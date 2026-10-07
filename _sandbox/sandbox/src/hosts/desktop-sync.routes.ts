@@ -1,7 +1,7 @@
 import { DeviceReportSchema, type SyncEnrollmentAnswer, type SyncEnrollmentRequest, SyncEnrollmentRequestSchema } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Context } from "hono";
-import { ownerDenied } from "../auth/owner-gates.js";
+import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import { revokeCardlessHost } from "./host-peer.js";
 import { sshdHostKey } from "./desktop-sync-ssh.js";
@@ -93,30 +93,35 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
         const { key, machineId, environment } = body;
         // Mode comes from the pairing, never the agent: a pairing minted below maintainer can only enroll mirror.
         const mode: SyncMode = paired ?? "sync";
-        // Sync enroll is single-holder: a conflict returns 423 before consuming the token, so a retry can reuse it.
+        // Sync enroll is single-holder: a conflict returns 423 before consuming the token, so a retry can reuse it. An
+        // enrollment store this build cannot read is refused rather than replaced (peers/desktop-sync.ts): 503, the
+        // pairing left unspent for a retry once it is fixed.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
-        const result = await enrollSyncKey({ historyRoot: services.config.historyRoot, key, mode, takeover, machineId, environment });
-        if ("locked" in result) {
-            return c.json({ error: "sync already active", machine: result.locked }, 423);
-        }
-        // Burned only on success, so a transient failure leaves the token usable for a retry; and still good for this key.
-        if (pair !== undefined && live !== undefined) {
-            await services.syncPairings.consume(pair);
-            redeemed.remember(pair, key.trim(), mode);
-        }
-        // No address returned: the agent reaches sshd via this daemon's own sync-ssh route, at the URL it already uses.
-        // The key that sshd presents rides along, so the agent pins it instead of trusting the first one it is shown;
-        // an unreadable one costs the pin, never the enrollment that already happened.
-        const answer: SyncEnrollmentAnswer = { ok: true, syncToken: result.syncToken, mode };
-        try {
-            const hostKey = await sshdHostKey(services.config.historyRoot);
-            if (hostKey !== undefined) {
-                answer.hostKey = hostKey;
+        return unavailableIfUnreadable(c, async () => {
+            const result = await enrollSyncKey({ historyRoot: services.config.historyRoot, key, mode, takeover, machineId, environment });
+            if ("locked" in result) {
+                return c.json({ error: "sync already active", machine: result.locked }, 423);
             }
-        } catch (err) {
-            services.logger.warn({ err }, "sync enrollment: the sshd host key could not be read, the machine will trust it on first use");
-        }
-        return c.json(answer);
+            // Burned only on success, so a transient failure leaves the token usable for a retry; and still good for this
+            // key.
+            if (pair !== undefined && live !== undefined) {
+                await services.syncPairings.consume(pair);
+                redeemed.remember(pair, key.trim(), mode);
+            }
+            // No address returned: the agent reaches sshd via this daemon's own sync-ssh route, at the URL it already
+            // uses. The key that sshd presents rides along, so the agent pins it instead of trusting the first one it is
+            // shown; an unreadable one costs the pin, never the enrollment that already happened.
+            const answer: SyncEnrollmentAnswer = { ok: true, syncToken: result.syncToken, mode };
+            try {
+                const hostKey = await sshdHostKey(services.config.historyRoot);
+                if (hostKey !== undefined) {
+                    answer.hostKey = hostKey;
+                }
+            } catch (err) {
+                services.logger.warn({ err }, "sync enrollment: the sshd host key could not be read, the machine will trust it on first use");
+            }
+            return c.json(answer);
+        });
     },
     /** GET /system/sync */
     state: async (c: Context<AppEnv>): Promise<Response> => {
@@ -142,14 +147,16 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
             ? c.json({ ok: true })
             : c.json({ error: "unknown enrollment" }, 403);
     },
-    // Agent's own way out: drops only the enrollment its sync token belongs to; exempt from the bearer middleware.
-    revokeOwn: async (c: Context<AppEnv>): Promise<Response> => {
-        if (!(await revokeEnrollmentByToken(services.config.historyRoot, c.req.header("x-intentic-sync") ?? ""))) {
-            return c.json({ error: "unknown enrollment" }, 404);
-        }
-        redeemed.forget();
-        return c.json({ ok: true });
-    },
+    // Agent's own way out: drops only the enrollment its sync token belongs to; exempt from the bearer middleware. Over a
+    // store this build cannot read the revoke is refused (503), never answered as an enrollment nobody holds.
+    revokeOwn: async (c: Context<AppEnv>): Promise<Response> =>
+        unavailableIfUnreadable(c, async () => {
+            if (!(await revokeEnrollmentByToken(services.config.historyRoot, c.req.header("x-intentic-sync") ?? ""))) {
+                return c.json({ error: "unknown enrollment" }, 404);
+            }
+            redeemed.forget();
+            return c.json({ ok: true });
+        }),
     // The operator's way out, one device at a time, matching DELETE /system/hosts/:id: no fleet-wide revoke, so cutting
     // off one laptop can't drop anyone else's mirror. Maintainer and up, the operating gate (`ownerDenied`); not exempt
     // from the bearer middleware.
@@ -161,12 +168,15 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
         const machine = c.req.param("machine") ?? "";
         // A machine can hold two doors and this screen shows one: the ssh key it syncs with, and a device enrollment
         // whose card is gone, which no screen lists. Both end here, or "revoked" would leave a live credential behind.
-        const door = await revokeCardlessHost(services, machine);
-        const key = await revokeEnrollmentByMachine(services.config.historyRoot, machine);
-        if (!key && !door) {
-            return c.json({ error: "no device is enrolled under that name" }, 404);
-        }
-        redeemed.forget();
-        return c.json({ ok: true });
+        // Either store unreadable refuses the revoke (503) rather than answering "no device", which would read as done.
+        return unavailableIfUnreadable(c, async () => {
+            const door = await revokeCardlessHost(services, machine);
+            const key = await revokeEnrollmentByMachine(services.config.historyRoot, machine);
+            if (!key && !door) {
+                return c.json({ error: "no device is enrolled under that name" }, 404);
+            }
+            redeemed.forget();
+            return c.json({ ok: true });
+        });
     },
 });

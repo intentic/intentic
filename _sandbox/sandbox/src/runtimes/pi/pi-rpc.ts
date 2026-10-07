@@ -1,16 +1,15 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import type { Readable, Writable } from "node:stream";
-import { StringDecoder } from "node:string_decoder";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
+import { jsonLines, outputTail } from "../stdio/child-output.js";
 
 // Pi RPC transport: spawns `<command> --mode rpc` and speaks its strict-LF JSONL protocol over stdio. Commands carry a
 // minted `id`; the matching `{type:"response", id}` line resolves it, everything else on stdout is an event handed
-// unparsed to the turn loop (mapping lives in pi-events.ts). Framing is hand-rolled on `indexOf("\n")`, since Node's
-// readline also splits on U+2028/U+2029, which are valid inside JSON strings.
+// unparsed to the turn loop (mapping lives in pi-events.ts). Records are split on LF alone (stdio/child-output.ts).
 
 // One process serves one turn, unlike ACP's warm sessions (Pi's persist as files). The stderr tail folds into surfaced
 // errors (acp-spawn precedent): a bare "exited" is undebuggable.
@@ -46,30 +45,6 @@ export interface PiProcess {
 // conversation the turn runs for, stamped on the process so the reaper retires it and its tools like a Claude turn's.
 export type PiSpawn = (config: AcpAgentConfig, cwd: string, handlers: PiProcessHandlers, owner?: string) => PiProcess;
 
-// Splits a stream into LF-terminated records, tolerating \r\n and multi-byte splits. Shared shape with Pi's own
-// reference client.
-const attachJsonlReader = (stream: Readable, onLine: (line: string) => void): void => {
-    const decoder = new StringDecoder("utf8");
-    let buffer = "";
-    stream.on("data", (chunk: Buffer | string) => {
-        buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-        for (;;) {
-            const newline = buffer.indexOf("\n");
-            if (newline === -1) {
-                break;
-            }
-            let line = buffer.slice(0, newline);
-            buffer = buffer.slice(newline + 1);
-            if (line.endsWith("\r")) {
-                line = line.slice(0, -1);
-            }
-            if (line !== "") {
-                onLine(line);
-            }
-        }
-    });
-};
-
 // Builds the production spawner for one sessions directory, created eagerly: a missing dir should fail here, at
 // composition, not inside a turn.
 export const piSpawner = (sessionDir: string): PiSpawn => {
@@ -91,11 +66,8 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             },
         );
 
-        let stderr = "";
-        proc.stderr.setEncoding("utf8");
-        proc.stderr.on("data", (chunk: string) => {
-            stderr = (stderr + chunk).slice(-STDERR_TAIL);
-        });
+        const stderr = outputTail(STDERR_TAIL);
+        stderr.follow(proc.stderr);
 
         let dead = false;
         let nextId = 0;
@@ -103,7 +75,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
 
         proc.on("error", (error) => {
             // A command that isn't on PATH surfaces as a spawn error, not an exit, same terminal state.
-            stderr = (stderr + String(error.message)).slice(-STDERR_TAIL);
+            stderr.append(String(error.message));
             settleExit(null);
         });
         proc.on("exit", (code) => settleExit(code));
@@ -123,7 +95,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             handlers.onExit(code);
         };
 
-        attachJsonlReader(proc.stdout, (line) => {
+        const onLine = (line: string): void => {
             let parsed: unknown;
             try {
                 parsed = JSON.parse(line);
@@ -146,6 +118,15 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             if (typeof record.type === "string") {
                 handlers.onEvent(record as PiEvent);
             }
+        };
+        void (async () => {
+            for await (const line of jsonLines(proc.stdout)) {
+                onLine(line);
+            }
+        })().catch(() => {
+            // A stdout that broke leaves no way to read a response; ending the process settles every waiter through
+            // its exit.
+            proc.kill();
         });
 
         const send = (command: Record<string, unknown>): void => {
@@ -167,7 +148,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
                 }),
             send,
             alive: () => !dead,
-            stderrTail: () => stderr,
+            stderrTail: stderr.text,
             kill: () => {
                 dead = true;
                 proc.kill();

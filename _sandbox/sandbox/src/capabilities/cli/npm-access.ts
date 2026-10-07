@@ -1,10 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { BROKER_PORT } from "@intentic/constants";
 import { GATEWAY_PLACEHOLDER } from "../broker/broker-routes.js";
 import type { ConnectorHook } from "./connector-hooks.js";
+import { homeDir } from "../../system/home-dir.js";
 
 // npm as a ConnectorHook: npm reads the registry token from ~/.npmrc, not a per-request header, so apply/restore upsert
 // the registry's _authToken line there (mode 0600) and remove strips it. One line per registry: the last-applied token
@@ -22,7 +22,7 @@ const GATEWAY_AUTH_KEY = GATEWAY_AUTH_LINE.slice(0, GATEWAY_AUTH_LINE.indexOf("=
 const ownLine = (line: string): boolean => line.startsWith(NPM_AUTH_KEY) || line.startsWith(GATEWAY_AUTH_KEY);
 
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
-const npmrcPath = (): string => join(process.env["HOME"] ?? homedir(), ".npmrc");
+const npmrcPath = (): string => join(homeDir(), ".npmrc");
 
 // Keeps any other ~/.npmrc content untouched; exported pure so tests skip the HOME dance.
 export const upsertNpmAuth = (content: string, token: string): string => {

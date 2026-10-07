@@ -1,11 +1,4 @@
-import {
-    CODEX_ADVISORY,
-    CODEX_MODEL_INVALID,
-    discoverCodexModels,
-    discoverTranslatorCodexModels,
-    isCodexModel,
-    parseCodexModelSuggestions,
-} from "./codex-models.js";
+import { CODEX_ADVISORY, CODEX_MODEL_INVALID, discoverCodexModels, discoverTranslatorCodexModels, isCodexModel } from "./codex-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -55,11 +48,6 @@ test("discoverCodexModels filters OpenAI's /v1/models to the chat/codex ids", as
 test("discoverCodexModels returns [] on a non-ok response so the caller falls through to seed", async () => {
     const fake = (async () => jsonResponse({ error: { message: "unauthorized" } }, 401)) as unknown as typeof fetch;
     expect(await discoverCodexModels("tok", fake)).toEqual([]);
-});
-
-test("parseCodexModelSuggestions extracts codex ids after 'Did you mean'", () => {
-    expect(parseCodexModelSuggestions("Model not found. Did you mean: gpt-5.1, gpt-5-codex?")).toEqual(["gpt-5.1", "gpt-5-codex"]);
-    expect(parseCodexModelSuggestions("The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.")).toEqual([]);
 });
 
 test("CODEX_MODEL_INVALID matches the ChatGPT-account rejection", () => {

@@ -242,6 +242,14 @@ test("a named account is the account that runs, refused or not", async () => {
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
+// Decided off each provider's spec (its Claude Code harness is its own runtime), so the sentence each says stays its own.
+test.each([
+    ["gemini", "Gemini doesn't run under the Claude Code harness, Google refuses that loop. It runs on its own runtime instead."],
+    ["cursor", "Cursor doesn't run under the Claude Code harness. It runs on its own runtime instead."],
+] as const)("a %s turn has no Claude Code credential, and says why", async (agent, message) => {
+    expect(await resolveHarnessCredentials(services({}), { agent })).toEqual({ ok: false, message });
+});
+
 // The account a conversation runs on is the one it names. A container that authenticates by itself holds some other
 // identity, so falling to it when the named account is gone would move the conversation onto an account nobody chose.
 describe("a turn naming a Claude account that can no longer serve it", () => {

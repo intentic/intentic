@@ -49,12 +49,15 @@ test("no module outside the store opens a file without the document that describ
     expect(calling(/\b(jsonFile|jsonEntries|jsonDir|idListFile)\s*(<[^>]*>)?\(/).filter((module) => !module.startsWith("store/"))).toEqual([]);
 });
 
-// Caches kept outside a runtime, each a network answer the daemon refetches whenever the file is gone or unreadable.
+// Caches kept outside a runtime, each an answer the daemon fetches or measures again whenever the file is gone or
+// unreadable.
 const CACHES_OUTSIDE_RUNTIMES = [
     // A custom endpoint's last discovered model list, standing in while its server is down.
     "endpoints/endpoint-catalog.ts",
     // A geo exit provider's relay or server catalog, refreshed past its TTL.
     "exit/exit-catalog.ts",
+    // The last finished disk scan, shown until the next scan replaces it; one this build cannot read is no scan yet.
+    "system/resources/storage/disk-storage.ts",
 ];
 
 test("a file no document describes is a cache, kept by a runtime or one of the few named above", () => {
@@ -66,6 +69,43 @@ test("a file no document describes is a cache, kept by a runtime or one of the f
 
 test("the files kept by hand beside the document layer are exactly the ones named above", () => {
     expect(calling(/\bwriteJsonFile\(/).filter((module) => !module.startsWith("store/"))).toEqual(HAND_KEPT);
+});
+
+// The text between the parentheses of every call to `callee` (a pattern) in a module, matched by depth, so a call
+// spread over lines is read whole and whatever follows the call is not.
+const callArguments = (text: string, callee: string): string[] =>
+    [...text.matchAll(new RegExp(`\\b${callee}\\s*\\(`, "g"))].map((match) => {
+        const start = match.index + match[0].length;
+        let depth = 1;
+        let end = start;
+        for (; end < text.length && depth > 0; end++) {
+            depth += text[end] === "(" ? 1 : text[end] === ")" ? -1 : 0;
+        }
+        return text.slice(start, end - 1);
+    });
+
+// JSON written whole through the atomic writer by hand, past every document: what the shape check and the conversions
+// cannot see, each named with why it stands. The list only shrinks.
+const RAW_JSON_WRITERS = [
+    // What a conversation was last told, overwritten every turn; one an older shape wrote reads as none.
+    "agent/prompt/prompt-record.ts",
+    // Claude Code's own settings.json: one key merged into a file whose shape another program owns.
+    "sessions/session-store.ts",
+    // Written synchronously as a failed boot exits, where no store's write queue can be waited on.
+    "system/boot/boot-failure.ts",
+    // The exit marker, written synchronously from the exit hook for the next boot to read.
+    "system/boot/boot-marker.ts",
+];
+
+test("JSON written whole outside the store goes through a document, or is one of the few named above", () => {
+    const writers = modules
+        .filter(
+            ({ module, text }) =>
+                !module.startsWith("store/") && callArguments(text, "writeFileAtomic(?:Sync)?").some((args) => args.includes("JSON.stringify")),
+        )
+        .map(({ module }) => module)
+        .toSorted();
+    expect(writers).toEqual(RAW_JSON_WRITERS);
 });
 
 test("every document the daemon keeps on the workspace or /history is one the contract's state-file tables describe", () => {

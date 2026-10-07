@@ -1,4 +1,5 @@
 import type { WebchatConfig, WebchatPublicConfig } from "@intentic/sandbox-contract";
+import { DEFAULT_ACCENT } from "@intentic/sandbox-contract/embed";
 import type { AutomationRecord } from "../automations/automations-store.js";
 
 // The listener provider a Visitor chat automation names, and the key space its threads live in. Declared here rather
@@ -12,8 +13,6 @@ export const WEBCHAT_PROVIDER = "webchat";
 // Defaults for a Visitor chat with nothing configured.
 const DEFAULT_TITLE = "Chat";
 const DEFAULT_GREETING = "Hi! Ask me anything.";
-// Intentic's brand orange (`--color-brand-600` from oklch); a customer who wants their own sets `accent`.
-const DEFAULT_ACCENT = "#e47100";
 // Top-right collides with fewer cookie banners and support widgets than bottom-right.
 const DEFAULT_POSITION = "top-right" as const;
 
@@ -23,6 +22,7 @@ export const publicConfig = (automation: AutomationRecord): WebchatPublicConfig 
         automationId: automation.id,
         title: config.title ?? DEFAULT_TITLE,
         greeting: config.greeting ?? DEFAULT_GREETING,
+        // Intentic's brand orange, the embeds' own default; a customer who wants their own sets `accent`.
         accent: config.accent ?? DEFAULT_ACCENT,
         position: config.position ?? DEFAULT_POSITION,
         access: config.access ?? "public",

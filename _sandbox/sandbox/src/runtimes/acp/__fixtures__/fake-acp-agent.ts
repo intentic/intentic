@@ -33,6 +33,8 @@ export const fakeAcpAgentApp = (
     } = {},
 ): AgentApp => {
     let nextSession = 0;
+    // Stalled prompts by session, each answered `cancelled` once its session is cancelled, as the protocol asks.
+    const stalled = new Map<string, () => void>();
     const fail = (method: "load" | "new" | "prompt"): void => {
         if (options.failure?.method === method) {
             throw new RequestError(options.failure.code, options.failure.message);
@@ -51,6 +53,10 @@ export const fakeAcpAgentApp = (
             fail("new");
             return { sessionId: `fake-${(nextSession += 1)}` };
         })
+        .onNotification(methods.agent.session.cancel, ({ params }) => {
+            stalled.get(params.sessionId)?.();
+            stalled.delete(params.sessionId);
+        })
         .onRequest(methods.agent.session.prompt, async ({ params, client: ctx }) => {
             fail("prompt");
             const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
@@ -62,8 +68,9 @@ export const fakeAcpAgentApp = (
                 throw new Error("the agent exploded");
             }
             if (text.includes("stall")) {
-                // Never answers, never streams, the adapter's inactivity watchdog must fire.
-                await new Promise(() => {});
+                // Never streams, and answers only a cancel: the adapter's inactivity watchdog must fire.
+                await new Promise<void>((resolve) => stalled.set(params.sessionId, resolve));
+                return { stopReason: "cancelled" };
             }
             if (text.includes("tool")) {
                 await push({
@@ -79,6 +86,11 @@ export const fakeAcpAgentApp = (
             }
             if (text.includes("checklist")) {
                 await push({ sessionUpdate: "plan", entries: [{ content: "step 1", priority: "high", status: "in_progress" }] });
+            }
+            if (text.includes("ask-and-report")) {
+                // Asks, then says how it was answered in the stop reason, for a caller that hears no session update.
+                const response = await ctx.request(methods.client.session.requestPermission, forcePush(params.sessionId));
+                return { stopReason: response.outcome.outcome === "cancelled" ? "cancelled" : "end_turn" };
             }
             if (text.includes("ask-permission")) {
                 const response = await ctx.request(methods.client.session.requestPermission, {
@@ -124,11 +136,12 @@ export const fakeAcpAgentApp = (
 // process, minus the process. Mirrors its per-session turn routing so the adapter under test is the real one.
 export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities = { loadSession: false }): AcpConnection => {
     const turns = new Map<string, TurnHooks>();
+    const abandoned = new Set<string>();
     let dead = false;
     const conn = client({ name: "fake-client" })
         .onRequest(methods.client.session.requestPermission, ({ params }) => {
             const hooks = turns.get(params.sessionId);
-            return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", false);
+            return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", abandoned.has(params.sessionId));
         })
         .onNotification(methods.client.session.update, ({ params }) => {
             turns.get(params.sessionId)?.onUpdate(params);
@@ -141,12 +154,19 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
         stderrTail: () => "",
         sessions: new Set<string>(),
         bindTurn: (sessionId, hooks) => {
+            abandoned.delete(sessionId);
             turns.set(sessionId, hooks);
             return () => {
                 if (turns.get(sessionId) === hooks) {
                     turns.delete(sessionId);
                 }
             };
+        },
+        abandon: (sessionId) => {
+            abandoned.add(sessionId);
+            if (turns.size === 0) {
+                dead = true;
+            }
         },
         kill: () => {
             dead = true;

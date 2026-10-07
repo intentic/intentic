@@ -1,8 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { holdsCredentialMaterial } from "@intentic/sandbox-contract";
+import { homeDir } from "../system/home-dir.js";
 
 // Checks whether a path actually holds a credential, the sandbox's half of `secrets.access`. May only subtract, and
 // only on evidence: `false` means the file is empty or absent, everything else undefined, which the classifier treats
@@ -15,7 +15,6 @@ const MAX_BYTES = 256 * 1024;
 const UNRESOLVABLE = /[*?$`{}[\]:]/;
 
 // Home as the shell about to run the command would expand it: `$HOME` when the environment sets it, the account's own.
-const homeDir = (): string => process.env["HOME"] ?? homedir();
 
 // The three spellings of home (`~`, `$HOME`, `${HOME}`) whose location isn't in doubt.
 const expandHome = (path: string): string => {

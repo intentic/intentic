@@ -1,10 +1,10 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { homeDir } from "../system/home-dir.js";
 
 // On-disk state for network-disk capabilities, and where each one mounts. One directory for every provider (0700,
 // root-only). Read from HOME at call time, not cached, so a test can point it at a temp dir.
 
-export const netdiskDir = (): string => join(process.env["HOME"] ?? homedir(), ".intentic-netdisk");
+export const netdiskDir = (): string => join(homeDir(), ".intentic-netdisk");
 
 // mount.cifs reads the credential from a file (never argv, so it stays out of `ps`); 0600, one per disk.
 export const credentialsPath = (id: string): string => join(netdiskDir(), `${id}.cred`);

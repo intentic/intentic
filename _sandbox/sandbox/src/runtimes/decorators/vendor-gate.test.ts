@@ -101,3 +101,22 @@ test("an unattended policy parks the ask on a card, and the judge is told nobody
     expect(step.value).toMatchObject({ kind: "permission", title: "Discards whatever commits origin has." });
     expect(seen).toEqual([true]);
 });
+
+// Codex and Cursor end a turn by releasing the gate, never by aborting the request: an ask the agent left unanswered
+// (its process died, or it moved on) settles as the turn ends instead of keeping its card open on nobody.
+test("releasing the gate settles a card still open, though the request's own signal never fired", async () => {
+    const { gate, release } = vendorTurnGate(
+        request({
+            policy: { rulebook: "approval" },
+            judge: async () => ({ decision: "ask", sentence: "Rewrites the shared history." }),
+        }),
+    );
+    const frames: AgentEvent[] = [];
+    const consulted = consultWith(gate, "git push --force origin main", SUBJECT, (event) => frames.push(event));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(frames).toMatchObject([{ kind: "permission", title: "Rewrites the shared history." }]);
+
+    release();
+
+    expect(await consulted).toEqual({ allow: false, reason: "The turn ended before you answered." });
+});

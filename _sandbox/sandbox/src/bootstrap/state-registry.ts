@@ -7,10 +7,11 @@ import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
+import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
-import { identityOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
+import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
@@ -110,6 +111,7 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 export const stateDocuments = (): readonly DocumentSpec[] => [
     activityLogDocument,
     pausedChildrenDocument,
+    approvalDecisionsDocument,
     approvalsDocument,
     areasDocument,
     membersDocument,
@@ -218,6 +220,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 export const stateSteps = (): readonly StructuralStep[] =>
     [
         identityOffWorkspaceStep,
+        passkeysOffWorkspaceStep,
         automationsRelocationStep,
         pre1308ImportStep,
         conversationsSchemaStep,

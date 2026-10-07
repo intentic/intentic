@@ -22,8 +22,7 @@
         "./stats": {
             "types": "./src/filter-stats.d.mts",
             "default": "./src/filter-stats.mjs"
-        },
-        "./retrieve-output": "./src/retrieve-output.mjs"
+        }
     },
     "scripts": {
         "bench": "node bench/cleaner-bench.mjs",

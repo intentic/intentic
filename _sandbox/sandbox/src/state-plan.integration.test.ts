@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { StatePlanSchema } from "@intentic/sandbox-contract";
 import { membersDocument } from "./auth/auth.js";
+import { passkeysDocument } from "./auth/passkeys/passkey-store.js";
 import { conversionDigest, engineEpoch } from "./store/evolution/documents.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { newestRunDocument } from "./store/newest-run.js";
@@ -55,9 +56,12 @@ test("prints one plan line naming its format, conversion set and verdict, and wr
         ok: true,
         downgrade: false,
         failures: [],
-        steps: [{ document: "identity-off-workspace", change: `starts ${membersDocument.path} on the history volume with nobody on it` }],
+        steps: [
+            { document: "identity-off-workspace", change: `starts ${membersDocument.path} on the history volume with nobody on it` },
+            { document: "passkeys-off-workspace", change: `starts ${passkeysDocument.path} on the history volume with no passkey in it` },
+        ],
         converts: [],
-        files: [join(history, membersDocument.path)],
+        files: [join(history, membersDocument.path), join(history, passkeysDocument.path)],
     });
     expect(await readdir(workspace)).toEqual([]);
     expect(await readdir(history)).toEqual([]);

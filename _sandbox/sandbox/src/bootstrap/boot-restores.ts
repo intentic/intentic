@@ -33,16 +33,25 @@ export const startBootRestores = (phase: BootPhase): void => {
     if (!role.container) {
         return;
     }
+    // Every restore below is detached, so each names its own failure: otherwise a failed one (an unreadable capability
+    // manifest, say) is an anonymous unhandled rejection and the only trace is a capability in error.
     // Writes stay under .intentic/, so this never touches the boot baseline.
-    void composeEnvironment(services);
+    void composeEnvironment(services).catch((error: unknown) =>
+        logger.warn({ err: error }, "environment: the approved environment could not be composed at boot"),
+    );
     // Disks after tunnels: a share behind a VPN is unreachable until it is up.
-    void reconnectVpns(services.capabilities, services.logger).then(() => remountNetdisks(services.capabilities, services.logger));
+    void reconnectVpns(services.capabilities, services.logger)
+        .then(() => remountNetdisks(services.capabilities, services.logger))
+        .catch((error: unknown) => logger.warn({ err: error }, "vpn: tunnels and network disks could not be restored at boot"));
     // A tunnel exit's client survives the daemon; only its SOCKS proxy is republished.
-    void restoreExits(services.capabilities, services.logger);
+    void restoreExits(services.capabilities, services.logger).catch((error: unknown) =>
+        logger.warn({ err: error }, "exit: tunnel exits could not be restored at boot"),
+    );
     // Connector side effects lived in HOME and die with the container.
-    void restoreConnectorHooks(services.capabilities, services.sshKeys, services.logger);
+    void restoreConnectorHooks(services.capabilities, services.sshKeys, services.logger).catch((error: unknown) =>
+        logger.warn({ err: error }, "connectors: connector hooks could not be restored at boot"),
+    );
     const bootCtx = capabilityCtx(services);
-    // Named here, or a failed start is an anonymous unhandled rejection and the only trace is a capability in error.
     void startDockerdIfEnabled(bootCtx).catch((error: unknown) =>
         logger.warn({ err: error }, "docker: the engine could not be restored at boot, saving the Docker capability starts it"),
     );
@@ -51,7 +60,9 @@ export const startBootRestores = (phase: BootPhase): void => {
     );
     void startTranslatorIfPacked(phase).catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Provider gateways (e.g. ext-discord) are extension processes, so the daemon holds no gateway of its own to restore.
-    void startAllExtensionProcesses(services);
+    void startAllExtensionProcesses(services).catch((error: unknown) =>
+        logger.warn({ err: error }, "extensions: extension processes could not be started at boot"),
+    );
     // A failure is a row on the Extensions tab, not a boot failure.
     services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
     // tmux.conf covers server start; this re-arms hooks on a server that outlived a daemon restart.

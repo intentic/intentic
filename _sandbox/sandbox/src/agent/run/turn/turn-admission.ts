@@ -12,12 +12,11 @@ import { conversationProfile, worktreeOf } from "../../../conversations/registry
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
-import { conversationIdentity } from "../placement/turn-placement.js";
+import { conversationIdentity, unpairedRunner } from "../placement/turn-placement.js";
 import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
-import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
 import { keepReceipt, receiptOf } from "./message-receipts.js";
-import { composeSteerText } from "./turn-interactions.js";
+import { steerComposed } from "./turn-interactions.js";
 
 // Every message to a conversation comes through here, whoever sends it: said into the live turn where that turn takes
 // words, started as a turn of its own when nothing runs, and otherwise queued on the conversation's actor until one of
@@ -31,6 +30,9 @@ type PersonSteer = Omit<Steer, "voice" | "outside">;
 
 const NOT_STEERABLE: Unsteered = { why: "no steerable turn running for that conversation" };
 
+// A local steer's answer as admission gives it: a turn that took no words is said why.
+const steeredOr = (steered: boolean | { readonly invalid: string }): true | Unsteered => (steered === false ? NOT_STEERABLE : steered);
+
 const ARCHIVED: Unsaid = { why: "the conversation is archived, and only a person's message reopens it" };
 
 // Hands the words to the live turn wherever it runs: composed against this workspace for a local one, uncomposed to a
@@ -38,11 +40,7 @@ const ARCHIVED: Unsaid = { why: "the conversation is archived, and only a person
 const handOver = async (services: Services, conversationId: string, steer: PersonSteer): Promise<true | Unsteered> => {
     const runnerId = worktreeOf(services.agents.entry(conversationId))?.runner;
     if (runnerId === undefined) {
-        const composed = await composeSteerText(services.workspace.root, steer);
-        if (composed.invalid !== undefined) {
-            return { invalid: composed.invalid };
-        }
-        return steerTurn(services.conversations, conversationId, { text: composed.text, voice: "person" }) || NOT_STEERABLE;
+        return steeredOr(await steerComposed(services, conversationId, { ...steer, voice: "person" }));
     }
     const client = services.runnerHub.client(runnerId);
     if (client === undefined) {
@@ -192,7 +190,7 @@ const openingOf = async (services: Services, turn: Turn): Promise<BeginTurn | Un
     const routed = withRuntimeDefaults(turn);
     const runner = routed.placement?.kind === "runner" ? routed.placement.id : undefined;
     if (runner !== undefined && !(await services.runners.enrolled(runner))) {
-        return { invalid: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.` };
+        return { invalid: unpairedRunner(runner) };
     }
     return conversationIdentity(routed, turn.conversationId, { isolated: runner !== undefined || routed.isolated === true, runner });
 };
@@ -211,14 +209,8 @@ const steerItem = async (services: Services, item: Omit<QueuedItem, "revision">)
     if (item.voice === "person") {
         return steerPerson(services, conversationId, words);
     }
-    const composed = await composeSteerText(services.workspace.root, words);
-    if (composed.invalid !== undefined) {
-        return { invalid: composed.invalid };
-    }
-    return (
-        steerTurn(services.conversations, conversationId, { text: composed.text, voice: item.voice, ...opt("outside", item.outside), ...opt("errand", item.turn.errand) }) ||
-        NOT_STEERABLE
-    );
+    const steer = { ...words, voice: item.voice, ...opt("outside", item.outside), ...opt("errand", item.turn.errand) };
+    return steeredOr(await steerComposed(services, conversationId, steer));
 };
 
 // Messages that go out as one turn: one person's in a row, joined as the composer always joined them; anything else

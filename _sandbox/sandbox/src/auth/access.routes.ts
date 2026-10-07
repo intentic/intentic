@@ -8,7 +8,7 @@ import { ownerDenied } from "./owner-gates.js";
 // browser out, or retire access for good.
 // Beside the members routes, not in them: this is about what holds a credential, not who may access the sandbox.
 
-export type AccessRoutesDeps = Pick<Services, "auth" | "wsTickets">;
+export type AccessRoutesDeps = Pick<Services, "auth" | "wsTickets" | "mediaTickets">;
 
 export const createAccessRoutes = (services: AccessRoutesDeps) => ({
     // Mints the one-shot ticket a WebSocket upgrade redeems; this route rides the bearer middleware, so the credential
@@ -23,7 +23,7 @@ export const createAccessRoutes = (services: AccessRoutesDeps) => ({
         return c.json({ ticket: services.wsTickets.mint(identity) });
     },
     // Re-keys the session signer so every session minted for this sandbox stops verifying at once, including the
-    // owner's own browser.
+    // owner's own browser, and drops every ticket a session minted, which would otherwise outlive it.
     // The owner's browser just re-establishes silently from its Google credential; loopback mode has nothing to rotate,
     // so it answers ok.
     revokeSessions: async (c: Context<AppEnv>): Promise<Response> => {
@@ -34,6 +34,7 @@ export const createAccessRoutes = (services: AccessRoutesDeps) => ({
         await services.auth?.rotateSessions();
         services.auth?.connections.revoke();
         services.wsTickets.revoke();
+        services.mediaTickets.revoke();
         return c.json({ ok: true });
     },
     // Account deletion: permanently refuses future browser authorization before rotating sessions and closing every
@@ -52,6 +53,7 @@ export const createAccessRoutes = (services: AccessRoutesDeps) => ({
         await services.auth?.rotateSessions();
         services.auth?.connections.revoke();
         services.wsTickets.revoke();
+        services.mediaTickets.revoke();
         return c.json({ ok: true });
     },
 });

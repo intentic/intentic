@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { emptyJournal, type JournalLogger, journalPath, readJournal, writeJournal } from "./state-journal.js";
+import { emptyJournal, type JournalLogger, journalPath, openEpisode, readJournal, writeJournal } from "./state-journal.js";
 
 // The journal is read by every build that boots on this volume, a rolled-back one included: whatever it cannot read of
 // it is named and kept, never read as nothing.
@@ -75,4 +75,21 @@ test("an absent journal is empty, with nothing to say", async () => {
     const { seen, logger } = warnings();
     expect(await readJournal(await historyRoot(), logger)).toEqual(emptyJournal());
     expect(seen).toEqual([]);
+});
+
+test("a new episode whose pre-images cannot all be taken leaves none behind and writes no journal", async () => {
+    const base = await historyRoot();
+    const roots = { workspace: join(base, "work"), history: join(base, "history"), auth: join(base, "auth") };
+    await Promise.all(Object.values(roots).map((root) => mkdir(root, { recursive: true })));
+    const copied = join(roots.workspace, "copied.json");
+    await writeFile(copied, "{}");
+    // A directory where a file is about to be converted: its copy fails after the first one landed.
+    const refused = join(roots.workspace, "refused.json");
+    await mkdir(refused);
+    const work = { renames: new Map<string, string>(), copies: [], writes: [copied, refused], sourceOf: (path: string) => path };
+
+    await expect(openEpisode(roots, emptyJournal(), work, { engine: 1, digest: "aaaa", version: "1.400.0", now: 7 })).rejects.toThrow();
+
+    expect(await readdir(join(roots.workspace, ".intentic/secrets/converting"))).toEqual([]);
+    expect(await readJournal(roots.history)).toEqual(emptyJournal());
 });

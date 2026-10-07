@@ -1,8 +1,8 @@
 import { type DeviceFlowLine, type DeviceSandboxFlowInput, type DeviceSandboxOp, systemContract } from "@intentic/sandbox-contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
-import { implement, ORPCError } from "@orpc/server";
+import { implement } from "@orpc/server";
 import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
-import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
+import { requireMaintainer } from "../auth/owner-gates.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
@@ -15,17 +15,6 @@ const RESTARTING: ReadonlySet<DeviceSandboxOp> = new Set(["restart", "update", "
 /* The `system.*Device*` procedures, implemented where the devices themselves live rather than in system/system.routes.ts. */
 export const createDeviceSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
-    // Every door here is maintainer-floored, checked identically so all three refuse the same way.
-    const requireMaintainer = async (headers: Headers, refusal: string): Promise<void> => {
-        if (services.auth === undefined) {
-            return;
-        }
-        try {
-            await authorizeMaintainer(services.auth, bearerFrom(headers.get("authorization") ?? undefined));
-        } catch {
-            throw new ORPCError("FORBIDDEN", { message: refusal });
-        }
-    };
     // The flow as the machine takes it, field by field: anything only this door reads (`resumeTurns`) stays here.
     const relayed = (input: DeviceSandboxFlowInput): AsyncGenerator<DeviceFlowLine> =>
         manageDeviceSandbox(services, input.id, {
@@ -52,7 +41,7 @@ export const createDeviceSystemRoutes = (services: Services) => {
         // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own
         // terminal error.
         manageDeviceSandbox: i.manageDeviceSandbox.handler(async function* ({ input, context }) {
-            await requireMaintainer(context.headers, "only a sandbox maintainer can act on connected devices");
+            await requireMaintainer(services, context.headers, "only a sandbox maintainer can act on connected devices");
             // The owner restarting THIS sandbox and asking for the turns it cuts back: kept for the next boot, which
             // resumes them (restart-resume.ts).
             const restartsThis = RESTARTING.has(input.op) && input.slug === sandboxSlugOf(services.config.sandbox.name);
@@ -67,13 +56,13 @@ export const createDeviceSystemRoutes = (services: Services) => {
         // `sync-install` needs no extra gate for its mode: this floor is the same maintainer-equivalent one
         // /system/sync/pair applies to the one-liner it enrolls with (auth/owner-gates.ts).
         runDeviceCommand: i.runDeviceCommand.handler(async ({ input, context }) => {
-            await requireMaintainer(context.headers, "only a sandbox maintainer can act on connected devices");
+            await requireMaintainer(services, context.headers, "only a sandbox maintainer can act on connected devices");
             return await runDeviceCommand(services, input);
         }),
         // Updates or restarts the agent on a connected device; maintainer-floored, since this replaces the binary
         // everything else on that machine runs through.
         runDeviceAgentFlow: i.runDeviceAgentFlow.handler(async function* ({ input, context }) {
-            await requireMaintainer(context.headers, "only a sandbox maintainer can update a connected device's agent");
+            await requireMaintainer(services, context.headers, "only a sandbox maintainer can update a connected device's agent");
             yield* runDeviceAgentFlow(services, input.id, { op: input.op });
         }),
     };

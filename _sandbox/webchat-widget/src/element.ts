@@ -1,5 +1,5 @@
 import type { WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract";
-import { type EmbedEndpoint, EmbedError, solveProofOfWork } from "@intentic/sandbox-contract/embed";
+import { type EmbedEndpoint, EmbedError, escapeHtml, solveProofOfWork } from "@intentic/sandbox-contract/embed";
 import { solveTurnstile } from "./challenge.js";
 import {
     renderGoogleSignIn,
@@ -23,7 +23,8 @@ const CLOSE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6
 const RESET_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`;
 const SEND_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>`;
 
-// Client-held transcript on a thread's first message only; matters after the daemon has expired the thread.
+// How much of the client-held transcript rides along with a message; the daemon reads it only when it starts a fresh
+// conversation for the thread, which is after it expired the last one.
 const HISTORY_MAX = 20;
 
 // How often the widget collects replies written after its stream closed: an approval-gated answer, or a human's. Slower
@@ -99,11 +100,11 @@ export class VisitorChatElement extends HTMLElement {
     private template(): string {
         return `
 <style>${styles(this.config)}</style>
-<button class="launcher" part="launcher" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttribute(`Open ${this.config.title}`)}">
+<button class="launcher" part="launcher" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeHtml(`Open ${this.config.title}`)}">
     ${LAUNCHER_ICON}
     <span class="unread" part="unread" hidden></span>
 </button>
-<div class="panel" role="dialog" aria-modal="false" aria-label="${escapeAttribute(this.config.title)}" hidden>
+<div class="panel" role="dialog" aria-modal="false" aria-label="${escapeHtml(this.config.title)}" hidden>
     <div class="header">
         <span class="title">${escapeHtml(this.config.title)}</span>
         <button class="icon-button reset" aria-label="Start a new chat" title="Start a new chat">${RESET_ICON}</button>
@@ -376,7 +377,9 @@ export class VisitorChatElement extends HTMLElement {
             ...(this.idToken !== undefined ? { idToken: this.idToken } : {}),
             ...(this.antiBotToken?.kind === "turnstile" ? { turnstileToken: this.antiBotToken.value } : {}),
             ...(this.antiBotToken?.kind === "pow" ? { powNonce: this.antiBotToken.value } : {}),
-            // Only the first message of a thread carries client-held history; after that the conversation resumes.
+            // Every message after the first carries the recent transcript: the widget cannot tell whether the daemon
+            // still holds the thread, and the daemon ignores it while the conversation resumes. The first has nothing
+            // before it but the greeting.
             ...(this.turns.length <= 2 ? {} : { history: this.recentHistory() }),
         };
 
@@ -436,9 +439,5 @@ export class VisitorChatElement extends HTMLElement {
         });
     }
 }
-
-const escapeHtml = (value: string): string =>
-    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
-const escapeAttribute = escapeHtml;
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : "Something went wrong. Try again.");

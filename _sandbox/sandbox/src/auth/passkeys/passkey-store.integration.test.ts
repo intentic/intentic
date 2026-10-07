@@ -2,6 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
+import { createAuthorizer, type MembersStore } from "../auth.js";
 import { memoryPasskeyStore } from "../auth-slice.testing.js";
 import {
     createPasskeyCeremonies,
@@ -395,5 +396,30 @@ describe("the file store", () => {
         await expect(store.setRequired(true)).rejects.toThrow("passkeys.json could not be read by this build");
         await expect(store.setRecovery([])).rejects.toThrow("passkeys.json could not be read by this build");
         expect(await readFile(path, "utf8")).toBe(garbled);
+    });
+
+    // The switch itself fails closed: a file that cannot be read does not say a passkey is no longer required, so the
+    // authorizer asking it refuses the sign-in rather than letting a Google proof alone through.
+    test("a file that cannot be read leaves whether a passkey is required unknown, never off", async () => {
+        const path = await storePath();
+        await writeFile(path, `{"required": true, "credentials": [`, "utf8");
+        await expect(filePasskeys(path).required()).rejects.toThrow("whether a passkey is required is unknown");
+        // A file not written yet is the ordinary fresh sandbox, which requires nothing.
+        expect(await filePasskeys(await storePath()).required()).toBe(false);
+    });
+
+    test("an owner's sign-in is refused while the switch cannot be read, and goes through once it can", async () => {
+        const path = await storePath();
+        await writeFile(path, `{"required": true, "credentials": [`, "utf8");
+        const passkeys = filePasskeys(path);
+        const authorizer = createAuthorizer({
+            verify: async () => ({ email: "owner@example.com" }),
+            owner: { read: async () => "owner@example.com", write: async () => {} },
+            members: { list: async () => [] } as unknown as MembersStore,
+            passkeys: { required: passkeys.required, enrolled: async () => false, exists: async () => false },
+        });
+        await expect(authorizer.authorize("google-proof", undefined)).rejects.toThrow("whether a passkey is required is unknown");
+        await writeFile(path, JSON.stringify({ required: false, credentials: [], recovery: [] }), "utf8");
+        await expect(authorizer.authorize("google-proof", undefined)).resolves.toMatchObject({ email: "owner@example.com", role: "owner" });
     });
 });

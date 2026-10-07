@@ -4,8 +4,11 @@ import { createTurnGate, type TurnGate } from "../../guard/turn-gate.js";
 
 // The turn gate every vendor loop mints, read off the request's groups: the policy it judges by, the hooks that judge and
 // record, and where the turn's commands run. The Claude Code loop builds its own, since only its hook can mark taint.
-export const vendorTurnGate = ({ spec, policy, hooks, signal }: Pick<AgentRequest, "spec" | "policy" | "hooks" | "signal">): TurnGate =>
-    createTurnGate({
+// Releasing it also ends the gate's signal: an agent can end its turn with an ask still unanswered (its process died, or
+// it moved on), and the card that ask raised must not stay open on nobody.
+export const vendorTurnGate = ({ spec, policy, hooks, signal }: Pick<AgentRequest, "spec" | "policy" | "hooks" | "signal">): TurnGate => {
+    const ended = new AbortController();
+    const turn = createTurnGate({
         ...opt("safetyPolicy", policy.safetyPolicy),
         ...opt("judging", policy.judging),
         ...opt("unattended", policy.unattended),
@@ -21,6 +24,14 @@ export const vendorTurnGate = ({ spec, policy, hooks, signal }: Pick<AgentReques
         ...opt("conversationId", spec.conversationId),
         cwd: spec.cwd,
         ...opt("ownCheckout", spec.ownCheckout),
-        signal,
+        signal: AbortSignal.any([signal, ended.signal]),
         cards: hooks.cards,
     });
+    return {
+        ...turn,
+        release: () => {
+            ended.abort();
+            turn.release();
+        },
+    };
+};

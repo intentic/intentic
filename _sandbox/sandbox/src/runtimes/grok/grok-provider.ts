@@ -23,6 +23,7 @@ import {
 } from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
+import { OPENCODE_XAI_PROVIDER } from "../opencode/xai-models.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Everything Grok contributes, listed in runtimes/runtime-table.ts; its loop and credential are OpenCode's (runtimes/opencode).
@@ -43,7 +44,7 @@ export const planGrokTurn = async (
     context: TurnContext,
     granted: readonly Capability[],
 ): Promise<TurnArmPlan> => {
-    if (!(await services.openCode.connected("xai"))) {
+    if (!(await services.openCode.connected(OPENCODE_XAI_PROVIDER))) {
         return {
             ok: false,
             message: "No Grok account connected, sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
@@ -69,7 +70,7 @@ export const planGrokTurn = async (
         extensions: context.persona?.powers.extensions,
     });
     // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt. OpenCode
-    // holds one xAI auth, so the single Grok account is "xai" (see grok-accounts.ts).
+    // holds one xAI auth, so the single Grok account is OpenCode's xAI provider id (see grok-accounts.ts).
     return armPlan(
         releasingMounts(services.grokAgent, mounted),
         withAttachments(
@@ -81,7 +82,7 @@ export const planGrokTurn = async (
             },
             context.attachmentPaths,
         ),
-        "xai",
+        OPENCODE_XAI_PROVIDER,
     );
 };
 
@@ -89,7 +90,7 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
     runtime: "opencode",
     preflight: (services, input, context, granted) => planGrokTurn(services, input, context, granted),
     health: async (services) => {
-        const connected = await attemptProbe(() => services.openCode.connected("xai"));
+        const connected = await attemptProbe(() => services.openCode.connected(OPENCODE_XAI_PROVIDER));
         if (connected === undefined) {
             return healthUnknown();
         }
@@ -119,7 +120,7 @@ export const grokProvider: ProviderModule<GrokProviderDeps> = {
     // only if xAI is already connected; ensure() is idempotent, so the first interactive call reuses this client.
     boot: (services, _role, logger) => {
         void (async () => {
-            if (!(await services.openCode.connected("xai"))) {
+            if (!(await services.openCode.connected(OPENCODE_XAI_PROVIDER))) {
                 return;
             }
             if (!(await enginesReady(grokProvider))) {
@@ -131,8 +132,10 @@ export const grokProvider: ProviderModule<GrokProviderDeps> = {
     },
     // OpenCode is Grok's credential store too: `connected` reads the auth.json a device sign-in wrote, on disk whether
     // or not a server is up.
-    packs: async (services) => ((await services.openCode.connected("xai")) ? ["opencode"] : []),
+    packs: async (services) => ((await services.openCode.connected(OPENCODE_XAI_PROVIDER)) ? ["opencode"] : []),
     // OpenCode holds one xAI auth per data dir, so Grok is a single fixed row rather than a list.
     secretEntries: async (services) =>
-        (await services.openCode.connected("xai")) ? [providerAccountEntry("grok", "Grok", "xai", "Grok", authStateRelPath("opencode"))] : [],
+        (await services.openCode.connected(OPENCODE_XAI_PROVIDER))
+            ? [providerAccountEntry("grok", "Grok", OPENCODE_XAI_PROVIDER, "Grok", authStateRelPath("opencode"))]
+            : [],
 };

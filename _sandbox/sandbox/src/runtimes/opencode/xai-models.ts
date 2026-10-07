@@ -4,6 +4,10 @@
 // Queries use the OAuth access token OpenCode persisted.
 import { authHeader, listModels, suggestedModels } from "../../agent/models/model-discovery.js";
 
+// xAI's provider id in OpenCode and models.dev: the key OpenCode files the Grok login under, the one Grok account's id,
+// and the backend an OpenCode turn that names none runs on. Gemini's is OPENCODE_GEMINI_PROVIDER.
+export const OPENCODE_XAI_PROVIDER = "xai";
+
 const XAI_BASE = "https://api.x.ai/v1";
 const XAI_MODELS_URL = `${XAI_BASE}/models`;
 const XAI_LANGUAGE_MODELS_URL = `${XAI_BASE}/language-models`;

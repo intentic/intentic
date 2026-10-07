@@ -1,0 +1,10 @@
+{
+  "result": "rolled-back",
+  "verb": "update",
+  "at": 1791240330000,
+  "from": "1.399.0",
+  "to": "1.400.0",
+  "reason": "the new version's daemon kept crashing (3 restarts)",
+  "log": "/home/owner/.intentic/logs/update-sandbox-0123456789ab.log",
+  "keepUntil": 1791326730000
+}

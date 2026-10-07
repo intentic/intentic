@@ -209,7 +209,8 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): ArmedWorksp
 const subscribers = new Set<(paths: string[]) => void>();
 const treeSubscribers = new Set<(delta: WorkspaceTreeDelta) => void>();
 let instance: { readonly root: string; readonly watch: IsolatedWorkspaceWatch } | undefined;
-export const startWorkspaceWatch = (root: string, logger: Logger): void => {
+// Returns the stop, for the daemon's shutdown.
+export const startWorkspaceWatch = (root: string, logger: Logger): (() => void) => {
     if (instance === undefined) {
         instance = { root, watch: createIsolatedWorkspaceWatch(root, logger) };
         instance.watch.subscribe((paths) => {
@@ -223,6 +224,10 @@ export const startWorkspaceWatch = (root: string, logger: Logger): void => {
             }
         });
     }
+    return () => {
+        void instance?.watch.close();
+        instance = undefined;
+    };
 };
 
 // The watched root's tree, held in memory; undefined for any other root, and before the watcher has started, when the

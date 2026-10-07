@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { defaultGit, GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
-import type { Chore } from "../../system/chore-clock.js";
+import { type Chore, DAY_MS } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -16,7 +16,6 @@ import { carriedRef, parkedAgentRefs, parkedRefOf } from "../../git/agent-refs.j
 // Un-archiving one past the retention starts its checkout afresh from the main line.
 
 // The clock's unit, spelled here: a value import from system/ would close a cycle (system/ reaches conversations/).
-const DAY_MS = 24 * 60 * 60_000;
 
 export const PARKED_REF_RETENTION_MS = 90 * DAY_MS;
 

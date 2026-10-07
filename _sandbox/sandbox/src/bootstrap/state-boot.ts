@@ -3,7 +3,7 @@ import type { Config } from "../env.config.js";
 import { AGENT_SESSION_ENV, type ContainerRole } from "../system/boot/container-owner.js";
 import type { BootFault } from "../system/boot/fault.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
-import { statePath } from "../state-paths.js";
+import { authRootOf } from "../state-paths.js";
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import { commitState, convergeState, type StateRoots } from "../store/evolution/state-convergence.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
@@ -13,10 +13,6 @@ import type { BootPhase } from "./boot-phase.js";
 // The two moments of boot the state engine owns (store/evolution/state-convergence.ts): converging stored files to this build's
 // shapes before any store opens, and committing that episode once the boot chain has converged, the point past which
 // nothing it converted needs undoing.
-
-// AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
-export const authRootOf = (config: Pick<Config, "agentAuthDir" | "workspaceRoot">): string =>
-    config.agentAuthDir !== "" ? config.agentAuthDir : statePath(config.workspaceRoot, ".intentic/secrets/auth/");
 
 export const stateRootsOf = (config: Config): StateRoots => ({ workspace: config.workspaceRoot, history: config.historyRoot, auth: authRootOf(config) });
 

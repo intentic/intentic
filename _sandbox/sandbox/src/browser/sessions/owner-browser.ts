@@ -1,10 +1,11 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Browser, BrowserContext } from "playwright";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
+import { spawnAs } from "../../workload/workload-class.js";
 
 // The owner's own sign-in window: Chromium started as a plain process, with Playwright attached afterwards over CDP.
 // Not launchPersistentContext: X's sign-in risk check refused a Google sign-in from every Playwright-launched window
@@ -111,6 +112,7 @@ const reapOrphans = async (userDataDir: string): Promise<void> => {
     const pids = (await readdir("/proc").catch((): string[] => [])).filter((name) => /^\d+$/.test(name));
     const orphans: number[] = [];
     for (const pid of pids) {
+        // allow(silent-catch): a process gone between the listing and the read is no window left to reap
         // oxlint-disable-next-line eslint/no-await-in-loop -- one small file per process, once per window opened
         const argv = (await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "")).split("\0");
         if (isOwnerWindow(argv, userDataDir)) {
@@ -121,7 +123,7 @@ const reapOrphans = async (userDataDir: string): Promise<void> => {
         try {
             process.kill(pid, "SIGKILL");
         } catch {
-            // Already gone between the scan and the kill.
+            // allow(silent-catch): already gone between the scan and the kill.
         }
     }
     // Chromium refuses a profile whose lock names a live pid; a killed one is cleared on the next start.
@@ -169,7 +171,8 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     await reapOrphans(options.userDataDir);
     await rm(portFile, { force: true });
     await seedLanguages(options.userDataDir, options.fingerprint.languages);
-    const child = spawn(options.executablePath, ownerBrowserArgs(options), {
+    // Ranked as a service for the OOM killer: after an agent's command, before a turn's runtime.
+    const child = spawnAs({ class: "service" }, options.executablePath, ownerBrowserArgs(options), {
         // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
         env: {
             ...process.env,
@@ -199,10 +202,10 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
         closing ??= (async () => {
             // Browser.close is Chromium's own orderly shutdown, which writes cookies out; Playwright's close() on a
             // connected browser only disconnects.
-            // allow(silent-catch): a browser already gone has nothing left to flush
             await attached
                 .newBrowserCDPSession()
                 .then((cdp) => cdp.send("Browser.close"))
+                // allow(silent-catch): a browser already gone has nothing left to flush
                 .catch(() => undefined);
             if (!(await exited(child, CLOSE_TIMEOUT_MS))) {
                 child.kill("SIGKILL");

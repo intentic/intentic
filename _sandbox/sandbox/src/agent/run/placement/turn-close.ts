@@ -20,12 +20,12 @@ import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 //    else the repository's own fixers run in its worktree (worktree-fixers.ts), the rules decide, and it lands under the
 //    lease (turn-landing.ts).
 // 5. settle: the placement's books, then the conversation's actor.
-// 6. publish, once: the placement announces how the turn ended (TurnEnding).
+// 6. publish, once: the placement announces how the turn ended (PlacedTurnEnding).
 // The run registry announces `run.settled` after all of it; its listeners are independent of each other and of this
 // order (_sandbox/sandbox/docs/subsystems.md).
 
 // How a turn ended, as its close decided it: an error, a stop, waiting on a wake it armed, or finished.
-export type TurnEnding = "failed" | "stopped" | "awaiting-wake" | "finished";
+export type PlacedTurnEnding = "failed" | "stopped" | "awaiting-wake" | "finished";
 
 // Steps 1 to 3, bound to one conversation's turn; placedTurn runs them once, before its land or in its finally.
 export interface TurnCloser {

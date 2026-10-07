@@ -1,3 +1,4 @@
+import { WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import type { SSEStreamingApi } from "hono/streaming";
 import type { TurnStream } from "../automations/scheduler.js";
 
@@ -21,12 +22,12 @@ export const createSseStream = (stream: SSEStreamingApi): SseTurnStream => {
         turn: {
             delta: (text) => {
                 if (text !== "") {
-                    write("delta", text);
+                    write(WEBCHAT_EVENT.delta, text);
                 }
             },
             // The reason is dropped on purpose (VISITOR_FAILURE); already recorded on the run and the activity feed.
-            failed: () => write("error", VISITOR_FAILURE),
-            end: () => write("done", ""),
+            failed: () => write(WEBCHAT_EVENT.error, VISITOR_FAILURE),
+            end: () => write(WEBCHAT_EVENT.done, ""),
         },
         // Loops until stable, so a write chained during the await is still flushed before resolving.
         flushed: async () => {

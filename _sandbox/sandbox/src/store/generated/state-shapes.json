@@ -103,6 +103,12 @@
       "since": "unreleased"
     }
   ],
+  "history:approval-decisions.json": [
+    {
+      "type": "{ approved: Record<string, { approvedAt: number; approver?: string; digest: string }> }",
+      "since": "unreleased"
+    }
+  ],
   "history:boot-failure.json": [
     {
       "type": "{ at: number; error: string; step?: string; version: string }",
@@ -214,6 +220,12 @@
   "history:identity/owner.json": [
     {
       "type": "{ email: string }",
+      "since": "unreleased"
+    }
+  ],
+  "history:identity/passkeys.json": [
+    {
+      "type": "{ credentials: ({ aaguid: string; backedUp: boolean; counter: number; createdAt: number; email: string; id: string; label: string; lastUsedAt?: number; name?: string; picture?: string; publicKey: { alg: -7 | -257 | -8; jwk: Record<string, string> }; rpId: string; transports: string[] })[]; recovery: { hash: string; usedAt?: number }[]; required: boolean }",
       "since": "unreleased"
     }
   ],

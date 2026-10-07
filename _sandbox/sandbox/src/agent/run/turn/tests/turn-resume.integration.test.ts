@@ -35,7 +35,7 @@ import { PROVIDER_MODULES } from "../../../../runtimes/runtime-table.js";
 import { type JournalledTurn, MAX_PARKED_RESTORES, sqliteTurnJournal, type TurnJournal } from "../turn-journal.js";
 import { turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
-import type { TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
+import type { Said, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
 import type { TurnRun } from "../turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
@@ -1234,6 +1234,35 @@ test("answering the restored question resumes with the picks, worded as a live a
     expect(prompts[0]).toMatch(/user answered/i);
     expect(prompts[0]).toContain("Yes");
     await settle(services, "pk-q");
+});
+
+// A starter that does not wait behind the promised resume (an automation's fire, a re-run) can take the conversation in
+// the moment between the placeholder letting go and the answer's turn starting; the answer then waits behind it.
+test("an answer whose turn another start beat to the conversation is said as the person's, not dropped", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    await services.turnJournal.recordTurn(parkedEntry("pk-beaten", [questionRequest("r-beaten")]));
+    const prompts: string[] = [];
+    const driven = drivenBy(services, fakeWake(prompts));
+    const said: Said[] = [];
+    const beaten: Services = unstubbed<Services>("services", {
+        ...driven,
+        turns: {
+            ...driven.turns,
+            start: async (turn, options) => (turn.resume === "answered" ? "busy" : await driven.turns.start(turn, options)),
+            say: async (words) => {
+                said.push(words);
+                return { delivered: "queued" };
+            },
+        },
+    });
+    await resumeInterruptedTurns(beaten, BOOT_AT);
+    await cardsUp(observed, "question");
+
+    expect(services.cards.resolve({ kind: "question", requestId: "r-beaten", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
+    await waitFor(() => expect(said).toHaveLength(1), SETTLES);
+    expect(said[0]).toMatchObject({ voice: "person", turn: { conversationId: "pk-beaten", resume: "answered", sessionId: "s-parked" } });
+    expect(said[0]?.turn.prompt).toContain("Yes");
+    expect(prompts).toEqual([]);
 });
 
 // 2026-10-06: a restart while a question was up brought the turn back as a new run that told its prompt again, so a window

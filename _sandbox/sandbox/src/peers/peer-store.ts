@@ -31,7 +31,8 @@ export interface PeerStore<Extra> {
     readonly mintPairing: (id: string, extra?: Extra) => { token: string; expiresIn: number };
     // Arms a setup-time token from the container env so a fresh install can self-enroll; false once already spent.
     readonly seedPairing: (id: string, token: string, extra?: Extra) => Promise<boolean>;
-    // Redeems a pairing into a durable token, spent either way; undefined means unknown, expired, or replayed.
+    // Redeems a pairing into a durable token, spent either way; undefined means unknown, expired, or replayed. Throws
+    // ManifestUnreadableError, the pairing left unspent, when the enrollment manifest or burn list cannot be read.
     readonly enroll: (pairToken: string) => Promise<({ readonly id: string; readonly token: string } & Extra) | undefined>;
     // Which peer is presenting this token — and when none does, whether that is settled or just this read's silence;
     // the only authorization on the WebSocket.
@@ -65,6 +66,9 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
         mintPairing: (id, extra) => pending.mint({ ...pairingExtra(id, extra), id }, { replayable }),
         seedPairing: (id, token, extra) => pending.arm(token, { ...pairingExtra(id, extra), id }),
         enroll: async (pairToken) => {
+            // Asked before the pairing is spent: a manifest this build cannot read refuses the enrollment that follows
+            // (enrollment.ts), and a pairing redeemed for nothing is one the peer has to be handed again.
+            await records.requireReadable();
             const pairing = await pending.redeem(pairToken);
             if (pairing === undefined) {
                 return undefined;

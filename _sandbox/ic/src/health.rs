@@ -6,14 +6,25 @@ use crate::util::{bail, Result};
 
 /* The two waits after a launch, in order — because a daemon that ANSWERS is not yet a daemon that SERVES. */
 
-const HEALTH_URL: &str = "http://localhost:8787/health";
+/// The daemon's address inside its container, the one every `curl` this binary execs there asks. A macro, so the URLs
+/// below are spelled from it at compile time.
+macro_rules! daemon_origin {
+    () => {
+        "http://localhost:8787"
+    };
+}
+
+/// The daemon's `/health` document, read from inside its container.
+pub const HEALTH_URL: &str = concat!(daemon_origin!(), "/health");
 
 /// netd's own answer about the daemon it runs (browser-wire's `SandboxVitals`), given whatever state Node is in: netd
 /// answers it before it would wait for Node.
-const VITALS_URL: &str = "http://localhost:8787/system/vitals";
+const VITALS_URL: &str = concat!(daemon_origin!(), "/system/vitals");
 
-/// Restarts of a crashed daemon, by netd inside a container that stays up, that make a crash loop: the editor's own
-/// threshold (diagnose.ts CRASH_LOOP_RESTARTS). Docker's restart count never sees them, since netd is PID 1.
+/// Restarts that make a crash loop, the editor's own threshold (diagnose.ts CRASH_LOOP_RESTARTS), whoever counts them:
+/// netd restarting a crashed daemon inside a container that stays up, or Docker restarting the container. Docker's
+/// restart count never sees the first kind: netd stays up, and so does the container, whatever its PID 1 (docker's
+/// tini under `--init` locally, netd itself on a hosted machine, Fly's init on Fly).
 pub const CRASH_LOOP_RESTARTS: u32 = 3;
 
 /// The line netd logs each time it restarts a daemon that crashed (_sandbox/netd/crates/netd/src/supervise.rs, held to
@@ -96,8 +107,9 @@ pub fn crash_loop_in_logs(container: &str) -> Option<String> {
     crashes_in(&docker::stderr_since(container, "10m")?)
 }
 
-/// The crash loop in a stretch of netd's log, with the error the daemon printed before its last restart. Pure.
-fn crashes_in(log: &str) -> Option<String> {
+/// How many times a stretch of netd's log says it restarted the daemon, and the error the daemon printed in the run
+/// that ended in the latest of those restarts. Pure.
+fn restarts_in(log: &str) -> (usize, Option<String>) {
     let lines: Vec<&str> = log.lines().map(str::trim).collect();
     let restarts: Vec<usize> = lines
         .iter()
@@ -105,31 +117,51 @@ fn crashes_in(log: &str) -> Option<String> {
         .filter(|(_, line)| line.contains(NETD_RESTARTING))
         .map(|(at, _)| at)
         .collect();
-    if restarts.len() < CRASH_LOOP_RESTARTS as usize {
-        return None;
-    }
-    let last = restarts[restarts.len() - 1];
-    let from = restarts[restarts.len() - 2] + 1;
-    let count = restarts.len();
-    Some(
-        match lines[from..last]
+    let error = restarts.last().and_then(|&last| {
+        let from = restarts
+            .len()
+            .checked_sub(2)
+            .map_or(0, |before| restarts[before] + 1);
+        lines[from..last]
             .iter()
             .rfind(|line| line.contains("Error"))
-        {
-            Some(error) => format!(
-                "netd restarted it {count} times in the last ten minutes, each time after {}",
-                crate::sandbox::preflight::clip(error, 200)
-            ),
-            None => format!("netd restarted it {count} times in the last ten minutes"),
-        },
-    )
+            .map(|error| crate::sandbox::preflight::clip(error, 200))
+    });
+    (restarts.len(), error)
+}
+
+/// The crash loop in a stretch of netd's log, with the error the daemon printed before its last restart. Pure.
+fn crashes_in(log: &str) -> Option<String> {
+    let (count, error) = restarts_in(log);
+    if count < CRASH_LOOP_RESTARTS as usize {
+        return None;
+    }
+    Some(match error {
+        Some(error) => {
+            format!(
+                "netd restarted it {count} times in the last ten minutes, each time after {error}"
+            )
+        }
+        None => format!("netd restarted it {count} times in the last ten minutes"),
+    })
+}
+
+/// A crash loop netd's vitals told of, with the error the daemon last died on where netd's log still holds it. Pure.
+fn with_last_error(looping: String, log: Option<&str>) -> String {
+    match log.and_then(|log| restarts_in(log).1) {
+        Some(error) => format!("{looping}; it last died on {error}"),
+        None => looping,
+    }
 }
 
 /// Why `container`'s daemon reads as one that keeps crashing, or None: netd's vitals where it answers them, its log
-/// where it cannot (a daemon that never got far enough to have netd listen).
+/// where it cannot (a daemon that never got far enough to have netd listen). Either way the error the daemon last died
+/// on is named when netd's log has it.
 pub fn crashing(container: &str) -> Option<String> {
     match vitals(container) {
-        Some(node) => crash_loop(&node),
+        Some(node) => crash_loop(&node).map(|looping| {
+            with_last_error(looping, docker::stderr_since(container, "10m").as_deref())
+        }),
         None => crash_loop_in_logs(container),
     }
 }
@@ -408,7 +440,7 @@ mod tests {
         let vitals = &wire["vitals"];
         assert_eq!(
             vitals["path"],
-            VITALS_URL.trim_start_matches("http://localhost:8787")
+            VITALS_URL.trim_start_matches(daemon_origin!())
         );
         assert_eq!(vitals["file"], VITALS_FILE);
         let body = &vitals["body"];
@@ -506,6 +538,26 @@ mod tests {
             Some("netd restarted it 3 times in the last ten minutes")
         );
         assert_eq!(crashes_in(""), None);
+    }
+
+    #[test]
+    fn a_crash_loop_netds_vitals_told_of_names_the_error_its_log_holds() {
+        let looping = "netd restarted it 3 times in the last ten minutes, and it is down again";
+        assert_eq!(
+            with_last_error(looping.to_string(), Some(LOOPING)),
+            format!("{looping}; it last died on Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js")
+        );
+        // A log that holds only the latest restart still holds the run that ended in it.
+        let one =
+            format!("Error [ERR_X]: boom\nNode.js v24.21.0\nERROR {NETD_RESTARTING} code=1\n");
+        assert_eq!(
+            with_last_error(looping.to_string(), Some(&one)),
+            format!("{looping}; it last died on Error [ERR_X]: boom")
+        );
+        // No log, or one with no error in it: the vitals' own words.
+        assert_eq!(with_last_error(looping.to_string(), None), looping);
+        let bare = format!("{NETD_RESTARTING}\n{NETD_RESTARTING}\n");
+        assert_eq!(with_last_error(looping.to_string(), Some(&bare)), looping);
     }
 
     #[test]

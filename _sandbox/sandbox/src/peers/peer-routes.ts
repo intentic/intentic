@@ -8,7 +8,7 @@ import type { Context } from "hono";
 import type { z } from "zod";
 import type { MountCall } from "../agent/tools/turn-mounts.routes.js";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
-import { ownerDenied } from "../auth/owner-gates.js";
+import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { rawRouteServer } from "../http/raw-route-server.js";
@@ -333,14 +333,14 @@ export const createPeerRoutes = <
             }
             return c.json(store.mintPairing(id));
         },
-        // POST /system/<slug>/enroll: authorized by the pairing alone, exempt from the bearer middleware.
-        enroll: async (c: Context<AppEnv>): Promise<Response> => {
-            const enrolled = await store.enroll(c.req.header("x-intentic-pair") ?? "");
-            if (enrolled === undefined) {
-                return c.json({ error: door.expired }, 401);
-            }
-            return c.json(enrolled);
-        },
+        // POST /system/<slug>/enroll: authorized by the pairing alone, exempt from the bearer middleware. A manifest
+        // this build cannot read refuses the enrollment with the pairing left unspent (peer-store.ts), answered as the
+        // doors' 503 rather than a 500.
+        enroll: async (c: Context<AppEnv>): Promise<Response> =>
+            unavailableIfUnreadable(c, async () => {
+                const enrolled = await store.enroll(c.req.header("x-intentic-pair") ?? "");
+                return enrolled === undefined ? c.json({ error: door.expired }, 401) : c.json(enrolled);
+            }),
         /** GET /system/<slug> */
         list: async (c: Context<AppEnv>): Promise<Response> => c.json({ [door.listKey]: await deps.summaries() }),
         // Drops the enrollment and the live socket; the software itself stays until removed at the keyboard. Maintainer

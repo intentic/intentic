@@ -40,11 +40,12 @@ const refreshRuntimeHealth = async (services: HealthDeps): Promise<void> => {
 };
 
 // Boot-time sweep (bootstrap/boot-schedulers.ts): warms the cache immediately, then on an interval. Unref'd so it never holds the event loop
-// open; tests that build the app directly never call this.
-export const startRuntimeHealth = (services: HealthDeps): void => {
+// open; tests that build the app directly never call this. Returns the stop, for the daemon's shutdown.
+export const startRuntimeHealth = (services: HealthDeps): (() => void) => {
     const tick = (): void => {
         void refreshRuntimeHealth(services);
     };
     tick();
-    setInterval(tick, REFRESH_MS).unref();
+    const timer = setInterval(tick, REFRESH_MS).unref();
+    return () => clearInterval(timer);
 };

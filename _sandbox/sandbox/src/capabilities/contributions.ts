@@ -103,8 +103,9 @@ const cachedFor = <T>(host: ExtensionHost, slot: string, build: () => Promise<T>
 export const contributionRegistry = (host: ExtensionHost): Promise<ReadonlyMap<string, ResolvedContribution>> =>
     cachedFor(host, "contributions", () => buildRegistry(host));
 
-// The enabled extensions themselves, from the same cache: what serves extension-level tools, and what the /x refusal
-// and the door read a manifest from.
+// The enabled extensions themselves, from the same cache: what serves extension-level tools, what the /x refusal and
+// the door read a manifest from, and what every turn's PATH, extension env and agent mounts and every outgoing
+// gateway message walk.
 export const cachedEnabledExtensions = (host: ExtensionHost): Promise<readonly InstalledExtension[]> =>
     cachedFor(host, "enabled", () => enabledExtensions(host));
 

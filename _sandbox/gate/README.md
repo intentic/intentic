@@ -22,7 +22,8 @@ flowchart LR
   `completed`, not landed.
 - Exit 2 is never a verdict. It means the exchange failed (bad token, no such gate, the daily ceiling, the network, a
   card status this gate does not know), or a run's deadline passed while the agent keeps working in the sandbox.
-- The package also exports these functions to [gate-action](../gate-action), which wraps them for GitHub.
+- The package also exports these functions to [gate-action](../gate-action), which wraps them for GitHub: both doors
+  run the same `gateExchange` and `runExchange` as the CLI, so a failure reads the same in a log and on a step.
 
 ## Usage
 
@@ -34,7 +35,7 @@ intentic-gate run --url "$INTENTIC_URL" --token "$INTENTIC_TOKEN" "Review this c
 ## Key files
 
 - [src/cli.ts](src/cli.ts) — the process: read stdin, one exchange, print the verdict, exit.
-- [src/gate.ts](src/gate.ts) — gate door: argument parsing, the request dial, `readVerdict` and `exitOf`.
+- [src/gate.ts](src/gate.ts) — gate door: argument parsing, `gateExchange` (the request dial and the verdict read), `exitOf`.
 - [src/run.ts](src/run.ts) — `runExchange`: start a turn, poll its card, land it, map the ending to an exit code.
 - [src/gate.test.ts](src/gate.test.ts) — the verdict reader held against `GateVerdictSchema`.
 

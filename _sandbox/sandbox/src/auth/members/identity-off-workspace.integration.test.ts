@@ -6,11 +6,11 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import pino from "pino";
 import { testConfig } from "../../testing.js";
 import { clearNewestRun } from "../../store/newest-run.js";
-import { convergeState, resetStateStatus, type StateRoots } from "../../store/evolution/state-convergence.js";
+import { commitState, convergeState, resetStateStatus, type StateRoots } from "../../store/evolution/state-convergence.js";
 import type { StructuralStep } from "../../store/evolution/state-steps.js";
 import { stateRegroupStep } from "../../store/evolution/steps/state-regroup.js";
 import { createAuthSlice } from "../auth-slice.js";
-import { identityOffWorkspaceStep } from "./identity-off-workspace.js";
+import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "./identity-off-workspace.js";
 
 // A sandbox updated past the move keeps its owner, its roster and its programs' tokens; the copy left in the workspace
 // is nobody's input from then on, including whatever a turn writes there later.
@@ -108,4 +108,58 @@ test("a flat state dir from before the regroup arrives on the history volume in 
     const slice = sliceOn(roots);
     expect(await slice.ownerEmail()).toBe("ada@example.com");
     expect(await slice.members.list()).toEqual(ROSTER.members);
+});
+
+// The passkeys moved a step later, so a sandbox that crossed the first move must still bring them over; and a row a turn
+// writes at the old address afterwards is nobody's passkey.
+const PASSKEY = {
+    id: "cred-1",
+    email: "ada@example.com",
+    label: "laptop",
+    rpId: "app.example.test",
+    publicKey: { alg: -7, jwk: { kty: "EC", crv: "P-256", x: "x", y: "y" } },
+    counter: 0,
+    transports: ["internal"],
+    backedUp: true,
+    aaguid: "00000000-0000-0000-0000-000000000000",
+    createdAt: 1,
+};
+const PASSKEYS = { required: true, credentials: [PASSKEY], recovery: [{ hash: "ab" }] };
+
+// The release after the roster's move, which knows the second step.
+const convergeNext = (roots: StateRoots) =>
+    convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [identityOffWorkspaceStep, passkeysOffWorkspaceStep] });
+
+test("a sandbox that already crossed the roster's move still brings its passkeys and their switch over, once", async () => {
+    const roots = await volumes();
+    await put(identity(roots, "members.json"), ROSTER);
+    await converge(roots);
+    await commitState(roots);
+    await put(identity(roots, "passkeys.json"), PASSKEYS);
+
+    const outcome = await convergeNext(roots);
+
+    expect(outcome.plan?.steps.map(({ change }) => change)).toEqual([
+        "copies .intentic/identity/passkeys.json to identity/passkeys.json on the history volume",
+    ]);
+    const slice = sliceOn(roots);
+    expect((await slice.passkeys.list()).map(({ id, email }) => [id, email])).toEqual([["cred-1", "ada@example.com"]]);
+    expect(await slice.passkeys.required()).toBe(true);
+    expect(JSON.parse(await readFile(identity(roots, "passkeys.json"), "utf8"))).toEqual(PASSKEYS);
+    expect((await convergeNext(roots)).plan?.steps).toEqual([]);
+});
+
+test("a passkey a turn writes at the old address opens nothing, before the move or after it", async () => {
+    const roots = await volumes();
+    expect((await converge(roots, [passkeysOffWorkspaceStep])).plan?.steps.map(({ change }) => change)).toEqual([
+        "starts identity/passkeys.json on the history volume with no passkey in it",
+    ]);
+
+    await put(identity(roots, "passkeys.json"), { ...PASSKEYS, credentials: [{ ...PASSKEY, email: "mallory@example.com" }] });
+    expect((await converge(roots, [passkeysOffWorkspaceStep])).plan?.steps).toEqual([]);
+
+    const slice = sliceOn(roots);
+    expect(await slice.passkeys.list()).toEqual([]);
+    expect(await slice.passkeys.find("cred-1")).toBeUndefined();
+    expect(await slice.passkeys.required()).toBe(false);
 });

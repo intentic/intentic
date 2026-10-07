@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { defaultGit, gitClone } from "@intentic/base/git";
-import { fileAutomationsStore } from "../automations/automations-store.js";
+import { automationsDocument, fileAutomationsStore } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
@@ -277,7 +277,7 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
     // The seed path: no browser, no token; everything applicable lands (main.ts's definitionSeed step).
     const seeded = await makeRoots();
     const seededServices = servicesFor(seeded, { git: { clone: gitClone } });
-    const report = await applyDefinitionItems(seededServices, parseDefinitionToml(toml), () => true);
+    const report = await applyDefinitionItems(seededServices, parseDefinitionToml(toml), () => true, { automations: automationsDocument });
     expect(report.failed).toEqual([]);
     expect(existsSync(join(seeded.work, "app/README.md"))).toBe(true);
     await cleanup();
@@ -455,6 +455,72 @@ test("private ignored state in a remote is refused before checkout and the targe
     expect(report.applied).toEqual([]);
     expect(report.failed[0]?.error).toContain(".intentic/secrets/auth/token.json");
     expect(await readFile(join(target.work, ".intentic/secrets/auth/token.json"), "utf8")).toBe('{"token":"mine"}\n');
+    expect(await workspaceRemoteUrl(target.work)).toBeUndefined();
+    await cleanup();
+});
+
+// The automations a workspace carries are read as the scheduler's store reads them: a file an older build wrote arrives
+// converted rather than refusing the whole workspace, and whatever this build does not know rides along.
+test("automations in an older shape arrive converted and switched off, keeping what this build does not know", async () => {
+    const remote = await publishedWorkspace(async (work) => {
+        await writeFile(
+            join(work, automationsDocument.path),
+            JSON.stringify([
+                // Named its model with the fields a build before 2026-09-07 wrote, and carries a key a newer one added.
+                { id: "nightly", trigger: { kind: "schedule", cron: "0 9 * * *" }, prompt: "sweep the inbox", model: "claude-sonnet-4-6", enabled: true, note: "kept" },
+            ]),
+        );
+    });
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    const arrivals = createArrivals(servicesFor(target));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+
+    expect(report.failed).toEqual([]);
+    expect(report.needsAction.map((action) => action.subject)).toContain("Turn on the automations you want");
+    const [arrived] = JSON.parse(await readFile(join(target.work, automationsDocument.path), "utf8")) as Record<string, unknown>[];
+    expect(arrived).toMatchObject({ id: "nightly", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: false, note: "kept" });
+    expect(arrived).not.toHaveProperty("model");
+    await cleanup();
+});
+
+// A webhook token an old build kept in the manifest is a credential: a step would move it into the target's door store
+// on its next boot, so it is dropped on the way in, whether or not anything had to be switched off.
+test("an old webhook token in the automations never arrives, while every other key does", async () => {
+    const hook = { id: "hook", trigger: { kind: "event", token: "the-source-webhook-secret" }, prompt: "triage", model: "claude-sonnet-4-6", enabled: false, note: "kept" };
+    const remote = await publishedWorkspace(async (work) => {
+        await writeFile(join(work, automationsDocument.path), JSON.stringify([hook]));
+    });
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    const arrivals = createArrivals(servicesFor(target));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+
+    expect(report.failed).toEqual([]);
+    const text = await readFile(join(target.work, automationsDocument.path), "utf8");
+    expect(text).not.toContain("the-source-webhook-secret");
+    expect(JSON.parse(text)).toEqual([{ ...hook, trigger: { kind: "event" } }]);
+    await cleanup();
+});
+
+// An entry this build cannot read would be written back as it stands, still enabled, for a later build to fire.
+test("an automations file holding an entry this build cannot read refuses the workspace", async () => {
+    const remote = await publishedWorkspace(async (work) => {
+        await writeFile(
+            join(work, automationsDocument.path),
+            JSON.stringify([{ id: "unpinned", trigger: { kind: "schedule", cron: "0 9 * * *" }, prompt: "sweep the inbox", enabled: true }]),
+        );
+    });
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    const arrivals = createArrivals(servicesFor(target));
+    const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
+    const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
+
+    expect(report.failed[0]?.error).toContain("automations.json");
+    expect(existsSync(join(target.work, "notes.md"))).toBe(false);
     expect(await workspaceRemoteUrl(target.work)).toBeUndefined();
     await cleanup();
 });

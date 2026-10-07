@@ -16,7 +16,8 @@ import { type CursorStore, liveCursorAccounts, type StoredCursorAccount } from "
 // /me, /models, /agents and /repositories and has no allowance surface at all, so the reading is the ledger of what it
 // has already refused (usage/observed-limits.ts), projected into the same windows every other provider fills.
 
-export const CURSOR: AgentProvider = "cursor";
+// The provider id Cursor's readings are filed under; not the contract's CURSOR, which is its runtime's capability record.
+const CURSOR_PROVIDER: AgentProvider = "cursor";
 
 export interface CursorUsageDeps {
     readonly cursorStore: CursorStore;
@@ -35,7 +36,9 @@ export const cursorModelLabels = async (catalog: CursorCatalog): Promise<ModelLa
 // Every live account's ledger, the basis of both readers below.
 const cursorReadings = async (deps: CursorUsageDeps): Promise<readonly (ObservedReading & { stored: StoredCursorAccount })[]> => {
     const accounts = await liveCursorAccounts(deps.cursorStore);
-    return Promise.all(accounts.map(async (stored) => ({ account: stored.id, stored, spent: await deps.observedLimits.spent(CURSOR, stored.id) })));
+    return Promise.all(
+        accounts.map(async (stored) => ({ account: stored.id, stored, spent: await deps.observedLimits.spent(CURSOR_PROVIDER, stored.id) })),
+    );
 };
 
 // A local projection, not a fetch: it reports `empty` so a ledger whose last entry has aged out takes its own reading
@@ -44,9 +47,9 @@ export const cursorHeadroomSource = (deps: CursorUsageDeps): HeadroomSource => (
     targets: async () =>
         (await liveCursorAccounts(deps.cursorStore)).map((account) => ({
             key: account.id,
-            provider: CURSOR,
+            provider: CURSOR_PROVIDER,
             read: async () => {
-                const spent = await deps.observedLimits.spent(CURSOR, account.id);
+                const spent = await deps.observedLimits.spent(CURSOR_PROVIDER, account.id);
                 // Catalog read only once something needs naming: every sweep of every provider reaches this, and
                 // almost every one of them finds an account with nothing on file.
                 if (Object.keys(spent).length === 0) {
@@ -63,8 +66,8 @@ export type CursorLimitDeps = CursorUsageDeps & { readonly headroom: Pick<Headro
 // Files what Cursor just refused against the account that was serving, then re-reads that account so an open picker
 // moves within the same beat rather than at the next sweep. The only way a Cursor ring ever gets a number.
 export const fileCursorLimit = async (deps: CursorLimitDeps, account: string, model: string, message: string): Promise<void> => {
-    await deps.observedLimits.record(CURSOR, account, model, { at: Date.now(), message });
-    await deps.headroom.refresh({ scope: { providers: [CURSOR], account }, maxAgeMs: 0 });
+    await deps.observedLimits.record(CURSOR_PROVIDER, account, model, { at: Date.now(), message });
+    await deps.headroom.refresh({ scope: { providers: [CURSOR_PROVIDER], account }, maxAgeMs: 0 });
 };
 
 // What the ladder reads instead of asking and being refused (agent/models/role-model-quota.ts).

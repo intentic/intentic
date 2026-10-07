@@ -1,5 +1,5 @@
 import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract";
-import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge } from "@intentic/sandbox-contract/embed";
+import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge, WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 
 // Widget's half of the wire: three calls against the daemon's public /webchat door, all subject to its origin
 // allowlist. Failures carry the server's own sentence (EmbedError), not a status code.
@@ -86,16 +86,16 @@ export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessa
             if (frame === undefined) {
                 continue;
             }
-            if (frame.event === "delta") {
+            if (frame.event === WEBCHAT_EVENT.delta) {
                 sink.delta(frame.data);
             }
-            if (frame.event === "pending") {
+            if (frame.event === WEBCHAT_EVENT.pending) {
                 sink.pending(frame.data);
             }
-            if (frame.event === "error") {
+            if (frame.event === WEBCHAT_EVENT.error) {
                 sink.failed(frame.data);
             }
-            if (frame.event === "done") {
+            if (frame.event === WEBCHAT_EVENT.done) {
                 return true;
             }
         }

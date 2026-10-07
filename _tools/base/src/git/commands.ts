@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { gitHeaderEnv } from "./remote-http.js";
 import { defaultGit, type GitRunner } from "./runner.js";
 
 // Generic git verbs over the injectable GitRunner, shared by the CLI (init/scaffold-app/adopt) and the sandbox daemon.
@@ -17,7 +18,8 @@ export const gitInit = async (dir: string, separateGitDir?: string, git: GitRunn
 
 export interface GitCloneOptions {
     readonly branch?: string;
-    // Sent via `-c http.extraheader`, not the URL, so the credential never lands in .git/config or stderr.
+    // Sent through the environment (gitHeaderEnv), never the URL or argv, so the credential lands in no .git/config,
+    // process list, log line or error text.
     readonly authHeader?: string;
     // Real git dir outside the worktree; the in-tree .git becomes a pointer file.
     readonly separateGitDir?: string;
@@ -36,14 +38,17 @@ export const gitClone = async (
         // Git creates the git dir itself but not its parents (fresh /history volume has no gits/).
         await mkdir(dirname(options.separateGitDir), { recursive: true });
     }
-    await git(parentDir, [
-        ...(options?.authHeader !== undefined ? ["-c", `http.extraheader=${options.authHeader}`] : []),
-        "clone",
-        ...(options?.branch !== undefined ? ["--branch", options.branch] : []),
-        ...(options?.separateGitDir !== undefined ? [`--separate-git-dir=${options.separateGitDir}`] : []),
-        cloneUrl,
-        name,
-    ]);
+    await git(
+        parentDir,
+        [
+            "clone",
+            ...(options?.branch !== undefined ? ["--branch", options.branch] : []),
+            ...(options?.separateGitDir !== undefined ? [`--separate-git-dir=${options.separateGitDir}`] : []),
+            cloneUrl,
+            name,
+        ],
+        options?.authHeader !== undefined ? gitHeaderEnv(options.authHeader) : undefined,
+    );
 };
 
 const porcelainFiles = (stdout: string): string[] =>

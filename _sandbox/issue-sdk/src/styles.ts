@@ -1,33 +1,23 @@
+import { DEFAULT_ACCENT, onAccent, parseHex } from "@intentic/sandbox-contract/embed";
+
 // The dialog's styles as a template string injected into its shadow root. `all: initial` is load-bearing: a shadow root
 // blocks the page's selectors but not inherited properties, so without it the dialog inherits the host's font and
 // color. System fonts only, so the artifact stays one file and nothing is blocked by the site's CSP.
 
-// The accent arrives as a hex colour so channels can be read out of it: a wash for the focus ring, a darker step for
-// hover, a legible label colour.
-const channels = (hex: string): { r: number; g: number; b: number } => {
-    const full = hex.length === 4 ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}` : hex;
-    return {
-        r: Number.parseInt(full.slice(1, 3), 16),
-        g: Number.parseInt(full.slice(3, 5), 16),
-        b: Number.parseInt(full.slice(5, 7), 16),
-    };
-};
+// The dialog's own ink, which is also the label on the accent whenever it contrasts more than white does.
+const INK = "#111827";
 
-// Whether the accent is light enough for black text; the sRGB luminance approximation is enough since this only decides
-// between two colours.
-const readableOn = (hex: string): string => {
-    const { r, g, b } = channels(hex);
-    return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#111827" : "#ffffff";
-};
-
-export const dialogStyles = (accent: string): string => {
-    const { r, g, b } = channels(accent);
+// The accent arrives as a hex colour so channels can be read out of it: a wash for the focus ring and a legible label
+// colour. One the maths cannot read paints as the default orange rather than half-derived.
+export const dialogStyles = (configured: string): string => {
+    const accent = parseHex(configured) === undefined ? DEFAULT_ACCENT : configured;
+    const [r, g, b] = parseHex(accent) ?? [0, 0, 0];
     return `
 :host {
     all: initial;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     line-height: 1.5;
-    color: #111827;
+    color: ${INK};
 }
 /* The app's 6px bar (ui/styles/base.css) in this dialog's own greys: base.css cannot reach across the shadow boundary. */
 *, *::before, *::after { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
@@ -98,7 +88,7 @@ button {
     border: 1px solid transparent;
     cursor: pointer;
 }
-button.send { background: ${accent}; color: ${readableOn(accent)}; }
+button.send { background: ${accent}; color: ${onAccent(accent, INK)}; }
 button.send:hover:not(:disabled) { filter: brightness(0.94); }
 button.send:disabled { opacity: 0.6; cursor: default; }
 button.cancel { background: transparent; color: #4b5563; }

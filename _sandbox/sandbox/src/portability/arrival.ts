@@ -21,6 +21,7 @@ import {
     skippedLines,
 } from "../migrations/assistants.js";
 import type { Services } from "../composition.js";
+import { automationsDocument } from "../automations/automations-store.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { applyDefinitionItems, definitionActions, definitionItems } from "../definition/apply-definition.js";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
@@ -230,7 +231,7 @@ export const createArrivals = (services: Services): Arrivals => {
             pending = undefined;
             const chosen = new Set(input.items);
             if (held.kind === "definition") {
-                return applyDefinitionItems(services, held.definition, (item) => chosen.has(item.id));
+                return applyDefinitionItems(services, held.definition, (item) => chosen.has(item.id), { automations: automationsDocument });
             }
             if (held.kind === "assistant") {
                 return applyAssistantSetup(services, held.setup, { items: input.items, includeSecrets: input.includeSecrets });

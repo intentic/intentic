@@ -53,6 +53,10 @@ const SHUTTING_DOWN: Close = Close {
     reason: std::borrow::Cow::Borrowed("sandbox shutting down"),
 };
 
+// How long a stopping sandbox waits for every carrier's close to leave, all of them together. Node's grace
+// (supervise.rs's STOP_GRACE) plus this stays inside the 30 s Docker gives a container to stop.
+const SHUT_WAIT: Duration = Duration::from_secs(2);
+
 // The config the carriers dial, their tasks, and what asks them to close.
 type Running = (
     TunnelConfig,
@@ -142,15 +146,19 @@ impl Tunnel {
     }
 
     /// Closes both sockets and the QUIC connection with 1001 so the edge forgets them at once, and waits briefly for
-    /// the closes to leave.
+    /// the closes to leave. The carriers close together under one wait, not one after another: this runs after Node's
+    /// own grace, and a wait per carrier could take the container past Docker's stop timeout and into a SIGKILL.
     pub async fn shut(&mut self) {
         if let Some((_, dialling, closing)) = self.running.take() {
             closing.send_replace(Some(SHUTTING_DOWN));
-            for carrier in dialling {
-                let _ = tokio::time::timeout(Duration::from_secs(2), carrier).await;
-            }
+            closed_within(dialling, SHUT_WAIT).await;
         }
     }
+}
+
+// Waits for every carrier to end, all at once, for `within` at most; one still going past that is left behind.
+async fn closed_within(carriers: Vec<JoinHandle<()>>, within: Duration) {
+    let _ = tokio::time::timeout(within, futures_util::future::join_all(carriers)).await;
 }
 
 // One socket's dialling: what it presents, and where its standing goes.
@@ -467,6 +475,27 @@ mod tests {
             refusal(&answered(502, &[])),
             Outcome::Dropped { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn carriers_that_never_close_hold_a_stop_for_one_wait_not_one_each() {
+        let stuck: Vec<JoinHandle<()>> = (0..3)
+            .map(|_| tokio::spawn(std::future::pending::<()>()))
+            .collect();
+        let within = Duration::from_millis(300);
+        let started = Instant::now();
+        closed_within(stuck, within).await;
+        let took = started.elapsed();
+        assert!(took >= within, "returned before the wait was up: {took:?}");
+        assert!(
+            took < within * 2,
+            "three stuck carriers waited {took:?}, one wait each rather than one for all"
+        );
+        // Carriers that close at once end the wait at once.
+        let quick: Vec<JoinHandle<()>> = (0..3).map(|_| tokio::spawn(async {})).collect();
+        let started = Instant::now();
+        closed_within(quick, Duration::from_secs(5)).await;
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 
     #[test]

@@ -41,7 +41,7 @@ import { limitReopensAt } from "../models/limit-reset.js";
 import type { RoutedTurn, TurnInput } from "../../seams/turn-starter.js";
 import type { LiveRun } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
-import { SteeringQueue } from "../checkpoints/agent-steering.js";
+import { type ActiveTurn, SteeringQueue } from "../checkpoints/agent-steering.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor, type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
 import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
@@ -59,7 +59,15 @@ import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
 import { endedAfterStop } from "./frames/stop-grace.js";
 import { performSettlement } from "./settle/settle-turn.js";
 import { settleTurn } from "./settle/turn-settlement.js";
-import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "./placement/turn-placement.js";
+import {
+    conversationIdentity,
+    mainTreePlacement,
+    type Placement,
+    placedTurn,
+    refusedBegin,
+    runnerPlacement,
+    unpairedRunner,
+} from "./placement/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
 import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
@@ -125,20 +133,12 @@ export async function* streamAgent(services: Services, sent: TurnInput, signal: 
         signal?.addEventListener("abort", () => controller.abort(), { once: true });
     }
     let steering: SteeringQueue | undefined;
-    let unregister: (() => void) | undefined;
     try {
         // Steering exists only where the runtime declares it; others register abort alone.
         steering = capabilitiesOf(input.agent, input.harness).steering ? new SteeringQueue() : undefined;
-        unregister =
-            input.conversationId !== undefined
-                ? services.conversations.registerTurn(input.conversationId, {
-                      abort: () => controller.abort(),
-                      ...(steering !== undefined ? { steering } : {}),
-                  })
-                : undefined;
-        yield* runConversationTurn(services, input, controller.signal, steering);
+        const control: ActiveTurn = { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) };
+        yield* runConversationTurn(services, input, controller.signal, control);
     } finally {
-        unregister?.();
         steering?.close();
     }
 }
@@ -219,8 +219,9 @@ async function* runConversationTurn(
     services: Services,
     input: RoutedTurn,
     signal: AbortSignal | undefined,
-    steering: SteeringQueue | undefined,
+    control: ActiveTurn,
 ): AsyncGenerator<AgentEvent> {
+    const { steering } = control;
     if (input.conversationId === undefined) {
         // A runner needs a conversation: its branch is what moves between machines; refused otherwise.
         if (input.placement?.kind === "runner") {
@@ -236,10 +237,7 @@ async function* runConversationTurn(
     const existing = services.agents.entry(conversationId);
     const runner = runnerOf(existing, input);
     if (existing === undefined && runner !== undefined && !(await services.runners.enrolled(runner))) {
-        yield {
-            kind: "error",
-            message: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.`,
-        };
+        yield { kind: "error", message: unpairedRunner(runner) };
         yield { kind: "done" };
         return;
     }
@@ -252,30 +250,39 @@ async function* runConversationTurn(
         return;
     }
     const isolated = isolatedOf(existing, input, runner);
-    const began = await services.conversations.send(conversationId, {
+    const begin = services.conversations.send(conversationId, {
         kind: "begin",
         turn: conversationIdentity(input, conversationId, { isolated, runner }),
-    }).settled;
-    if (began !== "begun") {
-        if (began === "archived") {
-            services.logger.info({ conversationId }, "turn not begun: the conversation is archived, and only a person reopens it");
+    });
+    // The turn's stop and steering are lent in the same breath its begin is granted, and never to a turn refused: lent
+    // first, a refused turn took them from the live one and cleared them as it unwound, so that one could no longer be
+    // stopped or steered.
+    const unregister = begin.reply === "begun" ? services.conversations.registerTurn(conversationId, control) : undefined;
+    try {
+        const began = await begin.settled;
+        if (began !== "begun") {
+            if (began === "archived") {
+                services.logger.info({ conversationId }, "turn not begun: the conversation is archived, and only a person reopens it");
+            }
+            yield* refusedBegin(began);
+            return;
         }
-        yield* refusedBegin(began);
-        return;
+        // Names the conversation while the turn runs, fire-and-forget; a gate skips one already better-named.
+        // Warn, not debug: this pass is invisible by construction, so a debug failure goes unnoticed fleet-wide.
+        nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
+            services.logger.warn({ err: error }, "agents: title naming failed"),
+        );
+        // Read once above the placement, so every placement checkpoints under the same index.
+        const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
+        yield* placedTurn(
+            services.conversations,
+            conversationId,
+            placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
+            turnCloser(services, conversationId, steering, signal),
+        );
+    } finally {
+        unregister?.();
     }
-    // Names the conversation while the turn runs, fire-and-forget; a gate skips one already better-named.
-    // Warn, not debug: this pass is invisible by construction, so a debug failure goes unnoticed fleet-wide.
-    nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
-        services.logger.warn({ err: error }, "agents: title naming failed"),
-    );
-    // Read once above the placement, so every placement checkpoints under the same index.
-    const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
-    yield* placedTurn(
-        services.conversations,
-        conversationId,
-        placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
-        turnCloser(services, conversationId, steering, signal),
-    );
 }
 
 // What a settled plan answer leaves in the transcript: the decision's notice, and a rejection's feedback, which stays

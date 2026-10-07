@@ -12,6 +12,8 @@
     "files": [
         "dist",
         "src",
+        "!src/testing.ts",
+        "!dist/testing.*",
         "NOTICE"
     ],
     "publishConfig": {

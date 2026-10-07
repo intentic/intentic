@@ -12,7 +12,7 @@ import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js
 import { commitEpisode, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
 import { version as buildVersion } from "../../version.js";
-import type { PlanFailure, PlanStep, StateStatus } from "@intentic/sandbox-contract";
+import { type PlanFailure, type PlanStep, PlanStepSchema, type StateStatus } from "@intentic/sandbox-contract";
 
 // The boot step that does, before any store opens, what a store's read cannot: moves documents that changed address
 // and runs structural steps (a regroup, a database's schema, an import), under a journal (state-journal.ts) that keeps
@@ -324,7 +324,7 @@ const LedgerEntrySchema = z.object({
     version: z.string(),
     engine: z.number(),
     digest: z.string().optional(),
-    steps: z.array(z.object({ document: z.string(), change: z.string(), detail: z.string().optional() })),
+    steps: z.array(PlanStepSchema),
 });
 export const conversionsDocument = defineDocument({ path: stateRelPath(".intentic/records/conversions.json"), schema: LedgerEntrySchema, granularity: "entries" });
 const LEDGER_KEPT = 50;

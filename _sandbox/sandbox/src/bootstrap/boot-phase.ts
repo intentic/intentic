@@ -9,6 +9,9 @@ import type { ProfileTraits } from "../system/boot/profile.js";
 // was started with, the services built from it, the profile's named traits, the role it claimed over the container,
 // and the one store every teardown registers with. Nothing here enumerates what to stop.
 export interface BootPhase {
+    // The daemon's one deliberate stop: everything registered with `shutdown` is torn down, then the process exits with
+    // `exitCode` (0 unless the cause asks netd for another start, system/boot/daemon-stop.ts). The first call decides.
+    readonly stop: (exitCode?: number) => void;
     readonly config: Config;
     readonly logger: Logger;
     readonly traits: ProfileTraits;

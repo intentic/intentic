@@ -136,7 +136,9 @@ export const startExport = async (services: Services, options: { readonly secret
 
     void (async () => {
         try {
-            await pipeline(Readable.fromWeb(packBundle(services, options) as never), createWriteStream(part));
+            // Flushed to the disk before it is renamed ready, so a power cut never leaves a ready name over bytes that
+            // never landed. A rename lost the same way leaves the `.part`, which the next boot marks failed.
+            await pipeline(Readable.fromWeb(packBundle(services, options) as never), createWriteStream(part, { flush: true }));
             await rename(part, join(dir, `${stem}${READY}`));
         } catch (error) {
             await writeFile(join(dir, `${stem}${FAILED}`), `${errorMessage(error)}\n`).catch(() => {});

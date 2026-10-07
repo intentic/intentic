@@ -14,6 +14,8 @@ flowchart LR
     agents --> tools["fileq · webq · ocr<br/>agent CLIs"]
 ```
 
+The acp-bridge in the diagram runs on the user's device, so it lives in [_devices/acp-bridge](../_devices/acp-bridge). The install recipe the daemon shares with the browser's folder upload is [_shared/workspace-setup](../_shared/workspace-setup). The packages here:
+
 | Package | Role |
 | --- | --- |
 | [agent-context](agent-context) | What an agent is told as a session opens (project map, field notes) and the readings that measure it |
@@ -27,6 +29,6 @@ flowchart LR
 | [ocr](ocr) | `ocr`: the text on an image read on this machine (PP-OCRv6), the privacy shield's reader |
 | [output-cleaners](output-cleaners) | Trims agent Bash output, keeps the raw text retrievable, and ledgers each cleaner's saving |
 | [sandbox](sandbox) | The daemon: runs agents in worktrees, serves the workspace, lands their work |
-| [scaffold](scaffold) | Intent-repo skeleton, git verbs and `deploy.config` rendering for CLI and daemon |
+| [scaffold](scaffold) | Intent-repo skeleton, template scaffolding and `deploy.config` rendering for CLI and daemon |
 | [webchat-widget](webchat-widget) | Visitor chat widget a site embeds to talk to a sandbox agent |
 | [webq](webq) | Agent CLI fetching web pages as budgeted markdown, with bounded crawls |

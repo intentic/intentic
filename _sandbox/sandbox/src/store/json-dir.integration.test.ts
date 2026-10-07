@@ -107,6 +107,15 @@ test("remove unlinks the entry; a second remove reports missing", async () => {
     expect(await store.read("doomed")).toBeUndefined();
 });
 
+test("a remove asked for while a write is in flight lands after it, so the entry stays removed", async () => {
+    const store = notes(await tempDir());
+    await store.write("doomed", { text: "bye" });
+    // Not awaited apart: the write is still reading the entry it replaces when the remove is asked for.
+    const [, removed] = await Promise.all([store.write("doomed", { text: "edited" }), store.remove("doomed")]);
+    expect(removed).toBe(true);
+    expect(await store.read("doomed")).toBeUndefined();
+});
+
 test("a document's conversions run on each file, and a write keeps the keys a newer build left in it", async () => {
     const dir = await tempDir();
     const document = defineDocument({ path: "evolution/notes/", schema: NoteSchema, history: [rename("body", "text")] });

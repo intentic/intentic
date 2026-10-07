@@ -81,6 +81,72 @@ describe(`DisposableStore`, () => {
     });
 });
 
+describe(`DisposableStore.disposeWithin`, () => {
+    /* The order a process's shutdown needs: the door that admits work closes before the work behind it. */
+    it(`stops the newest member first`, async () => {
+        const store = new DisposableStore();
+        const stopped: string[] = [];
+        store.push(() => stopped.push(`services`));
+        store.push(() => stopped.push(`door`));
+
+        await store.disposeWithin(1_000);
+
+        expect(stopped).toEqual([`door`, `services`]);
+    });
+
+    it(`waits for an asynchronous stop before resolving`, async () => {
+        const store = new DisposableStore();
+        let finished = false;
+        store.push(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            finished = true;
+        });
+
+        const outcome = await store.disposeWithin(1_000);
+
+        expect(finished).toBe(true);
+        expect(outcome).toEqual({ failed: [], unfinished: 0 });
+    });
+
+    /* A stop that never settles must not hold the exit. */
+    it(`gives up on a hanging stop at the deadline and counts it`, async () => {
+        const store = new DisposableStore();
+        store.push(() => new Promise(() => undefined));
+        store.push(async () => undefined);
+
+        const outcome = await store.disposeWithin(20);
+
+        expect(outcome.unfinished).toBe(1);
+    });
+
+    it(`reports throwing and rejecting stops without stopping the rest`, async () => {
+        const store = new DisposableStore();
+        const stopped: string[] = [];
+        store.push(() => stopped.push(`first`));
+        store.push(() => {
+            throw new Error(`threw`);
+        });
+        store.push(() => Promise.reject(new Error(`rejected`)));
+
+        const outcome = await store.disposeWithin(1_000);
+
+        expect(outcome.failed.map((error) => (error as Error).message).toSorted()).toEqual([`rejected`, `threw`]);
+        expect(stopped).toEqual([`first`]);
+    });
+
+    it(`does nothing the second time`, async () => {
+        const store = new DisposableStore();
+        const stop = jest.fn();
+        store.push(stop);
+
+        await store.disposeWithin(1_000);
+        await store.disposeWithin(1_000);
+        store.dispose();
+
+        expect(stop).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe(`Disposable`, () => {
     it(`releases what a subclass registered`, () => {
         const stop = jest.fn();

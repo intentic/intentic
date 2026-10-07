@@ -1,5 +1,4 @@
-import { createReadStream } from "node:fs";
-import { lstat, mkdtemp, readdir, readlink, rm } from "node:fs/promises";
+import { mkdtemp, open, readdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pipeline, Readable } from "node:stream";
@@ -25,13 +24,39 @@ import { webStream } from "@intentic/base/web-stream";
 
 export const BUNDLE_MANIFEST_ENTRY = "intentic-bundle.json";
 
-// Pack one file, streaming its bytes; `size` must be exact or tar-stream throws, so it comes from the same lstat that
-// decided this was a file.
-const packFile = (packer: Pack, name: string, absPath: string, size: number, mode: number, mtime: Date): Promise<void> =>
-    new Promise((resolve, reject) => {
-        const entry = packer.entry({ name, size, mode, mtime, type: "file" }, (error) => (error === null ? resolve() : reject(error)));
-        createReadStream(absPath).on("error", reject).pipe(entry);
-    });
+// Pack one regular file from one open handle: the entry's size, mode and mtime are that handle's own, and exactly that
+// many bytes are streamed from it. tar-stream fails an entry whose bytes differ from its size, and a file that grows
+// while it is packed (the money ledger, a transcript, a git object an agent's commit is writing) would otherwise fail the
+// whole export; this way it lands as the prefix it had when it was opened. Answers the bytes packed, or undefined when
+// the path was gone, or no longer a regular file, by the time it was opened.
+export const packFile = async (packer: Pack, name: string, absPath: string): Promise<number | undefined> => {
+    const handle = await open(absPath, "r").catch(undefinedIfMissing);
+    if (handle === undefined) {
+        return undefined;
+    }
+    try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) {
+            return undefined;
+        }
+        await new Promise<void>((resolve, reject) => {
+            const entry = packer.entry({ name, size: stats.size, mode: stats.mode & 0o7777, mtime: stats.mtime, type: "file" }, (error) =>
+                error === null ? resolve() : reject(error),
+            );
+            // The entry's own failure (bytes short of its size, when a file shrank under the walk) rejects here instead
+            // of escaping as an uncaught error.
+            entry.on("error", reject);
+            if (stats.size === 0) {
+                entry.end(null);
+                return;
+            }
+            handle.createReadStream({ start: 0, end: stats.size - 1, autoClose: false }).on("error", reject).pipe(entry);
+        });
+        return stats.size;
+    } finally {
+        await handle.close();
+    }
+};
 
 const packSymlink = (packer: Pack, name: string, linkname: string): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -83,13 +108,12 @@ const packTree = async (
                 // Sockets, fifos and device nodes have no meaning on the other side of a restore.
                 continue;
             }
-            const stats = await lstat(absPath).catch(undefinedIfMissing);
-            if (stats === undefined) {
+            const packed = await packFile(packer, `${prefix}${relPath}`, absPath);
+            if (packed === undefined) {
                 continue;
             }
-            await packFile(packer, `${prefix}${relPath}`, absPath, stats.size, stats.mode & 0o7777, stats.mtime);
             files += 1;
-            bytes += stats.size;
+            bytes += packed;
             wrote = true;
         }
         // An empty directory that survived every filter is content in its own right, and needs an explicit entry.
@@ -113,8 +137,9 @@ const packSnapshot = async (packer: Pack, name: string, database: Pick<Services[
     try {
         const snapshot = join(scratch, "snapshot.db");
         database.snapshot(snapshot);
-        const stats = await lstat(snapshot);
-        await packFile(packer, name, snapshot, stats.size, stats.mode & 0o7777, stats.mtime);
+        if ((await packFile(packer, name, snapshot)) === undefined) {
+            throw new Error("the conversations database snapshot was gone before it could be packed");
+        }
     } finally {
         await rm(scratch, { recursive: true, force: true });
     }

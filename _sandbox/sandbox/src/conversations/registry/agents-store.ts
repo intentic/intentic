@@ -2,6 +2,7 @@ import {
     AgentHarnessSchema,
     AgentOriginSchema,
     AgentProviderSchema,
+    type AgentStatus,
     ForkedFromSchema,
     LandConflictSchema,
     LandedMessageSchema,
@@ -272,7 +273,7 @@ export const worktreeOf = (entry: PersistedAgent | undefined): WorktreePlacement
 export const reposOf = (entry: PersistedAgent): readonly RepoRecord[] => worktreeOf(entry)?.repos ?? [];
 
 // The ending in the card's status vocabulary: both failure kinds read as `error`.
-export type EndingStatus = "idle" | "interrupted" | "stopped" | "error";
+export type EndingStatus = Extract<AgentStatus, "idle" | "interrupted" | "stopped" | "error">;
 export const endingStatus = (ending: Ending): EndingStatus =>
     ending.kind === "failed" || ending.kind === "limited" ? "error" : ending.kind;
 

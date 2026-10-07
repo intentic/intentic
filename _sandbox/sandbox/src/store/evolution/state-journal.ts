@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
@@ -155,12 +155,61 @@ export const rootOf = (roots: Readonly<Record<DocumentRoot, string>>, path: stri
         .filter(([, root]) => path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`))
         .toSorted(([, a], [, b]) => b.length - a.length)[0]?.[0];
 
-// Copies a file into place atomically: a sibling temp copy renamed over the target.
+// Copies a file into place atomically: a sibling temp copy, flushed to the disk, renamed over the target. The rename is
+// durable only once its directory is synced too, which the caller does for every directory an episode touched
+// (syncDirectories) before the journal names a pre-image or forgets one.
 const copyInto = async (from: string, to: string): Promise<void> => {
     await mkdir(dirname(to), { recursive: true });
     const temp = join(dirname(to), `.converting.${process.pid}.tmp`);
-    await copyFile(from, temp);
-    await rename(temp, to);
+    try {
+        await copyFile(from, temp);
+        const handle = await open(temp, "r+");
+        try {
+            await handle.sync();
+        } finally {
+            await handle.close();
+        }
+        await rename(temp, to);
+    } catch (error) {
+        await rm(temp, { force: true });
+        throw error;
+    }
+};
+
+// The directories a rename, a removal or a fresh mkdir at `path` changed: its own, and each above it up to the root of
+// the volume it is on, since a directory mkdir just made is itself only an entry in its parent.
+const directoriesOf = (roots: Readonly<Record<DocumentRoot, string>>, path: string): string[] => {
+    const root = rootOf(roots, path);
+    const top = root === undefined ? dirname(path) : roots[root];
+    const directories: string[] = [];
+    for (let directory = dirname(path); ; directory = dirname(directory)) {
+        directories.push(directory);
+        if (directory.length <= top.length || dirname(directory) === directory) {
+            return directories;
+        }
+    }
+};
+
+// Flushes each directory's entries to the disk once, whatever number of files an episode copied into it. A directory
+// gone since (an emptied tree a rollback removed) has nothing left to flush, and one on a filesystem that cannot flush a
+// directory, or on Windows, where a directory cannot be opened for it, has no better answer to give.
+const syncDirectories = async (directories: Iterable<string>): Promise<void> => {
+    if (process.platform === "win32") {
+        return;
+    }
+    for (const directory of new Set(directories)) {
+        const handle = await open(directory, "r").catch(undefinedIfMissing);
+        if (handle === undefined) {
+            continue;
+        }
+        try {
+            await handle.sync();
+        } catch {
+            // allow(silent-catch): the entries are written already; a filesystem that cannot flush a directory has no better answer
+        } finally {
+            await handle.close();
+        }
+    }
 };
 
 // What an episode is about to do, in the order it does it: renames, then copies, then writes (which may land inside a
@@ -174,7 +223,9 @@ export interface EpisodeWork {
 
 // Copies each target aside and records the episode open, before a single target is written. A resumed episode (a
 // crash mid-apply of a build with this same conversion digest) keeps the pre-images it already took: those are the true
-// originals. Entries are recorded in the order the work applies, and a rollback undoes them newest first.
+// originals. Entries are recorded in the order the work applies, and a rollback undoes them newest first. The copies are
+// on the disk before the journal names them; a new episode that fails before its journal is written takes its copies
+// with it, since nothing would ever name them again.
 export const openEpisode = async (
     roots: Readonly<Record<DocumentRoot, string>>,
     journal: Journal,
@@ -183,8 +234,20 @@ export const openEpisode = async (
 ): Promise<Journal> => {
     const resumed = journal.episodes.find((episode) => episode.state === "open" && episode.digest === identity.digest);
     const episode: Episode = resumed ?? { id: `${identity.now}-${process.pid}`, ...identity, state: "open", startedAt: identity.now, entries: [] };
+    try {
+        return await recordEpisode(roots, journal, work, episode);
+    } catch (error) {
+        if (resumed === undefined) {
+            await dropPreImages(roots, episode);
+        }
+        throw error;
+    }
+};
+
+const recordEpisode = async (roots: Readonly<Record<DocumentRoot, string>>, journal: Journal, work: EpisodeWork, episode: Episode): Promise<Journal> => {
     const recorded = new Set(episode.entries.map((entry) => entry.path));
     const entries = [...episode.entries];
+    const copiedInto: string[] = [];
     for (const [from, to] of work.renames) {
         if (!recorded.has(to)) {
             entries.push({ path: to, preImage: null, movedFrom: from });
@@ -212,7 +275,11 @@ export const openEpisode = async (
         );
         entries.push({ path: target, preImage: copied ? preImage : null });
         recorded.add(target);
+        if (copied) {
+            copiedInto.push(...directoriesOf(roots, preImage));
+        }
     }
+    await syncDirectories(copiedInto);
     const opened: Journal = {
         ...journal,
         episodes: [...journal.episodes.filter((candidate) => candidate.id !== episode.id), { ...episode, entries }],
@@ -221,21 +288,27 @@ export const openEpisode = async (
     return opened;
 };
 
-// Puts every file an episode touched back as it was, then forgets the episode.
+// Puts every file an episode touched back as it was, then forgets the episode. What was put back is on the disk before
+// the journal forgets the episode, and the journal forgets it before its pre-images go: a crash anywhere in between
+// leaves either an episode the next boot restores again from pre-images still there, or pre-images nothing names.
 export const restoreEpisode = async (roots: Readonly<Record<DocumentRoot, string>>, journal: Journal, episode: Episode): Promise<Journal> => {
+    const touched: string[] = [];
     // Newest first, so a tree renamed and then written into is emptied before it is renamed back.
     for (const entry of episode.entries.toReversed()) {
         if (entry.movedFrom !== undefined) {
             await moveBack(entry.path, entry.movedFrom);
+            touched.push(...directoriesOf(roots, entry.movedFrom));
         } else if (entry.preImage === null) {
             await rm(entry.path, { recursive: true, force: true });
         } else {
             await copyInto(entry.preImage, entry.path);
         }
+        touched.push(...directoriesOf(roots, entry.path));
     }
-    await dropPreImages(roots, episode);
+    await syncDirectories(touched);
     const restored: Journal = { ...journal, episodes: journal.episodes.filter((candidate) => candidate.id !== episode.id) };
     await writeJournal(roots.history, restored);
+    await dropPreImages(roots, episode);
     return restored;
 };
 

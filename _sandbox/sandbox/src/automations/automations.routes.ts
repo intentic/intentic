@@ -1,7 +1,7 @@
 import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, VISITOR_CHAT_PERSONA, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
-import type { DoorKind } from "../auth/tokens/door-tokens.js";
+import { type DoorKind, doorChange, listedDoorToken } from "../auth/tokens/door-tokens.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -43,7 +43,11 @@ const listed = async (services: Services, automation: AutomationRecord, operator
     if (!operator || door === undefined) {
         return summary;
     }
-    const token = await services.doorTokens.ensure(door, automation.id);
+    // Absent when the door file cannot be read: the row lists without its URL rather than failing the whole list.
+    const token = await listedDoorToken(services.doorTokens, door, automation.id);
+    if (token === undefined) {
+        return summary;
+    }
     return door === "automation" ? { ...summary, webhookToken: token } : { ...summary, ingestKey: token };
 };
 
@@ -124,10 +128,13 @@ export const createAutomationsRoutes = (services: Services) => {
             // The door's credential is minted with the door, never stored in the manifest; a re-post of the same record
             // keeps it, so an edit can't rotate a live credential out from under a shipped caller.
             // A trigger that changed kind drops the credential the old door held.
+            // A door file this build cannot read refuses the credential (CONFLICT naming it); the record above is saved.
             const door = doorOf(automation);
-            await Promise.all(
-                (["automation", "intake"] as const).map((kind) =>
-                    kind === door ? services.doorTokens.ensure(kind, automation.id) : services.doorTokens.remove(kind, automation.id),
+            await doorChange(
+                Promise.all(
+                    (["automation", "intake"] as const).map((kind) =>
+                        kind === door ? services.doorTokens.ensure(kind, automation.id) : services.doorTokens.remove(kind, automation.id),
+                    ),
                 ),
             );
             // A Visitor chat pinned to the Visitor chat persona brings that card into being: turnPersona denies everything
@@ -162,7 +169,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
             // The door is gone; so is what opened it.
-            await Promise.all([services.doorTokens.remove("automation", input.id), services.doorTokens.remove("intake", input.id)]);
+            await doorChange(Promise.all([services.doorTokens.remove("automation", input.id), services.doorTokens.remove("intake", input.id)]));
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
@@ -176,7 +183,7 @@ export const createAutomationsRoutes = (services: Services) => {
             if (door === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "this automation opens no door: nothing outside the sandbox reaches it, so there is no token to rotate" });
             }
-            return { token: await services.doorTokens.rotate(door, automation.id) };
+            return { token: await doorChange(services.doorTokens.rotate(door, automation.id)) };
         }),
         // Run now: fires the real path and runs the guard, skips only approval, and works even when switched off.
         run: i.run.handler(async ({ input }) => {

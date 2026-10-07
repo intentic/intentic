@@ -2,12 +2,15 @@ import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSum
 import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { type ApprovalStanding, approvalStandings, forgetApprovals } from "./approval-decisions.js";
 import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
 // agent write the queue.
 // Dispatched by kind: a Discord post goes out through its gateway, other posts and all actions need an agent turn.
 // `running` is written before any action starts, so a mid-death daemon leaves a stuck item rather than one done twice.
+// An item's `approved` is only a claim, since the agent writes the file too: it runs when the owner's yes on the history
+// volume (approval-decisions.ts) matches what it says now.
 
 // How long a turn may sit before another pass reconsiders it; else a dead turn leaves `running` forever.
 const RUNNING_STALE_MS = 30 * 60_000;
@@ -48,6 +51,14 @@ const isAction = (item: ApprovalSummary): item is ActionApprovalSummary => item.
 const actionTitle = (actions: readonly ActionApprovalSummary[]): string =>
     actions.length === 1 ? (actions[0]?.summary ?? `Carry out 1 action`) : `Carry out ${actions.length} actions`;
 
+// Why an item marked approved was not carried out, for its failed row. A retry from the app is the yes given again,
+// over the item as it stands then.
+const NOT_APPROVED: Readonly<Record<Exclude<ApprovalStanding, `approved`>, string>> = {
+    unapproved: `Nothing was done: there is no yes from the owner on record for this. An item is approved in the app, never by writing "approved" into its file. Read it, then retry if it is what you want.`,
+    changed: `Nothing was done: this changed after it was approved, and the yes covered it as it was then. Read it as it is now, then retry if it is still what you want.`,
+    unreadable: `Nothing was done: the record of what was approved could not be read. Read it, then retry to approve it again.`,
+};
+
 export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
     // One pass at a time: two overlapping passes could read `approved` before either writes `running`, twice.
@@ -57,6 +68,30 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         await services.approvals.upsert({ ...item, ...changes });
     };
     const fail = (item: ApprovalSummary, error: string): Promise<void> => mark(item, { status: `failed`, error });
+
+    // Fails unsent every due item without a yes matching it, then spends the yes of the rest before anything acts on
+    // them, so the file being put back to approved later runs nothing a second time. Returns the items that can go.
+    const settleUnapproved = async <T extends ApprovalSummary>(items: readonly T[]): Promise<T[]> => {
+        const standingOf = await approvalStandings({ historyRoot: services.config.historyRoot, workspaceRoot: services.workspace.root });
+        const cleared: T[] = [];
+        for (const item of items) {
+            const standing = await standingOf(item);
+            if (standing === `approved`) {
+                cleared.push(item);
+                continue;
+            }
+            services.logger.warn(
+                { approval: item.id, standing },
+                `approvals: an item marked approved has no yes matching it, so it was not carried out`,
+            );
+            await fail(item, NOT_APPROVED[standing]);
+        }
+        await forgetApprovals(
+            services.config.historyRoot,
+            cleared.map((item) => item.id),
+        );
+        return cleared;
+    };
 
     // Sends one post through the API its platform actually offers; returns whether it's now settled.
     // False hands it to the turn instead: the answer for a Discord post with an attachment or a channel named rather
@@ -126,10 +161,11 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         running = true;
         try {
             const { approvals } = await services.approvals.list();
-            const due = approvals.filter((item) => isDue(item, now));
-            if (due.length === 0) {
+            const marked = approvals.filter((item) => isDue(item, now));
+            if (marked.length === 0) {
                 return;
             }
+            const due = await settleUnapproved(marked);
 
             const forTurn: PostApprovalSummary[] = [];
             for (const post of due.filter(isPost)) {

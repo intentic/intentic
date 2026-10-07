@@ -241,9 +241,12 @@ async function* runAcpTurn(
     try {
         for (let next = await pull(); next !== SETTLED; next = await pull()) {
             if (next === EXPIRED) {
-                // Cancel is best-effort; the kill is not. Sessions die with the process; the next send self-heals.
+                // Cancel is best-effort. The process may be serving other conversations' turns, so this one lets go of
+                // its session and the connection ends the process only if none is left (acp-connection.ts); sessions
+                // die with it, and the next send self-heals.
                 cancel();
-                connection.kill();
+                unbind();
+                connection.abandon(session);
                 yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
                 return { sessionId: session, planText: held.text, errored: true };
             }

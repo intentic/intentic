@@ -140,7 +140,7 @@ fn wait_answering(slug: &str) {
                 "-sf",
                 "-m",
                 "5",
-                "http://localhost:8787/health",
+                crate::health::HEALTH_URL,
             ],
             Duration::from_secs(15),
         )

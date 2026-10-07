@@ -7,6 +7,7 @@ import {
     type IssuePublicConfig,
     type IssuesConfig,
 } from "@intentic/sandbox-contract";
+import { DEFAULT_ACCENT } from "@intentic/sandbox-contract/embed";
 import type { Context } from "hono";
 import type { z } from "zod";
 import type { AutomationRecord } from "../automations/automations-store.js";
@@ -32,8 +33,6 @@ const ISSUE_THREAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_TITLE = "Report a problem";
 const DEFAULT_PROMPT = "What went wrong?";
 const DEFAULT_THANKS = "Thanks, we have it. We will look into it.";
-// Intentic's brand orange, same default as the Visitor chat: unconfigured should still look like the product.
-const DEFAULT_ACCENT = "#e47100";
 
 export const publicIssuesConfig = (automation: AutomationRecord): IssuePublicConfig => {
     const config: IssuesConfig = automation.issues ?? {};
@@ -43,6 +42,7 @@ export const publicIssuesConfig = (automation: AutomationRecord): IssuePublicCon
         prompt: config.prompt ?? DEFAULT_PROMPT,
         thanks: config.thanks ?? DEFAULT_THANKS,
         askEmail: config.askEmail ?? false,
+        // Intentic's brand orange, the same default as the Visitor chat: unconfigured should still look like the product.
         accent: config.accent ?? DEFAULT_ACCENT,
         // A site that embedded a crash reporter meant to report crashes.
         captureCrashes: config.captureCrashes ?? true,

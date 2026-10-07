@@ -40,33 +40,32 @@ test("gitInit with no separate git dir is a plain init", async () => {
     await rm(historyRoot, { recursive: true });
 });
 
-test("gitClone forwards the auth header, branch, and separate git dir flags, and creates the git dir's parent", async () => {
+test("gitClone forwards the branch and separate git dir flags, and creates the git dir's parent", async () => {
     const historyRoot = await mkdtemp(join(tmpdir(), "intentic-git-test-"));
     await rm(historyRoot, { recursive: true });
     const separateGitDir = join(historyRoot, "gits", "extra");
     const { git, calls } = recordingGit({});
-    await gitClone(
-        WORKSPACE_ROOT,
-        "extra",
-        "https://example.com/extra.git",
-        { branch: "main", authHeader: "Authorization: Basic abc", separateGitDir },
-        git,
-    );
-    expect(calls).toEqual([
-        [
-            "/work",
-            "-c",
-            "http.extraheader=Authorization: Basic abc",
-            "clone",
-            "--branch",
-            "main",
-            `--separate-git-dir=${separateGitDir}`,
-            "https://example.com/extra.git",
-            "extra",
-        ],
-    ]);
+    await gitClone(WORKSPACE_ROOT, "extra", "https://example.com/extra.git", { branch: "main", separateGitDir }, git);
+    expect(calls).toEqual([["/work", "clone", "--branch", "main", `--separate-git-dir=${separateGitDir}`, "https://example.com/extra.git", "extra"]]);
     expect(existsSync(join(historyRoot, "gits"))).toBe(true);
     await rm(historyRoot, { recursive: true });
+});
+
+// Argv is world-readable in /proc and is quoted whole in a failure's message, so the header must ride the environment.
+test("gitClone hands the auth header to git through its environment, never its arguments", async () => {
+    const seen: { args: readonly string[]; env: Readonly<Record<string, string>> | undefined }[] = [];
+    const git: GitRunner = async (_dir, args, env) => {
+        seen.push({ args, env });
+        return { stdout: "", stderr: "" };
+    };
+    await gitClone(WORKSPACE_ROOT, "extra", "https://example.com/extra.git", { authHeader: "Authorization: Basic abc" }, git);
+    expect(seen).toEqual([
+        {
+            args: ["clone", "https://example.com/extra.git", "extra"],
+            env: { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: "Authorization: Basic abc" },
+        },
+    ]);
+    expect(seen[0]?.args.join(" ")).not.toContain("Basic abc");
 });
 
 test("gitClone with no options is a bare clone", async () => {

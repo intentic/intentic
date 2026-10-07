@@ -65,6 +65,9 @@ export interface JsonEntriesOptions<E> extends Omit<JsonFileOptions<E[]>, "parse
     // The keys that name an entry, for pairing a rebuilt entry with the one it replaces; `id` unless the entries use
     // another (a workflow run's `runId`).
     readonly idKeys?: IdKeys;
+    // The list read whole or not at all: an entry this build cannot read makes the file unreadable rather than being
+    // skipped and written back as it stands, for a list where carrying an entry forward unseen is unsafe.
+    readonly strict?: boolean;
 }
 
 // Where unreadable content is set aside: `<name>.corrupt`, or a stamped sibling when an earlier episode already holds
@@ -91,13 +94,14 @@ interface Store<T> {
     readonly mode: number | undefined;
     readonly onUnreadable: "setAside" | "refuse";
     readonly document: DocumentSpec | undefined;
+    readonly strict: boolean;
 }
 
 // A file with no document has no conversions to run.
 const NO_HISTORY = { history: [], granularity: "object" } as const;
 
 const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
-    const { how, fallback, mode, onUnreadable, document } = store;
+    const { how, fallback, mode, onUnreadable, document, strict } = store;
     // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
     // either way.
     const readState = async (): Promise<Read<T>> => {
@@ -127,6 +131,9 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             const detail = read.problems[0]?.detail ?? "the file does not match what this build expects";
             return done({ state: { value: fallback(), unreadable: true, detail } });
         }
+        if (strict && read.problems.some((problem) => problem.kind === "invalidEntry")) {
+            return done({ state: { value: fallback(), unreadable: true, detail: "an entry in it is not one this build can read" } });
+        }
         return done({ state: { value: read.value, unreadable: false }, carry: read.carry });
     };
 
@@ -150,7 +157,8 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             if (updated === undefined) {
                 return false;
             }
-            await writeJsonFile(path, updated, mode);
+            // As durable as `update` writes the same file: a repair is no reason to risk an owner's file.
+            await writeJsonFile(path, updated, mode, onUnreadable === "refuse");
             return true;
         });
 
@@ -193,18 +201,20 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
         mode,
         onUnreadable,
         document,
+        strict: false,
     });
 
 // A top-level array read one entry at a time: an entry this build cannot read, or whose conversion fails, is reported
 // and skipped instead of sinking the whole file to its fallback, and kept in the file on the next write where a later
 // build can read it.
-export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"] }: JsonEntriesOptions<E>): JsonFile<E[]> =>
+export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"], strict }: JsonEntriesOptions<E>): JsonFile<E[]> =>
     openJsonFile<E[]>(path, {
         how: { kind: "entries", entry, idKeys },
         fallback: () => [],
         mode,
         onUnreadable,
         document,
+        strict: strict === true,
     });
 
 // A newest-last log kept to its `cap` newest entries, over its store's own file, whose shape, mode and refusal stay the store's.

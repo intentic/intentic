@@ -14,7 +14,7 @@ import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "./runtimes/runtime-table.js"
 import { createAcpConnections } from "./runtimes/acp/acp-connection.js";
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
-import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
+import { activityLogDocument, type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
@@ -107,7 +107,7 @@ import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tool
 import { enabledExtensions, type ExtensionHost } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 
-import { statePath } from "./state-paths.js";
+import { authRootOf, statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import type { HostsSlice } from "./hosts/hosts-slice.js";
 import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
@@ -513,8 +513,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
 
     const workspaceSlice = createWorkspaceSlice({ config, logger });
     const { workspace } = workspaceSlice;
-    // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
-    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
+    const authRoot = authRootOf({ agentAuthDir: config.agentAuthDir, workspaceRoot: workspace.root });
     const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root, logger);
@@ -595,7 +594,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Hoisted: the CI fixer files into the same log and reads the same settings the routes do.
-    const activity = fileActivityStore(join(config.historyRoot, "activity.jsonl"));
+    const activity = fileActivityStore(join(config.historyRoot, activityLogDocument.path));
     const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path));
     // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
     const sessionsSlice = createSessionsSlice({
@@ -745,6 +744,24 @@ export const createServices = (config: Config, logger: Logger): Services => {
     });
     return services;
 };
+
+// What composing starts on its own clock (samplers, timers, children, a loopback listener) and how each stops: the one
+// list main() registers with its shutdown and a suite runs when it is done with a composed daemon, so the two cannot
+// keep different rosters. A member that starts something when it is built gains its stop here, beside its creation.
+export const servicesTeardown = (services: Services): readonly (() => unknown)[] => [
+    () => services.resources.stop(),
+    () => services.perf.stop(),
+    () => services.ciHooks.stop(),
+    () => services.announcer.stop(),
+    () => services.reach.stop(),
+    () => services.history.stop(),
+    () => services.processes.stopAll(),
+    // Extension gateways and the backend host are direct children; stopped here or they outlive the daemon (the orphan
+    // sweep is only a backstop).
+    () => services.serviceProcesses.stopAll(),
+    () => services.extensionBackend.stop(),
+    () => services.platformTunnel.close(),
+];
 
 // What reacts to the turns' and the fleet's announcements, subscribed in this order: chores to workspace events, the
 // owner's devices to a turn that parks or ends, history to a main tree a turn changed. Shared with the route harness,

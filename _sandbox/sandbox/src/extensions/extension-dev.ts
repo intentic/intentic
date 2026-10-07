@@ -235,13 +235,10 @@ export const bundleRevisionOf = async (dir: string, entry: string | undefined): 
     return bytes === undefined ? undefined : createHash("sha256").update(bytes).digest("hex").slice(0, 12);
 };
 
-// A runner of its own so the count is never a cached reading: a rebuilt dist/ is under an ignored directory name, so
-// no watcher tells a cache it moved.
-const uncachedGit: GitRunner = (dir, args, env) => defaultGit(dir, args, env);
-
+// The runner passes --no-optional-locks itself, so counting never takes the checkout's index.lock.
 const uncommittedIn = async (checkout: string, git: GitRunner): Promise<number | undefined> => {
     try {
-        const { stdout } = await git(checkout, ["--no-optional-locks", "status", "--porcelain", "-uall"]);
+        const { stdout } = await git(checkout, ["status", "--porcelain", "-uall"]);
         return stdout.split("\n").filter((line) => line.trim() !== "").length;
     } catch {
         // allow(silent-catch): not a repository, or git could not read it; the row simply carries no count
@@ -252,7 +249,7 @@ const uncommittedIn = async (checkout: string, git: GitRunner): Promise<number |
 // The row's `dev` field: where, how far from its last commit, which build is served, or why none is.
 export const devSummaryOf = async (
     extension: { readonly dir: string; readonly manifest: ExtensionManifest; readonly dev?: InstalledDev },
-    git: GitRunner = uncachedGit,
+    git: GitRunner = defaultGit,
 ): Promise<ExtensionDev | undefined> => {
     const dev = extension.dev;
     if (dev === undefined) {

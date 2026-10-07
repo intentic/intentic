@@ -37,7 +37,12 @@ A module takes `Pick<Services, …>` of the seams it uses, so its dependencies a
 [src/main.ts](../src/main.ts) runs the phases in [src/bootstrap/](../src/bootstrap): the netd door first, so
 `/health` and `/events` answer at once; then the boot chain (`boot-chain.ts`) while data routes wait behind the
 readiness gate; then workspace apps, sweeps, restores, schedulers, resumes, version watches and change reactions.
-Every subsystem registers its own teardown in one `DisposableStore`, so shutdown enumerates nothing.
+Every subsystem registers its own teardown in one `DisposableStore`, so shutdown enumerates nothing. Shutdown stops
+them newest first, so the netd door and the phases built last stop before the services they read, and it waits for
+the asynchronous stops for at most 10 s (`system/boot/daemon-stop.ts`), well inside the 25 s netd allows. A phase past
+the gate that throws is logged by name and the phases after it still start; a boot step with a `failure` sentence reads
+`failed` on `/health` and `/events` while the chain goes on. When netd's control link drops unasked, the daemon exits
+75 so netd starts Node again rather than ending the container.
 
 ## HTTP
 
@@ -100,7 +105,7 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
    agent's) becomes a commit: a subject that narrates instead of describing a change is replaced there by one built
    from the claimed paths (`committableSubject`), whichever path drafted or stored it.
 5. **Settle.** The placement's books, then the conversation's actor.
-6. **Publish, once.** The placement announces how the turn ended (`TurnEnding`: failed, stopped, awaiting a wake, or
+6. **Publish, once.** The placement announces how the turn ended (`PlacedTurnEnding`: failed, stopped, awaiting a wake, or
    finished); a worktree turn's is the workspace `turn.settled` event.
 
 After all of it the run registry announces `run.settled` (`agent/run/turn/turn-runs.ts`). Its listeners are independent
@@ -109,13 +114,15 @@ into the pipeline's order by subscribing earlier. They are, in subscription orde
 
 | Listener | Where | What it does |
 | --- | --- | --- |
-| reaper | `composition.ts` | frees what a stopped owner held |
 | taint | `composition.ts` | drops the turn's outside-content taint |
 | drain | `composition.ts` (`wireReactions`) | lets out what waited in the conversation's queue |
-| main's fix agent | `bootstrap/boot-schedulers.ts` | hands a failing main to the owner when its fix agent's turn ends without a fix |
+| work signal | `workload/work-signal.ts` (started in `main.ts`) | rewrites how many turns a restart would cut, for the host's keeper |
 | invariants | `bootstrap/boot-sweeps.ts` | runs the `turn-settled` self-checks |
+| reaper | `system/boot/reaper.ts` (wired in `composition.ts`, started in `bootstrap/boot-sweeps.ts`) | frees what a stopped owner held |
+| needs | `needs/needs.ts` (wired in `needs/needs-slice.ts`) | continues a conversation whose need was met while its turn ran |
 | child report | `bootstrap/boot-schedulers.ts` | tells a spawned child's parent it settled |
 | keep-warm | `bootstrap/boot-schedulers.ts` | arms a prompt-cache hold after a person's turn, from the event alone |
+| main's fix agent | `bootstrap/boot-schedulers.ts` | hands a failing main to the owner when its fix agent's turn ends without a fix |
 
 A listener takes the `run.settled` event and decides for itself; one that needs an order against the close belongs in
 the pipeline instead.

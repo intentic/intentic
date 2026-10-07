@@ -13,6 +13,10 @@ flowchart LR
 - Runs in a visitor's browser on someone else's site, so it must never break the page. Every path swallows its own
   failures, the error handlers observe through `addEventListener`, and breadcrumbs are a bounded ring buffer that
   skips request bodies, keystrokes and `console.log`.
+- A start that fails (a sandbox asleep at page load, a refused origin) is not kept: the next `init` tries again, and
+  meanwhile `captureException`, `report`, `breadcrumb` and `openReportDialog` resolve without doing anything.
+- Crashes and detections are sent at most five times a minute per message and thirty a minute in all, so an error
+  in a render loop is not a request per frame. A written report is never held back.
 - One entry, two builds (`vite.config.ts`): `sdk.js`, an IIFE that boots from its own `<script data-automation>` tag
   and exposes `window.Intentic`, and `sdk.mjs` for `init()` from a bundler.
 - The daemon serves `sdk.js` itself (`_sandbox/sandbox/src/issues/`), so the SDK and the routes it calls always ship
@@ -20,7 +24,8 @@ flowchart LR
 - `data-release` names the commit the build came from, so the agent reads the real source at that commit and no
   sourcemaps are needed. Browsers are admitted by origin; an app with no origin presents an ingest `key`.
 - `dialog.ts` is the only UI: an optional report dialog in a shadow root with no launcher button, opened from the
-  host's own link through `openReportDialog`.
+  host's own link through `openReportDialog`. Its Send label takes whichever of dark ink and white contrasts more with
+  the accent, measured the same way as the Visitor chat's.
 
 ## Key files
 

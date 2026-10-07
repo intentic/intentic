@@ -2,10 +2,11 @@ import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { CONTROL_SCOPES, type ControlScope } from "./control-tokens.js";
-import { ownerDenied } from "../owner-gates.js";
+import { ownerDenied, unavailableIfUnreadable } from "../owner-gates.js";
 
 // Control tokens, minted by the owner or a maintainer, durable and revocable; raw value returned exactly once. Plain
-// routes before the oRPC catch-all.
+// routes before the oRPC catch-all. A token file this build cannot read refuses a mint or a revoke (control-tokens.ts),
+// answered as 503.
 // Scope is required, never defaulted: a narrow default 403s the caller's first call, a generous one over-grants.
 // Expiry is optional and absent means never, since the same shape serves both a laptop-bound editor token and a
 // self-expiring CI secret.
@@ -46,11 +47,13 @@ export const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
         }
         // The minter's identity is what the middleware verified for this request, never a field of the body.
         const createdBy = c.get("identity")?.email;
-        return c.json(
-            await services.controlTokens.mint(request.label, request.scope, {
-                ...(createdBy !== undefined ? { createdBy } : {}),
-                ...(request.expiresAt !== undefined ? { expiresAt: request.expiresAt } : {}),
-            }),
+        return unavailableIfUnreadable(c, async () =>
+            c.json(
+                await services.controlTokens.mint(request.label, request.scope, {
+                    ...(createdBy !== undefined ? { createdBy } : {}),
+                    ...(request.expiresAt !== undefined ? { expiresAt: request.expiresAt } : {}),
+                }),
+            ),
         );
     },
     /** GET /system/control/tokens */
@@ -67,6 +70,8 @@ export const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
         if (denied !== undefined) {
             return denied;
         }
-        return (await services.controlTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
+        return unavailableIfUnreadable(c, async () =>
+            (await services.controlTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404),
+        );
     },
 });

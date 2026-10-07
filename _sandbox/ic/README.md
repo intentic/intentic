@@ -70,9 +70,9 @@ flowchart LR
   that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
   once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
   netd's vitals on its address, else off the file netd keeps them in (`/run/intentic/vitals.json`), else off netd's
-  own log for a netd from before the file; docker's restart count
-  never sees them, since netd is PID 1. The container put back is then waited for the same way, and the flow ends on
-  where the sandbox stands: a dev sandbox's previous container runs the same compiled checkout as the new one, so when
+  own log for a netd from before the file, with the error the daemon last died on where that log holds it; docker's
+  restart count never sees them, since netd and the container stay up while netd restarts the daemon inside it. The
+  container put back is then waited for the same way, and the flow ends on where the sandbox stands: a dev sandbox's previous container runs the same compiled checkout as the new one, so when
   neither comes up, the message names that code and the two commands that fix it. (2026-10-06: a swap onto a daemon
   that could not load a package said "Your previous sandbox was restored" over a restored container that crashed the
   same way.) After that
@@ -158,7 +158,10 @@ flowchart LR
   rather than assumed at `/mnt/c/Program Files` (2026-10-06). Every
   automatic restart is busy-aware (agents mid-turn mean a yes first), and the repairs made through ic are counted on
   the sandbox's volume (`/history/.ic/repairs.json`, `ledger.rs`, reported as `repairs` in `--json`): after three
-  automatic restarts in two hours the keeper stops and asks instead. A container a person stopped outside ic (Docker
+  automatic restarts in two hours the keeper stops and asks instead. A daemon netd keeps restarting (`health.rs`'s
+  crash loop) is never restarted with its container, which would put the same code back: the daemon check names the
+  crash and the error it last died on, and offers the version before the last update, or the log when there is none;
+  connect's postflight (`doctor.rs`) settles on the same finding instead of waiting it out. A container a person stopped outside ic (Docker
   Desktop's Stop button: Exited, `unless-stopped`, exit 0 or 143, the stop in the engine's event log) is recorded as
   held and left for a yes, and a stopped tunnel container from an older setup is removed rather than started. An
   unattended run on a side that keeps no sandbox names the machine's trouble and repairs none of it (2026-10-05: a
@@ -187,6 +190,9 @@ flowchart LR
 - [src/sandbox/side.rs](src/sandbox/side.rs) — which side of the computer keeps a sandbox, and the keeper's lease;
   [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
+- [src/sandbox/host_files.rs](src/sandbox/host_files.rs) — holds every file ic and the daemon share inside the
+  container (the restart ask, the update markers, the boot failure, the boot marker, the work signal) to the daemon's
+  own path and shape: its `golden/host-files.json` and the contract's `golden/update-*.json`.
 - [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
 
 ## Commands

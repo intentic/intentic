@@ -2,13 +2,14 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { gitHeaderEnv } from "@intentic/base/git";
 import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The runner's /work mirrors the parent's: fetched before a turn, pushed to refs/runner-incoming/<id> after. The token
-// rides in as GIT_CONFIG_* env, not argv (readable in /proc on a shared machine). Fetched refs land in
+// rides in as GIT_CONFIG_* env (gitHeaderEnv), not argv (readable in /proc on a shared machine). Fetched refs land in
 // refs/runner-parent/ first, since moving a checked-out branch straight into refs/heads/ would desync it from its
 // worktree.
 
@@ -26,9 +27,7 @@ export interface RunnerSyncDeps {
 
 export const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
     ...process.env,
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.extraHeader",
-    GIT_CONFIG_VALUE_0: `Authorization: Bearer ${identity.token}`,
+    ...gitHeaderEnv(`Authorization: Bearer ${identity.token}`),
     // A fetch that stops for a password prompt has already failed; fail it legibly instead.
     GIT_TERMINAL_PROMPT: "0",
 });

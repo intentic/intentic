@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { HOST_CARD_RULE } from "../hosts/host-peer.js";
 import { defineDocument } from "../store/evolution/documents.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { type Burns, enrollments, HostEnrollmentFieldsSchema, hostEnrollmentsDocument, pairings, syncPairConsumedDocument } from "./enrollment.js";
 
 // Pins the shared mechanic four doors use, not any one door's specifics: which pairings get written down at all, and
@@ -91,6 +92,24 @@ describe("pairings", () => {
         expect(await pending.arm("", "laptop")).toBe(false);
         expect(await pending.redeem("")).toBeUndefined();
     });
+
+    // A burn list read through its empty fallback would let a spent env-armed token in again; one set aside on the next
+    // burn would forget every token it ever spent. Refused both ways, and the pairing being redeemed stays unspent.
+    it("refuses to arm or redeem against a burn list it cannot read, and keeps the pairing for a retry", async () => {
+        const historyRoot = root();
+        const { path } = burnsIn(historyRoot);
+        const pending = pairings<string>(burnsIn(historyRoot));
+        expect(await pending.arm("from-the-env", "rig")).toBe(true);
+        await writeFile(path, "{ this is not json");
+
+        await expect(pairings<string>(burnsIn(historyRoot)).arm("from-the-env", "rig")).rejects.toBeInstanceOf(ManifestUnreadableError);
+        await expect(pending.redeem("from-the-env")).rejects.toBeInstanceOf(ManifestUnreadableError);
+        expect(pending.peek("from-the-env")).toBe("rig");
+        expect(await readFile(path, "utf8")).toBe("{ this is not json");
+
+        await rm(path);
+        expect(await pending.redeem("from-the-env")).toBe("rig");
+    });
 });
 
 describe("enrollments", () => {
@@ -149,6 +168,23 @@ describe("enrollments", () => {
 
         await rm(join(historyRoot, "enrollments.json"));
         expect(await store(historyRoot).verify(token)).toEqual({ kind: "unknown" });
+    });
+
+    // Set aside and rewritten, an unreadable manifest would keep only the peer just paired: every other peer's
+    // "unavailable" would become "unknown", which tells it to throw its credential away. Refused instead, revokes
+    // included, which would otherwise answer "never here" and leave the peer enrolled once the file is fixed.
+    it("refuses every write over a manifest it cannot read, and leaves it as it was", async () => {
+        const historyRoot = root();
+        const path = join(historyRoot, "enrollments.json");
+        await store(historyRoot).issue("rig", {});
+        await writeFile(path, "{ this is not json");
+
+        const records = store(historyRoot);
+        await expect(records.issue("laptop", {})).rejects.toBeInstanceOf(ManifestUnreadableError);
+        await expect(records.revoke("rig")).rejects.toBeInstanceOf(ManifestUnreadableError);
+        await expect(records.revokeCard("rig")).rejects.toBeInstanceOf(ManifestUnreadableError);
+        expect(await readFile(path, "utf8")).toBe("{ this is not json");
+        expect(existsSync(`${path}.corrupt`)).toBe(false);
     });
 
     it("renames without disturbing the key, and revokes once", async () => {

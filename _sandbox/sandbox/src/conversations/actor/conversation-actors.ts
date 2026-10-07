@@ -69,10 +69,11 @@ export interface ConversationActors {
     // One land at a time per conversation, later ones queued in arrival order; claimed synchronously, released once the
     // last queued one settles, whether or not it threw.
     readonly withLandLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T>;
-    // Holds the conversation against its own turns while a rewind restores files; refused (undefined) under a live turn.
+    // Holds the conversation against its own turns while a rewind restores files; refused (undefined) under a live turn
+    // or another rewind.
     readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
-    // Lends the conversation's live turn its hard-cancel and steering seam; last-wins, and the unregister it returns is
-    // bound to this turn, so a stale one can't clobber its successor. The turn starts unwatched.
+    // Lends the conversation's live turn its hard-cancel and steering seam, once its begin is granted; last-wins, and the
+    // unregister it returns is bound to this turn, so a stale one can't clobber its successor. The turn starts unwatched.
     readonly registerTurn: (conversationId: string, turn: ActiveTurn) => () => void;
     // Words into the live turn's steering queue; false when no turn with one is live.
     readonly steer: (conversationId: string, text: string) => boolean;

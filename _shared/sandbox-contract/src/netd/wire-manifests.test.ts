@@ -3,7 +3,15 @@ import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "../protocol/edge-verdict.js"
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH } from "../protocol/ingress-contract.js";
 import { VITALS_FILE, VITALS_PATH } from "../protocol/vitals.js";
 import { EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
-import { ASK_PATIENCE_MS, FRAME_LENGTH_BYTES, NETD_SOCKET_ENV, NODE_SOCKET_ENV } from "./netd-wire.js";
+import {
+    ASK_PATIENCE_MS,
+    FRAME_LENGTH_BYTES,
+    FRAME_MAX_BYTES,
+    INSTANCE_ENV,
+    NETD_SOCKET_ENV,
+    NODE_GENERATION_ENV,
+    NODE_SOCKET_ENV,
+} from "./netd-wire.js";
 
 // The manifests `cargo test` writes from the Rust crates that define this wire: every value TypeScript restates is read
 // back against them, so the two languages cannot drift and contract.lock.json pins what both agree on.
@@ -17,9 +25,9 @@ const tunnel = manifest("tunnel") as {
 };
 // SAFETY: netd-wire's own test writes this manifest with exactly these keys, and the lock pins them.
 const socket = manifest("netd-wire") as {
-    env: { netdSocket: string; nodeSocket: string };
+    env: { netdSocket: string; nodeSocket: string; generation: string; instance: string };
     askPatienceMs: number;
-    frame: { lengthBytes: number };
+    frame: { lengthBytes: number; maxBytes: number };
 };
 const browser = manifest("browser-wire") as {
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
@@ -37,11 +45,22 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
     });
 
     it("names the control socket's env vars, its patience and its framing as netd-wire does", () => {
-        expect({ netd: NETD_SOCKET_ENV, node: NODE_SOCKET_ENV, patience: ASK_PATIENCE_MS, length: FRAME_LENGTH_BYTES }).toEqual({
+        expect({
+            netd: NETD_SOCKET_ENV,
+            node: NODE_SOCKET_ENV,
+            generation: NODE_GENERATION_ENV,
+            instance: INSTANCE_ENV,
+            patience: ASK_PATIENCE_MS,
+            length: FRAME_LENGTH_BYTES,
+            max: FRAME_MAX_BYTES,
+        }).toEqual({
             netd: socket.env.netdSocket,
             node: socket.env.nodeSocket,
+            generation: socket.env.generation,
+            instance: socket.env.instance,
             patience: socket.askPatienceMs,
             length: socket.frame.lengthBytes,
+            max: socket.frame.maxBytes,
         });
     });
 

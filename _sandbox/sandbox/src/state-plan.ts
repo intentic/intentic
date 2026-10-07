@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { STATE_PLAN_FORMAT, type StatePlan } from "@intentic/sandbox-contract";
-import { statePath } from "./state-paths.js";
+import { authRootOf } from "./state-paths.js";
 import { recordNewestRun } from "./store/newest-run.js";
 import { planState } from "./store/evolution/state-convergence.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
@@ -27,7 +27,7 @@ const workspace = values.workspace;
 const roots = {
     workspace,
     history: values.history,
-    auth: values.auth ?? statePath(workspace, ".intentic/secrets/auth/"),
+    auth: authRootOf({ agentAuthDir: values.auth ?? "", workspaceRoot: workspace }),
 };
 
 // Learns the stamp (so a downgrade is named) without writing it: the mounts are read-only and this is not the daemon.

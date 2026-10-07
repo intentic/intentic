@@ -9,7 +9,7 @@ swap that went wrong the owner is looking at whichever version ended up running:
 the volume both containers share, so that version reads what happened to the other one (the daemon returns it as
 `/info` `lastUpdate`; its shape is `UpdateOutcomeSchema` in @intentic/sandbox-contract, schemas/updates.ts). */
 
-const FILE: &str = "/history/update-outcome.json";
+pub const FILE: &str = "/history/update-outcome.json";
 
 /// What happened, in the contract's words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,4 +1,4 @@
-import type { ControlTokens } from "./tokens/control-tokens.js";
+import { type ControlTokens, ControlTokensUnreadableError } from "./tokens/control-tokens.js";
 import { admitByGrant, type Grant, grantsOf } from "./grants.js";
 
 // The verdict alone: what a grant admits or refuses is the subject here, not the principal it may hand back.
@@ -110,7 +110,29 @@ test("the sync grant answers an unreadable enrollment store as unavailable, neve
     expect(await admitByGrant(grants, (name) => headers[name], "GET", "/ports")).toEqual({
         admitted: false,
         status: 503,
-        error: "this sandbox cannot read its enrollment manifest right now (the file is not valid JSON)",
+        error: "this sandbox cannot read its sync tokens right now (the file is not valid JSON)",
+    });
+});
+
+// The same for a control token: a token file this build cannot read is the daemon's fault, not a revocation.
+test("the control grant answers an unreadable token file as unavailable, never as unauthorized", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: {
+            resolve: async () => {
+                throw new ControlTokensUnreadableError("the file is not valid JSON");
+            },
+            touch: async () => undefined,
+        } as unknown as ControlTokens,
+        verifySync: async () => ({ kind: "unknown" }),
+        verifyExtension: () => undefined,
+    });
+    const headers: Readonly<Record<string, string>> = { "x-intentic-control": "ict_ci" };
+    expect(await admitByGrant(grants, (name) => headers[name], "GET", "/agents")).toEqual({
+        admitted: false,
+        status: 503,
+        error: "this sandbox cannot read its control tokens right now (the file is not valid JSON)",
     });
 });
 

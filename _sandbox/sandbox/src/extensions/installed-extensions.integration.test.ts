@@ -8,6 +8,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { listenerContribution, testConfig } from "../testing.js";
+import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { approveExtension, forgetExtensionApproval } from "./extension-approvals.js";
@@ -118,6 +119,20 @@ test("extensionBinDirsOf resolves each contributes.bin to an absolute dir on the
     await writeManifest(join(baked, "intentic.discord"), { ...manifest("intentic", "discord"), contributes: { bin: "bin" } });
     const dirs = await extensionBinDirsOf(services(mkdtempSync(join(tmpdir(), "installed-work-")), baked, []));
     expect(dirs).toEqual([join(baked, "intentic.discord", "bin")]);
+});
+
+// Every turn reads the bin dirs, so they come off the cached inventory: a new extension shows up once something says
+// the set moved (the daemon's watcher, the backend's restart), not by rebuilding the inventory on every turn.
+test("extensionBinDirsOf reads the cached inventory, which moves when it is invalidated", async () => {
+    const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
+    await writeManifest(join(baked, "intentic.discord"), { ...manifest("intentic", "discord"), contributes: { bin: "bin" } });
+    const host = services(mkdtempSync(join(tmpdir(), "installed-work-")), baked, []);
+    expect(await extensionBinDirsOf(host)).toEqual([join(baked, "intentic.discord", "bin")]);
+
+    await writeManifest(join(baked, "intentic.imap"), { ...manifest("intentic", "imap"), contributes: { bin: "tools" } });
+    expect(await extensionBinDirsOf(host)).toEqual([join(baked, "intentic.discord", "bin")]);
+    invalidateContributions();
+    expect((await extensionBinDirsOf(host)).toSorted()).toEqual([join(baked, "intentic.discord", "bin"), join(baked, "intentic.imap", "tools")]);
 });
 
 // Write the owner's switch file the way the enablement store does: by publisher.name, not the capability id.

@@ -28,16 +28,8 @@ export const newestRunDocument = defineDocument({ path: stateRelPath(".intentic/
 
 // Undefined until recordNewestRun runs; after that, the newest version seen.
 let newest: string | undefined;
-// The newest conversion count recorded here, undefined before any engine ran.
-let newestEngine: number | undefined;
-// The conversion digest the newest run recorded, undefined before any build that wrote one.
-let newestDigest: string | undefined;
 
 export const newestRunVersion = (): string | undefined => newest;
-
-export const newestRunEngine = (): number | undefined => newestEngine;
-
-export const newestRunDigest = (): string | undefined => newestDigest;
 
 // Whether a newer intentic has run this workspace: its files may hold what this build cannot read, and are never
 // moved aside or written over whole by it.
@@ -72,16 +64,13 @@ export const recordNewestRun = async (workspaceRoot: string, running: string = v
         // Absent or unreadable both read as no run recorded; re-established below.
     }
     newest = recorded.version;
-    newestEngine = recorded.engine;
-    newestDigest = recorded.digest;
     if (options.write === false || running === DEV_VERSION || (recorded.version !== undefined && !isNewer(running, recorded.version))) {
         return;
     }
     newest = running;
-    newestEngine = Math.max(recorded.engine ?? 0, options.engine ?? 0);
-    newestDigest = options.digest;
+    const engine = Math.max(recorded.engine ?? 0, options.engine ?? 0);
     try {
-        await writeFileAtomic(path, `${JSON.stringify({ version: running, engine: newestEngine, ...(newestDigest === undefined ? {} : { digest: newestDigest }) }, undefined, 2)}\n`);
+        await writeFileAtomic(path, `${JSON.stringify({ version: running, engine, ...(options.digest === undefined ? {} : { digest: options.digest }) }, undefined, 2)}\n`);
     } catch {
         // A workspace that cannot be written loses nothing but the better sentence.
     }
@@ -90,6 +79,4 @@ export const recordNewestRun = async (workspaceRoot: string, running: string = v
 // Test seam, like clearManifestProblems: the stamp cache is module state.
 export const clearNewestRun = (): void => {
     newest = undefined;
-    newestEngine = undefined;
-    newestDigest = undefined;
 };

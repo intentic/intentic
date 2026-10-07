@@ -119,15 +119,19 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, 
                 }
                 await writeJsonFile(path, before.kind === "read" ? before.carry(body) : body);
             }),
+        // On the entry's write queue too: a removal that overtook a write already reading the entry would be undone
+        // the moment that write landed.
         remove: (id) =>
-            unlink(entryPath(id)).then(
-                () => true,
-                (error: unknown) => {
-                    if (isMissing(error)) {
-                        return false;
-                    }
-                    throw error;
-                },
+            queueOnFile(entryPath(id), () =>
+                unlink(entryPath(id)).then(
+                    () => true,
+                    (error: unknown) => {
+                        if (isMissing(error)) {
+                            return false;
+                        }
+                        throw error;
+                    },
+                ),
             ),
         setAside: async (id) => rename(entryPath(id), await asideOf(entryPath(id))),
     };

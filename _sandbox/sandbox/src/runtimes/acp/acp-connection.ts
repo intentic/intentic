@@ -45,6 +45,11 @@ export interface AcpConnection {
     readonly sessions: Set<string>;
     // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;
+    // Gives up on a session whose turn stopped answering, once that turn has cancelled and unbound it. The process is
+    // every conversation's on this agent, so it is killed only when no other turn is bound to it; a process that hung
+    // outright still dies once the last turn on it gives up. Until a turn binds the session again, a permission it asks
+    // for is refused rather than auto-allowed: it was told to stop, and no turn is left to judge the ask.
+    readonly abandon: (sessionId: string) => void;
     readonly kill: () => void;
 }
 
@@ -66,6 +71,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         const proc = spawnAcpProcess(config.command, parseEnvBlock(config.env), cwd);
         const turns = new Map<string, TurnHooks>();
         const sessions = new Set<string>();
+        const abandoned = new Set<string>();
         const terminals = createAcpTerminals(terminalRun);
         let dead = false;
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -110,8 +116,9 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         const app = client({ name: "intentic" })
             .onRequest(methods.client.session.requestPermission, ({ params }) => {
                 const hooks = turns.get(params.sessionId);
-                // A late request with no bound turn falls back to the standing auto-allow policy.
-                return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", false);
+                // A late request with no bound turn falls back to the standing auto-allow policy, unless the session was
+                // abandoned mid-turn.
+                return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", abandoned.has(params.sessionId));
             })
             .onNotification(methods.client.session.update, ({ params }) => {
                 turns.get(params.sessionId)?.onUpdate(params);
@@ -170,6 +177,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             stderrTail: proc.stderrTail,
             sessions,
             bindTurn: (sessionId, hooks) => {
+                abandoned.delete(sessionId);
                 turns.set(sessionId, hooks);
                 clearTimeout(idleTimer);
                 return () => {
@@ -181,6 +189,13 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
                         armIdleReap();
                     }
                 };
+            },
+            abandon: (sessionId) => {
+                abandoned.add(sessionId);
+                if (turns.size === 0) {
+                    logger.info({ agent: id }, "acp: no turn left on a connection that stopped answering, ending it");
+                    kill();
+                }
             },
             kill,
         };

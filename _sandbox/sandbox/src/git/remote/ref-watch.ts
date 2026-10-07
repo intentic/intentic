@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
 import { Coalescer } from "@intentic/base/async";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { commonDirOf, gitDirOf } from "../git-dir.js";
 
 // A third change feed (beside the file watcher and repo-set differ): the git dir is often relocated off /work and the
 // file watcher ignores `.git`, so nothing else can say a commit landed. Watches only where a ref or operation marker is
@@ -24,17 +24,12 @@ export interface RefWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
 }
 
-// A repo's git dir and common dir, absolute; asked of git rather than guessed, so a relocated dir, a linked worktree
-// and a plain `.git` all work.
-const gitDirsOf = async (dir: string, git: GitRunner): Promise<{ gitDir: string; commonDir: string } | undefined> => {
-    try {
-        const { stdout } = await git(dir, ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"]);
-        const [gitDir, commonDir] = stdout.trim().split("\n");
-        return gitDir === undefined || commonDir === undefined ? undefined : { gitDir, commonDir: commonDir === "" ? gitDir : commonDir };
-    } catch {
-        // Not a repo yet, mid-removal, or a clone still being written; the next repo-set frame retries.
-        return undefined;
-    }
+// A repo's git dir and common dir, absolute; read off the filesystem (git/git-dir.ts) rather than guessed, so a
+// relocated dir, a linked worktree and a plain `.git` all work, and a repo-set frame spawns no git per repo.
+const gitDirsOf = async (dir: string): Promise<{ gitDir: string; commonDir: string } | undefined> => {
+    // Not a repo yet, mid-removal, or a clone still being written: undefined, and the next repo-set frame retries.
+    const gitDir = await gitDirOf(dir);
+    return gitDir === undefined ? undefined : { gitDir, commonDir: await commonDirOf(gitDir) };
 };
 
 const watchPaths = ({ gitDir, commonDir }: { gitDir: string; commonDir: string }): string[] => [
@@ -54,7 +49,6 @@ export const createRefWatch = (
     root: string,
     repos: (listener: (repos: string[]) => void) => () => void,
     logger?: Logger,
-    git: GitRunner = defaultGit,
 ): RefWatch & { close: () => void } => {
     const listeners = new Set<(repos: string[]) => void>();
     const watchers = new Map<string, FSWatcher>();
@@ -68,17 +62,18 @@ export const createRefWatch = (
         if (watchers.has(repo)) {
             return;
         }
-        const dirs = await gitDirsOf(repo === "root" ? root : join(root, repo), git);
+        const dirs = await gitDirsOf(repo === "root" ? root : join(root, repo));
         if (dirs === undefined) {
             return;
         }
-        // A second call may have won the race while this one awaited git; drop this one or the map leaks a watcher.
+        // A second call may have won the race while this one read the git dirs; drop this one or the map leaks a watcher.
         if (watchers.has(repo)) {
             return;
         }
-        // `ignoreInitial`: chokidar otherwise reports every existing ref as an `add` at boot. `depth: 2` covers
-        // `refs/heads/<name>` and `refs/remotes/<remote>/<name>`, the deepest cases any surface renders.
-        const watcher = watch(watchPaths(dirs), { ignoreInitial: true, depth: 2 });
+        // `ignoreInitial`: chokidar otherwise reports every existing ref as an `add` at boot. No depth limit: a branch
+        // name may hold any number of slashes (`refs/remotes/origin/agent/<name>`, `dependabot/npm_and_yarn/…`), and a
+        // refs tree is small.
+        const watcher = watch(watchPaths(dirs), { ignoreInitial: true });
         watcher.on("all", () => batcher.add(repo));
         watcher.on("error", (error) => logger?.warn({ err: error, repo }, "ref watch error"));
         watchers.set(repo, watcher);
@@ -118,9 +113,27 @@ export const createRefWatch = (
     };
 };
 
-// Boot-time singleton the /events handler subscribes to, mirroring repo-watch's pattern.
+// Boot-time singleton the /events handler subscribes to, as repo-watch's is: subscribers register into a set that
+// outlives the start, so one taken while boot is still under way hears every ref move once the watch is up.
+const subscribers = new Set<(repos: string[]) => void>();
 let instance: (RefWatch & { close: () => void }) | undefined;
-export const startRefWatch = (root: string, repos: (listener: (repos: string[]) => void) => () => void, logger: Logger): void => {
-    instance ??= createRefWatch(root, repos, logger);
+// Returns the stop, for the daemon's shutdown.
+export const startRefWatch = (root: string, repos: (listener: (repos: string[]) => void) => () => void, logger: Logger): (() => void) => {
+    if (instance === undefined) {
+        const refWatch = createRefWatch(root, repos, logger);
+        refWatch.subscribe((moved) => {
+            for (const listener of subscribers) {
+                listener(moved);
+            }
+        });
+        instance = refWatch;
+    }
+    return () => {
+        instance?.close();
+        instance = undefined;
+    };
 };
-export const subscribeRefChanges = (listener: (repos: string[]) => void): (() => void) => instance?.subscribe(listener) ?? (() => undefined);
+export const subscribeRefChanges = (listener: (repos: string[]) => void): (() => void) => {
+    subscribers.add(listener);
+    return () => subscribers.delete(listener);
+};

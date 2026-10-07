@@ -107,6 +107,18 @@ test("a branch created and then deleted is reported", async () => {
     expect(batches[0]).toEqual(["root"]);
 });
 
+// A branch name may nest as deep as it likes: an agent's `agent/<name>` under a remote is four levels below refs/.
+test("a ref several slashes deep is reported", async () => {
+    const root = await workspace();
+    const batches = watchRoot(root);
+    await attached(batches, probeBranch(root));
+
+    batches.length = 0;
+    await git(root, ["update-ref", "refs/remotes/origin/agent/deep/name", "HEAD"]);
+    await waitFor(() => batches.length > 0);
+    expect(batches[0]).toEqual(["root"]);
+});
+
 // Linked worktrees split state across two dirs: refs/packed-refs stay in the common dir, HEAD and in-progress markers
 // are per-worktree; missing either half misses it silently.
 test("a checkout inside a linked worktree is reported, HEAD being per-worktree", async () => {

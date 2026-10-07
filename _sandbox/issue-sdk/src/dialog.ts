@@ -1,3 +1,4 @@
+import { escapeHtml } from "@intentic/sandbox-contract/embed";
 import type { IssueClient } from "./client.js";
 import { dialogStyles } from "./styles.js";
 
@@ -34,9 +35,9 @@ export class IssueDialogElement extends HTMLElement {
         this.#root.innerHTML = `
             <style>${dialogStyles(accent)}</style>
             <div class="backdrop" part="backdrop">
-                <div class="panel" role="dialog" aria-modal="true" aria-label="${escaped(title)}">
-                    <h2>${escaped(title)}</h2>
-                    <p class="prompt">${escaped(prompt)}</p>
+                <div class="panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+                    <h2>${escapeHtml(title)}</h2>
+                    <p class="prompt">${escapeHtml(prompt)}</p>
                     <label for="what">What happened</label>
                     <textarea id="what" placeholder="It did this when I…"></textarea>
                     ${askEmail ? `<label for="email">Your email (optional)</label><input id="email" type="email" autocomplete="email" />` : ""}
@@ -84,7 +85,7 @@ export class IssueDialogElement extends HTMLElement {
     #thanks(message: string): void {
         const panel = this.#root.querySelector(".panel");
         if (panel !== null) {
-            panel.innerHTML = `<p class="done">${escaped(message)}</p>`;
+            panel.innerHTML = `<p class="done">${escapeHtml(message)}</p>`;
         }
         setTimeout(() => this.#close(), 2200);
     }
@@ -93,11 +94,6 @@ export class IssueDialogElement extends HTMLElement {
         return this.#root.querySelector<T>(selector) ?? undefined;
     }
 }
-
-// Neither the config text nor what a person typed is trusted with markup; escaped for both text and attributes, since
-// `title` lands in aria-label too.
-const escaped = (value: string): string =>
-    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 
 // Opens the dialog, defining the element on first use; idempotent, so a second call focuses the existing dialog instead
 // of stacking another one.

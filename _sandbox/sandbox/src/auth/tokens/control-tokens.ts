@@ -3,6 +3,7 @@ import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchem
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
+import { ManifestUnreadableError } from "../../store/json-file.js";
 import { openDocument } from "../../store/open-document.js";
 import { tokenEquals } from "../auth.js";
 import { routeFloor } from "../role-floor.js";
@@ -59,7 +60,8 @@ const TOUCH_INTERVAL_MS = 60_000;
 export interface ControlTokens {
     // Returns the raw token once; only its sha256 is persisted.
     readonly mint: (label: string, scope: ControlScope, options?: MintOptions) => Promise<{ id: string; token: string }>;
-    // The token this secret is, or undefined if no live stored token matches (unknown, revoked, or expired).
+    // The token this secret is, or undefined if no live stored token matches (unknown, revoked, or expired); throws
+    // ControlTokensUnreadableError when the file exists and this build cannot read it, which says nothing about the token.
     // One lookup answers whether it's real, how far it reaches, and what it's called, which the middleware needs all at
     // once.
     readonly resolve: (presented: string, now?: number) => Promise<ResolvedControlToken | undefined>;
@@ -69,10 +71,24 @@ export interface ControlTokens {
     readonly revoke: (id: string) => Promise<boolean>;
 }
 
+// The token file exists and this build cannot read it: every token in it is unknowable rather than unknown, so the
+// grant answers unavailable (503) instead of telling a holder its token is dead.
+export class ControlTokensUnreadableError extends Error {
+    readonly detail: string;
+    constructor(detail: string) {
+        super(`the control-token file could not be read (${detail})`);
+        this.name = "ControlTokensUnreadableError";
+        this.detail = detail;
+    }
+}
+
 export const fileControlTokens = (path: string): ControlTokens => {
+    // Refused rather than set aside when this build cannot read it: setting it aside on the next mint would revoke every
+    // other token at once. A write over it throws ManifestUnreadableError.
     const file = openDocument<typeof controlTokensDocument, StoredTokens>(controlTokensDocument, path, {
         unknownKeys: true,
         fallback: () => ({ tokens: [] }),
+        onUnreadable: "refuse",
     });
     const live = (entry: StoredToken, now: number): boolean => entry.expiresAt === undefined || entry.expiresAt > now;
     return {
@@ -99,9 +115,14 @@ export const fileControlTokens = (path: string): ControlTokens => {
             if (presented === "") {
                 return undefined;
             }
+            // `state`, not `read`: an unreadable file's empty fallback would answer every token as unknown.
+            const stored = await file.state();
+            if (stored.unreadable) {
+                throw new ControlTokensUnreadableError(stored.detail);
+            }
             const hash = sha256Hex(presented);
             // Comparing fixed-length hex digests keeps the comparison timing-safe regardless of input length.
-            const entry = (await file.read()).tokens.find((candidate) => tokenEquals(candidate.hash, hash));
+            const entry = stored.value.tokens.find((candidate) => tokenEquals(candidate.hash, hash));
             return entry === undefined || !live(entry, now)
                 ? undefined
                 : { id: entry.id, label: entry.label, scope: entry.scope, ...(entry.createdBy !== undefined ? { createdBy: entry.createdBy } : {}) };
@@ -119,6 +140,12 @@ export const fileControlTokens = (path: string): ControlTokens => {
         },
         list: async () => (await file.read()).tokens.map(({ hash: _hash, ...summary }) => summary),
         revoke: async (id) => {
+            // Over a file this build cannot read, a revoke would find no such token, write nothing, and leave the token
+            // to answer again the moment the file was fixed: refused like a mint.
+            const tokens = await file.state();
+            if (tokens.unreadable) {
+                throw new ManifestUnreadableError(path, tokens.detail);
+            }
             let revoked = false;
             await file.update((stored) => {
                 const next = stored.tokens.filter((entry) => entry.id !== id);

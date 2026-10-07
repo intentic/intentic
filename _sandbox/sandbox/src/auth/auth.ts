@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import type { GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
@@ -6,7 +5,9 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
+import { tokenEquals } from "./token-equals.js";
 
 // The sandbox authenticates the end user directly against Google; the platform never holds this credential.
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -163,7 +164,9 @@ export const memberRow = (email: string, grant: MemberGrant): Member => ({
 
 // Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
 // one erasing the other.
-// One malformed entry is skipped so the rest keep access; a file that isn't a members file at all reads as nobody.
+// One malformed entry is skipped so the rest keep access; a file that isn't a members file at all reads as nobody, and
+// is refused rather than set aside by a grant or a removal (ManifestUnreadableError), since replacing it would drop
+// every other member's access for good.
 export const fileMembersStore = (path: string): MembersStore => {
     const file = openDocument<typeof membersDocument, { readonly members: readonly Member[] }>(membersDocument, path, {
         lenient: (raw) => {
@@ -179,6 +182,7 @@ export const fileMembersStore = (path: string): MembersStore => {
             };
         },
         fallback: () => ({ members: [] }),
+        onUnreadable: "refuse",
     });
     return {
         list: async () => [...(await file.read()).members],
@@ -186,6 +190,12 @@ export const fileMembersStore = (path: string): MembersStore => {
             await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), memberRow(email, grant)] }));
         },
         remove: async (email) => {
+            // Over a roster this build cannot read, a removal would find nobody to remove, write nothing and answer as if
+            // done, and the person would be back the moment the file was fixed: refused like a grant.
+            const roster = await file.state();
+            if (roster.unreadable) {
+                throw new ManifestUnreadableError(path, roster.detail);
+            }
             await file.update((current) => {
                 const kept = current.members.filter((member) => member.email !== email);
                 return kept.length === current.members.length ? current : { members: kept };
@@ -209,11 +219,7 @@ export class PasskeyRequiredError extends Error {
 // Extract the bearer token from an Authorization header (empty string when absent/malformed).
 export const bearerFrom = (header: string | undefined): string => (header?.startsWith("Bearer ") ? header.slice(7) : "");
 
-export const tokenEquals = (a: string, b: string): boolean => {
-    const ab = Buffer.from(a);
-    const bb = Buffer.from(b);
-    return ab.length === bb.length && timingSafeEqual(ab, bb);
-};
+export { tokenEquals } from "./token-equals.js";
 
 // A verified identity plus the trust tier it holds here, what every authorized request acts as.
 // Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.

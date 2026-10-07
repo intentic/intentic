@@ -1,7 +1,7 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { EXTENSION_TOKEN_HEADER, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
-import { type ControlTokens, controlScoped } from "./tokens/control-tokens.js";
+import { type ControlTokens, ControlTokensUnreadableError, controlScoped, type ResolvedControlToken } from "./tokens/control-tokens.js";
 import type { Principal } from "./principal.js";
 import type { Presented } from "../peers/enrollment.js";
 
@@ -129,7 +129,7 @@ export const admitByGrant = async (
         }
         // The peer doors' answer too (peer-store.ts): no holder throws away a credential this daemon still holds.
         if (outcome.verdict === "unavailable") {
-            return { admitted: false, status: 503, error: `this sandbox cannot read its enrollment manifest right now (${outcome.detail})` };
+            return { admitted: false, status: 503, error: `this sandbox cannot read its ${grant.name}s right now (${outcome.detail})` };
         }
         return { admitted: false, status: 401, error: "unauthorized" };
     }
@@ -173,7 +173,15 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
             // check until the token is known.
             // The inversion leaks less too: an unknown token gets the same answer for every route instead of revealing
             // which ones exist.
-            const token = await controlTokens.resolve(presented);
+            let token: ResolvedControlToken | undefined;
+            try {
+                token = await controlTokens.resolve(presented);
+            } catch (error) {
+                if (error instanceof ControlTokensUnreadableError) {
+                    return { verdict: "unavailable", detail: error.detail };
+                }
+                throw error;
+            }
             if (token === undefined) {
                 return UNAUTHORIZED;
             }

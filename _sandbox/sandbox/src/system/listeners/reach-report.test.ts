@@ -5,7 +5,9 @@ import { stubGlobal, unstubAllGlobals, stubEnv, advanceTimersByTimeAsync } from 
 // reported.
 const posted: Array<{ path: string; body: unknown }> = [];
 const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
-    const req = new EventEmitter() as EventEmitter & { end: (payload: string) => void };
+    const req = new EventEmitter() as EventEmitter & { end: (payload: string) => void; setTimeout: () => unknown };
+    // Every platform exchange arms an idle cut (platform-client.ts); this one answers at once, so it never fires.
+    req.setTimeout = () => req;
     req.end = (payload: string) => {
         posted.push({ path: url.pathname, body: JSON.parse(payload) as unknown });
         cb({ statusCode: 200, resume: () => {} });

@@ -3,13 +3,13 @@ import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
-import { ownershipDenied } from "../owner-gates.js";
+import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
 // revokable grant must not change.
 
-export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "personas" | "areas">;
+export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas">;
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -72,6 +72,16 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: Gran
         : "no assistant works in those areas, so a guest fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the guest to an area that already has one";
 };
 
+// Everything a person's browser still holds here once their grant changes or goes: live sockets, and the tickets their
+// sessions minted, which would otherwise outlive the grant they were minted under.
+const revokeHeld = (services: Pick<MembersRoutesDeps, "auth" | "wsTickets" | "mediaTickets">, email: string): void => {
+    services.auth?.connections.revoke(email);
+    services.wsTickets.revoke(email);
+    services.mediaTickets.revoke(email);
+};
+
+// A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
+// over it answers 503 (`unavailableIfUnreadable`) and leaves every socket and ticket as it was.
 export const createMembersRoutes = (services: MembersRoutesDeps) => ({
     /** GET /members */
     list: async (c: Context<AppEnv>): Promise<Response> => {
@@ -100,11 +110,13 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
         }
-        await services.members.add(grant.email, grant);
-        // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier.
-        services.auth?.connections.revoke(grant.email);
-        services.wsTickets.revoke(grant.email);
-        return c.json({ members: await services.members.list() });
+        return unavailableIfUnreadable(c, async () => {
+            await services.members.add(grant.email, grant);
+            // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier. A media
+            // ticket names a file the new tier may no longer reach.
+            revokeHeld(services, grant.email);
+            return c.json({ members: await services.members.list() });
+        });
     },
     /** DELETE /members */
     remove: async (c: Context<AppEnv>): Promise<Response> => {
@@ -116,10 +128,11 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (email === undefined) {
             return c.json({ error: "email required" }, 400);
         }
-        await services.members.remove(email);
-        services.auth?.connections.revoke(email);
-        services.wsTickets.revoke(email);
-        return c.json({ members: await services.members.list() });
+        return unavailableIfUnreadable(c, async () => {
+            await services.members.remove(email);
+            revokeHeld(services, email);
+            return c.json({ members: await services.members.list() });
+        });
     },
     /** DELETE /members/self */
     removeSelf: async (c: Context<AppEnv>): Promise<Response> => {
@@ -131,9 +144,10 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ error: "the owner must retire the sandbox instead" }, 400);
         }
         // Normalized: the roster holds lowercase, but identity carries Google's claim as sent; raw form hits no row.
-        await services.members.remove(identity.email.toLowerCase());
-        services.auth?.connections.revoke(identity.email);
-        services.wsTickets.revoke(identity.email);
-        return c.json({ ok: true });
+        return unavailableIfUnreadable(c, async () => {
+            await services.members.remove(identity.email.toLowerCase());
+            revokeHeld(services, identity.email);
+            return c.json({ ok: true });
+        });
     },
 });

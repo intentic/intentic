@@ -17,7 +17,7 @@ import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } fro
 // through, the owner's require-a-passkey switch, and the recovery codes that keep that switch from locking the owner
 // out. Plain routes before the oRPC catch-all, like the roster beside them.
 
-export type PasskeyRoutesDeps = Pick<Services, "auth" | "passkeys" | "passkeyCeremonies" | "ownerEmail" | "wsTickets">;
+export type PasskeyRoutesDeps = Pick<Services, "auth" | "passkeys" | "passkeyCeremonies" | "ownerEmail" | "wsTickets" | "mediaTickets">;
 
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
 
@@ -130,6 +130,7 @@ export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             // are closed so a lost device's live streams end now, not at their next request.
             services.auth.connections.revoke(credential.email);
             services.wsTickets.revoke(credential.email);
+            services.mediaTickets.revoke(credential.email);
             return c.json({ ok: true });
         },
         /** POST /system/passkeys/assert/options, anonymous */
@@ -222,6 +223,7 @@ export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             // re-enter the authorizer, where the policy now asks.
             services.auth?.connections.revoke();
             services.wsTickets.revoke();
+            services.mediaTickets.revoke();
             return c.json({ required: true, codes });
         },
         /** POST /system/passkeys/recovery, owner: a fresh set of codes, the old ones forgotten */

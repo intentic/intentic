@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { unstubbed } from "@intentic/testing";
@@ -193,5 +193,44 @@ describe("a pairing redeemed once", () => {
         } finally {
             clock.mockRestore();
         }
+    });
+});
+
+// An enrollment store this build cannot read is refused rather than replaced (peers/desktop-sync.ts). The routes say so
+// as this sandbox's fault, 503, never a 500, and never an answer that reads as done or as a credential nobody holds.
+describe("an enrollment store that cannot be read", () => {
+    const LAPTOP = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILaptopLaptopLaptop laptop";
+    const unreadable = () => {
+        stubEnv("HOME", mkdtempSync(join(tmpdir(), "sync-unreadable-home-")));
+        const historyRoot = mkdtempSync(join(tmpdir(), "sync-unreadable-history-"));
+        const store = join(historyRoot, "sync-enrollments.json");
+        writeFileSync(store, "{ not json");
+        const svc = services({ config: { ...testConfig, historyRoot }, hosts: hostDoor([]).store });
+        return { svc, served: createApp(svc), store };
+    };
+
+    it("answers an enrollment 503 and leaves the pairing good for a retry once it is fixed", async () => {
+        const { svc, served, store } = unreadable();
+        const pair = svc.syncPairings.mint("sync").token;
+        const enroll = async (): Promise<Response> =>
+            served.request("/system/authorized-key", {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-intentic-pair": pair },
+                body: JSON.stringify({ key: LAPTOP }),
+            });
+
+        const refused = await enroll();
+        expect(refused.status).toBe(503);
+        expect(await refused.json()).toEqual({ error: expect.stringContaining("sync-enrollments.json could not be read by this build") });
+        expect(svc.syncPairings.peek(pair)).toBe("sync");
+
+        rmSync(store);
+        expect((await enroll()).status).toBe(200);
+    });
+
+    it("answers a machine's revoke and its own self-revoke 503, not a 404 that reads as nothing enrolled", async () => {
+        const { served } = unreadable();
+        expect((await served.request("/system/authorized-key/laptop", { method: "DELETE" })).status).toBe(503);
+        expect((await served.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": "ist_laptop" } })).status).toBe(503);
     });
 });

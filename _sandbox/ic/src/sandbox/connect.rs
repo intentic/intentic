@@ -811,7 +811,7 @@ fn wait_local_health(container: &str) -> bool {
     for _ in 0..60 {
         if docker::exec_ok(
             container,
-            &["curl", "-fsS", "--max-time", "5", "localhost:8787/health"],
+            &["curl", "-fsS", "--max-time", "5", crate::health::HEALTH_URL],
         ) {
             return true;
         }

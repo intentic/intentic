@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
 import type { AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
 import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract";
+import { INSTANCE_ENV } from "@intentic/sandbox-contract/netd-wire";
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";
 import { version } from "../../version.js";
@@ -26,8 +27,6 @@ import { callIngress, type IngressAnswer } from "../platform-client.js";
 const FAST_CAP_MS = 30_000;
 const SLOW_CAP_MS = 5 * 60_000;
 const FAST_WINDOW_MS = 10 * 60_000;
-// A platform that accepts the connection and never answers must not stall the loop: this cuts a quiet socket.
-const PLATFORM_IDLE_MS = 60_000;
 // After the fast window, a still-failing registration is logged this often rather than on every attempt.
 const QUIET_LOG_MS = 30 * 60_000;
 // Registered, the same announce goes again about this often: cheap (one small POST, one row update), and frequent
@@ -36,12 +35,12 @@ const QUIET_LOG_MS = 30 * 60_000;
 export const HEARTBEAT_MS = 60 * 60_000;
 const heartbeatDelay = (): number => Math.round(HEARTBEAT_MS * (0.9 + Math.random() * 0.2));
 
-/* WHICH COPY OF THIS SANDBOX IS SPEAKING. netd sets INTENTIC_INSTANCE once per container start when it can, so a
+/* WHICH COPY OF THIS SANDBOX IS SPEAKING. netd sets INSTANCE_ENV once per container start when it can, so a
  * daemon restarted inside one container stays the same copy; without it, this process's own id, minted once at boot and
  * kept for its life. Either way a second container holding the same token is a different instance. */
 const PROCESS_INSTANCE = randomUUID();
 const instanceId = (): string => {
-    const set = process.env["INTENTIC_INSTANCE"]?.trim() ?? "";
+    const set = process.env[INSTANCE_ENV]?.trim() ?? "";
     return set === "" ? PROCESS_INSTANCE : set.slice(0, 80);
 };
 
@@ -112,7 +111,7 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
 
     // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
     const register = (): Promise<AnnounceState> => {
-        inFlight ??= callIngress(config, { route: "announce", input: announceBody, idleMs: PLATFORM_IDLE_MS })
+        inFlight ??= callIngress(config, { route: "announce", input: announceBody })
             .then(
                 (answer) => verdictOf(answer, Date.now()),
                 (error: Error): AnnounceState => ({
@@ -185,7 +184,6 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
                     version,
                     ...adoptionPresentation(adoption),
                 },
-                idleMs: PLATFORM_IDLE_MS,
             });
             return { status: answer.status, detail: answer.status === 200 ? "adopted" : (answer.refusal ?? "").slice(0, 300) };
         } catch (error) {

@@ -8,3 +8,9 @@ export const statePath = (root: string, path: WorkspaceStatePath, ...tail: reado
 // Same spelling without root, for sites that compare rather than open (watcher prefix, git exclude, storedAt, prompts).
 // Forward-slash, matching the workspaceChanged path space; trailing slash dropped as above.
 export const stateRelPath = (path: WorkspaceStatePath, ...tail: readonly string[]): string => [path.replace(/\/$/, ""), ...tail].join("/");
+
+// Where AI-provider credentials and the sandbox's own trust files live: AGENT_AUTH_DIR when set (it shares the root
+// across dev sandboxes so subscription OAuth survives), else under the workspace's secrets. One derivation for the daemon,
+// the boot convergence and the host's read-only plan.
+export const authRootOf = ({ agentAuthDir, workspaceRoot }: { readonly agentAuthDir: string; readonly workspaceRoot: string }): string =>
+    agentAuthDir !== "" ? agentAuthDir : statePath(workspaceRoot, ".intentic/secrets/auth/");

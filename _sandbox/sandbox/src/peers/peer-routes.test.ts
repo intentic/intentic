@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -9,6 +11,7 @@ import type { PeerHub } from "./peer-hub.js";
 import { admitPeer, createPeerRoutes, greetPeer } from "./peer-routes.js";
 import { type Presented, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 
 // A door's two documents on /history: a browser's, whose records carry nothing beside the digest.
 const BROWSER_DOCUMENTS = { enrollments: webextEnrollmentsDocument, consumed: webextPairConsumedDocument };
@@ -285,6 +288,29 @@ test("an enrollment no card holds is refused, and invited back rather than unpai
         refusal: `no capability card grants this device anything right now`,
         retry: true,
     });
+});
+
+// The enroll door over an enrollment manifest this build cannot read: the doors' 503, never a 401 that sends the peer
+// off for a new pairing nor a 500. That the pairing survives is the store's (peer-store.integration.test.ts).
+const enrollWith = (store: Pick<PeerStore<Record<never, never>>, "enroll">) => {
+    const routes = createPeerRoutes({ logger: { warn: () => {} } } as unknown as Services, door, {
+        store: store as PeerStore<Record<never, never>>,
+        hub: {} as unknown as Hub,
+        summaries: async () => [],
+    });
+    const app = new Hono().post("/enroll", routes.enroll);
+    return async (): Promise<Response> => app.request("/enroll", { method: "POST", headers: { "x-intentic-pair": "the-pairing" } });
+};
+
+test("enrolling against a manifest that cannot be read answers 503 naming the file, not a 500", async () => {
+    const refused = new ManifestUnreadableError(join(HISTORY_ROOT, "host-enrollments.json"), "the file is not valid JSON");
+    const response = await enrollWith({
+        enroll: async () => {
+            throw refused;
+        },
+    })();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: refused.message });
 });
 
 // The greeting runs inside a socket handler whose promise nobody awaits, so a rejection there is unhandled.

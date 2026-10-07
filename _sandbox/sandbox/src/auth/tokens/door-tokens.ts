@@ -1,9 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
+import { ManifestUnreadableError } from "../../store/json-file.js";
 import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
-import { tokenEquals } from "../auth.js";
+import { bearerFrom, tokenEquals } from "../auth.js";
 
 // Door tokens: credentials behind the daemon's public doors, for an outside caller with no Google identity or control
 // token.
@@ -47,7 +49,13 @@ const mintFor = (kind: DoorKind): string => (kind === "intake" ? `ik_${randomByt
 const EMPTY: StoredDoors = { automation: {}, gate: {}, intake: {} };
 
 export const fileDoorTokens = (path: string): DoorTokens => {
-    const file = openDocument<typeof doorTokensDocument, StoredDoors>(doorTokensDocument, path, { unknownKeys: true, fallback: () => EMPTY });
+    // Refused rather than set aside when this build cannot read it: setting it aside on the next `ensure` would re-mint
+    // every door and break every URL already taught to a sender. A write over it throws ManifestUnreadableError.
+    const file = openDocument<typeof doorTokensDocument, StoredDoors>(doorTokensDocument, path, {
+        unknownKeys: true,
+        fallback: () => EMPTY,
+        onUnreadable: "refuse",
+    });
     const write = async (kind: DoorKind, id: string, token: string | undefined): Promise<void> => {
         await file.update((stored) => {
             const doors = { ...stored[kind] };
@@ -92,6 +100,27 @@ export const fileDoorTokens = (path: string): DoorTokens => {
     };
 };
 
+// A door's credential for one row of a list, minted if the door has none: absent when the door file cannot be read, as
+// it is for a viewer, so an unreadable file costs the rows their URLs rather than the whole list. The file itself is
+// reported where every manifest this build cannot read is (store/manifest/manifest-problems.ts).
+export const listedDoorToken = (doors: Pick<DoorTokens, "ensure">, kind: DoorKind, id: string): Promise<string | undefined> =>
+    doors.ensure(kind, id).catch((error: unknown) => {
+        if (error instanceof ManifestUnreadableError) {
+            return undefined;
+        }
+        throw error;
+    });
+
+// A change to the door file this build cannot read is refused rather than written over it: CONFLICT naming the file,
+// the answer these routes give every file of the owner's they cannot read, never a 500.
+export const doorChange = <T>(work: Promise<T>): Promise<T> =>
+    work.catch((error: unknown) => {
+        if (error instanceof ManifestUnreadableError) {
+            throw new ORPCError("CONFLICT", { message: error.message });
+        }
+        throw error;
+    });
+
 // The in-memory twin, for tests and for a composition with no workspace to persist into.
 export const memoryDoorTokens = (): DoorTokens => {
     const doors: Record<DoorKind, Map<string, string>> = { automation: new Map(), gate: new Map(), intake: new Map() };
@@ -126,9 +155,6 @@ export const memoryDoorTokens = (): DoorTokens => {
 // A caller that can set a header sends a bearer instead, safer than a query string (edge/tunnel logs); the header wins
 // when both are present.
 export const presentedDoorToken = (headers: { get: (name: string) => string | null | undefined }, query: string | undefined): string => {
-    const authorization = headers.get("authorization") ?? "";
-    if (authorization.startsWith("Bearer ")) {
-        return authorization.slice("Bearer ".length);
-    }
-    return query ?? "";
+    const bearer = bearerFrom(headers.get("authorization") ?? undefined);
+    return bearer === "" ? (query ?? "") : bearer;
 };

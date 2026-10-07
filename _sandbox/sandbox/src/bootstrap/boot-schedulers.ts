@@ -40,7 +40,8 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
 const originFollowDeps = (services: BootPhase["services"], logger: BootPhase["logger"]): OriginFollowDeps => ({
     workspace: services.workspace,
     enabled: async () => (await services.sandboxSettings.get()).followOrigin,
-    mainTreeBusy: () => services.agents.ids().some((id) => services.conversations.running(id) && services.agents.entry(id)?.placement.kind !== "worktree"),
+    mainTreeBusy: () =>
+        services.agents.ids().some((id) => services.conversations.running(id) && services.agents.entry(id)?.placement.kind !== "worktree"),
     agentWorktrees: services.agentWorktrees,
     history: services.history,
     logger,
@@ -136,6 +137,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     const originFollow = createOriginFollow(originFollowDeps(services, logger));
     shutdown.push(originFollow.stop);
 
+    shutdown.push(() => services.probeRunner.stop());
+    shutdown.push(() => services.driftSweep.stop());
     if (role.container) {
         // Both idle-only, allowed to fail, unref'd; the probe runner also waits out the boot's own pnpm install.
         services.probeRunner.start();
@@ -143,9 +146,9 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         originFollow.start();
     }
 
-    startRuntimeHealth(services);
+    shutdown.push(startRuntimeHealth(services));
     // Idle backstop: headroom is otherwise re-read only on a turn, refusal or screen.
-    services.headroom.start();
+    shutdown.push(services.headroom.start());
     // Anything the watchers see, a repo appearing or going, or a write the daemon made where no watcher looks.
     services.history.start((changed) => {
         const stops = [subscribeWorkspaceChanges(changed), subscribeRepoChanges(changed), subscribeUnwatchedWrites(changed)];

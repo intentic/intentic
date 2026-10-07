@@ -5,7 +5,7 @@ import { isConversationId } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { UnitOwners } from "../../store/conversation-units.js";
 // Type only: a value import from system/ would close a cycle between the subsystems (daemon-boundaries).
-import type { Chore } from "../../system/chore-clock.js";
+import { type Chore, DAY_MS } from "../../system/chore-clock.js";
 import { overlaysDir, overlaysRoot } from "./isolation.js";
 
 // CHECKOUTS AND OVERLAYS NO CONVERSATION OWNS (2026-10-05). A discard or purge removes a conversation's checkout and
@@ -17,8 +17,6 @@ import { overlaysDir, overlaysRoot } from "./isolation.js";
 // trash, which system/resources/storage/trash-sweep.ts empties after its while. Nothing is judged while the registry
 // cannot be trusted to name every conversation: a database made again this boot, one that names none, or a registry
 // that loaded none.
-
-const DAY_MS = 24 * 60 * 60_000;
 
 export const ORPHAN_MIN_AGE_MS = DAY_MS;
 

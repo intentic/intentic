@@ -18,7 +18,8 @@ export const approvalsDocument = defineDocument({
 });
 
 // The approvals queue: one file per item at <workspace>/.intentic/config/approvals/<id>.json; the agent creates them,
-// the daemon edits/deletes them for the owner.
+// the daemon edits/deletes them for the owner. An item's `status` here is not the owner's yes, which only the approve
+// route records, off the workspace (approval-decisions.ts).
 // Per-file, never a shared manifest, since two writers would race a read-modify-write (see json-dir.ts). No secrets
 // live here.
 
@@ -121,8 +122,9 @@ every platform that posts through a logged-in browser needs (see below).
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the time at approval.
 - status: defaults to "proposed" if omitted, and PROPOSED IS THE ONLY ONE YOU MAY WRITE. The owner approves in
   the app, which starts a short countdown they can still stop; the daemon then either does it itself or wakes
-  you naming the exact files to act on. An item you mark approved yourself skips the countdown and takes the
-  decision away from them.
+  you naming the exact files to act on. Their yes is kept outside the workspace and covers the item exactly as
+  they saw it: an item you mark approved yourself, or change after it was approved, is not carried out but
+  failed back to them with that reason.
 
 ## Before you write one: the errand pattern
 

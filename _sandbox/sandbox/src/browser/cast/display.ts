@@ -1,7 +1,8 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { pollUntil } from "@intentic/base/async";
+import { spawnAs } from "../../workload/workload-class.js";
 
 // A virtual X display per browser, not shared, since the picture now comes from the display itself (videocast.ts,
 // xinput.ts): sharing would overlap windows and share one cursor across browsers. Cheap (Xvfb, ~16 MB), bounded by
@@ -174,7 +175,7 @@ const start = async (key: string, size: DisplaySize): Promise<Display> => {
     writeFileSync(claimPath(number), `${key}\n${size.width}x${size.height}`, { mode: 0o600 });
     // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox). In a process group of its own,
     // since intentic-netd ends a crashed daemon's group with it, and this server is the next daemon's to adopt.
-    const child = spawn("Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac"], {
+    const child = spawnAs({ class: "service" }, "Xvfb", [`:${number}`, "-screen", "0", `${size.width}x${size.height}x24`, "-nolisten", "tcp", "-ac"], {
         stdio: "ignore",
         detached: true,
     });

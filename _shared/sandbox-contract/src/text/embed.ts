@@ -1,6 +1,6 @@
-// The zod-free half of an embed's wire, shared by the two embeds (webchat-widget, issue-sdk) and the daemon's
-// public-door.ts. No imports, ever: this bundles into someone else's page, and the contract's barrel would drag in zod
-// (measured at 1.1 MB for two strings).
+// The zod-free half of an embed's wire and look, shared by the two embeds (webchat-widget, issue-sdk) and the daemon's
+// doors behind them. No imports, ever: this bundles into someone else's page, and the contract's barrel would drag in
+// zod (measured at 1.1 MB for two strings).
 
 // Where an embed talks to: the daemon it came from, and the automation it is the public face of.
 export interface EmbedEndpoint {
@@ -130,3 +130,50 @@ export const embedEndpointOf = (script: HTMLScriptElement): EmbedEndpoint | unde
     }
     return { automationId, base: (script.dataset["base"] ?? new URL(script.src, window.location.href).origin).replace(/\/$/, "") };
 };
+
+// The frames of a Visitor chat reply, streamed as server-sent events on the POST that sent the message: a chunk of the
+// answer, the notice that the owner reviews it first, the one failure sentence a visitor sees, and the end of the turn.
+export const WEBCHAT_EVENT = { delta: "delta", pending: "pending", error: "error", done: "done" } as const;
+
+// Intentic's brand orange (`--color-brand-600`): the accent of an embed nobody configured, so it still looks like the
+// product, and what an embed paints when it cannot read the configured one.
+export const DEFAULT_ACCENT = "#e47100";
+
+// The red, green and blue of a `#rgb` or `#rrggbb` colour, undefined for anything else. The embeds do their colour maths
+// here rather than in CSS: an unsupported color-mix() is invalid at computed-value time and would paint nothing.
+export const parseHex = (value: string): [number, number, number] | undefined => {
+    const digits = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim())?.[1];
+    if (digits === undefined) {
+        return undefined;
+    }
+    const full = digits.length === 3 ? [...digits].map((char) => char + char).join("") : digits;
+    const channel = (at: number): number => Number.parseInt(full.slice(at, at + 2), 16);
+    return [channel(0), channel(2), channel(4)];
+};
+
+// One sRGB channel on WCAG's linear scale.
+const linear = (channel: number): number => {
+    const unit = channel / 255;
+    return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+};
+
+// WCAG relative luminance; an unreadable colour scores 0, which only ever picks a label and is never shown.
+const luminance = (color: string): number => {
+    const [r, g, b] = parseHex(color) ?? [0, 0, 0];
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+};
+
+const contrast = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+// The label on a solid accent: the embed's own dark ink or white, whichever contrasts more. Measured, not assumed:
+// white on the default orange is 3.15:1, under AA, where either embed's dark ink clears 5:1, and comparing the two works
+// for any accent a customer picks.
+export const onAccent = (accent: string, dark: string): string => {
+    const field = luminance(accent);
+    return contrast(field, luminance(dark)) >= contrast(field, luminance("#ffffff")) ? dark : "#ffffff";
+};
+
+// Text for innerHTML, safe both between tags and inside a quoted attribute: neither an owner's config nor what a
+// visitor typed is trusted with markup.
+export const escapeHtml = (value: string): string =>
+    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);

@@ -12,7 +12,7 @@ import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore
 import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } from "../../usage/model-refusals.js";
 import type { ObservedLimitStore } from "../../usage/observed-limits.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
-import { fileUsageStore, type UsageStore } from "../../usage/usage-store.js";
+import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
@@ -106,7 +106,7 @@ export interface ProvidersDeps
 // Builds the providers slice.
 export const createProvidersSlice = ({ historyRoot, conversations, whole, ...built }: ProvidersDeps): ProvidersSlice => ({
     ...built,
-    usage: fileUsageStore(join(historyRoot, "usage.jsonl")),
+    usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
     providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
     modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
     modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),

@@ -55,27 +55,9 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
     return { text: resolved, used, unknown };
 };
 
-// The forms a value can take by the time a reader sees it; masking matches all of them, not just the raw string.
-// - JSON-escaped: quotes, backslashes, newlines serialized in a logged payload
-// - percent-encoded: URL query or form body
-// Alphanumeric values encode to themselves and are skipped.
-export const surfaceForms = (value: string): readonly string[] => {
-    const forms = [value];
-    // JSON.stringify of a string is always a quoted string; the slice is its escaped body.
-    const jsonEscaped = JSON.stringify(value).slice(1, -1);
-    if (jsonEscaped !== value) {
-        forms.push(jsonEscaped);
-    }
-    try {
-        const encoded = encodeURIComponent(value);
-        if (encoded !== value) {
-            forms.push(encoded);
-        }
-    } catch {
-        // A lone surrogate makes encodeURIComponent throw; nothing to register since it can't reach a reader that way.
-    }
-    return forms;
-};
+// The forms a value can take by the time a reader sees it (raw, JSON-escaped, percent-encoded), which masking matches
+// all of. The terminal filter's own, so the two lanes cannot disagree about what a secret looks like.
+export { surfaceForms } from "@intentic/output-cleaners/cleaners";
 
 // Cheap pre-check for any reference-shaped token, so callers skip the registry read on the common case of no secret.
 export const hasSecretReferences = (text: string): boolean => {

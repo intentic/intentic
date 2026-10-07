@@ -1,7 +1,8 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pollUntil } from "@intentic/base/async";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import type { Capability } from "@intentic/sandbox-contract";
 import { createApp } from "../../app.js";
@@ -12,7 +13,7 @@ import { testConfig } from "../../testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { approveExtension } from "../extension-approvals.js";
-import { createExtensionBackend, type ExtensionBackend } from "./backend-supervisor.js";
+import { createExtensionBackend, type ExtensionBackend, type ExtensionBackendOptions } from "./backend-supervisor.js";
 import { extensionMcpToolsOf } from "./extension-mcp.js";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
@@ -74,13 +75,18 @@ const writeExtension = async (root: string, name: string, server: string, approv
 
 // Wires the real supervisor into the route harness's services through a holder, resolving their circular construction.
 // extensionsDir is emptied so the repo's own first-party extensions stay out of the host under test.
-const harness = (root: string, capabilities: readonly Capability[] = []): { svc: Services; backend: ExtensionBackend } => {
+const harness = (
+    root: string,
+    capabilities: readonly Capability[] = [],
+    options?: ExtensionBackendOptions,
+): { svc: Services; backend: ExtensionBackend } => {
     const holder: { current?: Services } = {};
     const backend = createExtensionBackend(
         () => holder.current!,
         0,
         // eslint-disable-next-line no-console -- the test host's forwarded lines are noise unless it fails
         { info: () => {}, warn: console.warn, error: console.error } as unknown as Services["logger"],
+        options,
     );
     const svc = services({
         workspace: workspacePaths(root),
@@ -330,4 +336,51 @@ test("the host restarts when a backend's code changes, and a converge that chang
     expect(second?.port).not.toBe(first?.port);
     expect(second?.hostToken).not.toBe(first?.hostToken);
     expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
+});
+
+// Whether a process is still there; signal 0 asks without sending anything.
+const alive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+// An activation that never returns, the interval keeping the host's event loop from ending on its own. It writes the
+// host's pid first, so the test can see the process itself go.
+const hangingServer = (pidFile: string): string => `export const activateServer = async () => {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+    await new Promise(() => setInterval(() => {}, 60_000));
+};
+`;
+
+// /health answers only once every activation has returned, so one hung activation holds every backend at 503.
+test("a host that never answers /health is killed and retried, and comes up once nothing hangs it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-hang-"));
+    const pidFile = join(root, "host.pid");
+    await writeExtension(root, "echo", hangingServer(pidFile));
+    const { backend } = harness(root, [], { healthTimeoutMs: 2_000 });
+    await backend.start();
+
+    expect(backend.status()).toMatchObject({ state: "error", detail: expect.stringContaining("did not become healthy") });
+    expect(backend.proxyTarget()).toBeUndefined();
+    const hung = Number(await readFile(pidFile, "utf8"));
+    expect(await pollUntil(() => !alive(hung), { intervalMs: 100, timeoutMs: 8_000 })).toBe(true);
+
+    // Nothing calls restart(): the retry the timeout scheduled is what finds the fixed bundle and brings it up.
+    await writeFile(join(workspaceExtensionsRoot(root), "echo", "server.js"), echoServer);
+    expect(await pollUntil(() => backend.status().state === "running", { intervalMs: 100, timeoutMs: 30_000 })).toBe(true);
+    expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
+}, 60_000);
+
+test("a host that dies on arrival keeps the exit it died of as the reason", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-quits-"));
+    await writeExtension(root, "quits", `export const activateServer = () => process.exit(3);\n`);
+    const { backend } = harness(root);
+    await backend.start();
+
+    expect(backend.status()).toMatchObject({ state: "error", detail: "the backend host exited (3)" });
 });

@@ -1,11 +1,11 @@
 import { lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { withManagedInclude } from "@intentic/base/ssh-config";
 import { publicLineOf } from "./credentials/ssh-keys.js";
 import { isKeyAlias, type SshKeyStore } from "./ssh-key-store.js";
+import { homeDir } from "../system/home-dir.js";
 
 // Managed ssh-config shared by the `ssh` capability and git-provider key access: `<alias>.conf` per alias, beside the
 // PUBLIC half of its key (`<alias>.pub`), or a password file for a machine that signs in with one. The private half is
@@ -14,7 +14,6 @@ import { isKeyAlias, type SshKeyStore } from "./ssh-key-store.js";
 // symlinked onto /history so the aliases survive container recreates.
 
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
-const homeDir = (): string => process.env["HOME"] ?? homedir();
 
 export const hostsDir = (): string => join(homeDir(), ".ssh", "intentic-hosts");
 export const hostConfPath = (alias: string): string => join(hostsDir(), `${alias}.conf`);

@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { pairings } from "./enrollment.js";
 import {
     deviceReports,
@@ -249,6 +250,44 @@ describe("enrollment store", () => {
         const laptop = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
         await writeFile(join(history, "sync-enrollments.json"), "{ not json");
         expect(await verifySyncToken(history, laptop, true)).toEqual({ kind: "unreadable", detail: "the file is not valid JSON" });
+    });
+
+    // Set aside and rewritten, an unreadable store would keep only the machine just enrolled and read every other one as
+    // revoked. Refused instead, and the store stays as it was for a person to fix.
+    it("refuses to enroll over a store it cannot read, and leaves the store as it was", async () => {
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false });
+        const path = join(history, "sync-enrollments.json");
+        await writeFile(path, "{ not json");
+        await expect(enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false })).rejects.toBeInstanceOf(
+            ManifestUnreadableError,
+        );
+        expect(await readFile(path, "utf8")).toBe("{ not json");
+        expect(existsSync(`${path}.corrupt`)).toBe(false);
+    });
+
+    // A revoke over a store it cannot read can tell no key from another, and answering "not enrolled" would leave the
+    // revoked key in authorized_keys: refused, and sshd admits nobody until the store is fixed.
+    it("refuses to revoke over a store it cannot read, and empties authorized_keys rather than keep the key", async () => {
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false });
+        await writeFile(join(history, "sync-enrollments.json"), "{ not json");
+        await expect(revokeEnrollmentByMachine(history, "laptop-a")).rejects.toBeInstanceOf(ManifestUnreadableError);
+        expect(await readFile(join(process.env["HOME"]!, ".ssh", "authorized_keys"), "utf8")).toBe("");
+    });
+
+    // authorized_keys is re-derived from the store inside its own queue rather than written from each update's own
+    // snapshot, so writes asked for together cannot land an older list last and bring a revoked key back.
+    it("leaves authorized_keys matching the store however many writes race", async () => {
+        const machines = ["a", "b", "c", "d", "e", "f"].map((name) => `laptop-${name}`);
+        await Promise.all(machines.map((machine) => enrollSyncKey({ historyRoot: history, key: key(machine), mode: "mirror", takeover: false })));
+        await Promise.all([
+            ...machines.slice(0, 3).map((machine) => revokeEnrollmentByMachine(history, machine)),
+            ...["g", "h"].map((name) => enrollSyncKey({ historyRoot: history, key: key(`laptop-${name}`), mode: "mirror", takeover: false })),
+            enrollSyncKey({ historyRoot: history, key: key("laptop-d"), mode: "mirror", takeover: false }),
+        ]);
+        const kept = ["laptop-d", "laptop-e", "laptop-f", "laptop-g", "laptop-h"];
+        expect((await mirrorsOf(history)).toSorted()).toEqual(kept);
+        const lines = (await readFile(join(process.env["HOME"]!, ".ssh", "authorized_keys"), "utf8")).trim().split("\n");
+        expect(lines.toSorted()).toEqual(kept.map(key));
     });
 
     it("self-revoke drops just that enrollment", async () => {

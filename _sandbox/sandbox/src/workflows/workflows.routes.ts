@@ -9,6 +9,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { archiveAgents } from "../conversations/registry/archive.js";
 import { operatorHere } from "../auth/operator.js";
+import { doorChange, listedDoorToken } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
@@ -33,13 +34,18 @@ export const createWorkflowsRoutes = (services: Services) => {
     return {
         list: i.list.handler(async ({ context }) => {
             const [workflows, runs] = await Promise.all([services.workflows.list(), services.workflowRuns.list()]);
-            // Gate token rides along for an operator only, minted if the gate has none yet.
+            // Gate token rides along for an operator only, minted if the gate has none yet; absent when the door file
+            // cannot be read, so the row lists without its URL rather than failing the whole list.
             const operator = operatorHere(services, context);
-            const withRuns = async (workflow: Workflow): Promise<WorkflowSummary> => ({
-                ...workflow,
-                runs: runs.filter((run) => run.workflow.id === workflow.id),
-                ...(operator && workflow.gate !== undefined ? { gateToken: await services.doorTokens.ensure("gate", workflow.id) } : {}),
-            });
+            const withRuns = async (workflow: Workflow): Promise<WorkflowSummary> => {
+                const gateToken =
+                    operator && workflow.gate !== undefined ? await listedDoorToken(services.doorTokens, "gate", workflow.id) : undefined;
+                return {
+                    ...workflow,
+                    runs: runs.filter((run) => run.workflow.id === workflow.id),
+                    ...(gateToken === undefined ? {} : { gateToken }),
+                };
+            };
             return { workflows: await Promise.all(workflows.map(withRuns)) };
         }),
         save: i.save.handler(async ({ input }) => {
@@ -58,12 +64,12 @@ export const createWorkflowsRoutes = (services: Services) => {
             }
             // Gate token lives with the door: minted once, kept across saves so a step rename doesn't change the
             // pipeline's URL, dropped once the design drops the gate. Returned since the designer has no other way to
-            // learn it.
+            // learn it. A door file this build cannot read refuses it (CONFLICT naming the file); the design is saved.
             if (workflow.gate === undefined) {
-                await services.doorTokens.remove("gate", workflow.id);
+                await doorChange(services.doorTokens.remove("gate", workflow.id));
                 return workflow;
             }
-            return { ...workflow, gateToken: await services.doorTokens.ensure("gate", workflow.id) };
+            return { ...workflow, gateToken: await doorChange(services.doorTokens.ensure("gate", workflow.id)) };
         }),
         // Mints a fresh gate credential and retires the old one in the same write; every wired pipeline must be
         // re-taught.
@@ -75,13 +81,13 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (workflow.gate === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "That workflow declares no gate, so there is no token to rotate." });
             }
-            return { token: await services.doorTokens.rotate("gate", workflow.id) };
+            return { token: await doorChange(services.doorTokens.rotate("gate", workflow.id)) };
         }),
         // Does not stop an in-flight run or delete its history: a run snapshots its own definition, so it stays
         // readable and stoppable after the workflow is gone.
         remove: i.remove.handler(async ({ input }) => {
             await services.workflows.remove(input.id);
-            await services.doorTokens.remove("gate", input.id);
+            await doorChange(services.doorTokens.remove("gate", input.id));
             return { ok: true as const };
         }),
         run: i.run.handler(async ({ input }) => {

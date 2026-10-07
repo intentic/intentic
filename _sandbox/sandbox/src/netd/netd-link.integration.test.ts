@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { FromNode, ToNode } from "@intentic/sandbox-contract/netd-wire";
-import { connectNetd, takeFrames } from "./netd-link.js";
+import { FRAME_MAX_BYTES, type FromNode, type ToNode } from "@intentic/sandbox-contract/netd-wire";
+import { connectNetd, FrameTooLarge, takeFrames } from "./netd-link.js";
 
 // A real Unix socket standing in for netd: Node dials it, answers a question by id, and hears the tunnel.
 
@@ -53,6 +53,7 @@ test("answers netd's question under its id and reports the tunnel", async () => 
         answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
         onTunnel: (connected) => tunnels.push(connected),
         onClose: () => undefined,
+        onFault: () => undefined,
     });
     const socket = await netd;
     const answered = nextMessage(socket);
@@ -77,6 +78,7 @@ test("answers netd's ping with a pong under its id, without asking the answerer"
         },
         onTunnel: () => undefined,
         onClose: () => undefined,
+        onFault: () => undefined,
     });
     const socket = await netd;
     const answered = nextMessage(socket);
@@ -92,6 +94,7 @@ test("a throwing answer goes back as a refusal carrying its message", async () =
         answer: () => Promise.reject(new Error("no such panel")),
         onTunnel: () => undefined,
         onClose: () => undefined,
+        onFault: () => undefined,
     });
     const socket = await netd;
     const refused = nextMessage(socket);
@@ -109,6 +112,7 @@ test("a sync is Node's question under the same envelope, answered by its id, and
         answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
         onTunnel: () => undefined,
         onClose: () => undefined,
+        onFault: () => undefined,
     });
     const socket = await netd;
     const asked = nextMessage(socket);
@@ -135,6 +139,7 @@ test("a question of Node's netd refuses or never answers settles as nulls, withi
         answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
         onTunnel: () => undefined,
         onClose: () => undefined,
+        onFault: () => undefined,
         patienceMs: 100,
     });
     const socket = await netd;
@@ -150,4 +155,46 @@ test("a question of Node's netd refuses or never answers settles as nulls, withi
     expect(await link.sync(["/b", "/c"])).toEqual([null, null]);
     expect(Date.now() - started).toBeGreaterThanOrEqual(90);
     link.close();
+});
+
+test("a frame that is not JSON is reported and skipped, and the frames after it still arrive", async () => {
+    const faults: Error[] = [];
+    const tunnels: boolean[] = [];
+    const link = await connectNetd({
+        path: join(dir, "netd.sock"),
+        answer: () => Promise.reject(new Error("not asked here")),
+        onTunnel: (connected) => tunnels.push(connected),
+        onClose: () => undefined,
+        onFault: (error) => faults.push(error),
+    });
+    const socket = await netd;
+    const garbage = Buffer.from("{not json", "utf8");
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(garbage.length, 0);
+    socket.write(Buffer.concat([header, garbage, toNode({ kind: "tunnel", connected: true })]));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(faults.map((fault) => fault.message)).toEqual([expect.stringContaining("was not JSON")]);
+    expect(tunnels).toEqual([true]);
+    link.close();
+});
+
+test("a length past the frame cap drops the link instead of buffering toward it", async () => {
+    const faults: Error[] = [];
+    let closed = false;
+    await connectNetd({
+        path: join(dir, "netd.sock"),
+        answer: () => Promise.reject(new Error("not asked here")),
+        onTunnel: () => undefined,
+        onClose: () => {
+            closed = true;
+        },
+        onFault: (error) => faults.push(error),
+    });
+    const socket = await netd;
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(FRAME_MAX_BYTES + 1, 0);
+    socket.write(header);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(closed).toBe(true);
+    expect(faults[0]).toBeInstanceOf(FrameTooLarge);
 });

@@ -82,9 +82,11 @@ type PhaseItem = AgentEvent | typeof PHASE_END;
 const modeFor = (planning: boolean): "plan" | "agent" => (planning ? "plan" : "agent");
 
 // Mid-turn injection rides the live Run, not the prompt, so the pump waits for the handle `send` resolves rather than
-// racing it. Only `complete_delivered` transfers ownership; every other ack means the run would not take the message,
-// and it stays in the relay for the next phase of a plan turn (there is none after the last, so it is reported).
-// `Run.steer` is declared optional by the SDK, so CursorRunHandle carries it optionally too.
+// racing it. Only `complete_delivered` transfers ownership. Any other answer (`revert_to_followup`, a refused steer, a
+// run with no `steer` at all) hands the message back, and the relay has already let it go, so the pump keeps it and the
+// phase sends it as an ordinary follow-up once the run settles: the SDK's own instruction, and what Codex does with a
+// steer its app-server refuses. `Run.steer` is declared optional by the SDK, so CursorRunHandle carries it optionally
+// too.
 
 // Best-effort: the phase ends on its own timer, so a cancel the SDK refuses is only worth a trace.
 const cancelRun = async (started: Promise<CursorRunHandle | undefined>, logger: Logger): Promise<void> => {
@@ -96,18 +98,36 @@ const cancelRun = async (started: Promise<CursorRunHandle | undefined>, logger: 
     }
 };
 
-const steerInto = async (started: Promise<CursorRunHandle | undefined>, channel: SteeringChannel, logger: Logger): Promise<void> => {
+// Answers, once the channel closes, every message the run handed back, in the order they were typed.
+const steerInto = async (
+    started: Promise<CursorRunHandle | undefined>,
+    channel: SteeringChannel,
+    settled: () => boolean,
+    logger: Logger,
+): Promise<readonly string[]> => {
+    const handedBack: string[] = [];
     for await (const text of channel.steering) {
         const run = await started;
-        const outcome = await run?.steer?.(text).catch((error: unknown) => {
-            logger.warn({ err: error }, "cursor: steering message rejected by the run");
-            return undefined;
-        });
+        // A run that has already settled can take nothing, so it is not asked.
+        const outcome = settled()
+            ? undefined
+            : await run?.steer?.(text).catch((error: unknown) => {
+                  logger.warn({ err: error }, "cursor: steering message rejected by the run");
+                  return undefined;
+              });
         if (outcome !== "complete_delivered") {
-            logger.warn({ outcome }, "cursor: steering message not taken by the running turn");
+            handedBack.push(text);
         }
     }
+    return handedBack;
 };
+
+// How one send of a phase ended, and the steering messages its run handed back, known once the phase's channel closes.
+interface PhaseOutcome {
+    readonly errored: boolean;
+    readonly planText: string | undefined;
+    readonly handedBack: Promise<readonly string[]>;
+}
 
 export const createCursorAgent = (deps: CursorAgentDeps) => {
     // Forwards one phase of the turn's queue; the caller emits `done` once, since a plan turn runs two of these.
@@ -121,7 +141,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         planning: boolean,
         channel: SteeringChannel | undefined,
         force: boolean,
-    ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
+    ): AsyncGenerator<AgentEvent, PhaseOutcome> {
         const mapper = createCursorEventMapper(request.spec.cwd, planning);
         let sawDelta = false;
         const options: SendOptions = {
@@ -179,13 +199,12 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // A pre-pull Stop hits an aborted signal no listener catches; unwatched, send starts a run nothing can cancel.
         const unwatchAbort = whenAborted(request.signal, onAbort);
 
-        // Not awaited: it lives as long as this phase's channel, and the frames below are what the turn is waiting on.
-        if (channel !== undefined) {
-            void steerInto(started, channel, deps.logger);
-        }
-
         // Ends the phase when the run itself finishes, ending the drain below.
         let settled = false;
+
+        // Not awaited: it lives as long as this phase's channel, and the frames below are what the turn is waiting on.
+        const handedBack = channel === undefined ? Promise.resolve([]) : steerInto(started, channel, () => settled, deps.logger);
+
         const finished = (async () => {
             const handle = await started;
             if (handle === undefined) {
@@ -231,7 +250,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             unwatchAbort();
         }
         const captured = mapper.capture();
-        return { errored: errored || captured.errored === true, planText: captured.planText };
+        return { errored: errored || captured.errored === true, planText: captured.planText, handedBack };
     }
 
     return async function* cursorAgent(request: AgentRequest<CursorCredential>): AsyncGenerator<AgentEvent> {
@@ -348,7 +367,28 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 orphanPossible = false;
                 try {
                     const outcome = yield* runPhase(live, request, queue, prompt, selection, planning, channel, force);
-                    return { errored: outcome.errored, ...(outcome.planText !== undefined ? { planText: outcome.planText } : {}) };
+                    // The run has settled, so this phase takes no more steering. Planning leaves what is still queued
+                    // for the executing phase; the last phase closes the turn's queue, so a message sent after this is
+                    // refused at the route rather than left in a relay nothing will read again.
+                    if (planning) {
+                        channel?.close();
+                    } else {
+                        request.spec.steering?.close();
+                    }
+                    const handedBack = await outcome.handedBack;
+                    if (handedBack.length === 0 || outcome.errored || request.signal.aborted) {
+                        if (handedBack.length > 0) {
+                            deps.logger.warn(
+                                { messages: handedBack.length },
+                                "cursor: steering messages not taken by a run that failed or was stopped",
+                            );
+                        }
+                        return { errored: outcome.errored, ...opt("planText", outcome.planText) };
+                    }
+                    // Sent on the same agent and in the same mode, so a plan still ends in a plan; it has no steering of
+                    // its own, since admission already closed.
+                    const followUp = yield* runPhase(live, request, queue, handedBack.join("\n\n"), selection, planning, undefined, false);
+                    return { errored: followUp.errored, ...opt("planText", followUp.planText ?? outcome.planText) };
                 } finally {
                     channel?.close();
                 }
@@ -372,7 +412,8 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 () => send(basePrompt, false),
             );
         } finally {
-            // Order matters: retire, then release, then close; a consult between finds no turn, and is allowed.
+            // Order matters: retire, then release, then close; a consult between finds no turn, and is allowed. The
+            // release also settles a card a hook or tool left open when the run ended without waiting for it.
             retire();
             release();
             agent.close();

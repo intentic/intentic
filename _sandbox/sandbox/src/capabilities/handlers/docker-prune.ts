@@ -1,7 +1,7 @@
 import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 // Type only: a value import from system/ would close a cycle between the subsystems (daemon-boundaries).
-import type { Chore } from "../../system/chore-clock.js";
+import { type Chore, DAY_MS } from "../../system/chore-clock.js";
 import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 
 // THE AGENTS' DOCKER, KEPT FROM GROWING WITHOUT END (2026-10-05). Nothing removed what the nested engine accumulates:
@@ -10,8 +10,6 @@ import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 // stopped containers older than a day and dangling images older than three days are pruned, as docker's own prune
 // decides; a tagged image is never touched (no `--all`), nor a volume, a network or the build cache. Never starts
 // dockerd to prune: an engine that is not running holds nothing that grows.
-
-const DAY_MS = 24 * 60 * 60_000;
 
 // The engine the docker capability starts (`dockerd` with no `-H`, docker.handler.ts) listens here. Named rather than
 // inherited, so an agent's DOCKER_HOST or docker context can never point a prune at some other engine.

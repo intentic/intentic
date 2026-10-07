@@ -1,6 +1,5 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { surfaceForms as terminalForms } from "@intentic/output-cleaners/cleaners";
-import { type NamedSecret, surfaceForms,SecretStoreUnreadableError } from "../../secrets/secret-registry.js";
+import { type NamedSecret, SecretStoreUnreadableError } from "../../secrets/secret-registry.js";
 import { WITHHELD, maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 
 // Masking must not depend on which tool fetched the value (it used to be Bash-only); a value masks to
@@ -111,19 +110,6 @@ test("a multi-line key serialized onto one line is masked whole, by its escaped 
 test("an alphanumeric token registers no extra forms: encoding it changes nothing", () => {
     // The common case must not pay for three targets over one secret.
     expect(maskTargets([named("a/token", "cf_live_0011223344ff")])).toEqual([{ target: "cf_live_0011223344ff", replacement: "{{secret:a/token}}" }]);
-});
-
-test("the terminal lane derives the same surface forms as this one", () => {
-    // The terminal filter (@intentic/output-cleaners, which the Claude Code plugin runs too) is plain node with no daemon
-    // behind it, so it carries its own copy of surfaceForms; what matters is that the two never disagree.
-    for (const value of [
-        'pa"ss\\word-1234567890',
-        "Xk4!mQ2pRt7@wZ9aBc1_",
-        "cf_live_0011223344ff",
-        "-----BEGIN KEY-----\nMIIEvQ\n-----END KEY-----",
-    ]) {
-        expect(terminalForms(value)).toEqual([...surfaceForms(value)]);
-    }
 });
 
 test("a value containing another is masked whole, not left with its tail showing", async () => {

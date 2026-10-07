@@ -298,6 +298,22 @@ export interface GitObservation {
     readonly queueDepth: number;
 }
 
+// A git command as a log line may name it: every `-c` pair dropped, since its value is where a credential would ride
+// (`http.extraheader`), a URL's user and password masked, and only the first three words kept, which hold the
+// subcommand and leave out trailing pathspecs (which can be hundreds).
+export const gitCommandLabel = (args: readonly string[]): string => {
+    const words: string[] = [];
+    for (let index = 0; index < args.length && words.length < 3; index += 1) {
+        const arg = args[index]!;
+        if (arg === "-c") {
+            index += 1;
+            continue;
+        }
+        words.push(arg.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, "$1"));
+    }
+    return words.join(" ");
+};
+
 let gitObserver: ((observation: GitObservation) => void) | undefined;
 
 /**

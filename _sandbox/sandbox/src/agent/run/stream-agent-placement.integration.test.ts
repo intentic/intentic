@@ -10,6 +10,7 @@ import { recordingTurnStores, services } from "../../harness/route-services.test
 import { beginTurn } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { depsSliceFake } from "../../workspace/deps/deps-slice.testing.js";
+import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { streamAgent } from "./stream-agent.js";
@@ -120,6 +121,23 @@ test("a conversation already running a turn refuses a second one as busy", async
         { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
         { kind: "done" },
     ]);
+});
+
+// A turn turned away at its begin must not take the live turn's stop and steering, nor clear them as it unwinds.
+test("a second turn refused as busy leaves the live turn stoppable and steerable", async () => {
+    const { services: s } = placedServices(scripted([{ kind: "done" }]));
+    const live = { conversationId: "placed-held", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" } } as const;
+    expect(await beginTurn(s.conversations, live, Date.now())).toBe("begun");
+    let stopped = false;
+    s.conversations.registerTurn("placed-held", { abort: () => (stopped = true), steering: new SteeringQueue() });
+
+    expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-held" }, undefined))).toStrictEqual([
+        { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
+        { kind: "done" },
+    ]);
+    expect(s.conversations.steer("placed-held", "go left instead")).toBe(true);
+    expect(s.conversations.abort("placed-held")).toBe(true);
+    expect(stopped).toBe(true);
 });
 
 // Only a person reopens an archived conversation: any other turn is turned away at its begin, runs nothing, and says why.

@@ -238,7 +238,7 @@ export const createAgentsRoutes = (services: Services) => {
                 return true;
             });
             if (outcome === undefined) {
-                throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
+                throw new ORPCError("CONFLICT", { message: "the agent's turn or a rewind holds this conversation, wait for it to finish" });
             }
             return { ok: true } as const;
         }),

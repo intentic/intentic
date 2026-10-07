@@ -1,52 +1,58 @@
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos.js";
+import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
+import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
+import { extensionDevDocument } from "../extensions/extension-dev.js";
+import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
 import { followExtensionDirs, stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
-import { stateRelPath } from "../state-paths.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import type { BootPhase } from "./boot-phase.js";
 
-// Three feeds, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs. Nothing polls.
+// Three watchers, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs.
+// Nothing polls. (netd's per-checkout change counts are a fourth feed, but one that answers status reads,
+// git/feed/checkout-feed.ts, and moves none of the reactions here.)
 
-// Module scope so the watcher doesn't rebuild this on every change batch.
-// Which installs run from a source checkout: a hand edit moves their code like an install does, and their processes too.
-const extensionDevPointers = stateRelPath(".intentic/local/extension-dev.json");
-const extensionSource = (path: string): boolean =>
-    path.startsWith(`${stateRelPath(".intentic/config/workspace-extensions/")}/`) ||
-    path.startsWith(`${stateRelPath(".intentic/local/extensions/")}/`) ||
-    path === stateRelPath(".intentic/config/extension-enablement.json") ||
-    path === extensionDevPointers;
-
-// The capability manifest names the installed extensions, so a hand edit to it moves the contribution inventory too.
-const capabilityManifest = stateRelPath(".intentic/config/capabilities.json");
+// Every workspace path an installed extension's code or switches live under, in the watcher's own relative spelling,
+// taken from the documents and directories that own them: a hand edit there moves the extension like an install does.
+const extensionSourceOf = (root: string): ((path: string) => boolean) => {
+    const dirs = [workspaceExtensionsRoot(root), extensionsRoot(root)].map((dir) => `${relative(root, dir)}/`);
+    const files = new Set([extensionEnablementDocument.path, extensionDevDocument.path]);
+    return (path) => files.has(path) || dirs.some((dir) => path.startsWith(dir));
+};
 
 export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
-    startWorkspaceWatch(services.workspace.root, logger);
-    subscribeWorkspaceChanges(() => services.iq.markDirty());
-    subscribeWorkspaceChanges(services.workspaceTreeChanged);
+    // Built once, not per change batch.
+    const extensionSource = extensionSourceOf(services.workspace.root);
+    shutdown.push(startWorkspaceWatch(services.workspace.root, logger));
+    shutdown.push(subscribeWorkspaceChanges(() => services.iq.markDirty()));
+    shutdown.push(subscribeWorkspaceChanges(services.workspaceTreeChanged));
     shutdown.push(subscribeUnwatchedWrites(() => services.workspaceTreeChanged([])));
     // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
     // again, and keeps none of its processes meanwhile.
-    subscribeWorkspaceChanges((paths) => {
-        if (paths.some((path) => extensionSource(path) || path === capabilityManifest)) {
-            invalidateContributions();
-        }
-        if (paths.some(extensionSource)) {
-            services.extensionBackend.restart();
-            void stopPendingExtensionProcesses(services);
-        }
-        // Idempotent, so the dev routes' own write passing through here moves nothing twice.
-        if (paths.includes(extensionDevPointers)) {
-            void followExtensionDirs(services);
-        }
-    });
-    startRepoWatch(services.workspace.root, logger);
-    startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
+    shutdown.push(
+        subscribeWorkspaceChanges((paths) => {
+            // The capability manifest names the installed extensions, so a hand edit to it moves the inventory too.
+            if (paths.some((path) => extensionSource(path) || path === capabilitiesDocument.path)) {
+                invalidateContributions();
+            }
+            if (paths.some(extensionSource)) {
+                services.extensionBackend.restart();
+                void stopPendingExtensionProcesses(services);
+            }
+            // Idempotent, so the dev routes' own write passing through here moves nothing twice.
+            if (paths.includes(extensionDevDocument.path)) {
+                void followExtensionDirs(services);
+            }
+        }),
+    );
+    shutdown.push(startRepoWatch(services.workspace.root, logger));
+    shutdown.push(startRefWatch(services.workspace.root, subscribeRepoChanges, logger));
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     // Everything a land standing is measured against outside the registry: refs (main's HEAD, agent tips) and the main

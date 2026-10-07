@@ -3,6 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import {
     ASK_PATIENCE_MS,
     FRAME_LENGTH_BYTES,
+    FRAME_MAX_BYTES,
     type Answer,
     type FromNode,
     type NetdAnswer,
@@ -40,6 +41,9 @@ export interface NetdLinkOptions {
     readonly answer: (question: NetdAsks) => Promise<Answer>;
     readonly onTunnel: (connected: boolean, report: TunnelReport) => void;
     readonly onClose: () => void;
+    // What went wrong on the link that is not a question's own refusal: a frame that would not parse (skipped, the rest
+    // still read), a length past the cap or a socket error (the link is then dropped, and `onClose` follows).
+    readonly onFault: (error: Error) => void;
     // How long a question of Node's waits for netd; ASK_PATIENCE_MS unless a test says otherwise.
     readonly patienceMs?: number;
 }
@@ -52,12 +56,24 @@ export const frameOf = (message: FromNode): Buffer => {
     return frame;
 };
 
-// Splits whatever has arrived into whole frames, keeping a partial one for the next read.
+// A length prefix past FRAME_MAX_BYTES: the stream has lost its framing, and nothing after it can be trusted.
+export class FrameTooLarge extends Error {
+    constructor(readonly length: number) {
+        super(`netd link: a frame announced ${length} bytes, past the ${FRAME_MAX_BYTES}-byte cap; the stream is corrupt`);
+        this.name = "FrameTooLarge";
+    }
+}
+
+// Splits whatever has arrived into whole frames, keeping a partial one for the next read. Throws FrameTooLarge rather
+// than waiting to buffer a frame no peer may send.
 export const takeFrames = (buffered: Buffer): { readonly frames: Buffer[]; readonly rest: Buffer } => {
     const frames: Buffer[] = [];
     let offset = 0;
     while (buffered.length - offset >= FRAME_LENGTH_BYTES) {
         const length = buffered.readUInt32BE(offset);
+        if (length > FRAME_MAX_BYTES) {
+            throw new FrameTooLarge(length);
+        }
         if (buffered.length - offset - FRAME_LENGTH_BYTES < length) {
             break;
         }
@@ -143,11 +159,26 @@ export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> =
         }
     };
     socket.on("data", (chunk: Buffer) => {
-        const { frames, rest } = takeFrames(buffered.length === 0 ? chunk : Buffer.concat([buffered, chunk]));
+        let taken: ReturnType<typeof takeFrames>;
+        try {
+            taken = takeFrames(buffered.length === 0 ? chunk : Buffer.concat([buffered, chunk]));
+        } catch (error) {
+            // Framing lost: no later byte can be placed, so the link goes, and with it this daemon (netd-door.ts onClose).
+            socket.destroy(error instanceof Error ? error : new Error(String(error)));
+            return;
+        }
         // Copied, since `rest` is a view that would otherwise pin every chunk it was cut from.
-        buffered = Buffer.from(rest);
-        for (const frame of frames) {
-            receive(JSON.parse(frame.toString("utf8")) as ToNode);
+        buffered = Buffer.from(taken.rest);
+        for (const frame of taken.frames) {
+            let message: ToNode;
+            try {
+                message = JSON.parse(frame.toString("utf8")) as ToNode;
+            } catch (error) {
+                // One bad frame, its bounds still known: skipped, and the frames after it in this read still delivered.
+                options.onFault(new Error(`netd link: a frame was not JSON (${errorMessage(error)}); skipped`));
+                continue;
+            }
+            receive(message);
         }
     });
     // netd is this process's parent: its socket closing means the sandbox is going down around it.
@@ -158,6 +189,9 @@ export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> =
         }
         options.onClose();
     });
-    socket.on("error", () => socket.destroy());
+    socket.on("error", (error) => {
+        options.onFault(error);
+        socket.destroy();
+    });
     return { tell, sync, tunnelConnected: () => tunnel, close: () => socket.end() };
 };

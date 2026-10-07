@@ -109,17 +109,35 @@ const createRepoWatch = (
     };
 };
 
-// Boot-time singleton the /events handler subscribes to, mirroring workspace-watch's pattern.
-let instance: RepoWatch | undefined;
+// Boot-time singleton the /events handler subscribes to, as workspace-watch's is: subscribers register into a set that
+// outlives the start, so one taken while boot is still under way (an editor's /events stream, the history sweep) hears
+// every change once the watch is up, instead of having subscribed to nothing.
+const subscribers = new Set<(repos: string[]) => void>();
+let instance: (RepoWatch & { close: () => void }) | undefined;
 // Root the singleton watches; a different root gets a real walk, not this one's memo (only tests differ here).
 let watchedRoot: string | undefined;
-export const startRepoWatch = (root: string, logger: Logger): void => {
+// Returns the stop, for the daemon's shutdown.
+export const startRepoWatch = (root: string, logger: Logger): (() => void) => {
     if (instance === undefined) {
-        instance = createRepoWatch(root, subscribeWorkspaceChanges, logger);
+        const watch = createRepoWatch(root, subscribeWorkspaceChanges, logger);
+        watch.subscribe((repos) => {
+            for (const listener of subscribers) {
+                listener(repos);
+            }
+        });
+        instance = watch;
         watchedRoot = root;
     }
+    return () => {
+        instance?.close();
+        instance = undefined;
+        watchedRoot = undefined;
+    };
 };
-export const subscribeRepoChanges = (listener: (repos: string[]) => void): (() => void) => instance?.subscribe(listener) ?? (() => undefined);
+export const subscribeRepoChanges = (listener: (repos: string[]) => void): (() => void) => {
+    subscribers.add(listener);
+    return () => subscribers.delete(listener);
+};
 
 // A repo the daemon made where the watcher cannot see it: a `.git` pointer is never watched, so a folder already
 // synced in becomes a repo with no batch to say so. The set is walked again and pushed as a reposChanged frame if it

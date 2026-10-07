@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-manifest";
 import type { Capability, ExtensionSummary, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
+import { cachedEnabledExtensions } from "../capabilities/contributions.js";
 import {
     extensionDir,
     extensionRootOf,
@@ -204,10 +205,11 @@ export interface ExtensionAgentDir {
     readonly source: InstalledExtension["source"];
 }
 
-// Each enabled extension contributing an agent plugin; `contributes.agent.path` is relative to the extension root.
+// Each enabled extension contributing an agent plugin; `contributes.agent.path` is relative to the extension root. Read
+// off the cached inventory (contributions.ts), since every turn's mounts ask.
 export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<ExtensionAgentDir[]> => {
     const dirs: ExtensionAgentDir[] = [];
-    for (const extension of await enabledExtensions(services)) {
+    for (const extension of await cachedEnabledExtensions(services)) {
         const agent = extension.manifest.contributes?.agent;
         if (agent === undefined) {
             continue;
@@ -218,10 +220,11 @@ export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<Ext
     return dirs;
 };
 
-// Absolute `bin` dirs of enabled extensions shipping CLIs, prepended to the turn's PATH so a tool resolves by name.
+// Absolute `bin` dirs of enabled extensions shipping CLIs, prepended to the turn's PATH so a tool resolves by name; off
+// the cached inventory, since every turn's environment asks.
 export const extensionBinDirsOf = async (services: ExtensionHost): Promise<string[]> => {
     const dirs: string[] = [];
-    for (const extension of await enabledExtensions(services)) {
+    for (const extension of await cachedEnabledExtensions(services)) {
         const bin = extension.manifest.contributes?.bin;
         if (bin !== undefined) {
             dirs.push(join(extension.dir, bin));

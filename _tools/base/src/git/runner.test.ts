@@ -1,4 +1,4 @@
-import { GIT_GLOBAL_ARGS, literalPathspecs } from "./runner.js";
+import { GIT_GLOBAL_ARGS, gitCommandLabel, literalPathspecs } from "./runner.js";
 
 // Pins that literalPathspecs marks every arg after `--` literal, since git wildmatches raw paths (`report[1].txt`
 // matches `report1.txt`); the real git behavior is pinned in changes.integration.test.ts.
@@ -62,4 +62,23 @@ test("plumbing that takes filenames rather than pathspecs is left alone", () => 
 // something like `git stash push --include-untracked`.
 test("the global args carry no process-wide pathspec flag", () => {
     expect(GIT_GLOBAL_ARGS).not.toContain("--literal-pathspecs");
+});
+
+// The daemon's slow-git log names commands by this label, so a credential anywhere in argv must not survive it.
+test("a command's label drops every -c value and a URL's credentials, keeping the subcommand", () => {
+    expect(gitCommandLabel(["-c", "http.extraheader=Authorization: Basic c2VjcmV0", "clone", "https://example.com/x.git", "x"])).toBe(
+        "clone https://example.com/x.git x",
+    );
+    expect(
+        gitCommandLabel([
+            "-c",
+            "http.lowSpeedLimit=1000",
+            "-c",
+            "http.lowSpeedTime=30",
+            "ls-remote",
+            "--symref",
+            "https://user:ghp_secret@example.com/x.git",
+        ]),
+    ).toBe("ls-remote --symref https://example.com/x.git");
+    expect(gitCommandLabel(["status", "--porcelain", "--", "a.ts", "b.ts"])).toBe("status --porcelain --");
 });

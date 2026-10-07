@@ -173,16 +173,18 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // In-memory state of a running service, not a disk read: no path to contain, nothing to scope.
         // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
-        // readable. Binds the resolved file, not its shared-tree namesake.
+        // readable. Binds the resolved file, not its shared-tree namesake, and names who minted it, so removing them or
+        // signing every browser out ends it (auth/tokens/media-tickets.ts).
         mediaTicket: i.mediaTicket.handler(async ({ input, context }) => {
             const { target } = await scopedRead(context, input.agent, input.path);
             if ((await services.files.size(target)) === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
-            return services.mediaTickets.mint(target);
+            return services.mediaTickets.mint(target, undefined, context.identity?.email);
         }),
         // Mints the ticket GET /workspace/download redeems: every path guarded like a read and resolved now, so the plan
-        // the ticket carries names only what this caller could already open, in the copy they asked for.
+        // the ticket carries names only what this caller could already open, in the copy they asked for. Named after
+        // its minter like a media ticket.
         downloadTicket: i.downloadTicket.handler(async ({ input, context }) => {
             const { names, filename } = nameSelection(input.paths, "workspace");
             const items: DownloadItem[] = [];
@@ -194,7 +196,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                 items.push({ target, name, root: shared ? scope.main : await workspaceRootFor(scope, input.agent) });
             }
             const plan: DownloadPlan = { items, filename };
-            return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS), filename };
+            return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS, context.identity?.email), filename };
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
         // resolveReference to the workspace's guards and to iq's in-memory glob.

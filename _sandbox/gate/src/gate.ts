@@ -1,5 +1,9 @@
-// Pure functions for what the CLI decides, kept separate from the process that acts on it. No dependencies: this runs
-// cold under `npx` in CI, so verdict fields are checked by hand and pinned to the contract schema by gate.test.ts.
+import { errorMessage } from "@intentic/base/errors";
+import { detailOf } from "./run.js";
+
+// What the CLI decides and the one exchange it makes, kept separate from the process that acts on them. No schema
+// library: this runs cold under `npx` in CI, so verdict fields are checked by hand and pinned to the contract schema by
+// gate.test.ts.
 
 // The verdict the daemon answers with (sandbox-contract's GateVerdictSchema, kept in step by a test).
 export interface GateVerdict {
@@ -129,5 +133,55 @@ export const exitOf = (verdict: GateVerdict, blockedExit: number): number => {
     return verdict.outcome === "fail" ? 1 : blockedExit;
 };
 
-// The run door shares this package: one zero-dependency install for every way a pipeline talks to a sandbox.
+// Something other than a verdict: the gate could not be reached, refused the call, or answered with something that was
+// not a verdict. Its message is the sentence the CLI and the action print before exiting 2.
+export class GateExchangeError extends Error {}
+
+// The exchange's one effect, injected as runExchange's are, so a test can play the gate.
+export interface GateDeps {
+    readonly fetch: (
+        url: string,
+        init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal },
+    ) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+}
+
+// POSTs what the pipeline knows and holds the connection until the gate judges it. The CLI and the GitHub Action both
+// go through here, so a refusal reads the same in either; anything but a verdict throws GateExchangeError.
+export const gateExchange = async ({ url, waitS, request }: Pick<GateCall, "url" | "waitS" | "request">, deps: GateDeps): Promise<GateVerdict> => {
+    // The body is read inside the same catch: the verdict arrives as the body, so a connection cut while the gate holds
+    // it is an unreachable gate too, not a crash a pipeline would read as exit 1.
+    const reached = async (): Promise<{ ok: boolean; status: number; text: string }> => {
+        const dial = dialOf(url, waitS);
+        const response = await deps.fetch(dial.url, {
+            method: "POST",
+            headers: dial.headers,
+            body: request,
+            signal: AbortSignal.timeout(clientTimeoutMs(waitS)),
+        });
+        return { ok: response.ok, status: response.status, text: await response.text() };
+    };
+    let answer: { ok: boolean; status: number; text: string };
+    try {
+        answer = await reached();
+    } catch (error) {
+        throw new GateExchangeError(`the gate could not be reached: ${errorMessage(error)}`);
+    }
+    const { ok, status, text } = answer;
+    if (!ok) {
+        throw new GateExchangeError(`the gate answered ${status}: ${detailOf(text)}`);
+    }
+    let body: unknown;
+    try {
+        body = JSON.parse(text);
+    } catch {
+        body = undefined;
+    }
+    const verdict = readVerdict(body);
+    if (verdict === undefined) {
+        throw new GateExchangeError(`the gate's answer was not a verdict: ${text.slice(0, 200)}`);
+    }
+    return verdict;
+};
+
+// The run door shares this package: one small install for every way a pipeline talks to a sandbox.
 export * from "./run.js";

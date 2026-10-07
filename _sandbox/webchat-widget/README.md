@@ -15,11 +15,16 @@ flowchart LR
   its own `<script data-automation>` tag, fetches the chat's config and mounts `<intentic-visitor-chat>`. A sleeping
   sandbox or a disallowed origin renders nothing.
 - The launcher and panel live in a shadow root so the host's CSS and the widget's never mix. Google sign-in and
-  Cloudflare Turnstile are the exception: third-party iframes need the light DOM, projected through a `<slot>`.
+  Cloudflare Turnstile are the exception: third-party iframes need the light DOM, projected through a `<slot>`. A
+  script of theirs that fails to load is fetched again the next time the panel opens.
 - A visitor is a thread id kept in `localStorage` per automation, or a Google ID token the daemon verifies. A typed
   name is display only. The first message of a thread spends a proof-of-work or Turnstile challenge.
-- Replies stream back as SSE over a `POST`. Answers written later (an approval-gated reply, a human writing as the
-  agent) arrive by polling, which backs off while the sandbox is unreachable.
+- Replies stream back as SSE over a `POST`, in the event names the contract's embed module shares with the daemon.
+  Answers written later (an approval-gated reply, a human writing as the agent) arrive by polling, which backs off
+  while the sandbox is unreachable. Every message after the first carries the recent transcript, which the daemon reads
+  only when it has expired the thread and starts a fresh conversation.
+- The accent's label colour, the default orange and HTML escaping come from the same embed module as the bug
+  reporter's, so the two embeds pick the same readable label for the same accent.
 - The daemon serves the built file itself (`_sandbox/sandbox/src/webchat/`), so the widget and its routes always ship
   together. Build this package before the daemon can serve it.
 

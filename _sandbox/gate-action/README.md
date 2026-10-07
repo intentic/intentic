@@ -11,9 +11,9 @@ flowchart LR
     action --> out["Step outputs<br/>job summary"]
 ```
 
-- The end of the `url` path picks the door. `/workflows/<id>/gate` holds the step until a verdict arrives;
-  `/automations/<id>/fire` posts the event payload and returns at once. With a `token` input, `url` is the sandbox's
-  own address and `prompt` runs as an agent turn through [gate](../gate)'s `runExchange`.
+- The end of the `url` path picks the door. `/workflows/<id>/gate` holds the step until a verdict arrives, through
+  [gate](../gate)'s `gateExchange`; `/automations/<id>/fire` posts the event payload and returns at once. With a
+  `token` input, `url` is the sandbox's own address and `prompt` runs as an agent turn through gate's `runExchange`.
 - Runs on GitHub's `node24` runtime from `dist/index.mjs`, one esbuild bundle that needs no `node_modules`. It speaks
   the runner protocol (`INPUT_*` variables, `GITHUB_OUTPUT`, `GITHUB_STEP_SUMMARY`, `::error::`) without
   `@actions/core`.

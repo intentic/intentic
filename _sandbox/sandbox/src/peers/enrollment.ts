@@ -6,6 +6,7 @@ import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
 import { at, type Conversion, type JsonObject, transform } from "../store/evolution/conversions.js";
 import { type DocumentSpec, defineDocument } from "../store/evolution/documents.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 
 // How something outside this sandbox becomes something it trusts, split into two halves by lifetime. A PAIRING is
@@ -57,12 +58,26 @@ export interface Pairings<T> {
 
 // `burns` is the /history document replayable pairings are recorded in. Omitting it declares nothing at this door can be
 // replayed, so `arm` refuses: an unauditable token must not be accepted. `ttlMs` is how long an unredeemed one lives.
+// A burn list this build cannot read is refused both ways: never set aside and rewritten (which would forget every token
+// it spent), and never read as empty (which would let a spent env-armed pairing in again). `arm` and `redeem` throw
+// ManifestUnreadableError for it, and the pairing being redeemed stays unspent for a retry once the file is fixed.
 export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => {
-    const burned = burns === undefined ? undefined : openDocument(burns.document, burns.path, { fallback: () => ({ digests: [] }), mode: 0o600 });
+    const burned =
+        burns === undefined
+            ? undefined
+            : openDocument(burns.document, burns.path, { fallback: () => ({ digests: [] }), mode: 0o600, onUnreadable: "refuse" });
     const live = new Map<string, { payload: T; expiresAt: number; replayable: boolean }>();
 
-    const isBurned = async (token: string): Promise<boolean> =>
-        burned === undefined ? false : (await burned.read()).digests.includes(sha256Hex(token));
+    const isBurned = async (token: string): Promise<boolean> => {
+        if (burns === undefined || burned === undefined) {
+            return false;
+        }
+        const stored = await burned.state();
+        if (stored.unreadable) {
+            throw new ManifestUnreadableError(burns.path, stored.detail);
+        }
+        return stored.value.digests.includes(sha256Hex(token));
+    };
 
     const peek = (token: string): T | undefined => {
         const pairing = live.get(token);
@@ -111,22 +126,26 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
         peek,
         consume,
         redeem: async (token) => {
-            const payload = peek(token);
-            if (payload === undefined) {
+            const pairing = peek(token) === undefined ? undefined : live.get(token);
+            if (pairing === undefined) {
                 return undefined;
             }
             // Claimed before anything is awaited: two redemptions of one token in flight together must not both find it
             // in the map, or a single-use pairing would enroll twice.
-            const replayable = live.get(token)?.replayable === true;
             live.delete(token);
             // The burn list decides, not the map: a digest already on /history means this in-memory copy is a replay.
-            if (await isBurned(token)) {
+            // One it cannot read decides nothing, so the claim goes back for a retry.
+            const spent = await isBurned(token).catch((error: unknown) => {
+                live.set(token, pairing);
+                throw error;
+            });
+            if (spent) {
                 return undefined;
             }
-            if (replayable) {
+            if (pairing.replayable) {
                 await burn(token);
             }
-            return payload;
+            return pairing.payload;
         },
     };
 };
@@ -181,6 +200,9 @@ export interface Enrollments<X extends object> {
     readonly amend: (id: string, patch: Partial<X>) => Promise<void>;
     // Drops one enrollment; the next connect is refused. Closing the live socket is the caller's own half.
     readonly revoke: (id: string) => Promise<boolean>;
+    // Throws ManifestUnreadableError when the manifest exists and this build cannot read it: for a caller about to spend
+    // something it cannot get back (a pairing) on a write that would then be refused.
+    readonly requireReadable: () => Promise<void>;
 }
 
 // Each door's enrollments file, one family: a top-level key of its own, and each entry the digest plus whatever the door
@@ -264,11 +286,15 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
     if (!Object.hasOwn(args.document.schema.shape, args.key)) {
         throw new Error(`${args.document.path} keeps its enrollments under ${Object.keys(args.document.schema.shape).join(", ")}, not ${args.key}`);
     }
+    // Refused rather than set aside when this build cannot read it: setting it aside would drop every peer's digest, so
+    // one new pairing would turn every other peer's "unavailable" into "unknown". `issue` and the other writes throw
+    // ManifestUnreadableError instead, which a door answers as unavailable.
     const file = openDocument<EnrollmentsDocument, Record<string, Entry[]>>(args.document, args.path, {
         // SAFETY: the document's schema is this door's family schema, whose one key holds entries of this door's shape.
         read: (stored) => stored as Record<string, Entry[]>,
         fallback: () => ({ [args.key]: [] }),
         mode: 0o600,
+        onUnreadable: "refuse",
     });
 
     const read = async (): Promise<Entry[]> => (await file.read())[args.key] ?? [];
@@ -279,8 +305,17 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
         return rest as { readonly id: string } & X;
     };
     // Returning the current array by reference skips the write, so revoking something that was never here is a no-op
-    // that says so, not a rewrite of the file.
+    // that says so, not a rewrite of the file. Over a manifest this build cannot read, that no-op would answer a revoke
+    // as "never here" and leave the peer enrolled once the file is fixed, so every write is refused there, not only one
+    // that changes something.
+    const requireReadable = async (): Promise<void> => {
+        const manifest = await file.state();
+        if (manifest.unreadable) {
+            throw new ManifestUnreadableError(args.path, manifest.detail);
+        }
+    };
     const write = async (change: (current: Entry[]) => Entry[] | undefined): Promise<void> => {
+        await requireReadable();
         await file.update((stored) => {
             const next = change(stored[args.key] ?? []);
             return next === undefined ? stored : { [args.key]: next };
@@ -364,5 +399,6 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
             });
             return revoked;
         },
+        requireReadable,
     };
 };

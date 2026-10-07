@@ -22,7 +22,8 @@ flowchart LR
   `ping` unanswered for 5 minutes has an event loop that is not turning at all, since a busy one answers within
   seconds: netd SIGKILLs it (its SIGTERM handler would need that loop) and restarts it as after a crash. A clean
   exit or a refused config ends netd, and with it the container. `docker run` gives the container a 30 s
-  `--stop-timeout`, past the 25 s netd gives Node to stop.
+  `--stop-timeout`, past the 25 s netd gives Node to stop and the 2 s it then gives every tunnel carrier, together, to
+  close.
 - Daemon replies expose Resource Timing to the origin their CORS response already permits, so the editor can read the
   negotiated HTTP protocol and reserve browser connections when multiplexing is unavailable.
 - `route.rs` picks the target from the listener a request arrived on and the leftmost DNS label of its Host. On the

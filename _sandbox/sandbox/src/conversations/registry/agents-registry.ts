@@ -128,7 +128,7 @@ const cacheClock = (state: ConversationState | undefined): AgentSummary["promptC
 };
 
 // What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing
-// check means it was not re-run; what a missing checklist means depends on how the turn ended (`TurnEnding`).
+// check means it was not re-run; what a missing checklist means depends on how the turn ended (`TurnCompletion`).
 const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
     const open = list.filter((item) => item.status !== "completed");
     if (open.length === 0) {

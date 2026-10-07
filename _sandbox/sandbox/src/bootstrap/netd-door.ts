@@ -2,7 +2,14 @@ import { once } from "node:events";
 import { readFileSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type RequestListener } from "node:http";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
-import { type Answer, type FromNode, NETD_SOCKET_ENV, type ListenConfig, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/netd-wire";
+import {
+    type Answer,
+    type FromNode,
+    type ListenConfig,
+    NETD_SOCKET_ENV,
+    NODE_GENERATION_ENV,
+    NODE_SOCKET_ENV,
+} from "@intentic/sandbox-contract/netd-wire";
 import { tunnelBulkRoutes } from "@intentic/sandbox-contract";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
@@ -21,16 +28,12 @@ import type { ProfileTraits } from "../system/boot/profile.js";
 import { sameProcess } from "../system/resources/proc-stat.js";
 import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
 import { buildId } from "../version.js";
+import { LINK_LOST_EXIT } from "../system/boot/daemon-stop.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // The daemon behind intentic-netd (_sandbox/netd): HTTP on a Unix socket only netd dials, and every port, the
 // loopback certificate and the ingress tunnel handed to netd over its control socket. Node decides; netd
 // binds.
-
-// Set by intentic-netd on each daemon it starts, counted from 1, and said back in the hello: netd lets a newer
-// start take its control socket from an older one, and never a copy of the same start (netd-wire's GENERATION_ENV,
-// written to the contract's generated/netd-wire.json, is the definition).
-const GENERATION_ENV = "INTENTIC_NODE_GENERATION";
 
 // The one push notification for another copy of this sandbox holding its tunnel: raised once, replaced when this copy
 // holds the tunnel again.
@@ -38,7 +41,7 @@ const ELSEWHERE_TAG = "tunnel-elsewhere";
 
 // The start of the daemon netd says this is, or none from a netd that predates generations.
 export const generationOf = (env: NodeJS.ProcessEnv): number | undefined => {
-    const generation = Number(env[GENERATION_ENV]);
+    const generation = Number(env[NODE_GENERATION_ENV]);
     return Number.isSafeInteger(generation) && generation > 0 ? generation : undefined;
 };
 
@@ -240,18 +243,31 @@ export const netdDoorServer = (preview: PreviewDeps, logger: Pick<Logger, "warn"
         return server;
     }) as typeof createHttpServer;
 
-export const startNetdDoor = async (phase: BootPhase, host: string): Promise<ReachPosture> => {
-    const { logger, services, shutdown } = phase;
-    const controlPath = process.env[NETD_SOCKET_ENV];
-    const httpPath = process.env[NODE_SOCKET_ENV];
+// The two sockets intentic-netd names for the daemon it spawns: its control link, and where this daemon serves HTTP.
+export interface NetdSockets {
+    readonly controlPath: string;
+    readonly httpPath: string;
+}
+
+// The daemon serves only behind intentic-netd. Checked with the other refusals in main.ts, before anything is converged,
+// built or bound, so a start outside netd changes nothing on its way out; read once, since the environment forgets both
+// names once the door has dialled them (daemon-env.ts).
+export const requireNetdSockets = (env: NodeJS.ProcessEnv = process.env): NetdSockets => {
+    const controlPath = env[NETD_SOCKET_ENV];
+    const httpPath = env[NODE_SOCKET_ENV];
     if (controlPath === undefined || controlPath === "" || httpPath === undefined || httpPath === "") {
-        // Before the logger's file: must be legible in `docker logs` whatever else is wrong.
+        // Before the logger: must be legible in `docker logs` whatever else is wrong.
         process.stderr.write(
             `FATAL: the daemon serves only behind intentic-netd, which sets ${NETD_SOCKET_ENV} and ${NODE_SOCKET_ENV}: ` +
                 "run it as `intentic-netd -- node dist/main.js`.\n",
         );
         process.exit(78); // EX_CONFIG
     }
+    return { controlPath, httpPath };
+};
+
+export const startNetdDoor = async (phase: BootPhase, host: string, { controlPath, httpPath }: NetdSockets): Promise<ReachPosture> => {
+    const { logger, services, shutdown } = phase;
     const refusal = netdDoorRefusal({ role: phase.role, traits: phase.traits, controlPath, ownerControlPath });
     if (refusal !== undefined) {
         // A boot failure: logged, and a guest's records nothing for the host (boot-failure.ts).
@@ -272,11 +288,13 @@ export const startNetdDoor = async (phase: BootPhase, host: string): Promise<Rea
         },
         // netd repeats where the tunnel stands to every Node that says hello; only a change is news.
         onTunnel: tunnelReports(logger, services.pushSender),
-        // netd is this process's parent: its control socket closing unasked means the box is going down around it.
+        onFault: (error) => logger.warn({ err: error }, "netd link: fault on the control socket"),
+        // The link closing unasked: netd dropped it (a frame it could not read) or is going away. Either way this daemon
+        // cannot serve without it, and exits for a fresh start; netd going down takes no notice of the code.
         onClose: () => {
             if (!stopping) {
-                logger.error("intentic-netd closed the control socket; stopping");
-                process.kill(process.pid, "SIGTERM");
+                logger.error("intentic-netd closed the control socket; exiting so netd starts this daemon again");
+                phase.stop(LINK_LOST_EXIT);
             }
         },
     });

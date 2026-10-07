@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { NETD_SOCKET_ENV, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/netd-wire";
+import { INSTANCE_ENV, NETD_SOCKET_ENV, NODE_GENERATION_ENV, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/netd-wire";
 
 // Whose work a process the daemon spawned is, stamped into its environment by every spawner (a turn's runtime, a
 // browser, a helper call) and read back by the process scan (system/resources/process-scan.ts), so
@@ -68,6 +68,8 @@ export const detachedStamp = (kind: DetachedKind, deadlineAt?: number): Detached
     return deadlineAt === undefined ? stamp : { ...stamp, [DEADLINE_ENV]: String(Math.ceil(deadlineAt)) };
 };
 
-// Variables only the daemon may hold: netd's control socket and the socket it relays HTTP to. A child that
-// inherited them (an agent's shell, a second Node started there) could take netd's socket over.
-export const DAEMON_ONLY_ENV = [NETD_SOCKET_ENV, NODE_SOCKET_ENV] as const;
+// Variables only the daemon may hold: netd's control socket and the socket it relays HTTP to, which a child that
+// inherited them (an agent's shell, a second Node started there) could take netd's socket over with; and which start
+// of the daemon this is and which copy of the sandbox, which such a second Node would otherwise claim as its own. Read
+// before they are forgotten: the generation by the hello, the instance by the announce, both at boot.
+export const DAEMON_ONLY_ENV = [NETD_SOCKET_ENV, NODE_SOCKET_ENV, NODE_GENERATION_ENV, INSTANCE_ENV] as const;

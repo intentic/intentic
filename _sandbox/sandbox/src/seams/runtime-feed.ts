@@ -1,4 +1,5 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import type { Logger } from "pino";
 
 // The push feed's announcing half, below every subsystem that changes a runtime (a tmux session, a panel, a browser, a
 // child turn): each publishes here and the /events stream subscribes (system/runtime-watch.ts), so neither imports the
@@ -35,7 +36,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     update: 1000,
 };
 
-const subscribers = new Set<(domains: RuntimeDomain[]) => void>();
+// Each subscriber, with where its own failure is reported: the /events connection's logger, or none.
+const subscribers = new Map<(domains: RuntimeDomain[]) => void, Pick<Logger, "warn"> | undefined>();
 
 // What has changed and not yet gone out, and the earliest each domain may go out again.
 const pending = new Set<RuntimeDomain>();
@@ -73,13 +75,26 @@ const flush = (): void => {
         nextAllowedAt.set(domain, now + THROTTLE_MS[domain]);
         ready.push(domain);
     }
-    if (ready.length > 0) {
-        for (const listener of subscribers) {
-            listener(ready);
-        }
-    }
+    // Re-armed before the listeners run, and each listener isolated, as domain-events isolates its own: one that
+    // throws must neither starve the listeners after it nor strand the domains still waiting for their window. A
+    // subscriber with no logger of its own has its failure raised once everyone has heard, as an uncaught one always was.
     if (soonest !== undefined) {
         arm(soonest);
+    }
+    let unreported: { readonly error: unknown } | undefined;
+    for (const [listener, failed] of ready.length > 0 ? subscribers : []) {
+        try {
+            listener(ready);
+        } catch (error) {
+            if (failed === undefined) {
+                unreported ??= { error };
+            } else {
+                failed.warn({ err: error, domains: ready }, "runtime feed: a subscriber failed on a change; the others still heard it");
+            }
+        }
+    }
+    if (unreported !== undefined) {
+        throw unreported.error;
     }
 };
 
@@ -96,8 +111,8 @@ export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void
 
 // The last unsubscribe drops what was pending and every rate-limit stamp: with nobody listening nothing is stale, and a
 // new connection re-asks every runtime-bound key anyway.
-export const onRuntimeChange = (listener: (domains: RuntimeDomain[]) => void): (() => void) => {
-    subscribers.add(listener);
+export const onRuntimeChange = (listener: (domains: RuntimeDomain[]) => void, failed?: Pick<Logger, "warn">): (() => void) => {
+    subscribers.set(listener, failed);
     return () => {
         subscribers.delete(listener);
         if (subscribers.size > 0) {

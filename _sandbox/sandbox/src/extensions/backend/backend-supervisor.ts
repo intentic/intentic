@@ -137,7 +137,17 @@ const hostKeyOf = (workspaceRoot: string, runnable: readonly (BackendHostExtensi
             .toSorted((a, b) => a.id.localeCompare(b.id)),
     });
 
-export const createExtensionBackend = (services: () => ExtensionHost, daemonPort: number, logger: Logger): ExtensionBackend => {
+export interface ExtensionBackendOptions {
+    // How long a spawned host has to answer /health before it is killed and retried; a test shortens it.
+    readonly healthTimeoutMs?: number;
+}
+
+export const createExtensionBackend = (
+    services: () => ExtensionHost,
+    daemonPort: number,
+    logger: Logger,
+    { healthTimeoutMs = HEALTH_TIMEOUT_MS }: ExtensionBackendOptions = {},
+): ExtensionBackend => {
     // Minted once per daemon lifetime so a restart doesn't invalidate an in-flight token; reach resolves separately.
     const tokens = new Map<string, string>();
     const tokenFor = (id: string): string => {
@@ -267,7 +277,8 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         let health: BackendHealth | undefined;
         await pollUntil(
             async () => {
-                if (spawned.child.exitCode !== null) {
+                // A signal death leaves exitCode null; either way there is nothing left to wait for.
+                if (spawned.child.exitCode !== null || spawned.child.signalCode !== null) {
                     return true;
                 }
                 try {
@@ -284,7 +295,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 }
                 return false;
             },
-            { intervalMs: HEALTH_POLL_MS, timeoutMs: HEALTH_TIMEOUT_MS },
+            { intervalMs: HEALTH_POLL_MS, timeoutMs: healthTimeoutMs },
         );
         return health;
     };
@@ -374,7 +385,22 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             return;
         }
         if (health === undefined) {
-            state = { state: "error", detail: "the backend host did not become healthy", extensions: collected.reported };
+            // A host that died on arrival was already reported and rescheduled by its exit handler, which said how it
+            // ended; that sentence stands.
+            if (host !== spawned) {
+                return;
+            }
+            // Alive but silent, most likely an activation that never returns: every backend waits behind it, so it is
+            // killed and tried again on the same ladder as a death, rather than left holding /x at 503 until something
+            // else restarts it.
+            logger.warn({ timeoutMs: healthTimeoutMs }, "extension backend host did not answer /health in time: killing it and retrying");
+            kill();
+            state = {
+                state: "error",
+                detail: `the backend host did not become healthy within ${healthTimeoutMs / 1_000}s`,
+                extensions: collected.reported,
+            };
+            retry = setTimeout(() => void converge(), ladder.next());
             return;
         }
         ladder.reset();

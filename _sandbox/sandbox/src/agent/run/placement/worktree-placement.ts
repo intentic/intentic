@@ -11,7 +11,7 @@ import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "./turn-landing.js";
-import { anchorIsolatedTurn, type Placement } from "./turn-placement.js";
+import { anchorIsolatedTurn, type Placement, worktreeFrame } from "./turn-placement.js";
 import type { ReachWatch } from "./turn-reach.js";
 
 // An isolated conversation's own worktree: composed and rebased onto today's main line before the model reads it,
@@ -28,28 +28,6 @@ export interface WorktreeRun {
     // Re-syncs after a settled card, answering the frame to restate where the branch stands, or nothing if it didn't move.
     readonly resync: () => Promise<AgentEvent | undefined>;
 }
-
-export type WorktreeFrame = Extract<AgentEvent, { kind: "worktree" }>;
-
-// Where the branch stands: `base` always names where it sits now, `unenforced` a container rewriting tool paths, and
-// `sync` what the rebase that just ran moved or could not.
-export const worktreeFrame = (worktree: ConversationWorktree, onto: ReadonlyMap<string, string>, enforced: boolean, synced: readonly RepoSync[]): WorktreeFrame => {
-    const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
-    return {
-        kind: "worktree",
-        branch: worktree.branch,
-        base: (root === undefined ? "" : (onto.get(root.repo) ?? root.base)).slice(0, 7),
-        ...(enforced ? {} : { unenforced: true }),
-        ...(synced.length > 0
-            ? {
-                  sync: {
-                      commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
-                      blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
-                  },
-              }
-            : {}),
-    };
-};
 
 const MAIN_LINE: Upstream = { kind: "main" };
 

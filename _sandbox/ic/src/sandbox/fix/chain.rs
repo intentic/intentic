@@ -155,6 +155,9 @@ pub struct ChainFacts {
     pub health: Health,
     /// What the daemon wrote to /history/boot-failure.json since the container last started.
     pub boot_failure: Option<String>,
+    /// netd's word that the daemon keeps crashing inside a container that stays up (health::crashing), asked of a
+    /// running one that did not answer. Docker's restart count never sees those restarts.
+    pub crashing: Option<String>,
     /// The memory the engine has, in bytes (for a raise after an OOM kill).
     pub engine_memory: Option<u64>,
     pub public: Public,
@@ -189,6 +192,7 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
         oom_seen,
         health: Health::NotAsked,
         boot_failure: None,
+        crashing: None,
         engine_memory: None,
         public: Public::NotAsked,
         live_turns: None,
@@ -270,6 +274,9 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
             &container,
             state.started_ms.unwrap_or(0),
         );
+        if state.running() {
+            facts.crashing = crate::health::crashing(&container);
+        }
     }
     if facts.oom_seen {
         facts.engine_memory =
@@ -303,7 +310,7 @@ fn ask_health(container: &str) -> Health {
             "-sf",
             "-m",
             HEALTH_CURL_SECS,
-            "http://localhost:8787/health",
+            crate::health::HEALTH_URL,
         ],
         EXEC_LIMIT,
     ) {
@@ -336,7 +343,7 @@ pub fn public_worth_a_second_look(public: &Public) -> bool {
 /* THE DAEMON'S WORK SIGNAL (the daemon's workload/work-signal.ts): how many turns run, rewritten at least every minute
 while it lives. A restart cuts them, so an unattended fix asks first. */
 
-const WORK_SIGNAL: &str = "/run/intentic/work.json";
+pub const WORK_SIGNAL: &str = "/run/intentic/work.json";
 /// Older than this, the count is what a hung daemon left behind: nothing to protect, and nothing to believe.
 const WORK_SIGNAL_STALE_MS: u64 = 3 * 60_000;
 
@@ -452,7 +459,7 @@ const STARTING_MS: u64 = 90_000;
 /// How long a daemon may run without its tunnel before a restart is the fix rather than patience.
 const TUNNEL_GRACE_MS: u64 = 180_000;
 /// A container this restart-heavy is crash-looping, whatever its current state says.
-const CRASH_LOOP_RESTARTS: u64 = 3;
+const CRASH_LOOP_RESTARTS: u64 = crate::health::CRASH_LOOP_RESTARTS as u64;
 /// A cutover whose heartbeat is this fresh is in progress somewhere (probation.rs's own figure).
 fn cutover_alive(record: &ChannelRecord, now_ms: u64) -> bool {
     record
@@ -734,7 +741,11 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                     fix,
                 );
             }
-            if up_for(facts).is_some_and(|up| up < STARTING_MS) {
+            // netd restarts a daemon that crashed without the container stopping, so one it says keeps crashing has
+            // been restarted already, each time onto the same code: no longer starting, and nothing a container
+            // restart would change.
+            let crashing = facts.crashing.as_deref();
+            if crashing.is_none() && up_for(facts).is_some_and(|up| up < STARTING_MS) {
                 return Check::warn(
                     DAEMON,
                     "the daemon is still starting — it keeps going in the background.",
@@ -746,7 +757,10 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                     "an update of this sandbox is in progress; it finishes or undoes itself.",
                 );
             }
-            let problem = "the daemon inside the container does not answer /health.";
+            let problem = crashing.map_or_else(
+                || "the daemon inside the container does not answer /health.".to_string(),
+                |looping| format!("the daemon keeps crashing: {looping}."),
+            );
             if swap_on_record(&facts.record) && !tried(&Repair::Watch) {
                 return Check::fail(
                     DAEMON,
@@ -755,7 +769,7 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                     Fix::Do(Repair::Watch),
                 );
             }
-            if !swap_on_record(&facts.record) && !restarted(tried) {
+            if crashing.is_none() && !swap_on_record(&facts.record) && !restarted(tried) {
                 return Check::fail(
                     DAEMON,
                     problem,
@@ -985,6 +999,7 @@ mod tests {
             oom_seen: false,
             health: Health::NotAsked,
             boot_failure: None,
+            crashing: None,
             engine_memory: None,
             public: Public::NotAsked,
             live_turns: None,
@@ -1185,6 +1200,66 @@ mod tests {
             .as_deref()
             .is_some_and(|p| p.contains("could not start: state conversion 12 threw")));
         assert_eq!(check.who(), Some(Who::You));
+    }
+
+    #[test]
+    fn a_daemon_netd_keeps_restarting_goes_back_rather_than_restarting_the_container() {
+        // netd's answer from inside a container Docker counts no restart of (2026-10-06: a package it could not load).
+        let looping = "netd restarted it 3 times in the last ten minutes, and it is down again; it last died on Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2'";
+        let crashing = ChainFacts {
+            health: Health::Silent,
+            crashing: Some(looping.to_string()),
+            ..facts(Container::Present(running_box()))
+        };
+        let check = daemon(&crashing, &never);
+        assert_ne!(check.repair(), Some(&Repair::Restart));
+        assert_eq!(check.who(), Some(Who::You));
+        assert_eq!(
+            check.problem.as_deref(),
+            Some(format!("the daemon keeps crashing: {looping}.").as_str())
+        );
+        assert!(check
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("ic sandbox logs")));
+        // After an update, the version before it.
+        let mut updated = ChainFacts {
+            health: Health::Silent,
+            crashing: Some(looping.to_string()),
+            ..facts(Container::Present(running_box()))
+        };
+        updated.record.previous = Some("ghcr.io/intentic/sandbox:1.2.3".to_string());
+        assert_eq!(daemon(&updated, &never).repair(), Some(&Repair::Rollback));
+        // Three restarts within the container's first minute are a loop, not a start still under way.
+        let young = ChainFacts {
+            health: Health::Silent,
+            crashing: Some(looping.to_string()),
+            ..facts(Container::Present(Inspected {
+                started_ms: Some(NOW - 30_000),
+                ..running_box()
+            }))
+        };
+        assert_eq!(daemon(&young, &never).state, State::Fail);
+        // A probation on record is the watch's to judge, as for any daemon that does not answer.
+        let mut probation = ChainFacts {
+            health: Health::Silent,
+            crashing: Some(looping.to_string()),
+            ..facts(Container::Present(running_box()))
+        };
+        probation.record.swap = Some(Swap {
+            phase: Phase::Probation,
+            at: NOW - 60_000,
+            verb: "update".to_string(),
+            from: None,
+            to: None,
+            until: Some(NOW + 60_000),
+            reach: None,
+            strikes: 0,
+            daemon_start: None,
+            daemon_restarts: 0,
+            alive: None,
+        });
+        assert_eq!(daemon(&probation, &never).repair(), Some(&Repair::Watch));
     }
 
     #[test]

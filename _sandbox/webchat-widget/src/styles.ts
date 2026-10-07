@@ -1,4 +1,5 @@
 import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
+import { DEFAULT_ACCENT, onAccent, parseHex } from "@intentic/sandbox-contract/embed";
 
 // Stylesheet as a string, not a .css file, so the embed stays one script with no second request to fail. `all: initial`
 // on :host blocks inherited properties (font, color, line-height) that cross the shadow boundary.
@@ -46,17 +47,8 @@ const ROLES = {
 
 type Scheme = keyof typeof ROLES;
 
-// Color maths run in TS since an unsupported color-mix()/oklch() is invalid at computed-value time; evaluating once
-// here ships plain hex needing no baseline.
-const parseHex = (value: string): number[] | undefined => {
-    const digits = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim())?.[1];
-    if (digits === undefined) {
-        return undefined;
-    }
-    const full = digits.length === 3 ? [...digits].map((char) => char + char).join("") : digits;
-    return [0, 2, 4].map((at) => Number.parseInt(full.slice(at, at + 2), 16));
-};
-
+// Evaluated here once so the sheet ships plain hex: an unsupported color-mix() or oklch() is invalid at computed-value
+// time and would paint nothing.
 /** Emulates `color-mix(in srgb, top ${weight}, bottom)`: an alpha composite of top over the bottom color. */
 const mix = (top: string, bottom: string, weight: number): string => {
     const [over, under] = [parseHex(top), parseHex(bottom)];
@@ -67,24 +59,6 @@ const mix = (top: string, bottom: string, weight: number): string => {
     return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 };
 
-// WCAG relative luminance; unreadable input scores 0, only ever used to pick a label, never shown.
-const luminance = (color: string): number => {
-    const [r, g, b] = (parseHex(color) ?? [0, 0, 0]).map((channel) => {
-        const unit = channel / 255;
-        return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
-    }) as [number, number, number];
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
-
-const contrast = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-
-// Label for a solid accent, measured not assumed: white on intentic's orange is 3.15:1, under AA. Comparing both
-// candidates works for any customer accent, not just the default.
-const onAccent = (accent: string): string => {
-    const field = luminance(accent);
-    return contrast(field, luminance(NEUTRAL[900])) >= contrast(field, luminance("#ffffff")) ? NEUTRAL[900] : "#ffffff";
-};
-
 // One scheme's tokens; light and dark share this function so no value can be missing from one. Bubbles differ by
 // surface step and tinted edge, not a saturated fill block.
 const tokens = (scheme: Scheme, accent: string): string => {
@@ -93,7 +67,7 @@ const tokens = (scheme: Scheme, accent: string): string => {
     return `
     --accent: ${accent};
     --accent-ink: ${ink};
-    --on-accent: ${onAccent(accent)};
+    --on-accent: ${onAccent(accent, NEUTRAL[900])};
     --accent-wash: ${mix(ink, role.overlay, 0.14)};
     --accent-wash-hover: ${mix(ink, role.overlay, 0.22)};
     --accent-line: ${mix(ink, role.line, 0.22)};
@@ -126,10 +100,8 @@ const PANEL_ANCHOR: Record<WebchatPublicConfig["position"], string> = {
     "bottom-left": "bottom: calc(var(--gap) + 3.5rem); left: var(--gap);",
 };
 
-// Fallback for an accent parseHex can't read; unreachable in practice since the wire type is a plain string.
-const DEFAULT_ACCENT = "#e47100"; // brand-600
-
 export const styles = (config: WebchatPublicConfig): string => {
+    // The wire type is a plain string; one the maths cannot read paints as the brand orange rather than half-derived.
     const accent = parseHex(config.accent) === undefined ? DEFAULT_ACCENT : config.accent;
     return `
 :host {

@@ -764,6 +764,7 @@ const rows: readonly Row[] = [
     },
     { name: "a rewind claims an idle conversation", from: idle(), event: { kind: "rewind-leased" }, to: rewinding(), effects: [], reply: true },
     { name: "a rewind is refused under a live turn", from: running(), event: { kind: "rewind-leased" }, to: running(), effects: [], reply: false },
+    { name: "a rewind under a rewind is refused", from: rewinding(), event: { kind: "rewind-leased" }, to: rewinding(), effects: [], reply: false },
     { name: "a rewind's release frees the conversation", from: rewinding(), event: { kind: "rewind-released" }, to: idleConversation(), effects: [] },
     {
         name: "a cleared session drops the live turn's pending id and the entry's",

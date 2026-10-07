@@ -183,3 +183,44 @@ test("a sandbox that refuses the config fails the start, with the daemon's own s
     );
     await expect(createClient({ automationId: "bugs", base: "https://sandbox.example" })).rejects.toThrow("origin not allowed");
 });
+
+// A render loop throws the same error every frame; the daemon would count each one, but the page should not post each.
+test("the same crash is sent a few times a minute, not once per frame, while a person's report always goes", async () => {
+    const sent = fakeDaemon();
+    const live = await started();
+    jest.useFakeTimers();
+    jest.setSystemTime(0);
+    try {
+        const ids = [];
+        for (let frame = 0; frame < 60; frame += 1) {
+            ids.push(await live.captureException(new Error("render failed")));
+        }
+        expect(sent).toHaveLength(5);
+        expect(ids.filter((id) => id === undefined)).toHaveLength(55);
+        expect(await live.report({ description: "the page froze" })).toBe("4f3a1b2c");
+        await live.captureException(new Error("a different failure"));
+        expect(sent).toHaveLength(7);
+
+        // A minute on, the same crash is news again.
+        jest.setSystemTime(60_000);
+        expect(await live.captureException(new Error("render failed"))).toBe("4f3a1b2c");
+        expect(sent).toHaveLength(8);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a loop whose message changes every frame is held to the overall budget", async () => {
+    const sent = fakeDaemon();
+    const live = await started();
+    jest.useFakeTimers();
+    jest.setSystemTime(0);
+    try {
+        for (let frame = 0; frame < 100; frame += 1) {
+            await live.captureException(new Error(`render failed at frame ${frame}`));
+        }
+        expect(sent).toHaveLength(30);
+    } finally {
+        jest.useRealTimers();
+    }
+});

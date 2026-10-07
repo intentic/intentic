@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { filterOutput } from "./agent-output-filter.mjs";
-import { CACHE_MARKER, CLEANERS, cleanLines, collapseCached, matchedCleaners, parseCleaners, sessionKeyFromLog } from "./cleaners.mjs";
+import { CACHE_MARKER, CLEANERS, cleanLines, collapseCached, matchedCleaners, parseCleaners, sessionKeyFromLog, surfaceForms } from "./cleaners.mjs";
 
 // The cap's byte budgets are only reachable with blobs intact: `wide` cuts a 2 KB run down to ~340 bytes, so a fixture
 // built to trip the cap never gets there with it on. The cap tests below turn it off to probe the cap alone.
@@ -637,4 +637,12 @@ test("filterOutput: cache disabled leaves a repeat untouched", () => {
     const raw = `${Array.from({ length: 20 }, (_, i) => `branch-${i} is up to date with origin/main and tracking it cleanly`).join("\n")}\n`;
     filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store });
     expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store }).out).toBe(raw);
+});
+
+// The one definition both masking lanes use: the terminal filter here and the daemon's tool results.
+test("surfaceForms: a value is matched raw, JSON-escaped and percent-encoded, and a plain token only raw", () => {
+    expect(surfaceForms('pa"ss\\word-12345')).toEqual(['pa"ss\\word-12345', 'pa\\"ss\\\\word-12345', "pa%22ss%5Cword-12345"]);
+    expect(surfaceForms("cf_live_0011223344ff")).toEqual(["cf_live_0011223344ff"]);
+    // A lone surrogate cannot be percent-encoded, and so cannot reach a reader that way: only the forms it has.
+    expect(surfaceForms("key\uD800value")).toEqual(["key\uD800value", "key\\ud800value"]);
 });

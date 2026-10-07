@@ -1045,6 +1045,7 @@ mod tests {
             oom_seen: false,
             health: chain::Health::NotAsked,
             boot_failure: None,
+            crashing: None,
             engine_memory: None,
             public: chain::Public::NotAsked,
             live_turns: None,

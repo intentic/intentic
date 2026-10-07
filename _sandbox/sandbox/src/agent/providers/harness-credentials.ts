@@ -9,6 +9,7 @@ import {
     PROVIDER_ACCESS,
     PROVIDER_VENDOR,
     providerLabel,
+    providerSpec,
     TRIAL_ENDPOINT_ID,
     TRIAL_MODEL_ID,
 } from "@intentic/sandbox-contract";
@@ -323,6 +324,11 @@ const resolveMintedCredentials = async (
     };
 };
 
+// Why a provider that only runs on its own runtime refuses the Claude Code harness, where there is more to say than that.
+const OWN_RUNTIME_ONLY: Readonly<Record<string, string>> = {
+    gemini: "Gemini doesn't run under the Claude Code harness, Google refuses that loop. It runs on its own runtime instead.",
+};
+
 // How long an unnamed pick waits for headroom to refresh before ranking accounts.
 const PICK_REFRESH_WAIT_MS = 1_000;
 
@@ -347,17 +353,12 @@ export const resolveHarnessCredentials = async (
     if (endpointId !== undefined) {
         return resolveEndpointCredentials(services, endpointId, input.model);
     }
-    // Gemini has no credential here: it refuses the Claude Code loop and always runs on its own runtime.
-    if (input.agent === "gemini") {
+    // A provider whose Claude Code harness is its own runtime (its spec's `claudeCode` record) has no credential here.
+    const spec = input.agent === undefined ? undefined : providerSpec(input.agent);
+    if (spec !== undefined && spec.runtimes.claudeCode.runtime !== "claude-code") {
         return {
             ok: false,
-            message: "Gemini doesn't run under the Claude Code harness, Google refuses that loop. It runs on its own runtime instead.",
-        };
-    }
-    if (input.agent === "cursor") {
-        return {
-            ok: false,
-            message: "Cursor doesn't run under the Claude Code harness. It runs on its own runtime instead.",
+            message: OWN_RUNTIME_ONLY[spec.id] ?? `${spec.label} doesn't run under the Claude Code harness. It runs on its own runtime instead.`,
         };
     }
     if (input.agent !== undefined && mintedVariant(input.agent) !== undefined) {

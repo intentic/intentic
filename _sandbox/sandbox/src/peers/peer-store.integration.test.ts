@@ -1,8 +1,9 @@
 import { mkdtempSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { filePeerStore, type PeerStore } from "./peer-store.js";
 import { RUNNER_PAIR_TTL_MS, RUNNER_PEER } from "../runners/runner-peer.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
@@ -98,6 +99,23 @@ test("a spent seed never arms again, not even for a fresh daemon on the same his
     const rebooted = filePeerStore(root, spec);
     expect(await rebooted.seedPairing("ada-laptop", "from-the-claim")).toBe(false);
     expect(await rebooted.enroll("from-the-claim")).toBeUndefined();
+});
+
+// The enrollment that follows a redemption is refused over a manifest this build cannot read, so the pairing is never
+// spent for it: a seed spent then would be burned for good, and the setup machine could never enroll on its own.
+test("a manifest that cannot be read refuses the enrollment before the pairing is spent", async () => {
+    const { store, root } = tempStore();
+    const manifest = join(root, webextEnrollmentsDocument.path);
+    await store.seedPairing("ada-laptop", "from-the-claim");
+    const { token } = store.mintPairing("laptop");
+    await writeFile(manifest, "{ this is not json");
+
+    await expect(store.enroll("from-the-claim")).rejects.toBeInstanceOf(ManifestUnreadableError);
+    await expect(store.enroll(token)).rejects.toBeInstanceOf(ManifestUnreadableError);
+
+    await rm(manifest);
+    expect((await store.enroll("from-the-claim"))?.id).toBe("ada-laptop");
+    expect((await store.enroll(token))?.id).toBe("laptop");
 });
 
 test("an unspent seed survives a restart, because the peer may not have got to it yet", async () => {

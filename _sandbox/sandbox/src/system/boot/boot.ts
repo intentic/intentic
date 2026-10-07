@@ -3,7 +3,9 @@ import type { Logger } from "pino";
 
 // Tracks boot as named, declared steps rather than elapsed time, so a restart reads as progress instead of an outage.
 // Declaring a chain closes the gate until finish() opens it; a tracker with no declared chain is converged from birth.
-// A failed step is recorded and the chain continues; failure here is not fatal to boot.
+// A step that fails reads failed whichever kind it is: a fatal step's rejection then fails the boot (boot-failure.ts),
+// a tolerated one is handed to its reporter and the chain goes on, so /health, /events and the host see the failure
+// rather than a step marked done.
 
 export interface BootTracker {
     // Resolves once the chain converges; data routes await it, /health and /events never do.
@@ -13,6 +15,8 @@ export interface BootTracker {
     // Runs one declared step, recording its state and elapsed time, and returns what `run` returns. A rejection marks
     // the step failed and still propagates.
     step<T>(key: string, run: () => Promise<T>): Promise<T>;
+    // Runs a step boot can go on without: a rejection marks it failed, is handed to `failed`, and resolves.
+    tolerate(key: string, run: () => Promise<void>, failed: (error: unknown) => void): Promise<void>;
     // Opens the gate: `converged` resolves and progress reads ready.
     finish(): void;
     progress(): BootProgress;
@@ -55,6 +59,26 @@ export const createBootTracker = (logger: Logger): BootTracker => {
         return found;
     };
 
+    const step = async <T>(key: string, run: () => Promise<T>): Promise<T> => {
+        const declared = entry(key);
+        declared.state = "running";
+        broadcast();
+        const from = performance.now();
+        try {
+            return await run();
+        } catch (error) {
+            declared.state = "failed";
+            throw error;
+        } finally {
+            declared.ms = Math.round(performance.now() - from);
+            declared.state = declared.state === "failed" ? "failed" : "done";
+            if (declared.ms > SLOW_STEP_MS) {
+                logger.info({ step: key, ms: declared.ms }, "boot: slow step");
+            }
+            broadcast();
+        }
+    };
+
     return {
         get converged() {
             return gate?.promise ?? Promise.resolve();
@@ -68,24 +92,9 @@ export const createBootTracker = (logger: Logger): BootTracker => {
             gate = { promise, open };
             broadcast();
         },
-        step: async (key, run) => {
-            const step = entry(key);
-            step.state = "running";
-            broadcast();
-            const from = performance.now();
-            try {
-                return await run();
-            } catch (error) {
-                step.state = "failed";
-                throw error;
-            } finally {
-                step.ms = Math.round(performance.now() - from);
-                step.state = step.state === "failed" ? "failed" : "done";
-                if (step.ms > SLOW_STEP_MS) {
-                    logger.info({ step: key, ms: step.ms }, "boot: slow step");
-                }
-                broadcast();
-            }
+        step,
+        tolerate: async (key, run, failed) => {
+            await step(key, run).catch(failed);
         },
         finish: () => {
             const open = gate?.open;

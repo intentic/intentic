@@ -1,7 +1,7 @@
 import { type CredentialPolicy, secretsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
-import { bearerFrom } from "../../auth/auth.js";
+import { isOwnerBearer } from "../../auth/owner-gates.js";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import { loadPrivateKey } from "../credentials/ssh-keys.js";
 import type { Services } from "../../composition.js";
@@ -52,15 +52,6 @@ export const credentialPolicies = async (
 
 export const createCredentialPolicyRoutes = (services: CredentialPolicyDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
-    const isOwner = async (headers: Headers): Promise<boolean> => {
-        if (services.auth === undefined) {
-            return true;
-        }
-        return services.auth.authorizeOwner(bearerFrom(headers.get("authorization") ?? undefined)).then(
-            () => true,
-            () => false,
-        );
-    };
     const policyOf = async (subject: string): Promise<CredentialPolicy> => {
         const policy = (await credentialPolicies(services, services.credentialPolicy)).get(subject);
         if (policy === undefined) {
@@ -72,7 +63,7 @@ export const createCredentialPolicyRoutes = (services: CredentialPolicyDeps) => 
         policy: i.policy.handler(async ({ input }) => policyOf(input.subject)),
         setPolicy: i.setPolicy.handler(async ({ input, context }) => {
             // The agent's own token never changes this, whoever's session it rides; only the owner's own request does.
-            if (context.headers.get("x-intentic-agent") !== null || !(await isOwner(context.headers))) {
+            if (context.headers.get("x-intentic-agent") !== null || !(await isOwnerBearer(services, context.headers))) {
                 throw new ORPCError("FORBIDDEN", {
                     message: `Only the owner can change how "${input.subject}"'s credential reaches the agent, or its rules.`,
                 });

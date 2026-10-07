@@ -1,4 +1,4 @@
-import { type AccountUsage, gatingWindows, humanizeModelId, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
+import { gatingWindows, humanizeModelId, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
@@ -93,11 +93,6 @@ export const observedWindows = (spent: ObservedSpend, labels?: ModelLabels): Usa
         // Scoped to the model that was refused: nothing here says whether the pool behind it covers anything else.
         gates: { models: [model] },
     }));
-
-export const observedUsage = (spent: ObservedSpend, labels?: ModelLabels, measuredAt: number = Date.now()): AccountUsage | undefined => {
-    const windows = observedWindows(spent, labels);
-    return windows.length === 0 ? undefined : { windows, measuredAt };
-};
 
 /** One account's ledger, as the two readers below take it. */
 export interface ObservedReading {

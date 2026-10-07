@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { HookMarketplace, HookPlugin, HookScript, SettingsHook } from "@intentic/sandbox-contract";
 import { frontmatterHooks } from "./frontmatter-hooks.js";
 import { enabledPluginsOf, installedPluginDirs, jsonIn, pluginHooks, skillFolderPlugins } from "./plugin-hooks.js";
+import { homeDir } from "../system/home-dir.js";
 
 /* The hooks Claude Code loads for one turn, folded to one sha256: from the user and project sources
  * (`settingSources: ["user", "project"]`) each settings file's and each skill, subagent or command frontmatter's `hooks`
@@ -42,7 +42,7 @@ export interface MountedPlugin {
 
 // The place as the CLI will resolve it: the daemon's own environment is the one the turn's CLI inherits.
 export const hookPlaceOf = (cwd: string, readable: (path: string) => string, plugins: readonly MountedPlugin[] = []): HookPlace => {
-    const home = process.env["HOME"] ?? homedir();
+    const home = homeDir();
     return { cwd, home, configDir: process.env["CLAUDE_CONFIG_DIR"] ?? join(home, ".claude"), readable, plugins };
 };
 

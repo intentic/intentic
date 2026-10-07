@@ -46,7 +46,10 @@ export interface QueuePoolSummary {
     readonly longestHolder?: QueueHolder;
 }
 
-export const queueRoot = (): string => process.env["INTENTIC_QUEUE_DIR"] ?? join(process.env["TMPDIR"] ?? tmpdir(), "intentic-queue");
+// bin/queue-run's own default, from the daemon's side: the one directory every turn's heavy commands lock in, and the
+// one a fenced turn is told to lock in (turn-sandbox.ts).
+export const queueRoot = (env: NodeJS.ProcessEnv = process.env): string =>
+    env["INTENTIC_QUEUE_DIR"] ?? join(env["TMPDIR"] ?? tmpdir(), "intentic-queue");
 
 // Rejects a path that merely starts with the root's characters, and procfs's ` (deleted)` suffix, whose lock guards nothing.
 export const slotFromFdTarget = (root: string, target: string): { readonly pool: string; readonly slot: string } | undefined => {

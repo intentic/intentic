@@ -5,9 +5,8 @@ import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
-import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { createAdmission } from "./turn-admission.js";
-import { applyReply, composeSteerText } from "./turn-interactions.js";
+import { applyReply, steerComposed } from "./turn-interactions.js";
 import { fireHeldResume, startConversationTurn } from "./turn-resume.js";
 import { startTurnRun } from "./turn-runs.js";
 
@@ -65,14 +64,7 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
             return run;
         },
         stream: (turn, signal) => body(withRuntimeDefaults(turn), signal),
-        steer: async (conversationId, steer) => {
-            const daemon = services();
-            const composed = await composeSteerText(daemon.workspace.root, steer);
-            if (composed.invalid !== undefined) {
-                return { invalid: composed.invalid };
-            }
-            return steerTurn(daemon.conversations, conversationId, { text: composed.text, voice: steer.voice, ...opt("outside", steer.outside) });
-        },
+        steer: (conversationId, steer) => steerComposed(services(), conversationId, steer),
         reply: (reply) => applyReply(services(), reply),
         stop: (target) => stopTurn(services().conversations, target),
         // A person's message, one at a time per conversation.

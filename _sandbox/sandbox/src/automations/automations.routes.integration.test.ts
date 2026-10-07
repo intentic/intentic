@@ -1,10 +1,11 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Automation, type Capability, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { fileDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { testConfig } from "../testing.js";
@@ -192,4 +193,29 @@ test("upsert refuses sender rules on a source that does not identify who is writ
     const guest = { ...automation("guest", { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] }), senders };
     await expect(call(routes.upsert, guest, { context })).rejects.toThrow(/does not identify who is writing/);
     expect(await services.automations.get("guest")).toBeUndefined();
+});
+
+// A door file this build cannot read is refused rather than re-minted (auth/tokens/door-tokens.ts). An operator's list
+// still loads, each row without its URL as a viewer sees it, and a save that would mint one answers CONFLICT naming the
+// file, the answer these routes give every file they cannot read.
+test("a door file that cannot be read costs the rows their URLs, not the list, and a save answers CONFLICT", async () => {
+    const root = mkdtempSync(join(tmpdir(), "routes-"));
+    const doorsPath = join(root, "doors.json");
+    writeFileSync(doorsPath, "{ this is not json");
+    const services = unstubbed<Services>("services", {
+        ...catalogServices(root),
+        doorTokens: fileDoorTokens(doorsPath),
+        auth: undefined,
+    });
+    const routes = createAutomationsRoutes(services);
+    await services.automations.upsert(automation("deploy", { kind: "event" }));
+
+    const listed = await call(routes.list, undefined, { context });
+    expect(listed.automations.map((row) => [row.id, row.webhookToken])).toEqual([["deploy", undefined]]);
+
+    await expect(call(routes.upsert, automation("deploy", { kind: "event" }), { context })).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: expect.stringContaining("doors.json could not be read by this build"),
+    });
+    await expect(call(routes.rotateToken, { id: "deploy" }, { context })).rejects.toMatchObject({ code: "CONFLICT" });
 });

@@ -1,6 +1,6 @@
 import { webcrypto } from "node:crypto";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { EmbedError, embedFailure, embedUrl, fetchEmbedJson, solveProofOfWork } from "./embed.js";
+import { DEFAULT_ACCENT, EmbedError, embedFailure, embedUrl, escapeHtml, fetchEmbedJson, onAccent, parseHex, solveProofOfWork } from "./embed.js";
 
 /* The wire every embed speaks before it speaks its own, against a fake fetch and the real WebCrypto. */
 
@@ -71,4 +71,24 @@ test("an http:// page is told the truth, in the embed's own words, instead of ha
         /HTTPS to start a chat/,
     );
     Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
+});
+
+test("an accent is read as three channels from either hex spelling, and anything else is unreadable", () => {
+    expect(parseHex(DEFAULT_ACCENT)).toEqual([228, 113, 0]);
+    expect(parseHex(" #FA0 ")).toEqual([255, 170, 0]);
+    expect(parseHex("rebeccapurple")).toBeUndefined();
+    expect(parseHex("#12345")).toBeUndefined();
+});
+
+// The default orange is where a brightness threshold gets it wrong: it read as dark and put white on it, at 3.15:1.
+test("the label on an accent is whichever of the dark ink and white contrasts more, so the default orange gets dark text", () => {
+    expect(onAccent(DEFAULT_ACCENT, "#111827")).toBe("#111827");
+    expect(onAccent(DEFAULT_ACCENT, "#201c19")).toBe("#201c19");
+    expect(onAccent("#1a3d8f", "#111827")).toBe("#ffffff");
+    expect(onAccent("#fde047", "#111827")).toBe("#111827");
+});
+
+test("escaped text stays text both between tags and inside a quoted attribute", () => {
+    expect(escapeHtml(`<img src=x onerror="alert('hi')"> & more`)).toBe("&lt;img src=x onerror=&quot;alert(&#39;hi&#39;)&quot;&gt; &amp; more");
+    expect(escapeHtml("Report a problem")).toBe("Report a problem");
 });

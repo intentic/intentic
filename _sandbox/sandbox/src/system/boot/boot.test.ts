@@ -36,6 +36,25 @@ test("a failing step is recorded as failed and the error still propagates", asyn
     expect(boot.progress().steps[1]?.state).toBe("done");
 });
 
+test("a tolerated step that fails reads failed, is reported, and lets the chain go on", async () => {
+    const boot = tracker();
+    const reported: unknown[] = [];
+    await boot.tolerate(
+        "links",
+        () => Promise.reject(new Error("no disk")),
+        (error) => reported.push(error),
+    );
+    expect(boot.progress().steps[0]?.state).toBe("failed");
+    expect(reported).toEqual([new Error("no disk")]);
+    await boot.tolerate(
+        "registry",
+        async () => undefined,
+        (error) => reported.push(error),
+    );
+    expect(boot.progress().steps[1]?.state).toBe("done");
+    expect(reported).toHaveLength(1);
+});
+
 test("an undeclared step throws rather than running unnamed", async () => {
     const boot = tracker();
     await expect(boot.step("sweep", async () => undefined)).rejects.toThrow(/was run without being declared/);

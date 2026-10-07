@@ -163,11 +163,11 @@ let unwatchPrompts: (() => void) | undefined;
 let listeners = 0;
 
 /**
- * Subscribes a /events connection to the runtime feed. `failed` hears a sampler probe that could not read its state; the
- * sampler keeps the one it started with, the first subscriber's.
+ * Subscribes a /events connection to the runtime feed. `failed` hears a sampler probe that could not read its state (the
+ * sampler keeps the one it started with, the first subscriber's) and this connection's own listener throwing.
  */
 export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void, failed?: SampleFailed): (() => void) => {
-    const unsubscribe = onRuntimeChange(listener);
+    const unsubscribe = onRuntimeChange(listener, failed);
     listeners += 1;
     sampler.start(failed);
     unwatchPrompts ??= watchPromptSignals(() => publishRuntimeChange("terminals"));

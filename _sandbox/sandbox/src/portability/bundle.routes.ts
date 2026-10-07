@@ -43,7 +43,8 @@ export const createBundleRoutes = (services: Services) => ({
         return removed ? c.json({ ok: true }) : c.json({ error: "no such export" }, 404);
     },
     // Mints a ticket for one bundle, since a navigated download carries no Authorization header (same problem as
-    // workspace media). Namespaced `bundle:` so it can't be replayed against another kind of ticket.
+    // workspace media). Namespaced `bundle:` so it can't be replayed against another kind of ticket. Carries who minted
+    // it, so signing out everywhere or removing that person drops it too (media-tickets.ts).
     ticket: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
         if (denied !== undefined) {
@@ -53,7 +54,7 @@ export const createBundleRoutes = (services: Services) => ({
         if (!(await isReadyExport(services.config.historyRoot, name))) {
             return c.json({ error: "no such export" }, 404);
         }
-        return c.json(services.mediaTickets.mint(`bundle:${name}`));
+        return c.json(services.mediaTickets.mint(`bundle:${name}`, undefined, c.get("identity")?.email));
     },
     // Navigated to, so the browser's own download manager streams to disk; exempt from the bearer middleware since
     // navigation carries no Authorization header, gated by the ticket instead.

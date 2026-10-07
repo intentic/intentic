@@ -70,17 +70,23 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                             "-sf",
                             "-m",
                             "5",
-                            "http://localhost:8787/health",
+                            health::HEALTH_URL,
                         ],
                         Duration::from_secs(15),
                     )
                     .said()
                     .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok());
                     if settled[DAEMON].is_none() {
+                        // Asked only of a daemon that did not answer: netd's own count of its restarts, which
+                        // Docker's restart count never sees.
+                        let crashing = health_json
+                            .is_none()
+                            .then(|| health::crashing(&container))
+                            .flatten();
                         settle(
                             &mut settled,
                             DAEMON,
-                            classify_daemon(health_json.as_ref(), &container),
+                            classify_daemon(health_json.as_ref(), crashing.as_deref(), &container),
                             last_round,
                         );
                     }
@@ -256,7 +262,7 @@ fn classify_container(inspect: Option<&str>, container: &str) -> Verdict {
         .unwrap_or(0);
     let slug = slug_of(container);
     match status {
-        "running" if restarts >= 3 => Verdict::Pending(Outcome::Fail {
+        "running" if restarts >= health::CRASH_LOOP_RESTARTS => Verdict::Pending(Outcome::Fail {
             problem: format!("the container is crash-looping ({restarts} restarts)."),
             remedy: format!("read its log: ic sandbox logs {slug} --tail 100"),
         }),
@@ -272,8 +278,23 @@ fn classify_container(inspect: Option<&str>, container: &str) -> Verdict {
     }
 }
 
-fn classify_daemon(health: Option<&serde_json::Value>, container: &str) -> Verdict {
+/// `crashing` is netd's word that the daemon keeps crashing (health::crashing), asked when it did not answer.
+fn classify_daemon(
+    health: Option<&serde_json::Value>,
+    crashing: Option<&str>,
+    container: &str,
+) -> Verdict {
     let Some(health) = health else {
+        // Settled: netd has already restarted it into the same crash, and more patience only watches it die again.
+        if let Some(looping) = crashing {
+            let slug = slug_of(container);
+            return Verdict::Settled(Outcome::Fail {
+                problem: format!("the daemon keeps crashing: {looping}."),
+                remedy: format!(
+                    "read its log (ic sandbox logs {slug} --tail 100); if this began with an update, go back to the version before it: ic sandbox rollback {slug}"
+                ),
+            });
+        }
         return Verdict::Pending(Outcome::Fail {
             problem: "the daemon inside the container does not answer /health.".to_string(),
             remedy: format!(
@@ -527,12 +548,12 @@ mod tests {
         // Every daemon since the boot chain reports `boot.ready`; the top-level `ready` was an older daemon's.
         let warming = serde_json::json!({ "boot": { "ready": false, "steps": [] } });
         assert!(matches!(
-            classify_daemon(Some(&warming), "c"),
+            classify_daemon(Some(&warming), None, "c"),
             Verdict::Pending(Outcome::Warn { .. })
         ));
         let failed =
             serde_json::json!({ "boot": { "ready": true }, "state": { "journal": "failed" } });
-        match classify_daemon(Some(&failed), "intentic-sandbox-work") {
+        match classify_daemon(Some(&failed), None, "intentic-sandbox-work") {
             Verdict::Settled(Outcome::Fail { remedy, .. }) => {
                 assert!(remedy.contains("ic sandbox rollback work"))
             }
@@ -541,19 +562,38 @@ mod tests {
     }
 
     #[test]
+    fn a_daemon_netd_keeps_restarting_is_settled_as_a_crash_not_waited_on_as_silence() {
+        // Docker counts no restart of a container whose netd restarts its daemon, so this is the only word of it.
+        let looping = "netd restarted it 3 times in the last ten minutes, and it is down again";
+        match classify_daemon(None, Some(looping), "intentic-sandbox-work") {
+            Verdict::Settled(Outcome::Fail { problem, remedy }) => {
+                assert_eq!(problem, format!("the daemon keeps crashing: {looping}."));
+                assert!(remedy.contains("ic sandbox logs work"));
+                assert!(remedy.contains("ic sandbox rollback work"));
+            }
+            _ => panic!("a crash loop is settled at once"),
+        }
+        // Without netd's word, silence is still waited on.
+        assert!(matches!(
+            classify_daemon(None, None, "c"),
+            Verdict::Pending(Outcome::Fail { .. })
+        ));
+    }
+
+    #[test]
     fn a_warming_daemon_is_a_warn_with_its_step_not_a_failure() {
         let health = serde_json::json!({
             "ready": false,
             "boot": { "steps": [{ "state": "running", "label": "index the workspace" }] }
         });
-        match classify_daemon(Some(&health), "c") {
+        match classify_daemon(Some(&health), None, "c") {
             Verdict::Pending(Outcome::Warn { problem }) => {
                 assert!(problem.contains("index the workspace"))
             }
             _ => panic!("warming is a warn that names the step"),
         }
         assert!(matches!(
-            classify_daemon(Some(&serde_json::json!({"ready": true})), "c"),
+            classify_daemon(Some(&serde_json::json!({"ready": true})), None, "c"),
             Verdict::Settled(Outcome::Pass)
         ));
     }

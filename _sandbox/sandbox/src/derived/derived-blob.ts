@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { parseSidecarFront, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
 import type { DerivedSide } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 
 // Text of bytes that are not a workspace file: a blob at a rev-spec, the before side of a document's diff. fileq keys
@@ -22,7 +23,7 @@ const MAX_DERIVED_BYTES = 512 * 1024;
 
 // Where a rendering is kept, by the sha of the bytes it was made from; the extension is kept so a reader of the cache
 // can tell what was rendered.
-const cachePath = (root: string, sha: string): string => statePath(root, ".intentic/local/cache/", "derived-blobs", `${sha}.md`);
+const cachePath = (root: string, sha: string): string => join(root, DERIVED_BLOBS_DIR, `${sha}.md`);
 
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -95,7 +96,8 @@ const readerFailure = (error: unknown): string => {
 };
 
 // Same front matter a path shadow carries (fileq's sidecar.ts), so one parser reads both; fileq already neutralized the
-// body and the notes before they reached its saved file.
+// body and the notes before they reached its saved file. Written whole or not at all: the name is the hash of the bytes
+// it was made from, so a rendering cut short by a crash would be served as that version's text from then on.
 const keep = async (path: string, sha: string, name: string, answer: ReadAnswer, body: string): Promise<void> => {
     const front = [
         "---",
@@ -108,8 +110,7 @@ const keep = async (path: string, sha: string, name: string, answer: ReadAnswer,
         "---",
         "",
     ].join("\n");
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${front}${body === "" ? "" : `${body}\n`}`);
+    await writeFileAtomic(path, `${front}${body === "" ? "" : `${body}\n`}`);
 };
 
 // Renders the bytes through a temporary copy: fileq derives a file outside any workspace in memory and saves the whole

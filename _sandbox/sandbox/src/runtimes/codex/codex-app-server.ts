@@ -1,11 +1,11 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import { createInterface } from "node:readline";
 import { whenAborted } from "@intentic/base/async";
 import { nsenterArgv } from "../../conversations/worktrees/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
+import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { z } from "zod";
 
 // Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated
@@ -453,7 +453,8 @@ export const stdioConnector =
         const pending = new Map<number, { readonly resolve: (value: unknown) => void; readonly reject: (error: unknown) => void }>();
         let requestId = 0;
         let closing = false;
-        let stderr = "";
+        // What the server said on the way down, folded into the error that ends the turn.
+        const stderr = outputTail(4_096);
         let ownThreadId: string | undefined;
         let active: { threadId: string; turnId: string } | undefined;
         let interrupted: string | undefined;
@@ -509,9 +510,7 @@ export const stdioConnector =
             }
             pending.clear();
         };
-        child.stderr.on("data", (chunk: Buffer | string) => {
-            stderr = (stderr + chunk.toString()).slice(-4_096);
-        });
+        stderr.follow(child.stderr);
         child.stdin.on("error", fail);
         child.once("error", fail);
         child.once("exit", (code, signal) => {
@@ -519,7 +518,7 @@ export const stdioConnector =
                 messages.end();
                 return;
             }
-            const detail = stderr.trim();
+            const detail = stderr.text().trim();
             fail(new Error(`Codex app-server exited (${signal ?? code ?? "unknown"})${detail === "" ? "" : `: ${detail}`}`));
         });
 
@@ -542,13 +541,9 @@ export const stdioConnector =
             return;
         };
 
-        const lines = createInterface({ input: child.stdout });
         void (async () => {
             try {
-                for await (const line of lines) {
-                    if (line.trim() === "") {
-                        continue;
-                    }
+                for await (const line of jsonLines(child.stdout)) {
                     const message = object(JSON.parse(line) as unknown, "JSON-RPC message");
                     const id = message["id"];
                     const method = message["method"];
@@ -577,7 +572,8 @@ export const stdioConnector =
                     }
                 }
                 if (!closing) {
-                    fail(new Error(`Codex app-server closed its output${stderr.trim() === "" ? "" : `: ${stderr.trim()}`}`));
+                    const detail = stderr.text().trim();
+                    fail(new Error(`Codex app-server closed its output${detail === "" ? "" : `: ${detail}`}`));
                 }
             } catch (error) {
                 fail(error);

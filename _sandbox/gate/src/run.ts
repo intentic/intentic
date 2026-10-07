@@ -1,6 +1,6 @@
 // Starts an agent turn with a control token, polls until it settles, and maps the ending to an exit code. Three calls:
 // POST /agent starts it, GET /agents/{id} is polled (survives a dropped connection where streaming would not), POST
-// /agents/{id}/land merges. Zero dependencies, so readers are checked by hand against run.test.ts's contract schemas.
+// /agents/{id}/land merges. No schema library, so readers are checked by hand against run.test.ts's contract schemas.
 
 export const RUN_WAIT_DEFAULT_S = 1800;
 // How often the card is polled for settlement; five seconds is invisible against a turn that runs minutes.
@@ -270,8 +270,8 @@ export interface RunDeps {
 // card). Reported with the daemon's own sentence when it had one.
 export class RunExchangeError extends Error {}
 
-// The daemon's own sentence when it has one, the raw body when it does not (a proxy or tunnel answered). Exported so
-// the GitHub Action reads the same failures the same way.
+// The daemon's own sentence when it has one, the raw body when it does not (a proxy or tunnel answered). Shared by both
+// exchanges and the GitHub Action's fire door, so every failure reads the same way.
 export const detailOf = (text: string): string => {
     try {
         const body = JSON.parse(text) as { error?: unknown };

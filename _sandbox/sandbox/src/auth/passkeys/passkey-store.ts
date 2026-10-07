@@ -11,14 +11,16 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
-import { stateRelPath } from "../../state-paths.js";
 import { tokenEquals, type VerifiedIdentity } from "../auth.js";
 import { rpIdOf } from "../browser-origins.js";
 import { ACCEPTED_ALGORITHMS, base64url, verifyAuthentication, verifyRegistration } from "./webauthn.js";
 
 // Passkeys registered with this sandbox, on the daemon's JSON substrate: the roster's trust class, since a passkey
 // admits its holder. The file holds public keys, the owner's require-a-passkey switch and the hashes
-// of their recovery codes; nothing in it can sign in by itself.
+// of their recovery codes. Nothing in it signs in by itself, but whoever writes a row into it signs in with that row's
+// key as the email it names, so it sits on the history volume beside the roster, where no turn writes. Until the
+// passkeys-off-workspace step it was the workspace's `.intentic/identity/passkeys.json`
+// (auth/members/identity-off-workspace.ts brings it over).
 
 const StoredCredentialSchema = z.object({
     // base64url credential id, the name every assertion carries.
@@ -50,7 +52,7 @@ const PasskeysFileSchema = z.object({
 });
 type PasskeysFile = z.infer<typeof PasskeysFileSchema>;
 
-export const passkeysDocument = defineDocument({ path: stateRelPath(".intentic/identity/passkeys.json"), schema: PasskeysFileSchema });
+export const passkeysDocument = defineDocument({ root: "history", path: "identity/passkeys.json", schema: PasskeysFileSchema });
 
 export interface PasskeyStore {
     readonly list: () => Promise<StoredCredential[]>;
@@ -59,6 +61,8 @@ export interface PasskeyStore {
     readonly remove: (id: string) => Promise<boolean>;
     // Records a sign-in: the counter the authenticator reported, its backup state, and when.
     readonly used: (id: string, counter: number, backedUp: boolean, now: number) => Promise<void>;
+    // Throws when the file exists and cannot be read: the switch is unknown then, and reading it as off would open the
+    // door it closes.
     readonly required: () => Promise<boolean>;
     readonly setRequired: (required: boolean) => Promise<void>;
     readonly recovery: () => Promise<readonly StoredRecoveryCode[]>;
@@ -96,7 +100,13 @@ export const filePasskeys = (path: string): PasskeyStore => {
                 credentials: stored.credentials.map((credential) => (credential.id === id ? { ...credential, counter, backedUp, lastUsedAt: now } : credential)),
             }));
         },
-        required: async () => (await file.read()).required,
+        required: async () => {
+            const state = await file.state();
+            if (state.unreadable) {
+                throw new Error(`the passkeys file at ${path} could not be read (${state.detail}), so whether a passkey is required is unknown`);
+            }
+            return state.value.required;
+        },
         setRequired: async (required) => {
             await file.update((stored) => (stored.required === required ? stored : { ...stored, required }));
         },

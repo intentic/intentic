@@ -1,9 +1,10 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { createApp } from "../../app.js";
 import { clientFor, postJson, proven } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { memoryAreasStore } from "../../harness/route-stores.testing.js";
 import { fileMembersStore } from "../auth.js";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -53,4 +54,47 @@ test("a guest fenced to areas no assistant works in is refused; another tier the
     expect(await members.list()).toEqual([]);
 
     expect((await postJson(app, "/members", { email: "fay@example.com", role: "viewer", areas: ["finance"] })).status).toBe(200);
+});
+
+const FILM = join(WORKSPACE_ROOT, "film.mp4");
+
+// A media or download ticket lives for hours; a person removed from the roster must not keep fetching with one.
+test("removing a member drops the media tickets they minted, and nobody else's", async () => {
+    const path = join(await mkdtemp(join(tmpdir(), "members-")), "members.json");
+    const members = fileMembersStore(path);
+    await members.add("dee@example.com", { role: "viewer" });
+    const owned = services({
+        auth: { authorize: async () => proven(`ada@example.com`, `owner`), authorizeOwner: async () => undefined },
+        ownerEmail: async () => `ada@example.com`,
+        members,
+    });
+    const dee = owned.mediaTickets.mint(FILM, undefined, "dee@example.com").ticket;
+    const ada = owned.mediaTickets.mint(FILM, undefined, "ada@example.com").ticket;
+
+    const removed = await createApp(owned).request("/members", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "dee@example.com" }),
+    });
+    expect(removed.status).toBe(200);
+    expect(owned.mediaTickets.valid(dee, FILM)).toBe(false);
+    expect(owned.mediaTickets.valid(ada, FILM)).toBe(true);
+});
+
+// A roster this build cannot read is refused rather than replaced: the grant answers as this sandbox's fault to fix,
+// and the file stays as it was.
+test("a grant over a roster that cannot be read answers 503 and leaves the file as it was", async () => {
+    const path = join(await mkdtemp(join(tmpdir(), "members-")), "members.json");
+    await writeFile(path, "{ this is not json", "utf8");
+    const unreadable = createApp(
+        services({
+            auth: { authorize: async () => proven(`ada@example.com`, `owner`), authorizeOwner: async () => undefined },
+            ownerEmail: async () => `ada@example.com`,
+            members: fileMembersStore(path),
+        }),
+    );
+    const granted = await postJson(unreadable, "/members", { email: "fay@example.com", role: "viewer" });
+    expect(granted.status).toBe(503);
+    expect(await granted.json()).toEqual({ error: expect.stringContaining("members.json could not be read by this build") });
+    expect(await readFile(path, "utf8")).toBe("{ this is not json");
 });

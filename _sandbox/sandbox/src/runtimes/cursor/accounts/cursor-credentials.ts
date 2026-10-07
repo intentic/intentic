@@ -177,14 +177,6 @@ export const cancelCursorLogin = (handshake: string): void => {
     pending.delete(handshake);
 };
 
-// Abandon every in-flight sign-in, for daemon shutdown.
-export const cancelAllCursorLogins = (): void => {
-    for (const entry of pending.values()) {
-        entry.abort.abort();
-    }
-    pending.clear();
-};
-
 // Accounts a turn could actually run on, oldest connection first (first-connected-is-default, where nothing else
 // decides). The one place expiry gates rather than warns: a dead key would otherwise fail the turn with a 401 the store
 // already knew. Which of them serves is cursor-usage.ts's question, since that needs the ledger this file never reads.

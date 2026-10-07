@@ -48,23 +48,32 @@ interface GoogleIdentityServices {
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 
-// One <script> tag per page and one load promise, however many Visitor chats or sign-in opens.
+// One <script> tag per page and one load promise, however many Visitor chats or sign-in opens. A failed load is not
+// kept, so the next sign-in tries again instead of failing for the rest of the page's life.
 let gisLoad: Promise<GoogleIdentityServices> | undefined;
 
-const loadGis = async (): Promise<GoogleIdentityServices> => {
-    gisLoad ??= new Promise<GoogleIdentityServices>((resolve, reject) => {
+// Adds Google's script tag, or waits on the page's own, and resolves with its global once it has run.
+const injectGis = (): Promise<GoogleIdentityServices> =>
+    new Promise<GoogleIdentityServices>((resolve, reject) => {
         const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SRC}"]`);
         const script = existing ?? document.createElement("script");
+        const fail = (): void => {
+            // Ours goes, so the retry adds a fresh tag rather than wait on one that has already had its chance.
+            if (existing === null) {
+                script.remove();
+            }
+            reject(new Error("Google sign-in failed to load"));
+        };
         const settle = (): void => {
             const gis = (window as unknown as { google?: GoogleIdentityServices }).google;
             if (gis === undefined) {
-                reject(new Error("Google sign-in failed to load"));
+                fail();
                 return;
             }
             resolve(gis);
         };
         script.addEventListener("load", settle);
-        script.addEventListener("error", () => reject(new Error("Google sign-in failed to load")));
+        script.addEventListener("error", fail);
         if (existing === null) {
             script.src = GIS_SRC;
             script.async = true;
@@ -76,7 +85,18 @@ const loadGis = async (): Promise<GoogleIdentityServices> => {
             settle();
         }
     });
-    return gisLoad;
+
+const loadGis = async (): Promise<GoogleIdentityServices> => {
+    gisLoad ??= injectGis();
+    const load = gisLoad;
+    try {
+        return await load;
+    } catch (error) {
+        if (gisLoad === load) {
+            gisLoad = undefined;
+        }
+        throw error;
+    }
 };
 
 export interface GoogleSignIn {

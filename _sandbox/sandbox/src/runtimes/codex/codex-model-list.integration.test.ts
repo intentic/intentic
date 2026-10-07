@@ -86,6 +86,16 @@ test("leaves out the rows the runtime hides, and the fields it doesn't publish",
     expect(await codexModelList("/codex-home", async () => binary)()).toEqual([{ id: "gpt-5.4-mini", label: "gpt-5.4-mini" }]);
 });
 
+// JSON allows U+2028 and U+2029 raw inside a string and Codex leaves them raw; a reader that breaks lines there handed
+// JSON.parse half a record.
+test("reads a row whose description holds a raw line separator as one record", async () => {
+    const binary = await fakeCodex(answering({ data: [row("gpt-5.6-luna", { description: "fast\u2028and\u2029light" })] }));
+
+    expect(await codexModelList("/codex-home", async () => binary)()).toEqual([
+        { id: "gpt-5.6-luna", label: "GPT-5.6-LUNA", efforts: ["low", "xhigh"], description: "fast\u2028and\u2029light" },
+    ]);
+});
+
 test("stays empty when the runtime cannot answer, so a catalog never fails over metadata", async () => {
     const absent = await codexModelList("/codex-home", async () => undefined)();
     const garbled = await codexModelList("/codex-home", async () => await fakeCodex(`{"id": <id>, "error": {"message": "nope"}}`))();

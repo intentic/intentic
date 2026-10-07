@@ -147,6 +147,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     },
     { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
+    // Public keys, the owner's require-a-passkey switch and the hashes of their recovery codes, moved from
+    // `.intentic/identity/passkeys.json` the same way (the passkeys-off-workspace step), since a passkey sign-in trusts
+    // the row it finds: a copy that traveled would let a source sandbox's passkeys open the target.
+    {
+        path: "identity/passkeys.json",
+        portability: "identity",
+        note: "Passkeys are bound to the sandbox they were registered with: add them again on the new one from its Access tab.",
+    },
     {
         path: "browser-access-disabled",
         portability: "identity",
@@ -189,6 +197,13 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "hook-requests.json", portability: "derived" },
     // The owner's yes to each workspace extension's declared powers, decided again by the target's owner.
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
+    // The owner's yes to each item in the approvals queue, pinned to what it will do: the queue travels with /work, and
+    // an item that arrives approved without its yes is not carried out until the target's owner gives it again.
+    {
+        path: "approval-decisions.json",
+        portability: "identity",
+        note: "Approve again from Approvals anything that was approved and had not run yet.",
+    },
     { path: "local-cert/", portability: "identity" },
 
     /* ---- the state engine's own bookkeeping (the daemon's store/evolution/state-journal.ts) ---- */

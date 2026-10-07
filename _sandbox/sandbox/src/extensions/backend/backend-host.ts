@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { errorMessage } from "@intentic/base/errors";
 import type { BackendRouteHandler, ExtensionServerApi, ExtensionServerModule } from "@intentic/extension-api";
+import { tokenEquals } from "../../auth/token-equals.js";
 import { createDaemonApi } from "./backend-daemon.js";
 import { answerToolMessage, type ToolRequest, type ToolSource } from "./backend-tools.js";
 import { BACKEND_HOST_HEADER, type BackendExtensionStatus, type BackendDeviceConfig, type BackendHostExtension } from "./backend-host-config.js";
@@ -94,7 +95,8 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
         statuses,
         fetch: async (request) => {
             // Accepts only daemon-proxied requests: loopback is shared and credential checks live in the daemon's gate.
-            if (request.headers.get(BACKEND_HOST_HEADER) !== config.hostToken) {
+            // Compared in constant time, and an empty host token admits nobody.
+            if (config.hostToken === "" || !tokenEquals(request.headers.get(BACKEND_HOST_HEADER) ?? "", config.hostToken)) {
                 return json({ error: "unauthorized" }, 401);
             }
             const url = new URL(request.url);

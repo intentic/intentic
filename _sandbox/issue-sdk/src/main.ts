@@ -10,18 +10,33 @@ import { openDialog } from "./dialog.js";
 
 export type { InitOptions, IssueClient };
 
-// The live client, if one has started; a second `init` returns the first instead of double-reporting.
+// The live client, if one has started; a second `init` returns the first instead of double-reporting. A start that
+// failed is not kept: a sandbox asleep at page load would otherwise switch the reporter off for the page's whole life,
+// so the next `init` tries again.
 let started: Promise<IssueClient> | undefined;
 
+const start = async (options: InitOptions): Promise<IssueClient> => {
+    try {
+        return await createClient(options);
+    } catch (error) {
+        started = undefined;
+        throw error;
+    }
+};
+
 export const init = (options: InitOptions): Promise<IssueClient> => {
-    started ??= createClient(options);
+    started ??= start(options);
     return started;
 };
+
+// The client once it is up, or undefined when none started or its start failed.
+// allow(silent-catch): the start's own caller already hears that failure (the script tag logs it), and these wrappers run inside someone else's error handlers, where a rejection would break the page.
+const live = async (): Promise<IssueClient | undefined> => started?.catch(() => undefined);
 
 // Awaits the client rather than requiring one, so a link can be wired before the config fetch returns. Silent when no
 // client started, since the reporter never coming up is the site's problem, not the visitor's to see.
 export const openReportDialog = async (): Promise<void> => {
-    const client = await started;
+    const client = await live();
     if (client !== undefined) {
         openDialog(client);
     }
@@ -30,10 +45,10 @@ export const openReportDialog = async (): Promise<void> => {
 // An error the app caught itself, for a Vue errorHandler, a React error boundary, or any catch worth hearing about;
 // resolves to the issue's short id, or undefined when nothing was sent.
 export const captureException = async (error: unknown, context?: Record<string, string>): Promise<string | undefined> =>
-    (await started)?.captureException(error, context);
+    (await live())?.captureException(error, context);
 
-export const report: IssueClient["report"] = async (input) => (await started)?.report(input);
-export const breadcrumb = async (kind: string, message: string): Promise<void> => void (await started)?.breadcrumb(kind, message);
+export const report: IssueClient["report"] = async (input) => (await live())?.report(input);
+export const breadcrumb = async (kind: string, message: string): Promise<void> => void (await live())?.breadcrumb(kind, message);
 
 // The <script>-tag entry.
 

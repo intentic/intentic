@@ -98,12 +98,12 @@ const routeWarnings = (route: AccountRoute | undefined, input: AgentTurn): TurnW
           ]
         : [];
 
-// Taught through the `agents` CLI to runtimes with only a shell door (the Claude Code loop and Cursor carry the tools
-// in-prompt), once, on the conversation's opening turn.
-const spawnNoteFor = (spawn: boolean, runtime: TurnRuntime): string | undefined =>
-    spawn && runtime.capabilities.runtime !== "claude-code" && runtime.capabilities.runtime !== "cursor" && runtime.conversationTurns === 0
-        ? spawnNote()
-        : undefined;
+// Taught through the `agents` CLI to runtimes with only a shell door, once, on the conversation's opening turn. A runtime
+// the daemon's own tools reach (`mcp` full or tools: the Claude Code loop and Cursor) already carries the spawn tool.
+const spawnNoteFor = (spawn: boolean, runtime: TurnRuntime): string | undefined => {
+    const { mcp } = runtime.capabilities;
+    return spawn && mcp !== "full" && mcp !== "tools" && runtime.conversationTurns === 0 ? spawnNote() : undefined;
+};
 
 // Sent unless the arm withholds it or the window cannot pay for it; `?? true`, since no arm means no experiment rather
 // than control. Withheld here rather than at placement, so `notesChars` never counts a brief that stayed home.

@@ -413,10 +413,14 @@ const readIfChanged = (path, name) => {
     }
 };
 
-// Every form a value can arrive in; mirrors src/secrets/secret-registry.ts surfaceForms (duplicated: this filter has no
-// daemon or build step). Only registering the raw form would miss a JSON-escaped or percent-encoded secret.
+// The forms a value can take by the time a reader sees it; masking matches all of them, not just the raw string.
+// - JSON-escaped: quotes, backslashes, newlines serialized in a logged payload
+// - percent-encoded: a URL query or form body
+// Alphanumeric values encode to themselves and add nothing. The daemon's tool-result masking imports this same function
+// (src/secrets/secret-registry.ts), so the terminal and the tools cannot disagree about what a secret looks like.
 export const surfaceForms = (value) => {
     const forms = [value];
+    // JSON.stringify of a string is always a quoted string; the slice is its escaped body.
     const jsonEscaped = JSON.stringify(value).slice(1, -1);
     if (jsonEscaped !== value) {
         forms.push(jsonEscaped);

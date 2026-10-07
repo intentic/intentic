@@ -267,11 +267,3 @@ export const cancelMintedLoginsFor = (provider: MintedProvider): void => {
         }
     }
 };
-
-// Abandon every in-flight sign-in, for daemon shutdown.
-export const cancelAllMintedLogins = (): void => {
-    for (const entry of pending.values()) {
-        entry.abort.abort();
-    }
-    pending.clear();
-};

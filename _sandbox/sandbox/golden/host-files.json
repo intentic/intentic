@@ -1,0 +1,44 @@
+{
+  "restartResume": {
+    "path": "/history/restart-resume.json",
+    "example": {
+      "askedAt": 1791240330000
+    }
+  },
+  "updateOutcome": {
+    "path": "/history/update-outcome.json"
+  },
+  "updatePreparing": {
+    "path": "/history/update-preparing.json"
+  },
+  "bootFailure": {
+    "path": "/history/boot-failure.json",
+    "example": {
+      "at": 1791240330000,
+      "version": "1.400.0",
+      "error": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ssh2' imported from /opt/sandbox/dist/capabilities/credentials/ssh-keys.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)",
+      "step": "Reading the configuration"
+    }
+  },
+  "daemonExit": {
+    "path": "/history/logs/daemon-exit.json",
+    "example": {
+      "pid": 41,
+      "startTimeTicks": 1208311,
+      "state": "running",
+      "startedAt": 1791240330000
+    }
+  },
+  "workSignal": {
+    "path": "/run/intentic/work.json",
+    "example": {
+      "liveTurns": 2,
+      "at": 1791240330000,
+      "bootedAt": 1791240270000,
+      "previousBootAt": 1791236730000,
+      "bootsInWindow": 2,
+      "restartStorm": false,
+      "lastRestartAt": 1791240240000
+    }
+  }
+}

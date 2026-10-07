@@ -2,9 +2,9 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 import { memoryMintedStore } from "./minted-provider.testing.js";
 import { metaLoginDriver } from "./meta-login.js";
-import type { WebExtFacts } from "@intentic/sandbox-contract";
+import { MINTED_PROVIDERS, type WebExtFacts } from "@intentic/sandbox-contract";
 import { CATCHING_DEVICE, catchingHub, fakeCatcher } from "../../agent/providers/accounts/loopback-bridge.testing.js";
-import { cancelAllMintedLogins, cancelMintedLogin, completeMintedLogin, mintedLoginStatus, startMintedLogin } from "./minted-login.js";
+import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, mintedLoginStatus, startMintedLogin } from "./minted-login.js";
 import { zaiLoginDriver } from "./zai-login.js";
 
 // All three sign-ins end to end against a fake vendor `fetch` that routes on URL and records every call, since nobody
@@ -69,7 +69,9 @@ beforeEach(() => {
 
 afterEach(() => {
     // A sign-in whose poll is still running would tick into the next test's fake clock.
-    cancelAllMintedLogins();
+    for (const provider of MINTED_PROVIDERS) {
+        cancelMintedLoginsFor(provider);
+    }
     jest.useRealTimers();
     jest.restoreAllMocks();
 });

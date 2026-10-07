@@ -7,7 +7,17 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { clientTimeoutMs, conversationIdFor, detailOf, dialOf, readVerdict, RunExchangeError, type RunOutcome, runExchange } from "@intentic/gate";
+import {
+    conversationIdFor,
+    detailOf,
+    dialOf,
+    GateExchangeError,
+    gateExchange,
+    type GateVerdict,
+    RunExchangeError,
+    type RunOutcome,
+    runExchange,
+} from "@intentic/gate";
 import {
     annotationOf,
     defaultRequest,
@@ -118,31 +128,11 @@ if (request === "") {
     wiring("nothing to tell the agent: set `with: request` (no workflow context to compose one from)");
 }
 
-let response: Response;
+let verdict: GateVerdict;
 try {
-    const dial = dialOf(inputs.url, inputs.waitS);
-    response = await fetch(dial.url, {
-        method: "POST",
-        headers: dial.headers,
-        body: request,
-        signal: AbortSignal.timeout(clientTimeoutMs(inputs.waitS)),
-    });
+    verdict = await gateExchange({ url: inputs.url, waitS: inputs.waitS, request }, { fetch });
 } catch (error) {
-    wiring(`the gate could not be reached: ${errorMessage(error)}`);
-}
-const text = await response.text();
-if (!response.ok) {
-    wiring(`the gate answered ${response.status}: ${detailOf(text)}`);
-}
-let body: unknown;
-try {
-    body = JSON.parse(text);
-} catch {
-    body = undefined;
-}
-const verdict = readVerdict(body);
-if (verdict === undefined) {
-    wiring(`the gate's answer was not a verdict: ${text.slice(0, 200)}`);
+    wiring(error instanceof GateExchangeError ? error.message : `the gate could not be reached: ${errorMessage(error)}`);
 }
 
 appendTo(process.env["GITHUB_OUTPUT"], outputLines(verdict, randomUUID()));

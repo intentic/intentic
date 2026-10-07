@@ -1,9 +1,9 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { cachedEnabledExtensions } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
 import { outboxKeyOf } from "../../webchat/webchat-outbox.js";
 import { extensionProcessKey } from "../extension-processes.js";
-import { enabledExtensions } from "../installed-extensions.js";
 import { listenerOwnership } from "./listener-state.js";
 
 // Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
@@ -77,10 +77,11 @@ const postToGateway = async (port: number, provider: string, channelId: string, 
 
 // The extension half: the extension that owns this provider's listener (listener-state.ts), asked over its own loopback
 // port. Never another declarer's: the reply is the agent's words to the owner's channel. Undefined when no enabled
-// extension listens on this provider.
+// extension listens on this provider. Walks the same cached inventory the ownership is read from, not a fresh one per
+// message.
 export const deliverThroughGateway = async (services: Services, provider: string, channelId: string, text: string): Promise<GatewayDelivery | undefined> => {
     const owner = (await listenerOwnership(services)).owners.get(provider);
-    for (const extension of await enabledExtensions(services)) {
+    for (const extension of await cachedEnabledExtensions(services)) {
         if (extension.manifest.contributes?.listener?.provider !== provider || (owner !== undefined && extension.id !== owner)) {
             continue;
         }

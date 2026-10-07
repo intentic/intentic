@@ -1,7 +1,7 @@
 // OpenAI/Codex's live model catalog for a ChatGPT-account turn; always resolves an explicit model id, never the CLI's
 // built-in default. Discovery order: the translator's /v1/models, then OpenAI's /v1/models with the OAuth token, then
 // the persisted catalog, then a compile-time seed.
-import { listModels, suggestedModels } from "../../agent/models/model-discovery.js";
+import { listModels } from "../../agent/models/model-discovery.js";
 
 const OPENAI_MODELS_URL = "https://api.openai.com/v1/models";
 
@@ -37,11 +37,6 @@ export const discoverTranslatorCodexModels = async (
     translatorToken: string,
     fetchImpl: typeof fetch = fetch,
 ): Promise<string[]> => codexModelIds(`${translatorUrl.replace(/\/$/, "")}/v1/models`, translatorToken, fetchImpl);
-
-// Extracts model ids from OpenAI's rejection-message hint ("Did you mean: a, b"); the token pattern is broad since ids
-// share no prefix.
-// isCodexModel, not the pattern, filters prose out of the result.
-export const parseCodexModelSuggestions = (message: string): string[] => suggestedModels(message, /[a-z0-9][\w.-]+/gi).filter(isCodexModel);
 
 // Non-fatal advisory on the error channel (fallback metadata used); a muted notice, not an error.
 export const CODEX_ADVISORY = /defaulting to fallback metadata/i;

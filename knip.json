@@ -48,6 +48,8 @@
         "_sandbox/sandbox": {
             "entry": [
                 "src/main.ts",
+                "src/state-plan.ts",
+                "src/**/*-worker.ts",
                 "src/extensions/backend/backend-host-main.ts",
                 "src/runtimes/cursor/cursor-agent-runtime.ts",
                 "src/**/*.test.ts",

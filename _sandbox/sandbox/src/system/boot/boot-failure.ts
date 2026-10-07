@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { version } from "../../version.js";
+import { type Teardown, tearDown } from "./daemon-stop.js";
 
 // Why the last boot on this volume failed before it could serve, left by the daemon that failed just before it exits
 // (main.ts), for the host: `ic` reads it with `docker exec cat` when a sandbox it started never comes up, and says why
@@ -63,16 +64,18 @@ export interface BootAttempt {
     // The boot chain's tracker, once the services exist: it names the step that failed.
     services?: { readonly boot: { readonly progress: () => BootProgress } };
     // What had started, stopped before the exit as a SIGTERM would.
-    shutdown?: { readonly dispose: () => void };
+    shutdown?: Teardown;
 }
 
-// The boot step that failed, when the chain's own tracker saw it: more exact than the stage around it.
-const failedStep = (attempt: BootAttempt): string | undefined => attempt.services?.boot.progress().steps.find((step) => step.state === "failed")?.label;
+// The boot step that failed, when the chain's own tracker saw it: more exact than the stage around it. The last one, since
+// a tolerated step can read failed ahead of the fatal one that stopped the chain.
+const failedStep = (attempt: BootAttempt): string | undefined =>
+    attempt.services?.boot.progress().steps.findLast((step) => step.state === "failed")?.label;
 
 // Records why this boot failed where the host looks, logs it, and exits non-zero so netd restarts the daemon with
 // backoff. Only the daemon that owns the container records anything: a second daemon sharing the volume is not the one
 // the host started. What had started is stopped first, so a restart finds nothing of it running.
-export const failBoot = (attempt: BootAttempt, error: Error, exit: (code: number) => never = process.exit): never => {
+export const failBoot = async (attempt: BootAttempt, error: Error, exit: (code: number) => never = process.exit): Promise<never> => {
     const step = failedStep(attempt) ?? attempt.stage;
     const { logger } = attempt;
     // Before the logger exists (a configuration that would not load), stderr is what `docker logs` keeps.
@@ -95,10 +98,9 @@ export const failBoot = (attempt: BootAttempt, error: Error, exit: (code: number
             say("boot: the failure could not be recorded on the history volume", errorMessage(recordError));
         }
     }
-    try {
-        attempt.shutdown?.dispose();
-    } catch (stopError) {
-        say("boot: one or more subsystems failed to stop after the boot failed", errorMessage(stopError));
+    const unstopped = attempt.shutdown === undefined ? undefined : await tearDown(attempt.shutdown);
+    if (unstopped !== undefined) {
+        say("boot: one or more subsystems did not stop cleanly after the boot failed", unstopped);
     }
     return exit(1);
 };

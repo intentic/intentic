@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import {
+import type {
     AutomationSchema,
-    type NeedsAction,
-    type DefinitionWorkspace,
-    type WorkspacePublish,
-    type WorkspacePublishResult,
-    type WorkspaceRemote,
+    NeedsAction,
+    DefinitionWorkspace,
+    WorkspacePublish,
+    WorkspacePublishResult,
+    WorkspaceRemote,
 } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { isPublicPath } from "@intentic/workspace-ignore";
@@ -17,11 +17,15 @@ import { z } from "zod";
 import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
+import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
 import { defaultBranchOf } from "../git/ops/publish-file.js";
 import { pushBranch, remoteState } from "../git/remote/remote.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { rootPathIsExcluded } from "../workspace/layout/git-layout.js";
+import { type Conversion, isJsonObject } from "../store/evolution/conversions.js";
+import type { DocumentSpec } from "../store/evolution/documents.js";
+import { openDocument, openEntries } from "../store/open-document.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { DEFINITION_SOURCES } from "./definition.js";
 
@@ -30,6 +34,14 @@ import { DEFINITION_SOURCES } from "./definition.js";
 // inert in a detached worktree before it ever touches /work; nothing unsafe is checked out live.
 
 export class WorkspaceRemoteError extends Error {}
+
+// The automations document lives a layer above this one (automations/), so the caller that may import it hands it in:
+// the staged file is then read the way the scheduler's own store reads it, its conversions and all.
+export type AutomationsDocument = DocumentSpec<typeof AutomationSchema, readonly Conversion[], readonly string[], "entries", false>;
+
+export interface AdoptionDocuments {
+    readonly automations: AutomationsDocument;
+}
 
 // Keeps git's full stderr, not just the last line: a checkout refusal names which files block it in the middle of the
 // message.
@@ -150,41 +162,54 @@ const replaceFile = async (root: string, path: string, content: Buffer | string 
 
 const APPROVED_OVERLAY = ".intentic/config/environment.custom.Dockerfile";
 const WORKSPACE_OVERLAY_DRAFT = ".intentic/config/environment.d/workspace.Dockerfile";
-const AUTOMATIONS = ".intentic/config/automations.json";
-const EXTENSION_ENABLEMENT = ".intentic/config/extension-enablement.json";
-const EnablementSchema = z.record(z.string(), z.boolean());
+const EXTENSION_ENABLEMENT = extensionEnablementDocument.path;
 
-const parsedJsonFile = async <T>(path: string, schema: z.ZodType<T>, label: string): Promise<T | undefined> => {
-    const bytes = await optionalFile(path);
-    if (bytes === undefined) {
-        return undefined;
+// An entry without the key at a dotted path, the rest of it as written.
+const withoutKey = (value: unknown, [head, ...rest]: readonly string[]): unknown => {
+    if (!isJsonObject(value) || head === undefined || !Object.hasOwn(value, head)) {
+        return value;
     }
-    try {
-        return schema.parse(JSON.parse(bytes.toString("utf8")));
-    } catch (error) {
-        throw new WorkspaceRemoteError(`${label} cannot arrive safely: ${errorMessage(error)}`);
+    if (rest.length > 0) {
+        return { ...value, [head]: withoutKey(value[head], rest) };
+    }
+    const { [head]: _moved, ...kept } = value;
+    return kept;
+};
+
+// What a structural step moves out of the document into a home of its own (an old webhook token into the door store)
+// never arrives with a workspace. The store keeps every key this build does not know on a write, and the step would
+// move such a key into place on the target's next boot, putting the source's credential to work there. Read after the
+// document has read the file whole, so it is a list of JSON entries.
+const dropMovedKeys = async (root: string, document: AutomationsDocument): Promise<void> => {
+    const text = await optionalFile(join(root, document.path));
+    if (text === undefined || document.movedByStep.length === 0) {
+        return;
+    }
+    const entries = JSON.parse(text.toString("utf8")) as unknown[];
+    const kept = entries.map((entry) => document.movedByStep.reduce((current, key) => withoutKey(current, key.split(".")), entry));
+    if (JSON.stringify(kept) !== JSON.stringify(entries)) {
+        await replaceFile(root, document.path, `${JSON.stringify(kept, null, 2)}\n`);
     }
 };
 
-const stillAutomations = async (root: string): Promise<NeedsAction | undefined> => {
-    const path = join(root, AUTOMATIONS);
-    const automations = await parsedJsonFile(path, z.array(AutomationSchema), AUTOMATIONS);
-    if (automations === undefined) {
-        return undefined;
+// The staged automations, read through their document as the scheduler's store reads them (an older shape converts),
+// and written back switched off with every key this build does not know kept, except what a step moves elsewhere.
+// Refused whole when the file, or any entry in it, cannot be read: such an entry would be written back as it stands,
+// perhaps enabled, for a later build that can read it to fire unattended.
+const stillAutomations = async (root: string, document: AutomationsDocument): Promise<NeedsAction | undefined> => {
+    const file = openEntries(document, join(root, document.path), { strict: true, onUnreadable: "refuse" });
+    const state = await file.state();
+    if (state.unreadable) {
+        throw new WorkspaceRemoteError(`${document.path} cannot arrive safely: ${state.detail}`);
     }
-    const enabled = automations.filter((automation) => automation.enabled);
+    const enabled = state.value.filter((automation) => automation.enabled);
+    if (enabled.length > 0) {
+        await file.update((automations) => automations.map((automation) => ({ ...automation, enabled: false })));
+    }
+    await dropMovedKeys(root, document);
     if (enabled.length === 0) {
         return undefined;
     }
-    await replaceFile(
-        root,
-        AUTOMATIONS,
-        `${JSON.stringify(
-            automations.map((automation) => ({ ...automation, enabled: false })),
-            null,
-            2,
-        )}\n`,
-    );
     return {
         subject: "Turn on the automations you want",
         detail: `${enabled.length} automation${enabled.length === 1 ? "" : "s"} arrived with the workspace and ${enabled.length === 1 ? "is" : "are"} switched OFF, because the scheduler fires enabled ones unattended: ${enabled.map((automation) => automation.id).join(", ")}. Enable the ones you want on the Automations view.`,
@@ -241,10 +266,14 @@ const gateOverlay = async (root: string, incoming: Buffer | undefined, handledBy
     };
 };
 
+export interface AdoptionOptions extends AdoptionDocuments {
+    readonly overlayHandledBySection: boolean;
+}
+
 const safeWorkspaceCommit = async (
     services: Services,
     commit: string,
-    options: { readonly overlayHandledBySection: boolean },
+    options: AdoptionOptions,
     git: GitRunner,
 ): Promise<{ readonly commit: string; readonly actions: NeedsAction[] }> => {
     const root = services.workspace.root;
@@ -253,7 +282,12 @@ const safeWorkspaceCommit = async (
         targetSources.set(path, await optionalFile(join(root, path)));
     }
     const targetEnablementBytes = await optionalFile(join(root, EXTENSION_ENABLEMENT));
-    const targetEnablement = (await parsedJsonFile(join(root, EXTENSION_ENABLEMENT), EnablementSchema, `the target's ${EXTENSION_ENABLEMENT}`)) ?? {};
+    // Through its document, as the extension host reads it; switches this build cannot read refuse the arrival rather
+    // than reading as none set, which would turn every extension the target had switched off back on.
+    const targetEnablement = await openDocument(extensionEnablementDocument, join(root, EXTENSION_ENABLEMENT), { fallback: () => ({}) }).state();
+    if (targetEnablement.unreadable) {
+        throw new WorkspaceRemoteError(`the target's ${EXTENSION_ENABLEMENT} cannot arrive safely: ${targetEnablement.detail}`);
+    }
 
     const stage = await mkdtemp(join(tmpdir(), "intentic-workspace-arrival-"));
     await rm(stage, { recursive: true, force: true });
@@ -269,8 +303,8 @@ const safeWorkspaceCommit = async (
         await replaceFile(stage, EXTENSION_ENABLEMENT, undefined);
         const actions = [
             await gateOverlay(stage, incomingOverlay, options.overlayHandledBySection),
-            await stillAutomations(stage),
-            await stillExtensions(stage, targetEnablement, targetEnablementBytes !== undefined),
+            await stillAutomations(stage, options.automations),
+            await stillExtensions(stage, targetEnablement.value, targetEnablementBytes !== undefined),
         ].filter((action): action is NeedsAction => action !== undefined);
         await git(stage, ["add", "-A"]);
         await git(stage, [
@@ -299,7 +333,7 @@ const safeWorkspaceCommit = async (
 export const adoptWorkspaceRemote = async (
     services: Services,
     workspace: DefinitionWorkspace,
-    options: { readonly overlayHandledBySection: boolean },
+    options: AdoptionOptions,
     git: GitRunner = defaultGit,
 ): Promise<{ readonly branch: string; readonly actions: NeedsAction[] }> => {
     const root = services.workspace.root;

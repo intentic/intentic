@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, USAGE } from "./gate.js";
+import { exitOf, GateExchangeError, gateExchange, type GateVerdict, parseArgs, USAGE } from "./gate.js";
 import { exitOfRun, parseRunArgs, RUN_USAGE, RunExchangeError, type RunOutcome, runExchange } from "./run.js";
 
 // Reads stdin, makes one fetch, writes stdout, and exits. Exit 2 means the exchange itself failed (bad token, no such
@@ -60,43 +60,11 @@ const { call } = parsed;
 // No words on the command line falls back to stdin, but only when piped in, not an interactive terminal.
 const request = call.request !== "" ? call.request : process.stdin.isTTY ? "" : (await readStdin()).trim();
 
-let response: Response;
+let verdict: GateVerdict;
 try {
-    const dial = dialOf(call.url, call.waitS);
-    response = await fetch(dial.url, {
-        method: "POST",
-        headers: dial.headers,
-        body: request,
-        signal: AbortSignal.timeout(clientTimeoutMs(call.waitS)),
-    });
+    verdict = await gateExchange({ ...call, request }, { fetch });
 } catch (error) {
-    console.error(`the gate could not be reached: ${errorMessage(error)}`);
-    process.exit(2);
-}
-
-const text = await response.text();
-if (!response.ok) {
-    // The daemon's own sentence when it has one ({"error": ...}), the raw body when it does not.
-    let detail = text;
-    try {
-        const body = JSON.parse(text) as { error?: unknown };
-        detail = typeof body.error === "string" ? body.error : text;
-    } catch {
-        // Not JSON, a proxy or tunnel answered. The raw body is the only clue there is.
-    }
-    console.error(`the gate answered ${response.status}: ${detail}`);
-    process.exit(2);
-}
-
-let body: unknown;
-try {
-    body = JSON.parse(text);
-} catch {
-    body = undefined;
-}
-const verdict = readVerdict(body);
-if (verdict === undefined) {
-    console.error(`the gate's answer was not a verdict: ${text.slice(0, 200)}`);
+    console.error(error instanceof GateExchangeError ? error.message : errorMessage(error));
     process.exit(2);
 }
 

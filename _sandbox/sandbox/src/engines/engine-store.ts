@@ -36,8 +36,8 @@ export const engineStateDocument = defineDocument({ root: "history", path: "engi
 const QUARANTINE_KEPT = 6;
 
 // Read per call rather than cached, so a suite can point it at a fixture tree; defaults to the daemon volume, beside
-// the activity and usage ledgers.
-const enginesRoot = (): string => process.env["INTENTIC_ENGINES_DIR"] ?? join(HISTORY_ROOT, "engines");
+// the activity and usage ledgers. Also where a fenced turn is handed the engines from (turn-sandbox.ts).
+export const enginesRoot = (): string => process.env["INTENTIC_ENGINES_DIR"] ?? join(HISTORY_ROOT, "engines");
 
 export const engineDir = (id: EngineId): string => join(enginesRoot(), id);
 export const engineVersionDir = (id: EngineId, version: string): string => join(engineDir(id), "versions", version);

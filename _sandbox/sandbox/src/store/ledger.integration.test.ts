@@ -48,6 +48,17 @@ test("a torn line or one this build cannot read costs itself, never the ledger",
     expect(await openLedger(ledgerDocument, path).read()).toEqual([{ amount: 1 }, { amount: 4 }]);
 });
 
+test("a line torn by a crash costs only itself: the next process's first line starts a line of its own", async () => {
+    const path = join(dir, "test.jsonl");
+    await writeFile(path, `${JSON.stringify({ amount: 1 })}\n{"amou`);
+    const ledger = openLedger(ledgerDocument, path);
+    await Promise.all([ledger.append({ amount: 2 }), openLedger(ledgerDocument, path).append({ amount: 3 })]);
+    await ledger.append({ amount: 4 });
+    expect((await ledger.read()).map(({ amount }) => amount).toSorted()).toEqual([1, 2, 3, 4]);
+    // One newline ends the fragment, however many handles appended first.
+    expect((await readFile(path, "utf8")).split("\n")).toHaveLength(6);
+});
+
 test("an absent ledger is empty, and one that cannot be read says so", async () => {
     expect(await openLedger(ledgerDocument, join(dir, "test.jsonl")).read()).toEqual([]);
     // A directory where the ledger should be: unreadable, never read as no entries.

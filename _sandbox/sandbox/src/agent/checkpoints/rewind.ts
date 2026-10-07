@@ -81,6 +81,6 @@ export const rewindConversation = async (
         // Timeline has a point only where the rewind moved through it; an isolated rewind moves the branch instead.
         return { dropped, ...(checkpoint.kind === "tree" ? { snapshot: checkpoint.snapshot } : {}) };
     });
-    // withRewindLease answers undefined for exactly one reason: a turn holds the conversation.
+    // withRewindLease answers undefined only when the conversation is held: by a live turn, or by another rewind.
     return outcome ?? "busy";
 };

@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 
 use crate::docker;
+use crate::health::{CRASH_LOOP_RESTARTS, HEALTH_URL};
 use crate::logfile::Log;
 use crate::record::{self, ChannelRecord, Phase, Swap};
 use crate::sandbox::ledger::{self, Ledger};
@@ -31,12 +32,15 @@ const JOURNAL_SECS: u64 = 15 * 60;
 /// of a version that is plainly down, never one bad answer.
 const STRIKES: u32 = 3;
 /// Container restarts that are a crash loop on their own, whatever the daemon says.
-const RESTARTS: u64 = 3;
+const RESTARTS: u64 = CRASH_LOOP_RESTARTS as u64;
 /// Daemon restarts inside a running container (netd restarts a crashed daemon without the container stopping)
 /// that are a crash loop on their own.
-const DAEMON_RESTARTS: u32 = 3;
+const DAEMON_RESTARTS: u32 = CRASH_LOOP_RESTARTS;
 
-const HEALTH_URL: &str = "http://localhost:8787/health";
+/// Why the last boot failed, left by the daemon that failed (its bootFailureDocument, boot-failure.ts).
+pub const BOOT_FAILURE_FILE: &str = "/history/boot-failure.json";
+/// The daemon's boot marker, claimed by every boot (its boot-marker.ts MARKER_FILE, under its logs).
+pub const DAEMON_EXIT_FILE: &str = "/history/logs/daemon-exit.json";
 
 /// How often an ic run doing a cutover says it is alive, and how long without that before its cutover counts as
 /// interrupted. The gap is several beats wide: a heartbeat is a record write and a `docker cp`, and a busy machine is
@@ -293,9 +297,14 @@ pub fn look(container: &str, swap_at: u64) -> Look {
         }
     }
     found.boot_failure = boot_failure_since(container, swap_at);
-    found.daemon_started = file_json(container, "/history/logs/daemon-exit.json")
-        .and_then(|marker| marker["startedAt"].as_u64());
+    found.daemon_started =
+        file_json(container, DAEMON_EXIT_FILE).and_then(|marker| daemon_started_of(&marker));
     found
+}
+
+/// When the daemon last started, off its boot marker. Pure.
+pub fn daemon_started_of(marker: &Value) -> Option<u64> {
+    marker["startedAt"].as_u64()
 }
 
 /// A small JSON file off the sandbox's volume. `docker cp` reads it whether or not the container is running.
@@ -337,9 +346,15 @@ pub fn ic_started_at(ledger: &Ledger) -> Option<u64> {
 /// The error the daemon recorded on /history/boot-failure.json, when it recorded it after `since`. `docker cp` reads
 /// it off a container that is not running too, which is the state a crash-looping one is often found in.
 pub fn boot_failure_since(container: &str, since: u64) -> Option<String> {
-    file_json(container, "/history/boot-failure.json")
-        .filter(|failure| failure["at"].as_u64().is_some_and(|at| at >= since))
-        .map(|failure| {
+    file_json(container, BOOT_FAILURE_FILE).and_then(|failure| boot_failure_of(&failure, since))
+}
+
+/// The first line of the error a boot-failure record names, when it was recorded at or after `since`. Pure.
+pub fn boot_failure_of(failure: &Value, since: u64) -> Option<String> {
+    failure["at"]
+        .as_u64()
+        .is_some_and(|at| at >= since)
+        .then(|| {
             failure["error"]
                 .as_str()
                 .unwrap_or("it gave no reason")

@@ -21,7 +21,7 @@ import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { cacheFile } from "../../store/open-document.js";
-import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./xai-models.js";
+import { discoverXaiModels, isChatModel, OPENCODE_XAI_PROVIDER, SEED_XAI_MODELS } from "./xai-models.js";
 import type { OpenCodeMcpServer } from "./opencode-mcp.js";
 import { z } from "zod";
 
@@ -644,7 +644,7 @@ const createXaiCatalog = (opencodeDir: string, fetchImpl: typeof fetch) => {
         }
     };
     const usableXaiToken = async (): Promise<string | undefined> => {
-        const entry = (await readAuth())["xai"];
+        const entry = (await readAuth())[OPENCODE_XAI_PROVIDER];
         if (entry?.type !== "oauth" || typeof entry.access !== "string") {
             return undefined;
         }

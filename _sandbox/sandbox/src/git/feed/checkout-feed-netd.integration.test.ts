@@ -43,6 +43,7 @@ beforeAll(async () => {
         answer: () => Promise.reject(new Error("not asked here")),
         onTunnel: () => undefined,
         onClose: () => undefined,
+        onFault: () => undefined,
     });
     link.tell({ kind: "hello", build: "test", pid: process.pid });
     useCheckoutFeed(netdCheckoutFeed(link));

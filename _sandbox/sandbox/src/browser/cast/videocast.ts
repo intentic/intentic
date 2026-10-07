@@ -1,5 +1,6 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { errorMessage } from "@intentic/base/errors";
+import { spawnAs } from "../../workload/workload-class.js";
 import type { Region } from "./region.js";
 
 // Grabs the browser as video off its X display, not one page's compositor, since an inter-frame codec suits a picture
@@ -129,7 +130,8 @@ export const startVideocast = (display: { readonly name: string }, region: Regio
     let pending: Buffer = Buffer.alloc(0);
     let stopped = false;
     let announced = false;
-    const child: ChildProcess = spawn(
+    const child: ChildProcess = spawnAs(
+        { class: "service" },
         "ffmpeg",
         [
             "-nostdin",

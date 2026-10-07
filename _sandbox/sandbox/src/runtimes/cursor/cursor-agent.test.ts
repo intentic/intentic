@@ -11,6 +11,7 @@ import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./curso
 import type { CallResult, HostCall, HostMessage, RuntimeMessage } from "./cursor-runtime-protocol.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -196,6 +197,48 @@ test("an approved plan streams its executing phase on the queue the planning pha
 
     expect(seen.filter((event) => event.kind === `delta`)).toEqual([{ kind: `delta`, text: `working on it` }]);
     expect(seen.at(-1)).toEqual({ kind: `done` });
+});
+
+// The relay gives a message up the moment it hands it to the run, so a steer the run hands back ("revert_to_followup")
+// is the adapter's to deliver: the SDK says to send it as an ordinary follow-up, which is what Codex does with a refused
+// steer. Dropping it lost what the person typed while the turn was still running.
+test("a steer the run hands back is sent as a follow-up once the run settles, and one it took is not sent again", async () => {
+    const prompts: string[] = [];
+    const steered: string[] = [];
+    const settle: ((result: { status: string }) => void)[] = [];
+    create.mockResolvedValue({
+        agentId: `agent-steered`,
+        send: async (prompt: string) => {
+            prompts.push(prompt);
+            return {
+                wait: () => new Promise((resolve: (result: { status: string }) => void) => settle.push(resolve)),
+                cancel,
+                steer: async (text: string) => {
+                    steered.push(text);
+                    return text === `also cover the CLI` ? `complete_delivered` : `revert_to_followup`;
+                },
+            };
+        },
+        close: () => {},
+    });
+    const steering = new SteeringQueue();
+
+    const turn = collect(createCursorAgent(deps())({ ...request(), spec: { ...request().spec, steering } }));
+    await waitFor(() => expect(settle).toHaveLength(1));
+    steering.push(`also cover the CLI`);
+    steering.push(`use SQLite instead`);
+    await waitFor(() => expect(steered).toEqual([`also cover the CLI`, `use SQLite instead`]));
+    settle[0]?.({ status: `success` });
+
+    await waitFor(() => expect(settle).toHaveLength(2));
+    // Admission closed as the run settled: a message from here on is refused at the route, not left unread.
+    expect(steering.push(`too late`)).toBe(false);
+    settle[1]?.({ status: `success` });
+    const events = await turn;
+
+    expect(prompts).toEqual([request().spec.prompt, `use SQLite instead`]);
+    expect(events.filter((event) => event.kind === `error`)).toEqual([]);
+    expect(events.at(-1)).toEqual({ kind: `done` });
 });
 
 // The bound is on the opening only: a turn that has streamed is a turn Cursor is answering, and a long quiet stretch

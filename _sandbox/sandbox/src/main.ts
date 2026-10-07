@@ -16,14 +16,14 @@ import { startChangeReactions } from "./bootstrap/change-reactions.js";
 import { forgetDaemonOnlyEnv, prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
-import { startNetdDoor } from "./bootstrap/netd-door.js";
+import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
 import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
 import { workingNow } from "./bootstrap/working-now.js";
-import { createServices } from "./composition.js";
+import { createServices, servicesTeardown } from "./composition.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
 import { CONTAINER_SECRET_ENV, loadConfig } from "./env.config.js";
@@ -31,6 +31,7 @@ import { sealConfigSecrets } from "./seams/sealed-env.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
 import { bootFacts } from "./system/boot/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
+import { tearDown } from "./system/boot/daemon-stop.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
@@ -50,6 +51,8 @@ import { appPanelKey } from "./workspace/layout/app-previews.js";
 // registers its own teardown, so nothing here enumerates what to stop.
 // A boot that fails before the gate opens records why and exits (system/boot/boot-failure.ts), rather than lingering
 // as a daemon that answers /health and never serves: netd restarts it with backoff, and the host reads the record.
+// Shutdown runs every registered stop newest first, so the doors that admit work close before the services behind
+// them, and waits for the asynchronous ones only as long as system/boot/daemon-stop.ts allows.
 
 // What the rest of the boot needs once the gate has opened.
 interface Ready {
@@ -57,7 +60,7 @@ interface Ready {
     readonly runnerEnv: RunnerModeEnv | undefined;
     readonly prewarm: boolean;
     // The one deliberate stop, registered on SIGTERM and SIGINT as soon as there is anything to tear down.
-    readonly stop: () => void;
+    readonly stop: (exitCode?: number) => void;
 }
 
 // Everything up to and including the gate opening. Throws whatever stops the boot short of it.
@@ -72,6 +75,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     requireAuthWhenReachable(config);
     requireLocalContract(config);
     requireProjectDir(config);
+    const netdSockets = requireNetdSockets();
     // Profile differences below read a named trait, never the profile value directly (system/boot/profile.ts).
     const traits = profileTraits(config);
     const host = listenHost(config);
@@ -84,24 +88,25 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Every subsystem registers its own teardown at creation; nothing here enumerates what to stop.
     const shutdown = new DisposableStore();
     attempt.shutdown = shutdown;
-    // Nothing to enumerate: every subsystem registered its own teardown. Keeps going past a throwing member and reports
-    // failures together. `finally`, since the exit must happen whatever the teardown did.
-    const stop = (): void => {
-        logger.info("shutting down intentic sandbox daemon…");
-        try {
-            shutdown.dispose();
-        } catch (error) {
-            logger.error({ err: error }, "shutdown: one or more subsystems failed to stop");
-        } finally {
+    // Once, however many signals arrive: a second SIGTERM while the first teardown runs changes nothing. Keeps going
+    // past a stop that throws or hangs and names it; the exit happens whatever the teardown did.
+    let stopping: Promise<void> | undefined;
+    const stop = (exitCode = 0): void => {
+        stopping ??= (async () => {
+            logger.info("shutting down intentic sandbox daemon…");
+            const unstopped = await tearDown(shutdown);
+            if (unstopped !== undefined) {
+                logger.error({ detail: unstopped }, "shutdown: one or more subsystems did not stop cleanly");
+            }
             // Fires the exit hook in daemon-env.ts, stamping the marker exited so the next boot reads a deliberate stop.
-            process.exit(0);
-        }
+        })().finally(() => process.exit(exitCode));
     };
     // Registered while boot is still under way, not once it is over: a stop that arrives mid-boot (the host's, the
     // netd closing its socket, idle-stop) would otherwise take Node's default exit, tearing nothing down and leaving
     // the marker unstamped, so the next boot would report a kill nobody made.
-    process.on("SIGTERM", stop);
-    process.on("SIGINT", stop);
+    // Wrapped: a signal listener is called with the signal's name, which is no exit code.
+    process.on("SIGTERM", () => stop());
+    process.on("SIGINT", () => stop());
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
@@ -128,7 +133,10 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     attempt.stage = "Building the services";
     const services = createServices(config, logger);
     attempt.services = services;
-    shutdown.push(() => services.resources.stop());
+    // What composing started on its own clock; registered first, so it stops last, after everything built on it.
+    for (const teardown of servicesTeardown(services)) {
+        shutdown.push(teardown);
+    }
     // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
     // daemon that claimed the container serves it.
     if (role.container) {
@@ -138,7 +146,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         // of its own) would inherit. Only where the agent is the container's, as for the tmux server (boot-sweeps.ts).
         setRunnerEnv({ SSH_AUTH_SOCK: services.sshAgent.owner });
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
-        shutdown.push(() => void room.close());
+        shutdown.push(() => room.close());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
         const work = startWorkSignal({ working: () => workingNow(services, "restart").length, events: services.events, logger, boot: bootFacts });
         shutdown.push(() => work.stop());
@@ -146,22 +154,13 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // The credential gateway, on loopback beside netd rather than behind it, up before any turn can be handed one of its
     // addresses (broker/broker-server.ts).
     const credentialGateway = await startCredentialGateway(services, logger);
-    shutdown.push(() => void credentialGateway.stop());
+    shutdown.push(() => credentialGateway.stop());
     // The ssh agent, its SSH half: the owner's socket, and every conversation socket a background job may still hold from
     // before a restart (broker/ssh-agent-sockets.ts). A socket that cannot bind is logged, and ssh then signs nothing.
-    await services.sshAgent.start().catch((error: unknown) => logger.warn({ err: error }, "ssh agent: could not start; ssh keys are unusable until restart"));
-    shutdown.push(() => void services.sshAgent.stop());
-    shutdown.push(() => services.perf.stop());
-    shutdown.push(() => services.ciHooks.stop());
-    shutdown.push(() => services.announcer.stop());
-    shutdown.push(() => services.reach.stop());
-    shutdown.push(() => services.history.stop());
-    shutdown.push(() => services.processes.stopAll());
-    // Extension gateways are direct children; stopped here or they outlive the daemon (the orphan sweep is only a
-    // backstop).
-    shutdown.push(() => services.serviceProcesses.stopAll());
-    // The backend host is a direct child, not a tmux session, stopped here or it outlives the daemon.
-    shutdown.push(() => services.extensionBackend.stop());
+    await services.sshAgent
+        .start()
+        .catch((error: unknown) => logger.warn({ err: error }, "ssh agent: could not start; ssh keys are unusable until restart"));
+    shutdown.push(() => services.sshAgent.stop());
     // Pool machine preparing its volume for a future owner (prewarm.ts); nothing below branches on it except the very
     // end. Container-only: a guest or local folder has no volume to prepare.
     const prewarm = config.sandbox.prewarm && role.container;
@@ -176,7 +175,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     );
 
     // What every phase below is handed; a phase reads its inputs from here instead of re-deriving them.
-    const phase: BootPhase = { config, logger, traits, role, services, shutdown };
+    const phase: BootPhase = { config, logger, traits, role, services, shutdown, stop };
     startDaemonMetrics(phase);
 
     // Every provider's boot task, declared by its own module, runs through one loop instead of a block per provider.
@@ -188,7 +187,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // state, and a browser is told which step is running. Before the listeners, or a request could slip past it.
     declareBootSteps(services);
     attempt.stage = "Opening the netd door";
-    const reach = await startNetdDoor(phase, host);
+    const reach = await startNetdDoor(phase, host, netdSockets);
     // The netd door has dialled its sockets: no child inherits them from here on (daemon-env.ts).
     forgetDaemonOnlyEnv();
     startPlatformPresence(phase, reach);
@@ -199,6 +198,16 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     services.boot.finish();
     return { phase, runnerEnv, prewarm, stop };
+};
+
+// Starts one phase past the gate, so a phase that throws is named in the log and the phases after it still start: none
+// of them needs another to have started, and one failure must not silently leave restores, schedulers and watches off.
+const startPhase = (logger: BootPhase["logger"], name: string, start: () => void): void => {
+    try {
+        start();
+    } catch (error) {
+        logger.error({ err: error, phase: name }, "boot: a phase past the gate failed to start; the phases after it still start");
+    }
 };
 
 // Everything past the gate: none of it is a boot failure, and a throw here is only logged.
@@ -218,21 +227,27 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootF
 
     // After the gate, so the editor is live while the dev servers come up; still after the stale-session sweep, which
     // must run before anything starts a session, and after the baseline, so a dev server's first build can't dirty it.
-    await startWorkspaceApps(phase, prewarm);
+    await startWorkspaceApps(phase, prewarm).catch((error: unknown) =>
+        logger.error({ err: error, phase: "workspace apps" }, "boot: the workspace's apps could not be started; the phases after it still start"),
+    );
     // Logs CPU throttle alongside boot time, since on a shared-CPU host a slow chain is usually the quota, not the
     // steps.
-    logger.info({ ms: Date.now() - services.boot.progress().startedAt, cpu: (await readCgroup()).cpuThrottle }, "boot: chain converged");
+    const cpu = await readCgroup().then(
+        (cgroup) => cgroup.cpuThrottle,
+        () => undefined,
+    );
+    logger.info({ ms: Date.now() - services.boot.progress().startedAt, cpu }, "boot: chain converged");
 
     // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
     // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.
     void startRunnerMode(services, runnerEnv).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
 
-    startBootSweeps(phase);
-    startBootRestores(phase);
-    startBootSchedulers(phase);
-    startBootResumes(phase);
-    startVersionWatches(phase);
-    startChangeReactions(phase);
+    startPhase(logger, "sweeps", () => startBootSweeps(phase));
+    startPhase(logger, "restores", () => startBootRestores(phase));
+    startPhase(logger, "schedulers", () => startBootSchedulers(phase));
+    startPhase(logger, "resumes", () => startBootResumes(phase));
+    startPhase(logger, "version watches", () => startVersionWatches(phase));
+    startPhase(logger, "change reactions", () => startChangeReactions(phase));
 
     // A pool machine's boot ends here: the volume is prepared and the starter running, so it warms once, stamps the
     // volume, and takes the same exit SIGTERM would.
@@ -247,7 +262,7 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootF
             answers: (port) => answers("http", port),
         })
             .catch((error: unknown) => logger.error({ err: error }, "prewarm: could not finish; the claimed boot prepares whatever is missing"))
-            .finally(stop);
+            .finally(() => stop());
     }
 };
 
@@ -264,4 +279,7 @@ const main = async (): Promise<void> => {
     await pastGate(ready, fault);
 };
 
-void main();
+void main().catch((error: unknown) => {
+    // Only past the gate, whose phases log their own failures: this is the backstop for one that escaped them.
+    process.stderr.write(`daemon: the boot past the gate failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+});

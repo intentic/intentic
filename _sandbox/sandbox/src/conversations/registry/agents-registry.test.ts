@@ -322,6 +322,22 @@ describe("agents registry", () => {
         expect(await beginTurn(conversations, turn(), 2_000)).toBe("begun");
     });
 
+    // Two rewinds restoring files at once would leave the conversation free the moment the first one finished.
+    it("refuses a rewind while another rewind holds the conversation", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+
+        let nested: string | undefined = "not asked";
+        const held = await conversations.withRewindLease("c1", async () => {
+            nested = await conversations.withRewindLease("c1", async () => "restored twice");
+            return "restored";
+        });
+
+        expect(held).toBe("restored");
+        expect(nested).toBeUndefined();
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
+    });
+
     it("refuses a rewind while a turn is running, and releases the lease even when the rewind throws", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

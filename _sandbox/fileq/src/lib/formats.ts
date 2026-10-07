@@ -108,9 +108,6 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
     ".rar": "archive",
 };
 
-/** Cheap pre-filter: could this path, by name alone, have a derivable format? Runs over every watcher batch. */
-export const isCandidatePath = (path: string): boolean => extname(path).toLowerCase() in EXTENSION_FORMAT;
-
 // Zip-underneath formats where magic can only say "zip"; the extension names the real container instead.
 const ZIP_CONTAINERS: ReadonlySet<Format> = new Set(["docx", "xlsx", "pptx", "odt", "ods", "odp", "epub"]);
 

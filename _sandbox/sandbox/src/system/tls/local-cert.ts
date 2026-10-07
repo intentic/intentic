@@ -68,7 +68,7 @@ const accountKeyOf = (config: Config): KeyObject => {
 // Writes/withdraws the DNS-01 record via the platform, keyed off our connect token. Also the only source of the name to
 // certify, since the platform alone owns the zone; undefined means the loopback path is off.
 const relayChallenge = async (config: Config, value: string | undefined): Promise<string | undefined> => {
-    const answer = await callIngress(config, { route: "localDns", input: value === undefined ? {} : { challenge: value }, idleMs: 60_000 });
+    const answer = await callIngress(config, { route: "localDns", input: value === undefined ? {} : { challenge: value } });
     if (answer.refusal !== undefined) {
         throw new Error(`the platform refused the loopback DNS update: ${answer.refusal}`);
     }
@@ -79,7 +79,7 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
 // The platform's read-back of the challenge through Cloudflare, for a host whose network cannot see the zone's
 // nameservers. Anything but a plain yes (an older platform without the route, a refusal) is a no.
 const confirmChallenge = async (config: Config, value: string): Promise<boolean> => {
-    const answer = await callIngress(config, { route: "localDnsConfirm", input: { challenge: value }, idleMs: 60_000 });
+    const answer = await callIngress(config, { route: "localDnsConfirm", input: { challenge: value } });
     return answer.data?.confirmed === true;
 };
 

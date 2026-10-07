@@ -17,9 +17,9 @@ const bootPhases = (): readonly { readonly path: string; readonly source: string
 
 const main = readFileSync(join(srcRoot, "main.ts"), "utf8");
 
-// The signal handler's body: from `const stop = (): void => {` to the line that closes it at the same indent.
+// The signal handler's body: from `const stop = (…): void => {` to the line that closes it at the same indent.
 const shutdownHandler = (): string => {
-    const opening = main.indexOf("const stop = (): void => {");
+    const opening = main.indexOf("const stop = (");
     expect(opening, "main.ts must still install a shutdown handler named `stop`").toBeGreaterThan(-1);
     const closing = main.indexOf("\n    };", opening);
     return main.slice(opening, closing);
@@ -28,7 +28,8 @@ const shutdownHandler = (): string => {
 describe(`daemon shutdown`, () => {
     it(`tears down by disposing the store, never by naming subsystems`, () => {
         const body = shutdownHandler();
-        expect(body).toContain(`shutdown.dispose()`);
+        // The store, newest first under the stop deadline (system/boot/daemon-stop.ts).
+        expect(body).toContain(`tearDown(shutdown)`);
 
         // A match here is a subsystem stopped by name; register it at creation instead (`shutdown.push(() =>
         // thing.stop())`).

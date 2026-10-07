@@ -4,27 +4,27 @@ import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { forgetAccountState } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
+import { OPENCODE_XAI_PROVIDER } from "../opencode/xai-models.js";
 
 // xAI subscription OAuth relayed through OpenCode, which owns the protocol and token storage. Uses the headless
 // device-code flow (the browser flow needs a loopback callback a remote daemon can't get): `start` returns the
 // pre-filled verification URL, the poll below drives the exchange, no paste-back so no `complete`. OpenCode holds one
 // xAI auth per data dir, so the list is 0 or 1 and its id is OpenCode's provider id.
 
-const XAI = "xai";
-const grokAccount: OauthAccount = { id: XAI, label: "Grok", connectedAt: 0 };
+const grokAccount: OauthAccount = { id: OPENCODE_XAI_PROVIDER, label: "Grok", connectedAt: 0 };
 const DEVICE_WINDOW_MS = 15 * 60_000;
 const isDeviceMethod = (label: string): boolean => /headless|device|remote|vps/i.test(label);
 type PollPause = (signal: AbortSignal) => Promise<void>;
 const pollPause: PollPause = async (signal) => void (await sleep(5_000, undefined, { signal }));
 
 const startDevice = async (client: OpencodeClient): Promise<{ method: number; url: string; code: string }> => {
-    const methods = (await client.provider.auth()).data?.[XAI] ?? [];
+    const methods = (await client.provider.auth()).data?.[OPENCODE_XAI_PROVIDER] ?? [];
     const oauthMethods = methods.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.type === "oauth");
     const method = oauthMethods.find(({ entry }) => isDeviceMethod(entry.label)) ?? oauthMethods[0];
     if (method === undefined) {
         throw new Error("xAI Grok OAuth is not available in this OpenCode build.");
     }
-    const authorization = (await client.provider.oauth.authorize({ path: { id: XAI }, body: { method: method.index } })).data;
+    const authorization = (await client.provider.oauth.authorize({ path: { id: OPENCODE_XAI_PROVIDER }, body: { method: method.index } })).data;
     if (authorization === undefined) {
         throw new Error("Could not start the xAI Grok sign-in.");
     }
@@ -45,7 +45,7 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number, signal
             return;
         }
         try {
-            if ((await client.provider.oauth.callback({ path: { id: XAI }, body: { method }, signal })).data === true) {
+            if ((await client.provider.oauth.callback({ path: { id: OPENCODE_XAI_PROVIDER }, body: { method }, signal })).data === true) {
                 return;
             }
         } catch {
@@ -60,7 +60,7 @@ export const grokAccountDoor = (services: GrokAccountDeps, options: { readonly p
     let poll: { readonly handshake: string; readonly controller: AbortController } | undefined;
     return {
         start: async () => {
-            const lease = await services.openCode.acquire({ providerID: XAI });
+            const lease = await services.openCode.acquire({ providerID: OPENCODE_XAI_PROVIDER });
             let handedOff = false;
             try {
                 const authorization = await startDevice(lease.client);
@@ -91,13 +91,13 @@ export const grokAccountDoor = (services: GrokAccountDeps, options: { readonly p
                 poll = undefined;
             }
         },
-        list: async () => ((await services.openCode.connected(XAI)) ? [grokAccount] : []),
+        list: async () => ((await services.openCode.connected(OPENCODE_XAI_PROVIDER)) ? [grokAccount] : []),
         rename: async () => {
             throw new Error("The Grok account is OpenCode's to name: it holds the credential, and there is only ever one.");
         },
         identityOf: () => undefined,
         forget: async (id) => {
-            await Promise.all([services.openCode.disconnect(XAI), forgetAccountState(services, "grok", id)]);
+            await Promise.all([services.openCode.disconnect(OPENCODE_XAI_PROVIDER), forgetAccountState(services, "grok", id)]);
         },
     };
 };

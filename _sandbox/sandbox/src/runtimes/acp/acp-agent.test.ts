@@ -98,7 +98,7 @@ test("a throwing prompt surfaces the agent's error, then done", async () => {
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
-test("a stalled agent trips the inactivity watchdog: cancel, kill, error, done", async () => {
+test("a stalled agent trips the inactivity watchdog: cancel, end the process no other turn is on, error, done", async () => {
     const connection = fakeAcpConnection(fakeAcpAgentApp());
     const agent = createAcpAgent(connectionsOf(connection), { inactivityMs: 100, maxTurnMs: 60_000 });
     const events = await collect(agent, request("stall forever"));
@@ -106,6 +106,22 @@ test("a stalled agent trips the inactivity watchdog: cancel, kill, error, done",
     expect(error?.kind === "error" && error.message.includes("timed out")).toBe(true);
     expect(connection.alive()).toBe(false);
     expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
+// The process is every conversation's on this agent: one turn's stall must not take down another's turn on it.
+test("a stalled turn gives up its own session and leaves the process to another conversation's turn", async () => {
+    const connection = fakeAcpConnection(fakeAcpAgentApp());
+    const patient = createAcpAgent(connectionsOf(connection), TIMEOUTS);
+    const hasty = createAcpAgent(connectionsOf(connection), { inactivityMs: 100, maxTurnMs: 60_000 });
+    const stop = new AbortController();
+    const other = collect(patient, { ...request("stall until stopped"), signal: stop.signal });
+
+    const events = await collect(hasty, request("stall forever"));
+
+    expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("timed out") });
+    expect(connection.alive()).toBe(true);
+    stop.abort();
+    expect((await other).at(-1)).toEqual({ kind: "done" });
 });
 
 test("resuming a session the process doesn't know without loadSession self-heals via session-not-found", async () => {

@@ -804,8 +804,26 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         }
         // The answer to a restored card is a person's, which reopens the conversation should it have been archived since.
         await services.agents.clearArchived([conversationId]);
-        if (typeof (await services.turns.start(followUp)) !== "string") {
+        const started = await services.turns.start(followUp);
+        if (typeof started !== "string") {
             services.logger.info({ conversationId }, "parked turn resumed: the user's answer continues its session");
+            return;
+        }
+        if (started !== "busy") {
+            services.logger.warn({ conversationId, refusal: started }, "parked turn's answer not delivered: the conversation refused it");
+            return;
+        }
+        // A starter that does not wait behind the promised resume took the conversation first (an automation's fire, a
+        // re-run, a fix press). The answer is still the person's words, so it goes where theirs would: into that turn
+        // where it takes words, else behind it in the queue, rather than nowhere.
+        const said = await services.turns.say({ turn: followUp, voice: "person" });
+        if ("delivered" in said) {
+            services.logger.info(
+                { conversationId, delivered: said.delivered },
+                "parked turn's answer went to the turn that took the conversation first, or waits behind it",
+            );
+        } else {
+            services.logger.warn({ conversationId, said }, "parked turn's answer not delivered: the conversation took nothing");
         }
     })().catch((error: unknown) => services.logger.error({ err: error, conversationId }, "parked turn's answer failed to resume it"));
     return undefined;
@@ -845,7 +863,10 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
     // The rows it journalled while it waited are what it had drawn; the provider's store is asked only without them.
     const recorded = await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt, {
         drawn: entry.run?.rows,
-    }).catch(() => false);
+    })
+        // allow(silent-catch): a record that could not be written is the warning's `recorded: false` below; the turn is
+        // given up either way.
+        .catch(() => false);
     await consumeEntry(services, entry);
     services.logger.warn(
         { conversationId, reason, attempts: entry.attempts, recorded },
@@ -857,9 +878,10 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
 // entry is consumed (spent or deleted) before it restarts, so a turn that kills the daemon can't loop the boot. An
 // automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `ownerAsked`: the restart
 // this boot follows was one the owner started and asked to pick up after (restart-resume.ts), which resumes the turns
-// it cut as autoResumeOnRestart would, this once. `held`: this boot is one of a restart storm (system/boot/boot-history.ts),
-// which resumes nothing, ask or setting, and leaves every cut turn interrupted on the record (2026-10-05).
-export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false, held = false): Promise<void> => {
+// it cut as autoResumeOnRestart would, this once. `restartStorm`: this boot is one of a restart storm
+// (system/boot/boot-history.ts), which resumes nothing, ask or setting, and leaves every cut turn interrupted on the
+// record (2026-10-05).
+export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false, restartStorm = false): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
         services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted turn is resumed");
         return [];
@@ -868,7 +890,7 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
     if (interrupted.length === 0) {
         return;
     }
-    const autoResumeOnRestart = !held && (ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart);
+    const autoResumeOnRestart = !restartStorm && (ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart);
     for (const entry of interrupted) {
         // Skips every gate below: rehydration spends nothing and isn't an attempt, so autoResumeOnRestart, staleness
         // and the attempt cap don't apply. Not cleared here either; the placeholder re-journals it, so a second restart
@@ -892,7 +914,7 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
             }
             await consumeEntry(services, entry);
             services.logger.info(
-                { entry: entry.kind, spent, stale, autoResumeOnRestart, restartStorm: held },
+                { entry: entry.kind, spent, stale, autoResumeOnRestart, restartStorm },
                 "interrupted turn not resumed: the interruption stands on the record",
             );
             continue;

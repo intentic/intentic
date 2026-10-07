@@ -7,8 +7,18 @@ export interface IDisposable {
 }
 
 // Wraps anything with its own way to stop (`close()`, `stop()`, an unsubscribe function) as an `IDisposable`, so a
-// store can hold it.
-export const toDisposable = (fn: () => void): IDisposable => ({ dispose: fn });
+// store can hold it. A stop that returns a promise keeps returning it, which is what `disposeWithin` waits on.
+export const toDisposable = (fn: () => unknown): IDisposable => ({ dispose: fn });
+
+// How a deadline-bounded disposal ended: what threw or rejected, and how many asynchronous stops were still running
+// when the deadline came.
+export interface DisposeOutcome {
+    readonly failed: readonly unknown[];
+    readonly unfinished: number;
+}
+
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+    typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 
 const disposeAll = (disposables: Iterable<IDisposable>): void => {
     const errors: unknown[] = [];
@@ -43,8 +53,8 @@ export class DisposableStore implements IDisposable {
     }
 
     // For things that stop by being called; returns nothing, since `deleteAndDispose` already covers removal by
-    // identity.
-    push(fn: () => void): void {
+    // identity. Return the stop's promise rather than `void`ing it, so `disposeWithin` can wait for it.
+    push(fn: () => unknown): void {
         this.add(toDisposable(fn));
     }
 
@@ -70,6 +80,53 @@ export class DisposableStore implements IDisposable {
         const members = [...this.members];
         this.members.clear();
         disposeAll(members);
+    }
+
+    // A process's shutdown: members stop newest first, so what was built on top (a listener, a scheduler reading a
+    // service) stops before what it was built on, and the door that admits new work closes before the work behind it
+    // goes. Every stop is started in that order without waiting for the one before; the promises the asynchronous ones
+    // return are then awaited together, for at most `deadlineMs`, so a stop that hangs cannot hold the exit. Never
+    // throws: a failure is reported in the outcome, beside the count of stops still running at the deadline.
+    async disposeWithin(deadlineMs: number): Promise<DisposeOutcome> {
+        if (this.disposed) {
+            return { failed: [], unfinished: 0 };
+        }
+        this.disposed = true;
+        const members = [...this.members].toReversed();
+        this.members.clear();
+        const failed: unknown[] = [];
+        const pending: Promise<void>[] = [];
+        let unfinished = 0;
+        for (const member of members) {
+            try {
+                const stopped: unknown = member.dispose();
+                if (isThenable(stopped)) {
+                    unfinished += 1;
+                    pending.push(
+                        Promise.resolve(stopped).then(
+                            () => {
+                                unfinished -= 1;
+                            },
+                            (error: unknown) => {
+                                unfinished -= 1;
+                                failed.push(error);
+                            },
+                        ),
+                    );
+                }
+            } catch (error) {
+                failed.push(error);
+            }
+        }
+        if (pending.length > 0) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const deadline = new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, deadlineMs);
+            });
+            await Promise.race([Promise.all(pending), deadline]);
+            clearTimeout(timer);
+        }
+        return { failed: [...failed], unfinished };
     }
 }
 

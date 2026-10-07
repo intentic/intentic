@@ -9,6 +9,7 @@ import { opt } from "../../opt.js";
 import { nsenterArgv } from "../../workload/namespace-entry.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
+import { outputTail } from "../stdio/child-output.js";
 import type {
     CodedError,
     CallMethod,
@@ -133,13 +134,10 @@ const runtimeChannel = (child: RuntimeProcess, tools: Record<string, SDKCustomTo
     const deltas = new Map<number, NonNullable<SendOptions["onDelta"]>>();
     let seq = 0;
     let failure: Error | undefined;
-    let output = "";
-
-    const collect = (chunk: Buffer | string): void => {
-        output = (output + chunk.toString()).slice(-4_096);
-    };
-    child.stdout?.on("data", collect);
-    child.stderr?.on("data", collect);
+    // Both streams, since the runtime's own failures print on either; the tail is folded into the exit error.
+    const output = outputTail(4_096);
+    output.follow(child.stdout);
+    output.follow(child.stderr);
 
     const fail = (error: Error): void => {
         failure ??= error;
@@ -150,7 +148,7 @@ const runtimeChannel = (child: RuntimeProcess, tools: Record<string, SDKCustomTo
     };
     child.once("error", fail);
     child.once("exit", (code, signal) => {
-        const detail = output.trim();
+        const detail = output.text().trim();
         fail(new Error(`The Cursor runtime process exited (${signal ?? code ?? "unknown"})${detail === "" ? "" : `: ${detail}`}`));
     });
 

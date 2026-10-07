@@ -43,8 +43,8 @@ const failureEnding = (deps: EndingDeps, id: string, summary: AgentSummary): Tur
     // Uncoded is stopped work: nothing to repair, so the press just carries on.
     return summary.failureCode === undefined ? { reason: "stopped", ...heldOn(deps, id) } : undefined;
 };
-// Off the projected `get` status, never raw `entry.status`, which stays `interrupted` through a running turn. Adds
-// reasons stop/kill don't cover (a spent allowance, an outage); repair failures are excluded.
+// Off the projected `get` status, never the stored `entry.ending`, which stays `interrupted` through a running turn.
+// Adds reasons stop/kill don't cover (a spent allowance, an outage); repair failures are excluded.
 export const endingOf = (deps: EndingDeps, id: string): TurnEnding | undefined => {
     const summary = deps.agents.get(id);
     if (summary === undefined) {

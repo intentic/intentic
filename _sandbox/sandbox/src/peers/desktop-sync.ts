@@ -1,14 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
 import { type Burns, burnsAt, type Presented, syncPairConsumedDocument } from "./enrollment.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import type { JsonFile } from "../store/json-file.js";
+import { type JsonFile, ManifestUnreadableError } from "../store/json-file.js";
 import { openEntries } from "../store/open-document.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
@@ -114,26 +115,35 @@ export const withoutStale = (enrollments: readonly SyncEnrollment[], now: number
     enrollments.filter((entry) => now - (entry.seenAt ?? entry.enrolledAt) < ENROLLMENT_RETENTION_MS);
 
 // Atomic writes and a per-path update queue (store/json-file.ts), so a redeem racing a heartbeat stamp can't lose an
-// update; 0o600, since the file holds token digests.
+// update; 0o600, since the file holds token digests. Refused rather than set aside when this build cannot read it:
+// setting it aside would drop every machine's digest, so one new enrollment would read every other machine as revoked
+// instead of unavailable. A write over it throws ManifestUnreadableError.
 const enrollmentsFile = (historyRoot: string): JsonFile<SyncEnrollment[]> =>
-    openEntries(syncEnrollmentsDocument, enrollmentsPath(historyRoot), { mode: 0o600, idKeys: ["key"] });
+    openEntries(syncEnrollmentsDocument, enrollmentsPath(historyRoot), { mode: 0o600, idKeys: ["key"], onUnreadable: "refuse" });
 
 const readEnrollments = (historyRoot: string): Promise<SyncEnrollment[]> => enrollmentsFile(historyRoot).read();
 
-// One key line per enrollment; an empty store writes an empty file, so sshd can read "nobody enrolled" rather than find
-// nothing.
-const writeAuthorizedKeys = async (enrollments: readonly SyncEnrollment[]): Promise<void> => {
-    await mkdir(dirname(authorizedKeysPath()), { recursive: true, mode: 0o700 });
-    await writeFile(authorizedKeysPath(), enrollments.map((entry) => entry.key).join("\n") + (enrollments.length > 0 ? "\n" : ""), { mode: 0o600 });
-};
+// Re-derives authorized_keys from the store as it stands now: one key line per enrollment, and an empty file for an
+// empty store, so sshd can read "nobody enrolled" rather than find nothing. A store this build cannot read reads as
+// empty here, so sshd admits nobody until it is fixed.
+// Queued on authorized_keys and reading the store inside the queue, never handed a snapshot: two writes that each carried
+// their own copy could land the older one last, and a key revoked in between would come back. Each derivation starts
+// after the store write that asked for it, so the last one to land reads at least the newest store. Written atomically,
+// so sshd never reads a truncated file.
+const syncAuthorizedKeys = (historyRoot: string): Promise<void> =>
+    queueOnFile(authorizedKeysPath(), async () => {
+        const enrollments = await readEnrollments(historyRoot);
+        await mkdir(dirname(authorizedKeysPath()), { recursive: true, mode: 0o700 });
+        await writeFileAtomic(authorizedKeysPath(), enrollments.map((entry) => entry.key).join("\n") + (enrollments.length > 0 ? "\n" : ""), 0o600);
+    });
 
-// Store and authorized_keys always move together, inside the file's own update queue; returning the same array means
+// Every store write re-derives authorized_keys once it lands (`syncAuthorizedKeys`); returning the same array means
 // no-op. Publishes its own change, since /history is outside the watched tree.
 // Every write also drops what is past retention (`withoutStale`), and the reports of what it dropped go with them.
 const persist = async (historyRoot: string, change: (current: SyncEnrollment[]) => SyncEnrollment[], now: number = Date.now()): Promise<boolean> => {
     let changed = false;
     let dropped: readonly SyncEnrollment[] = [];
-    const enrollments = await enrollmentsFile(historyRoot).update((current) => {
+    await enrollmentsFile(historyRoot).update((current) => {
         const next = change(current);
         const kept = withoutStale(next, now);
         dropped = next.filter((entry) => !kept.includes(entry));
@@ -144,7 +154,7 @@ const persist = async (historyRoot: string, change: (current: SyncEnrollment[]) 
         reports.delete(keyMaterialOf(entry.key));
     }
     if (changed) {
-        await writeAuthorizedKeys(enrollments);
+        await syncAuthorizedKeys(historyRoot);
         publishRuntimeChange("hosts");
     }
     return changed;
@@ -154,7 +164,7 @@ const persist = async (historyRoot: string, change: (current: SyncEnrollment[]) 
 // drops what is past retention first, so a key nobody has used in ninety days does not come back with the container.
 export const restoreAuthorizedKeys = async (historyRoot: string, now: number = Date.now()): Promise<void> => {
     if (!(await persist(historyRoot, (current) => current, now))) {
-        await writeAuthorizedKeys(await readEnrollments(historyRoot));
+        await syncAuthorizedKeys(historyRoot);
     }
 };
 
@@ -348,12 +358,20 @@ export const enrolledFleet = async (historyRoot: string): Promise<SyncFleet> => 
 // access dies with it.
 export const revokeEnrollmentByToken = async (historyRoot: string, token: string): Promise<boolean> => {
     const digest = sha256Hex(token);
-    return (await revokeWhere(historyRoot, (entry) => entry.tokenDigest === digest)) > 0;
+    return (await revokeWhere(historyRoot, (entry) => tokenEquals(entry.tokenDigest, digest))) > 0;
 };
 
 // Drops every enrollment `revoked` picks in one write, and their in-memory reports with them, or a report would outlive
 // its enrollment until the process restarts. Answers how many went.
+// Over a store this build cannot read, nothing matches and nothing is written, so the revoke would answer "not enrolled"
+// while the key stays in authorized_keys: refused instead, and authorized_keys re-derived from what can be read, which is
+// nobody, so sshd admits no one until the store is fixed.
 const revokeWhere = async (historyRoot: string, revoked: (entry: SyncEnrollment) => boolean): Promise<number> => {
+    const stored = await enrollmentsFile(historyRoot).state();
+    if (stored.unreadable) {
+        await syncAuthorizedKeys(historyRoot);
+        throw new ManifestUnreadableError(enrollmentsPath(historyRoot), stored.detail);
+    }
     let gone: SyncEnrollment[] = [];
     await persist(historyRoot, (enrollments) => {
         gone = enrollments.filter(revoked);

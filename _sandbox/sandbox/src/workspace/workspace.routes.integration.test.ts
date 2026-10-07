@@ -532,6 +532,33 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
     }
 });
 
+// A media or download ticket lives for hours, longer than the access of the person who minted it may: each names its
+// minter, so removing that person (members.routes.ts) or signing every browser out ends it.
+test("a media or download ticket names who minted it, and revoking that person ends both", async () => {
+    const root = await mkdtemp(join(tmpdir(), "media-minter-"));
+    await writeFile(join(root, "clip.mp4"), "video");
+    const svc = services({
+        workspace: workspacePaths(root),
+        files: fakeFiles({ size: statWorkspaceFileSize }),
+        auth: { authorize: async () => proven("member@example.com", "collaborator"), authorizeOwner: async () => {} },
+    });
+    const app = createApp(svc);
+    try {
+        const { ticket } = await clientFor(app).workspace.mediaTicket({ path: "clip.mp4" });
+        const download = await clientFor(app).workspace.downloadTicket({ paths: ["clip.mp4"] });
+        expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
+
+        svc.mediaTickets.revoke("someone-else@example.com");
+        expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
+
+        svc.mediaTickets.revoke("member@example.com");
+        expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(401);
+        expect(svc.mediaTickets.bound(download.ticket)).toBeUndefined();
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test("POST /workspace/upload streams any contained path to disk, 400s escape, 413s oversize", async () => {
     const writes: { path: string; content: Uint8Array }[] = [];
     const app = createApp(

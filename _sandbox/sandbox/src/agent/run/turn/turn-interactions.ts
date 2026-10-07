@@ -2,7 +2,10 @@ import type { AgentReply, EditorContext } from "@intentic/sandbox-contract";
 import type { Caller } from "../../../auth/auth.js";
 import type { Services } from "../../../composition.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { opt } from "../../../opt.js";
+import type { Steer } from "../../../seams/turn-starter.js";
 import { resolveExistingWithin, resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
+import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
 
 // applyReply and composeSteerText are functions rather than route bodies: a parent sandbox forwards a remote card's answer
@@ -75,4 +78,24 @@ export const composeSteerText = async (root: string, input: SteerInput): Promise
         .filter((part) => part !== "")
         .join("\n\n");
     return { text: paths.length > 0 ? withAttachmentNote(withEditor, paths) : withEditor };
+};
+
+// Words for a turn running in this sandbox, composed against its workspace and handed over with everything the steer
+// names, which the row they become carries. The port's steer door and admission both go through here, so neither drops a
+// field the other keeps.
+export const steerComposed = async (
+    services: Pick<Services, "workspace" | "conversations">,
+    conversationId: string,
+    steer: Steer,
+): Promise<boolean | { readonly invalid: string }> => {
+    const composed = await composeSteerText(services.workspace.root, steer);
+    if (composed.invalid !== undefined) {
+        return { invalid: composed.invalid };
+    }
+    return steerTurn(services.conversations, conversationId, {
+        text: composed.text,
+        voice: steer.voice,
+        ...opt("outside", steer.outside),
+        ...opt("errand", steer.errand),
+    });
 };

@@ -14,7 +14,7 @@ seconds, and gone the moment the prepare ends, whichever way it ends. A killed i
 passes it on only while its heartbeat is fresh (PREPARING_FRESH_MS), and a stuck bar is never what a crash leaves. */
 
 /// Where the daemon looks, beside the staged marker (the daemon's `updatePreparingDocument`).
-const MARKER: &str = "/history/update-preparing.json";
+pub const MARKER: &str = "/history/update-preparing.json";
 /// How often the marker is rewritten when nothing has moved: the heartbeat the daemon's freshness window is sized to.
 const HEARTBEAT: Duration = Duration::from_secs(4);
 /// The soonest a moved percent is written after the last write, so a pull's burst of layer lines is one exec, not forty.
@@ -215,7 +215,13 @@ fn now_ms() -> u128 {
 
 /// The marker's JSON, in the contract's shape (PreparingUpdateSchema). Pure, so its shape is asserted without a
 /// container.
-fn marker(channel: &str, started_at: u128, at: u128, phase: Phase, percent: Option<u32>) -> String {
+pub fn marker(
+    channel: &str,
+    started_at: u128,
+    at: u128,
+    phase: Phase,
+    percent: Option<u32>,
+) -> String {
     let mut fields = serde_json::Map::new();
     fields.insert("channel".into(), serde_json::Value::from(channel));
     // u128 is not a JSON number serde_json takes; milliseconds since 1970 fit a u64 for the next half-billion years.

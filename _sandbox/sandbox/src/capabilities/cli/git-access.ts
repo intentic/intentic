@@ -1,13 +1,13 @@
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { access, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import { generateSshKey, publicLineOf } from "../credentials/ssh-keys.js";
 import type { SshKeyStore } from "../ssh-key-store.js";
 import { adoptLegacySshKey, hostConfPath, hostPublicKeyPath, removeSshHost, writeHostPublicKey, writeSshHost } from "../ssh-hosts.js";
 import type { ConnectorHook } from "./connector-hooks.js";
+import { homeDir } from "../../system/home-dir.js";
 
 // With git access on, the account also names who commits here when the sandbox has no identity (ensureGitIdentity).
 // Git access on gets real git credentials beyond the curl-API skill: HTTPS always, set up first, and SSH best-effort.
@@ -64,7 +64,7 @@ const fileExists = (path: string): Promise<boolean> =>
     );
 
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
-const credentialsPath = (): string => join(process.env["HOME"] ?? homedir(), ".git-credentials");
+const credentialsPath = (): string => join(homeDir(), ".git-credentials");
 
 // Only absence reads as empty: a store that cannot be read is never rewritten as this host's line alone, dropping every
 // other host's credential.
@@ -100,6 +100,7 @@ const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<string> 
         await writeHostPublicKey(host.host, pair.publicKey);
         return pair.publicKey;
     }
+    // allow(silent-catch): an unreadable public half is rewritten from the private key held in the store, just below.
     const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
     if (written !== "") {
         return written;
@@ -236,6 +237,7 @@ export const ensureGitIdentity = async (host: GitHost, exec: ExecInTerminal, dep
     if ((name !== undefined && email !== undefined) || deps.accountIdentity === undefined) {
         return;
     }
+    // allow(silent-catch): a failed lookup leaves the identity unset, as the comment above promises; git then says so itself.
     const account = await deps.accountIdentity(host).catch(() => undefined);
     if (account === undefined) {
         return;
@@ -333,6 +335,7 @@ export const restoreGitAccess = async (
 // Whether both halves of access are in place: the https line alone doesn't work ssh remotes without the key or rewrite.
 // Neither route present looks active but fails Permission denied, what repointing ~/.ssh/intentic-hosts leaves behind.
 export const gitAccessWired = async (host: GitHost, keys: SshKeyStore): Promise<boolean> => {
+    // allow(silent-catch): a credentials file that cannot be read wires nothing, which is the answer this reports.
     const current = await readFile(credentialsPath(), "utf8").catch(() => "");
     if (!current.split("\n").some((entry) => entry.endsWith(`@${host.host}`))) {
         return false;

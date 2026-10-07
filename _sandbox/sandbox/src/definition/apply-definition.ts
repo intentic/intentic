@@ -17,7 +17,7 @@ import { composeEnvironment, draftsDir } from "../environment/environment.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { definitionDiff, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
-import { adoptWorkspaceRemote, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
+import { type AdoptionDocuments, adoptWorkspaceRemote, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
 
 // Parser and apply loop for sandbox.toml, one of the arrival pipeline's four sources. Apply re-derives its checklist
 // from the held document, never the wire plan; nothing lands verbatim, so it's all editable afterward. Lands beside
@@ -136,11 +136,13 @@ export const definitionActions = (definition: SandboxDefinition): NeedsAction[] 
 };
 
 // Exported apart from the arrival surface: the boot chain's definitionSeed applies everything applicable with no browser
-// involved, using the same report shape either caller renders or logs.
+// involved, using the same report shape either caller renders or logs. `documents` are the stores' documents a workspace
+// arrival reads its staged files through, handed in by callers above the stores that own them.
 export const applyDefinitionItems = async (
     services: Services,
     definition: SandboxDefinition,
     pick: (item: ArrivalItem) => boolean,
+    documents: AdoptionDocuments,
 ): Promise<ArrivalReport> => {
     const items = await definitionItems(services, definition);
     const applied: ArrivalReport["applied"] = [];
@@ -161,7 +163,7 @@ export const applyDefinitionItems = async (
                 if (workspace === undefined) {
                     throw new Error("the held definition no longer names a workspace");
                 }
-                const arrival = await adoptWorkspaceRemote(services, workspace, { overlayHandledBySection });
+                const arrival = await adoptWorkspaceRemote(services, workspace, { overlayHandledBySection, ...documents });
                 gated.push(...arrival.actions);
                 // A delivered capability manifest converges like an upserted one; handled once after the loop.
                 touchedCapabilities = true;

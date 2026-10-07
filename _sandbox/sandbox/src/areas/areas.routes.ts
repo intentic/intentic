@@ -7,7 +7,7 @@ import type { Services } from "../composition.js";
 // fence they are behind, and a picker cannot offer what it cannot list — but writing one decides who sees what, which
 // is the decision a revokable grant must never make, so both writes are the owner's alone.
 
-export type AreasRoutesDeps = Pick<Services, "areas" | "members" | "auth" | "wsTickets">;
+export type AreasRoutesDeps = Pick<Services, "areas" | "members" | "auth" | "wsTickets" | "mediaTickets">;
 
 // Undefined identity is the owner's own tool (loopback, a panel), which is already inside the fence.
 const refuseUnlessOwner = (context: OrpcContext): void => {
@@ -29,13 +29,15 @@ export const createAreasRoutes = (services: AreasRoutesDeps) => {
             const before = (await services.areas.get(input.id))?.folders ?? [];
             await services.areas.upsert({ ...input, folders });
             // A holder's open streams filter against the folders read when they opened; closing them makes their
-            // reconnect read these. A relabel moves no folder and closes nothing.
+            // reconnect read these. Their media and download tickets name files the old folders reached, so they go too.
+            // A relabel moves no folder and closes nothing.
             const moved = before.length !== folders.length || before.some((folder) => !folders.includes(folder));
             if (moved) {
                 for (const member of await services.members.list()) {
                     if (member.areas?.includes(input.id) === true) {
                         services.auth?.connections.revoke(member.email);
                         services.wsTickets.revoke(member.email);
+                        services.mediaTickets.revoke(member.email);
                     }
                 }
             }

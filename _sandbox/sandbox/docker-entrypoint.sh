@@ -7,7 +7,7 @@ set -e
 # machine's root filesystem is rebuilt from the image on every start and only /data survives. The layout
 # mirrors @intentic/sandbox-run/fly (FLY_VOLUME_LAYOUT) — change one, change both.
 if [ "${SANDBOX_VM:-}" = "1" ]; then
-    # The image's WORKDIR is /work, so PID 1 starts with its cwd inside the directory this block replaces.
+    # The image's WORKDIR is /work, so this script starts with its cwd inside the directory this block replaces.
     # Removing that directory in place leaves the process holding an unlinked cwd: the first Node call then
     # dies in process.cwd() with ENOENT (uv_cwd), and Fly exhausts the machine's restart allowance. Step out
     # before replacing it, then enter the persistent target once the link exists.
@@ -93,7 +93,8 @@ mkdir -p "$HISTORY_ROOT/shell"
 
 # /run/sshd may be a fresh tmpfs at runtime, so (re)create it here rather than relying on the build layer.
 mkdir -p /run/sshd
-/usr/sbin/sshd
+# Only local sync rides it, so an sshd that will not start costs that and nothing else: netd and the daemon still start.
+/usr/sbin/sshd || echo "intentic: sshd did not start; local sync stays down until the next start" >&2
 
 # DNS THAT CANNOT FREEZE THE DAEMON.
 #
@@ -128,7 +129,7 @@ if [ -f /etc/resolv.conf ] && ! grep -q 'timeout:' /etc/resolv.conf 2>/dev/null;
         /etc/resolv.conf > /tmp/resolv.conf.new && cat /tmp/resolv.conf.new > /etc/resolv.conf && rm -f /tmp/resolv.conf.new
 fi
 
-# The daemon is the main process — exec so it becomes PID 1 and owns SIGTERM/SIGINT graceful shutdown.
+# The daemon's own flags, for the exec at the end of this script.
 #
 # --report-on-fatalerror: a V8 fatal error (heap limit, native OOM) prints only to stderr and dies — and
 # stderr lives in `docker logs`, which the next recreate erases. The diagnostic report lands on /history
@@ -211,4 +212,7 @@ export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
 
 # netd owns every port and the tunnel, and supervises the daemon behind it: a daemon crash is restarted while the
 # browser's sockets stay open, and the daemon's own exit 0 (a stop, an idle machine) or 78 still ends the container.
+# exec, so netd takes this shell's place and the container's stop signal reaches it, which hands Node its graceful
+# shutdown. It is PID 1 itself only where nothing else is (the hosted runner's `init: false`); a local container's
+# PID 1 is docker's tini (`--init`), and a Fly machine's is Fly's own init, each forwarding the signal to netd.
 exec /opt/sandbox/netd/intentic-netd -- node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

@@ -13,6 +13,7 @@ import {
     KeyedProviderSchema,
     type Model,
     providerLabel,
+    providerSpec,
     reportsPlanLimits,
     SPENT_UTILIZATION,
     type TranslatorAccounts,
@@ -306,17 +307,16 @@ export const createCliProxyClient = (params: {
     // xAI/Kimi logins are device flows over the Management API: returns a verification URL and code, then polls to
     // completion in the background.
     const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth }).catch(
-            async (err: unknown) => {
-                throw await unreachable(err);
-            },
-        );
+        const vendor = providerSpec(provider)?.vendor ?? provider;
+        const response = await fetchFn(`${managementUrl}/${CLIPROXY_PROVIDER[provider]}-auth-url`, { headers: auth }).catch(async (err: unknown) => {
+            throw await unreachable(err);
+        });
         if (!response.ok) {
-            throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login failed to start (${response.status})`);
+            throw new Error(`${vendor} subscription login failed to start (${response.status})`);
         }
         const body = (await response.json()) as { url?: string; user_code?: string; state?: string };
         if (body.url === undefined || body.state === undefined || body.state === "") {
-            throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login returned an incomplete device flow`);
+            throw new Error(`${vendor} subscription login returned an incomplete device flow`);
         }
         return { url: body.url, code: body.user_code ?? "", state: body.state, flow: "device" };
     };
@@ -619,7 +619,7 @@ export const createCliProxyClient = (params: {
                         ...(cooling === undefined ? {} : { cooling }),
                     };
                 });
-            return { codex: of("codex"), grok: of("grok"), kimi: of("kimi"), gemini: of("gemini") };
+            return Object.fromEntries(KeyedProviderSchema.options.map((provider) => [provider, of(provider)])) as TranslatorAccounts;
         },
         headroom,
         sharedUsageKey: async (provider) => {

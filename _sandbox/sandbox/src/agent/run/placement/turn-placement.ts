@@ -4,12 +4,13 @@ import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/l
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";
+import type { RepoSync } from "../../../conversations/land/sync.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import type { TurnCloser, TurnEnding } from "./turn-close.js";
+import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
 import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
 import type { ReachWatch } from "./turn-reach.js";
 
@@ -26,7 +27,7 @@ export interface Placement {
     // In the turn's finally, before the conversation settles.
     readonly close: (failed: boolean) => Promise<void>;
     // After the settle, once per turn whatever happened: the one announcement of how it ended.
-    readonly settled: (ending: TurnEnding) => void;
+    readonly settled: (ending: PlacedTurnEnding) => void;
     // What a thrown error carrying no message of its own is observed as.
     readonly thrown: string;
 }
@@ -76,14 +77,19 @@ export async function* placedTurn(
         throw error;
     } finally {
         awaiting = await armOnce();
-        await placement.close(failed);
-        await conversations.send(conversationId, { kind: "settle" }).settled;
-        placement.settled(endingOf(failed, stopped, awaiting));
+        // A close that throws still lets the conversation settle and the turn announce its ending: an unsettled one
+        // stays running, and every later `begin` would be answered busy until a restart. Its error still propagates.
+        try {
+            await placement.close(failed);
+        } finally {
+            await conversations.send(conversationId, { kind: "settle" }).settled;
+            placement.settled(endingOf(failed, stopped, awaiting));
+        }
     }
 }
 
 // The turn's ending by precedence: an error outranks a stop, and a stop outranks the wake it may still have armed.
-const endingOf = (failed: boolean, stopped: boolean, awaiting: boolean): TurnEnding => {
+const endingOf = (failed: boolean, stopped: boolean, awaiting: boolean): PlacedTurnEnding => {
     if (failed) {
         return "failed";
     }
@@ -123,6 +129,10 @@ export const conversationIdentity = (
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),
 });
 
+// A fresh conversation naming a runner nobody paired, refused in the same words whether it is sent now or booked.
+export const unpairedRunner = (runner: string): string =>
+    `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.`;
+
 const REFUSED: { readonly [R in BeginRefusal]: string } = {
     busy: "This agent is already running a turn, wait for it to finish.",
     archived: "This conversation is archived: only a person's message reopens it.",
@@ -151,6 +161,28 @@ export async function* anchorIsolatedTurn(
         .catch((error: unknown) => deps.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
     yield { kind: "checkpoint", id: `worktree:${turn.index}`, index: turn.index };
 }
+
+export type WorktreeFrame = Extract<AgentEvent, { kind: "worktree" }>;
+
+// Where the branch stands, for a worktree and a runner's mirror alike: `base` always names where it sits now,
+// `unenforced` a container rewriting tool paths, and `sync` what the rebase that just ran moved or could not.
+export const worktreeFrame = (worktree: ConversationWorktree, onto: ReadonlyMap<string, string>, enforced: boolean, synced: readonly RepoSync[]): WorktreeFrame => {
+    const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
+    return {
+        kind: "worktree",
+        branch: worktree.branch,
+        base: (root === undefined ? "" : (onto.get(root.repo) ?? root.base)).slice(0, 7),
+        ...(enforced ? {} : { unenforced: true }),
+        ...(synced.length > 0
+            ? {
+                  sync: {
+                      commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
+                      blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
+                  },
+              }
+            : {}),
+    };
+};
 
 // The main tree: the body announces its own checkpoint, and there is no branch to land or books to settle. Where the
 // work went besides the tree's own repos is still read, its installs as it opens and the rest as it closes.
@@ -213,8 +245,8 @@ export const runnerPlacement = (
 ): Placement => ({
     async *open () {
         const worktree = await steps.compose();
-        const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
-        yield { kind: "worktree", branch: worktree.branch, base: (root?.base ?? "").slice(0, 7), remote: turn.runner };
+        // The mirror was just composed: nothing rebased it, and the runner enforces its own paths.
+        yield { ...worktreeFrame(worktree, new Map(), true, []), remote: turn.runner };
         yield* anchorIsolatedTurn(deps, turn.conversationId, worktree.repos, turn.snapshot);
         return steps.dispatch(worktree);
     },

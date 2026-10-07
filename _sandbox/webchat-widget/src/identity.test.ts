@@ -1,5 +1,6 @@
 import { unstubAllGlobals } from "@intentic/testing/bun";
 import {
+    renderGoogleSignIn,
     resetConversation,
     storeCursor,
     storeDisplayName,
@@ -67,4 +68,39 @@ test(`a browser that refuses storage still chats: it just gets a fresh thread ea
     });
     expect(visitorConversationId(`support`)).toMatch(/^[0-9a-f-]{36}$/);
     expect(storedDisplayName(`support`)).toBeUndefined();
+});
+
+// Google's script is fetched by the page; here the test plays the network by firing the tag's own load and error events.
+test(`a Google sign-in that failed to load is fetched again on the next try, not failed for the page's whole life`, async () => {
+    const tags = (): HTMLScriptElement[] => [
+        ...document.head.querySelectorAll<HTMLScriptElement>(`script[src="https://accounts.google.com/gsi/client"]`),
+    ];
+    try {
+        const first = renderGoogleSignIn(document.createElement(`div`), `client-id`);
+        await Promise.resolve();
+        expect(tags()).toHaveLength(1);
+        tags()[0]?.dispatchEvent(new Event(`error`));
+        await expect(first).rejects.toThrow(`Google sign-in failed to load`);
+        expect(tags()).toHaveLength(0);
+
+        const second = renderGoogleSignIn(document.createElement(`div`), `client-id`);
+        await Promise.resolve();
+        expect(tags()).toHaveLength(1);
+        const google = {
+            accounts: {
+                id: {
+                    initialize: (options: { callback: (response: { credential: string }) => void }) => options.callback({ credential: `id-token` }),
+                    renderButton: () => undefined,
+                },
+            },
+        };
+        Object.defineProperty(window, `google`, { value: google, configurable: true });
+        tags()[0]?.dispatchEvent(new Event(`load`));
+        expect(await second).toEqual({ idToken: `id-token` });
+    } finally {
+        for (const tag of tags()) {
+            tag.remove();
+        }
+        Reflect.deleteProperty(window, `google`);
+    }
 });

@@ -4,7 +4,7 @@ import type { Capability, ExtensionRemovalConnection, ExtensionRemovalPlan } fro
 import { type CapabilityCtx, capabilityCtx } from "../capabilities/capability.js";
 import { contributionKey, contributionRegistry, type ResolvedContribution } from "../capabilities/contributions.js";
 import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
-import { previousDir } from "../capabilities/git-checkout.js";
+import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { registry } from "../capabilities/registry.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
@@ -240,7 +240,11 @@ const tearDownExtension = async (services: Services, ctx: CapabilityCtx, extensi
     }
     const entry = await services.capabilities.get(extension.id);
     if (entry?.kind === "extension") {
-        await registry.extension.remove?.(ctx, entry.id, entry.config);
+        // Waits out an install, update or secret rotation still cloning into this checkout, which would otherwise swap a
+        // fresh copy in after the delete.
+        await withCheckoutLock(extensionsRoot(services.workspace.root), entry.id, async () =>
+            registry.extension.remove?.(ctx, entry.id, entry.config),
+        );
     }
     await services.capabilities.remove(extension.id);
 };

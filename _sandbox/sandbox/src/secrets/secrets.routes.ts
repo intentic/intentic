@@ -10,7 +10,8 @@ import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import type { CredentialGate, CredentialPolicy, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { authorizeMaintainer, bearerFrom, type Caller, ForbiddenError } from "../auth/auth.js";
+import type { Caller } from "../auth/auth.js";
+import { ensureMaintainer, ensureOwner } from "../auth/owner-gates.js";
 import { roleAtLeast, secretsContract } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -67,34 +68,6 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 throw new ORPCError("BAD_REQUEST", { message: error.message });
             }
             throw error;
-        }
-    };
-    const ensureMaintainer = async (headers: Headers): Promise<void> => {
-        if (services.auth === undefined) {
-            return;
-        }
-        try {
-            await authorizeMaintainer(services.auth, bearerFrom(headers.get("authorization") ?? undefined));
-        } catch (error) {
-            if (error instanceof ForbiddenError) {
-                throw new ORPCError("FORBIDDEN", { message: error.message });
-            }
-            throw new ORPCError("UNAUTHORIZED");
-        }
-    };
-    // Owner-only, in-route rather than by the route's maintainer floor: a maintainer is exactly who a gate may be
-    // written about, and letting that tier edit the policy would let it lift its own constraint.
-    const ensureOwner = async (headers: Headers): Promise<void> => {
-        if (services.auth === undefined) {
-            return;
-        }
-        try {
-            await services.auth.authorizeOwner(bearerFrom(headers.get("authorization") ?? undefined));
-        } catch (error) {
-            if (error instanceof ForbiddenError) {
-                throw new ORPCError("FORBIDDEN", { message: error.message });
-            }
-            throw new ORPCError("UNAUTHORIZED");
         }
     };
     // Whether this caller may see a value in the clear: reveal is the operating tier's (ensureMaintainer), and a gated
@@ -278,7 +251,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { entries: [...repoEntries, ...keptEntries, ...capabilityEntries, ...providerEntries].map(withUse) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
-            await ensureMaintainer(context.headers);
+            await ensureMaintainer(services, context.headers);
             // Capability credentials first (key = capability id): they exist whether or not DevOps is active.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
@@ -321,8 +294,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 });
             }
         }),
+        // Owner-only, in-route rather than by the route's maintainer floor: a maintainer is exactly who a gate may be
+        // written about, and letting that tier edit the policy would let it lift its own constraint.
         setGate: i.setGate.handler(async ({ input, context }) => {
-            await ensureOwner(context.headers);
+            await ensureOwner(services, context.headers);
             // Checked against the registry or capability manifest: a name nothing answers to never fires.
             if (input.kind === "capability") {
                 const capability = await services.capabilities.get(input.subject);
@@ -346,7 +321,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { ok: true } as const;
         }),
         removeGate: i.removeGate.handler(async ({ input, context }) => {
-            await ensureOwner(context.headers);
+            await ensureOwner(services, context.headers);
             await services.credentialGates.remove(input.subject);
             return { ok: true } as const;
         }),

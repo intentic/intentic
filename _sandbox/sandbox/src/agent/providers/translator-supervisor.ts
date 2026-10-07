@@ -2,6 +2,7 @@ import type { Readable } from "node:stream";
 import { createBackoff } from "@intentic/base/async";
 import type { Logger } from "pino";
 import { noteEngineServing, type ResolvedEngine } from "../../engines/engine-resolve.js";
+import { outputTail } from "../../runtimes/stdio/child-output.js";
 
 // Keeps one CLIProxyAPI process alive on whichever copy the engine store selects. The binary is resolved once per
 // spawn, so an Environment-card update or revert used to leave the old copy serving until the process died on its own
@@ -12,7 +13,7 @@ import { noteEngineServing, type ResolvedEngine } from "../../engines/engine-res
 const RESTART_LADDER = { floorMs: 10_000, capMs: 300_000, stableMs: 60_000 } as const;
 
 // The tail of the proxy's output kept per run, enough to carry a Go panic or a bind error into the exit log.
-const OUTPUT_TAIL_BYTES = 2_048;
+const OUTPUT_TAIL_CHARS = 2_048;
 
 // The copy to run, with the binary it resolves to (the store's, the image's on PATH, or the bare name).
 export type TranslatorCopy = ResolvedEngine & { readonly binary: string };
@@ -55,16 +56,13 @@ export const superviseTranslator = (deps: TranslatorSupervisorDeps): TranslatorS
         const copy = await deps.resolve();
         const startedAt = Date.now();
         // The proxy logs its exit reason on stdout, not stderr; both streams are captured, in order.
-        let outputTail = "";
-        const keepTail = (chunk: Buffer): void => {
-            outputTail = (outputTail + chunk.toString()).slice(-OUTPUT_TAIL_BYTES);
-        };
+        const output = outputTail(OUTPUT_TAIL_CHARS);
         const spawned = await deps.spawn(copy.binary);
         child = spawned;
         runningBinary = copy.binary;
         noteEngineServing("translator", copy);
-        spawned.stdout?.on("data", keepTail);
-        spawned.stderr?.on("data", keepTail);
+        output.follow(spawned.stdout);
+        output.follow(spawned.stderr);
         spawned.on("exit", (code) => {
             child = undefined;
             runningBinary = undefined;
@@ -77,7 +75,7 @@ export const superviseTranslator = (deps: TranslatorSupervisorDeps): TranslatorS
                 return;
             }
             const restartInMs = ladder.next(Date.now() - startedAt);
-            logger.warn({ code, output: outputTail.trim(), restartInMs }, "translator: cli-proxy-api exited, restarting");
+            logger.warn({ code, output: output.text().trim(), restartInMs }, "translator: cli-proxy-api exited, restarting");
             schedule(restart, restartInMs);
         });
     };

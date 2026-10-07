@@ -17,16 +17,13 @@ import type { CommandGuard } from "../../guard/command-guard.js";
 import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { opt } from "../../opt.js";
-import { isChatModel, parseModelSuggestions } from "./xai-models.js";
+import { isChatModel, OPENCODE_XAI_PROVIDER, parseModelSuggestions } from "./xai-models.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { openCodeBackendLabel, type OpenCodeService, type SessionJudge, type SessionJudges } from "./opencode.js";
 import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, visibleToolsOf } from "./opencode-mcp.js";
 import { type OpenCodeSubagents, openCodeSubagents } from "./opencode-subagents.js";
 
 // The OpenCode loop Grok and Gemini both run on: AgentRequest in, AgentEvent frames out, over one shared `opencode serve`.
-
-// The xAI provider id in OpenCode / models.dev, and the default backend for a turn that names none.
-const XAI = "xai";
 
 // One OpenCode turn: the runner creates or resumes its session and yields its events; injected so tests drive a fake stream.
 export interface OpenCodeTurn {
@@ -122,7 +119,7 @@ const refuseEarlyClose = (turn: OpenCodeTurn): void => {
     if (turn.signal.aborted) {
         return;
     }
-    throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} stopped sending events before the turn ended.`);
+    throw new Error(`${openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER)} stopped sending events before the turn ended.`);
 };
 
 // A turn's stream as the connect handshake left it: the iterator, the read in flight, and an event already read.
@@ -194,7 +191,7 @@ const sessionFor = async (c: OpencodeClient, turn: OpenCodeTurn): Promise<string
 // them.
 const promptBodyOf = (turn: OpenCodeTurn, mounts: OpenCodeMounts, modelId: string | undefined): NonNullable<SessionPromptAsyncData["body"]> => ({
     agent: turn.agent,
-    ...opt("model", modelId === undefined || modelId === "" ? undefined : { providerID: turn.provider ?? XAI, modelID: modelId }),
+    ...opt("model", modelId === undefined || modelId === "" ? undefined : { providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, modelID: modelId }),
     ...opt("system", turn.system),
     tools: visibleToolsOf(mounts),
     // Images precede the text part.
@@ -310,7 +307,9 @@ async function* consumeTurn({
         const event = await read();
         if (event === EXPIRED) {
             await abortSession(c, sessionId);
-            throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
+            throw new Error(
+                `${openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER)} turn timed out waiting for OpenCode: ${clock.expiry()}.`,
+            );
         }
         if (event === undefined) {
             refuseEarlyClose(turn);
@@ -380,7 +379,7 @@ async function* runOpenCodeTurn(
             await sendPrompt(suggestions[0]);
         };
         // The self-heal remains xAI-specific. Google must never silently substitute another model.
-        const selfHeals = (turn.provider ?? XAI) === XAI;
+        const selfHeals = (turn.provider ?? OPENCODE_XAI_PROVIDER) === OPENCODE_XAI_PROVIDER;
         unmount = await openCode.mount(turn.cwd, mcpServersOf(mounts));
         const healed = await sendFirst(sendPrompt, turn.model, selfHeals ? heal : undefined);
         clock.touch();
@@ -405,7 +404,7 @@ async function* runOpenCodeTurn(
 
 export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS): OpenCodeRunner =>
     async function* (turn) {
-        const lease = await openCode.acquire({ providerID: turn.provider ?? XAI, ...opt("modelID", turn.model) });
+        const lease = await openCode.acquire({ providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, ...opt("modelID", turn.model) });
         try {
             yield* runOpenCodeTurn(openCode, lease.client, turn, timeouts);
         } finally {
@@ -705,7 +704,7 @@ const unreachableServer = (error: unknown, provider: string): string | undefined
 };
 
 // A provider's loop on OpenCode's `provider` backend; capability limits are declared in the contract's agent-catalog.ts.
-export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = XAI) =>
+export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = OPENCODE_XAI_PROVIDER) =>
     async function* runOpenCodeAgent(request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
         // Pictures go to the model as pictures, base64 data URLs since the server is reached over HTTP; everything else,
         // including an unreadable picture, is named in the prompt for the read tool.
@@ -718,11 +717,9 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
         }));
         const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
         // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel, a hold parked
-        // on a card while the runner holds its watchdog (the capability record says `rulebook: "approval"`). The gate's
-        // signal also ends with the turn: OpenCode can move on from an ask nobody answered (a refused sibling ask stops
-        // its session), and the card it left must not stay open.
-        const ended = new AbortController();
-        const { gate, release } = vendorTurnGate({ ...request, signal: AbortSignal.any([request.signal, ended.signal]) });
+        // on a card while the runner holds its watchdog (the capability record says `rulebook: "approval"`). Releasing
+        // the gate as the turn ends settles a card OpenCode moved on from (a refused sibling ask stops its session).
+        const { gate, release } = vendorTurnGate(request);
         // The turn's remote MCP servers, the same list Codex takes, mounted per phase by the runner.
         const mounts = openCodeMounts(request.spec.conversationId, request.tools.remote ?? []);
         const view: TurnView = { cwd: request.spec.cwd, toolName: mcpToolNameOf(mounts) };
@@ -756,8 +753,7 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
                 };
             }
         } finally {
-            ended.abort();
-            // This turn's outside-content bit dies with the turn (guard/turn-taint.ts).
+            // This turn's outside-content bit and any card still open die with the turn (guard/turn-taint.ts).
             release();
         }
         yield { kind: "done" };

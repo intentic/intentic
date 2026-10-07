@@ -1,5 +1,5 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile, mkdir, open, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { z } from "zod";
 import { type Conversion, convertDocument, type Granularity, isJsonObject } from "./evolution/conversions.js";
@@ -138,6 +138,8 @@ export interface EntriesOptions<U, E> {
     readonly onUnreadable?: "setAside" | "refuse";
     // The keys that name an entry, `id` unless the entries use another (a workflow run's `runId`).
     readonly idKeys?: IdKeys;
+    // Unreadable as a whole when any entry is, rather than skipping it and writing it back as it stands.
+    readonly strict?: boolean;
 }
 
 // A document stored as a list, read one entry at a time.
@@ -215,6 +217,45 @@ const ledgerEntry = <D extends AnyDocument<"entries", false>>(spec: D, line: str
     }
 };
 
+// A ledger whose last line a crash cut short has no newline after it, and the next line appended would be glued onto the
+// fragment and lost with it. So the first append a process makes to a ledger ends that line first; checked once per
+// path, since every line appended after it ends itself. Shared by every handle on the path, so two first appends wait
+// on one check rather than each adding a newline.
+const tailsMended = new Map<string, Promise<void>>();
+
+const mendTail = async (path: string): Promise<void> => {
+    const handle = await open(path, "r").catch(undefinedIfMissing);
+    if (handle === undefined) {
+        return;
+    }
+    try {
+        const { size } = await handle.stat();
+        if (size === 0) {
+            return;
+        }
+        const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, size - 1);
+        if (buffer[0] !== 0x0a) {
+            await appendFile(path, "\n");
+        }
+    } finally {
+        await handle.close();
+    }
+};
+
+const tailMended = (path: string): Promise<void> => {
+    const key = resolve(path);
+    let mended = tailsMended.get(key);
+    if (mended === undefined) {
+        // A check that failed is asked again by the next append rather than failing every append after it.
+        mended = mendTail(path).catch((error: unknown) => {
+            tailsMended.delete(key);
+            throw error;
+        });
+        tailsMended.set(key, mended);
+    }
+    return mended;
+};
+
 // A document stored as JSON Lines, one entry per line, appended and never rewritten whole by this layer (usage.jsonl,
 // activity.jsonl): its document is `boot: false`, since the boot step reads whole JSON files, and every read converts
 // each line instead. Lines this build cannot read stay in the file for the build that wrote them.
@@ -229,6 +270,7 @@ export const openLedger = <D extends AnyDocument<"entries", false>>(spec: D, pat
         },
         append: async (entry) => {
             await mkdir(dirname(path), { recursive: true });
+            await tailMended(path);
             await appendFile(path, `${JSON.stringify(entry)}\n`);
         },
     };

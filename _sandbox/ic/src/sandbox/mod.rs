@@ -3,6 +3,8 @@ pub mod connect;
 pub mod desired;
 pub mod doctor;
 pub mod fix;
+#[cfg(test)]
+mod host_files;
 pub mod identity;
 pub mod inside;
 pub mod labels;

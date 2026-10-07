@@ -392,7 +392,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 fresh.map(async (project) =>
                     (
                         await unresolvedDependencies(join(deps.workspace.root, project.dir)).catch((cause: unknown) => {
-                            console.warn("Could not inspect project dependencies", cause);
+                            deps.logger.warn({ err: cause, dir: project.dir }, "dependency coordinator: could not inspect a project's dependencies");
                             return [];
                         })
                     ).reduce((total, entry) => total + entry.names.length, 0),

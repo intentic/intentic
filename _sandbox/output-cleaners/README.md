@@ -24,7 +24,8 @@ flowchart LR
 - `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the plugin's stats command
   both call `summarizeStats`, so the two reports cannot disagree.
 - Secret values come from the sandbox's own stores (`secretValues`); outside a sandbox that list is empty and only the
-  credential-shaped patterns redact.
+  credential-shaped patterns redact. `surfaceForms` (raw, JSON-escaped, percent-encoded) is the daemon's too: its
+  masking of tool results imports it from here, so the two lanes match the same forms of a value.
 
 ## Key files
 

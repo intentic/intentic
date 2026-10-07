@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { type CredentialGateKind, type HostGuardSetting, type SecretHostGuard, secretsContract, tightensHostGuard } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
-import { bearerFrom } from "../auth/auth.js";
+import { isOwnerBearer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 
@@ -25,16 +25,6 @@ const sameSubject =
 
 export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
-    // Whether this caller is the owner, refusing nobody: only a loosening turns on the answer.
-    const isOwner = async (headers: Headers): Promise<boolean> => {
-        if (services.auth === undefined) {
-            return true;
-        }
-        return services.auth.authorizeOwner(bearerFrom(headers.get("authorization") ?? undefined)).then(
-            () => true,
-            () => false,
-        );
-    };
     // What an edit is about, by the gate's own rule: a name with a `/` is a capability's vault entry and answers to the
     // capability; otherwise a stored secret by that name, else a connected capability by that id.
     const subjectOf = async (subject: string, kind: CredentialGateKind | undefined): Promise<HostSubject> => {
@@ -104,7 +94,7 @@ export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
             const current = (await services.hostGuards()).find(sameSubject(target));
             const from: HostGuardSetting = { guard: current?.guard ?? false, hosts: current?.hosts ?? [] };
             const approvedBy =
-                tightensHostGuard(current, next) || (await isOwner(context.headers))
+                tightensHostGuard(current, next) || (await isOwnerBearer(services, context.headers))
                     ? undefined
                     : await approveLoosening(context, { target, from, to: next, conversationId: input.conversationId }, signal);
             await store(target, next);

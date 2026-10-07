@@ -1,8 +1,10 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { CONTROL_SCOPES, controlScoped, fileControlTokens } from "./control-tokens.js";
+import { ManifestUnreadableError } from "../../store/json-file.js";
+import { CONTROL_SCOPES, ControlTokensUnreadableError, controlScoped, fileControlTokens } from "./control-tokens.js";
 
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "control-")), "control-tokens.json");
 
@@ -58,6 +60,23 @@ test("list echoes every field but the hash; revoke takes effect immediately", as
     expect(await store.revoke(id)).toBe(true);
     expect(await store.resolve(token)).toBeUndefined();
     expect(await store.revoke(id)).toBe(false);
+});
+
+// A token file this build cannot read says nothing about any token in it. Resolving through its empty fallback answered
+// every holder 401, and the next mint set the file aside, revoking every other token at once.
+test("a token file this build cannot read is unknowable, not empty: resolve throws and a mint or revoke is refused", async () => {
+    const path = await storePath();
+    const store = fileControlTokens(path);
+    const { id, token } = await store.mint("zed", "editor");
+    await writeFile(path, "{ this is not json", "utf8");
+
+    await expect(store.resolve(token)).rejects.toThrow(new ControlTokensUnreadableError("the file is not valid JSON"));
+    await expect(store.mint("ci", "drive")).rejects.toBeInstanceOf(ManifestUnreadableError);
+    await expect(store.revoke(id)).rejects.toBeInstanceOf(ManifestUnreadableError);
+    expect(await readFile(path, "utf8")).toBe("{ this is not json");
+    expect(existsSync(`${path}.corrupt`)).toBe(false);
+    // The empty string never reaches the file, readable or not.
+    expect(await store.resolve("")).toBeUndefined();
 });
 
 test("editor reaches exactly the agent-conversation surface: one conversation, not the fleet", () => {

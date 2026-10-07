@@ -1,6 +1,8 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ManifestUnreadableError } from "../../store/json-file.js";
 import { fileMembersStore } from "../auth.js";
 
 // The members file on disk: what a grant writes, and what a row the daemon would refuse reads as. The file is
@@ -57,4 +59,16 @@ describe("fileMembersStore: writers", () => {
         );
         await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", role: "viewer" }]);
     });
+});
+
+// Setting an unreadable roster aside and writing a fresh one would keep the one person just granted and drop everybody
+// else for good. Refused instead: the file stays as it was for a person to fix, and nobody is granted or removed.
+test("a roster this build cannot read refuses a grant and a removal, and stays as it was", async () => {
+    const path = await storePath();
+    await writeFile(path, `{"members": [{"email": "ada@example.com", "role": "viewer"}`, "utf8");
+    const store = fileMembersStore(path);
+    await expect(store.add("grace@example.com", { role: "viewer" })).rejects.toBeInstanceOf(ManifestUnreadableError);
+    await expect(store.remove("ada@example.com")).rejects.toBeInstanceOf(ManifestUnreadableError);
+    expect(await readFile(path, "utf8")).toBe(`{"members": [{"email": "ada@example.com", "role": "viewer"}`);
+    expect(existsSync(`${path}.corrupt`)).toBe(false);
 });

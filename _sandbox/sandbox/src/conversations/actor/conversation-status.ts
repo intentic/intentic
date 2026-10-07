@@ -1,10 +1,10 @@
 import type { AgentStatus, ParkKind, WaitingPermission } from "@intentic/sandbox-contract";
 import type { LandStanding } from "../land/standing.js";
 import type { EndingStatus } from "../registry/agents-store.js";
-import { awaitingWake, type ConversationState } from "./conversation-state.js";
+import { awaitingWake, type ConversationState, type StopEnding } from "./conversation-state.js";
 
 // The live turn's word: a chosen ending outranks a park.
-const liveStatus = (stopping: "stopped" | "dismissed" | undefined, parked: readonly unknown[]): AgentStatus => {
+const liveStatus = (stopping: StopEnding | undefined, parked: readonly unknown[]): AgentStatus => {
     if (stopping !== undefined) {
         return stopping === "dismissed" ? "dismissing" : "stopping";
     }

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { gitAuthHeader } from "@intentic/base/git";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
@@ -19,7 +20,7 @@ import { updateBrief } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest } from "../capabilities/extension-dirs.js";
-import { gitAuthHeader, previousDir } from "../capabilities/git-checkout.js";
+import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { browseMarketplace } from "../capabilities/marketplace.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
@@ -231,7 +232,8 @@ export const previewExtensionUpdate = async (services: Services, id: string, ref
     }
 };
 
-// Apply: the transaction, one at a time per id; a second click while one runs waits rather than interleaving clones.
+// Apply: the transaction, one at a time per id; a second click while one runs is refused rather than queued behind it,
+// and the clone itself is serialized per checkout with every other path that swaps it (git-checkout.ts).
 
 const applying = new Set<string>();
 
@@ -314,29 +316,34 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         const root = services.workspace.root;
         const config = capability.config;
         const parent = extensionsRoot(root);
-        const previous = previousDir(parent, id);
-        const previousManifest = await readExtensionManifest(extensionRootOf(previous, config.path));
-        if (previousManifest === undefined) {
-            throw new Error("there is no previous version to revert to");
-        }
-        const previousRef = await services.git.fullHead(previous);
-        // Quiesce the running version's declared processes before its directory moves out from under them.
-        const live = extensionDir(root, id);
-        const current = await readExtensionManifest(extensionRootOf(live, config.path));
-        for (const process of current?.contributes?.processes ?? []) {
-            services.serviceProcesses.stop(extensionProcessKey(id, process.name));
-        }
-        const parking = join(parent, `.${id}.reverting`);
-        await services.files.remove(parking);
-        await services.files.move(live, parking);
-        try {
-            await services.files.move(previous, live);
-        } catch (error) {
-            // Put the displaced version back before failing: a revert must never end with no live checkout.
-            await services.files.move(parking, live);
-            throw error;
-        }
-        await services.files.move(parking, previous);
+        // Under the checkout's lock, so a re-clone this file's guard does not see (an add, a secret rotation) cannot swap
+        // the same dirs while these move.
+        const { previousManifest, previousRef } = await withCheckoutLock(parent, id, async () => {
+            const previous = previousDir(parent, id);
+            const kept = await readExtensionManifest(extensionRootOf(previous, config.path));
+            if (kept === undefined) {
+                throw new Error("there is no previous version to revert to");
+            }
+            const keptRef = await services.git.fullHead(previous);
+            // Quiesce the running version's declared processes before its directory moves out from under them.
+            const live = extensionDir(root, id);
+            const current = await readExtensionManifest(extensionRootOf(live, config.path));
+            for (const process of current?.contributes?.processes ?? []) {
+                services.serviceProcesses.stop(extensionProcessKey(id, process.name));
+            }
+            const parking = join(parent, `.${id}.reverting`);
+            await services.files.remove(parking);
+            await services.files.move(live, parking);
+            try {
+                await services.files.move(previous, live);
+            } catch (error) {
+                // Put the displaced version back before failing: a revert must never end with no live checkout.
+                await services.files.move(parking, live);
+                throw error;
+            }
+            await services.files.move(parking, previous);
+            return { previousManifest: kept, previousRef: keptRef };
+        });
         await services.capabilities.upsert({ id, kind: "extension", config: { ...config, ref: previousRef } });
         const now = (await installedExtensions(services)).find((extension) => extension.id === id);
         if (now !== undefined && now.enabled) {
@@ -519,7 +526,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
         const unreached: string[] = [];
         for (const [registryUrl, group] of byRegistry) {
             try {
-                const market = await browseMarketplace(services, registryUrl, undefined, ".update-check.tmp");
+                const market = await browseMarketplace(services, registryUrl);
                 for (const target of group) {
                     rows.set(
                         target.identity,

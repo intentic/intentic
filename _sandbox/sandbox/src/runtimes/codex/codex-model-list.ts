@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import type { Model } from "@intentic/sandbox-contract";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
+import { jsonLines } from "../stdio/child-output.js";
 import { codexBinary } from "./codex-path.js";
 
 // The Codex runtime's own catalog, read from the CLI that will run the turn (app-server `model/list`): display names,
@@ -69,7 +69,6 @@ const requestModelList = async (binary: string, env: Record<string, string>): Pr
     // stderr is discarded rather than piped: nothing here reads it, and a full pipe would wedge the process this is
     // waiting on.
     const child = spawn(binary, ["app-server", "--stdio"], { env, stdio: ["pipe", "pipe", "ignore"] });
-    const lines = createInterface({ input: child.stdout });
     try {
         return await new Promise<unknown>((resolve, reject) => {
             const done = (finish: () => void): void => {
@@ -79,17 +78,17 @@ const requestModelList = async (binary: string, env: Record<string, string>): Pr
             const timer = setTimeout(() => done(() => reject(new Error("Codex app-server did not answer model/list"))), LIST_TIMEOUT_MS);
             child.once("error", (error) => done(() => reject(error)));
             child.once("exit", () => done(() => reject(new Error("Codex app-server exited before answering model/list"))));
-            lines.on("line", (line) => {
-                if (line.trim() === "") {
-                    return;
+            void (async () => {
+                for await (const line of jsonLines(child.stdout)) {
+                    const message = asRecord(JSON.parse(line) as unknown);
+                    if (message?.["id"] === 2) {
+                        done(() =>
+                            message["error"] === undefined ? resolve(message["result"]) : reject(new Error("Codex app-server refused model/list")),
+                        );
+                        return;
+                    }
                 }
-                const message = asRecord(JSON.parse(line) as unknown);
-                if (message?.["id"] === 2) {
-                    done(() =>
-                        message["error"] === undefined ? resolve(message["result"]) : reject(new Error("Codex app-server refused model/list")),
-                    );
-                }
-            });
+            })().catch((error: unknown) => done(() => reject(error)));
             // model/list needs no thread and no cwd, so all three messages go out together: app-server answers them in
             // order.
             const write = (message: unknown): void => {
@@ -100,7 +99,6 @@ const requestModelList = async (binary: string, env: Record<string, string>): Pr
             write({ method: "model/list", id: 2, params: {} });
         });
     } finally {
-        lines.close();
         child.kill();
     }
 };

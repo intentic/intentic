@@ -1,8 +1,19 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import type { RepoSync } from "../../../conversations/land/sync.js";
+import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { TurnCloser } from "./turn-close.js";
-import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin } from "./turn-placement.js";
+import {
+    conversationIdentity,
+    mainTreePlacement,
+    type Placement,
+    placedTurn,
+    refusedBegin,
+    runnerPlacement,
+    type WorktreeFrame,
+    worktreeFrame,
+} from "./turn-placement.js";
 
 // The two events a placed turn sends its conversation, and every step of the placement, in one running order.
 const recorded = () => {
@@ -177,6 +188,28 @@ describe("a placed turn", () => {
             ["settled", "finished"],
         ]);
     });
+
+    // A close that throws must not leave the conversation running: settled, it takes the next turn.
+    test("whose placement fails to close still settles and announces, and the close's error propagates", async () => {
+        const { steps, conversations } = recorded();
+        const broken: Placement = {
+            ...placement(steps, stream([{ kind: "done" }])),
+            close: async () => {
+                steps.push(["close"]);
+                throw new Error("books unreadable");
+            },
+        };
+        await expect(drain(placedTurn(conversations, "c", broken, closer(steps)))).rejects.toThrow("books unreadable");
+        expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([
+            ["open"],
+            ["hush"],
+            ["arm"],
+            ["land", false, false],
+            ["close"],
+            ["settle", "c"],
+            ["settled", "finished"],
+        ]);
+    });
 });
 
 describe("the main tree", () => {
@@ -265,5 +298,91 @@ describe("a turn its conversation would not take", () => {
             { kind: "error", message: "This conversation is archived: only a person's message reopens it." },
             { kind: "done" },
         ]);
+    });
+});
+
+const worktree = (repos: ConversationWorktree["repos"]): ConversationWorktree => ({
+    cwd: "/w",
+    branch: "agent/c",
+    repos,
+    fenced: false,
+    elsewhere: [],
+});
+const moved = (repo: string, commits: number): RepoSync => ({ repo, onto: "f".repeat(40), commits, moved: [], overlap: [] });
+const blocked = (repo: string): RepoSync => ({ repo, onto: "e".repeat(40), commits: 0, moved: [], overlap: [], blocked: true });
+
+describe("where the branch stands", () => {
+    const frames: [string, ConversationWorktree, ReadonlyMap<string, string>, boolean, readonly RepoSync[], WorktreeFrame][] = [
+        [
+            "names the root repo's base, cut to seven",
+            worktree([
+                { repo: "web", base: "b".repeat(40) },
+                { repo: "root", base: "a".repeat(40) },
+            ]),
+            new Map(),
+            true,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "aaaaaaa" },
+        ],
+        [
+            "names the first repo's when there is no root",
+            worktree([{ repo: "web", base: "b".repeat(40) }]),
+            new Map(),
+            true,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "bbbbbbb" },
+        ],
+        ["names nothing when there are no repos", worktree([]), new Map(), true, [], { kind: "worktree", branch: "agent/c", base: "" }],
+        [
+            "names where a rebase moved the root",
+            worktree([{ repo: "root", base: "a".repeat(40) }]),
+            new Map([["root", "c".repeat(40)]]),
+            true,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "ccccccc" },
+        ],
+        [
+            "says when the container cannot enforce the tree",
+            worktree([{ repo: "root", base: "a".repeat(40) }]),
+            new Map(),
+            false,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "aaaaaaa", unenforced: true },
+        ],
+        [
+            "counts what a rebase moved and names what it could not",
+            worktree([{ repo: "root", base: "a".repeat(40) }]),
+            new Map(),
+            true,
+            [moved("root", 2), moved("web", 3), blocked("docs")],
+            { kind: "worktree", branch: "agent/c", base: "aaaaaaa", sync: { commits: 5, blocked: ["docs"] } },
+        ],
+        [
+            "reports a rebase that found nothing to move",
+            worktree([{ repo: "root", base: "a".repeat(40) }]),
+            new Map(),
+            true,
+            [moved("root", 0)],
+            { kind: "worktree", branch: "agent/c", base: "aaaaaaa", sync: { commits: 0, blocked: [] } },
+        ],
+    ];
+    test.each(frames)("%s", (_case, composed, onto, enforced, synced, frame) => {
+        expect(worktreeFrame(composed, onto, enforced, synced)).toStrictEqual(frame);
+    });
+});
+
+describe("a runner's mirror", () => {
+    // Read before the anchor, so nothing past the announcement touches a checkout.
+    test("is announced as a worktree frame where the mirror stands, naming the runner", async () => {
+        const mirror = worktree([
+            { repo: "web", base: "b".repeat(40) },
+            { repo: "root", base: "a".repeat(40) },
+        ]);
+        const opened = runnerPlacement({} as never, { conversationId: "c", snapshot: { conversationId: "c", index: 0 }, runner: "box" }, {
+            compose: async () => mirror,
+            dispatch: stream([]),
+        }).open();
+        expect((await opened.next()).value).toStrictEqual({ kind: "worktree", branch: "agent/c", base: "aaaaaaa", remote: "box" });
+        await opened.return(stream([])());
     });
 });

@@ -14,12 +14,18 @@ import { isLocalHost } from "./tls/local-tls.js";
 
 // Every platform call is one exchange over node:https: undici can skip a dev platform's self-signed cert only process-wide.
 
+// How long a platform socket may stay quiet before the exchange is cut, unless a caller asks for less: every call gets
+// one, since a platform that accepts the connection and never answers would otherwise hold its caller (a report loop
+// that schedules its next attempt only after this one) for good.
+export const PLATFORM_IDLE_MS = 60_000;
+
 export interface PlatformExchange {
     readonly method: "GET" | "POST";
     readonly path: string;
     readonly headers: Readonly<Record<string, string>>;
     readonly payload?: string;
-    // Cuts a socket that has gone quiet this long, rejecting with `idleError`; `signal` bounds the whole exchange.
+    // Cuts a socket that has gone quiet this long (PLATFORM_IDLE_MS unless set), rejecting with `idleError`; `signal`
+    // bounds the whole exchange.
     readonly idleMs?: number;
     readonly idleError?: string;
     readonly signal?: AbortSignal;
@@ -54,10 +60,8 @@ export const exchangeWithPlatform = (config: Config, call: PlatformExchange): Pr
             },
         );
         req.on("error", reject);
-        if (call.idleMs !== undefined) {
-            const idleError = call.idleError ?? "the platform did not respond in time";
-            req.setTimeout(call.idleMs, () => req.destroy(new Error(idleError)));
-        }
+        const idleError = call.idleError ?? "the platform did not respond in time";
+        req.setTimeout(call.idleMs ?? PLATFORM_IDLE_MS, () => req.destroy(new Error(idleError)));
         req.end(call.payload);
     });
 
@@ -161,7 +165,7 @@ export interface SandboxPresentation {
 // Best-effort, never a throw: an export must not fail because the platform is unreachable, headless or older.
 export const fetchPresentation = async (config: Config): Promise<SandboxPresentation | undefined> => {
     try {
-        const { data } = await callIngress(config, { route: "presentation", idleMs: 60_000 });
+        const { data } = await callIngress(config, { route: "presentation" });
         if (data === undefined) {
             return undefined;
         }

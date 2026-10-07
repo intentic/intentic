@@ -64,7 +64,9 @@ export interface GenerationCandidate {
 export interface GenerationPolicy {
     readonly generation: string;
     readonly selfPid: number;
-    // Where an orphan is reparented to: init, and netd when it is a subreaper.
+    // Where an orphan is reparented to: the container's PID 1, which reaps it (docker's tini locally, netd on a hosted
+    // machine, Fly's init on a VM). The daemon's parent is listed too: it is that same PID 1 on a hosted machine, and
+    // elsewhere netd, which sets no subreaper, so nothing is reparented to it there.
     readonly orphanParents: ReadonlySet<number>;
     // Every live tmux pane's root pid, and the tmux server's.
     readonly panePids: ReadonlySet<number>;
@@ -153,6 +155,7 @@ export const endProcess = (pid: number, leadsGroup: boolean, signal: NodeJS.Sign
     try {
         process.kill(target, signal);
     } catch {
+        // allow(silent-catch): gone already, or not ours to signal; either way nothing was ended, as false says.
         return false;
     }
     if (signal !== "SIGKILL") {
@@ -172,6 +175,7 @@ const argvOf = async (pid: number): Promise<string[] | undefined> => {
     return raw === undefined ? undefined : raw.split("\0").filter((part) => part !== "");
 };
 
+// allow(silent-catch): a process gone since, or one whose namespace this one may not read, is a namespace unknown.
 const mountNamespace = (pid: number | "self"): Promise<string | undefined> => readlink(`/proc/${pid}/ns/mnt`).catch(() => undefined);
 
 export interface GenerationSweepDeps {

@@ -87,6 +87,12 @@ flowchart LR
   plugins counted. Only image-baked plugins are exempt (2026-10-04: a git-installed extension's or plugin's pinned
   commit says what was cloned, but its checkout sits under `/work/.intentic`, which every turn can write, and an
   extension's install review covers its declared powers, not its hooks module).
+- An approval queue item runs only on a yes the owner gave to exactly what it holds (`approvals/approval-decisions.ts`):
+  approving through the route records `{digest, approvedAt, approver}` in `/history/approval-decisions.json`, the
+  digest covering every field the executor acts on and the bytes of each media file. The queue itself sits in
+  `.intentic/config/approvals/`, which agents write, so an item an agent marked approved, or changed after the owner's
+  yes, is failed with the reason instead of run, and a yes is spent by the run it allowed. Only a signed-in maintainer
+  or the owner may approve; the panel and control tokens may propose.
 - A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.
@@ -299,6 +305,9 @@ Main groups under `src/`:
 Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),
 `seed-skills/` (the skills baked into `/root/.claude/skills`), `starter-site/`, and `claude-policy/`, Claude Code's
 managed settings and the policy mod they run first (`/etc/claude-code`, `/opt/intentic-claude-policy`).
+`golden/host-files.json` is not copied: it names every file the daemon and `ic` both touch across the container
+boundary, with an example of each body the daemon defines, written by `src/system/host-files.test.ts` and read by
+ic's own tests, so a rename on either side fails a test instead of a rollback.
 
 A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
 

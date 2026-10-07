@@ -1,5 +1,6 @@
 import { keyedLock } from "@intentic/base/async";
 import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema, type WebchatPending } from "@intentic/sandbox-contract";
+import { WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
@@ -206,7 +207,10 @@ export const createWebchatRoutes = (services: Services, installs?: InstallsStore
                 // approved run lands in this conversation, but by then this SSE is closed, so the reply reaches the
                 // fleet, not the widget.
                 if (automation.requireApproval === true) {
-                    await sse.writeSSE({ event: "pending", data: "Thanks, your request was received and a human will review it shortly." });
+                    await sse.writeSSE({
+                        event: WEBCHAT_EVENT.pending,
+                        data: "Thanks, your request was received and a human will review it shortly.",
+                    });
                 }
                 await enqueue(automation.id, async () => {
                     await door.fireOnThread(automation, thread, ttlMs, {

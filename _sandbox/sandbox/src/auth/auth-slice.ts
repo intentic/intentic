@@ -70,13 +70,34 @@ export interface AuthSlice {
         | undefined;
 }
 
+// The require-passkey switch the authorizer reads, saying once per boot, on the first read that finds the passkeys file
+// unreadable, why every sign-in is refused. The read still throws every time: the switch is unknown, and nothing inside
+// the sandbox can fix the file, since fixing it takes a sign-in.
+const noticedRequired = (passkeys: PasskeyStore, logger: Pick<Logger, "error">): (() => Promise<boolean>) => {
+    let said = false;
+    return async () => {
+        try {
+            return await passkeys.required();
+        } catch (error) {
+            if (!said) {
+                said = true;
+                logger.error(
+                    { err: error },
+                    "auth: the passkeys file cannot be read, so every sign-in is refused until it is fixed or moved aside on the history volume",
+                );
+            }
+            throw error;
+        }
+    };
+};
+
 // The sandbox as passkey relying party: its passkey store, the ceremonies the routes drive, and the view
 // of the store the authorizer's require-passkey policy reads.
 const passkeysOf = (
     config: Config,
-    workspaceRoot: string,
+    logger: Pick<Logger, "error">,
 ): { readonly passkeys: PasskeyStore; readonly passkeyCeremonies: PasskeyCeremonies; readonly passkeyPolicy: PasskeyPolicy } => {
-    const passkeys = filePasskeys(join(workspaceRoot, passkeysDocument.path));
+    const passkeys = filePasskeys(join(config.historyRoot, passkeysDocument.path));
     const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
     return {
         passkeys,
@@ -87,7 +108,7 @@ const passkeysOf = (
             sandboxName: config.sandbox.name,
         }),
         passkeyPolicy: {
-            required: passkeys.required,
+            required: noticedRequired(passkeys, logger),
             enrolled: async (email) => (await passkeys.list()).some((credential) => sameEmail(credential.email, email)),
             exists: async (credentialId) => (await passkeys.find(credentialId)) !== undefined,
         },
@@ -122,7 +143,7 @@ const noticedOwnerStore = (store: OwnerStore, logger: Pick<Logger, "error">, con
 // Builds the auth slice from config; loopback (no Google client id) leaves `auth` undefined, so every route is open.
 export const createAuthSlice = (config: Config, workspaceRoot: string, logger: Pick<Logger, "error">): AuthSlice => {
     const members = fileMembersStore(join(config.historyRoot, membersDocument.path));
-    const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, workspaceRoot);
+    const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, logger);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
     const ownerStore = noticedOwnerStore(fileOwnerStore(join(config.historyRoot, ownerDocument.path)), logger, config.connectToken);
     // Read once now, so a file that cannot be read is said at boot rather than at the owner's first refused sign-in.

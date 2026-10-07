@@ -53,8 +53,9 @@ flowchart LR
   feed it today. (2026-10-04: a widget kind of its own was rejected: a widget's lines are a status entry's text, and
   nothing yet draws a placement beside a composer.)
 - `StatePlanSchema` and `StateStatusSchema` are what `ic` reads by field name: the update pre-flight's line (embedded
-  verbatim in the staged-update marker) and `/health`'s `state`. `golden/` holds their examples, which the contract's
-  test keeps current and ic's Rust tests parse.
+  verbatim in the staged-update marker) and `/health`'s `state`. So are `UpdateOutcomeSchema` and
+  `PreparingUpdateSchema`, the files `ic` writes beside an update for the daemon to read. `golden/` holds an example of
+  each, which the contract's tests keep current and ic's Rust tests parse or produce field for field.
 - The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/netd/crates`): `tunnel` (the
   `/tunnel/v2` door, its headers and lanes, the stream multiplexer, close codes, liveness, ALPN and the transports an
   edge declares; what the daemon announces as its transfers is `protocol/tunnel-bulk.ts`, held to the edge's reading by

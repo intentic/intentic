@@ -1,4 +1,4 @@
-import { defaultGit, forkedExec, type GitRunner } from "@intentic/base/git";
+import { defaultGit, forkedExec, GIT_STALL_GUARD, type GitRunner } from "@intentic/base/git";
 import { z } from "zod";
 import type { ActionResult } from "../changes/changes-commits.js";
 import { upstreamOf } from "../ops/branches.js";
@@ -32,17 +32,16 @@ export type FollowOutcome =
     // HEAD that moved between reading and moving.
     | { readonly status: "refused"; readonly commits: number; readonly reason: string };
 
-// Long enough for a slow clone's fetch, short enough that a dead connection frees the next round.
+// Long enough for a slow clone's fetch, short enough that a dead connection frees the next round. A stalled https
+// transfer is aborted by git itself sooner (GIT_STALL_GUARD); anything else stalled is killed at this timeout.
 const FETCH_TIMEOUT_MS = 90_000;
-// A stalled https transfer is aborted by git itself; anything else stalled is killed at the timeout.
-const STALL_GUARD = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30"] as const;
 
 // Updates the remote-tracking refs of the one remote the branch follows, bounded in time and never prompting: nobody is
 // at a background fetch to answer a password question, so it fails instead. ssh has no terminal here to ask on, and is
 // left to the owner's own configuration (`core.sshCommand`, ~/.ssh/config), which an override would shadow.
 export const fetchTracked = async (dir: string, remote: string): Promise<ActionResult> => {
     try {
-        await forkedExec("git", ["-C", dir, ...STALL_GUARD, "fetch", "--quiet", "--no-write-fetch-head", remote], {
+        await forkedExec("git", ["-C", dir, ...GIT_STALL_GUARD, "fetch", "--quiet", "--no-write-fetch-head", remote], {
             timeout: FETCH_TIMEOUT_MS,
             env: { GIT_TERMINAL_PROMPT: "0" },
         });

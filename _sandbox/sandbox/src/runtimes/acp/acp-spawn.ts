@@ -4,6 +4,7 @@ import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "@intentic/base/web-stream";
+import { outputTail } from "../stdio/child-output.js";
 
 /* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the config documents this). */
 
@@ -50,13 +51,11 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
         env: { ...process.env, ...env, ...workloadStamp(DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
     });
-    let stderr = "";
-    child.stderr.on("data", (data: Buffer) => {
-        stderr = (stderr + data.toString()).slice(-STDERR_TAIL);
-    });
+    const stderr = outputTail(STDERR_TAIL);
+    stderr.follow(child.stderr);
     const stream = ndJsonStream(
         Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
         webStream<Uint8Array>(Readable.toWeb(child.stdout)),
     );
-    return { child, stream, stderrTail: () => stderr };
+    return { child, stream, stderrTail: stderr.text };
 };

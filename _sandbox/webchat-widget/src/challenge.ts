@@ -7,25 +7,44 @@ interface Turnstile {
 
 const TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
+// One load per page while it works. A failed one is not kept: a blocked or flaky first fetch would otherwise cost the
+// visitor the chat until a reload, and opening the panel again is what retries it.
 let turnstileLoad: Promise<Turnstile> | undefined;
 
-const loadTurnstile = async (): Promise<Turnstile> => {
-    turnstileLoad ??= new Promise<Turnstile>((resolve, reject) => {
+// Adds the script tag and resolves with Cloudflare's global once it has run.
+const injectTurnstile = (): Promise<Turnstile> =>
+    new Promise<Turnstile>((resolve, reject) => {
         const script = document.createElement("script");
+        const fail = (): void => {
+            // The retry adds a fresh tag; a dead one left behind would only pile up.
+            script.remove();
+            reject(new Error("The bot check failed to load"));
+        };
         script.src = TURNSTILE_SRC;
         script.async = true;
         script.addEventListener("load", () => {
             const turnstile = (window as unknown as { turnstile?: Turnstile }).turnstile;
             if (turnstile === undefined) {
-                reject(new Error("The bot check failed to load"));
+                fail();
                 return;
             }
             resolve(turnstile);
         });
-        script.addEventListener("error", () => reject(new Error("The bot check failed to load")));
+        script.addEventListener("error", fail);
         document.head.append(script);
     });
-    return turnstileLoad;
+
+const loadTurnstile = async (): Promise<Turnstile> => {
+    turnstileLoad ??= injectTurnstile();
+    const load = turnstileLoad;
+    try {
+        return await load;
+    } catch (error) {
+        if (turnstileLoad === load) {
+            turnstileLoad = undefined;
+        }
+        throw error;
+    }
 };
 
 export const solveTurnstile = async (container: HTMLElement, siteKey: string): Promise<string> => {

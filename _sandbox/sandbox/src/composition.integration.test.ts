@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
-import { createServices, type Services } from "./composition.js";
+import { createServices, type Services, servicesTeardown } from "./composition.js";
 import { statePath } from "./state-paths.js";
 import { testConfig } from "./testing.js";
 
@@ -15,13 +15,11 @@ mkdirSync(workspaceRoot);
 mkdirSync(historyRoot);
 const services: Services = createServices({ ...testConfig, workspaceRoot, historyRoot }, pino({ level: "silent" }));
 
-afterAll(() => {
-    // What main() stops at shutdown of what composing starts on its own clock.
-    services.resources.stop();
-    services.perf.stop();
-    services.ciHooks.stop();
-    services.reach.stop();
-    services.history.stop();
+afterAll(async () => {
+    // The same stops main() registers at shutdown for what composing starts on its own clock.
+    for (const stop of servicesTeardown(services)) {
+        await stop();
+    }
     rmSync(base, { recursive: true, force: true });
 });
 

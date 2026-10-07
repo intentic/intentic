@@ -4,6 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { createAuthConnections } from "../auth/connections.js";
+import { createMediaTickets } from "../auth/tokens/media-tickets.js";
 import { createWsTickets } from "../auth/tokens/ws-tickets.js";
 import { memoryAreasStore, memoryMembersStore } from "../harness/route-stores.testing.js";
 import { createAreasRoutes } from "./areas.routes.js";
@@ -31,6 +32,7 @@ const routes = () => {
         ]),
         auth: unstubbed<NonNullable<Services["auth"]>>("auth", { connections }),
         wsTickets: createWsTickets(),
+        mediaTickets: createMediaTickets(),
     };
     return { areas: createAreasRoutes(services), revoked, services };
 };
@@ -42,6 +44,15 @@ test("moving an area's folders closes its holders' streams, and nobody else's", 
     expect(revoked).toEqual(["fay@example.com"]);
     // A ticket minted under the old folders opens nothing either.
     expect(services.wsTickets.redeem(ticket)).toBeUndefined();
+});
+
+test("moving an area's folders ends its holders' media tickets, and nobody else's", async () => {
+    const { areas, services } = routes();
+    const holder = services.mediaTickets.mint("support/clip.mp4", undefined, "fay@example.com").ticket;
+    const other = services.mediaTickets.mint("support/clip.mp4", undefined, "vic@example.com").ticket;
+    await call(areas.save, { id: "support", label: "Support", folders: ["faq"] }, { context: asOwner });
+    expect(services.mediaTickets.bound(holder)).toBeUndefined();
+    expect(services.mediaTickets.bound(other)).toBe("support/clip.mp4");
 });
 
 test("a relabel moves no folder and closes nothing", async () => {

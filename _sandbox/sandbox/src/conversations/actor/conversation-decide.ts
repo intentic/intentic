@@ -90,14 +90,14 @@ export type BeginOutcome = "begun" | BeginRefusal;
 
 // How the settling turn ended, read before the settle resets what says so. A turn that ran to its own end speaks for
 // the whole checklist; one cut short learned nothing about what it did not see; `none` is a settle with no turn.
-export type TurnEnding = "clean" | "cut" | "none";
+export type TurnCompletion = "clean" | "cut" | "none";
 
 // What the settle folds into the entry, as the turn left it.
 export interface SettleFlush {
     // Whether a turn was live, so a manual land's settle does not count one.
     readonly ranTurn: boolean;
     readonly stopped: StopEnding | undefined;
-    readonly ending: TurnEnding;
+    readonly ending: TurnCompletion;
     readonly failure: FailedEnding | undefined;
     readonly usage: TurnUsage;
     readonly sessionId: string | undefined;
@@ -578,9 +578,10 @@ const onLandReleased = (state: ConversationState): Decision<undefined> => {
     return { state: { ...state, turn: { ...state.turn, landing: false }, land: { held } }, effects: BROADCAST, reply: undefined };
 };
 
-// A rewind shares the turn mutex: refused under a live turn, and holding off every `begin` until released.
+// A rewind shares the turn mutex: refused under a live turn or another rewind, and holding off every `begin` until
+// released. One holder at a time is what lets the release free the conversation outright.
 const onRewindLeased = (state: ConversationState): Decision<boolean> =>
-    state.phase.kind === "running" ? unchanged(state, false) : { state: { ...state, phase: { kind: "rewinding" } }, effects: [], reply: true };
+    state.phase.kind === "idle" ? { state: { ...state, phase: { kind: "rewinding" } }, effects: [], reply: true } : unchanged(state, false);
 
 const onRewindReleased = (state: ConversationState): Decision<undefined> =>
     unchanged(state.phase.kind === "rewinding" ? { ...state, phase: { kind: "idle" } } : state, undefined);

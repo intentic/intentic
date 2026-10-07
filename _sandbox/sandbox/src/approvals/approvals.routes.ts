@@ -5,6 +5,7 @@ import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { approveHookSet, dismissHookSet, hookRequests } from "../guard/hook-approvals.js";
+import { forgetApprovals, recordApproval } from "./approval-decisions.js";
 import { approvalsExecutorFor } from "./approvals-executor.js";
 
 // An approved item with no date gets one hold into the future as a plain scheduledAt; that date is the whole countdown
@@ -18,8 +19,13 @@ export const withApprovalHold = <T extends ApprovalSummary>(approval: T, now: nu
 // reject.
 // Every write re-arms the executor (detached) rather than reasoning about which write changed the soonest deadline; the
 // re-read already does that.
+// An approve is the one write that also records the owner's yes, off the workspace (approval-decisions.ts), and only a
+// person's session gives it: the bearer check refuses the panel and control tokens, since a program in the sandbox
+// approving its own proposal is the very thing the queue exists to stop. The yes is recorded before the file is written
+// and dropped before any other write or a reject, so the executor never reads a file ahead of the yes it carries.
 export const createApprovalsRoutes = (services: Services) => {
     const i = implement(approvalsContract).$context<OrpcContext>();
+    const roots = { historyRoot: services.config.historyRoot, workspaceRoot: services.workspace.root };
     const rearm = (): void => {
         void approvalsExecutorFor(services)
             .arm()
@@ -27,12 +33,24 @@ export const createApprovalsRoutes = (services: Services) => {
     };
     return {
         list: i.list.handler(() => services.approvals.list()),
-        upsert: i.upsert.handler(async ({ input }) => {
-            await services.approvals.upsert(withApprovalHold(input, Date.now()));
+        upsert: i.upsert.handler(async ({ input, context }) => {
+            const item = withApprovalHold(input, Date.now());
+            if (item.status === "approved") {
+                await requireMaintainer(
+                    services,
+                    context.headers,
+                    "only the owner or a maintainer, signed in, can approve; a program's token cannot",
+                );
+                await recordApproval(roots, item, context.identity?.email);
+            } else {
+                await forgetApprovals(roots.historyRoot, [item.id]);
+            }
+            await services.approvals.upsert(item);
             rearm();
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
+            await forgetApprovals(roots.historyRoot, [input.id]);
             if (!(await services.approvals.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no approval with that id" });
             }

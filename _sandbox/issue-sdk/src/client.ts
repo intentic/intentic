@@ -42,6 +42,49 @@ export interface IssueClient {
 // A report the network never carried: the visitor is offline or the sandbox asleep.
 class OfflineError extends Error {}
 
+// An error inside a render loop throws every frame, and each crash is posted as it happens. Past a few a minute the same
+// report only spends the visitor's network and the intake's rate limit on a row the daemon is already counting; past
+// the overall budget, a loop whose message changes every frame is held back too.
+const REPEATS_PER_WINDOW = 5;
+const REPORTS_PER_WINDOW = 30;
+const WINDOW_MS = 60_000;
+
+// Whether a crash or detection is over this minute's budget, for its own message or overall. A written report never
+// is: a person pressed Send. Only a report that passes opens a window, so the map holds at most a budget's worth.
+const crashBudget = (): ((report: IssueReport) => boolean) => {
+    const windows = new Map<string, { since: number; count: number }>();
+    let overall = { since: 0, count: 0 };
+    return (report) => {
+        if (report.kind === "report") {
+            return false;
+        }
+        const now = Date.now();
+        if (now - overall.since >= WINDOW_MS) {
+            overall = { since: now, count: 0 };
+        }
+        if (overall.count >= REPORTS_PER_WINDOW) {
+            return true;
+        }
+        const key = `${report.kind}\n${report.message}`;
+        const open = windows.get(key);
+        if (open !== undefined && now - open.since < WINDOW_MS) {
+            if (open.count >= REPEATS_PER_WINDOW) {
+                return true;
+            }
+            open.count += 1;
+        } else {
+            for (const [seen, window] of windows) {
+                if (now - window.since >= WINDOW_MS) {
+                    windows.delete(seen);
+                }
+            }
+            windows.set(key, { since: now, count: 1 });
+        }
+        overall.count += 1;
+        return false;
+    };
+};
+
 // The intake as the daemon resolved it, plus the two handles a page-long client keeps.
 export const createClient = async (options: InitOptions): Promise<IssueClient> => {
     const endpoint: EmbedEndpoint = { base: options.base.replace(/\/$/, ""), automationId: options.automationId };
@@ -50,6 +93,7 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
     // A per-browser id in localStorage, namespaced per intake: the rate-limit key, and what a proof of work binds.
     const clientId = storedId(`intentic.issues.${options.automationId}.client`);
     const crumbs = createBreadcrumbs();
+    const overBudget = crashBudget();
 
     // An offline visitor or an asleep sandbox fails the fetch itself (a TypeError) and is nobody's to fix; only the two
     // network calls are read that way, so a TypeError from a site's beforeSend still reaches its owner.
@@ -59,6 +103,9 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
         });
 
     const deliver = async (report: IssueReport): Promise<string | undefined> => {
+        if (overBudget(report)) {
+            return undefined;
+        }
         try {
             const shaped = options.beforeSend === undefined ? report : options.beforeSend(report);
             if (shaped === null) {

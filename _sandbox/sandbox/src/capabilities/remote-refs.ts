@@ -1,6 +1,5 @@
-import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { defaultGit, GIT_STALL_GUARD, gitAuthHeader, gitHeaderEnv, type GitRunner } from "@intentic/base/git";
 import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
-import { gitAuthHeader } from "./git-checkout.js";
 
 // What a repository offers, read over the wire without cloning it: `ls-remote` is one round trip and touches no disk,
 // which is what lets an install form resolve a version while someone is still typing the URL into it.
@@ -8,10 +7,6 @@ import { gitAuthHeader } from "./git-checkout.js";
 // `HEAD` is asked for by name because `--heads`/`--tags` would filter the symref line out, and the symref line is the
 // only thing that says which branch is the default.
 const REF_PATTERNS = ["HEAD", "refs/heads/*", "refs/tags/*"] as const;
-
-// A stalled fetch is aborted by git itself rather than by racing a timer, so no git process is left running behind an
-// answer the form already gave up on.
-const STALL_GUARD = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20"] as const;
 
 const SYMREF_LINE = /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/;
 const REF_LINE = /^([0-9a-f]{40})\s+refs\/(heads|tags)\/(.+?)(\^\{\})?$/;
@@ -80,10 +75,11 @@ export const readRemoteRefs = async (dir: string, url: string, token?: string, g
         throw new RemoteRefsError("Only http(s) repository URLs can be read: an ssh remote stops on a host-key prompt nobody can answer.");
     }
     try {
-        // The token rides a header via GIT_CONFIG_* so it never lands in the URL, a pane log or git's own error text.
-        const { stdout } = await git(dir, [...STALL_GUARD, "ls-remote", "--symref", url, ...REF_PATTERNS], {
+        // The token rides the environment (gitHeaderEnv), so it never lands in the URL, a pane log or git's own error
+        // text. A stalled read is aborted by git itself, so none is left running behind an answer the form gave up on.
+        const { stdout } = await git(dir, [...GIT_STALL_GUARD, "ls-remote", "--symref", url, ...REF_PATTERNS], {
             GIT_TERMINAL_PROMPT: "0",
-            ...(token === undefined ? {} : { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: gitAuthHeader(token) }),
+            ...(token === undefined ? {} : gitHeaderEnv(gitAuthHeader(token))),
         });
         return parseRemoteRefs(stdout);
     } catch (error) {

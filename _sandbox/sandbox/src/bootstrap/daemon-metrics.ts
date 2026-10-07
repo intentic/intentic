@@ -1,4 +1,4 @@
-import { observeGitCommands, observeStaleLocks } from "@intentic/base/git";
+import { gitCommandLabel, observeGitCommands, observeStaleLocks } from "@intentic/base/git";
 import { turnRunMetrics } from "../conversations/actor/conversation-holdings.js";
 import { browserSessionMetrics } from "../browser/sessions/browser-sessions.js";
 import { startResourceMetrics } from "../system/resources/resource-metrics.js";
@@ -25,10 +25,10 @@ export const startDaemonMetrics = ({ config, logger, services, shutdown }: BootP
         logger.warn({ path, ageMinutes: Math.round(ageMs / 60_000) }, "git: removed a stale lock no git process held"),
     );
 
-    // `args` keeps the subcommand and drops trailing pathspecs, which can be hundreds.
+    // Named by its label, never its raw args: perf.jsonl outlives the command, and a `-c` value can be a credential.
     observeGitCommands(({ dir, args, ms, execMs, attempts, failed, forked, queueDepth }) => {
         const fields = {
-            git: args.slice(0, 3).join(" "),
+            git: gitCommandLabel(args),
             repo: dir.startsWith(services.workspace.root) ? dir.slice(services.workspace.root.length + 1) || "root" : dir,
             ...(attempts > 1 ? { lockRetries: attempts - 1 } : {}),
             // Recorded only when false: a direct exec pays a page-table copy.

@@ -57,6 +57,10 @@ const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typ
 
 beforeEach(() => {
     jest.useFakeTimers();
+    // What netd and the host set on a real daemon, which the machine running this suite may carry too (a sandbox's own
+    // HOST_ENV): every case starts without them, and the ones about them set their own.
+    delete process.env["INTENTIC_INSTANCE"];
+    delete process.env["HOST_ENV"];
     outcomes.length = 0;
     calls.length = 0;
     requestMock.mockClear();

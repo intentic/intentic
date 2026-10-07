@@ -4,6 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import { type ProvidersFakeOverrides, providersSliceFake } from "../agent/providers/providers-slice.testing.js";
 import { type AuthFakeOverrides, authSliceFake } from "../auth/auth-slice.testing.js";
 import { automationsSliceFake } from "../automations/automations-slice.testing.js";
+import { brokerSliceFake } from "../capabilities/broker/broker-slice.testing.js";
 import { capabilitiesSliceFake } from "../capabilities/capabilities-slice.testing.js";
 import { type Services, wireReactions } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
@@ -111,6 +112,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...authSliceFake({ auth }, rest.passkeys),
         ...automationsSliceFake((conversationId) => conversationsFake.agents.entry(conversationId)?.archivedAt !== undefined),
         ...capabilitiesSliceFake(),
+        ...brokerSliceFake(),
         ...conversationsFake,
         ...extensionsSliceFake(),
         ...gitSliceFake({ git }),

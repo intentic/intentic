@@ -775,8 +775,8 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                 }
             }
         } finally {
-            // This turn's outside-content bit dies with it; the next turn starts clean unless it takes something in
-            // too.
+            // This turn's outside-content bit dies with it, so the next turn starts clean unless it takes something in
+            // too, and a card an approval request left open (the app-server died, or moved on) is settled.
             release();
         }
         yield { kind: "done" };

@@ -19,6 +19,7 @@ import { INFRA_APPLY_KEY } from "../intentic/infra-apply.js";
 import { arrivedPrewarmed } from "../system/boot/prewarm.js";
 import { projectDirOf, seedsStarterSite } from "../system/project-dir.js";
 import { restoreAuthorizedKeys, subscribeDeviceReports } from "../peers/desktop-sync.js";
+import { automationsDocument } from "../automations/automations-store.js";
 import { applyDefinitionItems } from "../definition/apply-definition.js";
 import { sweepArrivals } from "../portability/bundle-arrival.js";
 import { parseDefinitionToml } from "../definition/definition.js";
@@ -98,9 +99,13 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
         ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
         ...modelsAlive,
         ...kept,
-    ]).catch(() => undefined);
+    ]).catch((error: unknown) =>
+        logger.warn({ err: error }, "boot: stale terminal sessions could not all be ended; the generation sweep below is the backstop"),
+    );
     // Extension-gateway children of a daemon that died without unwinding hold connections a restore would duplicate.
-    await killOrphanServiceProcesses(logger).catch(() => undefined);
+    await killOrphanServiceProcesses(logger).catch((error: unknown) =>
+        logger.warn({ err: error }, "boot: orphaned extension gateways could not all be ended; a restore may meet a duplicate connection"),
+    );
     // After the sessions above, so what tmux still holds is exactly what this boot adopted.
     await sweepEarlierGenerations({ logger, panePids: async () => new Set((await panePids()).keys()) });
 };
@@ -113,7 +118,7 @@ const seedDefinition = async ({ config, logger, services, runnerEnv }: BootRun):
     const definition = parseDefinitionToml(Buffer.from(config.sandbox.definitionSeed, "base64").toString("utf8"));
     // A runner has no owner to reconnect a capability or fill a secret, and its repos arrive through the parent's git sync.
     const pick = runnerEnv !== undefined ? (item: ArrivalItem): boolean => item.group === "settings" : (): boolean => true;
-    const report = await applyDefinitionItems(services, definition, pick);
+    const report = await applyDefinitionItems(services, definition, pick, { automations: automationsDocument });
     logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
 };
 
@@ -379,13 +384,16 @@ export const runBootSteps = async (phase: BootPhase, runnerEnv: RunnerModeEnv | 
         phase.shutdown.push(subscribeDeviceReports(async (report) => steps.then(async () => attach(report))));
     }
     for (const step of BOOT_STEPS) {
-        await phase.services.boot.step(step.key, async () => {
-            if (step.when?.(boot) === false) {
-                return;
+        const run = async (): Promise<void> => {
+            if (step.when?.(boot) !== false) {
+                await step.run(boot);
             }
-            const { failure } = step;
-            await (failure === undefined ? step.run(boot) : step.run(boot).catch((error: unknown) => phase.logger.warn({ err: error }, failure)));
-        });
+        };
+        // A step with a `failure` sentence is one boot goes on without: it reads failed and the sentence is logged.
+        const { failure } = step;
+        await (failure === undefined
+            ? phase.services.boot.step(step.key, run)
+            : phase.services.boot.tolerate(step.key, run, (error) => phase.logger.warn({ err: error }, failure)));
     }
     booted();
     // A previous boot's check runs left per-run event files behind; their streams died with the daemon.

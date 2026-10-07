@@ -1,9 +1,6 @@
 {
     "_sandbox/sandbox/src/agent/providers/project-installs.ts": 1,
-    "_sandbox/sandbox/src/browser/cast/display.ts": 1,
-    "_sandbox/sandbox/src/browser/cast/videocast.ts": 1,
     "_sandbox/sandbox/src/browser/cast/xinput.ts": 1,
-    "_sandbox/sandbox/src/browser/sessions/owner-browser.ts": 1,
     "_sandbox/sandbox/src/browser/tools/browser-router.ts": 1,
     "_sandbox/sandbox/src/browser/tools/email-codes.ts": 1,
     "_sandbox/sandbox/src/conversations/land/lockfile-reconcile.ts": 1,

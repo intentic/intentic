@@ -1,4 +1,4 @@
-import { AgentSummarySchema, AgentTurnSchema } from "@intentic/sandbox-contract";
+import { AgentStatusSchema, AgentSummarySchema, AgentTurnSchema } from "@intentic/sandbox-contract";
 import {
     conversationIdFor,
     exitOfRun,
@@ -236,4 +236,12 @@ test("the deadline ends the wait with a timeout, and the agent is left working",
     expect(outcome.summary).toContain("keeps working");
     // The start, then exactly as many polls as fit in the wait.
     expect(calls).toHaveLength(4);
+});
+
+// The three status sets are written out by hand (this package carries no schema library), so this holds them to the
+// contract: a status the daemon added and the gate never placed would otherwise fail a pipeline as "unknown".
+test("every status the contract can put on a card is placed: in flight, parked, failed or completed", () => {
+    for (const status of AgentStatusSchema.options) {
+        expect(() => settledOf({ status }), status).not.toThrow();
+    }
 });
