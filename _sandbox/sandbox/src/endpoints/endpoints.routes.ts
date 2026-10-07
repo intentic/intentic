@@ -2,6 +2,7 @@ import { endpointsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { findHostServers } from "./host-servers.js";
 import { localModelFit } from "./local-model-fit.js";
 import { localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
 import { endpointConfigOf } from "./local-model.js";
@@ -45,8 +46,8 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
                 ...(status.servedModel === undefined ? {} : { servedModel: status.servedModel }),
             };
         }),
-        // Measured per call, never cached: a rebuild that grants the GPU, a reshape that changes the memory cap and a
-        // download that lands all change the answer without anything here being told.
+        // Measured per call, never cached: a reshape that changes the memory cap and a download that lands both change the
+        // answer without anything here being told.
         localModelFit: i.localModelFit.handler(async () =>
             localModelFit(services.workspace.root, await localModelPrefetchStatus(services.workspace.root)),
         ),
@@ -54,5 +55,7 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
         localModelPrefetch: i.localModelPrefetch.handler(async ({ input }) =>
             localModelPrefetch(services.workspace.root, input.action, await services.capabilities.list()),
         ),
+        // Asked per call: a server started or stopped on the host is news nothing here is told.
+        hostServers: i.hostServers.handler(async () => ({ servers: await findHostServers(await services.capabilities.list()) })),
     };
 };

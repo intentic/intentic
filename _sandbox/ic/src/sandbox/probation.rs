@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use crate::docker;
 use crate::health::{CRASH_LOOP_RESTARTS, HEALTH_URL};
 use crate::logfile::Log;
-use crate::record::{self, ChannelRecord, Phase, Swap};
+use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
 use crate::sandbox::ledger::{self, Ledger};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
@@ -804,16 +804,23 @@ fn keep(slug: &str, record: &ChannelRecord, swap: &Swap) -> Result<()> {
 /// Pins the record before the swap named that the record now does not: what the swap pushed off the end of the list.
 /// Kept through the probation so going back finds every one of them; only this sandbox's own pins are ever removed.
 pub fn drop_unnamed_pins(slug: &str, before: &ChannelRecord, now: &ChannelRecord) {
-    let named: Vec<String> = now.targets().into_iter().map(|pin| pin.image).collect();
-    for pin in before.targets() {
-        if pin
-            .image
-            .starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
-            && !named.contains(&pin.image)
-        {
-            docker::quiet(&["rmi", &pin.image]);
-        }
+    for image in unnamed_pins(slug, before, now) {
+        docker::quiet(&["rmi", &image]);
     }
+}
+
+/// Those pins, the environment build pinned beside a base counted with it. Pure.
+fn unnamed_pins(slug: &str, before: &ChannelRecord, now: &ChannelRecord) -> Vec<String> {
+    let named: Vec<String> = now.targets().iter().flat_map(Pin::images).collect();
+    before
+        .targets()
+        .iter()
+        .flat_map(Pin::images)
+        .filter(|image| {
+            image.starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
+                && !named.contains(image)
+        })
+        .collect()
 }
 
 /// A swap that is over without being judged (a new swap superseding it, an interrupted one undone by hand): the record
@@ -842,6 +849,30 @@ mod tests {
     use super::*;
 
     const MIN: u64 = 60_000;
+
+    #[test]
+    fn a_pin_that_falls_off_the_list_takes_its_environment_build_with_it_and_a_kept_one_keeps_it() {
+        let pin = |id: &str| Pin {
+            image: format!("intentic-sandbox-rollback-x:{id}"),
+            env_image: Some(format!("intentic-sandbox-rollback-x:env-{id}")),
+            env_hash: Some("h".to_string()),
+            ..Pin::default()
+        };
+        let before = ChannelRecord {
+            kept: vec![pin("222222222222")],
+            ..ChannelRecord::default()
+        }
+        .with_previous(Some(&pin("111111111111")));
+        let now = ChannelRecord::default().with_previous(Some(&pin("111111111111")));
+        assert_eq!(
+            unnamed_pins("x", &before, &now),
+            vec![
+                "intentic-sandbox-rollback-x:222222222222".to_string(),
+                "intentic-sandbox-rollback-x:env-222222222222".to_string(),
+            ]
+        );
+        assert!(unnamed_pins("x", &before, &before).is_empty());
+    }
 
     fn swap(at: u64, reach: Option<&str>) -> Swap {
         Swap {

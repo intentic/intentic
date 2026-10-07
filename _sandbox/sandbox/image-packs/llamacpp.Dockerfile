@@ -1,7 +1,8 @@
 # llama.cpp's llama-server for the local-model capability — one pinned build serving an OpenAI-compatible /v1
 # for one GGUF file (capabilities/handlers/localmodel.ts starts it per entry; the weights are NOT here, they
-# download into the workspace cache on add, the whisper-pack precedent). CPU build: the GPU variant is the
-# separate llamacpp-cuda pack, overlay-only, because its CUDA runtime is hundreds of MB.
+# download into the workspace cache on add, the whisper-pack precedent). CPU build only: a GPU model is a server on
+# the host (Ollama, LM Studio), reached as a model endpoint. A CUDA variant built here once took 19 minutes of a
+# rebuild and broke whenever the base image moved (2026-10-07), so there is none.
 # In the `standard` profile so adding a local model on the published image never asks for a rebuild.
 #
 # This image ships an amd64 and an arm64 half, each built natively on its own runner, and the same fragment is
@@ -11,8 +12,8 @@
 # UPSTREAM'S PREBUILT RELEASE, NOT A BUILD FROM SOURCE, and the second reason matters more.
 #
 # The first reason is cost: compiling this took 158s cold and ~12s with a warm ccache, against 4s to fetch and
-# unpack 16MB. It is also the one llama.cpp artifact a rebuild could not avoid paying for, because unlike the
-# CUDA pack it rides the published image.
+# unpack 16MB. It is also the one llama.cpp artifact a rebuild could not avoid paying for, because it rides the
+# published image.
 #
 # The second reason is CORRECTNESS, and it was a latent bug. A source build here defaults to GGML_NATIVE=ON,
 # which compiles ggml with `-march=native` — the instruction set of whatever machine ran the build. That is
@@ -41,9 +42,7 @@
 #
 # LAYOUT: everything lands in /opt/llamacpp together, because the prebuilt binary's RUNPATH is `$ORIGIN` — it
 # finds its own libraries next to itself, so no ld.so.conf entry and no LD_LIBRARY_PATH are needed.
-# /usr/local/bin holds a symlink, which resolves $ORIGIN to the real directory. The CUDA pack deletes that
-# symlink before installing its own binary there (see there for why it must), and one layout means one thing
-# to delete.
+# /usr/local/bin holds a symlink, which resolves $ORIGIN to the real directory.
 #
 # Both sha256s are pinned, which the image's other pinned downloads (cloudflared, yq) do not do. A prebuilt
 # BINARY is a different trust proposition from source this image compiles itself: a moved release asset would

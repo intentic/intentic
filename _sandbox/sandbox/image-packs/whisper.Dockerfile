@@ -9,7 +9,7 @@
 # compiles a native dep with no prebuild from source), and purging them here left this pack silently breaking
 # native installs in /work. git stays for the same reason. libgomp1 is whisper's
 # OpenMP runtime, installed explicitly so it survives.
-# Keep the build bounded by the same memory/CPU rule as the CUDA pack. Whisper is smaller, but bare `-j` still
+# Keep the build bounded by a memory/CPU rule. Whisper is small, but bare `-j` still
 # means unlimited jobs under GNU Make and image fragments must not make host survival depend on project size.
 # THE SOURCE ARRIVES AS A TARBALL, NOT A CLONE, and that is not a style preference. GitHub answers an
 # unauthenticated `git-upload-pack` from datacenter egress with 401 and `WWW-Authenticate: Basic realm="GitHub"`

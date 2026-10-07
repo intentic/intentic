@@ -1947,23 +1947,25 @@
             "factDownloaded": "Téléchargé",
             "factMemory": "utilise environ {total} en marche",
             "factWindow": "contexte de {window}k",
-            "gpuGranted": "GPU NVIDIA, {vram} de VRAM",
-            "gpuOffered": "CPU uniquement",
-            "gpuOfferedHint": "Un GPU NVIDIA peut être activé dans les réglages du modèle.",
-            "gpuUnsupported": "CPU uniquement (aucun runtime GPU sur cet hôte)",
             "memoryCapped": "{memory} de mémoire pour ce sandbox",
             "memoryMachine": "{memory} de mémoire",
-            "moreModels": "Autres modèles, GGUF personnalisé, réglages GPU",
+            "moreModels": "Autres modèles, GGUF personnalisé",
             "needsRebuild": "Cette image n'embarque pas encore llama-server. Reconstruisez le sandbox depuis Environnement sur la page Sandbox, puis revenez.",
             "openSettings": "Réglages du modèle",
             "quickJobsOnly": "Petites tâches",
             "quickJobsPitch": "Écrit les messages de commit et les titres de session. Trop petit pour discuter ou pour un tour d’agent.",
             "ready": "Prêt",
-            "sizedForGpu": "Les suggestions tiennent dans les {free} qu’un modèle peut utiliser sur le GPU.",
             "sizedForMemory": "Les suggestions tiennent dans les {free} de mémoire libres maintenant.",
             "statusFailed": "N’a pas démarré",
-            "statusSlow": "Tourne lentement",
             "windowUnderFloor": "Sa fenêtre est trop petite pour un tour d’agent, il ne convient donc qu’aux petites tâches. Plus de mémoire l’agrandirait."
+        },
+        "hostServers": {
+            "title": "{server} sur cet ordinateur",
+            "running": "en marche, pas encore ajouté",
+            "noModels": "En marche, aucun modèle téléchargé pour l’instant",
+            "modelsAndMore": "{models} et {count} de plus",
+            "use": "L’utiliser",
+            "noneFound": "Pour un GPU, lancez Ollama ou LM Studio sur l’ordinateur qui héberge ce sandbox et il apparaîtra ici. Sous Linux, démarrez Ollama avec OLLAMA_HOST=0.0.0.0 ; dans LM Studio, activez le service sur le réseau local."
         }
     },
     "desktop": {
@@ -2475,7 +2477,8 @@
             "sandboxDoesNotAnswer": "Ce sandbox ne répond pas à son adresse publique",
             "unreachableElsewhere": "Injoignable depuis d'autres appareils",
             "setupPredatesPublicAddress": "Son installation est antérieure aux adresses publiques : seul l'ordinateur qui le fait tourner peut l'ouvrir.",
-            "setupOutOfDate": "Son installation n'est plus à jour"
+            "setupOutOfDate": "Son installation n'est plus à jour",
+            "runFixOnItsComputer": "Sur l'ordinateur qui le fait tourner, lancez `ic sandbox fix` : il vérifie chaque lien vers le sandbox et répare ce qu'il peut."
         },
         "containerHealthCard": {
             "connectComputerRunsSandbox": "Ou connectez l'ordinateur qui le fait tourner pour le réparer d'ici.",
@@ -2483,7 +2486,7 @@
             "openSetupScreen": "Ouvrir l'installation",
             "reconnectSandbox": "Reconnecter",
             "reconnecting": "Reconnexion…",
-            "replacesContainer": "Reconstruit son conteneur sur {host}. Fichiers, historique et Docker sont conservés.",
+            "confirmReconnect": "Recrée son conteneur sur {host} à partir de son installation. Connexions, fichiers, historique et Docker sont conservés.",
             "sandboxReplacedPageReconnects": "S'il a été remplacé, cette page se reconnecte dès son retour.",
             "missingEnv": "Absent de son conteneur :",
             "details": "Détails"

@@ -1853,11 +1853,11 @@
             "localmodel": {
                 "name": "Model lokalny",
                 "description": "Model działający wewnątrz sandboxa: prywatnie i za darmo.",
-                "hint": "Nic nie opuszcza tej maszyny i działa to bez internetu. Masz już uruchomioną Ollamę albo vLLM? Wtedy wskaże ją kafelek „Serwer modeli”.",
+                "hint": "Działa na CPU tego sandboxa, nic nie opuszcza tej maszyny i działa bez internetu. Do GPU uruchom Ollamę albo LM Studio na hoście i dodaj go jako serwer modeli.",
                 "guide": {
                     "steps": {
                         "0": "Wybierz model i okno, na które ta maszyna ma wolną pamięć RAM; suma liczy się pod formularzem.",
-                        "1": "Pobiera się i od razu zaczyna działać; przebudowy wymaga tylko przełącznik GPU.",
+                        "1": "Pobiera się i od razu zaczyna działać, na CPU, bez przebudowy.",
                         "2": "Brakuje pamięci? Okno 16k przypięte jako szybki model sprawia, że wiadomości commitów nic nie kosztują."
                     }
                 },
@@ -1872,10 +1872,6 @@
                     "contextTokens": {
                         "hint": "Od 2048 do 1 048 576, około 1 GB RAM na każde 16k.",
                         "label": "Okno w tokenach"
-                    },
-                    "gpu": {
-                        "hint": "Wymaga nvidia-container-toolkit na hoście. Wyłączone = CPU, wystarczy dla małych modeli.",
-                        "label": "Użyj GPU NVIDIA tej maszyny"
                     },
                     "model": {
                         "hint": "Pobiera się raz do workspace’u, a potem działa z tego sandboxa.",
@@ -3711,14 +3707,10 @@
             "factWindow": "kontekst {window}k",
             "gettingReady": "Przygotowywanie — {received} z {total}",
             "gettingReadyPlain": "Przygotowywanie…",
-            "gpuGranted": "GPU NVIDIA, {vram} VRAM",
-            "gpuOffered": "Tylko CPU",
-            "gpuOfferedHint": "GPU NVIDIA można włączyć w ustawieniach modelu.",
-            "gpuUnsupported": "Tylko CPU (brak środowiska GPU na tym hoście)",
             "measuring": "Sprawdzanie, co ta maszyna może uruchomić…",
             "memoryCapped": "{memory} pamięci dla tej piaskownicy",
             "memoryMachine": "{memory} pamięci",
-            "moreModels": "Inne modele, własny GGUF, ustawienia GPU",
+            "moreModels": "Inne modele, własny GGUF",
             "needsRebuild": "Ten obraz nie zawiera jeszcze llama-server. Przebuduj sandbox z sekcji Środowisko na stronie Sandbox i wróć tutaj.",
             "nothingFits": "Nic z wybranej listy nie mieści się w {memory}. Daj sandboxowi więcej pamięci albo zamiast tego podłącz konto.",
             "nothingRunsWhole": "Nic z wybranej listy nie działa tu z pełną prędkością przy {free} wolnej pamięci. Zwolnij trochę pamięci, daj sandboxowi więcej albo zamiast tego połącz konto.",
@@ -3727,11 +3719,9 @@
             "quickJobsPitch": "Pisze opisy commitów i tytuły sesji. Za mały na czat i tury agenta.",
             "ready": "Gotowy",
             "runIt": "Uruchom",
-            "sizedForGpu": "Propozycje mieszczą się w {free}, które model może zająć na GPU.",
             "sizedForMemory": "Propozycje mieszczą się w {free} wolnej teraz pamięci.",
             "startNow": "Uruchom teraz",
             "statusFailed": "Nie uruchomił się",
-            "statusSlow": "Działa wolno",
             "stop": "Zatrzymaj",
             "useForQuickJobs": "Wybierz go do opisów commitów i tytułów",
             "windowUnderFloor": "Jego okno jest za małe na turę agenta, więc nadaje się tylko do drobnych zadań. Więcej pamięci by je powiększyło."
@@ -3760,8 +3750,8 @@
             "local": "Modele lokalne",
             "models": "{count} model | {count} modele | {count} modeli",
             "onThisComputer": "Na tym komputerze",
-            "ownServer": "Masz już Ollamę lub vLLM?",
-            "pointAtServer": "Wskaż swój serwer"
+            "ownServer": "Inny serwer?",
+            "pointAtServer": "Wskaż go"
         },
         "providerPanel": {
             "connectWay": "Podłącz: {way}",
@@ -3772,6 +3762,14 @@
         "providerTile": {
             "runs": "Uruchamia: {runs}",
             "signingIn": "Logowanie…"
+        },
+        "hostServers": {
+            "title": "{server} na tym komputerze",
+            "running": "działa, jeszcze nie dodany",
+            "noModels": "Działa, nie ma jeszcze pobranych modeli",
+            "modelsAndMore": "{models} i {count} więcej",
+            "use": "Użyj",
+            "noneFound": "Do GPU uruchom Ollamę albo LM Studio na komputerze, na którym działa ten sandbox, a pojawi się tutaj. Na Linuksie uruchom Ollamę z OLLAMA_HOST=0.0.0.0; w LM Studio włącz serwowanie w sieci lokalnej."
         }
     },
     "desktop": {
@@ -4661,7 +4659,8 @@
             "publicAddressDidNotAnswer": "Jego publiczny adres nie odpowiedział, gdy sandbox sprawdził go od środka.",
             "unreachableElsewhere": "Niedostępny z innych urządzeń",
             "setupPredatesPublicAddress": "Jego konfiguracja jest starsza niż publiczne adresy, więc otworzy go tylko komputer, na którym działa.",
-            "setupOutOfDate": "Jego konfiguracja jest nieaktualna"
+            "setupOutOfDate": "Jego konfiguracja jest nieaktualna",
+            "runFixOnItsComputer": "Na komputerze, na którym działa, uruchom `ic sandbox fix`: sprawdzi każde połączenie z sandboxem i naprawi, co się da."
         },
         "containerHealthCard": {
             "connectComputerRunsSandbox": "Albo podłącz komputer, na którym działa, żeby naprawić go stąd.",
@@ -4670,7 +4669,7 @@
             "reconnectSandbox": "Połącz ponownie",
             "reconnecting": "Ponowne łączenie…",
             "reconnectingSandbox": "Ponowne łączenie tego sandboxa",
-            "replacesContainer": "Odbudowuje jego kontener na {host}. Pliki, historia i Docker zostają.",
+            "confirmReconnect": "Tworzy jego kontener na {host} od nowa z jego konfiguracji. Logowania, pliki, historia i Docker zostają.",
             "sandboxReplacedPageReconnects": "Jeśli został wymieniony, ta strona połączy się sama, gdy wróci.",
             "missingEnv": "Brakuje w jego kontenerze:",
             "details": "Szczegóły"

@@ -51,14 +51,12 @@ describe("capabilityEffects", () => {
         });
     });
 
-    it("a local model runs a process, and only its gpu switch costs an image and the host's GPUs", () => {
+    it("a local model runs a process and nothing else, whatever an older config still says about a GPU", () => {
         expect(capabilityEffects({ kind: "localmodel", config: { model: "owner/repo/m.gguf" } })).toEqual([
             { kind: "process", names: ["llama-server"] },
         ]);
         expect(capabilityEffects({ kind: "localmodel", config: { model: "owner/repo/m.gguf", gpu: "on" } })).toEqual([
             { kind: "process", names: ["llama-server"] },
-            { kind: "image" },
-            { kind: "gpu" },
         ]);
     });
 
@@ -121,7 +119,12 @@ describe("capabilityEffects", () => {
 
     // A card that serves the agent tools says so before it is added, whichever way its extension declares them.
     it("discloses the MCP server a cli card registers, through its own `mcp` or its extension's `tools`", () => {
-        const aliased = capabilityEffects({ kind: "cli", id: "books", config: { provider: "ledger" }, contribution: connector({ id: "ledger", mcp: "mcp" }) });
+        const aliased = capabilityEffects({
+            kind: "cli",
+            id: "books",
+            config: { provider: "ledger" },
+            contribution: connector({ id: "ledger", mcp: "mcp" }),
+        });
         expect(aliased).toEqual([{ kind: "skill", name: "books" }, { kind: "secret", exposure: "agent-env" }, { kind: "mcp" }]);
         const served = capabilityEffects({
             kind: "cli",
@@ -131,8 +134,17 @@ describe("capabilityEffects", () => {
             manifest: manifest({ tools: { perCard: "ledger" } }),
         });
         expect(served).toEqual([{ kind: "skill", name: "books" }, { kind: "secret", exposure: "agent-env" }, { kind: "mcp" }]);
-        const other = capabilityEffects({ kind: "cli", id: "gh", config: { provider: "github" }, contribution: connector(), manifest: manifest({ tools: { perCard: "ledger" } }) });
-        expect(other).toEqual([{ kind: "skill", name: "gh" }, { kind: "secret", exposure: "agent-env" }]);
+        const other = capabilityEffects({
+            kind: "cli",
+            id: "gh",
+            config: { provider: "github" },
+            contribution: connector(),
+            manifest: manifest({ tools: { perCard: "ledger" } }),
+        });
+        expect(other).toEqual([
+            { kind: "skill", name: "gh" },
+            { kind: "secret", exposure: "agent-env" },
+        ]);
     });
 
     it("falls back to the echoed hasSecret when no connector spec is at hand", () => {

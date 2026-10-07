@@ -27,7 +27,7 @@ const withEndpoint = async (models: readonly { id: string; label: string; contex
     await sandbox.capabilities.upsert({
         id: "tiny",
         kind: "localmodel",
-        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off", context: "32768" },
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", context: "32768" },
     });
     return sandbox;
 };

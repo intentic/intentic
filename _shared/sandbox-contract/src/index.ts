@@ -60,12 +60,12 @@ export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
 export {
     endpointsContract,
-    type LocalModelDevice,
-    LocalModelDeviceSchema,
+    type HostModelServer,
+    HostModelServerSchema,
+    type HostModelServers,
+    HostModelServersSchema,
     LocalModelFitSchema,
     type LocalModelFitResponse,
-    type LocalModelGpu,
-    LocalModelGpuSchema,
     type LocalModelPrefetch,
     LocalModelPrefetchSchema,
     type TrialHealth,

@@ -180,7 +180,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         {
             id: "qwen",
             kind: "localmodel",
-            config: { model: "custom", gpu: "on", url: "https://example.com/m.gguf", context: "custom", contextTokens: 98_304 },
+            config: { model: "custom", url: "https://example.com/m.gguf", context: "custom", contextTokens: 98_304 },
         },
     ],
     // The wallet's signing key never enters this container; every config field is public and must be echoed.

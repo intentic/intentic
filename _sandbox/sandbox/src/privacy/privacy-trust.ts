@@ -16,18 +16,23 @@ import {
 // running on this machine is trusted whatever the list says, since nothing it reads leaves. Everything else is untrusted
 // while the shield is on, the free trial included: it passes through Intentic's servers to a vendor the owner never chose.
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
+// Loopback, and the computer that runs this sandbox's container: Docker names it host.docker.internal for the container
+// (the runner adds it as host-gateway), so Ollama or LM Studio on the owner's own PC is reached there. Its traffic
+// stops at the machine the sandbox already runs on, the same promise loopback makes. Only for whom a model may read: the
+// agent's own shell commands still treat that name as the network (command-classes.ts).
+const THIS_MACHINE_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0", "host.docker.internal"]);
 
-const loopbackUrl = (url: string): boolean => {
+const onThisMachine = (url: string): boolean => {
     try {
-        return LOOPBACK_HOSTS.has(new URL(url).hostname);
+        return THIS_MACHINE_HOSTS.has(new URL(url).hostname);
     } catch {
         // allow(silent-catch): an address that does not parse can't be shown to stay on this machine.
         return false;
     }
 };
 
-// Whether a provider is a model this machine serves: a local-model card, or an endpoint the owner pointed at loopback.
+// Whether a provider is a model this machine serves: a local-model card, or an endpoint the owner pointed at loopback or
+// at the computer hosting the container.
 // Never the free trial, whatever its address: it reaches Intentic's platform through a tunnel that listens on loopback
 // (src/trial/trial-endpoint.ts), so its base URL reads as local while every request leaves for a vendor the owner never
 // chose. Only a platform run on this machine for development would keep it here, and even that one relays to the vendor.
@@ -40,7 +45,7 @@ export const isLocalProvider = (provider: string, capabilities: readonly Capabil
     if (capability?.kind === "localmodel") {
         return true;
     }
-    return capability?.kind === "endpoint" && loopbackUrl(capability.config.baseUrl);
+    return capability?.kind === "endpoint" && onThisMachine(capability.config.baseUrl);
 };
 
 export const isTrustedProvider = (

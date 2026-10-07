@@ -1047,20 +1047,12 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "context == 'custom'",
                 hint: "2,048 to 1,048,576, about 1 GB of RAM per 16k.",
             },
-            {
-                key: "gpu",
-                label: "Use this machine's NVIDIA GPU",
-                boolean: true,
-                default: "off",
-                rebuild: true,
-                hint: "Needs nvidia-container-toolkit on the host. Off = CPU, fine for the small ones.",
-            },
         ],
-        hint: "Nothing leaves this machine, and it works offline. Already running Ollama or vLLM? The Model endpoint tile points at it instead.",
+        hint: "Runs on this sandbox's CPU, nothing leaves this machine, and it works offline. For a GPU, run Ollama or LM Studio on the host and add it as a model endpoint.",
         guide: {
             steps: [
                 "Pick a model and window this machine has the free RAM for, the sum is computed under the form.",
-                "It downloads and serves right away; only the GPU switch asks for a rebuild.",
+                "It downloads and serves right away, on the CPU, with no rebuild.",
                 "Short of memory? A 16k window pinned as the quick model makes commit messages free.",
             ],
         },

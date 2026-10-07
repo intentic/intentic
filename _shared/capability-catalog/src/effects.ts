@@ -292,11 +292,9 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         return effects;
     },
     // The standing consequence is the server the daemon runs; the model download is disclosed on the model field
-    // itself. No `endpoint` row, since turns never leave; image and gpu rows appear only when the gpu switch is on.
-    localmodel: (input) => [
-        { kind: "process", names: ["llama-server"] },
-        ...(input.config["gpu"] === "on" || input.config["gpu"] === true ? [{ kind: "image" } as const, { kind: "gpu" } as const] : []),
-    ],
+    // itself. No `endpoint` row, since turns never leave, and no image or gpu row: the engine is baked, and it runs on
+    // the CPU.
+    localmodel: () => [{ kind: "process", names: ["llama-server"] }],
     // Deliberately no `secret` row: the signing key stays with the platform's custody provider and never enters the
     // sandbox. What it adds instead is the spend itself.
     wallet: (input) => [

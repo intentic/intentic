@@ -55,12 +55,12 @@ test("bake-only and unknown packs compose no overlay fragment", async () => {
 });
 
 // An architecture-naming pack must ask which one it's building for (dpkg --print-architecture / uname -m); the same
-// fragment composes into amd64 and arm64 alike. llamacpp-cuda is exempt: amd64-only by construction, overlay-only.
+// fragment composes into amd64 and arm64 alike.
 test("a pack naming an architecture branches on the one it is building for", async () => {
     const NAMES_AN_ARCH = /x86_64|aarch64|[-_](x64|amd64|arm64)\b/i;
     const ASKS_WHICH = /dpkg --print-architecture|uname -m/;
     for (const pack of await listPacks()) {
-        if (pack.name === "llamacpp-cuda" || !NAMES_AN_ARCH.test(pack.content)) {
+        if (!NAMES_AN_ARCH.test(pack.content)) {
             continue;
         }
         expect(ASKS_WHICH.test(pack.content), `${pack.name} names an architecture but never asks which one it is building for`).toBe(true);
@@ -97,7 +97,11 @@ test("the CI image's PP-OCRv6 models are the privacy pack's, revision for revisi
     const privacy = (await readPack("privacy"))!;
     const ciBase = readFileSync(join(repoRoot, "_tools/ci-base/Dockerfile"), "utf8");
     const pinsOf = (content: string): string[] =>
-        [...content.matchAll(/PP-OCRv6_medium_(?:det|rec)_onnx\/resolve\/(?:\$\{PRIVACY_OCR_(?:DET|REC)_REVISION\}|([0-9a-f]{40}))|\b([0-9a-f]{64}) "\$ocr\//gu)]
+        [
+            ...content.matchAll(
+                /PP-OCRv6_medium_(?:det|rec)_onnx\/resolve\/(?:\$\{PRIVACY_OCR_(?:DET|REC)_REVISION\}|([0-9a-f]{40}))|\b([0-9a-f]{64}) "\$ocr\//gu,
+            ),
+        ]
             .map((match) => match[1] ?? match[2])
             .filter((pin): pin is string => pin !== undefined);
     const revisions = [...privacy.content.matchAll(/ARG PRIVACY_OCR_(?:DET|REC)_REVISION=([0-9a-f]{40})/gu)].map((match) => match[1] ?? "");
@@ -110,7 +114,6 @@ test("the CI image's PP-OCRv6 models are the privacy pack's, revision for revisi
 // unbaked. Also pins placement: pre-trees packs splice above the daemon tree COPY, post-trees below it.
 test("compose-image-dockerfile.mjs stamps the hashes this module computes, in the right halves", async () => {
     const composed = execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot, encoding: "utf8" });
-    // llamacpp-cuda is overlay-only and must never be stamped, or a GPU rebuild reads as already baked.
     const profiles = JSON.parse(readFileSync(join(sandboxRoot, "image-packs/profiles.json"), "utf8")).profiles as Record<string, string[]>;
     const standard = new Set(profiles["standard"] ?? []);
     for (const pack of await listPacks()) {

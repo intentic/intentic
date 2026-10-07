@@ -6,8 +6,8 @@ import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
-// What this machine can run, read from the daemon rather than reasoned about here: a cgroup cap, a GPU that may not
-// have been passed through, and weights already on disk are all facts only the sandbox holds. The connect view's local
+// What this machine can run, read from the daemon rather than reasoned about here: a cgroup cap, the memory free now,
+// and weights already on disk are all facts only the sandbox holds. The connect view's local
 // lane draws entirely from this.
 
 // Only while bytes are moving. The figures change on a rebuild or a download landing, neither of which the browser is

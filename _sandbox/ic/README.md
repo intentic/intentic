@@ -26,7 +26,11 @@ flowchart LR
   release, unless its caller would rather start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`,
   the desktop app's setups; never with `SELF_HOST`). On Windows its preflight takes the shim's word for the facts
   `ic docker prepare` passed on a moment before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second
-  time. `update`, `prepare`,
+  time. Connect refuses a sandbox this machine already has, running, stopped or parked, even with `-y`, and points to
+  `fix`, `rollback` and `rebuild` instead (2026-10-07). With `--replace` it reinstalls it under the sandbox's lock,
+  keeping what it was set up as: its image, logins volume, dev mounts, web origin, machine name and side, and the
+  device it connected (no second pairing). The claim's own values still win. The old container is parked, and put back
+  if the new one does not answer and become ready. The machine agent's Reconnect passes `--replace`. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early. Before any restart or recreate of a
   running sandbox ic writes the daemon's resume ask (`/history/restart-resume.json`, `{"askedAt": <ms>}` on the
@@ -93,7 +97,10 @@ flowchart LR
   download never stages it again, even once a rollback onto a release tag follows the registry (2026-10-06). Every
   build a swap leaves is pinned under a tag no other flow writes, chosen by image identity (`identity.rs`): an
   environment overlay is labelled with the base it was built on, since its base tag moves whenever anything on the
-  machine pulls it.
+  machine pulls it. The environment build the sandbox ran on that base is pinned beside it
+  (`intentic-sandbox-rollback-<slug>:env-<id>`, with its hash in the record), and a rollback runs that build as it is.
+  It rebuilds today's approved recipe on the old base only when that build is gone, so a recipe that no longer builds
+  does not block the way back (2026-10-07).
 - **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
   volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
   (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;

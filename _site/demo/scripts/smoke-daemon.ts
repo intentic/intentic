@@ -22,7 +22,9 @@ type Verdict = { readonly kind: `answered` | `refused` } | { readonly kind: `fai
 // A schema as oRPC reads one: Standard Schema, whichever library wrote it.
 interface Schema {
     readonly "~standard": {
-        readonly validate: (value: unknown) => { readonly issues?: readonly { readonly message: string }[] } | Promise<{ readonly issues?: readonly { readonly message: string }[] }>;
+        readonly validate: (
+            value: unknown,
+        ) => { readonly issues?: readonly { readonly message: string }[] } | Promise<{ readonly issues?: readonly { readonly message: string }[] }>;
     };
 }
 
@@ -74,7 +76,14 @@ const stubBrowser = (): void => {
         addEventListener: ignore,
         removeEventListener: ignore,
         dispatchEvent: () => true,
-        matchMedia: (media: string) => ({ matches: false, media, addEventListener: ignore, removeEventListener: ignore, addListener: ignore, removeListener: ignore }),
+        matchMedia: (media: string) => ({
+            matches: false,
+            media,
+            addEventListener: ignore,
+            removeEventListener: ignore,
+            addListener: ignore,
+            removeListener: ignore,
+        }),
         document: {
             documentElement: element(),
             head: element(),
@@ -116,7 +125,9 @@ const bundle = async (out: string): Promise<void> => {
             emptyOutDir: true,
             minify: false,
             rolldownOptions: {
-                input: Object.fromEntries(Object.entries(ENTRIES).map(([name, entry]) => [name, entry.startsWith(`src/`) ? join(DEMO_ROOT, entry) : entry])),
+                input: Object.fromEntries(
+                    Object.entries(ENTRIES).map(([name, entry]) => [name, entry.startsWith(`src/`) ? join(DEMO_ROOT, entry) : entry]),
+                ),
             },
         },
     });
@@ -143,7 +154,10 @@ const required = <T>(value: T | undefined, what: string): T => {
 };
 
 // Ids and records come from the fixture itself, so a renamed id moves the inputs with it.
-const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approvals }: Awaited<ReturnType<typeof fixturesOf>>, now: number): Samples => {
+const samplesOf = (
+    { fleet, automations, ci, workflows, loops, devices, approvals }: Awaited<ReturnType<typeof fixturesOf>>,
+    now: number,
+): Samples => {
     const run = required(ci.ciRunsResponse(now).runs[0], `pipeline run`);
     const pipeline = { repo: run.repo, runId: run.runId };
     const automation = required(automations.automationsList(now)[0], `automation`);
@@ -259,6 +273,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
         endpoints: {
             localModelFit: undefined,
             localModelPrefetch: { action: `start` },
+            hostServers: undefined,
         },
         settings: {
             get: undefined,
@@ -465,7 +480,9 @@ const verdictOf = async (response: Response, output: Schema): Promise<Verdict> =
 
 const outputSchemaOf = (contract: Contract, name: string): Schema | undefined => {
     const [group = ``, procedure = ``] = name.split(`.`);
-    const procedures = contract.sandboxContract as unknown as Readonly<Record<string, Readonly<Record<string, { readonly "~orpc": { readonly outputSchema?: Schema } }>>>>;
+    const procedures = contract.sandboxContract as unknown as Readonly<
+        Record<string, Readonly<Record<string, { readonly "~orpc": { readonly outputSchema?: Schema } }>>>
+    >;
     return procedures[group]?.[procedure]?.[`~orpc`].outputSchema;
 };
 
@@ -487,7 +504,9 @@ const main = async (): Promise<number> => {
     const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);
     const contract = await loaded<Contract>(out, `contract`);
     const samples = samplesOf(await fixturesOf(out), Date.now());
-    const sent = Object.entries(samples).flatMap(([group, inputs]) => Object.entries(inputs).map(([name, input]) => ({ name: `${group}.${name}`, input })));
+    const sent = Object.entries(samples).flatMap(([group, inputs]) =>
+        Object.entries(inputs).map(([name, input]) => ({ name: `${group}.${name}`, input })),
+    );
     const failures = servedProcedures(procedures)
         .filter((name) => !sent.some((sample) => sample.name === name))
         .map((name) => `${name}: served, but this run sends it nothing`);

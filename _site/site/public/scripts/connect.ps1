@@ -27,7 +27,10 @@ param(
     [string]$ConnectToken,
     [string]$SetupCode,
     # Start without prompting even if other sandboxes are already running (the old always-proceed behavior).
-    [switch]$Yes
+    [switch]$Yes,
+    # Reinstall a sandbox this machine already has, keeping its files, logins, settings and device. Without it ic asks
+    # at the terminal, or refuses when nobody can answer. The one-liner's spelling is $env:REPLACE='1'.
+    [switch]$Replace
 )
 # NOT 'Stop': this shim branches on $LASTEXITCODE itself - a child exiting non-zero is an ANSWER to act on,
 # not a failure to abort into. Windows PowerShell 5.1 (what `powershell.exe` still is, and what the desktop app
@@ -62,6 +65,7 @@ function Write-Step($Phase, $Message) {
 if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
 if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
+if ($env:REPLACE -eq '1') { $Replace = $true }
 
 # THE FOLDER THE ic CLI LANDS IN, PUT ON THE USER'S PATH - so `ic sandbox doctor <slug>`, `ic sandbox remove
 # <slug>` and every other command ic prints when it finishes are real commands rather than a promise the
@@ -196,6 +200,7 @@ $env:INTENTIC_PREPARED = '1'
 # hyphen as a flag unless the end-of-flags marker has already gone by.
 $IcArgs = @('sandbox', 'connect')
 if ($Yes) { $IcArgs += '-y' }
+if ($Replace) { $IcArgs += '--replace' }
 if ($SetupCode) { $IcArgs += '--'; $IcArgs += $SetupCode }
 & $Ic @IcArgs
 exit $LASTEXITCODE

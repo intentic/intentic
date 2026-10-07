@@ -71,6 +71,53 @@ const servedProps = async (config: EndpointConfig, fetchImpl: typeof fetch): Pro
     return { ...opt("window", served), ...opt("toolCalls", toolCalls) };
 };
 
+// Ollama and LM Studio publish no window on /v1/models and no /props, but each says, on its own API, the window a LOADED
+// model was given, which is what a turn is measured against. A model not loaded yet stays unknown: its window is chosen
+// when it loads, and the server's default (Ollama's is a few thousand tokens) is not something to guess at.
+// Ollama: GET /api/ps, `context_length` per running model (docs.ollama.com/api/ps). LM Studio: GET /api/v1/models,
+// `loaded_instances[].config.context_length` per model key (lmstudio.ai/docs/developer/rest/list). Any other server
+// 404s on both, and each parse stands on its own.
+const OllamaRunningSchema = z.object({
+    models: z.array(z.object({ name: z.string(), model: z.string().optional(), context_length: z.number().positive().optional() })),
+});
+const LmStudioModelsSchema = z.object({
+    models: z.array(
+        z.object({
+            key: z.string(),
+            loaded_instances: z.array(z.object({ id: z.string(), config: z.object({ context_length: z.number().positive() }) })).optional(),
+        }),
+    ),
+});
+
+const nativeJson = async (config: EndpointConfig, path: string, fetchImpl: typeof fetch): Promise<unknown> => {
+    const response = await fetchImpl(`${unversionedBase(config.baseUrl)}${path}`, {
+        headers: endpointHeaders(config),
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+    }).catch(() => undefined);
+    return response?.ok === true ? await response.json().catch(() => undefined) : undefined;
+};
+
+// Each loaded model's window, by every id a /v1/models row may carry for it.
+export const loadedWindows = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<ReadonlyMap<string, number>> => {
+    const [ollama, lmStudio] = await Promise.all([nativeJson(config, "/api/ps", fetchImpl), nativeJson(config, "/api/v1/models", fetchImpl)]);
+    const windows = new Map<string, number>();
+    for (const running of OllamaRunningSchema.safeParse(ollama).data?.models ?? []) {
+        if (running.context_length !== undefined) {
+            windows.set(running.name, running.context_length);
+            windows.set(running.model ?? running.name, running.context_length);
+        }
+    }
+    for (const model of LmStudioModelsSchema.safeParse(lmStudio).data?.models ?? []) {
+        for (const instance of model.loaded_instances ?? []) {
+            windows.set(instance.id, instance.config.context_length);
+            if (!windows.has(model.key)) {
+                windows.set(model.key, instance.config.context_length);
+            }
+        }
+    }
+    return windows;
+};
+
 // The curated rungs sold as too small for a turn, by weights file: llama-server lists its model under the path it
 // loaded, so the file name is what matches, whichever card (or hand-added endpoint) serves those weights.
 const fileOf = (id: string): string => id.split("/").at(-1) ?? "";
@@ -105,13 +152,14 @@ const labelFor = (id: string): string => {
 };
 
 const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<Model[]> => {
-    // Both reads at once: the props probe is independent of the models list, so silence costs one timeout.
-    const [response, props] = await Promise.all([
+    // Every read at once: the probes are independent of the models list, so silence costs one timeout.
+    const [response, props, loaded] = await Promise.all([
         fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
             headers: endpointHeaders(config),
             signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
         }).catch(() => undefined),
         servedProps(config, fetchImpl),
+        loadedWindows(config, fetchImpl),
     ]);
     if (response === undefined || !response.ok) {
         return [];
@@ -122,8 +170,9 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
     }
     return parsed.data.data.map((entry) => {
         const model: Model = { id: entry.id, label: entry.display_name ?? labelFor(entry.id) };
-        // Row's own number first (vLLM), then the server-wide one (llama.cpp); absent means unknown downstream.
-        const contextWindow = entry.max_model_len ?? props.window;
+        // Row's own number first (vLLM), then the loaded model's (Ollama, LM Studio), then the server-wide one
+        // (llama.cpp); absent means unknown downstream.
+        const contextWindow = entry.max_model_len ?? loaded.get(entry.id) ?? props.window;
         if (contextWindow !== undefined) {
             model.contextWindow = contextWindow;
         }
@@ -143,15 +192,30 @@ const ordered = (models: readonly Model[]): { models: Model[]; default: string }
     return { models: list, default: (list.find((model) => model.helperOnly === undefined) ?? list[0])?.id ?? "" };
 };
 
+export interface EndpointCatalogOptions {
+    // Called when a read finds a different list from the one last persisted: a model pulled on the server after its card
+    // was added, or a server that was down when it was. The translator renders its entries from these lists, so it has
+    // to be told, or the new model is listed in the picker and refused by the proxy.
+    readonly onChanged?: (id: string) => void;
+}
+
+const sameIds = (left: readonly Model[], right: readonly Model[]): boolean =>
+    left.length === right.length && left.every((model, index) => model.id === right[index]?.id);
+
 // fetchImpl is injectable so a test never reaches a live server; its default tolerates a self-signed cert on localhost
 // only, since local model servers and a dev-platform trial live there.
-export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetch = localTolerantFetch): EndpointCatalog => {
+export const createEndpointCatalog = (
+    persistDir: string,
+    fetchImpl: typeof fetch = localTolerantFetch,
+    options: EndpointCatalogOptions = {},
+): EndpointCatalog => {
     const cache = new Map<string, { value: { models: Model[]; default: string }; expiresAt: number }>();
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 
     // Parsed through the schema, not trusted: a record from an older daemon or a truncated write reads as nothing
     // known, never half-formed. Written atomically, so a crash mid-write can't leave the truncated record either.
-    const persisted = (id: string) => cacheFile<Model[]>(persistPath(id), { parse: (raw) => z.array(ModelSchema).safeParse(raw).data, fallback: () => [] });
+    const persisted = (id: string) =>
+        cacheFile<Model[]>(persistPath(id), { parse: (raw) => z.array(ModelSchema).safeParse(raw).data, fallback: () => [] });
 
     return {
         models: async (id, config) => {
@@ -163,8 +227,12 @@ export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetc
             if (discovered.length > 0) {
                 const value = ordered(discovered);
                 await mkdir(dirname(persistPath(id)), { recursive: true });
+                const before = await persisted(id).read();
                 await persisted(id).update(() => value.models);
                 cache.set(id, { value, expiresAt: Date.now() + MODELS_TTL_MS });
+                if (!sameIds(before, value.models)) {
+                    options.onChanged?.(id);
+                }
                 return value;
             }
             // Uncached, so the next read re-probes instead of pinning a stale list.

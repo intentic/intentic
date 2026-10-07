@@ -1955,23 +1955,25 @@
             "factDownloaded": "Descargado",
             "factMemory": "usa unos {total} en ejecución",
             "factWindow": "contexto de {window}k",
-            "gpuGranted": "GPU NVIDIA, {vram} de VRAM",
-            "gpuOffered": "Solo CPU",
-            "gpuOfferedHint": "Puedes activar una GPU NVIDIA en los ajustes del modelo.",
-            "gpuUnsupported": "Solo CPU (este host no tiene runtime de GPU)",
             "memoryCapped": "{memory} de memoria para este sandbox",
             "memoryMachine": "{memory} de memoria",
-            "moreModels": "Otros modelos, GGUF propio, ajustes de GPU",
+            "moreModels": "Otros modelos, GGUF propio",
             "needsRebuild": "Esta imagen aún no incluye llama-server. Reconstruye el sandbox desde Entorno en la página Sandbox y vuelve después.",
             "openSettings": "Ajustes del modelo",
             "quickJobsOnly": "Tareas rápidas",
             "quickJobsPitch": "Escribe mensajes de commit y títulos de sesión. Demasiado pequeño para chatear o para turnos de agente.",
             "ready": "Listo",
-            "sizedForGpu": "Las opciones caben en los {free} que un modelo puede usar en la GPU.",
             "sizedForMemory": "Las opciones caben en los {free} de memoria libres ahora.",
             "statusFailed": "No arrancó",
-            "statusSlow": "Va lento",
             "windowUnderFloor": "Su ventana es demasiado pequeña para un turno de agente, así que solo sirve para tareas rápidas. Más memoria la ampliaría."
+        },
+        "hostServers": {
+            "title": "{server} en este equipo",
+            "running": "en marcha, aún no añadido",
+            "noModels": "En marcha, sin modelos descargados todavía",
+            "modelsAndMore": "{models} y {count} más",
+            "use": "Usarlo",
+            "noneFound": "Para usar una GPU, ejecuta Ollama o LM Studio en el equipo que aloja este sandbox y aparecerá aquí. En Linux, inicia Ollama con OLLAMA_HOST=0.0.0.0; en LM Studio, activa el servicio en la red local."
         }
     },
     "desktop": {
@@ -2485,7 +2487,8 @@
             "sandboxDoesNotAnswer": "Este sandbox no responde en su dirección pública",
             "unreachableElsewhere": "Inaccesible desde otros dispositivos",
             "setupPredatesPublicAddress": "Su configuración es anterior a las direcciones públicas, así que solo puede abrirlo el ordenador en el que se ejecuta.",
-            "setupOutOfDate": "Su configuración está desactualizada"
+            "setupOutOfDate": "Su configuración está desactualizada",
+            "runFixOnItsComputer": "En el ordenador en el que se ejecuta, ejecuta `ic sandbox fix`: revisa cada enlace con el sandbox y repara lo que puede."
         },
         "containerHealthCard": {
             "connectComputerRunsSandbox": "O conecta el ordenador en el que se ejecuta para repararlo desde aquí.",
@@ -2493,7 +2496,7 @@
             "openSetupScreen": "Abrir configuración",
             "reconnectSandbox": "Volver a conectar",
             "reconnecting": "Reconectando…",
-            "replacesContainer": "Reconstruye su contenedor en {host}. Archivos, historial y Docker se conservan.",
+            "confirmReconnect": "Vuelve a crear su contenedor en {host} a partir de su configuración. Se conservan los inicios de sesión, los archivos, el historial y Docker.",
             "sandboxReplacedPageReconnects": "Si se reemplazó, esta página se reconecta sola cuando vuelva.",
             "missingEnv": "Falta en su contenedor:",
             "details": "Detalles"

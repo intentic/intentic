@@ -207,15 +207,17 @@ export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", sl
 
 // One argv for both claim-redeeming ops, because `ic sandbox connect` IS both: a claim minted for a row this machine
 // already runs reconnects it, and a claim minted for a fresh row builds that sandbox here. What differs is which row
-// the claim was minted for, which is decided on the platform and is nothing this side can see.
-export const icConnectArgs = (setupCode: string | undefined): string[] => {
+// the claim was minted for, which is decided on the platform and is nothing this side can see, and whether ic may
+// replace a sandbox it finds under that name: only a reconnect says so, and ic refuses one that exists otherwise.
+export const icConnectArgs = (setupCode: string | undefined, op: "create" | "reconnect"): string[] => {
     if (setupCode === undefined || setupCode.trim() === "") {
         throw new Error(`"setupCode" is required: it is the claim carrying the values this sandbox is missing.`);
     }
     // No slug in argv: ic derives it from the claim, and a second spelling would build a second sandbox.
     // -y: there is no terminal to answer ic's other-sandboxes prompt.
+    // --replace: the owner confirmed reinstalling this sandbox in the browser; ic keeps what it was set up as.
     // `--` before the code: it is a positional, and a code beginning with a hyphen would otherwise parse as a flag.
-    return ["sandbox", "connect", "-y", "--", setupCode.trim()];
+    return ["sandbox", "connect", "-y", ...(op === "reconnect" ? ["--replace"] : []), "--", setupCode.trim()];
 };
 
 // A claim is redeemable only on the platform that minted it; host.docker.internal is a container's name for this machine.
@@ -662,7 +664,7 @@ export const reconnectSandbox = async (
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const args = icConnectArgs(setupCode);
+    const args = icConnectArgs(setupCode, "reconnect");
     const env = icConnectEnv(platformUrl);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
@@ -670,7 +672,7 @@ export const reconnectSandbox = async (
     if (run.code !== 0) {
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
     }
-    return `Reconnected sandbox "${slug}". Its files and its history were kept, and it now has what it was missing.`;
+    return `Reconnected sandbox "${slug}". Its files, history, logins and settings were kept, and it now has what it was missing.`;
 };
 
 // A sandbox this machine does not run yet, from a claim minted for a row that has never been anywhere. The same `ic`
@@ -686,7 +688,7 @@ export const createSandbox = async (
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const args = icConnectArgs(setupCode);
+    const args = icConnectArgs(setupCode, "create");
     const env = icConnectEnv(platformUrl);
     if ((await fleet()).some((box) => box.slug === slug)) {
         throw new Error(`This device already runs a sandbox called "${slug}". Nothing was created and the setup code was not spent.`);

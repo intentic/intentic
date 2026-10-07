@@ -239,7 +239,7 @@ export const ensureWeights = (source: LocalModelSource, destination: string): Pr
 // Weights fetched before anybody has asked for them, so the connect view's local lane can be taken up without a
 // download in front of it. Same destination path and same `.part` resume point the handler uses, so adding the card
 // afterwards finds the file or joins the transfer rather than starting a second one.
-const INSTANT_SOURCE = localModelSource({ model: LOCAL_MODEL_INSTANT.id, gpu: "off", context: LOCAL_MODEL_WINDOW_DEFAULT });
+const INSTANT_SOURCE = localModelSource({ model: LOCAL_MODEL_INSTANT.id, context: LOCAL_MODEL_WINDOW_DEFAULT });
 // A prefetch nobody is streaming has no error frame to throw; this is where its failure waits to be read.
 let prefetchFailure: string | undefined;
 

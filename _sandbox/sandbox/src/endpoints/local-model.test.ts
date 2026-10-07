@@ -35,7 +35,7 @@ test("endpointConfigOf answers for both endpoint-minting kinds and nothing else"
     const local: Capability = {
         id: "qwen",
         kind: "localmodel",
-        config: { model: "custom", gpu: "off", context: "65536", url: "https://example.com/m.gguf" },
+        config: { model: "custom", context: "65536", url: "https://example.com/m.gguf" },
     };
     expect(endpointConfigOf(local)).toEqual(localModelEndpointConfig("qwen"));
     expect(endpointConfigOf({ id: "docker", kind: "docker", config: { gpu: "off" } })).toBeUndefined();
@@ -47,14 +47,14 @@ test("endpointConfigOf answers for both endpoint-minting kinds and nothing else"
 // A curated pick carries its pinned commit and digest; a path typed by hand has nothing to be pinned against.
 test("a Hugging Face path splits into repo + path for hub's downloadFile, cached by file name", () => {
     const curated = localModelChoice("unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf")!;
-    expect(localModelSource({ model: curated.id, gpu: "off", context: "65536" })).toEqual({
+    expect(localModelSource({ model: curated.id, context: "65536" })).toEqual({
         repo: "unsloth/Qwen3.5-9B-GGUF",
         path: "Qwen3.5-9B-Q4_K_M.gguf",
         file: "Qwen3.5-9B-Q4_K_M.gguf",
         revision: curated.revision,
         sha256: curated.sha256,
     });
-    expect(localModelSource({ model: "owner/repo/sub/dir/model.gguf", gpu: "off", context: "65536" })).toEqual({
+    expect(localModelSource({ model: "owner/repo/sub/dir/model.gguf", context: "65536" })).toEqual({
         repo: "owner/repo",
         path: "sub/dir/model.gguf",
         file: "model.gguf",
@@ -64,14 +64,14 @@ test("a Hugging Face path splits into repo + path for hub's downloadFile, cached
 // A branch moves under a card that did not; a digest that is not a sha256 would refuse every download of its file.
 test("every curated pin is a commit and a sha256, never a branch", () => {
     for (const choice of LOCAL_MODELS) {
-        const source = localModelSource({ model: choice.id, gpu: "off", context: "65536" });
+        const source = localModelSource({ model: choice.id, context: "65536" });
         expect(source?.revision).toMatch(/^[0-9a-f]{40}$/);
         expect(source?.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
 });
 
 test("the custom escape hatch takes the URL verbatim and keys the cache by its basename, query stripped", () => {
-    expect(localModelSource({ model: "custom", gpu: "off", context: "65536", url: "https://example.com/files/m.gguf?download=true" })).toEqual({
+    expect(localModelSource({ model: "custom", context: "65536", url: "https://example.com/files/m.gguf?download=true" })).toEqual({
         url: "https://example.com/files/m.gguf?download=true",
         file: "m.gguf",
     });
@@ -79,16 +79,16 @@ test("the custom escape hatch takes the URL verbatim and keys the cache by its b
 
 // Undefined is a refusal the caller must word, not a fallback; no default model is substituted.
 test("an unresolvable source is undefined: custom without a url, a path too short to name a file", () => {
-    expect(localModelSource({ model: "custom", gpu: "off", context: "65536" })).toBeUndefined();
-    expect(localModelSource({ model: "custom", gpu: "off", context: "65536", url: "   " })).toBeUndefined();
-    expect(localModelSource({ model: "owner/repo", gpu: "off", context: "65536" })).toBeUndefined();
-    expect(localModelSource({ model: "just-a-name", gpu: "off", context: "65536" })).toBeUndefined();
+    expect(localModelSource({ model: "custom", context: "65536" })).toBeUndefined();
+    expect(localModelSource({ model: "custom", context: "65536", url: "   " })).toBeUndefined();
+    expect(localModelSource({ model: "owner/repo", context: "65536" })).toBeUndefined();
+    expect(localModelSource({ model: "just-a-name", context: "65536" })).toBeUndefined();
 });
 
 // Fixture includes an anthropic-protocol endpoint to prove it stays excluded, since the harness dials it directly.
 test("a local model rides the translator list as its derived endpoint", () => {
     const capabilities: Capability[] = [
-        { id: "qwen", kind: "localmodel", config: { model: "owner/repo/m.gguf", gpu: "off", context: "65536" } },
+        { id: "qwen", kind: "localmodel", config: { model: "owner/repo/m.gguf", context: "65536" } },
         { id: "gateway", kind: "endpoint", config: { baseUrl: "https://x.example.com/v1", protocol: "anthropic" } },
         { id: "docker", kind: "docker", config: { gpu: "off" } },
     ];
@@ -96,12 +96,12 @@ test("a local model rides the translator list as its derived endpoint", () => {
 });
 
 test("the label is the file without its extension", () => {
-    expect(localModelLabel({ model: "owner/repo/Qwen3.5-9B-Q4_K_M.gguf", gpu: "off", context: "65536" })).toBe("Qwen3.5-9B-Q4_K_M");
-    expect(localModelLabel({ model: "custom", gpu: "off", context: "65536", url: "https://example.com/m.gguf" })).toBe("m");
+    expect(localModelLabel({ model: "owner/repo/Qwen3.5-9B-Q4_K_M.gguf", context: "65536" })).toBe("Qwen3.5-9B-Q4_K_M");
+    expect(localModelLabel({ model: "custom", context: "65536", url: "https://example.com/m.gguf" })).toBe("m");
 });
 
 test("a rung resolves to its own token count, a custom entry to the number typed", () => {
-    const model = { model: "owner/repo/m.gguf", gpu: "off" } as const;
+    const model = { model: "owner/repo/m.gguf" } as const;
     expect(localModelWindow({ ...model, context: "16384" })).toBe(16_384);
     expect(localModelWindow({ ...model, context: "131072" })).toBe(131_072);
     expect(localModelWindow({ ...model, context: "custom", contextTokens: 98_304 })).toBe(98_304);
@@ -109,7 +109,7 @@ test("a rung resolves to its own token count, a custom entry to the number typed
 
 // A form cannot submit this state; only a hand-edited manifest can, and the window falls back rather than refusing.
 test("custom with no number falls back to the default rung", () => {
-    expect(localModelWindow({ model: "owner/repo/m.gguf", gpu: "off", context: "custom" })).toBe(Number(LOCAL_MODEL_WINDOW_DEFAULT));
+    expect(localModelWindow({ model: "owner/repo/m.gguf", context: "custom" })).toBe(Number(LOCAL_MODEL_WINDOW_DEFAULT));
 });
 
 // Never rounds: the label must stay checkable against the number actually chosen.

@@ -105,6 +105,7 @@ applies from every conversation's next turn, with no restart.
 | an account, folder or shelf of tools this conversation's persona or area withholds | `grants request capability\|folder\|shelf <what> --why "…"`; it reaches the conversation from its next turn |
 | to know what this conversation is still waiting on people for | `needs`; answers arrive by themselves, so never poll and never ask twice |
 | a repo they can open, run and preview from the sidebar | `panels` skill: give the repo an `operator/` web app |
+| a model on their GPU, or a model server they already run | a model endpoint, never a model built into this image: Ollama or LM Studio on the computer hosting the sandbox is `http://host.docker.internal:<port>/v1` (11434, 1234). The Local models panel finds and adds those by itself; for anything else, `capabilities request endpoint --set baseUrl=… --why …`. Local models inside the sandbox run on its CPU only |
 | to pay an x402 endpoint | `wallet` skill: the `wallet` CLI; the owner approves each payment outside their auto-approve band |
 | a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill: the `sandboxes` CLI; every create asks in chat first. A difference only in how a turn behaves is a persona, not a machine |
 | a post on X, Reddit, Discord, YouTube… prepared rather than sent | `drafts` skill (present when the drafts extension is on) |

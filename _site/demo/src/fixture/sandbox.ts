@@ -133,7 +133,7 @@ export const demoCapabilities = (): CapabilitySummary[] => [
     },
 ];
 
-// A believable laptop for the connect view's local lane: 32 GB, no GPU passed through, nothing downloaded yet. Priced
+// A believable laptop for the connect view's local lane: 32 GB, nothing downloaded yet. Priced
 // with the daemon's own arithmetic rather than typed numbers, so the demo cannot show a machine the real fit route
 // would size differently.
 const DEMO_MEMORY_BYTES = 32 * 1024 * 1024 * 1024;
@@ -155,8 +155,6 @@ export const demoLocalModelFit = (): LocalModelFitResponse => {
     return {
         memoryBytes: DEMO_MEMORY_BYTES,
         memoryCapped: false,
-        gpu: `absent`,
-        gpuMemoryBytes: 0,
         budgetBytes: DEMO_BUDGET_BYTES,
         serverReady: true,
         options: LOCAL_MODELS.map((choice) => ({

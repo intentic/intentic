@@ -1,5 +1,5 @@
-import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
-import { isJsonObject, mapValue, retireEntries } from "../store/evolution/conversions.js";
+import { type Capability, CapabilitySchema, type LocalModelConfig, VAULTED } from "@intentic/sandbox-contract";
+import { isJsonObject, mapValue, retireEntries, transform } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { IdListStore } from "../store/id-list-file.js";
 import { openIdList } from "../store/open-document.js";
@@ -14,6 +14,14 @@ import type { SecretVault } from "./credentials/secret-vault.js";
 // build.
 export type CapabilitiesStore = IdListStore<Capability>;
 
+// A local model as stored before its GPU switch was retired: today's config plus the switch.
+// A type rather than an interface, so it is a JsonObject (an interface carries no index signature).
+type LocalModelWithGpu = {
+    id: string;
+    kind: "localmodel";
+    config: LocalModelConfig & { gpu: unknown };
+};
+
 export const capabilitiesDocument = defineDocument({
     path: stateRelPath(".intentic/config/capabilities.json"),
     schema: CapabilitySchema,
@@ -27,6 +35,18 @@ export const capabilitiesDocument = defineDocument({
             "retires a service or integration connection, withdrawn in favour of CLI connectors",
             (entry): entry is { kind: "service" | "integration" } =>
                 isJsonObject(entry) && (entry["kind"] === "service" || entry["kind"] === "integration"),
+        ),
+        // 2026-10-07: a local model no longer has a GPU switch. Its CUDA build broke a rebuild once a year and outgrew what
+        // a sandbox should compile; a GPU model is now a server on the host, reached as a model endpoint. Only the local
+        // model's `gpu` goes: docker's own GPU option keeps the same key.
+        transform(
+            "drops a local model's GPU switch, retired in favour of a model server on the host",
+            (entry): entry is LocalModelWithGpu =>
+                entry["kind"] === "localmodel" && isJsonObject(entry["config"]) && Object.hasOwn(entry["config"], "gpu"),
+            (entry) => {
+                const { gpu: _retired, ...config } = entry.config;
+                return { ...entry, config };
+            },
         ),
     ],
 });

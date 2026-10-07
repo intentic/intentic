@@ -269,7 +269,6 @@
     "_sandbox/sandbox/src/derived/derived-blob.ts": 1,
     "_sandbox/sandbox/src/derived/derived-text.ts": 4,
     "_sandbox/sandbox/src/endpoints/endpoint-catalog.ts": 4,
-    "_sandbox/sandbox/src/endpoints/local-model-fit.ts": 1,
     "_sandbox/sandbox/src/engines/engine-channel.ts": 3,
     "_sandbox/sandbox/src/engines/engine-descriptors.ts": 2,
     "_sandbox/sandbox/src/engines/engine-install.ts": 2,

@@ -2,6 +2,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract";
+import { versionedBase } from "../endpoints/endpoint-config.js";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
 // Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
@@ -183,11 +184,12 @@ const contributionProbe = (contribution: ResolvedContribution | undefined, confi
 const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
     const config = capability.config as Record<string, unknown>;
     if (capability.kind === "endpoint") {
-        const base = String(config["baseUrl"] ?? "").replace(/\/+$/u, "");
         const anthropic = config["protocol"] === "anthropic";
         const key = String(config["apiKey"] ?? "").trim();
         return {
-            url: `${base}/models`,
+            // The same URL discovery reads (endpoint-config.ts), so `http://host.docker.internal:11434` without its /v1
+            // passes the test exactly when its models would be found.
+            url: `${versionedBase(String(config["baseUrl"] ?? ""))}/models`,
             headers: key === "" ? {} : anthropic ? { "x-api-key": key, "anthropic-version": "2023-06-01" } : { authorization: `Bearer ${key}` },
             subject: "your model endpoint",
         };

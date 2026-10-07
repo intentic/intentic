@@ -140,20 +140,27 @@ test("a rollback carries its `to` to ic, and no other swap takes one", () => {
 
 // ic sandbox connect derives the sandbox from the claim; a slug alongside it would pick a second one.
 test("a reconnect redeems the claim and lets ic derive the sandbox from it", () => {
-    expect(icConnectArgs("code-abc")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
-    expect(icConnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
+    expect(icConnectArgs("code-abc", "reconnect")).toEqual(["sandbox", "connect", "-y", "--replace", "--", "code-abc"]);
+    expect(icConnectArgs("  code-abc  ", "reconnect")).toEqual(["sandbox", "connect", "-y", "--replace", "--", "code-abc"]);
+});
+
+// ic refuses to reinstall a sandbox it already has unless told to: only a reconnect, which the owner confirmed in the
+// browser, says so, and a create never does, so a claim for a name already taken is refused by ic too.
+test("only a reconnect lets ic replace the sandbox it finds under the claim's name", () => {
+    expect(icConnectArgs("code-abc", "reconnect")).toContain("--replace");
+    expect(icConnectArgs("code-abc", "create")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
 });
 
 // A code starting with a hyphen is a code, not a flag: `--` is what keeps the argument parser from reading it as one.
 test("a reconnect passes a hyphen-leading code as a value", () => {
-    expect(icConnectArgs("-Tq9xk")).toEqual(["sandbox", "connect", "-y", "--", "-Tq9xk"]);
+    expect(icConnectArgs("-Tq9xk", "reconnect")).toEqual(["sandbox", "connect", "-y", "--replace", "--", "-Tq9xk"]);
 });
 
 test("a reconnect with no claim is refused rather than run as a bare connect", () => {
     // Without a code, ic sandbox connect -y opens an interactive wizard this machine has no terminal for.
-    expect(() => icConnectArgs(undefined)).toThrow(/setupCode.*required/i);
-    expect(() => icConnectArgs("")).toThrow(/required/i);
-    expect(() => icConnectArgs("   ")).toThrow(/required/i);
+    expect(() => icConnectArgs(undefined, "reconnect")).toThrow(/setupCode.*required/i);
+    expect(() => icConnectArgs("", "reconnect")).toThrow(/required/i);
+    expect(() => icConnectArgs("   ", "create")).toThrow(/required/i);
 });
 
 // The claim is single-use: a create that would land on a name already taken has to refuse BEFORE ic runs, or the

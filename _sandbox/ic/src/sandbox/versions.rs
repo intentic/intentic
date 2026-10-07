@@ -44,10 +44,8 @@ pub fn without(record: &ChannelRecord, image: &str) -> ChannelRecord {
         .filter(|pin| pin.image != image);
     let previous = rest.next();
     ChannelRecord {
-        previous: previous.as_ref().map(|pin| pin.image.clone()),
-        previous_version: previous.and_then(|pin| pin.version),
         kept: rest.collect(),
-        ..record.clone()
+        ..record.with_previous(previous.as_ref())
     }
 }
 
@@ -83,6 +81,7 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
         return Ok(Pin {
             image: format!("{DEFAULT_REGISTRY}:{version}"),
             version: Some(version.to_string()),
+            ..Pin::default()
         });
     }
     if to
@@ -91,7 +90,7 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
     {
         return Ok(Pin {
             image: to.to_string(),
-            version: None,
+            ..Pin::default()
         });
     }
     let kept: Vec<String> = record
@@ -123,6 +122,25 @@ pub fn reachable(pin: &Pin, on_machine: bool) -> Option<String> {
         .map(|version| format!("{DEFAULT_REGISTRY}:{}", version.trim_start_matches('v')))
 }
 
+/* THE ENVIRONMENT BUILD KEPT BESIDE A PIN. A rollback used to rebuild today's approved recipe on the pinned base, so a
+recipe that no longer builds (a broken capability fragment, a package gone from its mirror) made going back impossible
+exactly when it was needed. The build the sandbox actually ran on that base is pinned with it, and run as it is. */
+
+/// The environment build a rollback onto `pin` runs as it is, and the hash its container carries: the one pinned
+/// beside that base, while this machine still holds both. None sends the rollback down the older road, rebuilding today's
+/// approved recipe on `target`: when the pinned base is gone and its release is run instead (`reachable`), and when the
+/// sandbox has no approved recipe any more, since the owner removed what that build installs. Pure over `on_machine`.
+pub fn pinned_environment(
+    pin: &Pin,
+    target: &str,
+    has_recipe: bool,
+    on_machine: &dyn Fn(&str) -> bool,
+) -> Option<(String, String)> {
+    let image = pin.env_image.as_ref()?;
+    let hash = pin.env_hash.as_ref()?;
+    (has_recipe && target == pin.image && on_machine(image)).then(|| (image.clone(), hash.clone()))
+}
+
 /// The rollback targets that can still be had, newest first, each as what a rollback would run. Pure over `on_machine`.
 pub fn reachable_targets(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Vec<Pin> {
     record
@@ -132,6 +150,7 @@ pub fn reachable_targets(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bo
             reachable(&pin, on_machine(&pin.image)).map(|image| Pin {
                 image,
                 version: pin.version,
+                ..Pin::default()
             })
         })
         .collect()
@@ -255,16 +274,16 @@ mod tests {
         Pin {
             image: image.to_string(),
             version: Some(version.to_string()),
+            ..Pin::default()
         }
     }
 
     fn with_targets(previous: Option<Pin>, kept: Vec<Pin>) -> ChannelRecord {
         ChannelRecord {
-            previous: previous.as_ref().map(|pin| pin.image.clone()),
-            previous_version: previous.and_then(|pin| pin.version),
             kept,
             ..ChannelRecord::default()
         }
+        .with_previous(previous.as_ref())
     }
 
     #[test]
@@ -386,13 +405,13 @@ mod tests {
         );
         let nameless = Pin {
             image: "intentic-sandbox-rollback-x:fedcba987654".to_string(),
-            version: None,
+            ..Pin::default()
         };
         assert_eq!(reachable(&nameless, false), None);
         // An older record named the registry's own tag: pulled as it is.
         let published = Pin {
             image: "ghcr.io/intentic/sandbox:1.1.0".to_string(),
-            version: None,
+            ..Pin::default()
         };
         assert_eq!(
             reachable(&published, false).as_deref(),
@@ -409,6 +428,67 @@ mod tests {
             targets_json(&record, &all_here).as_array().map(Vec::len),
             Some(2)
         );
+    }
+
+    fn env_pin(image: &str, version: &str, env: &str) -> Pin {
+        Pin {
+            env_image: Some(env.to_string()),
+            env_hash: Some(format!("hash-of-{env}")),
+            ..pin(image, version)
+        }
+    }
+
+    #[test]
+    fn a_rollback_runs_the_environment_build_kept_beside_its_base_and_rebuilds_only_when_it_is_gone(
+    ) {
+        let kept = env_pin("pin:b", "1.2.0", "pin:env-b");
+        assert_eq!(
+            pinned_environment(&kept, "pin:b", true, &|_| true),
+            Some(("pin:env-b".to_string(), "hash-of-pin:env-b".to_string()))
+        );
+        // Pruned outside ic: today's recipe is rebuilt on the base, as before.
+        assert_eq!(
+            pinned_environment(&kept, "pin:b", true, &|image| image != "pin:env-b"),
+            None
+        );
+        // The base itself gone, its release run instead: the build rode a base that is not the one going back to.
+        assert_eq!(
+            pinned_environment(&kept, "ghcr.io/intentic/sandbox:1.2.0", true, &|_| true),
+            None
+        );
+        // No approved recipe now: the owner removed what that build installs.
+        assert_eq!(pinned_environment(&kept, "pin:b", false, &|_| true), None);
+        // A stock sandbox's pin, or one an older ic wrote, has nothing beside it.
+        assert_eq!(
+            pinned_environment(&pin("pin:b", "1.2.0"), "pin:b", true, &|_| true),
+            None
+        );
+    }
+
+    #[test]
+    fn the_environment_build_travels_with_its_pin_through_a_rollback_and_back() {
+        let saved = with_targets(Some(env_pin("pin:b", "1.2.0", "pin:env-b")), Vec::new());
+        // Running c on its own environment build, going back to b: c's pair becomes the way forward.
+        let (previous, kept, _) = next_targets(
+            &saved,
+            Some(env_pin("pin:c", "1.3.0", "pin:env-c")),
+            "pin:b",
+            2,
+        );
+        assert_eq!(previous, Some(env_pin("pin:c", "1.3.0", "pin:env-c")));
+        assert!(kept.is_empty());
+        // And forward again: b's pair is the way back, environment build and all.
+        let after = with_targets(previous, kept);
+        let (previous, _, _) = next_targets(
+            &after,
+            Some(env_pin("pin:b", "1.2.0", "pin:env-b")),
+            "pin:c",
+            2,
+        );
+        assert_eq!(previous, Some(env_pin("pin:b", "1.2.0", "pin:env-b")));
+        // Taking a gone pin off the list takes its environment build with it.
+        let rest = without(&after, "pin:c");
+        assert_eq!((rest.previous, rest.previous_env), (None, None));
     }
 
     #[test]

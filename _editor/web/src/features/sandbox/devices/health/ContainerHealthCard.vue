@@ -4,8 +4,8 @@ import { Button, Icon, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
-import { containerNotices } from "../../overview/containerHealth";
-import { manageDeviceSandbox, useDevices, useHostRunning } from "../useDevices";
+import { containerNotices, offersReconnect, reconnectDoor } from "../../overview/containerHealth";
+import { manageDeviceSandbox, useDevices } from "../useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
@@ -22,9 +22,10 @@ const notices = computed(() => (active.value === undefined ? [] : containerNotic
 // The daemon hostname's first label is the sandbox slug.
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-// The machine this sandbox runs on, by the one rule every "run it out there" path shares (hostRunningSandbox). Kept
-// as the row, not the id, since the confirmation below names the machine.
-const hostId = useHostRunning(() => ownSlug.value);
+// The machine this sandbox runs on, through the door of the side that made it where the listing says (reconnectDoor),
+// else by the one rule every "run it out there" path shares. Kept as the row, not the id, since the confirmation below
+// names the machine.
+const hostId = computed(() => reconnectDoor(devices.value, ownSlug.value));
 const host = computed<Device | undefined>(() =>
     hostId.value === undefined ? undefined : devices.value.find((device) => device.hostId === hostId.value),
 );
@@ -33,8 +34,8 @@ const host = computed<Device | undefined>(() =>
 const canRepair = computed(() => isOwner.value && host.value !== undefined && ownSlug.value !== undefined);
 
 // The repair runs out on the machine and ends by replacing this container, so the machine's card and the Devices tile
-// say so for as long as it lasts.
-
+// say so for as long as it lasts. Asked first, inline: the press says what is replaced and what is kept.
+const confirming = ref(false);
 const busy = ref(false);
 const failure = ref<string | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
@@ -80,6 +81,7 @@ const repair = async (): Promise<void> => {
         failure.value = error instanceof Error ? error.message : String(error);
     } finally {
         busy.value = false;
+        confirming.value = false;
         endMark();
     }
 };
@@ -96,19 +98,28 @@ const repair = async (): Promise<void> => {
                 <p class="text-xs text-muted">{{ notice.detail }}</p>
                 <p v-if="notice.repair" class="text-xs text-muted">{{ notice.repair }}</p>
 
-                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <!-- Only an out-of-date setup is repaired by reinstalling; every other notice says what to run instead. -->
+                <div v-if="offersReconnect(notice)" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <!-- Named for what it does to the container, not for the fault: "Repair" hides that this replaces it. -->
                     <Button
-                        v-if="canRepair"
+                        v-if="canRepair && !confirming"
                         size="small"
                         severity="secondary"
-                        :loading="busy"
-                        :disabled="busy"
-                        :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
-                        @click="repair"
+                        :label="t(`sandbox.containerHealthCard.reconnectSandbox`)"
+                        @click="confirming = true"
                     >
-                        <template v-if="!busy" #icon><Icon name="refresh" /></template>
+                        <template #icon><Icon name="refresh" /></template>
                     </Button>
+                    <template v-else-if="canRepair">
+                        <Button
+                            size="small"
+                            :loading="busy"
+                            :disabled="busy"
+                            :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
+                            @click="repair"
+                        />
+                        <Button v-if="!busy" :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="confirming = false" />
+                    </template>
                     <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
                          they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
                     <Button
@@ -122,9 +133,12 @@ const repair = async (): Promise<void> => {
                         <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
                     <!-- `basis-48`: below that width the caption takes a line of its own instead of squeezing beside the button. -->
+                    <!-- Shown at the confirm moment, not as standing prose: what is replaced, and what is kept. -->
                     <p class="min-w-0 grow basis-48 text-2xs text-subtle">
                         <template v-if="canRepair">
-                            {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
+                            <template v-if="confirming">
+                                {{ t(`sandbox.containerHealthCard.confirmReconnect`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
+                            </template>
                         </template>
                         <template v-else-if="!isOwner">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</template>
                         <template v-else>{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</template>

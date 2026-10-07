@@ -61,7 +61,7 @@ step() {
 SETUP_CODE=""
 if [ $# -gt 0 ]; then
     case "$1" in
-        -y | --yes | --force) ;;
+        -y | --yes | --force | --replace) ;;
         *)
             SETUP_CODE="$1"
             shift

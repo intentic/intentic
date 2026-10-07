@@ -27,27 +27,28 @@ export const TrialStatusSchema = z.object({
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 
-// Whether this container can reach an NVIDIA GPU, and how sure we are. The three states are not a tri-state boolean:
-// `absent` means nobody has asked yet, so the switch is still worth offering, while `unsupported` means the host's
-// Docker answered and has no nvidia runtime, which is a sentence to print rather than a switch to offer. Before the
-// grant the sandbox cannot see VRAM at all — only after it can `gpuMemoryBytes` be anything but zero.
-export const LocalModelGpuSchema = z.enum(["granted", "unsupported", "absent"]);
-export type LocalModelGpu = z.infer<typeof LocalModelGpuSchema>;
+// A model server found running on the computer that hosts the sandbox.
+export const HostModelServerSchema = z.object({
+    kind: z.enum(["ollama", "lmstudio", "llamacpp", "vllm"]).describe("Which program usually listens on the port it answered on."),
+    label: z.string().describe("Its name, for the row."),
+    baseUrl: z.string().describe("Where the container reaches it, as a model endpoint's base URL."),
+    models: z.array(z.string()).describe("The models it lists right now."),
+    capability: z.string().optional().describe("The connection that already points at it, if one does."),
+});
+export type HostModelServer = z.infer<typeof HostModelServerSchema>;
 
-// Which one device a model runs at full speed on: the GPU when one reached this sandbox, else the host's RAM. One, never
-// a sum: a model split between a card and the CPU runs at the CPU's pace.
-export const LocalModelDeviceSchema = z.enum(["gpu", "host"]);
-export type LocalModelDevice = z.infer<typeof LocalModelDeviceSchema>;
+export const HostModelServersSchema = z.object({ servers: z.array(HostModelServerSchema) });
+export type HostModelServers = z.infer<typeof HostModelServersSchema>;
 
 // One window rung priced against one model, so a surface never has to redo the arithmetic the start check will.
 const LocalModelWindowFitSchema = z.object({
     tokens: z.number().int().positive(),
     // Weights + KV cache + the runtime's own floor: the same estimate the admission check refuses a start on.
     totalBytes: z.number().int().nonnegative(),
-    // Whether it can load at all, GPU and host together: what a start is refused on.
+    // Whether it can load at all: what a start is refused on.
     fits: z.boolean(),
-    // Whether all of it fits in the free memory of the one device, so it runs at that device's pace. A rung can fit and
-    // still run mostly on the CPU. Absent from a daemon older than the distinction.
+    // Whether all of it fits in the sandbox's free memory, so it runs at full speed. Absent from a daemon older than the
+    // distinction.
     fullSpeed: z.boolean().optional(),
 });
 
@@ -79,18 +80,12 @@ export const LocalModelFitSchema = z.object({
     // True when the number above is a container limit rather than the machine's: worth saying, since the host may look
     // much larger than what a model can have.
     memoryCapped: z.boolean(),
-    gpu: LocalModelGpuSchema,
-    gpuMemoryBytes: z.number().int().nonnegative(),
-    // The GPU's free memory, on the card with the most of it; zero before the grant. Absent from an older daemon.
-    gpuFreeBytes: z.number().int().nonnegative().optional(),
-    // What a start is refused on: the host and the GPU together, since llama.cpp can split a model between them. Only a
-    // model that cannot load at all is turned away here; a model that fits only this way runs mostly on the CPU.
+    // What a start is refused on: the sandbox's memory, by total. Only a model that cannot load at all is turned away.
     budgetBytes: z.number().int().nonnegative(),
-    // What a model may take and still run at full speed: the free memory of one device (fullSpeedDevice), plus whatever
-    // this sandbox's own local model holds there now, since a start stops it first. Both offers are sized against this,
-    // never against the sum. Zero means unmeasurable. Absent from a daemon older than the distinction.
+    // What a model may take and still run at full speed: the sandbox's free memory, plus whatever its own local model
+    // holds now, since a start stops it first. Both offers are sized against this. Zero means unmeasurable. Absent from
+    // a daemon older than the distinction.
     fullSpeedBytes: z.number().int().nonnegative().optional(),
-    fullSpeedDevice: LocalModelDeviceSchema.optional(),
     // Whether llama-server is in this image. False means the local lane costs a rebuild before it can serve anything.
     serverReady: z.boolean(),
     options: z.array(LocalModelOptionFitSchema),
@@ -122,17 +117,28 @@ export const endpointsContract = {
                 "The allowance, what has been used, when it resets, and which model actually answered the last message. Not being available is the ordinary answer rather than a failure: most sandboxes run against a platform that offers no trial at all.",
         })
         .output(TrialStatusSchema),
-    // Sized against this machine rather than a table in the browser, because the numbers that matter (a cgroup cap, a
-    // GPU that may not be passed through, weights already on disk) are only knowable in here.
+    // Sized against this machine rather than a table in the browser, because the numbers that matter (a cgroup cap, the
+    // memory free now, weights already on disk) are only knowable in here.
     localModelFit: procedure
         .route({
             method: "GET",
             path: "/endpoints/local-model/fit",
             summary: "Which local models this machine can actually run",
             description:
-                "The memory this sandbox may use, whether a GPU reached it, and every curated model priced two ways: whether it fits on one device's free memory and so runs at full speed, and whether it can load at all. The two the connect view offers, one that downloads in a minute and the best this machine runs at full speed, come from the first; a start is refused only on the second.",
+                "The memory this sandbox may use, and every curated model priced two ways: whether it fits in the free memory and so runs at full speed, and whether it can load at all. The two the connect view offers, one that downloads in a minute and the best this machine runs at full speed, come from the first; a start is refused only on the second. These run on the sandbox's CPU; a GPU model is a server on the host, which hostServers finds.",
         })
         .output(LocalModelFitSchema),
+    // A GPU model runs in a server on the computer that hosts the sandbox, never inside it; this finds the ones already
+    // running, so pointing at one is a press rather than a form.
+    hostServers: procedure
+        .route({
+            method: "GET",
+            path: "/endpoints/host-servers",
+            summary: "Model servers already running on the computer that hosts this sandbox",
+            description:
+                "Asks the usual ports of the hosting computer (Ollama 11434, LM Studio 1234, llama.cpp 8080, vLLM 8000) for their model list, as the container reaches them at host.docker.internal. Only servers that answer with models are listed, each with the connection that already points at it, if one does. Nothing is added.",
+        })
+        .output(HostModelServersSchema),
     // Start or stop fetching the instant model's weights before anyone has asked for them, so the first local turn does
     // not begin with a download. Idempotent: starting twice joins the transfer already running.
     localModelPrefetch: procedure

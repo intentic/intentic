@@ -5,7 +5,13 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::platform;
-use crate::sandbox::{container_status, doctor, list_slugs, project_dir, remove, CONTAINER_PREFIX};
+use crate::record::{ChannelRecord, Phase, Swap};
+use crate::sandbox::recreate::{self, Restored};
+use crate::sandbox::side::{self, Side};
+use crate::sandbox::{
+    container_status, doctor, list_slugs, lock, mirror, now_ms, project_dir, remove, resume,
+    CONTAINER_PREFIX, PARKED_SUFFIX,
+};
 use crate::tty;
 use crate::ui;
 use crate::util;
@@ -16,6 +22,8 @@ use crate::util::{bail, kv_lines, slug_from_token, step, Result};
 pub struct Args {
     pub setup_code: Option<String>,
     pub yes: bool,
+    /// Reinstall a sandbox this machine already has, keeping what it was set up as (see `existing`).
+    pub replace: bool,
 }
 
 fn env(name: &str) -> Option<String> {
@@ -53,9 +61,9 @@ fn connect(
         "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com",
     );
     let web_origin = env_or("WEB_ORIGIN", "https://app.intentic.dev");
-    let sandbox_image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
+    let mut sandbox_image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
     let preview_port = env_or("PREVIEW_PORT", "5173");
-    let sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
+    let mut sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
     let agent_auth_volume = env("INTENTIC_AGENT_AUTH_VOLUME");
     let sync_dir = env("SYNC_DIR");
     // A project sandbox's folder (a sandbox made for one folder), refused before anything starts when it is not a shape
@@ -202,9 +210,32 @@ fn connect(
         slug_from_token(&connect_token)
     };
     let container = format!("{CONTAINER_PREFIX}{slug}");
+    let parked = format!("{container}{PARKED_SUFFIX}");
+
+    /* A SANDBOX THIS MACHINE ALREADY HAS IS NOT SET UP AGAIN BY ACCIDENT. Connect is a whole install: run over a live
+    sandbox it used to remove the container and start the stock image in its place, with none of what the sandbox was
+    (its logins volume, its dev mounts, its web origin, its device), and -y skipped the one question (2026-10-07). */
+    let replacing = match existing(
+        docker::container_exists(&container) || docker::container_exists(&parked),
+        args.replace,
+        args.yes,
+        || {
+            ui::suspend();
+            println!("\nintentic: sandbox {slug} already exists on this machine.");
+            println!("Setting it up again recreates its container from this setup, and keeps its files, history, logins, settings and device.");
+            let yes = tty::confirm("Recreate it?", false);
+            println!();
+            ui::resume();
+            yes
+        },
+    ) {
+        Existing::None => None,
+        Existing::Refuse => bail!("{}", refusal(&slug)),
+        Existing::Replace => Some(Replacing::take(&slug, &container, &parked)?),
+    };
 
     // If OTHER sandboxes already exist, don't silently start one more beside them — surface them and let the
-    // user continue, clean some up first, or quit. A same-slug re-run is a normal reset. Skipped with -y;
+    // user continue, clean some up first, or quit. A same-slug re-run was settled above. Skipped with -y;
     // with no terminal we proceed (an explicitly requested create must not block automation).
     if !args.yes {
         let others: Vec<String> = list_slugs()
@@ -297,10 +328,32 @@ fn connect(
         ));
     }
 
+    // A replace keeps the image the sandbox runs (its environment build included) unless SANDBOX_IMAGE names another,
+    // and the resolvers it was made with unless SANDBOX_DNS does.
+    if let Some(replacing) = &replacing {
+        if let Some(kept) = replacing.kept_image(env("SANDBOX_IMAGE").as_deref()) {
+            sandbox_image = kept.to_string();
+        }
+        if let (None, Some(dns)) = (env("SANDBOX_DNS"), &replacing.dns) {
+            sandbox_dns = dns.clone();
+        }
+    }
     // Resolve the image up front (a slow first pull shouldn't look like a hang) — and the tunnel step below,
     // which runs this same image via `--entrypoint intentic`, must never execute a stale locally-cached tag.
     reporter.stage("pulling-image");
-    if reuses_local_image(env("INTENTIC_REUSE_IMAGE").as_deref(), self_host)
+    let keeps_image = replacing.as_ref().is_some_and(|replacing| {
+        replacing
+            .kept_image(env("SANDBOX_IMAGE").as_deref())
+            .is_some()
+    });
+    if keeps_image && docker::image_exists(&sandbox_image) {
+        step(
+            "pulling-image",
+            &format!("using the image this sandbox runs ({sandbox_image})."),
+        );
+    } else if keeps_image && is_registryless(&sandbox_image) {
+        bail!("the image this sandbox runs ({sandbox_image}) is no longer on this machine, so it cannot be reinstalled as it is. Nothing was changed.\n       Run `ic sandbox update {slug}` first, or name the image to use in SANDBOX_IMAGE.");
+    } else if reuses_local_image(env("INTENTIC_REUSE_IMAGE").as_deref(), self_host)
         && docker::image_exists(&sandbox_image)
     {
         step(
@@ -363,9 +416,10 @@ fn connect(
     // Created first because the container joins it: a Windows self-host target (the dind container above) is
     // reached by name on it, and nothing else on this machine is.
     crate::sandbox::ensure_network(&slug)?;
-    // A re-run over a running sandbox replaces its container: the turns that cuts are picked up again (resume.rs).
-    crate::sandbox::resume::ask(&container);
-    docker::quiet(&["rm", "-f", &container]);
+    // A replace cuts the agents' turns, which are picked up again once the sandbox is back (resume.rs).
+    if replacing.is_some() {
+        resume::ask(&container);
+    }
 
     // Windows self-host: the Docker-in-Docker deploy target, ALONGSIDE the sandbox on Docker Desktop, not
     // inside it — the control plane stays an unprivileged container outside its (privileged) targets, and it
@@ -385,7 +439,8 @@ fn connect(
 
     // HOW THE CONTAINER IS RUN is not written here — see contract.rs. The pairs go in NUL-framed (empties
     // dropped CLI-side, where an empty secret would shadow the workspace .env the user writes later).
-    let env_pairs = crate::util::nul_frame(&[
+    let host_label = machine_label();
+    let fresh: &[(&str, &str)] = &[
         ("PREVIEW_PORT", &preview_port),
         ("GOOGLE_CLIENT_ID", &google_client_id),
         ("CONNECT_TOKEN", &connect_token),
@@ -416,7 +471,7 @@ fn connect(
         // with its own hostname, on a Linux however this machine is spelled.
         ("HOST_PAIR_TOKEN", &host_pair_token),
         ("HOST_PLATFORM", host_platform()),
-        ("HOST_LABEL", &machine_label()),
+        ("HOST_LABEL", &host_label),
         ("CLOUDFLARE_API_TOKEN", &cf_token),
         ("HOST_SSH_KEY", &host_ssh_key),
         ("SELF_HOST_USER", &self_host_user),
@@ -430,31 +485,96 @@ fn connect(
                 ""
             },
         ),
-    ]);
-    let mounts = agent_auth_volume
+    ];
+    // A replace hands the image this run's pairs AND the old container's whole env: what it carries over wins over
+    // this run's defaults, the claim wins over what it carried, and the contract keeps only the names it replays.
+    let explicit: Vec<&str> = [
+        env("WEB_ORIGIN").map(|_| "WEB_ORIGIN"),
+        agent_auth_volume.as_ref().map(|_| "AGENT_AUTH_DIR"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let env_pairs = match &replacing {
+        None => crate::util::nul_frame(fresh),
+        Some(replacing) => replace_env(fresh, &replacing.env, &explicit),
+    };
+    let mut mounts: Vec<String> = agent_auth_volume
         .as_ref()
-        .map(|volume| format!("{volume}:/agent-auth"));
+        .or(replacing
+            .as_ref()
+            .and_then(|replacing| replacing.agent_auth.as_ref()))
+        .map(|volume| format!("{volume}:/agent-auth"))
+        .into_iter()
+        .collect();
+    if let Some(replacing) = &replacing {
+        mounts.extend(replacing.dev_mounts.iter().cloned());
+    }
+    let mounts = (!mounts.is_empty()).then(|| mounts.join("\n"));
+    // What a kept environment build needs beside its image: the base it extends, its hash, and its runtime directives.
+    let kept = replacing.as_ref().filter(|replacing| {
+        replacing
+            .kept_image(env("SANDBOX_IMAGE").as_deref())
+            .is_some()
+    });
+    let previous_image = replacing
+        .as_ref()
+        .and_then(|replacing| replacing.record.targets().into_iter().next())
+        .map(|pin| pin.image);
     let request = RunRequest {
         image: &sandbox_image,
         slug: &slug,
-        base_image: &sandbox_image,
-        channel: None,
-        previous_image: None,
-        environment_hash: None,
-        runtime: None,
+        base_image: kept
+            .and_then(|kept| kept.base_image.as_deref())
+            .unwrap_or(&sandbox_image),
+        channel: replacing
+            .as_ref()
+            .and_then(|replacing| replacing.record.channel.as_deref()),
+        previous_image: previous_image.as_deref(),
+        environment_hash: kept.and_then(|kept| kept.environment_hash.as_deref()),
+        runtime: kept
+            .map(|kept| kept.runtime_lines.as_str())
+            .filter(|lines| !lines.is_empty()),
         mounts: mounts.as_deref(),
         dns: (!sandbox_dns.is_empty()).then_some(sandbox_dns.as_str()),
         // A person's sandbox is set up by its owner in the browser; the seed is the runner/fleet door.
         definition_b64: None,
     };
+    // Which runtime asks this host cannot honour, probed through the image as a recreate does: a replace carries the
+    // environment's directives and the owner's own (SANDBOX_RUNTIME), and a new sandbox has neither.
+    let probes = match &replacing {
+        Some(replacing) if request.runtime.is_some() || !replacing.host_runtime.is_empty() => {
+            contract::host_probes(
+                &sandbox_image,
+                request.runtime.unwrap_or_default(),
+                &replacing.host_runtime,
+                &log,
+            )
+        }
+        _ => Vec::new(),
+    };
+    let unsupported = contract::unsupported_on_this_host(&probes);
     // What ic adds to the image's run line (labels.rs): its labels, and HOST_ENV. HOST_ENV rides here and not in the
     // pairs above because the run contract replays only the names it lists, and the images already published do not
-    // list it (2026-10-05): handed over with the pairs, it would be dropped before the container ever saw it.
-    let stamped_run = stamped_run(&slug, &crate::sandbox::side::here());
+    // list it (2026-10-05): handed over with the pairs, it would be dropped before the container ever saw it. A replace
+    // keeps the side the old container names, as a recreate does.
+    let stamped_run = match &replacing {
+        None => stamped_run(&slug, &side::here()),
+        Some(replacing) => recreate::stamp_args(
+            &slug,
+            &recreate::restamp(replacing.side.as_ref(), &side::here()),
+        ),
+    };
     let argv = crate::sandbox::labels::into_run(
-        &contract::run_command(&request, &env_pairs, false, &[], &[], &log)?,
+        &contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?,
         &stamped_run,
     );
+    // The old container is set aside only now, with the new run line in hand: it comes back if the new one fails.
+    if let Some(replacing) = &replacing {
+        replacing.park()?;
+    } else {
+        docker::quiet(&["rm", "-f", &container]);
+    }
     // The volumes are made here, labelled, instead of by `docker run` in passing, and this run remembers which it
     // made: a first setup that fails to start leaves none of them behind (audit 2026-10 item 14), and a re-run's
     // existing volumes, which hold a sandbox's data, are never among them.
@@ -465,13 +585,27 @@ fn connect(
     // launch when the port is held, so the retry drops just the shortcut.
     if docker::run_argv(&argv, &log).is_err() {
         docker::quiet(&["rm", "-f", &container]);
-        let retry = crate::sandbox::labels::into_run(
-            &contract::run_command(&request, &env_pairs, true, &[], &[], &log)?,
-            &stamped_run,
-        );
+        // Everything optional comes off together on the retry, as on a recreate's: the loopback shortcut and every
+        // runtime directive whose probe passed but whose run may still not.
+        let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
+        let retry =
+            match contract::run_command(&request, &env_pairs, true, &all_optional, &[], &log) {
+                Ok(retry) => crate::sandbox::labels::into_run(&retry, &stamped_run),
+                Err(err) => match &replacing {
+                    Some(replacing) => bail!("{}{}", err.0, replacing.put_back(&err.0, &log)),
+                    None => return Err(err),
+                },
+            };
         if let Err(refusal) = docker::run_argv(&retry, &log) {
-            docker::quiet(&["rm", "-f", &container]);
-            let left = remove_made(&made);
+            let left = match &replacing {
+                Some(replacing) => {
+                    replacing.put_back(&format!("starting it again failed: {refusal}"), &log)
+                }
+                None => {
+                    docker::quiet(&["rm", "-f", &container]);
+                    remove_made(&made)
+                }
+            };
             bail!(
                 "starting the sandbox failed — the full docker error is saved to {}.\n{refusal}{left}",
                 log.path.display()
@@ -490,7 +624,23 @@ fn connect(
     reporter.stage("waiting-health");
     // The sandbox's report key, kept for a later `ic sandbox fix` that finds Docker down and the env unreadable.
     crate::sandbox::fix::report::remember(&slug, Some(&connect_token), Some(platform_url));
-    health::wait_answering(&container, &log, "")?;
+    match &replacing {
+        None => {
+            health::wait_answering(&container, &log, "")?;
+        }
+        /* The same gate a recreate holds its new version to, and the same way back: the old container is put back
+        unless the new one answers AND commits its state journal. */
+        Some(replacing) => {
+            let ready = health::wait_answering(&container, &log, "")
+                .and_then(|answered| health::wait_ready(&container, &answered));
+            if let Err(err) = ready {
+                log.section(&format!("container logs ({container})"));
+                docker::logs_into(&container, "500", &log);
+                bail!("{}{}", err.0, replacing.put_back(&err.0, &log));
+            }
+            replacing.done();
+        }
+    }
 
     /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */
     step(
@@ -535,7 +685,16 @@ fn connect(
     }
 
     /* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no decision from the user. */
-    if !host_pair_token.is_empty()
+    let kept_device = replacing
+        .as_ref()
+        .and_then(|replacing| connected_device(&replacing.env));
+    if let Some(label) = &kept_device {
+        // Enrolling again would pair a second device for the same machine, one no card grants, and move this machine's
+        // link off the device the owner already set up (the machine agent keeps one link per sandbox).
+        ui::note(&format!(
+            "this device stays connected as {label}; nothing to pair again."
+        ));
+    } else if !host_pair_token.is_empty()
         && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
     {
@@ -544,6 +703,243 @@ fn connect(
 
     ending(&slug, &container, &sandbox_public_url, self_host);
     Ok(())
+}
+
+/// What connect does about a sandbox this machine already has under the slug the claim names.
+#[derive(Debug, PartialEq, Eq)]
+enum Existing {
+    /// Nothing here by that name: a new sandbox.
+    None,
+    /// One is here and nobody said to replace it.
+    Refuse,
+    /// One is here and `--replace` said to reinstall it, keeping what it was set up as.
+    Replace,
+}
+
+/// A sandbox that exists, parked or not, is reinstalled only on `--replace` or on a person at this machine's terminal
+/// answering yes. -y answers the other-sandboxes question, never this one, so a script or the machine agent has to say
+/// --replace; no terminal is no. The question comes after the setup code was spent (the slug is only in the claim), so
+/// a yes carries on with the claim in hand, where a refusal costs a new code. Pure but for `ask`, called only when a
+/// person could answer it.
+fn existing(exists: bool, replace: bool, yes: bool, ask: impl FnOnce() -> bool) -> Existing {
+    match (exists, replace) {
+        (false, _) => Existing::None,
+        (true, true) => Existing::Replace,
+        (true, false) if !yes && ask() => Existing::Replace,
+        (true, false) => Existing::Refuse,
+    }
+}
+
+/// What a refused connect says: what is here, what connect would have done, and what to run instead. Pure.
+fn refusal(slug: &str) -> String {
+    format!(
+        "sandbox {slug} already exists on this machine, and connect would install it again from scratch. Nothing was changed.\n       To repair it: ic sandbox fix {slug}\n       To go back to the version before: ic sandbox rollback {slug} (or rebuild its environment from the command on its Environment card: ic sandbox rebuild {slug} <hash>)\n       To reinstall it anyway, keeping its files, history, logins, settings and device: run the setup command again with a new code (this one is used up) from a terminal and answer yes, or add --replace."
+    )
+}
+
+/// The names a replace keeps from the container it replaces over this run's own defaults: what to call this machine and
+/// which side made it, the browser origin it answers, the logins volume, and the dev checkout it was launched from.
+const CARRIED: [&str; 5] = [
+    "HOST_LABEL",
+    "HOST_PLATFORM",
+    "WEB_ORIGIN",
+    "AGENT_AUTH_DIR",
+    "SANDBOX_DEV_ROOT",
+];
+
+/// The env a replace hands the image, NUL-framed. The contract takes each name's FIRST occurrence and keeps only the
+/// names it replays (recreate.rs), so the order is the policy: the CARRIED values (unless this run set one `explicit`ly),
+/// then this run's own non-empty pairs, the claim's tokens and the sandbox's identity among them, then everything the
+/// old container carried, for whatever this run left empty. One claim key gives way: the device pairing, while the old
+/// container's device is kept (`connected_device`), since a fresh pairing nobody redeems would sit armed in the sandbox
+/// for a device that is already connected. Pure.
+fn replace_env(fresh: &[(&str, &str)], old: &[u8], explicit: &[&str]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(old);
+    let old_pairs: Vec<(&str, &str)> = text
+        .split('\0')
+        .filter_map(|pair| pair.split_once('='))
+        .collect();
+    let old_value = |name: &str| {
+        old_pairs
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| *value)
+            .filter(|value| !value.is_empty())
+    };
+    let device = connected_device(old).map(|_| "HOST_PAIR_TOKEN");
+    let mut pairs: Vec<(&str, &str)> = CARRIED
+        .iter()
+        .copied()
+        .filter(|name| !explicit.contains(name))
+        .chain(device)
+        .filter_map(|name| old_value(name).map(|value| (name, value)))
+        .collect();
+    pairs.extend(fresh.iter().filter(|(_, value)| !value.is_empty()));
+    pairs.extend(old_pairs.iter());
+    crate::util::nul_frame(&pairs)
+}
+
+/// The device the old container's setup connected, by the name it was given: a container carrying both the pairing it
+/// armed and the machine's label. A replace enrolls nothing again for it. Pure.
+fn connected_device(old: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(old);
+    let value = |name: &str| {
+        text.split('\0')
+            .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    value("HOST_PAIR_TOKEN").and(value("HOST_LABEL"))
+}
+
+/// The dev wrapper's binds of a checkout's compiled trees over the image's own copies (dev-mounts.mjs): the ones a
+/// replace keeps, when the run was not handed its own. Pure.
+fn sandbox_binds(binds: &[String]) -> Vec<String> {
+    binds
+        .iter()
+        .filter(|bind| {
+            bind.rsplit_once(':')
+                .is_some_and(|(_, destination)| destination.starts_with("/opt/sandbox/"))
+        })
+        .cloned()
+        .collect()
+}
+
+/// A replace in progress: the sandbox's lock, and everything read off the container it replaces before that container
+/// is set aside.
+struct Replacing {
+    slug: String,
+    container: String,
+    parked: String,
+    _held: lock::Held,
+    record: ChannelRecord,
+    env: Vec<u8>,
+    agent_auth: Option<String>,
+    image: Option<String>,
+    base_image: Option<String>,
+    environment_hash: Option<String>,
+    runtime_lines: String,
+    host_runtime: String,
+    dns: Option<String>,
+    dev_mounts: Vec<String>,
+    side: Option<Side>,
+}
+
+impl Replacing {
+    /// Take the sandbox's lock, settle any swap still on its record, and read what the container is.
+    fn take(slug: &str, container: &str, parked: &str) -> Result<Replacing> {
+        let held = lock::hold_for_person(slug)?;
+        // A recreate that died with the sandbox parked left the name empty: the parked container is the sandbox.
+        if !docker::container_exists(container) {
+            docker::quiet(&["rename", parked, container]);
+        }
+        crate::record::read(slug)?;
+        let record = recreate::supersede_swap(slug, mirror::reconcile(slug))?;
+        let env = docker::container_env_nul(container)?;
+        let value = |name: &str| {
+            String::from_utf8_lossy(&env)
+                .split('\0')
+                .find_map(|pair| pair.strip_prefix(&format!("{name}=")).map(str::to_string))
+                .filter(|value| !value.is_empty())
+        };
+        let environment_hash = value("SANDBOX_ENVIRONMENT_HASH");
+        // The environment's runtime directives, from its recipe, as a reshape reads them for the image it keeps.
+        let runtime_lines = if environment_hash.is_some() {
+            let dir = tempfile::tempdir()?;
+            let path = dir.path().join("overlay.Dockerfile");
+            recreate::stage_overlay(container, &path)?;
+            recreate::runtime_lines(&std::fs::read_to_string(&path).unwrap_or_default())
+        } else {
+            String::new()
+        };
+        let dev_mounts = match recreate::dev_mounts() {
+            given if !given.is_empty() => given,
+            _ => sandbox_binds(&docker::bind_mounts(container)),
+        };
+        Ok(Replacing {
+            slug: slug.to_string(),
+            container: container.to_string(),
+            parked: parked.to_string(),
+            _held: held,
+            record,
+            agent_auth: docker::mount_source(container, "/agent-auth"),
+            image: value("SANDBOX_IMAGE")
+                .or_else(|| docker::inspect(container, "{{.Config.Image}}")),
+            base_image: value("SANDBOX_BASE_IMAGE"),
+            environment_hash,
+            runtime_lines,
+            host_runtime: value("SANDBOX_RUNTIME").unwrap_or_default(),
+            dns: docker::inspect(container, "{{join .HostConfig.Dns \" \"}}")
+                .filter(|servers| !servers.is_empty()),
+            dev_mounts,
+            side: match side::stamp_in(&env) {
+                side::Stamp::Side(side) => Some(side),
+                _ => None,
+            },
+            env,
+        })
+    }
+
+    /// The image the sandbox runs, kept unless SANDBOX_IMAGE names another.
+    fn kept_image(&self, asked: Option<&str>) -> Option<&str> {
+        match asked {
+            Some(_) => None,
+            None => self.image.as_deref(),
+        }
+    }
+
+    /// Set the old container aside under its parked name, as a recreate's cutover does; any container a swap left
+    /// parked is superseded (its record was settled in `take`).
+    fn park(&self) -> Result<()> {
+        docker::quiet(&["rm", "-f", &self.parked]);
+        docker::quiet(&["stop", &self.container]);
+        if let Err(refusal) = docker::capture(&["rename", &self.container, &self.parked]) {
+            docker::quiet(&["start", &self.container]);
+            bail!(
+                "the sandbox could not be set aside to be replaced ({}). It was started again as it was, and nothing was replaced.",
+                refusal.0
+            );
+        }
+        Ok(())
+    }
+
+    /// Put the old container back after a replacement that did not come up; the sentence that ends the failure.
+    fn put_back(&self, reason: &str, log: &Log) -> String {
+        let swap = Swap {
+            phase: Phase::Cutover,
+            at: now_ms(),
+            verb: "connect".to_string(),
+            from: self.image.clone(),
+            to: None,
+            until: None,
+            reach: None,
+            strikes: 0,
+            daemon_start: None,
+            daemon_restarts: 0,
+            alive: None,
+        };
+        match recreate::restore_parked(
+            &self.container,
+            &self.parked,
+            &self.slug,
+            &self.record,
+            &swap,
+            reason,
+            log,
+        ) {
+            Restored::Answering => "\n       Your sandbox was put back as it was and answers again. Nothing was replaced.".to_string(),
+            Restored::Down(why) => format!(
+                "\n       Your sandbox was put back as it was, but it does not come up either: {why}.\n       `ic sandbox doctor {}` checks every layer between here and it.",
+                self.slug
+            ),
+            Restored::NotPut => String::new(),
+        }
+    }
+
+    /// The replacement is up: the old container is no longer the way back.
+    fn done(&self) {
+        docker::quiet(&["rm", "-f", &self.parked]);
+    }
 }
 
 /// The options ic puts into a new sandbox's run line beside the image's own: its labels, and HOST_ENV when this
@@ -1076,6 +1472,133 @@ fn start_dind_target(slug: &str, log: &Log) -> Result<(String, String, String)> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /* A SANDBOX THIS MACHINE ALREADY HAS (2026-10-07). */
+    #[test]
+    fn an_existing_sandbox_is_refused_without_replace_and_reinstalled_only_with_it() {
+        let never = || -> bool { panic!("nobody is asked when the answer is already known") };
+        assert_eq!(existing(false, false, false, never), Existing::None);
+        assert_eq!(existing(false, true, true, never), Existing::None);
+        assert_eq!(existing(true, true, true, never), Existing::Replace);
+        assert_eq!(existing(true, true, false, never), Existing::Replace);
+        // -y is the machine agent and scripts: it never stands in for this answer, and nobody is asked.
+        assert_eq!(existing(true, false, true, never), Existing::Refuse);
+        // A person at the terminal decides; no answer (no terminal, an empty line) is no.
+        assert_eq!(existing(true, false, false, || true), Existing::Replace);
+        assert_eq!(existing(true, false, false, || false), Existing::Refuse);
+        let said = refusal("sandbox-abc");
+        for part in [
+            "already exists on this machine",
+            "install it again",
+            "Nothing was changed",
+            "ic sandbox fix sandbox-abc",
+            "ic sandbox rollback sandbox-abc",
+            "ic sandbox rebuild sandbox-abc",
+            "--replace",
+        ] {
+            assert!(said.contains(part), "{part} missing from: {said}");
+        }
+    }
+
+    /// The pairs the contract would keep from a framed env: first occurrence of each name, empties dropped (index.ts
+    /// replayableEnv), so a test reads what the container gets.
+    fn replayed(framed: &[u8]) -> Vec<(String, String)> {
+        let text = String::from_utf8_lossy(framed).to_string();
+        let mut seen: Vec<(String, String)> = Vec::new();
+        for (name, value) in text.split('\0').filter_map(|pair| pair.split_once('=')) {
+            if !seen.iter().any(|(key, _)| key == name) {
+                seen.push((name.to_string(), value.to_string()));
+            }
+        }
+        seen.retain(|(_, value)| !value.is_empty());
+        seen
+    }
+
+    fn value<'a>(pairs: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        pairs
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn a_replace_keeps_what_the_sandbox_was_set_up_as_and_the_claim_wins_its_own_keys() {
+        let old = crate::util::nul_frame(&[
+            ("HOST_LABEL", "ada-pc"),
+            ("HOST_PLATFORM", "windows"),
+            ("WEB_ORIGIN", "http://localhost:5173"),
+            ("AGENT_AUTH_DIR", "/agent-auth"),
+            ("SANDBOX_DEV_ROOT", "/home/ada/intentic"),
+            ("SANDBOX_MEMORY", "8g"),
+            ("CONNECT_TOKEN", "old-token"),
+            ("SANDBOX_GRANT", "old-grant"),
+            ("HOST_PAIR_TOKEN", "old-pair"),
+        ]);
+        let fresh: &[(&str, &str)] = &[
+            ("CONNECT_TOKEN", "claim-token"),
+            ("SANDBOX_GRANT", "claim-grant"),
+            ("WEB_ORIGIN", "https://app.intentic.dev"),
+            ("HOST_LABEL", "wsl-box"),
+            ("HOST_PLATFORM", "linux"),
+            ("HOST_PAIR_TOKEN", "claim-pair"),
+            ("AGENT_AUTH_DIR", ""),
+            ("OWNER_EMAIL", ""),
+        ];
+        let pairs = replayed(&replace_env(fresh, &old, &[]));
+        // Carried over this run's defaults: the device's name and side, the origin, the logins volume, the checkout.
+        assert_eq!(value(&pairs, "HOST_LABEL"), Some("ada-pc"));
+        assert_eq!(value(&pairs, "HOST_PLATFORM"), Some("windows"));
+        assert_eq!(value(&pairs, "WEB_ORIGIN"), Some("http://localhost:5173"));
+        assert_eq!(value(&pairs, "AGENT_AUTH_DIR"), Some("/agent-auth"));
+        assert_eq!(
+            value(&pairs, "SANDBOX_DEV_ROOT"),
+            Some("/home/ada/intentic")
+        );
+        // The claim's own keys win over what the container carried.
+        assert_eq!(value(&pairs, "CONNECT_TOKEN"), Some("claim-token"));
+        assert_eq!(value(&pairs, "SANDBOX_GRANT"), Some("claim-grant"));
+        // The device stays the one it was: its pairing, not a fresh one nobody will redeem.
+        assert_eq!(value(&pairs, "HOST_PAIR_TOKEN"), Some("old-pair"));
+        // Whatever this run left empty, the container's own value fills.
+        assert_eq!(value(&pairs, "SANDBOX_MEMORY"), Some("8g"));
+        assert_eq!(connected_device(&old).as_deref(), Some("ada-pc"));
+    }
+
+    #[test]
+    fn a_value_this_run_was_given_on_purpose_wins_over_the_carried_one_and_an_unpaired_sandbox_takes_the_claims_pairing(
+    ) {
+        let old = crate::util::nul_frame(&[
+            ("WEB_ORIGIN", "http://localhost:5173"),
+            ("AGENT_AUTH_DIR", "/agent-auth"),
+            ("HOST_LABEL", "ada-pc"),
+        ]);
+        let fresh: &[(&str, &str)] = &[
+            ("WEB_ORIGIN", "https://staging.intentic.dev"),
+            ("AGENT_AUTH_DIR", "/agent-auth"),
+            ("HOST_PAIR_TOKEN", "claim-pair"),
+        ];
+        let pairs = replayed(&replace_env(fresh, &old, &["WEB_ORIGIN"]));
+        assert_eq!(
+            value(&pairs, "WEB_ORIGIN"),
+            Some("https://staging.intentic.dev")
+        );
+        // No device was ever paired from that container: the claim's pairing is the one to redeem.
+        assert_eq!(connected_device(&old), None);
+        assert_eq!(value(&pairs, "HOST_PAIR_TOKEN"), Some("claim-pair"));
+    }
+
+    #[test]
+    fn a_replace_keeps_only_the_dev_checkouts_binds_over_the_image() {
+        let binds = vec![
+            "/home/ada/intentic/_sandbox/sandbox/dist:/opt/sandbox/dist".to_string(),
+            "/var/run/docker.sock:/var/run/docker.sock".to_string(),
+            "C:\\Users\\ada\\intentic\\dist:/opt/sandbox/node_modules/@intentic/x/dist".to_string(),
+        ];
+        assert_eq!(
+            sandbox_binds(&binds),
+            vec![binds[0].clone(), binds[2].clone()]
+        );
+    }
 
     #[test]
     fn a_dev_tag_is_registryless_and_a_published_image_is_not() {

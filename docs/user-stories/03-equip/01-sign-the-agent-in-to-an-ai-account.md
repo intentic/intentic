@@ -10,7 +10,7 @@ A sign-in is two steps with a trip to another tab in between, and it unfolds ins
 
 If I already use an AI tool on this computer (Claude Code, Codex, Gemini CLI, opencode, Hermes, OpenClaw), the desktop app has noticed, and that screen leads with what it found, above the grid. A subscription is one press: the sandbox signs in on its own and my browser, already signed in, only asks me to allow it. Nothing is copied out of the tool, because these logins renew with a token that works once, and a copy would sign either the tool or the sandbox out. A plain API key in those tools' files is different: it is copied into the sandbox as a model I can pick, and the screen shows only its last four characters.
 
-Afterwards the grid is also the overview: a tile's count and dot say what it holds and whether anything needs me (an account to sign in to again, one to verify, a seat only an admin can restore), and a tile that needs me opens by itself when I arrive. Its panel lists who each account signed in as, what it is spending, and how to drop one. The Local models panel holds this machine's models and any server or key the sandbox is pointed at, and it is the one place that offers pointing at an Ollama or vLLM server I already run. The sandbox's menu shows a count on Models when something there needs me, so I do not have to open it to find out. Which model does which job (commit messages, titles, the safety judge) is the Agent's Jobs tab, which picks from what Models holds.
+Afterwards the grid is also the overview: a tile's count and dot say what it holds and whether anything needs me (an account to sign in to again, one to verify, a seat only an admin can restore), and a tile that needs me opens by itself when I arrive. Its panel lists who each account signed in as, what it is spending, and how to drop one. The Local models panel holds this machine's models and any server or key the sandbox is pointed at, and it is the one place that offers pointing at an Ollama or vLLM server I already run. Ollama or LM Studio running on the computer that hosts the sandbox is already listed there, one press from being used; that is how a model uses my GPU, since the sandbox's own local models run on its CPU. The sandbox's menu shows a count on Models when something there needs me, so I do not have to open it to find out. Which model does which job (commit messages, titles, the safety judge) is the Agent's Jobs tab, which picks from what Models holds.
 
 ## Acceptance criteria
 
@@ -31,7 +31,8 @@ Afterwards the grid is also the overview: a tile's count and dot say what it hol
 - [ ] The Local models panel names a model this machine can actually hold, says what it will download and what it will hold while running, and says plainly where a small one is not good enough
 - [ ] Connecting ends on this screen saying so, with one press that starts a conversation on what I just connected
 - [ ] A provider's panel names who each account signed in as and lets one be dropped; a tile whose accounts need me opens by itself on arrival
-- [ ] Pointing at an Ollama or vLLM server is offered in the Local models panel and nowhere else on the page
+- [x] Pointing at an Ollama or vLLM server is offered in the Local models panel and nowhere else on the page
+- [x] Ollama or LM Studio running on the computer hosting the sandbox is listed in the Local models panel and added with one press, and what it serves stays on that computer as far as the privacy shield is concerned
 - [ ] Adding a second account finishes only when that account arrives, never because the provider already had one
 - [ ] The sandbox's menu counts what on Models needs a person, and marks a sign-in in progress
 - [ ] Agent ▸ Jobs chooses which model does each job from what Models holds

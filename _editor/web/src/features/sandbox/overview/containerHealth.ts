@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { type Device, hostRunningSandbox } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Order is significant: drift outranks duplicate, which outranks unreachable, which outranks refused.
@@ -63,6 +64,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
                 fault: "unreachable",
                 title: t(`sandbox.containerHealth.sandboxDoesNotAnswer`),
                 detail: report.detail ?? t(`sandbox.containerHealth.publicAddressDidNotAnswer`),
+                repair: t(`sandbox.containerHealth.runFixOnItsComputer`),
             },
         ];
     }
@@ -74,6 +76,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
                 fault: "refused",
                 title: t(`sandbox.containerHealth.sandboxCheckingInUnder`),
                 detail: t(`sandbox.containerHealth.announcedWhilePlatformOn`, { announced: refusal.announced, expected: refusal.expected }),
+                repair: t(`sandbox.containerHealth.runFixOnItsComputer`),
             },
         ];
     }
@@ -82,3 +85,24 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
 };
 
 export const hasContainerFault = (sandbox: ContainerEvidence): boolean => containerNotices(sandbox).length > 0;
+
+// Reconnecting reinstalls the container from a fresh setup code: the repair for a setup that is out of date, and for
+// nothing else. A sandbox that stops answering, or checks in under the wrong address, is a fault of the box as it
+// stands, which a reinstall only hides; each of those says what to run instead (`repair`). (2026-10-07)
+export const offersReconnect = (notice: ContainerNotice): boolean => notice.fault === `drift`;
+
+// The door a reconnect runs through. Windows and the WSL distros on it share one Docker engine, so every side lists the
+// sandbox, and a reconnect run from a side other than the one that made it used to set the sandbox up again as that
+// side's (2026-10-07). Each side's listing names the OTHER side when that one keeps it (`keptElsewhere`), so the door
+// whose listing names no other side is the one that made it; a side that only adopted it while its keeper was silent
+// comes after one that made it. With no side named anywhere (one door, an older ic), the shared rule's first door.
+export const reconnectDoor = (devices: readonly Device[], slug: string | undefined): string | undefined => {
+    const listing = (device: Device) => (device.sandboxes ?? []).find((box) => box.slug === slug);
+    const doors = devices.filter((device) => device.hostId !== undefined && device.online === true && listing(device) !== undefined);
+    if (!doors.some((door) => listing(door)?.keptElsewhere !== undefined)) {
+        return hostRunningSandbox(devices, slug);
+    }
+    const own = doors.filter((door) => listing(door)?.keptElsewhere === undefined);
+    const maker = own.find((door) => listing(door)?.adoptedFrom === undefined) ?? own[0];
+    return maker?.hostId ?? hostRunningSandbox(devices, slug);
+};

@@ -8,13 +8,15 @@ import { RouterLink } from "vue-router";
 import { endpointProviders } from "../../chat/accounts/providerCatalog";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
+import HostServerRows from "./HostServerRows.vue";
 import LocalModelLane from "./LocalModelLane.vue";
 
 // LOCAL MODELS, opened from its tile in Sandbox ▸ Models' grid: the models this sandbox runs itself and the servers it is
 // pointed at, in one card. What it already has first (a server, an API key, a model added from its capability card),
-// then the two models sized for this machine (LocalModelLane), each an offer until taken and a status once it is, then
-// the way to point at a server the reader already runs. That last one lives here and nowhere else on the page: somebody
-// running Ollama is somebody who chose to run models themselves.
+// then the servers already running on the computer hosting the sandbox, one press from being used (HostServerRows, where
+// a GPU model comes from), then the two models sized for this machine's CPU (LocalModelLane), each an offer until taken
+// and a status once it is, then the way to point at any other server. Those live here and nowhere else on the page:
+// somebody running Ollama is somebody who chose to run models themselves.
 
 const t = useT();
 
@@ -88,17 +90,16 @@ const held = computed(() =>
             </template>
         </ConnectionRow>
 
+        <HostServerRows />
+
         <LocalModelLane :fit="fit" @ready="(provider) => emit(`ready`, provider)" @stop-prefetch="emit(`stopPrefetch`)" />
 
-        <!-- The two ways past the curated pair, as one footer: the card that holds every other model and the GPU switch, and,
+        <!-- The two ways past the curated pair, as one footer: the card that holds every other model, and,
              for somebody already running a server, the card that points at it. Named once, here, without a tour. -->
         <RowNote variant="block">
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
                 <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-xs`)">
-                    <Icon name="sliders-h" class="text-2xs" />{{ t(`connect.localModelLane.moreModels`) }}<Icon
-                        name="arrow-right"
-                        class="text-2xs"
-                    />
+                    <Icon name="sliders-h" class="text-2xs" />{{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
                 </RouterLink>
                 <span class="flex flex-wrap items-center gap-x-2 text-muted">
                     <Icon name="server" class="text-2xs text-subtle" />{{ t(`connect.providerGrid.ownServer`) }}

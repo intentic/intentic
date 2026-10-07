@@ -19,7 +19,7 @@ use crate::util::{bail, sha256_hex, Fail, Result};
 
 /* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and every setting the container carries. */
 
-const APPROVED_FILE: &str = "/work/.intentic/local/environment.approved.Dockerfile";
+pub(crate) const APPROVED_FILE: &str = "/work/.intentic/local/environment.approved.Dockerfile";
 const DEV_TAG: &str = "intentic-sandbox:dev";
 // pub(crate): runner.rs names the same registry in its refusal when a shipped overlay's base is not allowed.
 pub(crate) const DEFAULT_REGISTRY: &str = "ghcr.io/intentic/sandbox";
@@ -198,16 +198,8 @@ fn recreate(
     // record is still an error here, since writing over it would lose the rollback target it names.
     record::read(&slug)?;
     let mut saved = mirror::reconcile(&slug);
-    /* A SWAP STILL ON THE RECORD IS OVER THE MOMENT A PERSON STARTS ANOTHER: one on probation is superseded (its parked container is the one this cutover removes), and an interrupted one did not happen. */
     if reach == Reach::Applied {
-        if let Some(swap) = saved.swap.clone() {
-            if probation::cutover_in_progress(&swap, now_ms()) {
-                bail!(
-                    "another ic run is swapping {slug} right now (from another terminal, or the other side of this machine's WSL). Nothing was changed; try again once it has finished."
-                );
-            }
-            saved = probation::settle(&slug, &saved, swap.phase == Phase::Cutover)?;
-        }
+        saved = supersede_swap(&slug, saved)?;
     }
     // The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered
     // one, and `stable` for a sandbox that predates the record. SANDBOX_IMAGE still overrides everything:
@@ -277,6 +269,8 @@ fn recreate(
     let mut prepared = false;
     // A rollback onto a pin whose image is gone runs the release it was instead; the pin leaves the list with it.
     let mut gone_pin: Option<String> = None;
+    // A rollback onto a pin with its environment build still here runs that build and its hash, and builds nothing.
+    let mut kept_env: Option<(String, String)> = None;
     match &mode {
         Mode::Rebuild { hash } => {
             // Copy the approved overlay out ONCE and hash/build that same copy — byte-exact, no window
@@ -401,6 +395,17 @@ fn recreate(
                 env_hash = Some(hash);
                 std::fs::write(&overlay_path, rebased)?;
             }
+            /* THE ENVIRONMENT BUILD THE SANDBOX RAN ON THAT BASE, kept beside its pin, runs as it is: nothing is rebuilt, so a recipe that no longer builds cannot block the way back (versions.rs). The recipe staged above still gives the run its runtime directives. */
+            kept_env = versions::pinned_environment(
+                &pin,
+                &registry_image,
+                !approved.is_empty(),
+                &|image| docker::image_exists(image),
+            );
+            if let Some((image, hash)) = &kept_env {
+                println!("intentic: using {image}, the environment build this sandbox ran on that version — nothing to rebuild.");
+                env_hash = Some(hash.clone());
+            }
         }
         Mode::Reshape(_) => {
             /* Nothing to fetch and nothing to build: the target is the image this container already runs. */
@@ -493,6 +498,8 @@ fn recreate(
             /* A prepared update is the same derivation already performed, so this arm's own answer and the record's staged image are the same string by construction. */
             if prepared {
                 target_image = saved.staged.clone().unwrap_or(target_image);
+            } else if let Some((image, _)) = &kept_env {
+                target_image = image.clone();
             } else if !overlay.is_empty() {
                 println!(
                     "intentic: rebuilding your environment overlay on the {} base…",
@@ -657,11 +664,7 @@ fn recreate(
     }
     mounts.extend(dev_mounts());
 
-    let runtime_lines: String = overlay
-        .lines()
-        .filter(|line| line.starts_with("# intentic:runtime "))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let runtime_lines = runtime_lines(&overlay);
     /* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now (SANDBOX_RUNTIME, replayed by every other mode). */
     let carried_runtime =
         docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
@@ -707,11 +710,29 @@ fn recreate(
     let new_base_id = docker::image_id(&base_image);
     let left_version =
         staged::container_version(&container).or_else(|| saved.current_version.clone());
+    // The environment build being left, pinned beside its base so a rollback runs it instead of rebuilding today's recipe.
+    let left_running = docker::inspect(&container, "{{.Image}}");
+    let left_hash = docker::container_env_value(&container, "SANDBOX_ENVIRONMENT_HASH");
+    let left_recipe = left_hash.as_ref().and_then(|_| {
+        let path = workdir.path().join("left.Dockerfile");
+        docker::cp_out(&container, APPROVED_FILE, &path)
+            .is_none()
+            .then(|| std::fs::read_to_string(&path).ok())
+            .flatten()
+    });
     let left = left_pin(
         old_base_id.as_deref(),
         new_base_id.as_deref(),
         &slug,
         left_version.clone(),
+        match (&left_running, &left_hash) {
+            (Some(running), Some(hash)) => Some(LeftEnv {
+                running,
+                hash,
+                recipe: left_recipe.as_deref(),
+            }),
+            _ => None,
+        },
     );
     // Every extra build kept is a whole image: on a machine already short of space only `previous` is.
     let max_kept = match checks::check_disk() {
@@ -727,6 +748,9 @@ fn recreate(
     if reach == Reach::Applied {
         if let (Some(pin), Some(old)) = (left.as_ref(), old_base_id.as_deref()) {
             docker::quiet(&["tag", old, &pin.image]);
+            if let (Some(env), Some(running)) = (&pin.env_image, &left_running) {
+                docker::quiet(&["tag", running, env]);
+            }
         }
     }
 
@@ -806,6 +830,8 @@ fn recreate(
         current_version: target_version.clone(),
         previous: previous.as_ref().map(|pin| pin.image.clone()),
         previous_version: previous.as_ref().and_then(|pin| pin.version.clone()),
+        previous_env: previous.as_ref().and_then(|pin| pin.env_image.clone()),
+        previous_env_hash: previous.as_ref().and_then(|pin| pin.env_hash.clone()),
         kept,
         // Applied by this very recreate, so no longer waiting; a failed swap rewinds the record and gets it back.
         desired: None,
@@ -1008,6 +1034,30 @@ fn recreate(
         log.path.display()
     );
     Ok(())
+}
+
+/// A SWAP STILL ON THE RECORD IS OVER THE MOMENT A PERSON STARTS ANOTHER: one on probation is superseded (its parked
+/// container is the one the next cutover removes), and an interrupted one did not happen. One still cutting over is
+/// another run's, and refused. pub(crate): `ic sandbox connect --replace` parks the container the same way (connect.rs).
+pub(crate) fn supersede_swap(slug: &str, saved: ChannelRecord) -> Result<ChannelRecord> {
+    let Some(swap) = saved.swap.clone() else {
+        return Ok(saved);
+    };
+    if probation::cutover_in_progress(&swap, now_ms()) {
+        bail!(
+            "another ic run is swapping {slug} right now (from another terminal, or the other side of this machine's WSL). Nothing was changed; try again once it has finished."
+        );
+    }
+    probation::settle(slug, &saved, swap.phase == Phase::Cutover)
+}
+
+/// The overlay's `# intentic:runtime` directive lines, verbatim: what its capabilities ask of the run line. Pure.
+pub(crate) fn runtime_lines(overlay: &str) -> String {
+    overlay
+        .lines()
+        .filter(|line| line.starts_with("# intentic:runtime "))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// `ic sandbox reshape` — the same image, a different share of this machine. Always a named slug: the verb
@@ -1217,7 +1267,7 @@ fn overlay_exists(container: &str) -> bool {
 /// daemon edit restarts in seconds instead of a rebuild — newline-separated -v specs, straight through. Read by
 /// the launch and by the pre-flight alike: the tree mounted over `/opt/sandbox/dist` is the engine that will
 /// run, so it is the engine that has to be asked.
-fn dev_mounts() -> Vec<String> {
+pub(crate) fn dev_mounts() -> Vec<String> {
     std::env::var("INTENTIC_DEV_MOUNTS")
         .map(|mounts| {
             mounts
@@ -1231,7 +1281,7 @@ fn dev_mounts() -> Vec<String> {
 
 /// Stage the sandbox's approved overlay at `dest` for the flow to build from. True when there is one; false
 /// for a stock sandbox, whose empty file every caller reads as "nothing to re-apply".
-fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
+pub(crate) fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
     let reason = docker::cp_out(container, APPROVED_FILE, dest);
     let copied = reason.is_none();
     match overlay_outcome(copied, !copied && overlay_exists(container)) {
@@ -1358,17 +1408,17 @@ pub(crate) fn base_is_allowed(
 /// environment to carry (the contract's replay drops HOST_ENV, so ic puts it back itself), and the side the result
 /// names.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Restamp {
-    add_platform: Option<String>,
-    env: Option<String>,
-    side: Side,
+pub(crate) struct Restamp {
+    pub(crate) add_platform: Option<String>,
+    pub(crate) env: Option<String>,
+    pub(crate) side: Side,
 }
 
 /// The old container's side kept as it was, and what it lacks filled in from this side: all of it for a container
 /// that named no side, the environment alone for one that named this side's platform without it. A container stamped
 /// with another platform is never given this side's environment, which would describe a side that does not exist.
 /// Pure.
-fn restamp(old: Option<&Side>, here: &Side) -> Restamp {
+pub(crate) fn restamp(old: Option<&Side>, here: &Side) -> Restamp {
     match old {
         None => Restamp {
             add_platform: Some(here.platform.clone()),
@@ -1396,7 +1446,7 @@ fn restamp(old: Option<&Side>, here: &Side) -> Restamp {
 
 /// The options a recreate's run line gets beside the contract's: ic's labels for the side it names, and HOST_ENV.
 /// Pure.
-fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
+pub(crate) fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
     let mut extra = labels::args(slug, LabelKind::Sandbox, &stamp.side.wire());
     if let Some(env) = &stamp.env {
         extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
@@ -1414,13 +1464,50 @@ fn left_pin(
     new_base_id: Option<&str>,
     slug: &str,
     version: Option<String>,
+    env: Option<LeftEnv>,
 ) -> Option<Pin> {
     match (old_base_id, new_base_id) {
-        (Some(old), Some(new)) if old != new => Some(Pin {
-            image: rollback_tag(slug, old),
-            version,
-        }),
+        (Some(old), Some(new)) if old != new => {
+            let image = rollback_tag(slug, old);
+            let (env_image, env_hash) = env
+                .filter(|env| env.running != old)
+                .map(|env| {
+                    (
+                        Some(rollback_env_tag(slug, env.running)),
+                        Some(pinned_env_hash(env.hash, env.recipe, &image)),
+                    )
+                })
+                .unwrap_or_default();
+            Some(Pin {
+                image,
+                version,
+                env_image,
+                env_hash,
+            })
+        }
         _ => None,
+    }
+}
+
+/// What the container being left runs on top of its base: the image id it runs, the environment hash it carries, and
+/// the approved recipe beside it when that could be read.
+struct LeftEnv<'a> {
+    running: &'a str,
+    hash: &'a str,
+    recipe: Option<&'a str>,
+}
+
+/// The hash a container running a pinned environment build carries once its base is the pin. The daemon recomposes the
+/// approved recipe on the base it is told (SANDBOX_BASE_IMAGE) and compares, so a build whose recipe is still the
+/// approved one is stamped with that recipe re-based on the pin, exactly as a rebuilding rollback stamps it. A recipe
+/// changed since that build cannot be known, and the hash it ran with stays: the daemon then says, truthfully, that the
+/// approved recipe is not what runs. Pure.
+fn pinned_env_hash(running_hash: &str, recipe: Option<&str>, pin_base: &str) -> String {
+    match recipe {
+        Some(recipe) if sha256_hex(recipe.as_bytes()) == running_hash => {
+            rebase_overlay(recipe, pin_base).0
+        }
+        _ => running_hash.to_string(),
     }
 }
 
@@ -1436,9 +1523,20 @@ fn rollback_tag(slug: &str, image_id: &str) -> String {
     )
 }
 
+/// The same protected family for the environment build pinned beside a base. By the build's own id, never its
+/// `intentic-sandbox-env-<slug>:<recipe>` tag: the next build of the same recipe on a new base takes that tag, and the
+/// build left behind is then a dangling image tidy removes.
+fn rollback_env_tag(slug: &str, image_id: &str) -> String {
+    let id = image_id.trim_start_matches("sha256:");
+    format!(
+        "intentic-sandbox-rollback-{slug}:env-{}",
+        &id[..id.len().min(12)]
+    )
+}
+
 /// What putting the parked container back came to.
 #[derive(Debug, PartialEq)]
-enum Restored {
+pub(crate) enum Restored {
     /// It is back and its daemon answers.
     Answering,
     /// It is back under its name and its daemon does not come up, and why.
@@ -1452,7 +1550,7 @@ enum Restored {
 /// new one (the dev mounts), so when neither comes up, the code there is what fails, not the image (2026-10-06: a
 /// daemon importing a package its image lacked; the restored container crashed on it exactly as the new one had,
 /// while this said it was restored).
-fn restored_line(restored: &Restored, dev: bool, slug: &str) -> String {
+pub(crate) fn restored_line(restored: &Restored, dev: bool, slug: &str) -> String {
     match restored {
         Restored::Answering => "\n       Your previous sandbox was restored and answers again — the update did not take.".to_string(),
         Restored::Down(why) if dev => format!(
@@ -1470,7 +1568,7 @@ fn restored_line(restored: &Restored, dev: bool, slug: &str) -> String {
 /// swap it described did not happen. Then its daemon is waited for, as the new one's was, so what the flow says
 /// last is where the sandbox stands rather than where it was meant to. Best-effort on every step: this runs on the
 /// failure path, where the one job is to leave the machine as close to "before" as it can reach.
-fn restore_parked(
+pub(crate) fn restore_parked(
     container: &str,
     parked: &str,
     slug: &str,
@@ -1960,7 +2058,7 @@ mod tests {
     ) -> Option<String> {
         let (previous, _, _) = versions::next_targets(
             saved,
-            left_pin(old, new, "abc", None),
+            left_pin(old, new, "abc", None, None),
             target,
             record::MAX_KEPT,
         );
@@ -2050,6 +2148,104 @@ mod tests {
             rollback_tag("a", "sha256:abc"),
             "intentic-sandbox-rollback-a:abc"
         );
+    }
+
+    #[test]
+    fn the_environment_build_being_left_is_pinned_beside_its_base_by_its_own_id() {
+        let recipe =
+            "# Composed\n\nFROM ghcr.io/intentic/sandbox:stable\n\nRUN apt-get install -y jq\n";
+        let applied = sha256_hex(recipe.as_bytes());
+        let pin = left_pin(
+            Some("sha256:0123456789abcdef"),
+            Some("sha256:fedcba9876543210"),
+            "abc",
+            Some("1.2.0".to_string()),
+            Some(LeftEnv {
+                running: "sha256:aaaabbbbccccdddd",
+                hash: &applied,
+                recipe: Some(recipe),
+            }),
+        )
+        .expect("a moved base leaves a pin");
+        assert_eq!(pin.image, "intentic-sandbox-rollback-abc:0123456789ab");
+        assert_eq!(
+            pin.env_image.as_deref(),
+            Some("intentic-sandbox-rollback-abc:env-aaaabbbbcccc")
+        );
+        // Stamped as the approved recipe re-based on the pin, which is what the daemon composes once it runs there.
+        let rebased = rebase_overlay(recipe, "intentic-sandbox-rollback-abc:0123456789ab").0;
+        assert_eq!(pin.env_hash.as_deref(), Some(rebased.as_str()));
+        assert_ne!(rebased, applied);
+    }
+
+    #[test]
+    fn a_recipe_changed_since_the_build_keeps_the_hash_it_ran_with_and_a_stock_sandbox_pins_no_environment(
+    ) {
+        assert_eq!(
+            pinned_env_hash("ran-with", Some("FROM x\nRUN newer\n"), "pin:1"),
+            "ran-with"
+        );
+        assert_eq!(pinned_env_hash("ran-with", None, "pin:1"), "ran-with");
+        // A stock container runs its base itself: nothing beside it to pin.
+        let stock = left_pin(
+            Some("sha256:0123456789abcdef"),
+            Some("sha256:fedcba9876543210"),
+            "abc",
+            None,
+            Some(LeftEnv {
+                running: "sha256:0123456789abcdef",
+                hash: "h",
+                recipe: None,
+            }),
+        )
+        .expect("a moved base leaves a pin");
+        assert_eq!((stock.env_image, stock.env_hash), (None, None));
+        assert_eq!(
+            left_pin(Some("sha256:0123"), Some("sha256:4567"), "abc", None, None)
+                .and_then(|pin| pin.env_image),
+            None
+        );
+    }
+
+    #[test]
+    fn a_rollback_onto_a_pinned_environment_build_leaves_one_too_so_pressing_it_twice_goes_forward()
+    {
+        // On c's environment build (base f…), going back to b's pinned pair: c's pair becomes `previous`, its
+        // environment build named by its own id, so the next rollback runs it again rather than rebuilding.
+        let left = left_pin(
+            Some("sha256:fedcba9876543210"),
+            Some("sha256:0123456789abcdef"),
+            "abc",
+            Some("1.3.0".to_string()),
+            Some(LeftEnv {
+                running: "sha256:cccc00000000ffff",
+                hash: "hash-c",
+                recipe: None,
+            }),
+        );
+        let saved = record::ChannelRecord {
+            current: Some("ghcr.io/intentic/sandbox:stable".to_string()),
+            ..record::ChannelRecord::default()
+        }
+        .with_previous(Some(&Pin {
+            image: "intentic-sandbox-rollback-abc:0123456789ab".to_string(),
+            version: Some("1.2.0".to_string()),
+            env_image: Some("intentic-sandbox-rollback-abc:env-bbbb00000000".to_string()),
+            env_hash: Some("hash-b".to_string()),
+        }));
+        let (previous, _, _) = versions::next_targets(
+            &saved,
+            left,
+            "intentic-sandbox-rollback-abc:0123456789ab",
+            record::MAX_KEPT,
+        );
+        let previous = previous.expect("the build being left is the way forward");
+        assert_eq!(previous.image, "intentic-sandbox-rollback-abc:fedcba987654");
+        assert_eq!(
+            previous.env_image.as_deref(),
+            Some("intentic-sandbox-rollback-abc:env-cccc00000000")
+        );
+        assert_eq!(previous.env_hash.as_deref(), Some("hash-c"));
     }
 
     #[test]

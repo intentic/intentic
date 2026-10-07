@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use crate::docker;
 use crate::logfile::{intentic_home, Log};
-use crate::record::{self, ChannelRecord};
+use crate::record::{self, ChannelRecord, Pin};
 use crate::sandbox::labels;
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::side::{self, Adoption, Keeper, Side};
@@ -56,17 +56,21 @@ const BACKUP_KEEP_MS: u64 = 30 * DAY_MS;
 const BACKUP_CLOCK_MARGIN_MS: u64 = 60 * 60 * 1000;
 
 /// The sandbox an image of ours belongs to, and whether it is a rollback pin. Only the tags ic itself writes (twelve hex
-/// characters of an id or a recipe hash) count: a tag a person made under the same name is theirs to remove. Pure.
+/// characters of an id or a recipe hash, and `env-` before them for the environment build pinned beside a base) count: a
+/// tag a person made under the same name is theirs to remove. Pure.
 pub fn owner_of(reference: &str) -> Option<(String, bool)> {
     let (repository, tag) = reference.rsplit_once(':')?;
-    if tag.len() != 12 || !tag.chars().all(|c| c.is_ascii_hexdigit()) {
+    let pinned_env = tag.strip_prefix("env-");
+    let id = pinned_env.unwrap_or(tag);
+    if id.len() != 12 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
     FAMILIES.iter().find_map(|prefix| {
+        let rollback = prefix.contains("rollback");
         repository
             .strip_prefix(prefix)
-            .filter(|slug| !slug.is_empty())
-            .map(|slug| (slug.to_string(), prefix.contains("rollback")))
+            .filter(|slug| !slug.is_empty() && (rollback || pinned_env.is_none()))
+            .map(|slug| (slug.to_string(), rollback))
     })
 }
 
@@ -403,7 +407,7 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
             .into_iter()
             .flatten()
             {
-                named.extend(rec.targets().into_iter().map(|pin| pin.image));
+                named.extend(rec.targets().iter().flat_map(Pin::images));
                 named.extend(rec.staged.clone());
                 named.extend(rec.current.clone());
             }
@@ -775,6 +779,19 @@ mod tests {
             owner_of("intentic-sandbox-env-sandbox-abc:91a8ec75fa46"),
             Some(("sandbox-abc".to_string(), false))
         );
+        // The environment build pinned beside a base is a rollback pin too, and only in that family.
+        assert_eq!(
+            owner_of("intentic-sandbox-rollback-sandbox-abc:env-91a8ec75fa46"),
+            Some(("sandbox-abc".to_string(), true))
+        );
+        assert_eq!(
+            owner_of("intentic-sandbox-env-sandbox-abc:env-91a8ec75fa46"),
+            None
+        );
+        assert_eq!(
+            owner_of("intentic-sandbox-rollback-sandbox-abc:env-latest"),
+            None
+        );
         assert_eq!(
             owner_of("intentic-sandbox-dev-env-sandbox-abc:2238823e9835"),
             Some(("sandbox-abc".to_string(), false))
@@ -788,6 +805,32 @@ mod tests {
         assert_eq!(owner_of("ghcr.io/intentic/sandbox:stable"), None);
         assert_eq!(owner_of("intentic-sandbox:dev"), None);
         assert_eq!(owner_of("postgres:18"), None);
+    }
+
+    #[test]
+    fn the_environment_build_a_record_pins_is_kept_with_its_base() {
+        let record = ChannelRecord {
+            kept: vec![Pin {
+                image: "intentic-sandbox-rollback-x:111111111111".to_string(),
+                env_image: Some("intentic-sandbox-rollback-x:env-aaaaaaaaaaaa".to_string()),
+                env_hash: Some("feed".to_string()),
+                ..Pin::default()
+            }],
+            ..ChannelRecord::default()
+        };
+        let named: Vec<String> = record.targets().iter().flat_map(Pin::images).collect();
+        assert!(in_use(
+            "intentic-sandbox-rollback-x:env-aaaaaaaaaaaa",
+            "sha256:old-env",
+            &[],
+            &named
+        ));
+        assert!(in_use(
+            "intentic-sandbox-rollback-x:111111111111",
+            "sha256:old-base",
+            &[],
+            &named
+        ));
     }
 
     #[test]

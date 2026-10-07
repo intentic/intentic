@@ -30,8 +30,6 @@ const option = (model: string, label: string, tier: `instant` | `work`) => ({
 const FIT: LocalModelFitResponse = {
     memoryBytes: 34_359_738_368,
     memoryCapped: false,
-    gpu: `absent`,
-    gpuMemoryBytes: 0,
     budgetBytes: 27_487_790_694,
     serverReady: true,
     options: [option(QUICK, `Qwen3.5 2B`, `instant`), option(WORK, `Qwen3.8 27B`, `work`)],
@@ -98,15 +96,11 @@ it(`says a served quick-jobs model is ready for quick jobs, and points at where 
     expect(html).toContain(`Choose it for commit messages and titles`);
 });
 
-// Ready and slow reads as broken without a reason: the pill says slow, and the daemon's reason gets a line of its own,
-// without the weights and window the row already names.
-it(`shows why a serving model is marked instead of calling it ready`, () => {
-    const detail = `Qwen3.8 27B · 64k window · only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace`;
-    const html = render([localModel(`localmodel`, WORK, { state: `active`, code: `gpu-partial`, detail })]);
-    expect(html).toContain(`Running slow`);
-    expect(html).toContain(`Only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace`);
+// A serving row's sentence repeats the rung's own name and window, so it gets no line of its own.
+it(`calls a serving model ready without repeating what its row already names`, () => {
+    const html = render([localModel(`localmodel`, WORK, { state: `active`, detail: `Qwen3.8 27B · 64k window` })]);
+    expect(html).toContain(`Ready`);
     expect(html).not.toContain(`Qwen3.8 27B · 64k window`);
-    expect(html).not.toContain(`>Ready<`);
 });
 
 // Pressing a rung and waiting for it to serve is the whole errand; only a model that can run a chat ends it in one.
@@ -134,10 +128,10 @@ it(`hands a served model on to chat only when it can run one`, async () => {
     expect(await started(QUICK)).toEqual([]);
 });
 
-it(`says what the offers were sized against: one device's free memory, not the sum`, () => {
-    const html = renderWith({ ...FIT, fullSpeedBytes: 6 * 1024 ** 3, fullSpeedDevice: `gpu` }, []);
-    expect(html).toContain(`Picks below fit in the ${localModelGb(6 * 1024 ** 3)} a model can use on the GPU.`);
-    const none = renderWith({ ...FIT, instant: undefined, best: undefined, fullSpeedBytes: 1024 ** 3, fullSpeedDevice: `host` }, []);
+it(`says what the offers were sized against: the memory free now, not the total`, () => {
+    const html = renderWith({ ...FIT, fullSpeedBytes: 6 * 1024 ** 3 }, []);
+    expect(html).toContain(`Picks below fit in the ${localModelGb(6 * 1024 ** 3)} of memory free now.`);
+    const none = renderWith({ ...FIT, instant: undefined, best: undefined, fullSpeedBytes: 1024 ** 3 }, []);
     expect(none).toContain(`Nothing on the curated list runs at full speed in the ${localModelGb(1024 ** 3)} free here.`);
 });
 

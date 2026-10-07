@@ -59,6 +59,47 @@ test("a server that publishes no window says nothing, and nothing is invented fo
     expect(catalog.models[0]?.contextWindow).toBeUndefined();
 });
 
+// Ollama and LM Studio say a loaded model's window only on their own APIs; a turn measured against nothing would be
+// silently cut at their few-thousand-token defaults.
+const nativeCatalog = async (data: readonly { id: string }[], routes: Readonly<Record<string, unknown>>) => {
+    const dir = await mkdtemp(join(tmpdir(), "endpoint-catalog-"));
+    const fetchImpl = (async (url: string) => {
+        const path = new URL(String(url)).pathname;
+        if (path in routes) {
+            return new Response(JSON.stringify(routes[path]), { headers: { "content-type": "application/json" } });
+        }
+        return path === "/v1/models"
+            ? new Response(JSON.stringify({ data }), { headers: { "content-type": "application/json" } })
+            : new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
+    return createEndpointCatalog(dir, fetchImpl).models("host", { baseUrl: "http://host.docker.internal:11434/v1", protocol: "openai" });
+};
+
+test("Ollama's running models carry their window, and a model not loaded yet stays unknown", async () => {
+    const catalog = await nativeCatalog([{ id: "qwen3:32b" }, { id: "llama3.2:latest" }], {
+        "/api/ps": { models: [{ name: "qwen3:32b", model: "qwen3:32b", size: 1, context_length: 4_096 }] },
+    });
+    const windows = Object.fromEntries(catalog.models.map((model) => [model.id, model.contextWindow]));
+    expect(windows).toEqual({ "qwen3:32b": 4_096, "llama3.2:latest": undefined });
+});
+
+test("LM Studio's loaded instance carries its window, by the model's key", async () => {
+    const catalog = await nativeCatalog([{ id: "google/gemma-4-26b-a4b" }, { id: "deepseek-r1" }], {
+        "/api/v1/models": {
+            models: [
+                {
+                    type: "llm",
+                    key: "google/gemma-4-26b-a4b",
+                    loaded_instances: [{ id: "google/gemma-4-26b-a4b", config: { context_length: 32_768 } }],
+                },
+                { type: "llm", key: "deepseek-r1", loaded_instances: [] },
+            ],
+        },
+    });
+    const windows = Object.fromEntries(catalog.models.map((model) => [model.id, model.contextWindow]));
+    expect(windows).toEqual({ "google/gemma-4-26b-a4b": 32_768, "deepseek-r1": undefined });
+});
+
 test("a /props answer in a shape we don't know leaves the window unknown rather than mangled", async () => {
     const catalog = await catalogOf([{ id: "gpt-4o-mini" }], { default_generation_settings: { n_ctx: "lots" }, total_slots: 4 });
     expect(catalog.models[0]?.contextWindow).toBeUndefined();
@@ -118,5 +159,7 @@ test("the last known list is replaced whole, never rewritten in place", async ()
     expect(JSON.parse(await readFile(join(dir, "before.json"), "utf8"))).toEqual([{ id: "old", label: "old" }]);
     // And it is the list that answers when the server no longer does.
     const offline = createEndpointCatalog(dir, (async () => new Response("down", { status: 503 })) as unknown as typeof fetch);
-    expect((await offline.models("local", { baseUrl: "http://127.0.0.1:40100/v1", protocol: "openai" })).models).toEqual([{ id: "new", label: "new" }]);
+    expect((await offline.models("local", { baseUrl: "http://127.0.0.1:40100/v1", protocol: "openai" })).models).toEqual([
+        { id: "new", label: "new" },
+    ]);
 });

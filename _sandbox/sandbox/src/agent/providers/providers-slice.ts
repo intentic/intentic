@@ -3,9 +3,11 @@ import { join } from "node:path";
 import type { Services } from "../../composition.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { createEndpointCatalog, type EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
+import { syncEndpointCompat } from "../../endpoints/endpoint-translator.js";
 import type { AcpConnections } from "../../runtimes/acp/acp-connection.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
 import type { ProviderDeps, RuntimeAdapters } from "../../runtimes/runtime-table.js";
+import { localTolerantFetch } from "../../system/tls/local-tls.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
 import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
@@ -79,22 +81,21 @@ export interface ProvidersSlice {
 // the one whose code this directory may not import (wakeLocalModel, above); and the runtimes themselves (the provider
 // modules and adapters of runtimes/runtime-table.ts, the ACP and Pi adapters), whose directories import agent/ back, so
 // naming them here would close a cycle.
-export interface ProvidersDeps
-    extends Pick<
-        ProvidersSlice,
-        | "cliProxy"
-        | "openCode"
-        | "authRoot"
-        | "accountUsage"
-        | "headroom"
-        | "observedLimits"
-        | "acpConnections"
-        | "acpAgent"
-        | "piAgent"
-        | "wakeLocalModel"
-        | "providerModules"
-        | "adapters"
-    > {
+export interface ProvidersDeps extends Pick<
+    ProvidersSlice,
+    | "cliProxy"
+    | "openCode"
+    | "authRoot"
+    | "accountUsage"
+    | "headroom"
+    | "observedLimits"
+    | "acpConnections"
+    | "acpAgent"
+    | "piAgent"
+    | "wakeLocalModel"
+    | "providerModules"
+    | "adapters"
+> {
     readonly historyRoot: string;
     // The actors that hold the children and background commands a Claude Code turn starts.
     readonly conversations: ConversationActors;
@@ -104,16 +105,25 @@ export interface ProvidersDeps
 }
 
 // Builds the providers slice.
-export const createProvidersSlice = ({ historyRoot, conversations, whole, ...built }: ProvidersDeps): ProvidersSlice => ({
-    ...built,
-    usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
-    providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
-    modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
-    modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
-    providerCatalogs: providerCatalogsOf(built.providerModules, whole),
-    providerReadiness: () => providerReadiness(whole()),
-    judgeCommand: (input, signal) => judgeCommand(whole(), input, signal),
-    endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints")),
-    // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
-    agent: (request) => runAgent(conversations, request),
-});
+export const createProvidersSlice = ({ historyRoot, conversations, whole, ...built }: ProvidersDeps): ProvidersSlice => {
+    // One translator sync at a time: a sync reads every endpoint's list, so a change found while one runs is in it.
+    let syncing: Promise<void> | undefined;
+    const resyncTranslator = (): void => {
+        syncing ??= syncEndpointCompat(whole()).finally(() => {
+            syncing = undefined;
+        });
+    };
+    return {
+        ...built,
+        usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
+        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
+        modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
+        modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
+        providerCatalogs: providerCatalogsOf(built.providerModules, whole),
+        providerReadiness: () => providerReadiness(whole()),
+        judgeCommand: (input, signal) => judgeCommand(whole(), input, signal),
+        endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints"), localTolerantFetch, { onChanged: resyncTranslator }),
+        // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
+        agent: (request) => runAgent(conversations, request),
+    };
+};

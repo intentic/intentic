@@ -2,10 +2,10 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
+import type { Capability, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../image/packs.js";
-import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget, localModelGpu } from "../../endpoints/local-model-fit.js";
-import { llamaServerProcesses, localModelLogPath, type LoadReport, offloadShortfall, readLoadReport } from "../../endpoints/local-model-load.js";
+import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget } from "../../endpoints/local-model-fit.js";
+import { llamaServerProcesses } from "../../endpoints/local-model-load.js";
 import {
     abortWeights,
     ensureWeights,
@@ -33,24 +33,15 @@ import { localModelPanelKey } from "../../ports/panel-keys.js";
 
 // A model the sandbox runs itself: the user picks weights, this downloads and serves them with the bundled
 // llama-server; the entry then IS an endpoint. Apply returns before the download finishes; a background job re-syncs
-// the translator once the server actually serves.
-
-// CUDA build of llama-server (overlay-only) plus the directive, spelled like docker's for the allowlist.
-const GPU_DIRECTIVE = `# local model capability, gpu option: the host's NVIDIA GPUs for llama-server.
-# intentic:runtime --gpus=all`;
-
-// The ask is the config; what became of it is localModelGpu() (granted/unsupported/absent), read per call.
-const gpuAsked = (config: unknown): boolean => (config as LocalModelConfig | undefined)?.gpu === "on";
+// the translator once the server actually serves. It runs on the CPU: a GPU model is a server on the host (Ollama,
+// LM Studio, llama.cpp), reached as a model endpoint, never a CUDA build inside this image.
 
 const weightsPath = (ctx: CapabilityCtx, source: LocalModelSource): string => localModelWeightsPath(ctx.workspace.root, source);
 
 // This handler's own ledgers, keyed by ENTRY, unlike the weights cache's, which are keyed by destination path: one
-// download can be what several entries are waiting on, while a job, a failure and the GPU's one owner belong to a entry.
+// download can be what several entries are waiting on, while a job, a failure and the one serving slot belong to an entry.
 const jobs = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const failures = new Map<string, string>();
-// Where each serving entry's layers went, read once its server answers: the log it wrote while loading is complete by
-// then. Only kept where a GPU was granted, the one case where "on the CPU" is news; cleared when the server stops.
-const loads = new Map<string, LoadReport>();
 let selectedModelId: string | undefined;
 let serverSwitch = Promise.resolve();
 
@@ -59,21 +50,17 @@ let serverSwitch = Promise.resolve();
 //   --parallel 1 llama.cpp defaults to 4 slots, each reserving the full window again
 //   --cache-type q8_0 halves the reservation at negligible quality cost
 //   --jinja curated models carry their own chat/tool template in the GGUF
-//   --log-file where the load says how many layers reached the GPU, which no HTTP route of the pinned build does
-export const serverCommand = (path: string, port: number, window: number): string => {
-    const gpuFit = localModelGpu() === "granted" ? " --gpu-layers auto --fit on" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja --log-file '${localModelLogPath(port)}'${gpuFit}`;
-};
+export const serverCommand = (path: string, port: number, window: number): string =>
+    `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja`;
 
-// Fits at all, the one figure a start is refused on (local-model-fit.ts): GPU and memory together, since llama.cpp splits
-// a model that fits nowhere whole. The connect view's offers are held to full speed as well, so it never offers what
-// this refuses; a model that fits only this way starts, and its row says where its layers went.
+// Fits at all, the one figure a start is refused on (local-model-fit.ts): the sandbox's memory. The connect view's
+// offers are held to full speed as well, so it never offers what this refuses.
 const admitModel = async (path: string, window: number): Promise<void> => {
     const [weightsBytes, budget] = await Promise.all([fileSize(path), localModelBudget()]);
     const estimated = estimatedModelMemory(weightsBytes, window);
     if (!fitsBudget(budget.budgetBytes, weightsBytes, window)) {
         throw new Error(
-            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but GPU and memory together allow ${gb(budget.budgetBytes)}. Reduce the conversation window or choose smaller weights.`,
+            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but the sandbox's memory allows ${gb(budget.budgetBytes)}. Reduce the conversation window or choose smaller weights.`,
         );
     }
 };
@@ -96,8 +83,7 @@ const stopOtherServers = async (ctx: CapabilityCtx, id: string): Promise<void> =
     const others = (await ctx.capabilities.list()).filter((capability) => capability.kind === "localmodel" && capability.id !== id);
     for (const other of others) {
         stopWatching(other.id);
-        loads.delete(other.id);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one GPU owner at a time is the invariant this loop establishes
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one serving model at a time is the invariant this loop establishes
         await ctx.panels.stop(localModelPanelKey(other.id));
         // A stopped endpoint must not stay routable just because its last catalog survived on disk.
         // oxlint-disable-next-line eslint/no-await-in-loop -- paired with the panel stop above
@@ -143,28 +129,13 @@ const waitUntilServing = async (ctx: CapabilityCtx, id: string, signal: AbortSig
 // Held outside `jobs` on purpose: folding it in would block a second Update on the whole load via `jobs.has`.
 const servings = new Map<string, AbortController>();
 
-const recordLoad = async (id: string): Promise<void> => {
-    const report = localModelGpu() === "granted" ? await readLoadReport(localModelPort(id)) : undefined;
-    if (report === undefined) {
-        loads.delete(id);
-        return;
-    }
-    loads.set(id, report);
-};
-
 const syncWhenServing = (ctx: CapabilityCtx, id: string): void => {
     servings.get(id)?.abort();
-    loads.delete(id);
     const abort = new AbortController();
     servings.set(id, abort);
     void waitUntilServing(ctx, id, abort.signal)
         .then(async (serving) => {
             if (serving && !abort.signal.aborted) {
-                await recordLoad(id);
-                const shortfall = offloadShortfall(loads.get(id));
-                if (shortfall !== undefined) {
-                    ctx.logger.warn(`localmodel ${id}: ${shortfall.detail}`);
-                }
                 await ctx.syncEndpoints();
             }
         })
@@ -206,7 +177,7 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
             return;
         }
         await serializeServerSwitch(async () => {
-            // A newer selection while this download ran wins the GPU; the bytes stay cached regardless.
+            // A newer selection while this download ran wins the serving slot; the bytes stay cached regardless.
             if (selectedModelId !== id) {
                 return;
             }
@@ -240,36 +211,6 @@ const windowAdvice = (window: number): string =>
         ? ""
         : " — enough for the one-shot helper jobs (titles, commit messages), not for a full agent turn, whose tools and instructions fill a window this size on their own. Raise it on the entry to chat with this model.";
 
-// Where a granted GPU is not doing the work, said on the serving row: a model that fits only across GPU and memory
-// together runs at the CPU's pace, and nothing else would tell the owner why it is slow. The advice follows the cause.
-const offloadStatus = (id: string, askedForGpu: boolean, running: string): CapabilityStatus | undefined => {
-    const shortfall = offloadShortfall(loads.get(id));
-    if (shortfall === undefined) {
-        return undefined;
-    }
-    const advice =
-        shortfall.code === "gpu-partial" || askedForGpu
-            ? "; smaller weights or a smaller window would fit it whole"
-            : "; turn on GPU on this entry and rebuild to use one";
-    return { state: "active", code: shortfall.code, detail: `${running} · ${shortfall.detail}${advice}` };
-};
-
-// Same GPU sentences as the docker entry, minus the toolkit clause (no nested runtime here): pending, error, or silent
-// once the flag rode.
-const gpuStatus = (config: unknown): CapabilityStatus | undefined => {
-    if (!gpuAsked(config)) {
-        return undefined;
-    }
-    const state = localModelGpu();
-    if (state === undefined) {
-        return { state: "pending", detail: "GPU access: rebuild required" };
-    }
-    if (state === "unsupported") {
-        return { state: "error", detail: "GPU access: this host's Docker has no nvidia runtime, install nvidia-container-toolkit on it" };
-    }
-    return undefined;
-};
-
 // Whether another entry is fed by the same weights file, keyed on the resolved path; decides if removing this one may
 // stop the download.
 const sharesWeights = async (ctx: CapabilityCtx, id: string, destination: string): Promise<boolean> =>
@@ -287,22 +228,13 @@ export const localModelHandler: CapabilityHandler = {
         const model = config as LocalModelConfig;
         return {
             model: model.model,
-            gpu: gpuAsked(config),
             ...(model.url !== undefined ? { url: model.url } : {}),
             context: model.context,
             ...(model.contextTokens !== undefined ? { contextTokens: model.contextTokens } : {}),
         };
     },
-    // Engine pack composes to nothing on a standard image (already baked), the install itself on a core image. The GPU
-    // directive is present whenever asked: baking it records the grant, flips the state to rebuild-required.
-    fragment: async (config) => {
-        const engine = await packFragment("llamacpp");
-        if (!gpuAsked(config)) {
-            return engine;
-        }
-        const cuda = await packFragment("llamacpp-cuda");
-        return [engine, cuda, GPU_DIRECTIVE].filter((part) => part !== undefined).join("\n");
-    },
+    // Engine pack composes to nothing on a standard image (already baked), the install itself on a core image.
+    fragment: async () => packFragment("llamacpp"),
     async *apply(ctx, id, config) {
         const model = config as LocalModelConfig;
         const source = localModelSource(model);
@@ -321,9 +253,6 @@ export const localModelHandler: CapabilityHandler = {
                   }
                 : { kind: "log" as const, message: `Stored ${id}, no llama-server in this dev run; the model serves in a real sandbox container.` };
             return;
-        }
-        if (gpuAsked(model) && localModelGpu() === "absent") {
-            yield { kind: "log", message: "GPU access needs a one-time rebuild (Environment entry), serving on CPU until then." };
         }
         const path = weightsPath(ctx, source);
         const held = await weightsReady(path);
@@ -366,8 +295,7 @@ export const localModelHandler: CapabilityHandler = {
         if (await serverHealthy(localModelPort(id))) {
             // Window joins the model name: two rows on the same weights can be a working agent or a helper-only rung.
             const window = localModelWindow(model);
-            const running = `${localModelLabel(model)} · ${localModelWindowLabel(window)} window${windowNote(window)}`;
-            return gpuStatus(config) ?? offloadStatus(id, gpuAsked(config), running) ?? { state: "active", detail: running };
+            return { state: "active", detail: `${localModelLabel(model)} · ${localModelWindowLabel(window)} window${windowNote(window)}` };
         }
         const held = await weightsReady(path);
         // No progress yet means the connection hasn't opened; `held` says whether this is loading or still fetching.
@@ -391,7 +319,6 @@ export const localModelHandler: CapabilityHandler = {
         jobs.get(id)?.abort.abort();
         stopWatching(id);
         failures.delete(id);
-        loads.delete(id);
         await ctx.panels.stop(localModelPanelKey(id));
         await ctx.endpointModels.forget(id);
         const source = localModelSource(config as LocalModelConfig);
@@ -410,7 +337,6 @@ export const localModelHandler: CapabilityHandler = {
             jobs.get(from)?.abort.abort();
             stopWatching(from);
             failures.delete(from);
-            loads.delete(from);
             await ctx.panels.stop(localModelPanelKey(from));
             await ctx.endpointModels.forget(from);
         },
@@ -452,7 +378,6 @@ export const unloadIdleLocalModels = async (ctx: CapabilityCtx, idleMs: number):
         idle.map(async (id) => {
             // The watcher first: it polls /health, and a stop it did not expect reads to it as a load that failed.
             stopWatching(id);
-            loads.delete(id);
             await ctx.panels.stop(localModelPanelKey(id));
             ctx.logger.info(`localmodel ${id}: unloaded after ${Math.round(idleMs / 60_000)} idle minutes, it reloads on the next turn that asks`);
         }),
@@ -488,11 +413,7 @@ export const wakeLocalModel = async (ctx: CapabilityCtx, id: string, timeoutMs: 
         } else if (!ctx.panels.running(localModelPanelKey(id))) {
             await startServer(ctx, id, path, window);
         }
-        const serving = await waitUntilServing(ctx, id, AbortSignal.timeout(timeoutMs));
-        if (serving) {
-            await recordLoad(id);
-        }
-        return serving;
+        return await waitUntilServing(ctx, id, AbortSignal.timeout(timeoutMs));
     } catch (error) {
         ctx.logger.warn(`localmodel ${id}: wake failed, ${errorMessage(error)}`);
         return false;

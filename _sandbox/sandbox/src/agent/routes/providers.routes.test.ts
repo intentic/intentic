@@ -31,7 +31,7 @@ test("names the ACP agents and endpoints, and nothing else the box connects to",
         { id: "goose", kind: "agent", config: { command: "goose acp", name: "Goose" } },
         { id: "codebuddy", kind: "agent", config: { command: "codebuddy acp" } },
         { id: "together", kind: "endpoint", config: { baseUrl: "https://api.together.xyz/v1", protocol: "openai" } },
-        { id: "qwen-local", kind: "localmodel", config: { model: "Qwen/Qwen3-8B", gpu: "off", context: "65536" } },
+        { id: "qwen-local", kind: "localmodel", config: { model: "Qwen/Qwen3-8B", context: "65536" } },
         // The rows this read exists to leave out: a chat can't be addressed to them, and naming them here would hand
         // the connector inventory to a tier that cannot read it.
         { id: "github", kind: "cli", config: { provider: "github" } },

@@ -115,6 +115,11 @@ enum SandboxCommand {
         /// Start without prompting even if other sandboxes are already running
         #[arg(short = 'y', long = "yes", alias = "force")]
         yes: bool,
+        /// Reinstall a sandbox this machine already has. Without it, connect refuses one that exists (-y included); with
+        /// it, the sandbox keeps its files, history, logins volume, image, settings and device, and is put back as it was
+        /// if the reinstalled one does not come up
+        #[arg(long)]
+        replace: bool,
     },
     /// Update onto the newest image of this sandbox's release channel, re-applying the approved overlay
     Update {
@@ -601,9 +606,15 @@ fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         Command::Sandbox(command) => match command {
-            SandboxCommand::Connect { setup_code, yes } => {
-                sandbox::connect::run(sandbox::connect::Args { setup_code, yes })
-            }
+            SandboxCommand::Connect {
+                setup_code,
+                yes,
+                replace,
+            } => sandbox::connect::run(sandbox::connect::Args {
+                setup_code,
+                yes,
+                replace,
+            }),
             SandboxCommand::Update {
                 slug,
                 channel,
@@ -1055,13 +1066,20 @@ mod tests {
     #[test]
     fn connect_binds_the_setup_code_positionally_and_yes_is_a_flag() {
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Connect { setup_code, yes }),
+            command:
+                Command::Sandbox(SandboxCommand::Connect {
+                    setup_code,
+                    yes,
+                    replace,
+                }),
         }) = parse(&["sandbox", "connect", "abc123", "-y"])
         else {
             panic!("connect did not parse")
         };
         assert_eq!(setup_code.as_deref(), Some("abc123"));
         assert!(yes);
+        // -y answers the other-sandboxes question only; reinstalling one that exists takes its own flag.
+        assert!(!replace);
         // The desktop app and the shims both pass -y; --force is the historical alias the scripts accepted.
         let Ok(Cli {
             command: Command::Sandbox(SandboxCommand::Connect { yes, .. }),
@@ -1080,13 +1098,48 @@ mod tests {
         // Bare, a code like this is argv this parser is right to refuse: it cannot tell it from a flag.
         assert!(parse(&["sandbox", "connect", "-Tq9xk", "-y"]).is_err());
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Connect { setup_code, yes }),
+            command:
+                Command::Sandbox(SandboxCommand::Connect {
+                    setup_code, yes, ..
+                }),
         }) = parse(&["sandbox", "connect", "-y", "--", "-Tq9xk"])
         else {
             panic!("connect did not take a hyphen-leading code behind --")
         };
         assert_eq!(setup_code.as_deref(), Some("-Tq9xk"));
         assert!(yes);
+    }
+
+    /* THE MACHINE AGENT'S RECONNECT: the argv @intentic/machine builds (icConnectArgs) parses to a replace of that code. */
+    #[test]
+    fn connect_replace_is_its_own_flag_beside_yes_ahead_of_the_code() {
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Connect {
+                    setup_code,
+                    yes,
+                    replace,
+                }),
+        }) = parse(&["sandbox", "connect", "-y", "--replace", "--", "-Tq9xk"])
+        else {
+            panic!("connect --replace did not parse")
+        };
+        assert_eq!(setup_code.as_deref(), Some("-Tq9xk"));
+        assert!(yes && replace);
+        // Behind `--` it is the code, not the flag.
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Connect {
+                    setup_code,
+                    replace,
+                    ..
+                }),
+        }) = parse(&["sandbox", "connect", "--", "--replace"])
+        else {
+            panic!("a code spelled like the flag did not parse")
+        };
+        assert_eq!(setup_code.as_deref(), Some("--replace"));
+        assert!(!replace);
     }
 
     #[test]

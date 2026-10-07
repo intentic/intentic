@@ -16,6 +16,21 @@ pub const MAX_KEPT: usize = 2;
 pub struct Pin {
     pub image: String,
     pub version: Option<String>,
+    /// The environment build the sandbox ran on that base, pinned beside it (`intentic-sandbox-rollback-<slug>:env-<id>`),
+    /// and the environment hash a container running it on the pinned base carries. A rollback runs this build as it is
+    /// instead of rebuilding today's recipe on the old base, so a recipe that no longer builds cannot block the way
+    /// back. Absent for a stock sandbox, and in a record an ic before it wrote. (2026-10-07)
+    pub env_image: Option<String>,
+    pub env_hash: Option<String>,
+}
+
+impl Pin {
+    /// Every image this pin keeps: the base, and the environment build beside it.
+    pub fn images(&self) -> Vec<String> {
+        std::iter::once(self.image.clone())
+            .chain(self.env_image.clone())
+            .collect()
+    }
 }
 
 /// Where a swap is. `Cutover` from the moment the old container is about to stop until the new one has passed its
@@ -106,6 +121,9 @@ pub struct ChannelRecord {
     pub current_version: Option<String>,
     /// What `previous` said it was when it was pinned.
     pub previous_version: Option<String>,
+    /// The environment build pinned beside `previous`, and its hash (Pin::env_image).
+    pub previous_env: Option<String>,
+    pub previous_env_hash: Option<String>,
     /// Older rollback targets kept beyond `previous`, newest first, at most MAX_KEPT.
     pub kept: Vec<Pin>,
     /// A swap in flight or on probation.
@@ -156,10 +174,23 @@ impl ChannelRecord {
             targets.push(Pin {
                 image: image.clone(),
                 version: self.previous_version.clone(),
+                env_image: self.previous_env.clone(),
+                env_hash: self.previous_env_hash.clone(),
             });
         }
         targets.extend(self.kept.iter().cloned());
         targets
+    }
+
+    /// The same record with `pin` as `previous`, or nothing to go back to: the four keys move together.
+    pub fn with_previous(&self, pin: Option<&Pin>) -> ChannelRecord {
+        ChannelRecord {
+            previous: pin.map(|pin| pin.image.clone()),
+            previous_version: pin.and_then(|pin| pin.version.clone()),
+            previous_env: pin.and_then(|pin| pin.env_image.clone()),
+            previous_env_hash: pin.and_then(|pin| pin.env_hash.clone()),
+            ..self.clone()
+        }
     }
 }
 
@@ -215,10 +246,10 @@ pub fn parse(content: &str) -> ChannelRecord {
     let mut record = ChannelRecord::default();
     // The shape's four keys are read together at the end: all four, or no shape.
     let mut desired: [Option<String>; 4] = Default::default();
-    // So are a kept target's image and version, and a swap's keys: a half-written group is no group.
-    let mut kept: [(Option<String>, Option<String>); MAX_KEPT] = Default::default();
+    // So are a kept target's image, version and environment build, and a swap's keys: a half-written group is no group.
+    let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
-    let mut rest: [Option<String>; 8] = Default::default();
+    let mut rest: [Option<String>; 10] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -244,10 +275,16 @@ pub fn parse(content: &str) -> ChannelRecord {
             "report_key" => &mut rest[5],
             "report_platform" => &mut rest[6],
             "side" => &mut rest[7],
-            "kept_1" => &mut kept[0].0,
-            "kept_1_version" => &mut kept[0].1,
-            "kept_2" => &mut kept[1].0,
-            "kept_2_version" => &mut kept[1].1,
+            "previous_env" => &mut rest[8],
+            "previous_env_hash" => &mut rest[9],
+            "kept_1" => &mut kept[0][0],
+            "kept_1_version" => &mut kept[0][1],
+            "kept_1_env" => &mut kept[0][2],
+            "kept_1_env_hash" => &mut kept[0][3],
+            "kept_2" => &mut kept[1][0],
+            "kept_2_version" => &mut kept[1][1],
+            "kept_2_env" => &mut kept[1][2],
+            "kept_2_env_hash" => &mut kept[1][3],
             "swap_phase" => &mut swap[0],
             "swap_at" => &mut swap[1],
             "swap_verb" => &mut swap[2],
@@ -272,10 +309,11 @@ pub fn parse(content: &str) -> ChannelRecord {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side] =
+    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash] =
         rest;
     record.current_version = current_version;
     record.previous_version = previous_version;
+    (record.previous_env, record.previous_env_hash) = env_of(previous_env, previous_env_hash);
     record.rolled_back_from = rolled_back_from;
     record.written = written.and_then(|value| value.parse().ok());
     record.held = held.as_deref() == Some("1");
@@ -284,14 +322,30 @@ pub fn parse(content: &str) -> ChannelRecord {
     record.side = side.filter(|side| !side.is_empty());
     record.kept = kept
         .into_iter()
-        .filter_map(|(image, version)| {
-            image
-                .filter(|image| !image.is_empty())
-                .map(|image| Pin { image, version })
+        .filter_map(|[image, version, env_image, env_hash]| {
+            let (env_image, env_hash) = env_of(env_image, env_hash);
+            image.filter(|image| !image.is_empty()).map(|image| Pin {
+                image,
+                version,
+                env_image,
+                env_hash,
+            })
         })
         .collect();
     record.swap = swap_of(swap);
     record
+}
+
+/// A pinned environment build and its hash, both or neither: a build whose hash is not known would boot reading as a
+/// recipe never applied, and a hash with no build is nothing to run.
+fn env_of(image: Option<String>, hash: Option<String>) -> (Option<String>, Option<String>) {
+    match (
+        image.filter(|image| !image.is_empty()),
+        hash.filter(|hash| !hash.is_empty()),
+    ) {
+        (Some(image), Some(hash)) => (Some(image), Some(hash)),
+        _ => (None, None),
+    }
 }
 
 /// A swap's keys as one value: a phase this build knows and a start time, or no swap at all.
@@ -337,11 +391,18 @@ pub fn serialize(record: &ChannelRecord) -> String {
     put("staged_version", record.staged_version.as_deref());
     put("current_version", record.current_version.as_deref());
     put("previous_version", record.previous_version.as_deref());
+    put("previous_env", record.previous_env.as_deref());
+    put("previous_env_hash", record.previous_env_hash.as_deref());
     for (slot, pin) in record.kept.iter().take(MAX_KEPT).enumerate() {
         put(&format!("kept_{}", slot + 1), Some(&pin.image));
         put(
             &format!("kept_{}_version", slot + 1),
             pin.version.as_deref(),
+        );
+        put(&format!("kept_{}_env", slot + 1), pin.env_image.as_deref());
+        put(
+            &format!("kept_{}_env_hash", slot + 1),
+            pin.env_hash.as_deref(),
         );
     }
     if let Some(swap) = &record.swap {
@@ -687,10 +748,12 @@ mod tests {
                 Pin {
                     image: "intentic-sandbox-rollback-abc:111111111111".to_string(),
                     version: Some("1.314.0".to_string()),
+                    ..Pin::default()
                 },
                 Pin {
                     image: "intentic-sandbox-rollback-abc:222222222222".to_string(),
                     version: None,
+                    ..Pin::default()
                 },
             ],
             swap: Some(Swap {
@@ -724,6 +787,65 @@ mod tests {
                 "intentic-sandbox-rollback-abc:111111111111".to_string(),
                 "intentic-sandbox-rollback-abc:222222222222".to_string(),
             ]
+        );
+    }
+
+    /* THE ENVIRONMENT BUILD PINNED BESIDE A BASE, and the records written before and without it. */
+    #[test]
+    fn a_pinned_environment_build_round_trips_beside_its_base_and_an_older_record_names_none() {
+        let env_pin = |base: &str, env: &str| Pin {
+            image: format!("intentic-sandbox-rollback-abc:{base}"),
+            version: Some("1.315.0".to_string()),
+            env_image: Some(format!("intentic-sandbox-rollback-abc:env-{env}")),
+            env_hash: Some("feedface".to_string()),
+        };
+        let record = ChannelRecord {
+            kept: vec![
+                env_pin("111111111111", "aaaaaaaaaaaa"),
+                Pin {
+                    image: "intentic-sandbox-rollback-abc:222222222222".to_string(),
+                    ..Pin::default()
+                },
+            ],
+            ..swap("x", None)
+        }
+        .with_previous(Some(&env_pin("000000000000", "bbbbbbbbbbbb")));
+        let text = serialize(&record);
+        assert!(text.contains("previous_env=intentic-sandbox-rollback-abc:env-bbbbbbbbbbbb\nprevious_env_hash=feedface\n"), "{text}");
+        assert!(
+            !text.contains("kept_2_env"),
+            "a stock pin writes no environment keys: {text}"
+        );
+        assert_eq!(parse(&text), record);
+        assert_eq!(
+            record.targets()[0].images(),
+            vec![
+                "intentic-sandbox-rollback-abc:000000000000".to_string(),
+                "intentic-sandbox-rollback-abc:env-bbbbbbbbbbbb".to_string(),
+            ]
+        );
+        // A record from before the environment keys: every pin reads as a base alone, as it always did.
+        let older = parse("current=x\nprevious=pin:b\nprevious_version=1.2.0\nkept_1=pin:a\n");
+        assert_eq!(older.targets()[0].env_image, None);
+        assert_eq!(older.kept[0].env_hash, None);
+        // Half a pair is no pair: a build without its hash would boot reading as a recipe never applied.
+        let half = parse(
+            "current=x\nprevious=pin:b\nprevious_env=pin:env-b\nkept_1=pin:a\nkept_1_env_hash=f\n",
+        );
+        assert_eq!((half.previous_env, half.previous_env_hash), (None, None));
+        assert_eq!(
+            (
+                half.kept[0].env_image.clone(),
+                half.kept[0].env_hash.clone()
+            ),
+            (None, None)
+        );
+        // And nothing to go back to clears all four keys together.
+        let cleared = record.with_previous(None);
+        assert!(
+            cleared.previous.is_none()
+                && cleared.previous_env.is_none()
+                && cleared.previous_env_hash.is_none()
         );
     }
 

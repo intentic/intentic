@@ -33,7 +33,15 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS, browserSession } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
-import { automationApprovals, automationCatalog, automationsList, checkDemoSource, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import {
+    automationApprovals,
+    automationCatalog,
+    automationsList,
+    checkDemoSource,
+    deleteAutomation,
+    resolveApproval,
+    saveAutomation,
+} from "./fixture/automations";
 import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning, switchDemoPairings } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoNameDictionary } from "./fixture/nameDictionary";
@@ -917,11 +925,15 @@ export const procedures = {
         list: () => ({ native: [`claude`], agents: [], endpoints: [] }),
     },
     endpoints: {
-        // What the connect view's local lane draws: a 32 GB laptop with no GPU passed through and nothing downloaded yet.
+        // What the connect view's local lane draws: a 32 GB laptop with nothing downloaded yet.
         localModelFit: () => demoLocalModelFit(),
         // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say
         // about — a transfer under way, with the Stop that declines it.
         localModelPrefetch: ({ action }) => demoStartPrefetch(action === `start`),
+        // Ollama on the laptop, serving two models and not yet pointed at: the row the panel has the most to say about.
+        hostServers: () => ({
+            servers: [{ kind: `ollama`, label: `Ollama`, baseUrl: `http://host.docker.internal:11434/v1`, models: [`qwen3:32b`, `llama3.2:latest`] }],
+        }),
     },
     settings: {
         get: () => DEMO_SETTINGS,

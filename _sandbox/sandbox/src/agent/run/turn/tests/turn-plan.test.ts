@@ -116,7 +116,9 @@ test("Codex with neither a translator subscription nor an api key names which of
 });
 
 test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
-    const services = servicesWith({ openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }) });
+    const services = servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
+    });
 
     const plan = await planTurn(services, turn({ agent: "grok" }), context);
 
@@ -143,7 +145,7 @@ test("a local model whose served window cannot hold the loop is refused before a
     const tiny = {
         id: "tiny",
         kind: "localmodel" as const,
-        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const, context: "32768" as const },
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", context: "32768" as const },
     };
     const services = servicesWith({
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
@@ -206,7 +208,7 @@ const smallWindow = async (window: number): Promise<ReturnType<typeof planTurn>>
     const card = {
         id: "tiny",
         kind: "localmodel" as const,
-        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const, context: "32768" as const },
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", context: "32768" as const },
     };
     const services = servicesWith({
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),

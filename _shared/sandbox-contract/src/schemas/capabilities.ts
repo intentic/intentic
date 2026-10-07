@@ -332,7 +332,6 @@ export const localModelChoice = (id: string): LocalModelChoice | undefined => LO
 export const LOCAL_MODEL_INSTANT: LocalModelChoice = LOCAL_MODELS.find((choice) => choice.tier === "instant")!;
 export const LocalModelConfigSchema = z.object({
     model: z.string().min(1),
-    gpu: z.enum(["on", "off"]).default("off"),
     url: z.url().optional(),
     context: z.union([z.enum(LOCAL_MODEL_WINDOWS), z.literal("custom")]).default(LOCAL_MODEL_WINDOW_DEFAULT),
     // Coerced from a text field's string, like the ssh card's `port`; read only when `context` is "custom".

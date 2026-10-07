@@ -180,7 +180,9 @@ describe("whether a turn may run", () => {
     });
 
     test("a grant for one conversation lets the provider run there and nowhere else", async () => {
-        const { privacyShield } = privacySliceFake({ policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "cursor" }] } });
+        const { privacyShield } = privacySliceFake({
+            policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "cursor" }] },
+        });
         expect(await privacyShield.admit("cursor", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
         expect((await privacyShield.admit("cursor", "native", "smart-moth-pq04")).allowed).toBe(false);
         expect((await privacyShield.admit("cursor", "native")).allowed).toBe(false);
@@ -221,6 +223,19 @@ describe("whether a turn may run", () => {
             { id: "endpoint/free-trial", local: false },
             { id: "endpoint/ollama", local: true },
         ]);
+    });
+
+    // A GPU model is served by the computer the container runs on, which Docker names host.docker.internal: what it reads
+    // stops on that machine, so it is as local as loopback. A server anywhere else is not.
+    test("a model server on the computer hosting the sandbox is local, one elsewhere on the network is not", async () => {
+        const capabilities = async () => [
+            { id: "lmstudio", kind: "endpoint", config: { baseUrl: "http://host.docker.internal:1234/v1", protocol: "openai" } } as never,
+            { id: "gpu-box", kind: "endpoint", config: { baseUrl: "http://192.168.1.20:11434/v1", protocol: "openai" } } as never,
+        ];
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, capabilities });
+        const policy = await privacyShield.policy();
+        expect(await privacyShield.trusted(policy, "endpoint/lmstudio")).toBe(true);
+        expect(await privacyShield.trusted(policy, "endpoint/gpu-box")).toBe(false);
     });
 });
 

@@ -115,6 +115,17 @@ test(`checks a model endpoint the way the thing that uses it would`, async () =>
     expect(seen[0]?.auth).toBe(`Bearer sk-local`);
 });
 
+// Ollama's address is pasted without /v1 as often as with it; discovery adds it, so the test must too, or a server
+// whose models load fine reads as broken.
+test(`a model endpoint pasted without its /v1 is tested where its models are read`, async () => {
+    const { url, seen } = await serve(({ path }) => (path === `/v1/models` ? { status: 200, body: { data: [] } } : { status: 404, body: {} }));
+
+    const answer = await probeCapability(new Map(), { id: "ollama", kind: "endpoint", config: { baseUrl: url, protocol: "openai" } });
+
+    expect(answer).toMatchObject({ checked: true, ok: true });
+    expect(seen[0]?.path).toBe(`/v1/models`);
+});
+
 test(`checks an MCP server by the handshake, and names the server that answered`, async () => {
     const { url, seen } = await serve(() => ({ status: 200, body: { jsonrpc: "2.0", id: 1, result: { serverInfo: { name: "linear" } } } }));
 

@@ -5,22 +5,19 @@ import {
     LOCAL_MODEL_WINDOWS,
     LOCAL_MODELS,
     type LocalModelChoice,
-    type LocalModelDevice,
     type LocalModelFitResponse,
-    type LocalModelGpu,
     type LocalModelPrefetch,
 } from "@intentic/sandbox-contract";
 import { forkedExec } from "@intentic/base/git";
 import { opt } from "../opt.js";
 import { localModelWeightsPath } from "./local-model.js";
-import { llamaServerProcesses, readLoadReport } from "./local-model-load.js";
+import { llamaServerProcesses } from "./local-model-load.js";
 
 // What this machine can actually run, measured rather than assumed, as two figures that answer two questions:
-// - full speed: does the whole model fit in the FREE memory of one device (the GPU when one reached this sandbox, else
-//   the host)? This sizes the connect view's offers. A model split between a card and the CPU runs at the CPU's pace,
-//   so a sum of the two would recommend a model that crawls: 8 GB of VRAM plus 32 GB of RAM once offered a 27B.
-// - fits at all: does it fit in everything, GPU and host together? This alone gates a start (localmodel.handler's
-//   admission check), since llama.cpp will split a model that fits nowhere whole rather than refuse it.
+// - full speed: does the whole model fit in the sandbox's FREE memory? This sizes the connect view's offers.
+// - fits at all: does it fit in the sandbox's memory by total? This alone gates a start (localmodel.handler's
+//   admission check), since a start frees what the model it replaces holds.
+// The sandbox serves on the CPU only: a GPU model is a server on the host, reached as a model endpoint.
 // Both come from here, so a view cannot offer a model the daemon will then refuse (full speed implies fits at all), nor
 // quote a figure the refusal was not decided on.
 
@@ -30,21 +27,9 @@ import { llamaServerProcesses, readLoadReport } from "./local-model-load.js";
 const MODEL_RUNTIME_BYTES = 1024 ** 3;
 // A model may have most of the box, never all of it: the daemon, the harness and whatever the agent runs live here too.
 const MODEL_CAPACITY_SHARE = 0.8;
-// What `--fit` leaves free on each device before it places a layer (llama.cpp's `fit_params_target`, 1 GiB at b11146);
-// a model sized into that margin is one the fitter spills to the CPU.
-const GPU_FIT_MARGIN_BYTES = 1024 ** 3;
 
 export const estimatedModelMemory = (weightsBytes: number, window: number): number =>
     weightsBytes + window * LOCAL_MODEL_KV_BYTES_PER_TOKEN + MODEL_RUNTIME_BYTES;
-
-// The ask's fate, stamped by the runner: "all" if --gpus=all rode, "unsupported" if the host's Docker has no nvidia
-// runtime, absent if nobody ever asked. Read per call so a test need not fight module order.
-const gpuEnv = (): string | undefined => process.env["SANDBOX_GPU"];
-
-export const localModelGpu = (): LocalModelGpu => {
-    const state = gpuEnv();
-    return state === "all" ? "granted" : state === "unsupported" ? "unsupported" : "absent";
-};
 
 // The container's own ceiling where it binds, the engine's total otherwise: a 64 GB host says nothing about a sandbox
 // capped at 8, and a cap past the engine's total never binds.
@@ -87,49 +72,10 @@ export const hostMemory = async (): Promise<{ bytes: number; capped: boolean; fr
     return { ...memoryFrom(cgroupMax, meminfo), freeBytes: freeMemoryFrom({ cgroupMax, cgroupCurrent, cgroupStat, meminfo }) };
 };
 
-export interface GpuReading {
-    // The card with the most memory, and separately the one with the most free: one device holds a model at full
-    // speed, and a second card's memory is not the first one's.
-    readonly totalBytes: number;
-    readonly freeBytes: number;
-}
-
-// nvidia-smi's `memory.total,memory.free` as csv, one line per card, in MiB. A line that does not parse is skipped, so
-// an unreadable answer reads as no GPU memory rather than a throw: that already means "size against the host alone".
-export const gpuReadingFrom = (csv: string): GpuReading => {
-    const cards = csv
-        .split("\n")
-        .filter((line) => line.trim() !== "")
-        .map((line) => line.split(",").map((field) => Number(field.trim())))
-        .filter((fields) => fields.length === 2 && fields.every(Number.isFinite));
-    const mib = 1024 * 1024;
-    return {
-        totalBytes: Math.max(0, ...cards.map(([total]) => total ?? 0)) * mib,
-        freeBytes: Math.max(0, ...cards.map(([, free]) => free ?? 0)) * mib,
-    };
-};
-
-// Zero until the GPU is actually passed through: before the grant there is no device to ask, so any figure here would
-// be a guess dressed as a measurement.
-export const gpuMemory = async (): Promise<GpuReading> => {
-    if (localModelGpu() !== "granted") {
-        return { totalBytes: 0, freeBytes: 0 };
-    }
-    const result = await forkedExec("nvidia-smi", ["--query-gpu=memory.total,memory.free", "--format=csv,noheader,nounits"]).catch(() => undefined);
-    return gpuReadingFrom(result?.stdout ?? "");
-};
-
-// What this sandbox's own llama-servers hold, host and GPU: a start stops every other one and restarts its own
-// (localmodel.handler), so all of it is free to the model being sized. Without it the model already serving would read
-// as not fitting on the machine it is running on.
-const heldByLocalModels = async (): Promise<{ hostBytes: number; gpuBytes: number }> => {
-    const servers = await llamaServerProcesses();
-    const reports = await Promise.all(servers.map(async (server) => readLoadReport(server.port)));
-    return {
-        hostBytes: servers.reduce((sum, server) => sum + server.residentBytes, 0),
-        gpuBytes: reports.reduce((sum, report) => sum + (report?.gpuBytes ?? 0), 0),
-    };
-};
+// What this sandbox's own llama-servers hold: a start stops every other one and restarts its own (localmodel.handler),
+// so all of it is free to the model being sized. Without it the model already serving would read as not fitting on the
+// machine it is running on.
+const heldByLocalModels = async (): Promise<number> => (await llamaServerProcesses()).reduce((sum, server) => sum + server.residentBytes, 0);
 
 // A bare dev run has no llama-server; the local lane then costs a rebuild before it can serve anything.
 export const llamaServerMissing = async (): Promise<boolean> =>
@@ -141,11 +87,8 @@ export const llamaServerMissing = async (): Promise<boolean> =>
 export interface LocalModelBudget {
     readonly memoryBytes: number;
     readonly memoryCapped: boolean;
-    readonly gpu: LocalModelGpu;
-    readonly gpuMemoryBytes: number;
-    readonly gpuFreeBytes: number;
-    // Fits at all: what a start is admitted against, the host and the GPU together, by total rather than free, since a
-    // start frees what the model it replaces holds. Zero means "unmeasurable", which every caller reads as "admit
+    // Fits at all: what a start is admitted against, by total rather than free, since a start frees what the model it
+    // replaces holds. Zero means "unmeasurable", which every caller reads as "admit
     // anything" rather than "admit nothing" — refusing on a reading we could not take would be worse than letting
     // llama.cpp decide.
     readonly budgetBytes: number;
@@ -154,14 +97,11 @@ export interface LocalModelBudget {
 }
 
 export const localModelBudget = async (): Promise<LocalModelBudget> => {
-    const [host, gpu] = await Promise.all([hostMemory(), gpuMemory()]);
+    const host = await hostMemory();
     return {
         memoryBytes: host.bytes,
         memoryCapped: host.capped,
-        gpu: localModelGpu(),
-        gpuMemoryBytes: gpu.totalBytes,
-        gpuFreeBytes: gpu.freeBytes,
-        budgetBytes: Math.round((host.bytes + gpu.totalBytes) * MODEL_CAPACITY_SHARE),
+        budgetBytes: Math.round(host.bytes * MODEL_CAPACITY_SHARE),
         hostFreeBytes: host.freeBytes,
     };
 };
@@ -171,29 +111,14 @@ export const fitsBudget = (budgetBytes: number, weightsBytes: number, window: nu
     budgetBytes <= 0 || estimatedModelMemory(weightsBytes, window) <= budgetBytes;
 
 export interface FullSpeedBudget {
-    readonly device: LocalModelDevice;
     readonly bytes: number;
 }
 
-// The one device a model runs at full speed on, and what it may take there. The GPU wherever one was granted and
-// answered, less the margin `--fit` keeps; the host otherwise, at the same share of its free memory the box keeps for
-// everything else. Undefined when the host's free memory could not be read: an offer sized against nothing would be
-// the old sum under another name.
-export const fullSpeedFrom = (reading: {
-    readonly gpu: LocalModelGpu;
-    readonly gpuMemoryBytes: number;
-    readonly gpuFreeBytes: number;
-    readonly hostFreeBytes: number | undefined;
-    readonly held: { readonly hostBytes: number; readonly gpuBytes: number };
-}): FullSpeedBudget | undefined => {
-    if (reading.gpu === "granted" && reading.gpuMemoryBytes > 0) {
-        const free = Math.min(reading.gpuMemoryBytes, reading.gpuFreeBytes + reading.held.gpuBytes);
-        return { device: "gpu", bytes: Math.max(0, free - GPU_FIT_MARGIN_BYTES) };
-    }
-    return reading.hostFreeBytes === undefined
-        ? undefined
-        : { device: "host", bytes: Math.round((reading.hostFreeBytes + reading.held.hostBytes) * MODEL_CAPACITY_SHARE) };
-};
+// What a model may take and still run at full speed: the same share of the free memory the box keeps for everything
+// else, plus what this sandbox's own servers hold. Undefined when free memory could not be read: an offer sized
+// against nothing would be a guess.
+export const fullSpeedFrom = (reading: { readonly hostFreeBytes: number | undefined; readonly heldBytes: number }): FullSpeedBudget | undefined =>
+    reading.hostFreeBytes === undefined ? undefined : { bytes: Math.round((reading.hostFreeBytes + reading.heldBytes) * MODEL_CAPACITY_SHARE) };
 
 // Measured, never assumed: zero free is a real answer that runs nothing at full speed.
 export const runsAtFullSpeed = (fullSpeed: FullSpeedBudget, weightsBytes: number, window: number): boolean =>
@@ -251,7 +176,7 @@ export const localModelOffers = (budgetBytes: number, fullSpeed: FullSpeedBudget
 
 export const localModelFit = async (root: string, prefetch: LocalModelPrefetch): Promise<LocalModelFitResponse> => {
     const [budget, ownServers, serverMissing] = await Promise.all([localModelBudget(), heldByLocalModels(), llamaServerMissing()]);
-    const fullSpeed = fullSpeedFrom({ ...budget, held: ownServers });
+    const fullSpeed = fullSpeedFrom({ hostFreeBytes: budget.hostFreeBytes, heldBytes: ownServers });
     const { instant, best } = localModelOffers(budget.budgetBytes, fullSpeed);
     const options = await Promise.all(
         LOCAL_MODELS.map(async (choice) => ({
@@ -271,12 +196,8 @@ export const localModelFit = async (root: string, prefetch: LocalModelPrefetch):
     return {
         memoryBytes: budget.memoryBytes,
         memoryCapped: budget.memoryCapped,
-        gpu: budget.gpu,
-        gpuMemoryBytes: budget.gpuMemoryBytes,
-        gpuFreeBytes: budget.gpuFreeBytes,
         budgetBytes: budget.budgetBytes,
         ...opt("fullSpeedBytes", fullSpeed?.bytes),
-        ...opt("fullSpeedDevice", fullSpeed?.device),
         serverReady: !serverMissing,
         options,
         ...(instant === undefined ? {} : { instant }),

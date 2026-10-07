@@ -598,6 +598,23 @@ fn mount_source_format(destination: &str) -> String {
     )
 }
 
+/// Every host path bound into a container, as `source:destination` the way `-v` takes it back. Works on a stopped
+/// container, like every inspect; empty when docker does not answer.
+pub fn bind_mounts(container: &str) -> Vec<String> {
+    inspect(
+        container,
+        "{{range .Mounts}}{{if eq .Type \"bind\"}}{{.Source}}:{{.Destination}}\n{{end}}{{end}}",
+    )
+    .map(|text| {
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 pub fn container_exists(name: &str) -> bool {
     ok(&["inspect", name])
 }

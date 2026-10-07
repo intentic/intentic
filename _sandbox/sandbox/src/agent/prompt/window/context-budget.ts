@@ -42,7 +42,7 @@ export const helperOverflow = (prompt: string, room: number, declared: DeclaredW
     }
     const fix = declared.onACard
         ? `Raise "Conversation window" on this model's card in Connections`
-        : `Raise the context size its server was started with`;
+        : `Raise the context size its server was started with (OLLAMA_CONTEXT_LENGTH for Ollama, the model's context length in LM Studio)`;
     return (
         `this job needs about ${withCommas(tokensOfChars(prompt.length))} tokens and the model accepts ` +
         `${withCommas(declared.window)} in one request. ${fix}, or set a model with a larger window for this job in ` +
@@ -132,7 +132,8 @@ export const contextShortfall = (turn: {
         ? `Raise "Conversation window" on this model's card in Connections (each step up costs memory, the card ` +
           `prices it), pick a model with a larger window, or keep this one for the small jobs (titles, commit ` +
           `messages) it can do as a one-shot helper.`
-        : `Raise the context size the server was started with, pick a model with a larger window, or keep this ` +
+        : `Raise the context size the server was started with (OLLAMA_CONTEXT_LENGTH for Ollama, the model's context ` +
+          `length in LM Studio), pick a model with a larger window, or keep this ` +
           `one for the small jobs (titles, commit messages) it can do as a one-shot helper.`;
     return {
         window,
