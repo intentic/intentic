@@ -30,6 +30,7 @@ import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createPublicRoutes } from "./public/public.routes.js";
+import { createPagesRoutes } from "./agent/pages/pages.routes.js";
 import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
@@ -88,6 +89,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     logs: createLogsRoutes(services),
     loops: createLoopsRoutes(services),
     workflows: createWorkflowsRoutes(services),
+    // What an MCP server's app drawn in a chat asks of its own server (agent/pages/mcp-apps.ts).
+    pages: createPagesRoutes(services),
     panels: createPanelsRoutes(services),
     // A server an agent left running for the person is named on its port's row by its job.
     ports: createPortsRoutes({ ...services, jobOn: (port) => portJobOf(services.conversations, port) }),

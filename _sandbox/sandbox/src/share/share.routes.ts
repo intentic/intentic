@@ -43,7 +43,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         // kind it was, as a native push notification's is, its pictures are painted over the same way (or not published
         // where they cannot be read), and no file name goes with them.
         const shielded = (await services.privacyShield.policy()).mode === "on";
-        const { messages, pictures } = shareTranscript(await services.transcripts.read(agent), detail, { keepNames: !shielded });
+        const { messages, pictures, pages } = shareTranscript(await services.transcripts.read(agent), detail, { keepNames: !shielded });
         if (messages.length === 0) {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation has nothing to share yet" });
         }
@@ -70,6 +70,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             { title: shown.title, sharedAt, detail, messages: shown.messages },
             pictures,
             shielded ? services.privacyShield.redactPictureForDisplay : undefined,
+            pages,
         );
         const stored: StoredShare = { id, conversationId, title, detail, sharedAt, messages: messages.length };
         await services.shares.put(stored);

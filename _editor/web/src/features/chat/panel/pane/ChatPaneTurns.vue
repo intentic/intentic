@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, EmptyState, Icon, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, inject, provide, ref } from "vue";
+import { computed, defineAsyncComponent, inject, provide, ref } from "vue";
+import { loadChunk } from "@intentic/ui/chunk";
 import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { CHAT_SURFACE, useChatSurface } from "../../tools/chatToolSurface";
@@ -90,6 +91,10 @@ const viewer = useShotViewer(
     computed(() => conversation.value.scope.value),
 );
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
+// Pages the live turn is still writing (turnFacts' page_draft), loaded the first time a turn writes one.
+const ChatPageDrafts = defineAsyncComponent(() => loadChunk(() => import(`../../transcript/pages/ChatPageDrafts.vue`)));
+const drafting = computed(() => streaming.value && conversation.value.turn.pageDrafts.value.size > 0);
+
 // The column whose `path:line` links raise a preview of the file (FileRefPeek).
 const column = ref<HTMLElement>();
 // What this conversation's next wait draws (ChatTranscriptSkeleton): its turns as they last stood, kept per conversation.
@@ -202,6 +207,8 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         </EmptyState>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
         <slot v-else-if="!waiting" name="empty" />
+        <!-- Pages the live turn is still writing, drawn as their markup streams in, just above where the turn says it is working. -->
+        <ChatPageDrafts v-if="drafting" />
         <!-- The live turn before it's written anything, or with rows under its bubble (showTurnStatus); outside the turn sections so it is always the last thing the transcript says. -->
         <ChatTurnStatus v-if="showTurnStatus" />
         <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->

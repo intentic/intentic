@@ -3588,6 +3588,33 @@
             "nothingChecks": "nic tego nie sprawdza",
             "reviewerAgrees": "recenzent się zgadza",
             "rounds": "{count} iteracja | {count} iteracje | {count} iteracji"
+        },
+        "chatPages": {
+            "needsPress": "Strona może to zrobić tylko po Twoim własnym kliknięciu w nią.",
+            "answerTooLarge": "Ta odpowiedź jest za duża, by ją odesłać.",
+            "notAsking": "Ta strona nie prosi o odpowiedź.",
+            "unavailable": "Nie udało się wczytać tej strony.",
+            "superseded": "{title}: wcześniejsza wersja, narysowana ponownie niżej",
+            "showEarlier": "Pokaż",
+            "hideEarlier": "Zwiń",
+            "openSource": "Otwórz plik, z którego ją zbudowano",
+            "fromFile": "z {path}",
+            "expand": "Otwórz w pełnym rozmiarze",
+            "publish": "Opublikuj…",
+            "publishHeader": "Umieścić tę stronę w internecie?",
+            "publishWarning": "„{title}” zostanie skopiowana do skrzynki nadawczej obszaru roboczego, gdzie każdy z linkiem otworzy ją bez logowania. Usuń ją ze skrzynki, aby ją zdjąć.",
+            "publishConfirm": "Opublikuj",
+            "publishedCopied": "Opublikowano, link skopiowany",
+            "publishedNoAddress": "W skrzynce nadawczej jako {path}; ten sandbox nie ma jeszcze publicznego adresu",
+            "publishFailed": "Nie udało się opublikować",
+            "alreadyAnswered": "Na tę stronę już odpowiedziano.",
+            "answering": "Twoja odpowiedź jest w drodze.",
+            "askHint": "Odpowiedz na samej stronie; to, co wyśle, wraca do agenta.",
+            "sent": "Wysłano:",
+            "dismiss": "Odrzuć",
+            "drafting": "Rysuję stronę…",
+            "draftingTitled": "Rysuję {title}…",
+            "notAnApp": "Ta strona nie jest aplikacją serwera MCP."
         }
     },
     "common": {
@@ -7211,6 +7238,11 @@
                 "runtimeDestination": "liczy się też cel budowany w czasie działania, bo jego hosta nie da się odczytać z góry",
                 "storedSecret": "zapisany sekret użyty w samym poleceniu"
             }
+        },
+        "agentChatPages": {
+            "group": "Strony w czacie",
+            "title": "Odpowiadaj stronami",
+            "description": "Pozwól agentowi narysować wykres, tabelę, diagram lub makietę bezpośrednio w czacie i zapytać Cię na małej stronie, gdy tam łatwiej wybrać. Wyłączone: narzędzia w ogóle nie są mu oferowane."
         }
     },
     "settings": {

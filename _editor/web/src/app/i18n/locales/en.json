@@ -3588,6 +3588,33 @@
             "nothingChecks": "nothing checks it",
             "reviewerAgrees": "a reviewer agrees",
             "rounds": "{count} rounds | {count} rounds"
+        },
+        "chatPages": {
+            "needsPress": "A page can do that only from your own click on it.",
+            "answerTooLarge": "That answer is too large to send back.",
+            "notAsking": "This page is not asking for an answer.",
+            "unavailable": "This page could not be loaded.",
+            "superseded": "{title}: an earlier version, redrawn below",
+            "showEarlier": "Show",
+            "hideEarlier": "Fold away",
+            "openSource": "Open the file it was built from",
+            "fromFile": "from {path}",
+            "expand": "Open full size",
+            "publish": "Publish…",
+            "publishHeader": "Put this page on the internet?",
+            "publishWarning": "\"{title}\" is copied into the workspace outbox, where anyone with the link can open it without signing in. Remove it from the outbox to take it down.",
+            "publishConfirm": "Publish",
+            "publishedCopied": "Published, link copied",
+            "publishedNoAddress": "In the outbox as {path}; this sandbox has no public address yet",
+            "publishFailed": "Could not publish",
+            "alreadyAnswered": "This page has already been answered.",
+            "answering": "Your answer is on its way.",
+            "askHint": "Answer on the page itself; what it sends goes back to the agent.",
+            "sent": "Sent:",
+            "dismiss": "Dismiss",
+            "drafting": "Drawing a page…",
+            "draftingTitled": "Drawing {title}…",
+            "notAnApp": "This page is not an MCP server's app."
         }
     },
     "common": {
@@ -7563,6 +7590,11 @@
                 "runtimeDestination": "a destination built at run time counts, since its host can't be read beforehand",
                 "storedSecret": "a stored secret, used in the command itself"
             }
+        },
+        "agentChatPages": {
+            "group": "Pages in chat",
+            "title": "Answer with pages",
+            "description": "Let the agent draw a chart, a table, a diagram or a mock-up right in the chat, and ask you on a small page when a choice is easier to make there. Off, it is not offered the tools at all."
         }
     },
     "settings": {

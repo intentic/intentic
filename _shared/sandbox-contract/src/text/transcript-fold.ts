@@ -1,5 +1,6 @@
 import { cancelledRequests, settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
+import type { Page } from "../events/requests.js";
 import {
     REQUEST_FIELDS,
     holdsRequest,
@@ -528,6 +529,10 @@ export class TranscriptFold {
                 return this.park(event.requestId, { paymentOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "credential_offer":
                 return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
+            case "page":
+                return this.showPage(event.page);
+            case "page_ask":
+                return this.park(event.requestId, { pageAsk: { requestId: event.requestId, page: event.page, status: "pending" } });
             case "need":
                 // A row of its own, not a park: the turn goes on, and the card reads the need's live state by its id.
                 return this.pushRow({ role: "notice", text: needRowText(event.need), need: event.need });
@@ -573,9 +578,27 @@ export class TranscriptFold {
             case "context_usage":
             case "mode":
             case "agent_status":
+            case "page_draft":
             case "done":
                 return [];
         }
+    }
+
+    /**
+     * A page drawn on the bubble whose call showed it, which it then closes, as a card does: the prose after it is the
+     * next row. A redraw of a page already shown folds the earlier row to a line rather than drawing two copies.
+     */
+    private showPage(page: Page): TranscriptPatch[] {
+        const patches: TranscriptPatch[] = [];
+        const earlier = this.rows.findLastIndex((row) => row.page !== undefined && row.page.id === page.id && row.page.superseded !== true);
+        if (earlier !== -1) {
+            this.rows[earlier]!.page = { ...this.rows[earlier]!.page!, superseded: true };
+            patches.push(this.replace(earlier));
+        }
+        const [index, opened] = this.open();
+        this.rows[index]!.page = page;
+        this.bubble = undefined;
+        return [...patches, ...opened, this.replace(index)];
     }
 
     /** A message pushed into a running turn; only a person's own message is a rewind anchor. */

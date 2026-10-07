@@ -1,5 +1,6 @@
 import { type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { browserFields } from "../../../browser/tools/browser-fields.js";
+import { mcpToolsOf } from "../../../capabilities/mcp-tools.js";
 import type { Services } from "../../../composition.js";
 import { gatedPlugins, withSettingsHookGate } from "./settings-hook-gate.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
@@ -188,6 +189,8 @@ export const planHarnessTurn = async (
         iqAvailable: iqLoaded,
         ...harnessAccounts(deps, input, context, granted),
         ...shellTools(deps, settings),
+        // Pages drawn in the chat, unless the owner switched them off; a turn nobody watches still may, its card waiting.
+        ...(settings.chatPages ? { pages: { workspaceRoot: deps.workspace.root, apps: mcpToolsOf(granted) } } : {}),
         // Every stored credential masked to its reference in tool results, unconditional since this isn't a saving worth
         // trading away.
         secrets,

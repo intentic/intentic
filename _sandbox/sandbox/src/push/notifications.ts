@@ -53,6 +53,11 @@ const AWAITING: Record<ParkKind, { readonly title: string; readonly named: strin
         named: "a payment to approve",
         body: "The agent wants to pay for something and nothing moves until you answer.",
     },
+    page_ask: {
+        title: "The agent is waiting on a page",
+        named: "a page to answer",
+        body: "It showed you a page to answer on and is waiting for what you choose.",
+    },
     // Reaches every member who is away, not only the approvers the card names.
     credential_offer: {
         title: "A credential needs a named approver",

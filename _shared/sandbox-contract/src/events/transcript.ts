@@ -14,6 +14,8 @@ import {
     CapabilityOutcomeSchema,
     credentialOfferRequest,
     CredentialReceiptSchema,
+    pageAskRequest,
+    PageSchema,
     paymentOfferRequest,
     PaymentReceiptSchema,
     PermissionAskSchema,
@@ -92,6 +94,14 @@ export const TranscriptCredentialOfferSchema = z.object({
     receipt: CredentialReceiptSchema.optional().describe("Who released it, or that somebody refused (the credential_receipt frame)."),
 });
 export type TranscriptCredentialOffer = z.infer<typeof TranscriptCredentialOfferSchema>;
+// A page asked to be answered, and what it sent back: the value as the page gave it, JSON text, which is also exactly
+// what the agent was handed.
+export const TranscriptPageAskSchema = z.object({
+    ...pageAskRequest,
+    status: QuestionStatusSchema.describe("Where the answer stands."),
+    value: z.string().optional().describe("What the page sent back, as JSON text."),
+});
+export type TranscriptPageAsk = z.infer<typeof TranscriptPageAskSchema>;
 
 // One row shape across live folding, storage and replay; a reopened chat redraws the transcript, not paraphrases it. A
 // subagent's own calls nest under the card that spawned them (z.lazy, self-referential).
@@ -353,6 +363,9 @@ export const TranscriptRowSchema = z.object({
         "Another agent's words that reached this conversation, whose they are, and the prompt they came as.",
     ),
     backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
+    // Not a card: a page parks nothing, it is part of what the agent said. On the bubble whose tool call showed it.
+    page: PageSchema.optional().describe("A page the agent showed here, drawn inline."),
+    pageAsk: TranscriptPageAskSchema.optional().describe("A page the agent asked to be answered on, and what it sent back."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",
     ),
@@ -369,6 +382,7 @@ export const REQUEST_FIELDS = [
     "capabilityOffer",
     "paymentOffer",
     "credentialOffer",
+    "pageAsk",
 ] as const;
 export type RequestField = (typeof REQUEST_FIELDS)[number];
 export type TranscriptRequests = Pick<TranscriptRow, RequestField>;

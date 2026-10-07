@@ -172,6 +172,9 @@ export const numberedFileBody = (text: string): { readonly code: string; readonl
 
 // Per-tool presenters keyed by lowercased display name (agent/tool-calls.ts normalizes it across backends).
 const PRESENTERS: Record<string, Presenter> = {
+    // The page itself is drawn under the call (ChatPageView); the call's own result is what the agent was told.
+    "show page": { icon: `globe` },
+    "ask on a page": { icon: `globe` },
     bash: { body: commandBody, summary: (text) => (text === `` ? t(`chat.toolPresentation.noOutput`) : lineCount(text)) },
     bashoutput: { body: commandBody },
     read: {

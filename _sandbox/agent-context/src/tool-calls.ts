@@ -20,6 +20,9 @@ const DISPLAY_NAMES: Record<string, string> = {
     websearch: "WebSearch",
     task: "Task",
     patch: "Edit",
+    // The page tools a chat draws from (the sandbox's agent/pages), named for a reader rather than by their server.
+    mcp__ui__show_page: "Show page",
+    mcp__ui__ask_page: "Ask on a page",
 };
 
 // Browser tool names spelled out for a reader (`Browser navigate`, `Browser click`); which server handled it is

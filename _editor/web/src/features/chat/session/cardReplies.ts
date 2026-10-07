@@ -24,6 +24,9 @@ const parkOf = (kind: CardAnswer["kind"]): AnsweredPark | undefined => {
         case `question`:
         case `permission`:
             return kind;
+        // The board reads a page waiting on an answer as a question for you.
+        case `page_ask`:
+            return `question`;
         case `capability_offer`:
             return `capability`;
         case `credential_offer`:
@@ -43,6 +46,7 @@ const FIELD_OF: Readonly<Record<CardAnswer["kind"], RequestField>> = {
     capability_offer: `capabilityOffer`,
     payment_offer: `paymentOffer`,
     credential_offer: `credentialOffer`,
+    page_ask: `pageAsk`,
 };
 
 // What the error line says when the daemon didn't take an answer, in the words each card has always used.
@@ -51,6 +55,7 @@ export const refusalOf = (answer: CardAnswer): string => {
         case `plan`:
             return t(`chat.cardReplies.planNotRecorded`);
         case `question`:
+        case `page_ask`:
             return answer.cancelled === true ? t(`chat.cardReplies.questionNotDismissed`) : t(`chat.cardReplies.answersNotSubmitted`);
         case `permission`:
             return t(`chat.cardReplies.decisionTurnEnded`);

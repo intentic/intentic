@@ -35,6 +35,8 @@ export interface LoopFacts {
     readonly browserAccounts: boolean;
     readonly desktop: boolean;
     readonly diagnostics: boolean;
+    // Optional so a caller that predates pages composes the same block it always did.
+    readonly pages?: boolean;
     readonly terminal: boolean;
     readonly hostDevices: HostDeviceReach | undefined;
     readonly ownBrowsers: OwnBrowserReach | undefined;
@@ -228,6 +230,19 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "When a decision is genuinely the user's to make (an ambiguous requirement, a fork between real alternatives, a missing preference you cannot infer from the code), ask with the AskUserQuestion tool. It renders as a clickable card in the chat; options written as plain text do not, so the user cannot answer them by clicking. Do not use it for questions you can answer yourself by reading the workspace.",
             "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
         ].join("\n\n"),
+    },
+    {
+        id: "pages",
+        reach: "loop",
+        // Only where the owner left the page tools on; off, nothing names them.
+        when: ({ pages }) => pages === true,
+        text:
+            "When a chart, a table, a diagram, a comparison of options or a mock-up would say more than prose, show it with " +
+            "`mcp__ui__show_page`: a self-contained HTML page drawn inline in the chat, in the chat's own theme. When the " +
+            "answer you need is easier to give on a page than by picking an option (choosing among mock-ups, tuning values, " +
+            "a short form), ask with `mcp__ui__ask_page`, which waits for what the page sends back. Keep pages to what the " +
+            "reader acts on: no filler, no decoration, real data only. Prose stays the default for anything a few sentences " +
+            "say as well.",
     },
     {
         id: "unwatched",

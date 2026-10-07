@@ -213,6 +213,16 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 - **Chat** (`/`): one conversation. Question cards (`AskUserQuestion`), plan approval, capability asks and
   payment approvals render here. Each session card shows a badge for what its last turn showed of its own
   work.
+- **Pages in chat**: `mcp__ui__show_page` draws a self-contained HTML page inline (a chart, a table, a mock-up),
+  in the chat's own theme; `mcp__ui__ask_page` draws one as a card and waits for what the page sends back with
+  `window.intentic.submit(value)`. Pages run sealed: scripts yes, network no. Files they name on disk and
+  libraries on the usual CDNs (jsDelivr, unpkg, cdnjs, d3js.org, cdn.plot.ly, Google Fonts) are carried in when
+  the page is shown; anything else does not load. `check: true` lays the page out headless first and returns a
+  picture and its console. A page's button can put words in the composer (`window.intentic.send`), never send
+  them. Each page is a file under `.intentic/records/artifacts/pages/<conversation>/`; its caption opens it full
+  size or publishes it to the outbox. A connected MCP server's own app (an MCP Apps `ui://` resource) is drawn
+  the same way after a call to its tool. The owner can switch all of it off (Sandbox ▸ Agent ▸ Tools ▸ Pages
+  in chat).
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status. Every agent
   a conversation started hangs under its card as a row, whichever way it was started, and the chat's list of open
   chats hangs the same rows under its cards: a conversation it spawned (its row opens its own chat) and a subagent

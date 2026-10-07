@@ -54,6 +54,18 @@ flowchart LR
   and the composer are the person's. The Claude Code loop's `informational` lines (`agent/run/informational.ts`) are
   notices by level, `info` dropped as the CLI shows it only in transcript mode. A line tied to a tool call is that call's
   status entry until its result. Hook lifecycle messages are not requested.
+- Pages in chat (`agent/pages/`, 2026-10-07): the Claude Code loop's `ui` server carries `show_page` and `ask_page`
+  beside `ask`, unless settings `chatPages` is off. A page is one HTML document, written inline or named by path.
+  The files it names on disk, and libraries on the CDNs in `page-assets.ts`, are carried into it as data. With
+  `check`, the sandbox's headless Chromium lays it out at the column width and the agent gets a picture and its
+  console (`page-check.ts`). It is filed under `.intentic/records/artifacts/pages/<conversation>/` and never
+  rewritten (`page-store.ts`); a `replaces` redraw is a new file, and the earlier row folds. `page` frames draw it
+  inline. `page_ask` parks the turn until the page's `intentic.submit` answers it. `page_draft` turn facts stream the
+  markup while the model writes it (`page-draft.ts` reads `input_json_delta`). The editor draws pages sealed: scripts
+  run, no network, no reach into the editor. A page speaks the MCP Apps bridge (`sandbox-contract` `text/pages.ts`),
+  so a connected MCP server's own `ui://` app is drawn the same way after a call to its tool (`mcp-apps.ts`). What
+  that app later asks of its server goes through `POST /pages/app-call`, which calls only tools the server lets its
+  app call. Without the reader's press, it calls only read-only ones.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

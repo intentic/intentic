@@ -25,6 +25,7 @@ import { inventoryContract } from "./contracts/inventory.contract.js";
 import { issuesContract } from "./contracts/issues.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
+import { pagesContract } from "./contracts/pages.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
@@ -95,6 +96,7 @@ export * from "./protocol/vitals.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
+export { pagesContract, PageAppCallResultSchema, PageAppCallSchema } from "./contracts/pages.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
@@ -132,6 +134,7 @@ export * from "./policy/request-status.js";
 export * from "./events/child-run.js";
 export * from "./policy/turned-away.js";
 export * from "./text/mentions.js";
+export * from "./text/pages.js";
 export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";
 export { type ControlReach, defaultFloor, type RouteAccess, type RouteMeta, routeAccess } from "./protocol/route-meta.js";
@@ -308,6 +311,7 @@ export const sandboxContract = {
     issues: issuesContract,
     logs: logsContract,
     loops: loopsContract,
+    pages: pagesContract,
     panels: panelsContract,
     ports: portsContract,
     public: publicContract,

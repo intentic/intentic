@@ -308,6 +308,8 @@ export const UNSERVED = {
     "inventory.remove": UNSIMULATED_WRITE,
     "loops.start": UNSIMULATED_WRITE,
     "loops.stop": UNSIMULATED_WRITE,
+    // Only an MCP server's app calls it, and no fixture conversation shows one.
+    "pages.appCall": UNSIMULATED_WRITE,
     "personas.remove": UNSIMULATED_WRITE,
     "personas.removeSkill": UNSIMULATED_WRITE,
     "personas.savePrompt": UNSIMULATED_WRITE,

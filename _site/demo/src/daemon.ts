@@ -78,6 +78,7 @@ import {
 } from "./fixture/sandbox";
 import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH, HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "./fixture/document";
 import { transcriptFor } from "./fixture/transcripts";
+import { PAGE_FILES } from "./fixture/pages";
 import { subagentTranscriptFor } from "./fixture/subagentTranscripts";
 import {
     agentChanges,
@@ -1128,6 +1129,10 @@ const documentBytes = (bytes: Uint8Array<ArrayBuffer>): Response =>
 // Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the Word documents, the only paths here
 // whose bytes are bytes: a viewer parses them, so text would not do.
 const workspaceRaw = (path: string): Response => {
+    const page = PAGE_FILES.get(path);
+    if (page !== undefined) {
+        return new Response(page, { status: 200, headers: { "content-type": `text/html; charset=utf-8` } });
+    }
     if (path === SUPPLIER_LETTER_PATH) {
         return documentBytes(SUPPLIER_LETTER_DOCX);
     }

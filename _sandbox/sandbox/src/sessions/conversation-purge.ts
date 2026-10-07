@@ -7,6 +7,7 @@ import { claudeStoreOf } from "./session-store.js";
 import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";
 import { conversationsRoot } from "../store/conversation-units.js";
+import { purgePages } from "../agent/pages/page-store.js";
 
 // What a conversation leaves OUTSIDE its unit and its rows, in layouts other owners dictate: its session files in the
 // Claude Code store every unfenced conversation shares, and uploads only its transcript names. Runs before the unit goes,
@@ -84,5 +85,7 @@ export const purgeConversationState = async (
             rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
         ),
         ...[...new Set(claudeSessions)].map((sessionId) => purgeClaudeSession(claudeStoreOf(workspaceRoot, historyRoot, undefined), sessionId)),
+        // The pages a conversation showed are its own record, and go with it.
+        ...removed.map((entry) => purgePages(workspaceRoot, entry.id)),
     ]);
 };

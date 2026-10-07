@@ -92,9 +92,35 @@ const shareTool = (tool: TranscriptTool, pictures: Pictures): TranscriptTool => 
     ...(tool.thinking === undefined ? {} : { thinking: redactSecrets(tool.thinking) }),
 });
 
+// One page an agent showed, to publish beside the shared conversation: its stored file, and its name beside the page.
+export interface SharePage {
+    readonly source: string;
+    readonly published: string;
+}
+
+// Stored page path → published name, one per page drawing, numbered after the pictures' scheme.
+class Pages {
+    private readonly byPath = new Map<string, string>();
+
+    published(path: string): string {
+        const already = this.byPath.get(path);
+        if (already !== undefined) {
+            return already;
+        }
+        const published = `${SHARE_FILES_DIR}/page-${this.byPath.size + 1}.html`;
+        this.byPath.set(path, published);
+        return published;
+    }
+
+    all(): SharePage[] {
+        return [...this.byPath].map(([source, published]) => ({ source, published }));
+    }
+}
+
 export interface SharedTranscript {
     readonly messages: TranscriptRow[];
     readonly pictures: readonly SharePicture[];
+    readonly pages: readonly SharePage[];
 }
 
 export interface ShareOptions {
@@ -104,6 +130,13 @@ export interface ShareOptions {
 
 export const shareTranscript = (messages: readonly TranscriptRow[], detail: ShareDetail, options: ShareOptions = {}): SharedTranscript => {
     const pictures = new Pictures(options.keepNames ?? true);
+    const pages = new Pages();
+    // A page is part of what the agent said, so it rides both levels; a page it later redrew is left out, as the chat folds
+    // it away. Not while the privacy shield is on: a page's markup is not a picture the shield can paint over.
+    const pageOf = (message: TranscriptRow): Pick<TranscriptRow, "page"> =>
+        message.page === undefined || message.page.superseded === true || options.keepNames === false
+            ? {}
+            : { page: { id: message.page.id, title: redactSecrets(message.page.title), path: pages.published(message.page.path), ...(message.page.measured === undefined ? {} : { measured: message.page.measured }), ...(message.page.height === undefined ? {} : { height: message.page.height }) } };
     const shared = messages.map((message): TranscriptRow => {
         const base: TranscriptRow = {
             role: message.role,
@@ -117,7 +150,7 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
             const published = pictures.published(path);
             return published === undefined ? [] : [published];
         });
-        const withAttachments = attachments.length === 0 ? base : { ...base, attachments };
+        const withAttachments = { ...(attachments.length === 0 ? base : { ...base, attachments }), ...pageOf(message) };
         if (detail === "messages") {
             return withAttachments;
         }
@@ -136,5 +169,5 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
                   }),
         };
     });
-    return { messages: shared, pictures: pictures.all() };
+    return { messages: shared, pictures: pictures.all(), pages: pages.all() };
 };

@@ -1843,6 +1843,33 @@
         },
         "chatAgentStatus": {
             "label": "Was die Erweiterungen des Agenten anzeigen"
+        },
+        "chatPages": {
+            "needsPress": "Eine Seite kann das nur nach deinem eigenen Klick darauf tun.",
+            "answerTooLarge": "Diese Antwort ist zu groß, um zurückgeschickt zu werden.",
+            "notAsking": "Diese Seite fragt nach keiner Antwort.",
+            "unavailable": "Diese Seite konnte nicht geladen werden.",
+            "superseded": "{title}: eine frühere Fassung, unten neu gezeichnet",
+            "showEarlier": "Anzeigen",
+            "hideEarlier": "Einklappen",
+            "openSource": "Die Datei öffnen, aus der sie gebaut wurde",
+            "fromFile": "aus {path}",
+            "expand": "In voller Größe öffnen",
+            "publish": "Veröffentlichen…",
+            "publishHeader": "Diese Seite ins Internet stellen?",
+            "publishWarning": "„{title}“ wird in den Ausgang des Arbeitsbereichs kopiert, wo jeder mit dem Link sie ohne Anmeldung öffnen kann. Entferne sie aus dem Ausgang, um sie wieder offline zu nehmen.",
+            "publishConfirm": "Veröffentlichen",
+            "publishedCopied": "Veröffentlicht, Link kopiert",
+            "publishedNoAddress": "Im Ausgang als {path}; diese Sandbox hat noch keine öffentliche Adresse",
+            "publishFailed": "Konnte nicht veröffentlicht werden",
+            "alreadyAnswered": "Diese Seite wurde bereits beantwortet.",
+            "answering": "Deine Antwort ist unterwegs.",
+            "askHint": "Antworte direkt auf der Seite; was sie sendet, geht an den Agenten zurück.",
+            "sent": "Gesendet:",
+            "dismiss": "Verwerfen",
+            "drafting": "Zeichne eine Seite…",
+            "draftingTitled": "Zeichne {title}…",
+            "notAnApp": "Diese Seite ist nicht die App eines MCP-Servers."
         }
     },
     "common": {
@@ -3895,6 +3922,11 @@
             "device": "Gerät",
             "host": "Host",
             "region": "Region"
+        },
+        "agentChatPages": {
+            "group": "Seiten im Chat",
+            "title": "Mit Seiten antworten",
+            "description": "Lass den Agenten ein Diagramm, eine Tabelle oder einen Entwurf direkt im Chat zeichnen und dich auf einer kleinen Seite fragen, wenn eine Wahl dort leichter fällt. Aus, werden ihm die Werkzeuge gar nicht angeboten."
         }
     },
     "settings": {

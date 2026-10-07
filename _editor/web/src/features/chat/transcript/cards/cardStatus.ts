@@ -4,6 +4,7 @@ import type {
     TranscriptBrowserHelp,
     TranscriptCapabilityOffer,
     TranscriptCredentialOffer,
+    TranscriptPageAsk,
     TranscriptPaymentOffer,
     TranscriptPermission,
     TranscriptPlan,
@@ -33,6 +34,18 @@ export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
 
 export const questionStatus = (question: TranscriptQuestion): CardStatus | undefined => {
     switch (question.status) {
+        case "answered":
+            return { label: t(`chat.cardStatus.answered`), tone: "done" };
+        case "cancelled":
+            return { label: t(`chat.cardStatus.dismissed`), tone: "gone" };
+        default:
+            return undefined;
+    }
+};
+
+// A page asked to be answered on ends as a question does: answered, or set aside.
+export const pageAskStatus = (card: TranscriptPageAsk): CardStatus | undefined => {
+    switch (card.status) {
         case "answered":
             return { label: t(`chat.cardStatus.answered`), tone: "done" };
         case "cancelled":

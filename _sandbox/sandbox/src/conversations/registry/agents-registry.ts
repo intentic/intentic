@@ -1111,7 +1111,8 @@ export const createFleet = (
             updatedAt: state !== undefined && activityLive(state) ? Math.max(entry.updatedAt, state.turn.lastAt ?? 0) : entry.updatedAt,
             attention: {
                 plan: parked.includes("plan"),
-                question: parked.includes("question"),
+                // A page asked to be answered on is a question in another form: it waits on the same person.
+                question: parked.includes("question") || parked.includes("page_ask"),
                 permission: parked.includes("permission"),
                 capability: parked.includes("capability_offer"),
                 // Its own lane, not folded into `permission`: the reader looking at the board often cannot be the one

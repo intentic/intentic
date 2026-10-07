@@ -74,6 +74,9 @@ import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, answerFiles, formatAnswers } from "../tools/question-answers.js";
+import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
+import { pageTools } from "../pages/page-tools.js";
+import { McpAppHost } from "../pages/mcp-apps.js";
 import { imageBlock, loadAttachments } from "../prompt/attachment-images.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
@@ -529,6 +532,8 @@ const baseOptions = (
                 // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
                 // checked their work to each delegation's result.
                 subagents !== undefined ? subagentHooks(subagents) : {},
+                // A connected MCP server's app, drawn in the chat after a call to the tool it belongs to (mcp-apps.ts).
+                appHooks(request, push),
                 // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
                 // namespace.
                 editDiagnosticsHooks(
@@ -588,6 +593,20 @@ const trackProse = (prose: TurnProse, event: AgentEvent): void => {
     }
 };
 
+// The MCP Apps host's hook, where the owner leaves pages on and has an MCP server connected; nothing otherwise.
+const appHooks = (request: HarnessRequest, push: (event: AgentEvent) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    const pages = request.tools.pages;
+    if (pages?.apps === undefined || pages.apps.length === 0) {
+        return {};
+    }
+    return new McpAppHost({
+        servers: pages.apps,
+        workspaceRoot: pages.workspaceRoot,
+        ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),
+        push,
+    }).hooks();
+};
+
 // The API's own ceiling on one picture, base64; a bigger one stays a path for the Read tool, which downsizes.
 const MAX_ANSWER_IMAGE_BASE64 = 5 * 1024 * 1024;
 
@@ -604,6 +623,20 @@ const askServer = (
         name: "ui",
         alwaysLoad: true,
         tools: [
+            // The page tools beside `ask` (agent/pages/page-tools.ts), only where the owner leaves them on: off, the turn
+            // is not offered them at all.
+            ...(request.tools.pages === undefined
+                ? []
+                : pageTools({
+                      workspaceRoot: request.tools.pages.workspaceRoot,
+                      cwd: request.spec.cwd,
+                      placement: request.spec.isolation?.plan,
+                      ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),
+                      push,
+                      cards: request.hooks.cards,
+                      signal: request.signal,
+                      answered: (answered) => syncOnAnswer(conversations, request, push, shell, answered),
+                  })),
             sdk().tool(
                 "ask",
                 'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
@@ -655,7 +688,7 @@ const askServer = (
 
 // Tools that must never raise a permission card: asking a question and entering plan mode are both deferring to the
 // user.
-const UNGATED = new Set([...ASK_TOOL_NAMES, "EnterPlanMode"]);
+const UNGATED = new Set([...ASK_TOOL_NAMES, ...PAGE_TOOL_NAMES, "EnterPlanMode"]);
 
 // The only tools a planning turn is stopped from using: the ones that write a file (rules/edit-tools.ts).
 const PLAN_WRITE_TOOLS = new Set<string>(EDIT_TOOL_NAMES);

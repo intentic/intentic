@@ -43,6 +43,7 @@ const LINES = {
     capability_offer: (row) => waiting(row.capabilityOffer, (card) => `Connect ${card.offer.name}`),
     payment_offer: (row) => waiting(row.paymentOffer, (card) => `$${card.offer.amountUsd} to ${hostOf(card.offer.url)}`),
     credential_offer: (row) => waiting(row.credentialOffer, (card) => card.offer.subject),
+    page_ask: (row) => waiting(row.pageAsk, (card) => card.page.title),
 } satisfies Record<ParkKind, (row: TranscriptRow) => AwaitingCard | undefined>;
 
 // The newest card of this kind still waiting on its answer; undefined when the rows hold none, as when it was answered

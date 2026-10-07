@@ -1,3 +1,4 @@
+import { SEALED_PAGE_POLICY } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // A workspace web page as one self-contained document, for a sandboxed frame's `srcdoc` (HtmlPreview.vue). Every file
@@ -11,23 +12,8 @@ import { z } from "zod";
 // page's CDN script or web font is counted and blocked, since fetching it would mean either the frame reaching the
 // network or this window fetching whatever a page names on its behalf.
 
-export const PREVIEW_POLICY = [
-    `default-src 'none'`,
-    // Inline only, which is every script this document can hold: the page's own, and its files carried in as text. Eval
-    // gives nothing more to a frame that can reach nothing.
-    `script-src 'unsafe-inline' 'unsafe-eval'`,
-    `style-src 'unsafe-inline'`,
-    `img-src data: blob:`,
-    `font-src data:`,
-    `media-src data: blob:`,
-    `connect-src 'none'`,
-    `frame-src 'none'`,
-    `worker-src 'none'`,
-    `object-src 'none'`,
-    `form-action 'none'`,
-    `base-uri 'none'`,
-    `manifest-src 'none'`,
-].join(`; `);
+// The same seal a page the agent shows in the chat wears (sandbox-contract text/pages.ts), spelled there once.
+export const PREVIEW_POLICY = SEALED_PAGE_POLICY;
 
 // What a reference in a page points at: a place in the page, bytes already inside it, the internet, some other scheme
 // (`mailto:`, `javascript:`), or a file in the workspace.
@@ -406,8 +392,9 @@ const markLinks = ({ doc, path }: Carrying): void => {
     }
 };
 
-// First in the head, so nothing the page carries is read before the policy that governs it.
-const seal = (doc: Document): void => {
+// First in the head, so nothing the page carries is read before the policy that governs it. `extra` follows the seal,
+// still ahead of everything the page writes itself: a chat page's theme and bridge (chat/transcript/pages).
+const seal = (doc: Document, extra?: string): void => {
     const policy = doc.createElement(`meta`);
     policy.setAttribute(`http-equiv`, `Content-Security-Policy`);
     policy.setAttribute(`content`, PREVIEW_POLICY);
@@ -417,6 +404,9 @@ const seal = (doc: Document): void => {
     const guide = doc.createElement(`script`);
     guide.textContent = LINK_GUIDE;
     doc.head.prepend(policy, referrer, guide);
+    if (extra !== undefined) {
+        guide.insertAdjacentHTML(`afterend`, extra);
+    }
 };
 
 // What a frame's message may ask of the window, parsed where it arrives since the page's own scripts can post anything:
@@ -435,8 +425,9 @@ export const PreviewAskSchema = z.object({
     ]),
 });
 
-// The page at `path`, from its `source`, as one document for a sandboxed frame; `load` reads a file beside it.
-export const buildPreviewDocument = async (source: string, path: string, load: AssetLoader): Promise<PreviewDocument> => {
+// The page at `path`, from its `source`, as one document for a sandboxed frame; `load` reads a file beside it, and
+// `extra` is markup to put right after the seal.
+export const buildPreviewDocument = async (source: string, path: string, load: AssetLoader, extra?: string): Promise<PreviewDocument> => {
     const doc = new DOMParser().parseFromString(source, `text/html`);
     const carrying: Carrying = { doc, path, carrier: carrierFor(load) };
     // A page's own base would move where its references point, and a refresh would take the frame elsewhere.
@@ -447,7 +438,7 @@ export const buildPreviewDocument = async (source: string, path: string, load: A
     // by which time the page's own styles have been listed, so no sheet is carried twice.
     await Promise.all([...carryLinks(carrying), ...carryScripts(carrying), ...carryStyles(carrying), ...carryMedia(carrying)]);
     markLinks(carrying);
-    seal(doc);
+    seal(doc, extra);
     // A page written without a doctype renders in quirks mode, and keeps doing so here.
     const doctype = doc.doctype === null ? `` : `<!DOCTYPE ${doc.doctype.name}>`;
     return { html: `${doctype}${doc.documentElement.outerHTML}`, ...carrying.carrier.tally() };

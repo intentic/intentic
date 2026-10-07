@@ -81,6 +81,12 @@ const CARDS: readonly { readonly event: AgentEvent; readonly field: RequestField
         answer: { kind: `credential_offer`, approve: false },
         settled: `skipped`,
     },
+    {
+        event: { kind: `page_ask`, requestId: `r1`, page: { id: `p1`, title: `Pick one`, path: `.intentic/records/artifacts/pages/c/p1.r0.html` } },
+        field: `pageAsk`,
+        answer: { kind: `page_ask`, value: `{"pick":"B"}` },
+        settled: `answered`,
+    },
 ];
 
 // A chat parked on the given cards, in the order raised, beneath the prompt that started the turn.

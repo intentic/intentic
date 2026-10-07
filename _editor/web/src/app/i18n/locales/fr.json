@@ -1843,6 +1843,33 @@
         },
         "chatAgentStatus": {
             "label": "Ce qu'affichent les extensions de l'agent"
+        },
+        "chatPages": {
+            "needsPress": "Une page ne peut faire cela qu'après votre propre clic dessus.",
+            "answerTooLarge": "Cette réponse est trop volumineuse pour être renvoyée.",
+            "notAsking": "Cette page ne demande pas de réponse.",
+            "unavailable": "Cette page n'a pas pu être chargée.",
+            "superseded": "{title} : une version antérieure, redessinée plus bas",
+            "showEarlier": "Afficher",
+            "hideEarlier": "Replier",
+            "openSource": "Ouvrir le fichier à partir duquel elle a été construite",
+            "fromFile": "depuis {path}",
+            "expand": "Ouvrir en grand",
+            "publish": "Publier…",
+            "publishHeader": "Mettre cette page sur internet ?",
+            "publishWarning": "« {title} » est copiée dans la boîte d'envoi de l'espace de travail, où toute personne ayant le lien peut l'ouvrir sans se connecter. Retirez-la de la boîte d'envoi pour la mettre hors ligne.",
+            "publishConfirm": "Publier",
+            "publishedCopied": "Publiée, lien copié",
+            "publishedNoAddress": "Dans la boîte d'envoi sous {path} ; ce sandbox n'a pas encore d'adresse publique",
+            "publishFailed": "Publication impossible",
+            "alreadyAnswered": "Cette page a déjà reçu une réponse.",
+            "answering": "Votre réponse est en route.",
+            "askHint": "Répondez directement sur la page ; ce qu'elle envoie revient à l'agent.",
+            "sent": "Envoyé :",
+            "dismiss": "Ignorer",
+            "drafting": "Dessin d'une page…",
+            "draftingTitled": "Dessin de {title}…",
+            "notAnApp": "Cette page n'est pas l'application d'un serveur MCP."
         }
     },
     "common": {
@@ -3890,6 +3917,11 @@
             "device": "Appareil",
             "host": "Hôte",
             "region": "Région"
+        },
+        "agentChatPages": {
+            "group": "Pages dans le chat",
+            "title": "Répondre avec des pages",
+            "description": "Laissez l'agent dessiner un graphique, un tableau, un diagramme ou une maquette directement dans le chat, et vous poser une question sur une petite page quand un choix s'y fait plus facilement. Désactivé, les outils ne lui sont même pas proposés."
         }
     },
     "settings": {

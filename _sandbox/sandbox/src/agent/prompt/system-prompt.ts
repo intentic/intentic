@@ -164,6 +164,8 @@ export interface SdkSystemPromptInput {
     readonly diagnostics?: boolean;
     // Whether the turn mounted the sandbox's own desktop; its sentence rides only then.
     readonly desktop?: boolean;
+    // Whether the page tools ride the `ui` server (settings `chatPages`); their sentence rides only then.
+    readonly pages?: boolean;
     // Whether agent.ts mounted the terminal hand-off server (attended, tmux wrapper on); the sentence rides only where
     // it's loadable.
     readonly terminal?: boolean;
@@ -185,7 +187,7 @@ export interface SdkSystemPromptInput {
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search">;
     readonly policy: Pick<TurnPolicy, "unattended">;
-    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -207,6 +209,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     browserAccounts: holdsBrowserAccounts(tools.browserAccounts),
     desktop: tools.desktop === true,
     diagnostics: tools.diagnostics === true,
+    pages: tools.pages !== undefined,
     terminal,
     hostDevices: tools.hostDevices,
     ownBrowsers: tools.ownBrowsers,
@@ -226,6 +229,7 @@ export const harnessGuidance = ({
     browserAccounts,
     desktop,
     diagnostics,
+    pages,
     terminal,
     hostDevices,
     ownBrowsers,
@@ -241,6 +245,7 @@ export const harnessGuidance = ({
                       browserAccounts: browserAccounts === true,
                       desktop: desktop === true,
                       diagnostics: diagnostics === true,
+                      pages: pages === true,
                       terminal: terminal === true,
                       hostDevices,
                       ownBrowsers,

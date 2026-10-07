@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChildRunSchema } from "../../events/requests.js";
+import { ChildRunSchema, PAGE_VALUE_MAX } from "../../events/requests.js";
 import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
 import { AgentHarnessSchema, AgentProviderSchema, ConversationIdSchema, EditorContextSchema } from "../agent.js";
 import { MENTION_LIMIT } from "../../text/mentions.js";
@@ -270,6 +270,20 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         approve: z
             .boolean()
             .describe("Yes releases exactly one payment. Anything else spends nothing. This click is the only way the money can move."),
+    }),
+    // What a page the agent asked on sent back, as JSON text: the page's own answer, handed to the agent as it came.
+    z.object({
+        kind: z.literal("page_ask").describe("Answering a page the agent showed to be answered on."),
+        requestId: z.string().min(1).describe("Which card you are answering."),
+        value: z
+            .string()
+            .max(PAGE_VALUE_MAX)
+            .optional()
+            .describe("What the page sent back, as JSON text. Absent with a dismissal."),
+        cancelled: z
+            .boolean()
+            .optional()
+            .describe("Dismissing it instead, which tells the agent to carry on without an answer rather than leaving it waiting."),
     }),
     // The one reply whose sender is checked: the daemon verifies identity against the card's named list and refuses
     // anyone else, including a `no` — otherwise a stranger could deny-of-service the approver.

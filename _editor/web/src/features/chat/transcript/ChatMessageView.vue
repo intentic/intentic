@@ -5,7 +5,8 @@ import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
 import { REQUEST_FIELDS, type RequestField } from "@intentic/sandbox-contract";
-import { type Component, computed, nextTick, ref, useTemplateRef, watch } from "vue";
+import { type Component, computed, defineAsyncComponent, nextTick, ref, useTemplateRef, watch } from "vue";
+import { loadChunk } from "@intentic/ui/chunk";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
@@ -81,6 +82,11 @@ const reply = async (answer: CardAnswer): Promise<void> => {
     }
 };
 
+// A page the agent showed, and the card for one it asked on: loaded the first time a chat draws one, since most never do
+// and the sealed document builder behind them is not small.
+const ChatPageView = defineAsyncComponent(() => loadChunk(() => import(`./pages/ChatPageView.vue`)));
+const ChatPageAskCard = defineAsyncComponent(() => loadChunk(() => import(`./pages/ChatPageAskCard.vue`)));
+
 // The card each request field is drawn as, as cardReplies' FIELD_OF names the answers; a row holds at most one.
 const CARDS: Readonly<Record<RequestField, Component>> = {
     plan: ChatPlanCard,
@@ -91,6 +97,7 @@ const CARDS: Readonly<Record<RequestField, Component>> = {
     capabilityOffer: ChatCapabilityCard,
     paymentOffer: ChatPaymentCard,
     credentialOffer: ChatCredentialCard,
+    pageAsk: ChatPageAskCard,
 };
 const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] !== undefined));
 
@@ -598,6 +605,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             >
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatMessageView.placedBy`) }}
             </p>
+
+            <!-- A page the agent showed here, drawn inline where its reply continues (ChatPageView). -->
+            <ChatPageView v-if="message.page" :page="message.page" />
 
             <!-- The card this row holds, by its field (CARDS); every answer goes through the chat's one reply. -->
             <component :is="CARDS[card]" v-if="card" :message="message" :settling="settling" :reply="reply" />

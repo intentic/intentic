@@ -145,6 +145,33 @@ export const withAgentStatus = (
     return next;
 };
 
+/** A page the agent is still writing, as far as its markup has streamed (page_draft facts); live state only. */
+export interface PageDraftView {
+    readonly html: string;
+    readonly title?: string;
+}
+
+/**
+ * The drafts after one page_draft fact. A stretch starting where the held markup ends extends it; one starting earlier
+ * (an attach replaying the turn's facts) rewrites from there; one starting past the end means a stretch was missed, and
+ * the draft waits as it is rather than drawing a gap. `done` lets it go: the page itself has taken over.
+ */
+export const withPageDraft = (
+    drafts: ReadonlyMap<string, PageDraftView>,
+    fact: Extract<TurnFact, { kind: `page_draft` }>,
+): ReadonlyMap<string, PageDraftView> => {
+    const next = new Map(drafts);
+    if (fact.done === true) {
+        next.delete(fact.callId);
+        return next;
+    }
+    const held = next.get(fact.callId) ?? { html: `` };
+    const html = fact.at <= held.html.length ? held.html.slice(0, fact.at) + fact.text : held.html;
+    const title = fact.title ?? held.title;
+    next.set(fact.callId, title === undefined ? { html } : { html, title });
+    return next;
+};
+
 export class TurnClient {
     // Where this window's run stands; moved only by `advance`, and every other fact about the run is read off it.
     readonly phase = shallowRef<RunPhase>(IDLE);
@@ -162,6 +189,9 @@ export class TurnClient {
     // What the runtime's own extensions show while this turn runs (agent_status facts), by key, in the order first set.
     // Live state, not transcript: gone once the turn settles, whatever the last frame said.
     readonly agentStatus = shallowRef<ReadonlyMap<string, AgentStatusEntry>>(new Map());
+    // Pages the agent is writing right now (page_draft facts), by the call writing each, for the column's foot to draw
+    // as they stream in. Live state too: a draft goes when its page lands, and every one with the turn.
+    readonly pageDrafts = shallowRef<ReadonlyMap<string, PageDraftView>>(new Map());
 
     // A person ended the live turn (Stop, or a card waved away) and it is unwinding: set in the press's own frame, long
     // before the stream closes, and published with the tab (TabFacts.ending) so the board's card and this chat say the
@@ -682,8 +712,9 @@ export class TurnClient {
         this.message = undefined;
         // An in-turn retry belongs to the turn that was retrying; whatever it settled as, the wait is over.
         this.providerRetry.value = undefined;
-        // An extension's status lines belong to the turn that set them.
+        // An extension's status lines belong to the turn that set them, and so do the pages it was still writing.
         this.agentStatus.value = new Map();
+        this.pageDrafts.value = new Map();
         host.failures.armRenewalProbe();
         host.failures.settled();
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.

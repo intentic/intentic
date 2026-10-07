@@ -19,6 +19,9 @@ flowchart LR
   preference, so the reader's OS picks the colour scheme and the browser picks the language.
 - **Nothing to click through.** Tool cards reach only their own copied pictures (`shareSurface.ts`); file links,
   shells and delegations draw as plain records. The page is marked `noindex`.
+- **Pages the agent showed.** Each one the conversation still stands on is published beside it as
+  `files/page-<n>.html`, masked like the rest and sealed off the network. It is drawn in a frame with an opaque origin
+  that is told its height by the page itself. None is published while the privacy shield is on (`share-payload.ts`).
 - **Fixed base.** The build's `base` is `SHARE_VIEWER_BASE` from `@intentic/sandbox-contract/share-paths`, so every
   share loads one copy of the assets. The daemon resolves `dist/` through this package's `./page` export, so a share
   fails until the package is built.

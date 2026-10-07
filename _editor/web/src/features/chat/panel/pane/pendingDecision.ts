@@ -26,6 +26,10 @@ const decisionIn = (message: ChatMessage): PendingDecision | undefined => {
         const asks = message.question.questions;
         return { kind: `question`, requestId: message.question.requestId, ...titled(asks.length === 1 ? asks[0]?.question : undefined) };
     }
+    // A page asked to be answered on is a question in another form, named by the page's own title.
+    if (message.pageAsk?.status === `pending`) {
+        return { kind: `question`, requestId: message.pageAsk.requestId, ...titled(message.pageAsk.page.title) };
+    }
     if (message.permission?.status === `pending`) {
         const { displayName, toolName, requestId } = message.permission;
         return { kind: `permission`, requestId, ...titled(displayName ?? toolName) };

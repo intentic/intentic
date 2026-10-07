@@ -266,6 +266,48 @@ export const RequestDocumentSchema = z.object({
 });
 export type RequestDocument = z.infer<typeof RequestDocumentSchema>;
 
+// A page the agent showed in the chat (its `show_page`/`ask_page` tools): a self-contained HTML document the daemon
+// stored under the workspace's records, drawn inline in a sealed frame. The row carries where it lives, not its bytes,
+// so a long chat full of charts stays a light record; the file is the page as it was shown, never rewritten after.
+export const PAGE_MIN_HEIGHT = 80;
+export const PAGE_MAX_HEIGHT = 2000;
+export const PAGE_TITLE_MAX = 200;
+export const PageSchema = z.object({
+    id: z.string().min(1).describe("The page's own id, which a later `replaces` names to redraw it in place."),
+    title: z.string().max(PAGE_TITLE_MAX).describe("What it is, in a few words."),
+    path: z.string().min(1).describe("Where the page is stored, as a workspace path."),
+    height: z
+        .number()
+        .int()
+        .min(PAGE_MIN_HEIGHT)
+        .max(PAGE_MAX_HEIGHT)
+        .optional()
+        .describe("The tallest the agent wants its frame, in pixels; the page scrolls inside it beyond that. Absent, the frame fits the page."),
+    measured: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("The page's height at the chat's column width, as the sandbox's own browser laid it out, so its room is held before it loads."),
+    source: z.string().optional().describe("The workspace file the page was built from, when the agent showed a file rather than writing the page inline."),
+    revision: z.number().int().nonnegative().optional().describe("How many times the agent redrew this page; each redraw is a new file at a new path."),
+    superseded: z
+        .boolean()
+        .optional()
+        .describe("A later redraw of this page stands further down the conversation, so this one is drawn folded to a line."),
+    app: z
+        .object({
+            server: z.string().min(1).describe("The connected MCP server whose app it is, by its capability id."),
+            tool: z.string().min(1).describe("The tool whose call the app shows."),
+        })
+        .optional()
+        .describe("Present when the page is an MCP server's own app (an MCP Apps `ui://` resource), shown for one of its tool calls."),
+});
+export type Page = z.infer<typeof PageSchema>;
+
+// What a page sent back is capped at: an answer, not a document.
+export const PAGE_VALUE_MAX = 64_000;
+
 // One request's fields, spelled once: the raising frame, the parked-card journal entry, and the transcript row all share
 // this shape rather than declaring it three times.
 const REQUEST_ID = z.string().describe("What to send back when you answer.");
@@ -295,6 +337,11 @@ export const terminalHelpRequest = {
     requestId: z.string(),
     session: z.string(),
     message: z.string(),
+};
+// A page the agent showed to be answered (`ask_page`): the turn waits until the page sends its answer back.
+export const pageAskRequest = {
+    requestId: REQUEST_ID,
+    page: PageSchema.describe("The page to answer on."),
 };
 export const capabilityOfferRequest = { requestId: z.string(), offer: CapabilityOfferSchema };
 export const paymentOfferRequest = { requestId: z.string(), offer: PaymentOfferSchema };

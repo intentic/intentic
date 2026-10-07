@@ -5,7 +5,7 @@ import { setAccountUsage } from "../accounts/providerAccounts";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../run/turnStream";
 import type { Conversation } from "./conversation";
-import { withAgentStatus } from "./turnClient";
+import { withAgentStatus, withPageDraft } from "./turnClient";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it
@@ -18,6 +18,14 @@ const warnedUnenforced = new WeakSet<Conversation>();
 // A tool card arriving for the first time: a main-tree turn records its written paths for the Changes panel to warn
 // against, per repo; an isolated turn records nothing, since its writes land in its own worktree diff.
 const applyPatchConsequence = (conversation: Conversation, patch: TranscriptPatch): void => {
+    // A page has landed in the transcript: the drafts standing for it at the column's foot go, rather than draw it twice
+    // until its call's result says so (an `ask_page` call's result waits on the reader).
+    if ((patch.op === `append` || patch.op === `replace`) && (patch.row.page !== undefined || patch.row.pageAsk !== undefined)) {
+        if (conversation.turn.pageDrafts.value.size > 0) {
+            conversation.turn.pageDrafts.value = new Map();
+        }
+        return;
+    }
     if (patch.op !== `tool` || !conversation.turn.firstSight(patch.tool.id)) {
         return;
     }
@@ -119,6 +127,10 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
     // A status line a runtime's extension set or cleared; the composer's status row draws them (ChatAgentStatus).
     agent_status: (conversation, fact) => {
         conversation.turn.agentStatus.value = withAgentStatus(conversation.turn.agentStatus.value, fact);
+    },
+    // A page as the agent is writing it; the column's foot draws it until the page itself lands (ChatPageDrafts).
+    page_draft: (conversation, fact) => {
+        conversation.turn.pageDrafts.value = withPageDraft(conversation.turn.pageDrafts.value, fact);
     },
     error: (conversation, fact) => conversation.failures.apply(fact),
     // The live gate, not a headroom reading: `account_usage` carries every pool for the readouts.

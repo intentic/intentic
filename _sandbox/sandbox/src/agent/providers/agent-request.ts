@@ -172,6 +172,14 @@ export interface TurnTools {
     readonly browserAccounts?: Record<string, string>;
     // Whether the turn mounted the sandbox's own desktop (desktop/desktop-tools.ts), so the prompt names it only then.
     readonly desktop?: boolean;
+    // The page tools (agent/pages/page-tools.ts) and where they file what they show; absent where the owner switched
+    // them off (settings `chatPages`), so neither the tools nor the guidance that names them reach the turn.
+    readonly pages?: {
+        readonly workspaceRoot: string;
+        // The owner's connected MCP servers whose apps (`ui://` resources) are drawn in the chat when the agent calls their
+        // tools (agent/pages/mcp-apps.ts); absent or empty, none is.
+        readonly apps?: readonly AgentTool[];
+    };
 }
 
 // Where the privacy shield's gateway stands in for the credential's own base URL: the harness sends every model request

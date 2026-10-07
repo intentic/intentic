@@ -6,6 +6,7 @@ import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "./useSandboxSettings";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
+import AgentChatPages from "../agent-settings/behaviour/AgentChatPages.vue";
 import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
@@ -130,6 +131,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentCodeSearch />
             <AgentRepoChecks />
             <AgentCommandOutput />
+            <!-- What it may answer with besides words: a page drawn in the chat, or one it asks on. -->
+            <AgentChatPages />
             <AgentSubagents />
             <!-- Last: not what it may reach for but where the heaviest of it runs, which only matters once a machine has a runner. -->
             <AgentOffload />

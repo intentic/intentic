@@ -24,7 +24,7 @@ const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => 
 
 export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | undefined): TranscriptRequests => {
     const out: Cards = {};
-    const { plan, question, permission, browserHelp, terminalHelp, capabilityOffer, paymentOffer, credentialOffer } = cards;
+    const { plan, question, permission, browserHelp, terminalHelp, capabilityOffer, paymentOffer, credentialOffer, pageAsk } = cards;
     if (plan !== undefined) {
         out.plan = { ...plan, status: reply?.kind !== "plan" ? "cancelled" : reply.approve ? "approved" : "rejected" };
     }
@@ -66,6 +66,15 @@ export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | u
         out.credentialOffer = {
             ...credentialOffer,
             status: reply?.kind !== "credential_offer" ? "cancelled" : reply.approve ? "approved" : "skipped",
+        };
+    }
+    // The page's answer rides the card, as the agent was handed it; a dismissal keeps none.
+    if (pageAsk !== undefined) {
+        const answered = reply?.kind === "page_ask" && reply.cancelled !== true;
+        out.pageAsk = {
+            ...pageAsk,
+            status: answered ? "answered" : "cancelled",
+            ...(answered && reply.value !== undefined ? { value: reply.value } : {}),
         };
     }
     return out;

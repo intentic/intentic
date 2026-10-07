@@ -1851,6 +1851,33 @@
         },
         "chatAgentStatus": {
             "label": "Lo que muestran las extensiones del agente"
+        },
+        "chatPages": {
+            "needsPress": "Una página solo puede hacer eso tras tu propio clic en ella.",
+            "answerTooLarge": "Esa respuesta es demasiado grande para devolverla.",
+            "notAsking": "Esta página no está pidiendo una respuesta.",
+            "unavailable": "No se pudo cargar esta página.",
+            "superseded": "{title}: una versión anterior, redibujada más abajo",
+            "showEarlier": "Mostrar",
+            "hideEarlier": "Plegar",
+            "openSource": "Abrir el archivo del que se construyó",
+            "fromFile": "de {path}",
+            "expand": "Abrir a tamaño completo",
+            "publish": "Publicar…",
+            "publishHeader": "¿Poner esta página en internet?",
+            "publishWarning": "«{title}» se copia a la bandeja de salida del espacio de trabajo, donde cualquiera con el enlace puede abrirla sin iniciar sesión. Quítala de la bandeja para retirarla.",
+            "publishConfirm": "Publicar",
+            "publishedCopied": "Publicada, enlace copiado",
+            "publishedNoAddress": "En la bandeja de salida como {path}; este sandbox aún no tiene dirección pública",
+            "publishFailed": "No se pudo publicar",
+            "alreadyAnswered": "Esta página ya fue respondida.",
+            "answering": "Tu respuesta está en camino.",
+            "askHint": "Responde en la propia página; lo que envíe vuelve al agente.",
+            "sent": "Enviado:",
+            "dismiss": "Descartar",
+            "drafting": "Dibujando una página…",
+            "draftingTitled": "Dibujando {title}…",
+            "notAnApp": "Esta página no es la app de un servidor MCP."
         }
     },
     "common": {
@@ -3910,6 +3937,11 @@
             "device": "Dispositivo",
             "host": "Host",
             "region": "Región"
+        },
+        "agentChatPages": {
+            "group": "Páginas en el chat",
+            "title": "Responder con páginas",
+            "description": "Deja que el agente dibuje un gráfico, una tabla, un diagrama o una maqueta directamente en el chat, y que te pregunte en una pequeña página cuando sea más fácil elegir allí. Desactivado, ni siquiera se le ofrecen las herramientas."
         }
     },
     "settings": {

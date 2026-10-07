@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import { PAGE_BRIDGE, PAGE_MAX_HEIGHT, type TranscriptRow, type TranscriptTool } from "@intentic/sandbox-contract";
 import Icon from "@intentic/ui/icon";
 import Markdown from "@intentic/ui/markdown-view";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
 import { CHAT_SURFACE } from "@intentic/web/features/chat/tools/chatToolSurface";
 import { dayMarksOf, turnsOf } from "@intentic/web/features/chat/transcript/transcript";
 import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
-import { computed, provide, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { readPayload } from "./payload";
 import { shareSurface } from "./shareSurface";
 import { useT } from "@intentic/ui/i18n";
@@ -47,6 +47,24 @@ const LIVE = false;
 
 // Tool calls arrive in the contract's own shape, the same one the app's card renders.
 const toolsOf = (message: TranscriptRow): readonly TranscriptTool[] => message.tools ?? [];
+
+// A page's frame fits the height the page says it needs (its published copy reports it), up to the cap the agent set.
+const pageHeights = ref<Record<string, number>>({});
+const pageHeight = (page: NonNullable<TranscriptRow["page"]>): number =>
+    Math.min(page.height ?? PAGE_MAX_HEIGHT, Math.max(48, pageHeights.value[page.path] ?? page.measured ?? 320));
+const onPageMessage = (event: MessageEvent): void => {
+    const height = (event.data as { method?: unknown; params?: { height?: unknown } } | null)?.params?.height;
+    if ((event.data as { method?: unknown } | null)?.method !== PAGE_BRIDGE.sizeChanged || typeof height !== `number` || !Number.isFinite(height)) {
+        return;
+    }
+    const frame = [...document.querySelectorAll<HTMLIFrameElement>(`iframe[data-share-page]`)].find((candidate) => candidate.contentWindow === event.source);
+    const path = frame?.dataset[`sharePage`];
+    if (path !== undefined) {
+        pageHeights.value = { ...pageHeights.value, [path]: Math.ceil(height) };
+    }
+};
+onMounted(() => window.addEventListener(`message`, onPageMessage));
+onBeforeUnmount(() => window.removeEventListener(`message`, onPageMessage));
 
 // Folded by default even on a full share: reasoning is the longest, least-read part of a transcript.
 const openThinking = ref<Record<number, boolean>>({});
@@ -127,6 +145,20 @@ const toggleThinking = (index: number): void => {
                             :source="message.text"
                             class="chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5"
                         />
+
+                        <!-- A page the agent showed, published beside this one: its scripts run, sealed off from this page and the network. -->
+                        <div v-if="message.page" class="px-3.5">
+                            <iframe
+                                :src="message.page.path"
+                                :title="message.page.title"
+                                sandbox="allow-scripts"
+                                referrerpolicy="no-referrer"
+                                loading="lazy"
+                                class="block w-full border-0"
+                                :style="{ height: `${pageHeight(message.page)}px` }"
+                                :data-share-page="message.page.path"
+                            />
+                        </div>
                     </div>
                 </template>
             </main>

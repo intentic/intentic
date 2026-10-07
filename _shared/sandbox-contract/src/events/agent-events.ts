@@ -10,7 +10,7 @@ import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/ke
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
-import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
+import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
 
@@ -229,6 +229,23 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // Something the agent asked a person for (docs/architecture/needs.md). Parks nothing: the turn carries on, the need
     // outlives it in the needs store, and its card draws the store's live state by `need.id`.
     z.object({ kind: z.literal("need"), need: NeedSchema }),
+    // A page the agent showed (its `show_page` tool): drawn inline where the turn stands, in a sealed frame. Parks
+    // nothing. A page whose id an earlier one already holds is a redraw, and the earlier row folds to a line.
+    z.object({ kind: z.literal("page"), page: PageSchema }),
+    // A page the agent showed to be answered (`ask_page`): parks the turn until the page sends its answer back, or the
+    // person dismisses it. Not journalled for restore: the tool call waiting on it dies with the daemon.
+    z.object({ kind: z.literal("page_ask"), ...pageAskRequest }),
+    // A page as the model is still writing it, for the chat to draw as it arrives: `text` is what came at `at` in the
+    // page's markup, so a window that missed nothing appends and one joining late replays them in order. Live state, not
+    // transcript: `done` ends it (the page itself, or the call's failure, takes over), and every draft goes with the turn.
+    z.object({
+        kind: z.literal("page_draft"),
+        callId: z.string().describe("The tool call writing it."),
+        at: z.number().int().nonnegative().describe("Where in the page's markup this text starts."),
+        text: z.string().describe("The next stretch of the page's markup."),
+        title: z.string().optional().describe("The page's title, once the call has written it."),
+        done: z.boolean().optional().describe("The draft is over: the page is published, or the call failed."),
+    }),
     // The named card is released and the turn resumes; emitted the moment its waiter settles, since nothing else on
     // this stream marks a park's end. `reply` is what a rebuilt transcript freezes the card with.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
@@ -379,6 +396,7 @@ export const TURN_FACT_KINDS = [
     "context_usage",
     "mode",
     "agent_status",
+    "page_draft",
     "error",
 ] as const;
 export type TurnFact = Extract<AgentEvent, { kind: (typeof TURN_FACT_KINDS)[number] }>;

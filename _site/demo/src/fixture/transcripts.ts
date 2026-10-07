@@ -11,6 +11,7 @@ import {
     WEB_MAIN_FIXER_ID,
 } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
+import { PAYOUTS_PAGE } from "./pages";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
 // needs all three to decide whether its next message resumes this session.
@@ -237,9 +238,24 @@ const PRIYA_PAYOUTS: AgentTranscript = {
             role: `user`,
             text: `Reconcile August payouts against the ledger and tell me what doesn't match.`,
         },
+        // The page answers first, where the reading is; the words after it say only what the page does not.
         {
             role: `assistant`,
-            text: `412 payouts, **$186,340** settled. All but three reconcile to the cent.\n\nThe three are the same shape: a refund issued after the payout closed, so August paid out on revenue September took back. Two are under $40. The third is **$2,180**, Northwind's annual, refunded on the 29th.`,
+            text: ``,
+            tools: [
+                {
+                    id: `tc_priya_page`,
+                    name: `Show page`,
+                    category: `other`,
+                    status: `completed`,
+                    content: [{ type: `text`, text: `Shown to the user inline as "${PAYOUTS_PAGE.title}".` }],
+                },
+            ],
+            page: PAYOUTS_PAGE,
+        },
+        {
+            role: `assistant`,
+            text: `All three are the same shape: a refund issued after the payout closed, so August paid out on revenue September took back. Only Northwind's is worth a conversation.`,
         },
         {
             role: `assistant`,

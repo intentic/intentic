@@ -1,12 +1,12 @@
 import { cp, mkdir, readFile, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SharePayload } from "@intentic/sandbox-contract";
+import { publishedPage, type SharePayload } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_VIEWER_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicRoot } from "../public/public-files.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { sharePage } from "./share-page.js";
-import type { SharePicture } from "./share-payload.js";
+import { redactSecrets, type SharePage, type SharePicture } from "./share-payload.js";
 
 // Writes a share into the outbox, the only disk-touching part of sharing. Maintains two things: one shared copy of the
 // page's built assets, and a directory per share holding its own page and pictures (tree in share-paths.ts). Assets
@@ -66,6 +66,25 @@ const copyPictures = async (workspaceRoot: string, dir: string, pictures: readon
     }
 };
 
+// A page is far smaller than any picture cap; one past this is a document, not a reply, and stays out.
+const MAX_PAGE_BYTES = 25 * 1024 * 1024;
+
+// Copies the pages the agent showed, masked like every string the share publishes and sealed off the network, each
+// saying its height to the shared page around it (publishedPage). One that cannot be read is left out, and its row
+// draws nothing where it stood.
+const copyPages = async (workspaceRoot: string, dir: string, pages: readonly SharePage[]): Promise<void> => {
+    for (const page of pages) {
+        const source = resolveWithin(workspaceRoot, page.source);
+        const info = source === undefined ? undefined : await stat(source).catch(() => undefined);
+        if (source === undefined || info === undefined || !info.isFile() || info.size > MAX_PAGE_BYTES) {
+            continue;
+        }
+        const target = join(dir, page.published);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, publishedPage(redactSecrets(await readFile(source, "utf8"))));
+    }
+};
+
 // Writes one share whole; an update is the same write over the same id, with the directory cleared first so a picture
 // no longer in the conversation doesn't linger.
 export const publishShare = async (
@@ -76,6 +95,7 @@ export const publishShare = async (
     payload: SharePayload,
     pictures: readonly SharePicture[],
     filter?: PictureFilter,
+    pages: readonly SharePage[] = [],
 ): Promise<void> => {
     const template = await readFile(join(viewer, "index.html"), "utf8");
     // Built before anything is written, so a template this daemon can't fill leaves the previous share untouched.
@@ -85,6 +105,7 @@ export const publishShare = async (
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     await copyPictures(workspaceRoot, dir, pictures, filter);
+    await copyPages(workspaceRoot, dir, pages);
     await writeFile(join(dir, "index.html"), page);
 };
 

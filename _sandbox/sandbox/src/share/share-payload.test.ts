@@ -270,3 +270,27 @@ describe("a shared page the outbox then sniffs", () => {
         }
     });
 });
+
+// A page the agent showed is part of what it said: published beside the conversation at both levels, its stored path
+// never leaving, one it later redrew left out as the chat folds it, and nothing of it while the privacy shield is on.
+describe("pages in a share", () => {
+    const stored = ".intentic/records/artifacts/pages/c1/a1b2c3d4e5.r0.html";
+    const rows: TranscriptRow[] = [
+        { role: "assistant", text: "", page: { id: "a1b2c3d4e5", title: "Old", path: stored.replace("r0", "r9"), superseded: true } },
+        { role: "assistant", text: "", page: { id: "a1b2c3d4e5", title: "Revenue", path: stored, measured: 300, source: "reports/q3.html" } },
+    ];
+
+    it("publishes the standing page under a name of its own, and only that one", () => {
+        const { messages, pages } = shareTranscript(rows, "messages");
+        expect(messages[0]?.page).toBeUndefined();
+        expect(messages[1]?.page).toEqual({ id: "a1b2c3d4e5", title: "Revenue", path: "files/page-1.html", measured: 300 });
+        expect(pages).toEqual([{ source: stored, published: "files/page-1.html" }]);
+        expect(JSON.stringify(messages)).not.toContain("reports/q3.html");
+    });
+
+    it("publishes none while names may not leave", () => {
+        const { messages, pages } = shareTranscript(rows, "everything", { keepNames: false });
+        expect(messages.every((message) => message.page === undefined)).toBe(true);
+        expect(pages).toEqual([]);
+    });
+});

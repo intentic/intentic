@@ -280,6 +280,14 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether a new chat is matched to one of your personas from its first message. It is read once the message is sent, in the same single call that chooses what the chat runs on (the New chat routing job under Models), and the chat says in its own transcript which persona it landed on. Never applies to unwatched runs, which name their persona themselves.",
         ),
+    // The `show_page`/`ask_page` tools and the guidance that names them (agent/pages/page-tools.ts); off, a turn is
+    // offered neither and draws no page, which costs it nothing.
+    chatPages: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Let the agent answer with a page drawn right in the chat: a chart, a table, a diagram, a mock-up, or a small form you answer it on. Off, the agent is not offered the tools at all, so it spends nothing on them.",
+        ),
     hashlineEdits: z
         .boolean()
         .default(false)
