@@ -71,7 +71,7 @@ const harness = (): Harness => {
     const settings: Harness["settings"] = { continueWhenMet: true, live: true, steerable: true, standing: STANDING };
     const ended = new Set<(conversationId: string) => void>();
     const handler = fakeKind(kind);
-    const kinds: NeedKinds = { capability: handler, secret: handler, grant: handler, release: handler, environment: handler };
+    const kinds: NeedKinds = { capability: handler, secret: handler, grant: handler, release: handler, environment: handler, automation: handler };
     let next = 0;
     const deps: NeedsDeps = {
         store: memoryNeedsStore(),

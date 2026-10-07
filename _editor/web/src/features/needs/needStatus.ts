@@ -12,6 +12,8 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     grant: `shield`,
     release: `unlock`,
     environment: `box`,
+    // The rail's own Automations glyph, which a held wake in Needs you already wears.
+    automation: `automations`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.

@@ -85,7 +85,10 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     "timeout hits, whichever first) this conversation is woken exactly once with the check's output. Use for " +
                     "CI runs, deploys, remote queues: anything outside this sandbox. Do NOT use it for work you started " +
                     "here (background commands, subagents, delegated CLIs): the harness already notifies you about those, " +
-                    "and the wait tool covers parking on them mid-turn.",
+                    "and the wait tool covers parking on them mid-turn. This is the short form, for up to a day: for " +
+                    "something that may take longer (a release, a launch, a page changing), propose a durable watch with " +
+                    "the `automations propose` shell command instead, which checks without a model for weeks and wakes " +
+                    "this conversation the same way once the owner approves it.",
                 {
                     command: z
                         .string()
@@ -107,7 +110,9 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         .min(60)
                         .max(86_400)
                         .optional()
-                        .describe(`Deadline. If the check never passes, you are woken anyway with its last output. Default ${DEFAULT_TIMEOUT_S}.`),
+                        .describe(
+                            `Deadline, at most a day. If the check never passes, you are woken anyway with its last output. Default ${DEFAULT_TIMEOUT_S}. Longer than a day is \`automations propose\`.`,
+                        ),
                 },
                 async (args) => {
                     if (deps.conversationId === undefined) {

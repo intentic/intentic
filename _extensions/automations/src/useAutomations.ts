@@ -1,4 +1,4 @@
-import type { Automation, AutomationSummary, SenderSeen } from "@intentic/sandbox-contract";
+import type { AgentSummary, Automation, AutomationSummary, SenderSeen, WatchSource } from "@intentic/sandbox-contract";
 import { asZone, UTC, type Zone } from "@intentic/sandbox-contract/time";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef, type Ref } from "vue";
@@ -76,6 +76,39 @@ export function useVisitorChatInstalls(automationId: Ref<string | undefined>, en
         installs: computed<VisitorChatInstall[]>(() => query.data.value ?? []),
         isLoading: query.isLoading,
         error: computed(() => query.error.value?.message),
+    };
+}
+
+// One source checked now, nothing saved or remembered: the composer's "Check now", so the owner reads what a watch would
+// see before arming it. A mutation, not a query: it reaches the registry, GitHub or the page on every press, and only on
+// a press.
+export function useWatchCheck() {
+    const api = host();
+    return useMutation({ mutationFn: (source: WatchSource) => api.sandbox.rpc.automations.check({ source }) });
+}
+
+// The conversations an automation can continue, newest first, for the target picker and for naming the one a row
+// continues. Read only while something on screen names a conversation target; the board's own push is the shell's, not
+// an extension's, so this is a plain read that goes stale politely.
+const NO_CONVERSATIONS: readonly AgentSummary[] = [];
+const CONVERSATIONS_STALE_MS = 30_000;
+
+export function useConversations(enabled: Ref<boolean>) {
+    const api = host();
+    const query = useQuery({
+        queryKey: api.sandbox.key(`automation-conversations`),
+        queryFn: async (): Promise<readonly AgentSummary[]> =>
+            (await api.sandbox.rpc.agents.list()).agents.toSorted((a, b) => b.updatedAt - a.updatedAt),
+        enabled: computed(() => enabled.value && api.sandbox.reachable()),
+        staleTime: CONVERSATIONS_STALE_MS,
+    });
+    const conversations = computed<readonly AgentSummary[]>(() => query.data.value ?? NO_CONVERSATIONS);
+    return {
+        conversations,
+        // Whether the list has answered once, so a conversation missing from it reads as gone, not as still loading.
+        fetched: computed(() => query.isFetched.value),
+        // What to call one: its title, else its id, which is also what an archived or deleted one is left with.
+        titleOf: (id: string): string => conversations.value.find((conversation) => conversation.id === id)?.title ?? id,
     };
 }
 

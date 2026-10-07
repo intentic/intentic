@@ -299,6 +299,47 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
             "cause, verify the failing checks pass, and push the fix to the branch that failed.",
         note: "the moment a branch starts failing",
     },
+    // Watches: a check the daemon makes itself, every few hours, that costs nothing until what it waits for happens.
+    {
+        id: "package-release",
+        title: "When a package ships",
+        icon: "bell",
+        requires: [],
+        trigger: { kind: "schedule", cron: "17 */6 * * *" },
+        source: { kind: "npm", package: "bun", range: ">=1.4.3" },
+        until: "first-fire",
+        target: { kind: "notify" },
+        description: "Tell me once a version of an npm package I am waiting for is published. No model runs until it is.",
+        prompt: "The version you were waiting for is published. Read its release notes and say what in this workspace it changes.",
+        note: "checks every 6 hours · stops after it fires",
+    },
+    {
+        id: "repository-releases",
+        title: "New releases of a repository",
+        icon: "tag",
+        requires: [],
+        trigger: { kind: "schedule", cron: "41 */6 * * *" },
+        source: { kind: "github-release", repo: "oven-sh/bun" },
+        fireOn: "change",
+        description: "Every time a GitHub repository publishes a release, read it and say what it means for this workspace.",
+        prompt:
+            "A repository this workspace depends on published a release; what the check saw is below. Read its release notes, find where this " +
+            "workspace uses what changed, and say plainly whether anything should be done about it. Change nothing yourself.",
+        note: "checks every 6 hours · only when a new release appears",
+    },
+    {
+        id: "page-changes",
+        title: "When a page changes",
+        icon: "globe",
+        requires: [],
+        trigger: { kind: "schedule", cron: "7 * * * *" },
+        source: { kind: "url", url: "https://example.com/status" },
+        fireOn: "change",
+        target: { kind: "notify" },
+        description: "Tell me when the text of a web page changes, a status page, a pricing page, a changelog.",
+        prompt: "The page you were watching changed; what changed is below.",
+        note: "checks hourly · only when its text changes",
+    },
     ...CHORE_TEMPLATES,
 ];
 

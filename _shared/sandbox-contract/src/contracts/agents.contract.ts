@@ -25,7 +25,7 @@ import {
     AgentUnsentSchema,
     LandResultSchema,
 } from "../schemas/agents.js";
-import { AgentsListSchema } from "../schemas/automations.js";
+import { AgentsListSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";

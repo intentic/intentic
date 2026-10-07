@@ -1,5 +1,13 @@
-import { join } from "node:path";
-import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema, type ModelPin } from "@intentic/sandbox-contract";
+import { dirname, join } from "node:path";
+import {
+    type Automation,
+    type AutomationRun,
+    AutomationRunSchema,
+    AutomationSchema,
+    type ModelPin,
+    type WatchState,
+    WatchStateSchema,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { drop, fold, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -17,9 +25,13 @@ import { stateRelPath } from "../state-paths.js";
 // Kept per automation, enough for the UI's run history without the ledger growing forever.
 const RUNS_KEPT = 20;
 
-// The joined read model every caller sees: the automation with its runs read back from the ledger; the split is this
-// store's own detail.
-export type AutomationRecord = Automation & { runs: AutomationRun[] };
+// The joined read model every caller sees: the automation with its runs read back from the ledger, and what its check saw
+// last when it has one; the split is this store's own detail.
+export type AutomationRecord = Automation & { runs: AutomationRun[]; watch?: WatchState };
+
+// How much of what a check saw is kept: enough for a release's notes or a short page to diff against next time, bounded
+// so one noisy page cannot grow the file without end.
+export const WATCH_VALUE_MAX = 16_000;
 
 const RunLedgerSchema = z.record(z.string(), z.array(AutomationRunSchema));
 
@@ -47,6 +59,13 @@ export const automationsDocument = defineDocument({
 });
 export const automationRunsDocument = defineDocument({ path: stateRelPath(".intentic/records/automation-runs.json"), schema: RunLedgerSchema });
 type RunLedger = z.infer<typeof RunLedgerSchema>;
+// What each watch's check saw last, keyed by automation id; daemon-written beside the run ledger, for the same reason.
+export const automationWatchDocument = defineDocument({
+    path: stateRelPath(".intentic/records/automation-watch.json"),
+    schema: WatchStateSchema,
+    granularity: "record",
+});
+type WatchLedger = Readonly<Record<string, WatchState>>;
 
 const parsedJson = (text: string | undefined): unknown => {
     try {
@@ -121,8 +140,13 @@ export const automationsRelocationStep = defineStep({
 
 // Runs for an id the manifest no longer has are invisible by construction: the join walks the manifest, never the
 // ledger's keys.
-const withRuns = (automations: readonly Automation[], runs: RunLedger): AutomationRecord[] =>
-    automations.map((automation) => ({ ...automation, runs: runs[automation.id] ?? [] }));
+const withRuns = (automations: readonly Automation[], runs: RunLedger, watches: WatchLedger): AutomationRecord[] =>
+    automations.map((automation) => joined(automation, runs, watches));
+
+const joined = (automation: Automation, runs: RunLedger, watches: WatchLedger): AutomationRecord => {
+    const watch = watches[automation.id];
+    return { ...automation, runs: runs[automation.id] ?? [], ...(watch === undefined ? {} : { watch }) };
+};
 
 // How many times in a row this automation has failed, counting from the newest run until one isn't an `error`.
 // `interrupted` also resets the streak (a daemon death says nothing about the automation); bounded by RUNS_KEPT, since
@@ -143,21 +167,43 @@ export interface AutomationsStore {
     readonly remove: (id: string) => Promise<boolean>;
     // Prepend a run (newest first), capped at RUNS_KEPT. A run for a just-removed automation is dropped.
     readonly recordRun: (id: string, run: AutomationRun) => Promise<void>;
+    // Replace what a watch's check saw last, given what it saw before; dropped for an automation no longer there. The
+    // value is cut to WATCH_VALUE_MAX here, so no caller can grow the file.
+    readonly recordWatch: (id: string, next: (previous: WatchState | undefined) => WatchState) => Promise<void>;
 }
 
-// Two JSON file stores, used in production at <workspace>/.intentic/config/automations.json and its runs sibling.
-export const fileAutomationsStore = (path: string, runsPath: string): AutomationsStore => {
+const bounded = (state: WatchState): WatchState =>
+    state.value === undefined || state.value.length <= WATCH_VALUE_MAX ? state : { ...state, value: state.value.slice(0, WATCH_VALUE_MAX) };
+
+// Three JSON file stores, used in production at <workspace>/.intentic/config/automations.json and its runs and watch
+// siblings; the watch ledger sits beside the runs ledger unless named.
+export const fileAutomationsStore = (
+    path: string,
+    runsPath: string,
+    watchPath = join(dirname(runsPath), "automation-watch.json"),
+): AutomationsStore => {
     // One entry at a time: a single automation this build cannot read is skipped and kept, never the whole manifest.
     const file = openEntries(automationsDocument, path);
     // Unreadable runs fall back to no history rather than reading as an absent manifest, which would silently stop
     // every automation.
     // Rebuild unreadable run history only from the next recorded run.
     const ledger = openDocument(automationRunsDocument, runsPath, { fallback: (): RunLedger => ({}) });
+    // Unreadable reads as never checked: the next check records a baseline again rather than stopping the watch.
+    const watches = openDocument(automationWatchDocument, watchPath, { fallback: (): Record<string, WatchState> => ({}) });
+    const dropWatch = async (id: string): Promise<void> => {
+        await watches.update((current) => {
+            if (current[id] === undefined) {
+                return current;
+            }
+            const { [id]: _dropped, ...rest } = current;
+            return rest;
+        });
+    };
     return {
-        list: async () => withRuns(await file.read(), await ledger.read()),
+        list: async () => withRuns(await file.read(), await ledger.read(), await watches.read()),
         get: async (id) => {
             const automation = (await file.read()).find((record) => record.id === id);
-            return automation === undefined ? undefined : { ...automation, runs: (await ledger.read())[id] ?? [] };
+            return automation === undefined ? undefined : joined(automation, await ledger.read(), await watches.read());
         },
         upsert: async (automation) => {
             let existed = false;
@@ -177,6 +223,7 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
                     const { [automation.id]: _stale, ...rest } = runs;
                     return rest;
                 });
+                await dropWatch(automation.id);
             }
         },
         setEnabled: async (id, enabled) => {
@@ -211,6 +258,7 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
                     const { [id]: _dropped, ...rest } = runs;
                     return rest;
                 });
+                await dropWatch(id);
             }
             return removed;
         },
@@ -221,6 +269,12 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
                 return;
             }
             await ledger.update((runs) => ({ ...runs, [id]: [run, ...(runs[id] ?? [])].slice(0, RUNS_KEPT) }));
+        },
+        recordWatch: async (id, next) => {
+            if (!(await file.read()).some((automation) => automation.id === id)) {
+                return;
+            }
+            await watches.update((current) => ({ ...current, [id]: bounded(next(current[id])) }));
         },
     };
 };

@@ -339,6 +339,9 @@ catalogs:
     '@types/pg':
       specifier: 8.23.1
       version: 8.23.1
+    '@types/semver':
+      specifier: 7.8.0
+      version: 7.8.0
     '@types/ssh2':
       specifier: 1.15.6
       version: 1.15.6
@@ -516,6 +519,9 @@ catalogs:
     semantic-release:
       specifier: 25.0.9
       version: 25.0.9
+    semver:
+      specifier: 7.8.5
+      version: 7.8.5
     sharp:
       specifier: 0.35.5
       version: 0.35.5
@@ -2773,6 +2779,9 @@ importers:
       playwright:
         specifier: 'catalog:'
         version: 1.63.0
+      semver:
+        specifier: 'catalog:'
+        version: 7.8.5
       sharp:
         specifier: 'catalog:'
         version: 0.35.5(@types/node@24.19.1)
@@ -2822,6 +2831,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
+      '@types/semver':
+        specifier: 'catalog:'
+        version: 7.8.0
       '@types/ssh2':
         specifier: 'catalog:'
         version: 1.15.6
@@ -7647,6 +7659,9 @@ packages:
 
   '@types/sax@1.2.7':
     resolution: {integrity: sha512-rO73L89PJxeYM3s3pPPjiPgVVcymqU490g0YO5n5By0k2Erzj6tay/4lr1CHAAU4JyOWd1rpQ8bCf6cZfHU96A==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/ssh2-streams@0.1.13':
     resolution: {integrity: sha512-faHyY3brO9oLEA0QlcO8N2wT7R0+1sHWZvQ+y3rMLwdY1ZyS1z0W3t65j9PqT4HmQ6ALzNe7RZlNuCNE0wBSWA==}
@@ -16238,6 +16253,8 @@ snapshots:
   '@types/sax@1.2.7':
     dependencies:
       '@types/node': 24.19.1
+
+  '@types/semver@7.8.0': {}
 
   '@types/ssh2-streams@0.1.13':
     dependencies:

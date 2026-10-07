@@ -6,6 +6,7 @@ import { Notice, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
+import NeedAutomationBody from "./NeedAutomationBody.vue";
 import NeedCapabilityBody from "./NeedCapabilityBody.vue";
 import NeedDecline from "./NeedDecline.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
@@ -47,6 +48,9 @@ const decline = async (): Promise<void> => {
     </NeedGrantBody>
     <!-- A release's no is its approvers' alone, so it keeps its own. -->
     <NeedReleaseBody v-else-if="need.subject.kind === `release`" :need="need" :subject="need.subject" />
+    <NeedAutomationBody v-else-if="need.subject.kind === `automation`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedAutomationBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

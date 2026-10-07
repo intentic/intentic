@@ -459,6 +459,10 @@
     {
       "type": "{ account?: string; actsAs?: string; allowedTools?: string[]; chore?: boolean; enabled: boolean; guard?: string; holdForSeconds?: number; id: string; issues?: { accent?: string; antiBot?: \"pow\"; askEmail?: boolean; captureCrashes?: boolean; dailyReportMax?: number; escalateAfter?: number; keyFromBrowsers?: boolean; prompt?: string; thanks?: string; title?: string }; models: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; prompt: string; requireApproval?: boolean; senders?: { others: \"allow\" | \"hold\" | \"ignore\"; rules: { actsAs?: string; groups?: string[]; ids?: string[]; label?: string; requireApproval?: boolean }[] }; trigger: { afterSessions?: number; cron: string; kind: \"schedule\"; tz?: string } | { at: number; kind: \"once\" } | { dailyMax?: number; kind: \"event\" } | { allowedOrigins?: string[]; branch?: string; channelId?: string; eventType?: string; kind: \"listener\"; mentioned?: boolean; provider: string } | { event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; kind: \"workspace\"; repo?: string }; webchat?: { accent?: string; access?: \"public\" | \"google\"; antiBot?: \"turnstile\" | \"pow\"; conversationMessageMax?: number; dailyMessageMax?: number; googleClientId?: string; greeting?: string; position?: \"top-right\" | \"top-left\" | \"bottom-right\" | \"bottom-left\"; requireName?: boolean; sessionTtlMinutes?: number; title?: string; turnstileSecret?: string; turnstileSiteKey?: string } }",
       "since": "v1.303.0"
+    },
+    {
+      "type": "{ account?: string; actsAs?: string; allowedTools?: string[]; chore?: boolean; enabled: boolean; expiresAt?: number; fireOn?: \"pass\" | \"change\"; guard?: string; holdForSeconds?: number; id: string; issues?: { accent?: string; antiBot?: \"pow\"; askEmail?: boolean; captureCrashes?: boolean; dailyReportMax?: number; escalateAfter?: number; keyFromBrowsers?: boolean; prompt?: string; thanks?: string; title?: string }; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; note?: string; prompt: string; requireApproval?: boolean; senders?: { others: \"allow\" | \"hold\" | \"ignore\"; rules: { actsAs?: string; groups?: string[]; ids?: string[]; label?: string; requireApproval?: boolean }[] }; source?: { kind: \"npm\"; package: string; range?: string; tag?: string } | { kind: \"github-release\"; prereleases?: boolean; repo: string } | { kind: \"url\"; select?: string; url: string }; target?: { kind: \"agent\" } | { conversationId: string; kind: \"conversation\" } | { kind: \"notify\" }; trigger: { afterSessions?: number; cron: string; kind: \"schedule\"; tz?: string } | { at: number; kind: \"once\" } | { dailyMax?: number; kind: \"event\" } | { allowedOrigins?: string[]; branch?: string; channelId?: string; eventType?: string; kind: \"listener\"; mentioned?: boolean; provider: string } | { event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; kind: \"workspace\"; repo?: string }; until?: \"first-fire\"; webchat?: { accent?: string; access?: \"public\" | \"google\"; antiBot?: \"turnstile\" | \"pow\"; conversationMessageMax?: number; dailyMessageMax?: number; googleClientId?: string; greeting?: string; position?: \"top-right\" | \"top-left\" | \"bottom-right\" | \"bottom-left\"; requireName?: boolean; sessionTtlMinutes?: number; title?: string; turnstileSecret?: string; turnstileSiteKey?: string } }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/config/autostart.json": [
@@ -831,6 +835,10 @@
     {
       "type": "{ actsAs?: string; autoRunAt?: number; automationId: string; conversationId?: string; createdAt: number; origin?: { author?: string; automationId: string; channelId?: string; provider: string }; payload?: string; sessionId?: string; thread?: string; title?: string }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ actsAs?: string; autoRunAt?: number; automationId: string; conversationId?: string; createdAt: number; observed?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string }; payload?: string; sessionId?: string; thread?: string; title?: string }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/automation-runs.json": [
@@ -843,6 +851,12 @@
     {
       "type": "{ coveredUntil: number; off?: true }",
       "since": "v1.324.0"
+    }
+  ],
+  "workspace:.intentic/records/automation-watch.json": [
+    {
+      "type": "{ armedAt: number; changedAt?: number; checkedAt: number; firedAt?: number; value?: string; waiting?: string }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/chores/ledger.json": [
@@ -909,6 +923,10 @@
     {
       "type": "{ answeredBy?: string; conversationId: string; createdAt: number; id: string; outcome?: string; status: \"open\" | \"working\" | \"met\" | \"declined\" | \"cancelled\"; subject: { changes?: Record<string, string>; entry: string; instance?: string; kind: \"capability\"; mode: \"connect\" | \"reconnect\" | \"change\"; name: string; prefill?: Record<string, string>; reason?: string; reported?: boolean; target?: string } | { hint?: string; kind: \"secret\"; link?: string; name: string; replace?: boolean; where?: string } | { kind: \"grant\"; label: string; persona?: string; scope?: \"conversation\" | \"persona\"; subject: \"capability\" | \"folder\" | \"shelf\" | \"site\"; what: string } | { approvers: string[]; kind: \"release\"; subject: string } | { approvedHash?: string; kind: \"environment\"; steps: string; tool: string }; title: string; told?: \"call\" | \"turn\" | \"queued\"; unattended?: boolean; updatedAt: number; why?: string }",
       "since": "v1.317.0"
+    },
+    {
+      "type": "{ answeredBy?: string; conversationId: string; createdAt: number; id: string; outcome?: string; status: \"open\" | \"working\" | \"met\" | \"declined\" | \"cancelled\"; subject: { changes?: Record<string, string>; entry: string; instance?: string; kind: \"capability\"; mode: \"connect\" | \"reconnect\" | \"change\"; name: string; prefill?: Record<string, string>; reason?: string; reported?: boolean; target?: string } | { hint?: string; kind: \"secret\"; link?: string; name: string; replace?: boolean; where?: string } | { kind: \"grant\"; label: string; persona?: string; scope?: \"conversation\" | \"persona\"; subject: \"capability\" | \"folder\" | \"shelf\" | \"site\"; what: string } | { approvers: string[]; kind: \"release\"; subject: string } | { approvedHash?: string; kind: \"environment\"; steps: string; tool: string } | { automation: { account?: string; actsAs?: string; allowedTools?: string[]; chore?: boolean; enabled: boolean; expiresAt?: number; fireOn?: \"pass\" | \"change\"; guard?: string; holdForSeconds?: number; id: string; issues?: { accent?: string; antiBot?: \"pow\"; askEmail?: boolean; captureCrashes?: boolean; dailyReportMax?: number; escalateAfter?: number; keyFromBrowsers?: boolean; prompt?: string; thanks?: string; title?: string }; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; note?: string; prompt: string; requireApproval?: boolean; senders?: { others: \"allow\" | \"hold\" | \"ignore\"; rules: { actsAs?: string; groups?: string[]; ids?: string[]; label?: string; requireApproval?: boolean }[] }; source?: { kind: \"npm\"; package: string; range?: string; tag?: string } | { kind: \"github-release\"; prereleases?: boolean; repo: string } | { kind: \"url\"; select?: string; url: string }; target?: { kind: \"agent\" } | { conversationId: string; kind: \"conversation\" } | { kind: \"notify\" }; trigger: { afterSessions?: number; cron: string; kind: \"schedule\"; tz?: string } | { at: number; kind: \"once\" } | { dailyMax?: number; kind: \"event\" } | { allowedOrigins?: string[]; branch?: string; channelId?: string; eventType?: string; kind: \"listener\"; mentioned?: boolean; provider: string } | { event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; kind: \"workspace\"; repo?: string }; until?: \"first-fire\"; webchat?: { accent?: string; access?: \"public\" | \"google\"; antiBot?: \"turnstile\" | \"pow\"; conversationMessageMax?: number; dailyMessageMax?: number; googleClientId?: string; greeting?: string; position?: \"top-right\" | \"top-left\" | \"bottom-right\" | \"bottom-left\"; requireName?: boolean; sessionTtlMinutes?: number; title?: string; turnstileSecret?: string; turnstileSiteKey?: string } }; firstCheck?: { at: number; pass: boolean; saw: string }; kind: \"automation\"; replaces?: boolean }; title: string; told?: \"call\" | \"turn\" | \"queued\"; unattended?: boolean; updatedAt: number; why?: string }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/push-checks.json": [

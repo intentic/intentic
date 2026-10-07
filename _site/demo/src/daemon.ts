@@ -33,7 +33,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS, browserSession } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
-import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { automationApprovals, automationCatalog, automationsList, checkDemoSource, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning, switchDemoPairings } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoNameDictionary } from "./fixture/nameDictionary";
@@ -1010,6 +1010,8 @@ export const procedures = {
         list: () => ({ automations: automationsList(Date.now()) }),
         // What can wake an agent and what it can start from, for the composer's source picker.
         catalog: () => automationCatalog(),
+        // A source's check, answered from the fixture: the demo reaches no registry, GitHub or page.
+        check: ({ source }) => checkDemoSource(source),
         pendingList: () => ({ approvals: automationApprovals(Date.now()) }),
         upsert: (automation) => okAfter(() => saveAutomation(Date.now(), automation)),
         remove: ({ id }) => okAfter(() => deleteAutomation(Date.now(), id)),

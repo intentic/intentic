@@ -4,6 +4,7 @@ import { localZone } from "@intentic/sandbox-contract/time";
 import {
     type ActionItem,
     Button,
+    Code,
     ui,
     CopyButton,
     DisclosureRow,
@@ -20,7 +21,8 @@ import { host } from "./host";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
 import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
-import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
+import { embedSnippet, useAutomations, useConversations, useSandboxZone, webhookUrl } from "./useAutomations";
+import { isWatch, sourceLabel, watchLine } from "./watch";
 import { t } from "./i18n.js";
 
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
@@ -137,6 +139,26 @@ const openRun = (run: AutomationRun): void => {
 
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
 
+// WHERE A WATCH STANDS: what its check saw last and when, what retires it. A quiet check (nothing moved) is not a run,
+// so a watch that has only ever waited has no history to show; this line is what says it is alive.
+const watched = computed<string | undefined>(() => watchLine(props.automation));
+// A watch's row is scanned for where it stands; a guarded chore's for what it does, so its line waits in the drawer.
+const leadsWithWatch = computed(() => watched.value !== undefined && isWatch(props.automation));
+const checkedAt = computed<number | undefined>(() => props.automation.watch?.checkedAt);
+
+// What a passing check sets off, said only when it is not the default new agent: the conversation it continues, by its
+// title, or the owner's phone. Read only for a row that names a conversation.
+const target = computed(() => props.automation.target);
+const { titleOf } = useConversations(computed(() => target.value?.kind === `conversation`));
+const targetPhrase = computed<string | undefined>(() => {
+    const goes = target.value;
+    if (goes?.kind === `conversation`) {
+        return t(`automationRow.continues`, { conversation: titleOf(goes.conversationId) });
+    }
+    return goes?.kind === `notify` ? t(`automationRow.notifiesYou`) : undefined;
+});
+const TARGET_ICON = { conversation: `comments`, notify: `mobile` } as const;
+
 // The form itself is AutomationEditor's, mounted only while editing, so it loads fresh on every Edit.
 const editing = ref(false);
 const sandboxZone = useSandboxZone();
@@ -184,7 +206,7 @@ const visitorChat = computed(() => {
 // The model wanted, then a count of fallbacks, not a full list: scanning asks "which model", not "what are all four";
 // the full ladder is one click away in the editor.
 const runsOn = computed<string>(() => {
-    const [head, ...rest] = props.automation.models;
+    const [head, ...rest] = props.automation.models ?? [];
     if (head === undefined) {
         return t(`automationRow.noModel`);
     }
@@ -236,7 +258,11 @@ const answersTip = computed<{ title: string; rows: { label: string; value: numbe
     };
 });
 const settings = computed<readonly { label: string; value: string }[]>(() => [
-    { label: t(`automationRow.runsOn`), value: runsOn.value },
+    // A conversation runs on its own model and a notification on none, so only a new agent names one.
+    ...(targetPhrase.value === undefined
+        ? [{ label: t(`automationRow.runsOn`), value: runsOn.value }]
+        : [{ label: t(`automationRow.then`), value: targetPhrase.value }]),
+    ...(props.automation.fireOn === `change` ? [{ label: t(`automationRow.fires`), value: t(`automationRow.onlyOnChange`) }] : []),
     ...(props.automation.actsAs !== undefined ? [{ label: t(`automationRow.runs2`), value: props.automation.actsAs }] : []),
     ...(answers.value !== undefined ? [{ label: t(`automationRow.answers`), value: answers.value }] : []),
     ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: t(`automationRow.heldForYou`) }] : []),
@@ -288,6 +314,21 @@ const verbs = computed((): ActionItem[] => [
                     v-tooltip.top="{ title: t(`automationRow.guarded`), note: t(`automationRow.wakesOnFinding`) }"
                     class="shrink-0 text-2xs text-subtle"
                 />
+                <!-- A watch: the daemon checks something outside itself, and nothing runs until it moves. -->
+                <Icon
+                    v-if="automation.source"
+                    name="eye"
+                    v-tooltip.top="{ title: t(`automationRow.watches`), note: sourceLabel(automation.source) }"
+                    class="shrink-0 text-2xs text-subtle"
+                />
+                <!-- Where a fire goes when it is not a new agent: unobtrusive, since the drawer says it in words. -->
+                <Icon
+                    v-if="automation.target && automation.target.kind !== `agent` && targetPhrase"
+                    :name="TARGET_ICON[automation.target.kind]"
+                    v-tooltip.top="targetPhrase"
+                    :aria-label="targetPhrase"
+                    class="shrink-0 text-2xs text-subtle"
+                />
                 <Icon
                     v-if="automation.requireApproval"
                     name="lock"
@@ -311,9 +352,10 @@ const verbs = computed((): ActionItem[] => [
             <span class="flex min-w-0 items-baseline gap-1.5">
                 <span class="shrink-0">{{ triggerLabel }}</span>
                 <!-- A hairline, not a middle dot: the trigger phrase is itself dot-separated, so one more dot would just extend that list. -->
+                <!-- A watch's line says where it stands, which is what its row is scanned for; the prompt is in the drawer. -->
                 <span class="hidden min-w-0 flex-1 items-center gap-2 truncate text-subtle @xl:flex" aria-hidden="true">
                     <span class="h-2.5 w-px shrink-0 bg-line-strong"></span>
-                    <span class="min-w-0 truncate">{{ automation.prompt }}</span>
+                    <span class="min-w-0 truncate">{{ leadsWithWatch ? watched : automation.prompt }}</span>
                 </span>
             </span>
         </template>
@@ -329,6 +371,14 @@ const verbs = computed((): ActionItem[] => [
                 v-tooltip.top="runTooltip(lastRun)"
             >
                 {{ outcomeVerb(lastRun.outcome) }} {{ since(lastRun.at) }}
+            </span>
+            <!-- A watch that has only ever waited has run nothing, yet it is alive: when it last looked says so. -->
+            <span
+                v-else-if="checkedAt !== undefined"
+                class="hidden w-20 shrink-0 items-center justify-end gap-1 truncate @xl:flex"
+                v-tooltip.top="t(`automationRow.checkedAt`, { at: formatDateTime(checkedAt) })"
+            >
+                <Icon name="eye" class="shrink-0 text-2xs" />{{ since(checkedAt) }}
             </span>
             <span v-else class="hidden w-20 shrink-0 text-right @xl:block">{{ t(`automationRow.neverRun`) }}</span>
 
@@ -432,6 +482,26 @@ const verbs = computed((): ActionItem[] => [
                         <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
                             {{ automation.prompt }}
                         </p>
+                    </div>
+
+                    <!-- What decides whether a fire goes ahead, and what it saw last time it looked. -->
+                    <div v-if="automation.guard || automation.source || watched" class="flex min-w-0 flex-col gap-1">
+                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.check`) }}</span>
+                        <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
+                        <span v-else-if="automation.source" class="truncate text-2xs text-muted" v-tooltip.top.overflow="sourceLabel(automation.source)">{{
+                            sourceLabel(automation.source)
+                        }}</span>
+                        <span v-if="watched" class="text-2xs text-subtle">{{ watched }}</span>
+                        <template v-if="automation.watch?.value">
+                            <span class="mt-1 text-2xs text-subtle">{{
+                                automation.watch.changedAt === undefined
+                                    ? t(`automationRow.lastSaw`)
+                                    : t(`automationRow.lastSawSince`, { when: formatDateTime(automation.watch.changedAt) })
+                            }}</span>
+                            <pre class="max-h-32 overflow-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-2xs break-words whitespace-pre-wrap text-muted">{{
+                                automation.watch.value
+                            }}</pre>
+                        </template>
                     </div>
 
                     <div v-if="trigger.kind === `event`" class="flex flex-col gap-1">

@@ -162,7 +162,74 @@
         "whoChat": "Kto może rozmawiać",
         "whoRunsWhatPays": "Jako kto działa i co za to płaci.",
         "workLands": "Praca zostaje scalona",
-        "workspace": "Przestrzeń robocza"
+        "workspace": "Przestrzeń robocza",
+        "note": "Notatka",
+        "noteOptional": "Notatka (opcjonalnie)",
+        "notePlaceholder": "Wyszedł Bun 1.4.3",
+        "noteHint": "Jedna linijka o tym, po co jest. Od niej zaczynają się jej powiadomienia.",
+        "stopAfterFirstFire": "Wyłącz po pierwszym uruchomieniu",
+        "endsOn": "Kończy się",
+        "endDate": "Data zakończenia",
+        "noEndDate": "Bez daty zakończenia",
+        "endsCaption": "Wyłączy się sama {when} i da ci znać.",
+        "if": "Jeśli",
+        "whatHasToBeTrue": "Co musi być prawdą najpierw. Do sprawdzenia nie uruchamia się żaden model.",
+        "conditionNone": "Zawsze",
+        "conditionGuard": "Polecenie",
+        "conditionNpm": "Pakiet npm",
+        "conditionGithub": "Wydanie na GitHubie",
+        "conditionUrl": "Strona WWW",
+        "conditionCaption": {
+            "none": "Nic nie jest sprawdzane: każde uruchomienie idzie dalej.",
+            "guard": "Polecenie powłoki uruchamiane najpierw w przestrzeni roboczej. Kod wyjścia 0 przepuszcza, a to, co wypisze, trafia do pobudki; każdy inny jest zapisywany jako pominięcie. $AUTOMATION_STATE wskazuje plik, który może przechowywać między przebiegami, a $AUTOMATION_LAST zawiera to, co wypisało, gdy ostatnio przepuściło.",
+            "npm": "Pakiet w rejestrze npm, sprawdzany przez sam sandbox: bez powłoki, bez tokenu.",
+            "github": "Najnowsze wydanie publicznego repozytorium na GitHubie, sprawdzane przez sam sandbox.",
+            "url": "Tekst jednej strony WWW albo ta jego część, którą wskaże wzorzec."
+        },
+        "guardCommand": "Polecenie, które decyduje, czy idzie dalej",
+        "waitForVersion": "Czekaj na wersję",
+        "followTag": "Śledź tag",
+        "package": "Pakiet",
+        "versionRange": "Zakres wersji",
+        "distTag": "Tag",
+        "npmCaption": {
+            "range": "Przechodzi, gdy opublikowana wersja spełnia zakres; to, co widzi, to ta wersja.",
+            "tag": "Widzi wersję pod tym tagiem, latest, gdy puste. Połącz z „tylko zmiana”, by słyszeć o każdej nowej."
+        },
+        "repository": "Repozytorium",
+        "prereleasesToo": "Licz też wersje przedpremierowe",
+        "page": "Strona",
+        "onlyWhatMatches": "Tylko to, co pasuje (opcjonalnie)",
+        "pageCaption": "Puste obserwuje cały tekst strony. Wyrażenie regularne zawęża go do tego, co pasuje, a jeśli ma grupę, do jej pierwszej grupy.",
+        "checkNow": "Sprawdź teraz",
+        "checkNowHint": "Uruchamia sprawdzenie raz, teraz. Nic nie jest zapisywane.",
+        "checkFailed": "Nie udało się uruchomić sprawdzenia.",
+        "checkWaiting": "Jeszcze nie. Wciąż czeka:",
+        "checkPassesFires": "Przechodzi już teraz, więc uruchomi ją następne sprawdzenie. Widzi:",
+        "checkPassesChange": "Teraz widzi to, a uruchomi się, gdy to się zmieni:",
+        "fireOn": "Uruchamia się przy",
+        "everyPass": "Każdym udanym sprawdzeniu",
+        "onlyOnChange": "Tylko zmianie",
+        "fireOnCaption": {
+            "pass": "Każde sprawdzenie, które przejdzie, ją uruchamia.",
+            "change": "Tylko gdy to, co widzi sprawdzenie, różni się od poprzedniego razu. Pierwsze sprawdzenie tylko notuje stan rzeczy."
+        },
+        "targetAgent": "Nowy agent",
+        "targetConversation": "Kontynuuj rozmowę",
+        "targetNotify": "Tylko powiadom mnie",
+        "targetCaption": {
+            "agent": "Nowy agent zaczyna od poniższego promptu i tego, co zobaczyło sprawdzenie.",
+            "conversation": "Rozmowa wraca tam, gdzie się zatrzymała, z tym, co zobaczyło sprawdzenie, i poniższym promptem. Działa na własnym modelu.",
+            "notify": "Nie uruchamia się żaden model: twoje urządzenia dostają powiadomienie z tym, co zobaczyło sprawdzenie, albo z poniższymi słowami, gdy nic nie zobaczyło."
+        },
+        "pickConversation": "Wybierz rozmowę",
+        "conversationToContinue": "Rozmowa do kontynuowania",
+        "notOnBoard": "zarchiwizowana lub usunięta",
+        "whatConversationIsTold": "Co usłyszy rozmowa.",
+        "whatNotificationSays": "Co mówi powiadomienie.",
+        "notifyPlaceholder": "Obserwowana strona się zmieniła.",
+        "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
+        "tagPlaceholder": "latest"
     },
     "automationRow": {
         "alreadyFired": "Już uruchomiona",
@@ -242,7 +309,17 @@
         "named": "wymienieni: {who}",
         "nobodyNamed": "nikt nie jest wymieniony",
         "heldForYou": "wstrzymywane dla Ciebie",
-        "holdBeforeRun": "{seconds} s przed każdym przebiegiem"
+        "holdBeforeRun": "{seconds} s przed każdym przebiegiem",
+        "watches": "Obserwuje",
+        "continues": "Kontynuuje {conversation}",
+        "notifiesYou": "Powiadamia cię",
+        "then": "Wtedy",
+        "fires": "Uruchamia się",
+        "onlyOnChange": "tylko przy zmianie",
+        "check": "Sprawdzenie",
+        "lastSaw": "Co ostatnio zobaczyła",
+        "lastSawSince": "Co ostatnio zobaczyła, bez zmian od {when}",
+        "checkedAt": "Sprawdzono {at}"
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",
@@ -319,7 +396,16 @@
         "notAnOrigin": "„{origin}” to nie jest źródło (origin); podaj tylko schemat i host, np. https://example.com",
         "pickDateTime": "Wybierz datę i godzinę, o której ma się uruchomić.",
         "pickModel": "Wybierz przynajmniej jeden model: automatyzacja działa, gdy nikt nie patrzy, więc nic nie zostanie wybrane za nią.",
-        "promptRequired": "Prompt jest wymagany."
+        "promptRequired": "Prompt jest wymagany.",
+        "guardRequired": "Wpisz polecenie albo wybierz inny warunek.",
+        "packageRequired": "Podaj nazwę pakietu, np. bun albo {'@'}scope/name.",
+        "rangeRequired": "Podaj zakres wersji, np. >=1.4.3, albo śledź tag.",
+        "repoFormat": "Podaj repozytorium jako właściciel/nazwa, np. oven-sh/bun.",
+        "pageUrl": "Podaj pełny adres strony, zaczynający się od http:// lub https://.",
+        "selectInvalid": "Ten wzorzec się nie kompiluje: {problem}",
+        "pickEndDate": "Wybierz datę i godzinę zakończenia albo ją wyczyść.",
+        "endPassed": "Ta data zakończenia już minęła.",
+        "pickConversation": "Wybierz rozmowę do kontynuowania."
     },
     "cronSchedule": {
         "afterSessions": "{label} · po {count} sesji | {label} · po {count} sesjach | {label} · po {count} sesjach",
@@ -342,7 +428,8 @@
             "st": "{day}.",
             "th": "{day}."
         },
-        "weekdays": "W dni robocze {time}"
+        "weekdays": "W dni robocze {time}",
+        "everyHours": "Co {count} godz."
     },
     "calendar": {
         "today": "Dziś",
@@ -372,5 +459,19 @@
             "openTranscript": "Otwórz transkrypcję",
             "nextIn": "Następne {when}"
         }
+    },
+    "watch": {
+        "npm": "npm {spec}",
+        "releases": "Wydania {repo}",
+        "releasesWithPre": "Wydania {repo}, też przedpremierowe",
+        "pageMatching": "{url}, pasujące do {select}",
+        "checked": "Sprawdzono {when}",
+        "notChecked": "Jeszcze nie sprawdzono",
+        "saw": "widzi {value}",
+        "waiting": "czeka: {detail}",
+        "fired": "uruchomiona {when}",
+        "ends": "kończy się {date}",
+        "ended": "skończyła się {date}",
+        "stopsAfterFirst": "wyłączy się po pierwszym uruchomieniu"
     }
 }

@@ -34,6 +34,12 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
                 record.runs = [run, ...record.runs];
             }
         },
+        recordWatch: async (id, next) => {
+            const record = automations.find((automation) => automation.id === id);
+            if (record !== undefined) {
+                record.watch = next(record.watch);
+            }
+        },
     };
 };
 

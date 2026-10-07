@@ -230,7 +230,15 @@ export const scheduleLabel = (cron: string, reader: Zone, rule: Zone): string =>
     // so qualifying them would be false precision.
     const qualify = (label: string): string => (zone === undefined ? label : `${label} ${zone}`);
     if (schedule.freq === `custom`) {
-        return schedule.cron;
+        // Every hour or every few hours off the hour, the shapes a watch checks on (`automations propose --every 6h`): the
+        // builder has no row for them, but the list can still say them in words. An hour step means the same thing on
+        // every clock, so no zone.
+        const written = schedule.cron.trim();
+        if (/^\d{1,2} \* \* \* \*$/.test(written)) {
+            return t(`cronSchedule.hourly`);
+        }
+        const hours = /^\d{1,2} \*\/(\d{1,2}) \* \* \*$/.exec(written);
+        return hours?.[1] === undefined ? schedule.cron : t(`cronSchedule.everyHours`, { count: Number(hours[1]) });
     }
     if (schedule.freq === `minutes`) {
         return t(`cronSchedule.everyMinutes`, { minutes: schedule.everyMinutes });

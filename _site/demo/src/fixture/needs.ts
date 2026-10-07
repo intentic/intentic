@@ -56,6 +56,30 @@ const seed = (now: number): Need[] => [
         createdAt: now - minutes(3),
         updatedAt: now - minutes(3),
     },
+    {
+        id: `need-5w1rt`,
+        conversationId: AWAITING_AGENT_ID,
+        subject: {
+            kind: `automation`,
+            automation: {
+                id: `playwright-1-60`,
+                enabled: true,
+                trigger: { kind: `schedule`, cron: `41 */6 * * *` },
+                source: { kind: `npm`, package: `@playwright/test`, range: `>=1.60.0` },
+                until: `first-fire`,
+                expiresAt: now + minutes(60 * 24 * 45),
+                target: { kind: `conversation`, conversationId: AWAITING_AGENT_ID },
+                note: `Playwright 1.60 is published, with the retry fix`,
+                prompt: `Playwright 1.60 is out with the fix for retried fixtures. Bump it, drop the workaround in signup.spec.ts, and run the signup suite twenty times to see whether the flake is gone.`,
+            },
+            firstCheck: { pass: false, saw: `no published version of @playwright/test satisfies >=1.60.0 yet (latest is 1.59.2)`, at: now - minutes(2) },
+        },
+        title: `Run an automation unattended: Playwright 1.60 is published, with the retry fix`,
+        why: `the flake's real fix ships in Playwright 1.60; until then the workaround stays`,
+        status: `open`,
+        createdAt: now - minutes(2),
+        updatedAt: now - minutes(2),
+    },
 ];
 
 let needs: Need[] | undefined;
@@ -86,7 +110,10 @@ export const answerDemoNeed = (id: string, answer: NeedAnswer): Need =>
             case `accept`:
                 return { ...need, status: `working` };
             case `approve`:
-                return { ...need, status: `working`, answeredBy: `demo@intentic.dev` };
+                // An automation is saved by the yes itself; an environment waits for its rebuild.
+                return need.subject.kind === `automation`
+                    ? { ...need, status: `met`, outcome: `The automation ${need.subject.automation.id} is saved and switched on.`, told: `turn`, answeredBy: `demo@intentic.dev` }
+                    : { ...need, status: `working`, answeredBy: `demo@intentic.dev` };
             case `apply`:
             case `grant`:
             case `release`:

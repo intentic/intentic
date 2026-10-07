@@ -11,10 +11,12 @@
             "GET /automations",
             "GET /automations/catalog",
             "GET /automations/senders/*",
+            "GET /agents",
             "GET /personas",
             "GET /settings",
             "GET /ci/runs",
             "POST /automations",
+            "POST /automations/check",
             "POST /automations/*/enabled",
             "DELETE /automations/*",
             "POST /automations/*/run",
@@ -27,6 +29,7 @@
         "files": [
             { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },
+            { "path": ".intentic/records/automation-watch.json", "invalidates": ["automations"] },
             { "path": ".intentic/config/personas.json", "invalidates": ["personas"] }
         ]
     }

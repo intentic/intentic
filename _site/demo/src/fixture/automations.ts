@@ -1,4 +1,5 @@
-import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary } from "@intentic/sandbox-contract";
+import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary, WatchCheckResult, WatchSource } from "@intentic/sandbox-contract";
+import { LATENCY_AGENT_ID } from "./fleet";
 
 // Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the
 // page's claim that they share one machine holds, and enough on a clock (nightly, twice a weekday, every ten minutes,
@@ -159,6 +160,42 @@ const seed = (now: number): AutomationSummary[] => [
             { at: now - hours(2), outcome: `completed`, detail: `README route table updated`, conversationId: `cnv_docs_drift` },
             { at: now - hours(9), outcome: `interrupted`, detail: `the daemon restarted mid-wake` },
         ],
+    },
+    {
+        // A watch waiting on one thing: no model runs while the release is not out, and when it is, the conversation that
+        // planned the upgrade picks it back up and the watch switches itself off.
+        id: `pg-17-ships`,
+        trigger: { kind: `schedule`, cron: `23 */6 * * *` },
+        source: { kind: `npm`, package: `pg`, range: `>=9.0.0` },
+        until: `first-fire`,
+        expiresAt: now + hours(24 * 60),
+        target: { kind: `conversation`, conversationId: LATENCY_AGENT_ID },
+        note: `node-postgres 9 is published`,
+        prompt: `node-postgres 9 is out. Carry out the pool migration you planned: bump pg, switch to the new pool API, and rerun the latency comparison.`,
+        enabled: true,
+        nextRun: now + hours(3),
+        runs: [{ at: now - hours(3), outcome: `skipped`, detail: `no published version of pg satisfies >=9.0.0 yet (latest is 8.16.3)` }],
+        watch: { armedAt: now - hours(51), checkedAt: now - hours(3), waiting: `no published version of pg satisfies >=9.0.0 yet (latest is 8.16.3)` },
+    },
+    {
+        // A watch with no model at all: the page's text is compared each hour, and only a change reaches the phone.
+        id: `stripe-status`,
+        trigger: { kind: `schedule`, cron: `7 * * * *` },
+        source: { kind: `url`, url: `https://status.stripe.com`, select: `<h2[^>]*>([^<]+)</h2>` },
+        fireOn: `change`,
+        target: { kind: `notify` },
+        note: `Stripe's status changes`,
+        prompt: `Stripe's status page changed.`,
+        enabled: true,
+        nextRun: now + minutes(41),
+        runs: [{ at: now - hours(30), outcome: `completed`, detail: `Saw: All systems operational. Told 2 device(s).` }],
+        watch: {
+            armedAt: now - hours(24 * 9),
+            checkedAt: now - minutes(19),
+            value: `All systems operational`,
+            changedAt: now - hours(30),
+            firedAt: now - hours(30),
+        },
     },
     {
         id: `pipeline-failed`,
@@ -333,6 +370,21 @@ const catalog: AutomationCatalog = {
 };
 
 export const automationCatalog = (): AutomationCatalog => catalog;
+
+// What "Check now" answers in the demo: the daemon would ask the registry, GitHub or the page; the demo has no network
+// to ask, so it answers what the fixture's own watches saw.
+export const checkDemoSource = (source: WatchSource): WatchCheckResult => {
+    switch (source.kind) {
+        case `npm`:
+            return source.range === undefined
+                ? { pass: true, saw: `${source.package}@8.16.3` }
+                : { pass: false, saw: `no published version of ${source.package} satisfies ${source.range} yet (latest is 8.16.3)` };
+        case `github-release`:
+            return { pass: true, saw: `v8.16.3 (node-postgres 8.16.3)\nhttps://github.com/${source.repo}/releases/tag/v8.16.3` };
+        case `url`:
+            return { pass: true, saw: `All systems operational` };
+    }
+};
 
 let automations: AutomationSummary[] | undefined;
 let approvals: AutomationApproval[] | undefined;

@@ -219,3 +219,53 @@ test("a door file that cannot be read costs the rows their URLs, not the list, a
     });
     await expect(call(routes.rotateToken, { id: "deploy" }, { context })).rejects.toMatchObject({ code: "CONFLICT" });
 });
+
+// Watches: the rules across fields the schema cannot state one field at a time, refused before anything is written.
+const watchServices = (root: string, conversations: readonly string[] = []): Services =>
+    unstubbed<Services>("services", {
+        ...catalogServices(root),
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: (id) => (conversations.includes(id) ? ({ id } as ReturnType<Services["agents"]["entry"]>) : undefined),
+        }),
+    });
+
+const watching = (id: string, extra: Partial<Automation>): Automation => ({
+    ...automation(id, { kind: "schedule", cron: "17 */6 * * *" }),
+    ...extra,
+});
+
+test("a watch is refused two checks at once, a change with nothing to compare, and a source that could never be read", async () => {
+    const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")));
+    const routes = createAutomationsRoutes(services);
+    const npm = { kind: "npm" as const, package: "bun", range: ">=1.4.3" };
+    await expect(call(routes.upsert, watching("both", { guard: "true", source: npm }), { context })).rejects.toThrow(/not both/);
+    await expect(call(routes.upsert, watching("nothing", { fireOn: "change" }), { context })).rejects.toThrow(/needs a check to compare/);
+    await expect(call(routes.upsert, watching("vague", { source: { kind: "npm", package: "bun", range: "soon" } }), { context })).rejects.toThrow(
+        /not a semver range/,
+    );
+    await expect(call(routes.upsert, watching("late", { source: npm, expiresAt: Date.now() - 1_000 }), { context })).rejects.toThrow(
+        /end date has already passed/,
+    );
+    expect(await services.automations.list()).toEqual([]);
+});
+
+test("a new agent needs a model, a conversation target needs its conversation, and either other target needs no model", async () => {
+    const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")), ["rapid-ridge"]);
+    const routes = createAutomationsRoutes(services);
+    const { models: _models, ...modelless } = watching("bun", { source: { kind: "npm", package: "bun", range: ">=1.4.3" }, until: "first-fire" });
+    await expect(call(routes.upsert, modelless, { context })).rejects.toThrow(/needs a model/);
+    await expect(call(routes.upsert, { ...modelless, target: { kind: "conversation", conversationId: "gone" } }, { context })).rejects.toThrow(
+        /no conversation gone/,
+    );
+    await call(routes.upsert, { ...modelless, target: { kind: "conversation", conversationId: "rapid-ridge" } }, { context });
+    await call(routes.upsert, { ...modelless, id: "bun-notify", target: { kind: "notify" } }, { context });
+    expect((await services.automations.list()).map((saved) => saved.id).toSorted()).toEqual(["bun", "bun-notify"]);
+});
+
+test("an automation that listens for messages only ever starts an agent", async () => {
+    const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")));
+    const routes = createAutomationsRoutes(services);
+    await expect(
+        call(routes.upsert, { ...automation("chat", { kind: "listener", provider: "webchat" }), target: { kind: "notify" } }, { context }),
+    ).rejects.toThrow(/can only start an agent/);
+});

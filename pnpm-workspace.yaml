@@ -287,6 +287,7 @@ catalog:
   "@types/mailparser": 3.9.0
   "@types/node": 24.19.1
   "@types/pg": 8.23.1
+  "@types/semver": 7.8.0
   "@types/ssh2": 1.15.6
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.2
@@ -379,6 +380,7 @@ catalog:
   prisma: 7.10.0
   read-excel-file: 9.3.10
   semantic-release: 25.0.9
+  semver: 7.8.5
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
   # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
   # so the two share one copy without an override.

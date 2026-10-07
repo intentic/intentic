@@ -723,8 +723,7 @@ export type LandedRemover = NonNullable<NonNullable<AgentSummary["landedPresence
 export type LandFailure = NonNullable<AgentSummary["landFailure"]>;
 // The permission a running turn waits on, as a card can answer it.
 export type WaitingPermission = NonNullable<AgentSummary["permissionAsk"]>;
-// AgentsListSchema is declared later, after AutomationApprovalSchema, since the fleet list carries held wakes and zod
-// needs that type declared first.
+// AgentsListSchema lives in agents-list.ts, since the fleet list carries held wakes (automations.ts).
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });
 
 // Naming no watch disarms every one, which is what a press made about the whole card means; a press made about one

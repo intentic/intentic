@@ -193,6 +193,22 @@ const STATE_FILES = [
         why: "Scheduler bookkeeping nothing in the browser renders: what a catch-up fire produces reaches the run ledger, which carries the automations key.",
         portability: "carry",
     },
+    // What each watch's check saw last (automations/automations-store.ts), so `fireOn: change` can say what moved and
+    // the list can show the last value. `carry`: a restored sandbox must not read every release it already saw as new.
+    {
+        path: ".intentic/records/automation-watch.json",
+        invalidates: [],
+        why: "Declared by the intentic.automations extension's contributes.files, `automations` is its query key, not core's.",
+        portability: "carry",
+    },
+    // One file per automation that a guard command may keep between runs ($AUTOMATION_STATE); the daemon only makes the
+    // directory and deletes an automation's file with it. `carry`: it is the guard's memory of what it already saw.
+    {
+        path: ".intentic/records/automation-state/",
+        invalidates: [],
+        why: "A guard's own scratch file; the daemon never reads it and nothing in the browser renders it.",
+        portability: "carry",
+    },
     {
         path: ".intentic/records/approvals/",
         invalidates: [],

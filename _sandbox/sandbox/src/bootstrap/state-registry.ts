@@ -15,7 +15,7 @@ import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/memb
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
-import { automationRunsDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
+import { automationRunsDocument, automationWatchDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
 import { heldWakesDocument } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
@@ -121,6 +121,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     doorTokensDocument,
     automationRunsDocument,
     automationsDocument,
+    automationWatchDocument,
     heldWakesDocument,
     scheduleCoverageDocument,
     sendersDocument,

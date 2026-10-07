@@ -1,7 +1,6 @@
 // automations: scheduled agent wake-ups (.intentic/config/automations.json)
 import { z } from "zod";
 import { AgentOriginSchema, ModelPinSchema } from "./agent.js";
-import { AgentSummarySchema } from "./agents.js";
 import { entryId } from "./internal.js";
 import { IssuesConfigSchema } from "./issues.js";
 import { ZoneSchema } from "../time/zone.js";
@@ -124,6 +123,81 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
+// A watch is an automation whose check decides, without a model, whether anything happened: either its `guard` command
+// or one of these ready-made sources, which the daemon checks itself (automations/watch/watch-sources.ts). Only once the check
+// says so does anything run, and what it saw goes with the wake. No source needs an extension, a token or a shell.
+// npm: the registry's view of one package. With `range`, the check passes once a published version satisfies it, and
+// what it saw is that version; without, what it saw is the version under `tag` (latest by default), for `fireOn: change`.
+// github-release: a public repository's newest release (prereleases only when asked), for `fireOn: change`.
+// url: one page, its text or the first `select` match, for `fireOn: change`.
+export const WatchSourceSchema = z.discriminatedUnion("kind", [
+    z.object({
+        kind: z.literal("npm").describe("A package on the npm registry."),
+        package: z.string().min(1).max(214).describe("The package name, scoped or not, like bun or @scope/name."),
+        range: z
+            .string()
+            .min(1)
+            .max(200)
+            .optional()
+            .describe("A semver range, like >=1.4.3. Passes once a published version satisfies it. Prereleases count only when the range names one."),
+        tag: z.string().min(1).max(100).optional().describe("Which dist-tag to read without a range. Absent means latest."),
+    }),
+    z.object({
+        kind: z.literal("github-release").describe("The newest release of a public GitHub repository."),
+        repo: z
+            .string()
+            .regex(/^[\w.-]+\/[\w.-]+$/, "repo must look like owner/name")
+            .describe("The repository, as owner/name."),
+        prereleases: z.boolean().optional().describe("Count prereleases too. Absent means only full releases."),
+    }),
+    z.object({
+        kind: z.literal("url").describe("One web page."),
+        url: z.string().url().describe("The page, http or https."),
+        select: z
+            .string()
+            .min(1)
+            .max(500)
+            .optional()
+            .describe("A regular expression; what it matches (its first group, if it has one) is what is watched rather than the whole page's text."),
+    }),
+]);
+export type WatchSource = z.infer<typeof WatchSourceSchema>;
+// What a passing check sets off. `agent` (the default) is a new agent with the prompt, as every automation always did;
+// `conversation` continues one that already exists, the way a watch wakes the conversation that armed it, so a plan
+// made weeks ago resumes where it stopped; `notify` runs no model at all, and only tells the owner what the check saw.
+export const AutomationTargetSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("agent").describe("A new agent, told the prompt and what the check saw.") }),
+    z.object({
+        kind: z.literal("conversation").describe("An existing conversation, continued with what the check saw and the prompt."),
+        conversationId: z.string().min(1).describe("Which conversation."),
+    }),
+    z.object({ kind: z.literal("notify").describe("No agent: a notification to the owner with what the check saw.") }),
+]);
+export type AutomationTarget = z.infer<typeof AutomationTargetSchema>;
+// `pass` (the default): every check that passes fires. `change`: a check fires only when what it saw differs from what
+// it saw last time, and the first one only records where things stand, so a watch says when something moves rather
+// than that it is still there.
+export const FireOnSchema = z.enum(["pass", "change"]);
+export type FireOn = z.infer<typeof FireOnSchema>;
+// What the daemon remembers of a watch between checks (.intentic/records/automation-watch.json), and what the list
+// shows under it. Values are kept whole up to a bound, so the next check can say what changed.
+export const WatchStateSchema = z.object({
+    armedAt: z.number().describe("When it was first checked, in milliseconds."),
+    checkedAt: z.number().describe("When it was last checked, in milliseconds."),
+    value: z.string().optional().describe("What the last passing check saw. Absent until one has passed."),
+    changedAt: z.number().optional().describe("When what it saw last changed, in milliseconds."),
+    firedAt: z.number().optional().describe("When it last set something off, in milliseconds."),
+    // Why the last check did not pass, when it did not.
+    waiting: z.string().optional().describe("What the last check said when it did not pass: what it is still waiting for."),
+});
+export type WatchState = z.infer<typeof WatchStateSchema>;
+// POST /automations/check: one source checked now, nothing remembered.
+export const WatchCheckInputSchema = z.object({ source: WatchSourceSchema.describe("The source to check.") });
+export const WatchCheckResultSchema = z.object({
+    pass: z.boolean().describe("Whether the check passes now."),
+    saw: z.string().describe("What it saw when it passed, or what it is still waiting for when it did not."),
+});
+export type WatchCheckResult = z.infer<typeof WatchCheckResultSchema>;
 // The Visitor chat widget's settings, present only on `webchat` listener automations. Split into what the widget itself
 // may read (public by construction) and what only the daemon may (turnstileSecret); GET /webchat/<id>/config serves the
 // first group by naming it, never by omitting the second.
@@ -269,8 +343,38 @@ export const AutomationSchema = z.object({
         .min(1)
         .optional()
         .describe(
-            "A command run before the wake that decides whether there is anything to do. Skipped by the guard is often the most useful thing an automation can report.",
+            "A command run before the wake that decides whether there is anything to do. Skipped by the guard is often the most useful thing an automation can report. What it prints when it passes goes with the wake; $AUTOMATION_STATE names a file it may keep between runs, and $AUTOMATION_LAST holds what it printed last time it passed.",
         ),
+    // The guard's alternative: a condition the daemon checks itself. Refused at upsert beside a guard, since two checks
+    // would leave "what the check saw" meaning two things.
+    source: WatchSourceSchema.optional().describe(
+        "A ready-made check instead of a guard command: an npm package's version, a GitHub repository's newest release, or a web page.",
+    ),
+    fireOn: FireOnSchema.optional().describe(
+        "Fire on every passing check, or only when what the check saw changed since the last one. Absent means every passing check.",
+    ),
+    // Retirement, so a watch never outlives what it was for: `first-fire` switches it off as it fires, the way a one-time
+    // wake retires; `expiresAt` switches it off at a deadline and says so.
+    until: z
+        .enum(["first-fire"])
+        .optional()
+        .describe("Switch it off the first time it fires, for a watch waiting on one thing. Absent means it keeps firing."),
+    expiresAt: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("When it gives up, in milliseconds. Switched off then, and whoever it was for is told it never fired."),
+    target: AutomationTargetSchema.optional().describe(
+        "What a passing check sets off: a new agent (the default), an existing conversation, or only a notification to the owner.",
+    ),
+    // One line a notification and a woken conversation read; an automation has no title of its own.
+    note: z
+        .string()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("One line on what it watches for, like 'Bun 1.4.3 is published'. Shown in its notifications."),
     prompt: z.string().min(1).describe("What the woken agent is told."),
     // The Visitor chat widget's settings, `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional().describe("Settings for the public chat widget, for an automation that answers visitors."),
@@ -287,15 +391,18 @@ export const AutomationSchema = z.object({
         .describe(
             "Narrow the woken turn to these tools. For one driven by an outside message this list is the real boundary, because prompt wording is only advice and an empty toolbox is not.",
         ),
-    // Required ordered ladder (replaces separate agent/harness/model fields): an automation spends real money
-    // unwatched, so it must name what it spends rather than inherit a chat's default. Walked in order at fire time to
-    // the first rung that can start; each rung is a whole pin (provider+model+effort+harness together).
+    // Ordered ladder (replaces separate agent/harness/model fields): an automation spends real money unwatched, so it must
+    // name what it spends rather than inherit a chat's default. Walked in order at fire time to the first rung that can
+    // start; each rung is a whole pin (provider+model+effort+harness together). Required for a new agent, the default
+    // target, and refused there at upsert when absent; a conversation target runs on that conversation's own model and a
+    // notification runs none, so neither needs one.
     models: z
         .array(ModelPinSchema)
         .min(1)
         .max(10)
+        .optional()
         .describe(
-            "Which models this automation may run on, best first. Required, and nothing is chosen for you: work that fires while nobody is watching spends a real allowance, so it names the models it spends rather than inheriting one. Tried in order, so a spent account does not silently stop the job.",
+            "Which models this automation may run on, best first. Required when it starts a new agent, and nothing is chosen for you: work that fires while nobody is watching spends a real allowance, so it names the models it spends rather than inheriting one. Tried in order, so a spent account does not silently stop the job. Not needed to continue a conversation, which runs on its own model, or to only notify.",
         ),
     // Absent means the daemon's pick: the account its conversation runs on for a continuing thread (moved off one that
     // can no longer serve), else the one that can serve with the most room. Named, it is a pin, run whatever its state,
@@ -341,6 +448,8 @@ export const AutomationApprovalSchema = z.object({
         "Where the message came from, kept alongside the payload so an approved wake appears on the board exactly as an automatic one would have.",
     ),
     title: z.string().optional().describe("What the conversation would be called."),
+    // What the automation's check saw when it passed, so the approved wake carries it as an automatic one would have.
+    observed: z.string().optional().describe("What the automation's check saw when it passed, kept so the approved wake is told the same thing."),
     // The thread this wake belongs to, so approving continues it rather than minting a fresh conversation per approved
     // message.
     conversationId: z
@@ -371,24 +480,6 @@ export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 // Whether a held wake waits on a person. A countdown hold (`autoRunAt`) releases itself, so counting it would ask the
 // owner about something already about to happen on its own.
 export const awaitsOwner = (wake: Pick<AutomationApproval, "autoRunAt">): boolean => wake.autoRunAt === undefined;
-// `rev` is the registry revision this roster was read at: fleet snapshots are last-frame-wins, so the browser drops any
-// roster older than the newest it applied and holds a pending change until a roster past `rev` arrives. `held` is the
-// approvals queue projected onto the board, defaulted for an older daemon's roster.
-export const AgentsListSchema = z.object({
-    agents: z.array(AgentSummarySchema).describe("The conversations."),
-    rev: z
-        .number()
-        .describe(
-            "Which version of the fleet this is. The fleet is published as whole snapshots, so without a version a list read before a change but delivered after it would silently undo that change. Drop any list older than the newest you have already applied.",
-        ),
-    held: z
-        .array(AutomationApprovalSchema)
-        .default([])
-        .describe(
-            "Automations waiting at the door for a yes, put alongside the running conversations so needs-you sits beside working rather than on a page nobody opens.",
-        ),
-});
-export type AgentsList = z.infer<typeof AgentsListSchema>;
 export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema).describe("Everything waiting for a yes.") });
 export const AutomationApprovalIdParamSchema = z.object({ id: z.string().describe("Which waiting item.") });
 export const AutomationRunSchema = z.object({
@@ -410,6 +501,8 @@ export const FIRE_DAILY_MAX_DEFAULT = 200;
 export const AutomationSummarySchema = AutomationSchema.extend({
     runs: z.array(AutomationRunSchema),
     nextRun: z.number().optional(),
+    // Absent for an automation with no check, and for one never checked.
+    watch: WatchStateSchema.optional().describe("What its check saw last and when, for an automation that checks something before it fires."),
     // Door credentials, attached for a maintainer or owner only, never a viewer or a control-token program; kept in the
     // secrets store, not the manifest.
     webhookToken: z
@@ -488,6 +581,11 @@ export const AutomationTemplateSchema = z.object({
     trigger: TriggerSchema,
     // Prefills the guard command (a shell one-liner; non-zero exit skips the wake).
     guard: z.string().min(1).optional(),
+    // Prefill a watch: a ready-made check, when it fires, whether it retires, and what it sets off.
+    source: WatchSourceSchema.optional(),
+    fireOn: FireOnSchema.optional(),
+    until: z.enum(["first-fire"]).optional(),
+    target: AutomationTargetSchema.optional(),
     // Prefills the countdown hold: each fire waits this long, visibly and cancellably, before starting itself.
     holdForSeconds: z.number().int().positive().optional(),
     prompt: z.string().min(1),

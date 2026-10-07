@@ -1,10 +1,13 @@
 import type {
     Automation,
     AutomationSummary,
+    AutomationTarget,
     AutomationTemplate,
+    FireOn,
     ModelPin,
     SenderRule,
     Senders,
+    WatchSource,
     WebchatConfig,
     WorkspaceEventKind,
 } from "@intentic/sandbox-contract";
@@ -22,6 +25,26 @@ import { t } from "./i18n";
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export type TriggerKind = `schedule` | `once` | `event` | `listener` | `workspace`;
+
+// What decides, without a model, whether a fire goes ahead: nothing, the owner's own command, or one of the daemon's
+// ready-made sources. One choice, since the daemon refuses a guard beside a source.
+export type ConditionKind = `none` | `guard` | WatchSource[`kind`];
+// What a passing check sets off; `agent` is what every automation did before it had a choice.
+export type TargetKind = AutomationTarget[`kind`];
+
+// The repository shape the daemon's schema accepts, said here so the refusal points at the box.
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+
+// Why a typed pattern does not compile, the one thing the daemon refuses a page's `select` for; undefined when it does.
+const patternProblem = (pattern: string): string | undefined => {
+    try {
+        // Compiled only to learn whether it can be; the daemon compiles its own each check.
+        void new RegExp(pattern);
+        return undefined;
+    } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+    }
+};
 
 // One row of who may talk to a listener, as typed: ids and groups as comma-separated text split only at save, like
 // `allowedTools`; a blank `actsAs` is no persona, the full toolbox reaching no account, exactly as the automation's own.
@@ -81,15 +104,33 @@ export function useAutomationForm(
 ) {
     // Text the form put in the box (starter or template prompt); compared verbatim to detect a user edit.
     const templatePrompts = computed(() => new Set<string>(templates.value.map((template) => template.prompt)));
-    const formGuards = computed(
-        () => new Set<string>([``, ...templates.value.flatMap((template) => (template.guard === undefined ? [] : [template.guard]))]),
-    );
+    // A template's guard, as opposed to one the owner typed: only the first leaves with its template's prompt.
+    const templateGuards = computed(() => new Set<string>(templates.value.flatMap((template) => (template.guard === undefined ? [] : [template.guard]))));
     let original: Automation | undefined;
     const form = reactive({
         kind: `schedule` as TriggerKind,
         id: ``,
-        // No UI for this: kept only so gallery chores (e.g. knip-based guards) still reach `build` intact.
+        // The check before anything runs. Each kind keeps its own boxes, so flipping between kinds while deciding does
+        // not lose what was typed into the others; only the picked kind reaches `build`.
+        condition: `none` as ConditionKind,
         guard: ``,
+        npmPackage: ``,
+        // A range waits for a version to exist; a tag follows one (latest by default), for firing on a change.
+        npmBy: `range` as `range` | `tag`,
+        npmRange: ``,
+        npmTag: ``,
+        githubRepo: ``,
+        githubPrereleases: false,
+        pageUrl: ``,
+        pageSelect: ``,
+        fireOn: `pass` as FireOn,
+        // Retirement: switched off as it fires, or at an end date, as a `datetime-local` box reads it (blank is none).
+        stopAfterFirst: false,
+        expiresAt: ``,
+        target: `agent` as TargetKind,
+        conversationId: ``,
+        // One line on what it watches for; a notification's title and what a woken conversation reads it as.
+        note: ``,
         prompt: ``,
         // Replaces provider/harness/model; each rung is a full ModelPin, and the list must never be empty.
         models: [] as ModelPin[],
@@ -227,6 +268,80 @@ export function useAutomationForm(
         return onceAt.value <= Date.now() ? t(`useAutomationForm.momentPassed`) : undefined;
     });
 
+    /* ---- the check, what it sets off, and when it stops ---- */
+
+    // A listener answers whoever wrote, so it only ever starts an agent: the daemon refuses any other target there.
+    const targetsOffered = computed(() => form.kind !== `listener`);
+    const effectiveTarget = computed<TargetKind>(() => (targetsOffered.value ? form.target : `agent`));
+    // Only a new agent spends a model of the automation's own: a conversation runs on its own, a notification on none.
+    const needsModels = computed(() => effectiveTarget.value === `agent`);
+    // A one-time wake retires itself as it fires, so neither way of retiring one means anything there.
+    const retireOffered = computed(() => form.kind !== `once`);
+
+    // The source the boxes describe, whether or not they are complete; `watchSource` is the one worth sending.
+    const sourceOf = (): WatchSource | undefined => {
+        switch (form.condition) {
+            case `npm`:
+                return {
+                    kind: `npm`,
+                    package: form.npmPackage.trim(),
+                    ...(form.npmBy === `range` && form.npmRange.trim() !== `` ? { range: form.npmRange.trim() } : {}),
+                    ...(form.npmBy === `tag` && form.npmTag.trim() !== `` ? { tag: form.npmTag.trim() } : {}),
+                };
+            case `github-release`:
+                return { kind: `github-release`, repo: form.githubRepo.trim(), ...(form.githubPrereleases ? { prereleases: true } : {}) };
+            case `url`:
+                return { kind: `url`, url: form.pageUrl.trim(), ...(form.pageSelect.trim() !== `` ? { select: form.pageSelect.trim() } : {}) };
+            case `none`:
+            case `guard`:
+                return undefined;
+        }
+    };
+
+    // Each kind's own refusal, said at the box rather than as the daemon's sentence after a save.
+    const conditionError = computed<string | undefined>(() => {
+        switch (form.condition) {
+            case `none`:
+                return undefined;
+            case `guard`:
+                return form.guard.trim() === `` ? t(`useAutomationForm.guardRequired`) : undefined;
+            case `npm`:
+                if (form.npmPackage.trim() === ``) {
+                    return t(`useAutomationForm.packageRequired`);
+                }
+                return form.npmBy === `range` && form.npmRange.trim() === `` ? t(`useAutomationForm.rangeRequired`) : undefined;
+            case `github-release`:
+                return REPO_RE.test(form.githubRepo.trim()) ? undefined : t(`useAutomationForm.repoFormat`);
+            case `url`: {
+                if (!/^https?:\/\/\S+$/.test(form.pageUrl.trim()) || !URL.canParse(form.pageUrl.trim())) {
+                    return t(`useAutomationForm.pageUrl`);
+                }
+                const problem = form.pageSelect.trim() === `` ? undefined : patternProblem(form.pageSelect.trim());
+                return problem === undefined ? undefined : t(`useAutomationForm.selectInvalid`, { problem });
+            }
+        }
+    });
+
+    // What "Check now" sends: only a complete source, never a guard, which runs here with a persona's credentials.
+    const watchSource = computed<WatchSource | undefined>(() => (conditionError.value === undefined ? sourceOf() : undefined));
+
+    // The end date as an instant, NaN for blank or half-typed; refused once past, since the daemon would switch it off
+    // on its next tick rather than arm it.
+    const expiresAt = computed(() => instantOf(form.expiresAt));
+    const expiresError = computed<string | undefined>(() => {
+        if (!retireOffered.value || form.expiresAt === ``) {
+            return undefined;
+        }
+        if (Number.isNaN(expiresAt.value)) {
+            return t(`useAutomationForm.pickEndDate`);
+        }
+        return expiresAt.value <= Date.now() ? t(`useAutomationForm.endPassed`) : undefined;
+    });
+
+    const conversationError = computed<string | undefined>(() =>
+        effectiveTarget.value === `conversation` && form.conversationId.trim() === `` ? t(`useAutomationForm.pickConversation`) : undefined,
+    );
+
     /* ---- the prompt follows the trigger ---- */
 
     // Only a live source has a starter; other triggers' payloads come from the sender, not a template.
@@ -250,9 +365,13 @@ export function useAutomationForm(
                 return;
             }
             form.prompt = starterPrompt.value ?? ``;
-            // A guard leaves with its prompt; a stale guard on another trigger silently blocks every firing.
-            if (formGuards.value.has(form.guard)) {
+            // A template's guard leaves with its prompt; a stale guard on another trigger silently blocks every firing.
+            // One the owner typed is theirs, and stays.
+            if (form.guard !== `` && templateGuards.value.has(form.guard)) {
                 form.guard = ``;
+                if (form.condition === `guard`) {
+                    form.condition = `none`;
+                }
             }
             promptFor = key;
         },
@@ -284,6 +403,9 @@ export function useAutomationForm(
         // Required like the other touched fields, so an empty ladder's refusal has a visible reason.
         touched.add(`models`);
         touched.add(`senders`);
+        touched.add(`condition`);
+        touched.add(`expiresAt`);
+        touched.add(`conversation`);
     };
 
     const nameError = computed<string | undefined>(() => {
@@ -312,7 +434,10 @@ export function useAutomationForm(
 
     // The one error about spending rather than syntax: no sandbox-wide tier to fall back on, so an empty ladder must
     // refuse. Enforced here too, not just in the schema, so the refusal happens at save with an actionable message.
-    const modelsError = computed<string | undefined>(() => (form.models.length === 0 ? t(`useAutomationForm.pickModel`) : undefined));
+    // Only a new agent needs one: a conversation continues on its own model, and a notification runs none.
+    const modelsError = computed<string | undefined>(() =>
+        needsModels.value && form.models.length === 0 ? t(`useAutomationForm.pickModel`) : undefined,
+    );
 
     // A rule naming nobody would be refused by the daemon's schema; said here so the refusal points at the row.
     const sendersError = computed<string | undefined>(() => {
@@ -331,6 +456,9 @@ export function useAutomationForm(
             modelsError.value === undefined &&
             sendersError.value === undefined &&
             onceError.value === undefined &&
+            conditionError.value === undefined &&
+            expiresError.value === undefined &&
+            conversationError.value === undefined &&
             (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)),
     );
 
@@ -341,7 +469,22 @@ export function useAutomationForm(
         Object.assign(form, {
             kind: `schedule`,
             id: ``,
+            condition: `none`,
             guard: ``,
+            npmPackage: ``,
+            npmBy: `range`,
+            npmRange: ``,
+            npmTag: ``,
+            githubRepo: ``,
+            githubPrereleases: false,
+            pageUrl: ``,
+            pageSelect: ``,
+            fireOn: `pass`,
+            stopAfterFirst: false,
+            expiresAt: ``,
+            target: `agent`,
+            conversationId: ``,
+            note: ``,
             prompt: ``,
             // Empty: a template can't know which providers this sandbox has connected, so it never fills this.
             models: [],
@@ -376,14 +519,47 @@ export function useAutomationForm(
         touched.clear();
     };
 
+    // The condition half of `load` and `loadTemplate`: a source, else a guard command, else none. Every kind's boxes
+    // start from what the record says, so the condition shown is the one it names and nothing else is left over.
+    const loadCondition = (from: Pick<Automation, `guard` | `source`>): void => {
+        const source = from.source;
+        form.guard = from.guard ?? ``;
+        form.condition = source?.kind ?? (from.guard === undefined ? `none` : `guard`);
+        if (source?.kind === `npm`) {
+            form.npmPackage = source.package;
+            // A range wins over a tag in the daemon's own check, so a record naming both reads as the range it obeys.
+            form.npmBy = source.range !== undefined ? `range` : `tag`;
+            form.npmRange = source.range ?? ``;
+            form.npmTag = source.tag ?? ``;
+        }
+        if (source?.kind === `github-release`) {
+            form.githubRepo = source.repo;
+            form.githubPrereleases = source.prereleases === true;
+        }
+        if (source?.kind === `url`) {
+            form.pageUrl = source.url;
+            form.pageSelect = source.select ?? ``;
+        }
+    };
+
+    // What a passing check sets off, the inverse of `targetOf`; absent is a new agent.
+    const loadTarget = (target: AutomationTarget | undefined): void => {
+        form.target = target?.kind ?? `agent`;
+        form.conversationId = target?.kind === `conversation` ? target.conversationId : ``;
+    };
+
     // Prefills only the fields a template carries; everything else resets first, so picking twice can't accumulate
-    // state. `chore` is carried, not inferred: a schedule trigger alone can't tell a dependency sweep from an external
-    // poll.
+    // state, and a template switch replaces the condition with the new template's own (or none). `chore` is carried,
+    // not inferred: a schedule trigger alone can't tell a dependency sweep from an external poll. A template's `note` is
+    // its card's disclosure ("checks every 6 hours"), not what the automation watches for, so it is not carried.
     const loadTemplate = (template: AutomationTemplate): void => {
         reset();
         form.kind = template.trigger.kind;
         form.id = template.id;
-        form.guard = template.guard ?? ``;
+        loadCondition(template);
+        form.fireOn = template.fireOn ?? `pass`;
+        form.stopAfterFirst = template.until === `first-fire`;
+        loadTarget(template.target);
         form.holdForSeconds = template.holdForSeconds ?? 0;
         form.prompt = template.prompt;
         form.chore = template.chore === true;
@@ -436,10 +612,15 @@ export function useAutomationForm(
         const trigger = automation.trigger;
         form.kind = trigger.kind;
         form.id = automation.id;
-        form.guard = automation.guard ?? ``;
+        loadCondition(automation);
+        form.fireOn = automation.fireOn ?? `pass`;
+        form.stopAfterFirst = automation.until === `first-fire`;
+        form.expiresAt = automation.expiresAt === undefined ? `` : localInputOf(automation.expiresAt);
+        loadTarget(automation.target);
+        form.note = automation.note ?? ``;
         form.prompt = automation.prompt;
         // Copied, not aliased: the picker edits in place, and a cancelled edit must not touch the stored record.
-        form.models = automation.models.map((pin) => ({ ...pin }));
+        form.models = (automation.models ?? []).map((pin) => ({ ...pin }));
         form.account = automation.account ?? ``;
         form.actsAs = automation.actsAs ?? ``;
         form.allowedTools = (automation.allowedTools ?? []).join(`, `);
@@ -538,6 +719,70 @@ export function useAutomationForm(
         }
     };
 
+    // What a passing check sets off, as stored: absent for a new agent, the default and a listener's only choice.
+    const targetOf = (): AutomationTarget | undefined => {
+        switch (effectiveTarget.value) {
+            case `agent`:
+                return undefined;
+            case `conversation`:
+                return { kind: `conversation`, conversationId: form.conversationId.trim() };
+            case `notify`:
+                return { kind: `notify` };
+        }
+    };
+
+    // The end date as stored. The box reads to the minute, so an untouched one keeps the exact instant it was loaded
+    // with rather than the minute it rounds to: an agent's "in a week" is rarely on a minute.
+    const expiresAtOf = (): number | undefined => {
+        if (!retireOffered.value || form.expiresAt === `` || Number.isNaN(expiresAt.value)) {
+            return undefined;
+        }
+        const stored = original?.expiresAt;
+        return stored !== undefined && localInputOf(stored) === form.expiresAt ? stored : expiresAt.value;
+    };
+
+    // The watch half of `build`: one condition, when it fires, when it retires and what it sets off. Each is written
+    // only where it says something, and dropped where the record started with one the form no longer names.
+    const applyWatch = (automation: Automation): void => {
+        delete automation.guard;
+        delete automation.source;
+        if (form.condition === `guard` && form.guard.trim() !== ``) {
+            automation.guard = form.guard.trim();
+        }
+        const source = sourceOf();
+        if (source !== undefined) {
+            automation.source = source;
+        }
+        // A change needs a check to compare; without one the daemon refuses it, so it is not written.
+        if (form.fireOn === `change` && (automation.guard !== undefined || automation.source !== undefined)) {
+            automation.fireOn = `change`;
+        } else {
+            delete automation.fireOn;
+        }
+        if (retireOffered.value && form.stopAfterFirst) {
+            automation.until = `first-fire`;
+        } else {
+            delete automation.until;
+        }
+        const ends = expiresAtOf();
+        if (ends === undefined) {
+            delete automation.expiresAt;
+        } else {
+            automation.expiresAt = ends;
+        }
+        const target = targetOf();
+        if (target === undefined) {
+            delete automation.target;
+        } else {
+            automation.target = target;
+        }
+        if (form.note.trim() === ``) {
+            delete automation.note;
+        } else {
+            automation.note = form.note.trim();
+        }
+    };
+
     // Record to upsert: keeps every opaque field from the loaded record, overwriting only what the editor exposes.
     // Enabled never changes as a side effect; the webhook token stays at the daemon's door, never here.
     const build = (): Automation => {
@@ -547,18 +792,20 @@ export function useAutomationForm(
             id: form.id.trim(),
             trigger: triggerOf(),
             prompt: form.prompt,
-            // Copied, not aliased, so a later form edit can't reach a record already handed to the caller.
-            models: form.models.map((pin) => ({ ...pin })),
             enabled: original?.enabled ?? true,
         };
-        if (form.guard.trim() === ``) {
-            delete automation.guard;
+        applyWatch(automation);
+        // Only a new agent spends models of its own, so only it carries them, and the account that pays for them. The
+        // form keeps the ladder while another target is picked, so switching back finds it where it was.
+        if (needsModels.value) {
+            // Copied, not aliased, so a later form edit can't reach a record already handed to the caller.
+            automation.models = form.models.map((pin) => ({ ...pin }));
         } else {
-            automation.guard = form.guard.trim();
+            delete automation.models;
         }
         // Clear an account pin when model choices span providers.
         const oneProvider = new Set(form.models.map((pin) => pin.provider)).size <= 1;
-        if (form.account === `` || !oneProvider) {
+        if (form.account === `` || !oneProvider || !needsModels.value) {
             delete automation.account;
         } else {
             automation.account = form.account;
@@ -651,6 +898,16 @@ export function useAutomationForm(
         sendersError,
         onceAt,
         onceError,
+        // the check, its target, its retirement
+        targetsOffered,
+        effectiveTarget,
+        needsModels,
+        retireOffered,
+        watchSource,
+        conditionError,
+        expiresAt,
+        expiresError,
+        conversationError,
         valid,
         // directions
         reset,

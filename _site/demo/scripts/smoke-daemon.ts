@@ -302,6 +302,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices, approval
         automations: {
             list: undefined,
             catalog: undefined,
+            check: { source: { kind: `npm`, package: `pg`, range: `>=9.0.0` } },
             pendingList: undefined,
             upsert: automation,
             remove: { id: automation.id },

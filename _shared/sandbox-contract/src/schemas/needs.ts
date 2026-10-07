@@ -1,12 +1,17 @@
 import { z } from "zod";
+import { AutomationSchema } from "./automations.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
 // value, wider reach, a tool in the image). Unlike a parked card it outlives the turn that raised it: the sandbox keeps
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment"] as const;
-export const NeedKindSchema = z.enum(NEED_KINDS).describe("What is being asked for: a connection, a secret's value, wider reach, a gated credential, or a tool in the image.");
+export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation"] as const;
+export const NeedKindSchema = z
+    .enum(NEED_KINDS)
+    .describe(
+        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, or an automation to run unattended.",
+    );
 export type NeedKind = z.infer<typeof NeedKindSchema>;
 
 // `working` is a yes still being carried out: a connection whose form is open, an overlay approved but not yet built.
@@ -117,8 +122,33 @@ export const EnvironmentNeedSchema = z.object({
 });
 export type EnvironmentNeed = z.infer<typeof EnvironmentNeedSchema>;
 
+// What its check sees today, run once as the automation was proposed, so the person deciding reads the watch working
+// rather than a promise that it would. Absent for a guard command, which the agent ran itself before asking: run here
+// it would carry the proposed persona's credentials before anyone approved them.
+export const AutomationFirstCheckSchema = z.object({
+    pass: z.boolean().describe("Whether the check passes today, which for a watch waiting on one thing means it would fire at once."),
+    saw: z.string().describe("What it saw, or what it is still waiting for."),
+    at: z.number().describe("When it ran, in milliseconds."),
+});
+export type AutomationFirstCheck = z.infer<typeof AutomationFirstCheckSchema>;
+
+export const AutomationNeedSchema = z.object({
+    kind: z.literal("automation"),
+    automation: AutomationSchema.describe("The automation as it would be saved, switched on, the moment a person approves it."),
+    replaces: z.boolean().optional().describe("An automation of this id already exists, and approving replaces it."),
+    firstCheck: AutomationFirstCheckSchema.optional(),
+});
+export type AutomationNeed = z.infer<typeof AutomationNeedSchema>;
+
 export const NeedSubjectSchema = z
-    .discriminatedUnion("kind", [CapabilityNeedSchema, SecretNeedSchema, GrantNeedSchema, ReleaseNeedSchema, EnvironmentNeedSchema])
+    .discriminatedUnion("kind", [
+        CapabilityNeedSchema,
+        SecretNeedSchema,
+        GrantNeedSchema,
+        ReleaseNeedSchema,
+        EnvironmentNeedSchema,
+        AutomationNeedSchema,
+    ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
 
@@ -164,6 +194,9 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
     }),
     z.object({ kind: z.literal("release"), subject: z.string().min(1) }),
     z.object({ kind: z.literal("environment"), tool: z.string().min(1).max(64), steps: z.string().min(1).max(20_000) }),
+    // Everything the agent proposes, switched on; the daemon checks it as the Automations page would save it, runs a
+    // source's check once for the card, and saves it only on a person's approval.
+    z.object({ kind: z.literal("automation"), automation: AutomationSchema }),
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;
 

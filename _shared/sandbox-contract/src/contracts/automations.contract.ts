@@ -9,20 +9,38 @@ import {
     AutomationsListSchema,
     SendersProviderParamSchema,
     SendersRosterSchema,
+    WatchCheckInputSchema,
+    WatchCheckResultSchema,
 } from "../schemas/automations.js";
 import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 
 // Automations manifest (scheduled agent wake-ups); `pending*` is the owner's approval queue for wakes a
 // `requireApproval` automation holds instead of firing directly.
 export const automationsContract = {
+    // The `automations` CLI reads it on the agent token; a door's credential is attached for an operator only, which the
+    // agent token never is.
     list: procedure
+        .meta({ agent: true })
         .route({
             method: "GET",
             path: "/automations",
             summary: "Things that wake an agent on their own",
-            description: "Every automation with its recent runs and when it fires next.",
+            description: "Every automation with its recent runs, what its check saw last, and when it fires next.",
         })
         .output(AutomationsListSchema),
+    // A source only, never a guard command: a command run here would carry whichever persona's credentials the caller
+    // named, and the agent can run its own command in its own shell.
+    check: procedure
+        .meta({ agent: true })
+        .route({
+            method: "POST",
+            path: "/automations/check",
+            summary: "Try a watch's check once",
+            description:
+                "Runs a ready-made source's check now and answers what it sees, without saving or remembering anything: what to look at before proposing a watch, and what the composer shows beside the source it is editing.",
+        })
+        .input(WatchCheckInputSchema)
+        .output(WatchCheckResultSchema),
     catalog: procedure
         .route({
             method: "GET",

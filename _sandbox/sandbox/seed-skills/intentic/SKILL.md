@@ -46,7 +46,9 @@ What the daemon does around you:
   `.intentic/config/personas/<id>/` (`PROMPT.md`, its own system prompt; `skills/`); the card has no prompt
   field.
 - **Automations** are standing instructions that start a turn on their own (a cron expression, or a
-  connector's listener); **workflows** are daemon-scheduled graphs of turns; **drafts** are posts held for the
+  connector's listener). One with a check (a guard command, or a ready-made npm, GitHub-release or web-page
+  source) is a **watch**: the check runs with no model, and only when it passes does anything happen — a new
+  agent, an existing conversation continued, or just a push to the owner. **Workflows** are daemon-scheduled graphs of turns; **drafts** are posts held for the
   owner's approval. **Extensions** add connectors, channels (Slack, Discord, Telegram, WhatsApp…), viewers
   and skills, found and installed on Sandbox ▸ Extensions.
 - **Secrets** are stored by the owner (Sandbox ▸ Secrets) and reach you only as `{{secret:name}}`
@@ -107,7 +109,8 @@ applies from every conversation's next turn, with no restart.
 | a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill: the `sandboxes` CLI; every create asks in chat first. A difference only in how a turn behaves is a persona, not a machine |
 | a post on X, Reddit, Discord, YouTube… prepared rather than sent | `drafts` skill (present when the drafts extension is on) |
 | to act as one of the sandbox's signed-in accounts on a site | `mcp__accounts__roster`, then `ToolSearch` `+mcp__browser__`; the account's own skill holds the site's cheatsheet |
-| to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn |
+| to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn. It lasts a day at most: for anything that may take longer, the next row |
+| to be told, or to pick this conversation back up, when something happens out in the world (a package version ships, a repository releases, a page changes) | a durable watch: `automations propose <id> --npm bun@'>=1.4.3' --until first-fire --note "…" --prompt "…" --why "…"` (or `--github owner/repo`, `--url … [--select <regex>]`, `--guard '<cmd>'`). Its check runs without a model every few hours (`--every`), and only when it passes does anything wake: this conversation by default (`--target here`), only a push (`--target notify`), or a new agent (`--target new --model …`). `--fire-on change` fires only when what it sees moves; `--expires 30d` gives up and says so. `automations check --npm …` shows what a source sees today; `automations` lists what runs. The owner approves it on a card: never write `automations.json` yourself |
 | to wait on work started here: a background command, a subagent | the `wait` tool with the command's ID from its Bash call, or the subagent's id (its Agent call's id, or the id spawn returned); never `sleep`, and never detach a process yourself |
 | to know why something failed, died, hung or felt slow | the diagnostics playbook below |
 | to know how personas work, how to keep an agent inside one project, or which model runs what (an orchestrator on one model, subagents on cheaper ones; whether that is enforced) | read `/root/.claude/skills/intentic/references/personas-and-models.md` |
@@ -123,7 +126,7 @@ applies from every conversation's next turn, with no restart.
 | a file handed over by link | `/work/public/`, and say the link is public |
 | an outside codebase studied | clone it into `/work/refs/` |
 | a change to an installed extension (a page under `/ext/…`, its panel, tools or skill) | its source checkout under `/work/extensions/<name>` (`extension list` names each one's), never the installed copy in `.intentic/local/extensions/`, which every conversation runs live, nobody reviews, and the next update replaces. Build in the checkout, then `extension dev <name>` so the sandbox runs it and the owner sees it on reload; `extension dev <name> --off` goes back. A baked extension's source is the intentic repo's `_extensions/<name>`. With no checkout in the workspace, ask the owner for one: a clone made inside your conversation does not land. Pushing to the extension's repository publishes it: ask first |
-| a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor); draft the prompt and trigger for the owner |
+| a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor). A scheduled watch is proposed with `automations propose` (row above); anything else, draft the prompt and trigger for the owner |
 | the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; approving the overlay is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere the rebuild runs on the machine this sandbox lives on, which is yours to run when that machine is a connected device (row below) |
 | anything that has to happen on the machine THIS sandbox runs on (a container restart, a rebuild, a script in the host checkout, a look at its docker) | when that machine is a connected device — its skill is in your list — do it yourself: `list_sandboxes` finds this sandbox by the slug in `SANDBOX_NAME`, then `run_command`, `manage_sandbox`, `swap_sandbox`, `reshape_sandbox`, `sandbox_logs`. Never hand the owner a command for a machine you can reach. Anything that restarts this container ends your turn: say so and get a yes first |
 

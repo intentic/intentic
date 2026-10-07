@@ -179,7 +179,8 @@ describe("the asking commands speak the needs contract", () => {
             ],
             suggested: [{ entry: "gitlab", claim: "This repository's pipeline runs on GitLab.", evidence: ".gitlab-ci.yml" }],
         });
-        server.answer = (seen) => (seen.method === "GET" && seen.path === "/capabilities/connectable" ? { status: 200, body } : { status: 404, body: {} });
+        server.answer = (seen) =>
+            seen.method === "GET" && seen.path === "/capabilities/connectable" ? { status: 200, body } : { status: 404, body: {} };
         const result = await run(server.port, "capabilities", ["list"]);
         expect(result.code).toBe(0);
         expect(result.stdout).toBe(
@@ -477,5 +478,139 @@ describe("the asking commands speak the needs contract", () => {
         expect(await run(server.port, "capabilities", ["request", "github"])).toEqual({
             code: 2, stdout: "capabilities: unreadable answer from the daemon: expected a need verdict and message\n", stderr: "",
         });
+    });
+});
+
+describe("the automations command speaks the automations and needs contracts", () => {
+    let server: Daemon;
+    beforeAll(async () => {
+        server = await daemon();
+    });
+    afterAll(async () => {
+        await server.close();
+    });
+    beforeEach(() => {
+        server.seen.length = 0;
+    });
+
+    it("propose sends one automation ask: the source, a schedule off the hour, this conversation as its target", async () => {
+        server.answer = raised({ state: "open", message: "Asked a person: Run an automation unattended: Bun 1.4.3 is published.", need: OPEN_NEED });
+        const result = await run(server.port, "automations", [
+            "propose",
+            "bun-1-4-3",
+            "--npm",
+            "bun@>=1.4.3",
+            "--until",
+            "first-fire",
+            "--note",
+            "Bun 1.4.3 is published",
+            "--prompt",
+            "Carry out the bun check migration plan.",
+            "--why",
+            "bun check ships in 1.4.3",
+        ]);
+        expect(result.code).toBe(3);
+        const body = NeedRaiseSchema.parse(server.seen[0]?.body);
+        expect(body.why).toBe("bun check ships in 1.4.3");
+        const ask = body.ask;
+        if (ask.kind !== "automation") {
+            throw new Error(`expected an automation ask, got ${ask.kind}`);
+        }
+        expect(ask.automation).toMatchObject({
+            id: "bun-1-4-3",
+            enabled: true,
+            source: { kind: "npm", package: "bun", range: ">=1.4.3" },
+            until: "first-fire",
+            target: { kind: "conversation", conversationId: "here" },
+            note: "Bun 1.4.3 is published",
+            prompt: "Carry out the bun check migration plan.",
+        });
+        // Every 6 hours by default, on a minute of its own rather than :00.
+        expect(ask.automation.trigger).toMatchObject({ kind: "schedule" });
+        expect(ask.automation.trigger.kind === "schedule" ? ask.automation.trigger.cron : "").toMatch(/^\d{1,2} \*\/6 \* \* \*$/);
+        expect(ask.automation.models).toBeUndefined();
+    });
+
+    it("a dist-tag is a tag, a GitHub source carries its repo, and a new agent needs a model", async () => {
+        server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+        await run(server.port, "automations", [
+            "propose",
+            "bun-canary",
+            "--npm",
+            "bun@canary",
+            "--fire-on",
+            "change",
+            "--target",
+            "notify",
+            "--prompt",
+            "Say so.",
+        ]);
+        await run(server.port, "automations", [
+            "propose",
+            "bun-releases",
+            "--github",
+            "oven-sh/bun",
+            "--every",
+            "1d",
+            "--target",
+            "new",
+            "--model",
+            "claude/claude-sonnet-4-6:low",
+            "--prompt",
+            "Summarise it.",
+        ]);
+        const asks = server.seen.map((seen) => NeedRaiseSchema.parse(seen.body).ask);
+        expect(asks.map((ask) => (ask.kind === "automation" ? ask.automation.source : undefined))).toEqual([
+            { kind: "npm", package: "bun", tag: "canary" },
+            { kind: "github-release", repo: "oven-sh/bun" },
+        ]);
+        expect(asks.map((ask) => (ask.kind === "automation" ? ask.automation.target : undefined))).toEqual([{ kind: "notify" }, { kind: "agent" }]);
+        expect(asks[1]?.kind === "automation" ? asks[1].automation.models : undefined).toEqual([
+            { provider: "claude", model: "claude-sonnet-4-6", effort: "low" },
+        ]);
+
+        const modelless = await run(server.port, "automations", ["propose", "x", "--github", "a/b", "--target", "new", "--prompt", "p"]);
+        expect(modelless.code).toBe(2);
+        expect(modelless.stdout).toContain("needs at least one --model");
+    });
+
+    it("check runs one source through the route the contract declares and exits by whether it passes", async () => {
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["automations", "check"], seen.body)
+                ? { status: 200, body: { pass: false, saw: "no published version of bun satisfies >=1.4.3 yet (latest is 1.4.2)" } }
+                : { status: 404, body: { message: `nothing at ${seen.path}` } };
+        const result = await run(server.port, "automations", ["check", "--npm", "bun@>=1.4.3"]);
+        expect(result).toMatchObject({ code: 1, stdout: "does not pass: no published version of bun satisfies >=1.4.3 yet (latest is 1.4.2)\n" });
+        expect(server.seen[0]?.body).toEqual({ source: { kind: "npm", package: "bun", range: ">=1.4.3" } });
+    });
+
+    it("the listing says what each automation checks, where it goes and what it saw last", async () => {
+        server.answer = (seen) =>
+            seen.method === "GET" && seen.path === "/automations"
+                ? {
+                      status: 200,
+                      body: {
+                          automations: [
+                              {
+                                  id: "bun-1-4-3",
+                                  enabled: true,
+                                  trigger: { kind: "schedule", cron: "17 */6 * * *" },
+                                  source: { kind: "npm", package: "bun", range: ">=1.4.3" },
+                                  until: "first-fire",
+                                  target: { kind: "conversation", conversationId: "rapid-ridge" },
+                                  note: "Bun 1.4.3 is published",
+                                  prompt: "Carry on.",
+                                  runs: [],
+                                  watch: { armedAt: Date.now() - 3_600_000, checkedAt: Date.now() - 60_000, waiting: "no published version yet" },
+                              },
+                          ],
+                      },
+                  }
+                : { status: 404, body: {} };
+        const result = await run(server.port, "automations", []);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("bun-1-4-3 [on] cron 17 */6 * * *");
+        expect(result.stdout).toContain("checks npm bun@>=1.4.3 → continues rapid-ridge");
+        expect(result.stdout).toContain("checked 1m ago · waiting: no published version yet");
     });
 });

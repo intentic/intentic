@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { ModelPin, SenderSeen } from "@intentic/sandbox-contract";
+import type { FireOn, ModelPin, SenderSeen, WatchCheckResult } from "@intentic/sandbox-contract";
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import {
+    Button,
     ui,
     formatDateTime,
     Icon,
@@ -16,12 +17,12 @@ import {
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
-import { nextIn } from "./cronSchedule";
+import { nextIn, since } from "./cronSchedule";
 import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
-import { useSenders } from "./useAutomations";
-import { type AutomationFormState, type SenderRuleDraft, splitIds, type TriggerKind } from "./useAutomationForm";
+import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
+import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
 
 // Every field of an automation, rendered once by both the composer that creates one and the row that edits one; the
@@ -62,6 +63,15 @@ const {
     sendersError,
     onceAt,
     onceError,
+    targetsOffered,
+    effectiveTarget,
+    needsModels,
+    retireOffered,
+    watchSource,
+    conditionError,
+    expiresAt,
+    expiresError,
+    conversationError,
 } = props.state;
 
 // Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
@@ -386,6 +396,112 @@ const moveRung = (index: number, by: number): void => {
     form.models = form.models.map((pin, at) => (at === index ? displaced : at === to ? moving : pin));
 };
 
+/* ---- the check ---- */
+
+// Chips rather than tabs: five kinds wrap on a phone, and the trigger's own tabs above are already the loud question.
+const CONDITION_OPTIONS = computed<readonly { value: ConditionKind; label: string; icon?: IconName }[]>(() => [
+    { value: `none`, label: t(`automationFields.conditionNone`) },
+    { value: `guard`, label: t(`automationFields.conditionGuard`), icon: `terminal` },
+    { value: `npm`, label: t(`automationFields.conditionNpm`), icon: `box` },
+    { value: `github-release`, label: t(`automationFields.conditionGithub`), icon: `github` },
+    { value: `url`, label: t(`automationFields.conditionUrl`), icon: `globe` },
+]);
+const conditionCaption = (condition: ConditionKind): string =>
+    ({
+        none: t(`automationFields.conditionCaption.none`),
+        guard: t(`automationFields.conditionCaption.guard`),
+        npm: t(`automationFields.conditionCaption.npm`),
+        "github-release": t(`automationFields.conditionCaption.github`),
+        url: t(`automationFields.conditionCaption.url`),
+    })[condition];
+const conditionShown = computed(() => touched.has(`condition`) && conditionError.value !== undefined);
+const isSource = computed(() => form.condition === `npm` || form.condition === `github-release` || form.condition === `url`);
+
+const FIRE_ON_OPTIONS = computed(
+    () =>
+        [
+            { value: `pass`, label: t(`automationFields.everyPass`) },
+            { value: `change`, label: t(`automationFields.onlyOnChange`) },
+        ] as const satisfies readonly { value: FireOn; label: string }[],
+);
+
+// CHECK NOW: the source as it stands, run once by the daemon, nothing saved. The answer is kept beside the source it was
+// for and shown only while the boxes still say the same thing, so an edited source never wears an old verdict.
+const check = useWatchCheck();
+type Checked = { readonly key: string; readonly result: WatchCheckResult } | { readonly key: string; readonly error: string };
+const checked = ref<Checked>();
+const sourceKey = computed(() => (watchSource.value === undefined ? undefined : JSON.stringify(watchSource.value)));
+const shownCheck = computed(() => (checked.value !== undefined && checked.value.key === sourceKey.value ? checked.value : undefined));
+const checkNow = async (): Promise<void> => {
+    const source = watchSource.value;
+    if (source === undefined) {
+        markTouched(`condition`);
+        return;
+    }
+    const key = JSON.stringify(source);
+    try {
+        checked.value = { key, result: await check.mutateAsync(source) };
+    } catch (err) {
+        checked.value = { key, error: err instanceof Error ? err.message : t(`automationFields.checkFailed`) };
+    }
+};
+// What the verdict means for THIS watch: a pass fires on the next check, unless it fires only on a change, where the
+// first check just notes what it sees.
+const checkVerdict = (result: WatchCheckResult): string => {
+    if (!result.pass) {
+        return t(`automationFields.checkWaiting`);
+    }
+    return form.fireOn === `change` ? t(`automationFields.checkPassesChange`) : t(`automationFields.checkPassesFires`);
+};
+
+/* ---- what it sets off ---- */
+
+const TARGET_TABS = computed<readonly { value: TargetKind; label: string; icon: IconName }[]>(() => [
+    { value: `agent`, label: t(`automationFields.targetAgent`), icon: `sparkles` },
+    { value: `conversation`, label: t(`automationFields.targetConversation`), icon: `comments` },
+    { value: `notify`, label: t(`automationFields.targetNotify`), icon: `mobile` },
+]);
+const targetCaption = (target: TargetKind): string =>
+    ({
+        agent: t(`automationFields.targetCaption.agent`),
+        conversation: t(`automationFields.targetCaption.conversation`),
+        notify: t(`automationFields.targetCaption.notify`),
+    })[target];
+// The rail under "Then" says what the prompt is for, which the target decides.
+const promptCaption = computed<string>(() =>
+    ({
+        agent: t(`automationFields.whatWakes`),
+        conversation: t(`automationFields.whatConversationIsTold`),
+        notify: t(`automationFields.whatNotificationSays`),
+    })[effectiveTarget.value],
+);
+
+// The board's conversations by title, newest first; read only while this target is picked. One the board no longer
+// lists (archived, or gone) stays pickable as itself, so an edit does not silently re-point it.
+const conversationsWanted = computed(() => effectiveTarget.value === `conversation`);
+const { conversations, fetched: conversationsFetched } = useConversations(conversationsWanted);
+const conversationOptions = computed<readonly PickerOption[]>(() => [
+    ...conversations.value.map((conversation) => ({
+        value: conversation.id,
+        label: conversation.title ?? conversation.id,
+        description: since(conversation.updatedAt),
+    })),
+    ...(form.conversationId !== `` && !conversations.value.some((conversation) => conversation.id === form.conversationId)
+        ? [
+              {
+                  value: form.conversationId,
+                  label: form.conversationId,
+                  mono: true,
+                  ...(conversationsFetched.value ? { description: t(`automationFields.notOnBoard`) } : {}),
+              },
+          ]
+        : []),
+]);
+
+// The persona decides what a new agent may reach, and what credentials a guard command runs with; a conversation runs
+// as itself and a notification runs nothing, so with neither there is nobody to pick.
+const personaShown = computed(() => needsModels.value || form.condition === `guard`);
+
 const toggleDay = (day: number): void => {
     const at = schedule.days.indexOf(day);
     if (at === -1) {
@@ -405,25 +521,40 @@ const setProvider = (provider: string): void => {
 <template>
     <!-- `divide-y` puts a hairline between steps only, not around each one, so the panel reads as three sections, not three boxes. -->
     <div class="@container flex flex-col divide-y divide-line-subtle">
-        <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one. -->
-        <section v-if="!nameLocked" class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
+        <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one.
+             The note is not, so an edit keeps the section for it alone. -->
+        <section class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ t(`automationFields.name`) }}</span>
+                <span :class="ui.sectionLabel()">{{ nameLocked ? t(`automationFields.note`) : t(`automationFields.name`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`automationFields.howYoullFindLater`) }}</span>
             </div>
-            <label class="ui-field min-w-0 max-w-sm flex-1">
-                <input
-                    ref="nameInput"
-                    v-model="form.id"
-                    placeholder="morning-briefing"
-                    :class="[ui.input(), touched.has('name') && nameError ? 'ui-field-error-box' : '']"
-                    @blur="markTouched('name')"
-                />
-                <span v-if="touched.has('name') && nameError" class="ui-field-error">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    {{ nameError }}
-                </span>
-            </label>
+            <div class="flex min-w-0 flex-1 flex-col gap-3">
+                <label v-if="!nameLocked" class="ui-field min-w-0 max-w-sm">
+                    <input
+                        ref="nameInput"
+                        v-model="form.id"
+                        placeholder="morning-briefing"
+                        :class="[ui.input(), touched.has('name') && nameError ? 'ui-field-error-box' : '']"
+                        @blur="markTouched('name')"
+                    />
+                    <span v-if="touched.has('name') && nameError" class="ui-field-error">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        {{ nameError }}
+                    </span>
+                </label>
+                <!-- One line on what it is for: a notification's title, and what a conversation it wakes reads it as. -->
+                <label class="ui-field min-w-0 max-w-2xl">
+                    <span v-if="!nameLocked" class="ui-field-label">{{ t(`automationFields.noteOptional`) }}</span>
+                    <input
+                        v-model="form.note"
+                        maxlength="200"
+                        :placeholder="t(`automationFields.notePlaceholder`)"
+                        :aria-label="t(`automationFields.note`)"
+                        :class="ui.input()"
+                    />
+                    <span class="text-2xs text-subtle">{{ t(`automationFields.noteHint`) }}</span>
+                </label>
+            </div>
         </section>
 
         <!-- WHEN -->
@@ -770,6 +901,215 @@ const setProvider = (provider: string): void => {
                         <span v-if="delivery.detail" class="mt-1 block text-2xs text-subtle">{{ delivery.detail }}</span>
                     </span>
                 </p>
+
+                <!-- HOW IT ENDS, so a watch never outlives what it was for: as it fires, or at a date. A one-time wake
+                     already ends as it fires, so neither is offered there. -->
+                <template v-if="retireOffered">
+                    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">
+                        <label class="flex items-center gap-2 text-xs text-content">
+                            <ToggleSwitch v-model="form.stopAfterFirst" :aria-label="t(`automationFields.stopAfterFirstFire`)" />
+                            {{ t(`automationFields.stopAfterFirstFire`) }}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-content">
+                            {{ t(`automationFields.endsOn`) }}
+                            <input
+                                v-model="form.expiresAt"
+                                type="datetime-local"
+                                class="w-56"
+                                :class="[ui.input(), touched.has(`expiresAt`) && expiresError ? `ui-field-error-box` : ``]"
+                                :aria-label="t(`automationFields.endDate`)"
+                                @change="markTouched(`expiresAt`)"
+                            />
+                        </label>
+                        <button v-if="form.expiresAt !== ``" type="button" :class="ui.textAction(`text-2xs`)" @click="form.expiresAt = ``">
+                            {{ t(`automationFields.noEndDate`) }}
+                        </button>
+                    </div>
+                    <p v-if="expiresError && touched.has(`expiresAt`)" class="-mt-1 text-xs text-danger">{{ expiresError }}</p>
+                    <p v-else-if="form.expiresAt !== `` && !expiresError" class="-mt-1 text-2xs text-subtle">
+                        {{ t(`automationFields.endsCaption`, { when: nextIn(expiresAt) }) }}
+                    </p>
+                </template>
+            </div>
+        </section>
+
+        <!-- IF: what decides, with no model, whether a fire goes ahead. -->
+        <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
+            <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
+                <span :class="ui.sectionLabel()">{{ t(`automationFields.if`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`automationFields.whatHasToBeTrue`) }}</span>
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col gap-3">
+                <div class="flex flex-wrap gap-1.5">
+                    <button
+                        v-for="option in CONDITION_OPTIONS"
+                        :key="option.value"
+                        type="button"
+                        class="ui-chip"
+                        :class="form.condition === option.value ? `ui-chip-on` : ``"
+                        :aria-pressed="form.condition === option.value"
+                        @click="form.condition = option.value"
+                    >
+                        <Icon v-if="option.icon" :name="option.icon" class="text-2xs" />
+                        {{ option.label }}
+                    </button>
+                </div>
+                <p class="text-2xs text-subtle">{{ conditionCaption(form.condition) }}</p>
+
+                <label v-if="form.condition === `guard`" class="ui-field">
+                    <textarea
+                        v-model="form.guard"
+                        rows="3"
+                        spellcheck="false"
+                        :placeholder="t(`automationFields.guardPlaceholder`)"
+                        :aria-label="t(`automationFields.guardCommand`)"
+                        :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
+                        @blur="markTouched(`condition`)"
+                    ></textarea>
+                </label>
+
+                <template v-if="form.condition === `npm`">
+                    <div class="flex flex-wrap gap-1.5">
+                        <button
+                            type="button"
+                            class="ui-chip"
+                            :class="form.npmBy === `range` ? `ui-chip-on` : ``"
+                            :aria-pressed="form.npmBy === `range`"
+                            @click="form.npmBy = `range`"
+                        >
+                            {{ t(`automationFields.waitForVersion`) }}
+                        </button>
+                        <button
+                            type="button"
+                            class="ui-chip"
+                            :class="form.npmBy === `tag` ? `ui-chip-on` : ``"
+                            :aria-pressed="form.npmBy === `tag`"
+                            @click="form.npmBy = `tag`"
+                        >
+                            {{ t(`automationFields.followTag`) }}
+                        </button>
+                    </div>
+                    <div class="grid gap-3 @2xl:grid-cols-2">
+                        <label class="ui-field min-w-0">
+                            <span class="ui-field-label">{{ t(`automationFields.package`) }}</span>
+                            <input
+                                v-model="form.npmPackage"
+                                placeholder="bun"
+                                spellcheck="false"
+                                :class="[ui.input(`font-mono`), conditionShown && form.npmPackage.trim() === `` ? `ui-field-error-box` : ``]"
+                                @blur="markTouched(`condition`)"
+                            />
+                        </label>
+                        <label v-if="form.npmBy === `range`" class="ui-field min-w-0">
+                            <span class="ui-field-label">{{ t(`automationFields.versionRange`) }}</span>
+                            <input
+                                v-model="form.npmRange"
+                                placeholder=">=1.4.3"
+                                spellcheck="false"
+                                :class="[ui.input(`font-mono`), conditionShown && form.npmRange.trim() === `` ? `ui-field-error-box` : ``]"
+                                @blur="markTouched(`condition`)"
+                            />
+                        </label>
+                        <label v-else class="ui-field min-w-0">
+                            <span class="ui-field-label">{{ t(`automationFields.distTag`) }}</span>
+                            <input v-model="form.npmTag" :placeholder="t(`automationFields.tagPlaceholder`)" spellcheck="false" :class="ui.input(`font-mono`)" />
+                        </label>
+                    </div>
+                    <p class="text-2xs text-subtle">
+                        {{ form.npmBy === `range` ? t(`automationFields.npmCaption.range`) : t(`automationFields.npmCaption.tag`) }}
+                    </p>
+                </template>
+
+                <div v-if="form.condition === `github-release`" class="flex flex-wrap items-end gap-x-6 gap-y-2">
+                    <label class="ui-field w-full min-w-0 max-w-sm">
+                        <span class="ui-field-label">{{ t(`automationFields.repository`) }}</span>
+                        <input
+                            v-model="form.githubRepo"
+                            placeholder="oven-sh/bun"
+                            spellcheck="false"
+                            :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
+                            @blur="markTouched(`condition`)"
+                        />
+                    </label>
+                    <label class="flex items-center gap-2 pb-2 text-xs text-content">
+                        <ToggleSwitch v-model="form.githubPrereleases" :aria-label="t(`automationFields.prereleasesToo`)" />
+                        {{ t(`automationFields.prereleasesToo`) }}
+                    </label>
+                </div>
+
+                <template v-if="form.condition === `url`">
+                    <div class="grid gap-3 @2xl:grid-cols-2">
+                        <label class="ui-field min-w-0">
+                            <span class="ui-field-label">{{ t(`automationFields.page`) }}</span>
+                            <input
+                                v-model="form.pageUrl"
+                                type="url"
+                                placeholder="https://example.com/status"
+                                spellcheck="false"
+                                :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
+                                @blur="markTouched(`condition`)"
+                            />
+                        </label>
+                        <label class="ui-field min-w-0">
+                            <span class="ui-field-label">{{ t(`automationFields.onlyWhatMatches`) }}</span>
+                            <input
+                                v-model="form.pageSelect"
+                                placeholder="v(\d+\.\d+\.\d+)"
+                                spellcheck="false"
+                                :class="ui.input(`font-mono`)"
+                                @blur="markTouched(`condition`)"
+                            />
+                        </label>
+                    </div>
+                    <p class="text-2xs text-subtle">{{ t(`automationFields.pageCaption`) }}</p>
+                </template>
+
+                <span v-if="conditionShown" class="ui-field-error">
+                    <Icon name="exclamation-triangle" class="text-2xs" />
+                    {{ conditionError }}
+                </span>
+
+                <!-- CHECK NOW: what the watch would see today, before it is armed. Sources only: a guard command runs
+                     with the persona's credentials, which nobody has approved for a preview. -->
+                <div v-if="isSource" class="flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                            size="small"
+                            severity="secondary"
+                            :label="t(`automationFields.checkNow`)"
+                            :loading="check.isPending.value"
+                            @click="checkNow"
+                        >
+                            <template #icon><Icon name="refresh" /></template>
+                        </Button>
+                        <span v-if="shownCheck === undefined" class="text-2xs text-subtle">{{ t(`automationFields.checkNowHint`) }}</span>
+                    </div>
+                    <div
+                        v-if="shownCheck !== undefined && `result` in shownCheck"
+                        class="flex flex-col gap-1 rounded-md border border-line bg-canvas px-3 py-2"
+                    >
+                        <span class="flex items-center gap-1.5 text-xs" :class="shownCheck.result.pass ? `text-success` : `text-muted`">
+                            <Icon :name="shownCheck.result.pass ? `check-circle` : `clock`" class="text-2xs" />
+                            {{ checkVerdict(shownCheck.result) }}
+                        </span>
+                        <pre class="max-h-32 overflow-auto font-mono text-2xs break-words whitespace-pre-wrap text-content">{{ shownCheck.result.saw }}</pre>
+                    </div>
+                    <p v-else-if="shownCheck !== undefined" class="flex items-start gap-1.5 text-xs text-danger">
+                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" />
+                        {{ shownCheck.error }}
+                    </p>
+                </div>
+
+                <!-- WHEN IT FIRES: every passing check, or only a change in what the check saw. Nothing to compare without a check. -->
+                <template v-if="form.condition !== `none`">
+                    <div class="flex flex-wrap items-center gap-3 text-xs text-content">
+                        <span>{{ t(`automationFields.fireOn`) }}</span>
+                        <SegmentedControl v-model="form.fireOn" :options="FIRE_ON_OPTIONS" />
+                    </div>
+                    <p class="-mt-1 text-2xs text-subtle">
+                        {{ form.fireOn === `change` ? t(`automationFields.fireOnCaption.change`) : t(`automationFields.fireOnCaption.pass`) }}
+                    </p>
+                </template>
             </div>
         </section>
 
@@ -777,35 +1117,57 @@ const setProvider = (provider: string): void => {
         <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">{{ t(`automationFields.then`) }}</span>
-                <span class="text-2xs text-subtle">{{ t(`automationFields.whatWakes`) }}</span>
+                <span class="text-2xs text-subtle">{{ promptCaption }}</span>
                 <!-- Validation must agree with the trigger's payload shape. -->
                 <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">{{ t(`automationFields.starter`, { recipeNote }) }}</span>
                 <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="mt-1 text-2xs text-subtle">
                     {{ t(`automationFields.sStarterYoursTo`, { label: listenerSource.label }) }}</span
                 >
             </div>
-            <label class="ui-field min-w-0 flex-1 cursor-text">
-                <!-- Use the story editor's borderless prose field for this writing surface. -->
-                <ProseField
-                    ref="promptField"
-                    v-model="form.prompt"
-                    :placeholder="t(`automationFields.checkInboxSummarizeAnything`)"
-                    class="-mx-2 min-h-24"
-                    @blur="markTouched('prompt')"
-                />
-                <span v-if="touched.has('prompt') && promptError" class="ui-field-error">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    {{ promptError }}
-                </span>
-                <!-- A starter left over from a different source; not the form's to rewrite, but worth flagging with a way to swap it. -->
-                <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    <span>{{ t(`automationFields.sStarterSendsDifferent`, { label: staleStarter.label, label2: listenerSource.label }) }}</span>
-                    <button type="button" :class="ui.textAction()" @click="applyStarter">
-                        {{ t(`automationFields.useStarter`, { label: listenerSource.label }) }}
-                    </button>
-                </p>
-            </label>
+            <div class="flex min-w-0 flex-1 flex-col gap-3">
+                <!-- WHAT IT SETS OFF. A listener answers whoever wrote, so it only ever starts an agent and is not asked. -->
+                <template v-if="targetsOffered">
+                    <SegmentedControl v-model="form.target" :options="TARGET_TABS" stretch class="max-w-2xl" />
+                    <p class="text-2xs text-subtle">{{ targetCaption(form.target) }}</p>
+                    <div v-if="form.target === `conversation`" class="ui-field max-w-md">
+                        <Picker
+                            v-model="form.conversationId"
+                            :options="conversationOptions"
+                            :placeholder="t(`automationFields.pickConversation`)"
+                            :aria-label="t(`automationFields.conversationToContinue`)"
+                            class="w-full"
+                        />
+                        <span v-if="touched.has(`conversation`) && conversationError" class="ui-field-error">
+                            <Icon name="exclamation-triangle" class="text-2xs" />
+                            {{ conversationError }}
+                        </span>
+                    </div>
+                </template>
+                <label class="ui-field min-w-0 cursor-text">
+                    <!-- Use the story editor's borderless prose field for this writing surface. -->
+                    <ProseField
+                        ref="promptField"
+                        v-model="form.prompt"
+                        :placeholder="
+                            effectiveTarget === `notify` ? t(`automationFields.notifyPlaceholder`) : t(`automationFields.checkInboxSummarizeAnything`)
+                        "
+                        class="-mx-2 min-h-24"
+                        @blur="markTouched('prompt')"
+                    />
+                    <span v-if="touched.has('prompt') && promptError" class="ui-field-error">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        {{ promptError }}
+                    </span>
+                    <!-- A starter left over from a different source; not the form's to rewrite, but worth flagging with a way to swap it. -->
+                    <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        <span>{{ t(`automationFields.sStarterSendsDifferent`, { label: staleStarter.label, label2: listenerSource.label }) }}</span>
+                        <button type="button" :class="ui.textAction()" @click="applyStarter">
+                            {{ t(`automationFields.useStarter`, { label: listenerSource.label }) }}
+                        </button>
+                    </p>
+                </label>
+            </div>
         </section>
 
         <!-- RUNS AS -->
@@ -817,10 +1179,11 @@ const setProvider = (provider: string): void => {
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whoRunsWhatPays`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <!-- Keep the same-shaped behavior and runtime pickers side by side. -->
-                <div class="grid gap-3 @xl:grid-cols-2">
+                <!-- Keep the same-shaped behavior and runtime pickers side by side. Only a new agent spends a model of
+                     its own; a conversation continues on its own, and a notification runs none. -->
+                <div v-if="personaShown" class="grid gap-3 @xl:grid-cols-2">
                     <!-- Preserve the daemon's preference order so fallback remains predictable. -->
-                    <div class="ui-field min-w-0">
+                    <div v-if="needsModels" class="ui-field min-w-0">
                         <span class="ui-field-label">{{ t(`automationFields.runsOn`) }}</span>
                         <div class="flex min-w-0 flex-col gap-1.5">
                             <div v-for="(label, index) in rungs" :key="index" class="flex min-w-0 items-center gap-1.5">
@@ -990,7 +1353,7 @@ const setProvider = (provider: string): void => {
                 </div>
 
                 <!-- One line, since they compose: approval holds every fire for a click, the countdown holds it and starts by itself. -->
-                <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-2" :class="personaShown ? `border-t border-line-subtle pt-3` : ``">
                     <label class="flex items-center gap-2 text-xs text-content">
                         <ToggleSwitch v-model="form.requireApproval" :aria-label="t(`automationFields.requireMyApprovalBefore`)" />
                         {{ t(`automationFields.requireMyApprovalBefore2`) }}
@@ -1017,7 +1380,7 @@ const setProvider = (provider: string): void => {
                 </p>
 
                 <!-- Keep the extra job restriction folded because it is uncommon. -->
-                <details v-if="form.actsAs !== ``" class="text-xs">
+                <details v-if="personaShown && form.actsAs !== ``" class="text-xs">
                     <summary class="cursor-pointer text-muted hover:text-content">{{ t(`automationFields.narrowOneJobFurther`) }}</summary>
                     <div class="ui-field mt-2 max-w-sm">
                         <input

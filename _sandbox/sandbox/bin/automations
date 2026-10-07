@@ -1,0 +1,396 @@
+#!/usr/bin/env node
+// The in-sandbox automations command: what this sandbox runs on its own, a watch's check tried once, and the one door an
+// agent proposes a new automation through (docs/architecture/needs.md). Proposing raises a card in this chat showing
+// exactly what would be saved and what its check sees today; a person's approval is what saves it, so an agent never
+// arms unattended work by itself. A watch costs nothing while nothing happens: its check runs without a model, and only
+// when it passes does anything wake (src/automations/watch/watch-condition.ts).
+
+import { createHash } from "node:crypto";
+import { call, die, parseArgs, raise, refusalOf, WAIT_HELP } from "./needs-cli.mjs";
+
+const COMMAND = "automations";
+
+const USAGE = `automations — what this sandbox runs on its own, and how to ask for a new watch
+
+  automations                     every automation: on or off, when, what it checks, where it goes, what it saw last
+  automations show <id>           one automation whole, with its recent runs
+  automations check <source>      run a ready-made check once now and print what it sees (exit 0 passes, 1 does not)
+  automations propose <id> <source | --guard '<cmd>'> --prompt "…" --why "…" [options]
+                                  ask the owner, on a card in this chat, to switch on a watch; nothing runs until they
+                                  approve it, and the card shows what its check sees today
+
+Sources (no shell, no model, no token needed):
+  --npm <package>[@<range|tag>]   a version on npm: with a range (bun@>=1.4.3) it passes once one is published;
+                                  with a tag or nothing it sees that tag's version, for --fire-on change
+  --github <owner/repo> [--prereleases]   the newest release of a public GitHub repository
+  --url <address> [--select <regex>]      a page's text, or what the pattern matches on it
+  --guard '<command>'             your own shell check instead: exit 0 passes, and what it prints goes with the wake.
+                                  Test it in your shell first; it is never run before approval. $AUTOMATION_STATE names a
+                                  file it may keep between runs, $AUTOMATION_LAST holds what it printed last time.
+
+Options for propose:
+  --every <15m|2h|6h|1d|1w>       how often it checks (default 6h); or --cron '<expr>' [--tz <Zone/Name>]
+  --fire-on change                fire only when what it sees changes (the first check only notes where things stand)
+  --until first-fire              switch off after firing once: for a watch waiting on one thing
+  --expires <30d|12h|2w|ISO date> give up then, and say so
+  --target here|notify|new|<conversation id>
+                                  here (default): continue THIS conversation when it fires, on its own model
+                                  notify: only tell the owner, no model at all
+                                  new: a new agent with the prompt; needs --model
+  --model <provider>/<model>[:<effort>]   for --target new; repeat for a fallback ladder, best first
+  --as <persona>                  the persona its wakes act as
+  --note "…"                      one line on what it watches for, shown in notifications
+  --prompt "…"                    what the woken conversation or agent is told to do (required)
+
+${WAIT_HELP}`;
+
+const parseJson = (text) => {
+    try {
+        return JSON.parse(text);
+    } catch {
+        return die(COMMAND, "unreadable answer from the daemon");
+    }
+};
+
+const get = async (path) => {
+    const { status, text } = await call(COMMAND, "GET", path);
+    if (status < 200 || status >= 300) {
+        return die(COMMAND, refusalOf(text));
+    }
+    return parseJson(text);
+};
+
+const ago = (at) => {
+    const minutes = Math.max(0, Math.round((Date.now() - at) / 60_000));
+    if (minutes < 120) {
+        return `${minutes}m ago`;
+    }
+    const hours = Math.round(minutes / 60);
+    return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+};
+
+const inTime = (at) => {
+    const minutes = Math.max(0, Math.round((at - Date.now()) / 60_000));
+    if (minutes < 120) {
+        return `in ${minutes}m`;
+    }
+    const hours = Math.round(minutes / 60);
+    return hours < 48 ? `in ${hours}h` : `in ${Math.round(hours / 24)}d`;
+};
+
+const firstLine = (text, max = 100) => {
+    const line =
+        (text ?? "")
+            .split("\n")
+            .find((entry) => entry.trim() !== "")
+            ?.trim() ?? "";
+    return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
+};
+
+// A source in a few words, as the daemon labels it.
+const sourceText = (source) => {
+    if (source.kind === "npm") {
+        const spec = source.range ?? source.tag;
+        return `npm ${source.package}${spec === undefined ? "" : `@${spec}`}`;
+    }
+    if (source.kind === "github-release") {
+        return `GitHub releases of ${source.repo}${source.prereleases === true ? " (prereleases too)" : ""}`;
+    }
+    return source.select === undefined ? source.url : `${source.url} (matching ${source.select})`;
+};
+
+const triggerText = (trigger) => {
+    switch (trigger.kind) {
+        case "schedule":
+            return `cron ${trigger.cron}${trigger.tz === undefined ? "" : ` (${trigger.tz})`}`;
+        case "once":
+            return `once at ${new Date(trigger.at).toISOString()}`;
+        case "event":
+            return "webhook";
+        case "listener":
+            return `messages from ${trigger.provider}`;
+        default:
+            return `workspace ${trigger.event}`;
+    }
+};
+
+const targetText = (target) => {
+    if (target === undefined || target.kind === "agent") {
+        return "a new agent";
+    }
+    return target.kind === "notify" ? "a notification only" : `continues ${target.conversationId}`;
+};
+
+const conditionText = (automation) =>
+    automation.source !== undefined
+        ? sourceText(automation.source)
+        : automation.guard !== undefined
+          ? `guard: ${firstLine(automation.guard, 80)}`
+          : "no check";
+
+const watchText = (watch) => {
+    if (watch === undefined) {
+        return "never checked";
+    }
+    const said =
+        watch.waiting !== undefined ? `waiting: ${firstLine(watch.waiting)}` : watch.value !== undefined ? `saw: ${firstLine(watch.value)}` : "";
+    return [`checked ${ago(watch.checkedAt)}`, said, watch.firedAt === undefined ? "" : `fired ${ago(watch.firedAt)}`]
+        .filter((part) => part !== "")
+        .join(" · ");
+};
+
+const list = async () => {
+    const { automations } = await get("/automations");
+    if (automations.length === 0) {
+        process.stdout.write("No automations. `automations propose` asks the owner for one.\n");
+        return;
+    }
+    for (const automation of automations.toSorted((a, b) => a.id.localeCompare(b.id))) {
+        const state = automation.enabled ? "on" : "off";
+        const next = automation.nextRun === undefined ? "" : ` · next ${inTime(automation.nextRun)}`;
+        process.stdout.write(`${automation.id} [${state}] ${triggerText(automation.trigger)}${next}\n`);
+        if (automation.note !== undefined) {
+            process.stdout.write(`  ${automation.note}\n`);
+        }
+        process.stdout.write(
+            `  checks ${conditionText(automation)}${automation.fireOn === "change" ? " (on change)" : ""} → ${targetText(automation.target)}\n`,
+        );
+        if (automation.source !== undefined || automation.guard !== undefined) {
+            process.stdout.write(`  ${watchText(automation.watch)}\n`);
+        }
+    }
+};
+
+const show = async (id) => {
+    const { automations } = await get("/automations");
+    const automation = automations.find((entry) => entry.id === id);
+    if (automation === undefined) {
+        return die(COMMAND, `no automation named ${id}: \`automations\` lists them`);
+    }
+    const lines = [
+        `${automation.id} — ${automation.enabled ? "on" : "off"}`,
+        ...(automation.note === undefined ? [] : [`note: ${automation.note}`]),
+        `trigger: ${triggerText(automation.trigger)}${automation.nextRun === undefined ? "" : ` (next ${inTime(automation.nextRun)})`}`,
+        `check: ${automation.source !== undefined ? sourceText(automation.source) : (automation.guard ?? "none")}`,
+        `fires: ${automation.fireOn === "change" ? "only when what it sees changes" : "on every passing check"}${automation.until === "first-fire" ? ", then switches off" : ""}`,
+        ...(automation.expiresAt === undefined ? [] : [`ends: ${new Date(automation.expiresAt).toISOString()}`]),
+        `goes to: ${targetText(automation.target)}`,
+        ...(automation.actsAs === undefined ? [] : [`acts as: ${automation.actsAs}`]),
+        ...(automation.models === undefined ? [] : [`models: ${automation.models.map((pin) => `${pin.provider}/${pin.model}`).join(", ")}`]),
+        ...(automation.watch === undefined ? [] : [`last check: ${watchText(automation.watch)}`]),
+        "prompt:",
+        ...automation.prompt.split("\n").map((line) => `  ${line}`),
+        "recent runs:",
+        ...(automation.runs.length === 0
+            ? ["  none yet"]
+            : automation.runs
+                  .slice(0, 10)
+                  .map(
+                      (run) =>
+                          `  ${new Date(run.at).toISOString()} ${run.outcome}${run.detail === undefined ? "" : ` — ${firstLine(run.detail, 140)}`}`,
+                  )),
+    ];
+    process.stdout.write(`${lines.join("\n")}\n`);
+};
+
+// `bun@>=1.4.3`, `@scope/pkg@canary`, `left-pad`: the last @ past the first character splits name from spec; a spec that
+// reads like a dist-tag (a word starting with a letter) is a tag, anything else a semver range the daemon validates.
+const npmSource = (spec) => {
+    const at = spec.lastIndexOf("@");
+    const name = at > 0 ? spec.slice(0, at) : spec;
+    const version = at > 0 ? spec.slice(at + 1) : undefined;
+    if (name === "") {
+        return die(COMMAND, "--npm needs a package name");
+    }
+    if (version === undefined || version === "") {
+        return { kind: "npm", package: name };
+    }
+    return /^[a-z][a-z0-9._-]*$/i.test(version) && !/^v?\d/.test(version)
+        ? { kind: "npm", package: name, tag: version }
+        : { kind: "npm", package: name, range: version };
+};
+
+const SOURCE_FLAGS = ["npm", "github", "url", "select"];
+
+const sourceOf = (flags) => {
+    const named = ["npm", "github", "url"].filter((flag) => flags[flag] !== undefined);
+    if (named.length > 1) {
+        return die(COMMAND, "name one source: --npm, --github or --url");
+    }
+    if (flags.npm !== undefined) {
+        return npmSource(flags.npm);
+    }
+    if (flags.github !== undefined) {
+        return { kind: "github-release", repo: flags.github, ...(flags.prereleases === true ? { prereleases: true } : {}) };
+    }
+    if (flags.url !== undefined) {
+        return { kind: "url", url: flags.url, ...(flags.select === undefined ? {} : { select: flags.select }) };
+    }
+    return undefined;
+};
+
+const check = async (args) => {
+    const { flags } = parseArgs(COMMAND, args, { values: SOURCE_FLAGS, switches: ["prereleases"] });
+    const source = sourceOf(flags);
+    if (source === undefined) {
+        return die(COMMAND, "check what? --npm <package>[@range], --github <owner/repo> or --url <address>");
+    }
+    const { status, text } = await call(COMMAND, "POST", "/automations/check", JSON.stringify({ source }));
+    if (status < 200 || status >= 300) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const answer = parseJson(text);
+    process.stdout.write(`${answer.pass ? "passes" : "does not pass"}: ${answer.saw}\n`);
+    process.exit(answer.pass ? 0 : 1);
+};
+
+// A minute off the hour, stable per automation: everything set for :00 fires at once, and a host's clock is busiest then.
+const minuteOf = (id) => (createHash("sha256").update(id).digest()[0] ?? 0) % 60;
+
+const cronEvery = (every, id) => {
+    const match = /^(\d+)\s*(m|h|d|w)$/.exec(every.trim());
+    if (match === null) {
+        return die(COMMAND, "--every takes a count and a unit: 15m, 2h, 6h, 1d, 1w");
+    }
+    const count = Number(match[1]);
+    const unit = match[2];
+    const minute = minuteOf(id);
+    if (unit === "m") {
+        if (count < 5 || count > 59) {
+            return die(COMMAND, "--every in minutes runs from 5m to 59m; use hours past that");
+        }
+        return `*/${count} * * * *`;
+    }
+    if (unit === "h") {
+        if (count < 1 || count > 23) {
+            return die(COMMAND, "--every in hours runs from 1h to 23h; use 1d past that");
+        }
+        return count === 1 ? `${minute} * * * *` : `${minute} */${count} * * *`;
+    }
+    if (unit === "d" && count === 1) {
+        return `${minute} 9 * * *`;
+    }
+    if ((unit === "w" && count === 1) || (unit === "d" && count === 7)) {
+        return `${minute} 9 * * 1`;
+    }
+    return die(COMMAND, "--every in days is 1d or 1w; for anything else give --cron");
+};
+
+const DURATION = { h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 };
+
+const expiresOf = (raw) => {
+    const match = /^(\d+)\s*(h|d|w)$/.exec(raw.trim());
+    if (match !== null) {
+        return Date.now() + Number(match[1]) * DURATION[match[2]];
+    }
+    const at = Date.parse(raw);
+    if (Number.isNaN(at)) {
+        return die(COMMAND, "--expires takes a span (30d, 12h, 2w) or a date (2026-11-30)");
+    }
+    return at;
+};
+
+const modelOf = (raw) => {
+    const match = /^([^/]+)\/([^:]+)(?::(.+))?$/.exec(raw);
+    if (match === null) {
+        return die(COMMAND, "--model takes <provider>/<model>[:<effort>], like claude/claude-sonnet-4-6");
+    }
+    return { provider: match[1], model: match[2], ...(match[3] === undefined ? {} : { effort: match[3] }) };
+};
+
+const targetOf = (raw) => {
+    if (raw === undefined || raw === "here") {
+        // Named by the daemon from the conversation raising the card, never from this shell's word for it.
+        return { kind: "conversation", conversationId: "here" };
+    }
+    if (raw === "notify") {
+        return { kind: "notify" };
+    }
+    if (raw === "new") {
+        return { kind: "agent" };
+    }
+    return { kind: "conversation", conversationId: raw };
+};
+
+const propose = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, {
+        values: [...SOURCE_FLAGS, "guard", "every", "cron", "tz", "fire-on", "until", "expires", "target", "as", "note", "prompt", "why", "wait"],
+        switches: ["prereleases"],
+        repeated: ["model"],
+    });
+    const [id] = rest;
+    if (id === undefined || !/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) {
+        return die(COMMAND, "propose needs an id: lowercase letters, digits and dashes, like bun-1-4-3");
+    }
+    const source = sourceOf(flags);
+    if (source !== undefined && flags.guard !== undefined) {
+        return die(COMMAND, "give it a source or a --guard command, not both");
+    }
+    if (source === undefined && flags.guard === undefined) {
+        return die(COMMAND, "a watch needs something to check: --npm, --github, --url or --guard");
+    }
+    if (flags.prompt === undefined || flags.prompt.trim() === "") {
+        return die(COMMAND, '--prompt is required: what the woken conversation or agent should do, like "Carry out the migration plan above."');
+    }
+    if (flags["fire-on"] !== undefined && !["pass", "change"].includes(flags["fire-on"])) {
+        return die(COMMAND, "--fire-on is pass or change");
+    }
+    if (flags.until !== undefined && flags.until !== "first-fire") {
+        return die(COMMAND, "--until takes first-fire");
+    }
+    if (flags.every !== undefined && flags.cron !== undefined) {
+        return die(COMMAND, "give --every or --cron, not both");
+    }
+    const target = targetOf(flags.target);
+    const models = (flags.model ?? []).map(modelOf);
+    if (target.kind === "agent" && models.length === 0) {
+        return die(COMMAND, "--target new starts a new agent, which needs at least one --model <provider>/<model>");
+    }
+    const cron = flags.cron ?? cronEvery(flags.every ?? "6h", id);
+    const automation = {
+        id,
+        enabled: true,
+        trigger: { kind: "schedule", cron, ...(flags.tz === undefined ? {} : { tz: flags.tz }) },
+        ...(source === undefined ? { guard: flags.guard } : { source }),
+        ...(flags["fire-on"] === undefined ? {} : { fireOn: flags["fire-on"] }),
+        ...(flags.until === undefined ? {} : { until: flags.until }),
+        ...(flags.expires === undefined ? {} : { expiresAt: expiresOf(flags.expires) }),
+        target,
+        ...(models.length === 0 ? {} : { models }),
+        ...(flags.as === undefined ? {} : { actsAs: flags.as }),
+        ...(flags.note === undefined ? {} : { note: flags.note }),
+        prompt: flags.prompt,
+    };
+    await raise(COMMAND, { kind: "automation", automation }, flags);
+};
+
+const main = async () => {
+    const [command, ...args] = process.argv.slice(2);
+    if (command === "--help" || command === "-h" || command === "help") {
+        process.stdout.write(`${USAGE}\n`);
+        return;
+    }
+    if (command === undefined || command === "ls" || command === "list") {
+        await list();
+        return;
+    }
+    if (command === "show") {
+        if (args[0] === undefined) {
+            return die(COMMAND, "show which automation? `automations` lists them");
+        }
+        await show(args[0]);
+        return;
+    }
+    if (command === "check") {
+        await check(args);
+        return;
+    }
+    if (command === "propose") {
+        await propose(args);
+        return;
+    }
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(2);
+};
+
+main().catch((error) => die(COMMAND, error instanceof Error ? error.message : String(error)));

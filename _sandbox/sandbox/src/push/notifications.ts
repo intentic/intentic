@@ -119,6 +119,29 @@ export const automationPending = (automationId: string, prompt: string): PushNot
     requireInteraction: true,
 });
 
+// A watch whose whole answer is this notification (target `notify`): what it watched for, and what its check saw. One tag
+// per automation, so a watch that fires again replaces its last word rather than stacking.
+export const automationFired = (
+    automation: { readonly id: string; readonly note?: string | undefined; readonly prompt: string },
+    saw: string | undefined,
+): PushNotification => ({
+    title: summarize(automation.note ?? `Automation ${automation.id} fired`, 60),
+    body: saw === undefined || saw.trim() === "" ? summarize(automation.prompt) : summarize(saw),
+    url: `/automations`,
+    tag: `automation-${automation.id}`,
+});
+
+// A watch that reached its deadline: said, because a watch that silently stops reads exactly like one still waiting.
+export const automationExpired = (
+    automation: { readonly id: string; readonly note?: string | undefined; readonly prompt: string },
+    fired: boolean,
+): PushNotification => ({
+    title: fired ? "Watch ended" : "Watch gave up",
+    body: `${summarize(automation.note ?? automation.prompt, 70)}: ${fired ? "it reached its end date and is switched off." : "it reached its end date without firing."}`,
+    url: `/automations`,
+    tag: `automation-${automation.id}`,
+});
+
 // Withdrawals: an ask that stopped waiting is replaced under its own tag (PushSender.withdraw), only on the devices its
 // persistent notification reached. A replacement that shows something rather than a silent close, since browsers
 // penalise a push that displays nothing; it carries no detail of the ask, which the lock screen already showed.

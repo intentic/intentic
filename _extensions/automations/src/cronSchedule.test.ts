@@ -80,6 +80,13 @@ describe(`scheduleLabel`, () => {
         expect(scheduleLabel(`30 8 22 * *`, HOME, HOME)).toBe(`Monthly 22nd 08:30`);
     });
 
+    /* A watch checks every few hours, a shape the builder has no row for; the list still says it in words. */
+    it(`says an hour step in words, on no clock, and passes any other shape through as written`, () => {
+        expect(scheduleLabel(`23 */6 * * *`, AWAY, HOME)).toBe(`Every 6h`);
+        expect(scheduleLabel(`7 * * * *`, AWAY, HOME)).toBe(`Hourly`);
+        expect(scheduleLabel(`0 9-17 * * 1-5`, HOME, HOME)).toBe(`0 9-17 * * 1-5`);
+    });
+
     /* THE ONE THAT MATTERS: "Daily 20:43" said nothing about whose 20:43, and the answer was the container's. */
     it(`names the rule's zone to a reader who is not on that clock`, () => {
         expect(scheduleLabel(`43 20 * * *`, AWAY, HOME)).toBe(`Daily 20:43 Europe/Warsaw`);

@@ -162,7 +162,74 @@
             "source": "The moment {source} sends one of these. Nothing is polled: a gateway holds the connection open.",
             "visitorChat": "When a visitor writes in the chat widget on your site: one conversation each, live for you to take over.",
             "workspace": "On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it."
-        }
+        },
+        "note": "Note",
+        "noteOptional": "Note (optional)",
+        "notePlaceholder": "Bun 1.4.3 is published",
+        "noteHint": "One line on what it is for. Its notifications lead with it.",
+        "stopAfterFirstFire": "Stop after the first fire",
+        "endsOn": "Ends",
+        "endDate": "End date",
+        "noEndDate": "No end date",
+        "endsCaption": "It switches itself off {when} and tells you.",
+        "if": "If",
+        "whatHasToBeTrue": "What has to be true first. No model runs to check it.",
+        "conditionNone": "Always",
+        "conditionGuard": "Command",
+        "conditionNpm": "npm package",
+        "conditionGithub": "GitHub release",
+        "conditionUrl": "Web page",
+        "conditionCaption": {
+            "none": "Nothing is checked: every fire goes ahead.",
+            "guard": "A shell command run in the workspace first. Exit 0 goes ahead, and what it prints goes with the wake; anything else is recorded as skipped. $AUTOMATION_STATE names a file it may keep between runs, and $AUTOMATION_LAST holds what it printed when it last passed.",
+            "npm": "A package on the npm registry, checked by the sandbox itself: no shell, no token.",
+            "github": "The newest release of a public GitHub repository, checked by the sandbox itself.",
+            "url": "One web page's text, or the part of it a pattern picks out."
+        },
+        "guardCommand": "Command that decides whether it goes ahead",
+        "waitForVersion": "Wait for a version",
+        "followTag": "Follow a tag",
+        "package": "Package",
+        "versionRange": "Version range",
+        "distTag": "Tag",
+        "npmCaption": {
+            "range": "Passes once a published version satisfies the range; what it sees is that version.",
+            "tag": "Sees the version under this tag, latest when blank. Pair it with “only a change” to hear about each new one."
+        },
+        "repository": "Repository",
+        "prereleasesToo": "Count prereleases too",
+        "page": "Page",
+        "onlyWhatMatches": "Only what matches (optional)",
+        "pageCaption": "Blank watches the page's whole text. A regular expression narrows it to what it matches, its first group if it has one.",
+        "checkNow": "Check now",
+        "checkNowHint": "Runs the check once, now. Nothing is saved.",
+        "checkFailed": "Could not run the check.",
+        "checkWaiting": "Not yet. It is still waiting:",
+        "checkPassesFires": "Passes now, so its next check fires it. It sees:",
+        "checkPassesChange": "It sees this now, and fires when that changes:",
+        "fireOn": "Fires on",
+        "everyPass": "Every passing check",
+        "onlyOnChange": "Only a change",
+        "fireOnCaption": {
+            "pass": "Every check that passes sets it off.",
+            "change": "Only when what the check sees differs from last time. The first check just notes where things stand."
+        },
+        "targetAgent": "New agent",
+        "targetConversation": "Continue a conversation",
+        "targetNotify": "Just notify me",
+        "targetCaption": {
+            "agent": "A new agent starts with the prompt below and what the check saw.",
+            "conversation": "The conversation picks up where it stopped, told what the check saw and the prompt below. It runs on its own model.",
+            "notify": "No model runs: your devices get a notification with what the check saw, or the words below when it saw nothing."
+        },
+        "pickConversation": "Pick a conversation",
+        "conversationToContinue": "Conversation to continue",
+        "notOnBoard": "archived or gone",
+        "whatConversationIsTold": "What the conversation is told.",
+        "whatNotificationSays": "What the notification says.",
+        "notifyPlaceholder": "The page you were watching changed.",
+        "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
+        "tagPlaceholder": "latest"
     },
     "automationRow": {
         "alreadyFired": "Already fired",
@@ -242,7 +309,17 @@
         "named": "{who} named",
         "nobodyNamed": "nobody named",
         "heldForYou": "held for you",
-        "holdBeforeRun": "{seconds}s before each run"
+        "holdBeforeRun": "{seconds}s before each run",
+        "watches": "Watches",
+        "continues": "Continues {conversation}",
+        "notifiesYou": "Notifies you",
+        "then": "Then",
+        "fires": "Fires",
+        "onlyOnChange": "only on a change",
+        "check": "Check",
+        "lastSaw": "What it saw last",
+        "lastSawSince": "What it saw last, unchanged since {when}",
+        "checkedAt": "Checked {at}"
     },
     "automationsView": {
         "addAutomation": "Add an automation",
@@ -319,7 +396,16 @@
         "notAnOrigin": "\"{origin}\" isn't an origin, use scheme + host only, e.g. https://example.com",
         "pickDateTime": "Pick the date and time it should fire.",
         "pickModel": "Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.",
-        "promptRequired": "Prompt is required."
+        "promptRequired": "Prompt is required.",
+        "guardRequired": "Write the command, or pick another condition.",
+        "packageRequired": "Name the package, like bun or {'@'}scope/name.",
+        "rangeRequired": "Name a version range, like >=1.4.3, or follow a tag instead.",
+        "repoFormat": "Name the repository as owner/name, like oven-sh/bun.",
+        "pageUrl": "Give the page's full address, starting with http:// or https://.",
+        "selectInvalid": "That pattern does not compile: {problem}",
+        "pickEndDate": "Pick the end date and time, or clear it.",
+        "endPassed": "That end date has already passed.",
+        "pickConversation": "Pick the conversation to continue."
     },
     "cronSchedule": {
         "afterSessions": "{label} · after {count} sessions | {label} · after {count} sessions",
@@ -342,7 +428,8 @@
             "st": "{day}st",
             "th": "{day}th"
         },
-        "weekdays": "Weekdays {time}"
+        "weekdays": "Weekdays {time}",
+        "everyHours": "Every {count}h"
     },
     "calendar": {
         "today": "Today",
@@ -372,5 +459,19 @@
             "openTranscript": "Open the transcript",
             "nextIn": "Next {when}"
         }
+    },
+    "watch": {
+        "npm": "npm {spec}",
+        "releases": "Releases of {repo}",
+        "releasesWithPre": "Releases of {repo}, prereleases too",
+        "pageMatching": "{url}, matching {select}",
+        "checked": "Checked {when}",
+        "notChecked": "Not checked yet",
+        "saw": "saw {value}",
+        "waiting": "waiting: {detail}",
+        "fired": "fired {when}",
+        "ends": "ends {date}",
+        "ended": "ended {date}",
+        "stopsAfterFirst": "stops after the first fire"
     }
 }

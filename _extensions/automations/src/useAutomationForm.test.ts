@@ -64,8 +64,22 @@ const LADDER = [
     { provider: `codex`, model: `gpt-5.3-codex` },
 ] satisfies Automation["models"];
 
+// A watch template: a ready-made source, change-only firing, retiring at its first fire, and only a notification.
+const PAGE_CHANGES: AutomationTemplate = {
+    id: `page-changes`,
+    title: `When a page changes`,
+    requires: [],
+    trigger: { kind: `schedule`, cron: `7 * * * *` },
+    source: { kind: `url`, url: `https://example.com/status` },
+    fireOn: `change`,
+    until: `first-fire`,
+    target: { kind: `notify` },
+    prompt: `The page you were watching changed.`,
+    note: `checks hourly`,
+};
+
 const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
-const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW]);
+const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW, PAGE_CHANGES]);
 // A sandbox zone that is NOT UTC and not the test runner's, so anything reading the process's own clock instead of
 // this shows up as a wrong answer rather than an accidentally right one.
 const SANDBOX_ZONE = computed(() => ZoneSchema.parse(`Europe/Warsaw`));
@@ -127,11 +141,56 @@ describe(`a template's own text`, () => {
         loadTemplate(review);
         await nextTick();
         expect<string | undefined>(form.guard).toBe(review.guard);
+        expect(form.condition).toBe(`guard`);
         form.kind = `listener`;
         await nextTick();
         expect<string | undefined>(form.prompt).toBe(DISCORD.starterPrompt);
         // A diff-size jq left on a Discord listener is a row that never fires and never says why.
         expect(form.guard).toBe(``);
+        expect(form.condition).toBe(`none`);
+    });
+
+    it(`leaves a guard the owner typed where it is when the trigger moves`, async () => {
+        const { form, loadTemplate } = formState();
+        loadTemplate(REVIEW);
+        await nextTick();
+        form.guard = `test -s inbox.txt`;
+        form.kind = `listener`;
+        await nextTick();
+        expect(form.condition).toBe(`guard`);
+        expect(form.guard).toBe(`test -s inbox.txt`);
+    });
+
+    it(`replaces the condition with the next template's own when another is picked`, () => {
+        const { form, loadTemplate, build } = formState();
+        loadTemplate(REVIEW);
+        loadTemplate(PAGE_CHANGES);
+        expect(form.condition).toBe(`url`);
+        expect(form.guard).toBe(``);
+        expect(build().guard).toBeUndefined();
+        loadTemplate(FIX_CI);
+        expect(form.condition).toBe(`none`);
+        expect(build().source).toBeUndefined();
+    });
+
+    it(`prefills a watch: its source, when it fires, when it retires and what it sets off`, () => {
+        const { form, loadTemplate, build, modelsError } = formState();
+        loadTemplate(PAGE_CHANGES);
+        expect(form.condition).toBe(`url`);
+        expect(form.pageUrl).toBe(`https://example.com/status`);
+        expect(form.fireOn).toBe(`change`);
+        expect(form.stopAfterFirst).toBe(true);
+        expect(form.target).toBe(`notify`);
+        // A notification runs no model, so a template that cannot know the sandbox's providers is still saveable.
+        expect(modelsError.value).toBeUndefined();
+        const built = build();
+        expect(built.source).toEqual({ kind: `url`, url: `https://example.com/status` });
+        expect(built.fireOn).toBe(`change`);
+        expect(built.until).toBe(`first-fire`);
+        expect(built.target).toEqual({ kind: `notify` });
+        expect(built.models).toBeUndefined();
+        // The template's note is its card's disclosure, not what the automation watches for.
+        expect(built.note).toBeUndefined();
     });
 });
 
@@ -444,5 +503,218 @@ describe(`sender rules`, () => {
         form.senderRules.push({ label: ``, ids: `u-mark`, groups: ``, actsAs: ``, requireApproval: false });
         expect(sendersOffered.value).toBe(false);
         expect(build().senders).toBeUndefined();
+    });
+});
+
+// Who pays: a new agent names its models; a conversation runs on its own and a notification on none.
+describe(`what a passing check sets off`, () => {
+    const filled = () => {
+        const state = formState();
+        state.form.id = `bun-ships`;
+        state.form.prompt = `Bun shipped.`;
+        return state;
+    };
+
+    it(`needs no model to notify, and writes none`, () => {
+        const { form, modelsError, valid, build } = filled();
+        form.models = [...LADDER];
+        form.account = `reliable-account`;
+        form.target = `notify`;
+        expect(modelsError.value).toBeUndefined();
+        expect(valid.value).toBe(true);
+        const built = build();
+        expect(built.target).toEqual({ kind: `notify` });
+        expect(built.models).toBeUndefined();
+        expect(built.account).toBeUndefined();
+        // The ladder waits in the form, so switching back to a new agent finds it where it was.
+        form.target = `agent`;
+        expect(build().models).toEqual(LADDER);
+        expect(build().target).toBeUndefined();
+    });
+
+    it(`continues a conversation only once one is named`, () => {
+        const { form, conversationError, modelsError, valid, build } = filled();
+        form.target = `conversation`;
+        expect(modelsError.value).toBeUndefined();
+        expect(conversationError.value).toMatch(/conversation to continue/);
+        expect(valid.value).toBe(false);
+        form.conversationId = `c-123`;
+        expect(valid.value).toBe(true);
+        expect(build().target).toEqual({ kind: `conversation`, conversationId: `c-123` });
+    });
+
+    it(`is always a new agent for a listener, which answers whoever wrote`, () => {
+        const { form, modelsError, build } = filled();
+        form.kind = `listener`;
+        form.target = `notify`;
+        expect(modelsError.value).toMatch(/at least one model/i);
+        form.models = [...LADDER];
+        expect(build().target).toBeUndefined();
+        expect(build().models).toEqual(LADDER);
+    });
+});
+
+// One check at a time, as the daemon has it: the picked kind is the only one written, whatever the other boxes hold.
+describe(`the condition`, () => {
+    const filled = () => {
+        const state = formState();
+        state.form.id = `watch`;
+        state.form.prompt = `Look.`;
+        state.form.models = [...LADDER];
+        return state;
+    };
+
+    it(`writes nothing when it always goes ahead, and no change to fire on`, () => {
+        const { form, build } = filled();
+        form.guard = `true`;
+        form.fireOn = `change`;
+        const built = build();
+        expect(built.guard).toBeUndefined();
+        expect(built.source).toBeUndefined();
+        expect(built.fireOn).toBeUndefined();
+    });
+
+    it(`writes a guard command, and firing on its change`, () => {
+        const { form, build, conditionError } = filled();
+        form.condition = `guard`;
+        expect(conditionError.value).toMatch(/Write the command/);
+        form.guard = `  ./bin/new-release  `;
+        form.fireOn = `change`;
+        expect(conditionError.value).toBeUndefined();
+        const built = build();
+        expect(built.guard).toBe(`./bin/new-release`);
+        expect(built.source).toBeUndefined();
+        expect(built.fireOn).toBe(`change`);
+    });
+
+    it(`writes an npm range, or a tag, never both`, () => {
+        const { form, build, conditionError, watchSource } = filled();
+        form.condition = `npm`;
+        expect(conditionError.value).toMatch(/Name the package/);
+        expect(watchSource.value).toBeUndefined();
+        form.npmPackage = `bun`;
+        expect(conditionError.value).toMatch(/version range/);
+        form.npmRange = `>=1.4.3`;
+        form.npmTag = `canary`;
+        expect(build().source).toEqual({ kind: `npm`, package: `bun`, range: `>=1.4.3` });
+        expect(watchSource.value).toEqual({ kind: `npm`, package: `bun`, range: `>=1.4.3` });
+        form.npmBy = `tag`;
+        expect(build().source).toEqual({ kind: `npm`, package: `bun`, tag: `canary` });
+        // Blank is latest, which the daemon reads from an absent tag.
+        form.npmTag = ``;
+        expect(build().source).toEqual({ kind: `npm`, package: `bun` });
+    });
+
+    it(`writes a GitHub repository's releases, prereleases only when asked`, () => {
+        const { form, build, conditionError } = filled();
+        form.condition = `github-release`;
+        form.githubRepo = `bun`;
+        expect(conditionError.value).toMatch(/owner\/name/);
+        form.githubRepo = `oven-sh/bun`;
+        expect(build().source).toEqual({ kind: `github-release`, repo: `oven-sh/bun` });
+        form.githubPrereleases = true;
+        expect(build().source).toEqual({ kind: `github-release`, repo: `oven-sh/bun`, prereleases: true });
+    });
+
+    it(`writes a web page and its pattern, and refuses one that does not compile`, () => {
+        const { form, build, conditionError, valid } = filled();
+        form.condition = `url`;
+        form.pageUrl = `example.com`;
+        expect(conditionError.value).toMatch(/http/);
+        form.pageUrl = `https://example.com/changelog`;
+        form.pageSelect = `v(\\d+`;
+        expect(conditionError.value).toMatch(/does not compile/);
+        expect(valid.value).toBe(false);
+        form.pageSelect = `v(\\d+\\.\\d+)`;
+        expect(valid.value).toBe(true);
+        expect(build().source).toEqual({ kind: `url`, url: `https://example.com/changelog`, select: `v(\\d+\\.\\d+)` });
+    });
+
+    it(`drops what another kind's boxes still hold when the kind is switched`, () => {
+        const { form, build } = filled();
+        form.condition = `guard`;
+        form.guard = `./check`;
+        form.condition = `github-release`;
+        form.githubRepo = `oven-sh/bun`;
+        const built = build();
+        expect(built.guard).toBeUndefined();
+        expect(built.source).toEqual({ kind: `github-release`, repo: `oven-sh/bun` });
+    });
+});
+
+describe(`retiring`, () => {
+    const filled = () => {
+        const state = formState();
+        state.form.id = `watch`;
+        state.form.prompt = `Look.`;
+        state.form.models = [...LADDER];
+        return state;
+    };
+    const inputOf = (date: Date): string =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, `0`)}-${String(date.getDate()).padStart(2, `0`)}T${String(date.getHours()).padStart(2, `0`)}:${String(date.getMinutes()).padStart(2, `0`)}`;
+
+    it(`stops after the first fire, and at an end date that is still ahead`, () => {
+        const { form, build, expiresError, valid } = filled();
+        form.stopAfterFirst = true;
+        const later = new Date(Date.now() + 7 * 86_400_000);
+        later.setSeconds(0, 0);
+        form.expiresAt = inputOf(later);
+        expect(expiresError.value).toBeUndefined();
+        expect(valid.value).toBe(true);
+        const built = build();
+        expect(built.until).toBe(`first-fire`);
+        expect(built.expiresAt).toBe(later.getTime());
+    });
+
+    it(`refuses an end date already gone`, () => {
+        const { form, expiresError, valid } = filled();
+        const gone = new Date(Date.now() - 3_600_000);
+        form.expiresAt = inputOf(gone);
+        expect(expiresError.value).toMatch(/already passed/);
+        expect(valid.value).toBe(false);
+    });
+
+    it(`offers neither on a one-time wake, which already retires as it fires`, () => {
+        const { form, build, retireOffered } = filled();
+        form.kind = `once`;
+        form.onceAt = inputOf(new Date(Date.now() + 3_600_000));
+        form.stopAfterFirst = true;
+        form.expiresAt = inputOf(new Date(Date.now() + 7_200_000));
+        expect(retireOffered.value).toBe(false);
+        const built = build();
+        expect(built.until).toBeUndefined();
+        expect(built.expiresAt).toBeUndefined();
+    });
+});
+
+describe(`a stored watch`, () => {
+    it(`round-trips whole, an end date off the minute included`, () => {
+        const watch: Automation = {
+            id: `bun-1-4-3`,
+            trigger: { kind: `schedule`, cron: `17 */6 * * *` },
+            source: { kind: `npm`, package: `bun`, range: `>=1.4.3` },
+            fireOn: `change`,
+            until: `first-fire`,
+            // An agent's "a week from now", seconds and milliseconds and all.
+            expiresAt: Date.now() + 7 * 86_400_000 + 12_345,
+            target: { kind: `conversation`, conversationId: `c-armed-it` },
+            note: `Bun 1.4.3 is published`,
+            prompt: `Carry on with the upgrade.`,
+            enabled: true,
+        };
+        const { form, load, build, valid } = formState();
+        load(watch);
+        expect(form.condition).toBe(`npm`);
+        expect(form.target).toBe(`conversation`);
+        expect(form.note).toBe(`Bun 1.4.3 is published`);
+        expect(valid.value).toBe(true);
+        expect(build()).toEqual(watch);
+    });
+
+    it(`drops a blank note rather than saving an empty one`, () => {
+        const { form, load, build } = formState();
+        load({ id: `x`, trigger: { kind: `event` }, prompt: `Go.`, models: LADDER, note: `Old`, enabled: true });
+        form.note = `   `;
+        expect(build().note).toBeUndefined();
     });
 });

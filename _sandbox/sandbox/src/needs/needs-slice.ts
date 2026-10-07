@@ -21,7 +21,11 @@ import { needRaised, needResolved } from "../push/notifications.js";
 import { upsertEnv } from "../secrets/env-text.js";
 import { textFile } from "../store/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
+import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
+import { refuseInvalidAutomation, saveAutomation } from "../automations/automation-save.js";
+import { checkSource } from "../automations/watch/watch-sources.js";
+import { sourceEnv } from "../automations/watch/watch-condition.js";
 import { grantNeed } from "./kinds/grant-need.js";
 import { releaseNeed } from "./kinds/release-need.js";
 import { secretNeed } from "./kinds/secret-need.js";
@@ -135,6 +139,21 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
                 approve: (tool) => approveDraft(whole(), tool),
                 reject: (tool) => rejectDraft(whole(), tool),
                 appliedHash: () => appliedEnvironmentHash(whole()),
+            }),
+            automation: automationNeed({
+                refuse: (automation) => refuseInvalidAutomation(whole(), automation),
+                save: (automation) => saveAutomation(whole(), automation),
+                exists: async (id) => (await whole().automations.get(id)) !== undefined,
+                firstCheck: async (automation) => {
+                    if (automation.source === undefined) {
+                        return undefined;
+                    }
+                    const checked = await checkSource(automation.source, {
+                        fetch: (url, init) => fetch(url, init),
+                        env: await sourceEnv(whole(), automation),
+                    });
+                    return { pass: checked.pass, saw: checked.pass ? checked.output : checked.detail, at: Date.now() };
+                },
             }),
         },
         logger,

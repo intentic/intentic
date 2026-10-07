@@ -568,6 +568,10 @@ COPY --chmod=644 _sandbox/sandbox/bin/needs-cli.mjs /usr/local/bin/needs-cli.mjs
 COPY --chmod=755 _sandbox/sandbox/bin/grants /usr/local/bin/grants
 COPY --chmod=755 _sandbox/sandbox/bin/environment /usr/local/bin/environment
 COPY --chmod=755 _sandbox/sandbox/bin/needs /usr/local/bin/needs
+# The automations command the intentic skill teaches: list what runs on its own, try a watch's check once, and propose a
+# new watch on a card the owner approves. Same shape as environment: it relays through the daemon, which owns the card
+# and the save; an agent never arms unattended work by itself.
+COPY --chmod=755 _sandbox/sandbox/bin/automations /usr/local/bin/automations
 # The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable
 # endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
 # consent card and the ledger; the signing key lives with the platform and never enters this container.

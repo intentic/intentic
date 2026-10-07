@@ -1,8 +1,6 @@
 import { Cron } from "croner";
 import type { AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
 import { cronOptions, wallClockIn } from "@intentic/sandbox-contract";
-import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
-import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
@@ -18,15 +16,10 @@ import { type AutomationRecord, consecutiveFailures } from "./automations-store.
 import type { ScheduleMark } from "./schedule-coverage.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
-import { outputTail, runCheck, shellArgv } from "../workload/run-check.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
+import { continueConversation, expireAutomation, notifyOwner, type TargetOutcome } from "./watch/fire-targets.js";
+import { checkCondition, conditionOutside } from "./watch/watch-condition.js";
 
-// How long a guard command may run before it counts as failed (skipping the wake).
-const GUARD_TIMEOUT_MS = 60_000;
-// Output a guard may print per stream; past it the guard fails (execFile's default maxBuffer, which it ran under).
-const GUARD_CAPTURE_BYTES = 1024 * 1024;
-// How much guard output survives into the run's detail.
-const GUARD_DETAIL_TAIL = 500;
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
 
@@ -72,32 +65,6 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
     await services.automations.upsert({ ...automation, enabled: false });
     services.logger.warn({ automation: id, failures }, "automation disabled after consecutive failures");
     return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
-};
-
-// Runs the guard command in the workspace root; exit 0 wakes the agent, with the payload in AUTOMATION_PAYLOAD. On
-// failure, the stderr/stdout tail becomes the run's detail.
-const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
-    const ran = await runCheck({
-        argv: shellArgv(command, "sh"),
-        cwd,
-        timeoutMs: GUARD_TIMEOUT_MS,
-        env: {
-            ...process.env,
-            // A guard runs at the workspace root, where refs/ is reference material its scanners skip.
-            [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
-            ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
-        },
-        workload: { class: "command" },
-        kind: "automation-guard",
-        captureBytes: GUARD_CAPTURE_BYTES,
-        // Output past the cap fails the guard, as execFile's maxBuffer did.
-        killOnOverflow: true,
-    });
-    if (ran.exitCode === 0 && !ran.truncated) {
-        return { pass: true };
-    }
-    const detail = outputTail(ran, GUARD_DETAIL_TAIL) || (ran.spawnError ?? "");
-    return { pass: false, ...(detail !== "" ? { detail } : {}) };
 };
 
 // Run in progress per automation; a queued fire awaits it. Shared by the tick, dispatchers and fire route.
@@ -220,6 +187,9 @@ export interface FireOptions {
     // a nightly chore run at noon knows it is late. Its own section rather than the payload: a gated schedule's payload
     // is its sessions listing, which a guard reads, and this note is for the agent only.
     readonly late?: string;
+    // What the automation's check saw, already worded for the wake: carried by a held wake's replay, whose check ran
+    // when it was held and must not run again (it would compare against the value it just recorded).
+    readonly observed?: string;
     // What happens when this automation is already running:
     // - `drop` (default): a cron or workspace-event re-fire is not wanted twice; the next tick comes anyway.
     // - `queue`: for an inbound message with no next tick; waits for the run in progress, keeping its reply sink open.
@@ -283,12 +253,21 @@ const pinFields = (
 // Walks the automation's model ladder for the first rung this sandbox can run; undefined means no wake, already
 // recorded. A fully disconnected ladder is an `error` run, counted toward the failure streak.
 const wakeModel = async (services: Services, automation: AutomationRecord, stream: TurnStream | undefined): Promise<ModelPin | undefined> => {
+    const ladder = automation.models ?? [];
+    // Upsert refuses a new-agent automation naming no model; one hand-edited into that state says so rather than guessing.
+    if (ladder.length === 0) {
+        const reason =
+            "This automation starts a new agent but names no model to run it on: pick one, or point it at a conversation or a notification.";
+        await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "error", detail: reason });
+        stream?.failed(reason);
+        return undefined;
+    }
     // A single-rung ladder fires as configured regardless: no next entry, and automations have no floor to fall to.
-    const [only, ...rest] = automation.models;
+    const [only, ...rest] = ladder;
     if (only !== undefined && rest.length === 0) {
         return only;
     }
-    const pin = await pinnedRunModel(services, automation.models);
+    const pin = await pinnedRunModel(services, ladder);
     if (pin !== undefined) {
         return pin;
     }
@@ -298,16 +277,21 @@ const wakeModel = async (services: Services, automation: AutomationRecord, strea
     return undefined;
 };
 
-// Tells the owner a one-time wake is done, the one trigger whose whole purpose is to reach a person. Every other kind
+// Whether this automation is a watch: something a person asked to hear about when it happens, rather than a chore run on
+// a clock. A ready-made source, a change-only check, or a wait for one thing are each that.
+const isWatch = (automation: Pick<AutomationRecord, "source" | "fireOn" | "until">): boolean =>
+    automation.source !== undefined || automation.fireOn === "change" || automation.until === "first-fire";
+
+// Tells the owner a one-time wake or a watch is done, the two whose whole purpose is to reach a person. Every other kind
 // is already answering somebody listening (a visitor, a channel, a webhook's caller) or is a chore nobody asked to hear
-// each run of, and a push per fire would make a five-minute poll unbearable. `notifyIfAway` still holds it if they're
-// here to see the card themselves.
+// each run of, and a push per fire would make a five-minute poll unbearable. A watch fires only when something
+// happened, so it never is one. `notifyIfAway` still holds it if they're here to see the card themselves.
 const notifyWakeSettled = (services: Services, automation: AutomationRecord, conversationId: string, failure: string | undefined): void => {
-    if (automation.trigger.kind !== "once") {
+    if (automation.trigger.kind !== "once" && !isWatch(automation)) {
         return;
     }
     const outcome = failure === undefined ? { ok: true } : { ok: false, error: failure };
-    void services.pushSender.notifyIfAway(turnFinished(conversationId, automation.prompt, outcome));
+    void services.pushSender.notifyIfAway(turnFinished(conversationId, automation.note ?? automation.prompt, outcome));
 };
 
 // What a held wake keeps of the fire that was stopped, so an approved run replays it: the payload and origin, the
@@ -317,11 +301,12 @@ const heldWakeSnapshot = (
     automationId: string,
     // Only a pure-countdown hold carries autoRunAfterS; an "ask me" hold never auto-runs.
     autoRunAfterS: number | undefined,
-    fire: Pick<AutomationApproval, "payload" | "origin" | "title" | "conversationId" | "sessionId" | "thread" | "actsAs">,
+    fire: Pick<AutomationApproval, "payload" | "observed" | "origin" | "title" | "conversationId" | "sessionId" | "thread" | "actsAs">,
 ): Omit<AutomationApproval, "id"> => ({
     automationId,
     ...(autoRunAfterS !== undefined ? { autoRunAt: Date.now() + autoRunAfterS * 1_000 } : {}),
     ...(fire.payload !== undefined ? { payload: fire.payload } : {}),
+    ...(fire.observed !== undefined ? { observed: fire.observed } : {}),
     ...(fire.origin !== undefined ? { origin: fire.origin } : {}),
     ...(fire.title !== undefined ? { title: fire.title } : {}),
     ...(fire.conversationId !== undefined ? { conversationId: fire.conversationId } : {}),
@@ -331,13 +316,40 @@ const heldWakeSnapshot = (
     createdAt: Date.now(),
 });
 
-// The prompt as the woken turn reads it: the trigger's payload under its heading, then a late fire's note under its own.
-// A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep it raw.
-const wakeBody = (automation: AutomationRecord, payload: string | undefined, late: string | undefined): string => {
+// The heading what the automation's check saw goes under in the woken prompt.
+const OBSERVED_HEADING = "What the check saw";
+
+// The prompt as the woken turn reads it: the trigger's payload under its heading, what the check saw under its own, then
+// a late fire's note. A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep
+// it raw. What the check saw arrives already wrapped where it came from outside (watch/watch-condition.ts).
+const wakeBody = (automation: AutomationRecord, payload: string | undefined, late: string | undefined, observed?: string): string => {
     const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(payload ?? "", { source: automation.trigger.provider }) : payload;
     const told =
-        payload !== undefined && payload !== "" ? `${automation.prompt}\n\n--- ${PAYLOAD_HEADING[automation.trigger.kind]} ---\n${sealed}` : automation.prompt;
-    return late === undefined ? told : `${told}\n\n--- ${PAYLOAD_HEADING.once} ---\n${late}`;
+        payload !== undefined && payload !== ""
+            ? `${automation.prompt}\n\n--- ${PAYLOAD_HEADING[automation.trigger.kind]} ---\n${sealed}`
+            : automation.prompt;
+    const seen = observed === undefined || observed === "" ? told : `${told}\n\n--- ${OBSERVED_HEADING} ---\n${observed}`;
+    return late === undefined ? seen : `${seen}\n\n--- ${PAYLOAD_HEADING.once} ---\n${late}`;
+};
+
+// Records a fire that went somewhere other than a new agent, as the run history and the activity feed read every fire.
+const recordTargetRun = async (services: Services, automation: AutomationRecord, outcome: TargetOutcome): Promise<void> => {
+    await services.automations.recordRun(automation.id, {
+        at: Date.now(),
+        ...(outcome.ok
+            ? { outcome: "completed" as const, ...(outcome.detail === undefined ? {} : { detail: outcome.detail }) }
+            : { outcome: "error" as const, detail: outcome.error }),
+        ...(outcome.ok && outcome.conversationId !== undefined ? { conversationId: outcome.conversationId } : {}),
+    });
+    void services.activity
+        .append({
+            direction: "system",
+            type: "automation.run",
+            automationIds: [automation.id],
+            outcome: outcome.ok ? "ok" : "error",
+            ...(outcome.ok ? {} : { error: outcome.error }),
+        })
+        .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
 };
 
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
@@ -358,10 +370,23 @@ const runFire = async (
         origin,
         title,
         late,
+        observed: replayedObservation,
     }: FireOptions,
 ): Promise<FireOutcome> => {
     try {
+        // Past its end date it does nothing but end: switched off, and whoever it was for told. A held wake already
+        // released by a person is theirs to have, so a replay goes ahead.
+        if (automation.expiresAt !== undefined && automation.expiresAt <= Date.now() && cleared !== "both") {
+            await expireAutomation(services, automation);
+            stream?.failed("this automation reached its end date");
+            return {};
+        }
         let capped = payload?.slice(0, PAYLOAD_MAX);
+        // What the check saw, worded for the wake, and where its words came from when that was outside the sandbox. A
+        // replay carries the check that ran when it was held; it does not run again.
+        let observed = replayedObservation;
+        let observedOutside = replayedObservation === undefined ? undefined : conditionOutside(automation);
+        let observedValue: string | undefined;
         // The persona this fire wears: the sender's lane when someone sent it, else the automation's own. Resolved once
         // here so the hold snapshot and the turn cannot disagree.
         const actsAs = lane !== undefined ? lane.actsAs : automation.actsAs;
@@ -395,18 +420,29 @@ const runFire = async (
             }
             // The sessions are a gated fire's payload: what woke it, read by the guard and appended under the prompt.
             capped = gate.listing ?? capped;
-            if (automation.guard !== undefined) {
-                const precheck = await runGuard(automation.guard, services.workspace.root, capped);
-                if (!precheck.pass) {
+            // The check: a guard command or a ready-made source, deciding without a model whether anything happened.
+            const condition = await checkCondition(services, automation, capped);
+            if (condition.kind !== "go") {
+                // A quiet check (nothing moved) stays out of the history, which a frequent watch would fill with it; one
+                // pressed by hand says it anyway, since "nothing changed" is the answer the button asked for.
+                if (condition.kind === "skip" || cleared === "approval") {
                     await services.automations.recordRun(automation.id, {
                         at: Date.now(),
                         outcome: "skipped",
-                        ...(precheck.detail !== undefined ? { detail: precheck.detail } : {}),
+                        ...(condition.detail !== "" ? { detail: condition.detail } : {}),
                     });
-                    // A guard refusal is still a reply that never arrives to the sink, so it's said, not left silent.
-                    stream?.failed(precheck.detail ?? "this automation's guard skipped the run");
-                    return {};
                 }
+                // A guard refusal is still a reply that never arrives to the sink, so it's said, not left silent.
+                stream?.failed(condition.detail || "this automation's guard skipped the run");
+                return {};
+            }
+            observed = condition.observed;
+            observedOutside = condition.outside;
+            observedValue = condition.value;
+            // Waiting for one thing: it has come, so the automation retires before anything runs, as a one-time wake
+            // does, and a daemon that dies mid-fire cannot fire it again. A held fire is the one it was waiting for.
+            if (automation.until === "first-fire") {
+                await services.automations.setEnabled(automation.id, false);
             }
             // Holds the wake instead of running; inFlight releases in the finally, so the lock isn't held during the
             // wait.
@@ -414,6 +450,7 @@ const runFire = async (
                 await services.heldWakes.add(
                     heldWakeSnapshot(automation.id, verdict.autoRunAfterS, {
                         payload: capped,
+                        observed,
                         origin,
                         title,
                         conversationId: resumedConversationId,
@@ -435,6 +472,20 @@ const runFire = async (
                 return {};
             }
         }
+        // Somewhere other than a new agent: the owner's phone with no model, or a conversation that already exists.
+        const target = automation.target ?? { kind: "agent" as const };
+        if (target.kind === "notify") {
+            await recordTargetRun(services, automation, await notifyOwner(services, automation, observedValue ?? observed));
+            return {};
+        }
+        if (target.kind === "conversation") {
+            const continued = await continueConversation(services, automation, target.conversationId, "met", {
+                ...(observed === undefined ? {} : { text: observed }),
+                ...(observedOutside === undefined ? {} : { outside: observedOutside }),
+            });
+            await recordTargetRun(services, automation, continued);
+            return {};
+        }
         // What this wake runs on, walked before anything is spent or written down (see `wakeModel`).
         const pin = await wakeModel(services, automation, stream);
         if (pin === undefined) {
@@ -454,7 +505,7 @@ const runFire = async (
                 attempts,
             })
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
-        const body = wakeBody(automation, capped, late);
+        const body = wakeBody(automation, capped, late, observed);
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
@@ -464,8 +515,13 @@ const runFire = async (
             conversationId,
             // Marks nobody is at a composer: the command gate refuses instead of prompting, plan/ask withheld.
             unattended: true,
-            // Names the provider when a listener started this turn, for the guard layer; other triggers set nothing.
-            ...(automation.trigger.kind === "listener" ? { outsideWake: automation.trigger.provider } : {}),
+            // Names the provider when a listener started this turn, for the guard layer; a check that read the outside
+            // world names that instead, since its words are in the prompt; other triggers set nothing.
+            ...(automation.trigger.kind === "listener"
+                ? { outsideWake: automation.trigger.provider }
+                : observedOutside !== undefined && observed !== undefined
+                  ? { outsideWake: observedOutside }
+                  : {}),
             // Resumes the provider session on a continuing thread; absent on a first turn or any one-off wake.
             ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
             ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
@@ -480,7 +536,7 @@ const runFire = async (
             // Resolved rung spread verbatim, not through turn-resume's fill step, since this turn walked its ladder.
             ...pinFields(pin),
             // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
-            ...(automation.account !== undefined && automation.models.every((rung) => rung.provider === pin.provider)
+            ...(automation.account !== undefined && (automation.models ?? []).every((rung) => rung.provider === pin.provider)
                 ? { account: automation.account }
                 : {}),
             // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
@@ -564,6 +620,7 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
     cleared: "both",
     lane: { actsAs: held.actsAs, requireApproval: false },
     ...(held.payload !== undefined ? { payload: held.payload } : {}),
+    ...(held.observed !== undefined ? { observed: held.observed } : {}),
     ...(held.origin !== undefined ? { origin: held.origin } : {}),
     ...(held.title !== undefined ? { title: held.title } : {}),
     ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
@@ -649,7 +706,9 @@ const lateWakeNote = (at: number, now: number, zone: Zone): string =>
 // Whether an interrupted fire of this automation may be re-fired at boot (turn-resume.ts). A retired `once` was
 // switched off BY its own fire rather than by the owner, so one the daemon died under still resumes; every other
 // trigger reads `enabled` as the owner's own answer, and a switched-off automation stays off.
-export const resumable = (automation: Pick<Automation, "enabled" | "trigger">): boolean => automation.enabled || automation.trigger.kind === "once";
+// A watch waiting for one thing (`until: first-fire`) retires the same way, by its own fire.
+export const resumable = (automation: Pick<Automation, "enabled" | "trigger" | "until">): boolean =>
+    automation.enabled || automation.trigger.kind === "once" || automation.until === "first-fire";
 
 // Fires a one-time wake whose moment has arrived, switching it off FIRST: `at` stays in the past forever, so every
 // later poll would match it again and the switch is the only thing standing between one reminder and one every 30
@@ -781,8 +840,7 @@ export const heldWakeQuiet = (
     trigger: Trigger["kind"] | undefined,
     now: number,
     fleet: { readonly lastLand: number; readonly liveTurns: number; readonly autoRunAt: number },
-): boolean =>
-    trigger === "workspace" ? now - fleet.lastLand >= LAND_QUIET_MS || now - fleet.autoRunAt >= LAND_QUIET_CAP_MS : fleet.liveTurns === 0;
+): boolean => (trigger === "workspace" ? now - fleet.lastLand >= LAND_QUIET_MS || now - fleet.autoRunAt >= LAND_QUIET_CAP_MS : fleet.liveTurns === 0);
 
 // What heldWakeQuiet reads, asking only what the trigger's rule needs: land times for a repair, live turns otherwise.
 const fleetFor = (services: Services, trigger: Trigger["kind"] | undefined, autoRunAt: number) =>
@@ -836,6 +894,12 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
         for (const automation of automations.filter((candidate) => candidate.enabled)) {
             // Per automation: this window is already spent, so one that throws must not cost every later one its moment.
             try {
+                // An end date is kept by the tick, not only by a fire, so a webhook or a listener that never comes still
+                // ends when it said it would, and says so.
+                if (automation.expiresAt !== undefined && automation.expiresAt <= now) {
+                    await expireAutomation(services, automation);
+                    continue;
+                }
                 const fired = await fireIfDue(services, automation, windowStart, now, sandbox);
                 if (fired !== undefined) {
                     changes[automation.id] = { coveredUntil: fired };
