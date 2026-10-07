@@ -15,12 +15,13 @@ import { isUnder, realPathOf } from "./workspace-files-paths.js";
 
 // One directory entry with its symlink followed; isDir is the TARGET's kind, so a folder link expands like one.
 // real is where the entry's bytes actually live; used for containment (link outside workspace) and the cycle guard.
-// size is the file's, which the listing carries; a directory has none.
+// size and mtime are the file's, off one stat, which the listing carries; a directory has neither.
 export interface Entry {
     readonly name: string;
     readonly isDir: boolean;
     readonly real: string;
     readonly size?: number;
+    readonly mtime?: number;
     readonly link?: WorkspaceLink;
 }
 
@@ -55,7 +56,8 @@ const STAT_POOL = 64;
 // Directory reads in flight at once for the empty-folder scan, whose recursion otherwise opens every branch together.
 const NAMES_POOL = 16;
 
-// Resolves one directory entry; a plain directory costs no syscall (dirent alone), a plain file one stat for its size.
+// Resolves one directory entry; a plain directory costs no syscall (dirent alone), a plain file one stat for its size
+// and when it last changed.
 // A symlink costs stat (kind and size; failure marks it dangling, still listed), readlink (display text), realpath
 // (cycle guard).
 const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, realRoot: string): Promise<Entry> => {
@@ -66,7 +68,12 @@ const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, real
             return { name, isDir: true, real: join(realDir, name) };
         }
         const stats = await stat(abs).catch(() => undefined);
-        return { name, isDir: false, real: join(realDir, name), ...(stats === undefined ? {} : { size: stats.size }) };
+        return {
+            name,
+            isDir: false,
+            real: join(realDir, name),
+            ...(stats === undefined ? {} : { size: stats.size, mtime: Math.round(stats.mtimeMs) }),
+        };
     }
     const [target, to, real] = await Promise.all([stat(abs).catch(() => undefined), readlink(abs).catch(() => abs), realPathOf(abs)]);
     if (target === undefined) {
@@ -77,9 +84,23 @@ const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, real
         name,
         isDir: target.isDirectory(),
         real,
-        ...(target.isDirectory() ? {} : { size: target.size }),
+        ...(target.isDirectory() ? {} : { size: target.size, mtime: Math.round(target.mtimeMs) }),
         link: inside ? { to } : { to, state: "outside" },
     };
+};
+
+// What a listing says of a file beyond its name: its size and when it last changed, each only where the stat read it.
+// One place for both, so every listing of the tree (the walk, the lazy one, the resident model) carries the same two.
+export type FileFacts = { -readonly [Key in `size` | `mtime`]?: Entry[Key] };
+export const fileFacts = (entry: Pick<Entry, `size` | `mtime`>): FileFacts => {
+    const facts: FileFacts = {};
+    if (entry.size !== undefined) {
+        facts.size = entry.size;
+    }
+    if (entry.mtime !== undefined) {
+        facts.mtime = entry.mtime;
+    }
+    return facts;
 };
 
 // Dirs before files, then alphabetical, on the followed kind.

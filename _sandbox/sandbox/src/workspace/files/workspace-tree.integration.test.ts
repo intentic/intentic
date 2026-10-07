@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -338,4 +338,22 @@ test("listWorkspaceChildren follows symlinks the same way the eager walk does", 
     expect(linked?.link).toEqual({ to: "../real" });
     expect(entries.find((entry) => entry.name === "dead")?.link).toEqual({ to: "../nowhere", state: "broken" });
     expect((await listWorkspaceChildren(root, "node_modules/linked")).entries.map((entry) => entry.path)).toEqual(["node_modules/linked/a.ts"]);
+});
+
+// The folder page's date grouping reads it (the web's homeOrder.ts); a plain folder is listed from its dirent alone.
+test("a file carries when it last changed, from the stat that reads its size, and a folder carries none", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-mtime-"));
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "notes.md"), "# notes");
+    const changed = new Date("2026-03-04T05:06:07Z");
+    await utimes(join(root, "notes.md"), changed, changed);
+
+    const { tree } = await walkWorkspaceTree(root);
+    expect(tree.find((entry) => entry.name === "notes.md")?.mtime).toBe(changed.getTime());
+    expect(tree.find((entry) => entry.name === "docs")?.mtime).toBeUndefined();
+    // The lazy listing of one folder carries it the same way.
+    await writeFile(join(root, "docs", "a.md"), "a");
+    await utimes(join(root, "docs", "a.md"), changed, changed);
+    const { entries } = await listWorkspaceChildren(root, "docs");
+    expect(entries.find((entry) => entry.name === "a.md")?.mtime).toBe(changed.getTime());
 });

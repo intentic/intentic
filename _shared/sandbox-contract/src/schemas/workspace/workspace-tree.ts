@@ -35,6 +35,9 @@ export interface WorkspaceTreeEntry {
     readonly path: string;
     readonly type: "file" | "dir";
     readonly size?: number | undefined;
+    // When a file last changed, in epoch milliseconds, from the stat that already reads its size; a directory has none,
+    // since a plain one is listed from its dirent alone. The home's date grouping reads it (homeOrder.ts).
+    readonly mtime?: number | undefined;
     // Ignored by tooling (node_modules, .git, gitignored paths, browser profiles); client greys the row.
     readonly ignored?: boolean | undefined;
     // Set when this entry is a symlink; `type` above is then its target's type.
@@ -47,6 +50,10 @@ export const WorkspaceTreeEntrySchema: z.ZodType<WorkspaceTreeEntry> = z.object(
     path: z.string().describe("Its full path from the workspace root, which feeds straight back into the file routes."),
     type: z.enum(["file", "dir"]).describe("What it is. For a link, what it points at, so a link to a folder opens like a folder."),
     size: z.number().optional().describe("Size in bytes, for a file."),
+    mtime: z
+        .number()
+        .optional()
+        .describe("When a file last changed, in milliseconds since 1970. A folder has none. Absent too where the listing could not read it."),
     ignored: z
         .boolean()
         .optional()
@@ -84,7 +91,11 @@ export const WorkspaceTreeSchema = z.object({
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
 // What moved in the shared tree between two generations: every folder whose own entries changed, parents first.
 export const WorkspaceTreeDeltaSchema = z.object({
-    from: z.number().int().nonnegative().describe("The generation this applies on top of. A reader holding any other fetches the tree afresh instead."),
+    from: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("The generation this applies on top of. A reader holding any other fetches the tree afresh instead."),
     generation: z.number().int().nonnegative().describe("The generation it leaves the tree at."),
     dirs: z
         .array(
@@ -143,7 +154,9 @@ export const WorkspaceDownloadTicketQuerySchema = WorkspaceScopeSchema.extend({
         .describe("The files and folders to download together, as workspace paths. A folder brings everything inside it."),
 });
 export const WorkspaceDownloadTicketSchema = z.object({
-    ticket: z.string().describe("Hand this to the download route in the query string. It buys exactly the selection it was minted for, once resolved."),
+    ticket: z
+        .string()
+        .describe("Hand this to the download route in the query string. It buys exactly the selection it was minted for, once resolved."),
     expiresAt: z.number().describe("When it stops working, in milliseconds. It is meant to be used at once."),
     filename: z.string().describe("What the archive is saved as, so a caller can say what is on its way."),
 });
@@ -212,7 +225,9 @@ export const WorkspaceDerivedQuerySchema = z.object({
     path: z
         .string()
         .min(1)
-        .describe("The file you want the text of, as a workspace path. The real file, not its shadow: where the text is kept is this route's business."),
+        .describe(
+            "The file you want the text of, as a workspace path. The real file, not its shadow: where the text is kept is this route's business.",
+        ),
 });
 // Where one file stands, which is the question a reader looking at a missing or stale rendering is actually asking.
 // Nothing renders in the background: a file has text once someone asks for it, and fileq keeps it until the file changes.
@@ -229,7 +244,10 @@ export const WorkspaceDerivedPresentSchema = z.object({
     path: z.string().describe("The file it was derived from, as asked for."),
     content: z.string().describe("The text itself, as markdown."),
     deriver: z.string().describe("Which reader wrote it, and at which version, such as `pdf+ocr v1`. A file re-derives when this changes."),
-    derivedAt: z.string().optional().describe("When it was written, as an ISO timestamp. Absent only for a shadow whose front matter was edited by hand."),
+    derivedAt: z
+        .string()
+        .optional()
+        .describe("When it was written, as an ISO timestamp. Absent only for a shadow whose front matter was edited by hand."),
     title: z.string().optional().describe("The title the format carried, where it carried one."),
     notes: z
         .array(z.string())
@@ -237,7 +255,9 @@ export const WorkspaceDerivedPresentSchema = z.object({
             "Every cap and degradation the derivation hit: a sheet cut to 200 rows, a book cut at 2 MB, a scan recognised rather than read. Show these with the text, since text that was cut reading as complete is the one failure this whole feature cannot afford.",
         ),
     tokens: z.number().describe("Roughly what an agent spends reading it, by the same four-chars-a-token estimate every budget here uses."),
-    truncated: z.boolean().describe("Whether this is only the start of the shadow, cut to keep the response sendable. The file on disk holds the rest."),
+    truncated: z
+        .boolean()
+        .describe("Whether this is only the start of the shadow, cut to keep the response sendable. The file on disk holds the rest."),
     stale: z
         .boolean()
         .describe(
@@ -246,15 +266,21 @@ export const WorkspaceDerivedPresentSchema = z.object({
 });
 export const WorkspaceDerivedAbsentSchema = z.object({
     ...DerivedStandingShape,
-    present: z.literal(false).describe("There is no derived text for that file. Read `state` before saying so to anyone: absent and being read are different answers."),
+    present: z
+        .literal(false)
+        .describe("There is no derived text for that file. Read `state` before saying so to anyone: absent and being read are different answers."),
     path: z.string().describe("The file, as asked for."),
     derivable: z
         .boolean()
-        .describe("Whether this format can be turned into text at all. True means asking for it to be derived is worth offering; false means nothing here reads this format."),
+        .describe(
+            "Whether this format can be turned into text at all. True means asking for it to be derived is worth offering; false means nothing here reads this format.",
+        ),
     reason: z
         .string()
         .optional()
-        .describe("Why there is none, when deriving was just attempted and produced nothing: the file is too large, corrupt, or of a format no reader claims."),
+        .describe(
+            "Why there is none, when deriving was just attempted and produced nothing: the file is too large, corrupt, or of a format no reader claims.",
+        ),
 });
 export const WorkspaceDerivedSchema = z.discriminatedUnion("present", [WorkspaceDerivedPresentSchema, WorkspaceDerivedAbsentSchema]);
 export type WorkspaceDerived = z.infer<typeof WorkspaceDerivedSchema>;
@@ -295,9 +321,7 @@ export const WorkspaceDeletedSchema = z.object({
     trashed: z
         .string()
         .optional()
-        .describe(
-            "The trash id that brings it back through the restore call, for a day. Absent when there was nothing at that path to delete.",
-        ),
+        .describe("The trash id that brings it back through the restore call, for a day. Absent when there was nothing at that path to delete."),
 });
 export type WorkspaceDeleted = z.infer<typeof WorkspaceDeletedSchema>;
 export const WorkspaceRestoreSchema = z.object({

@@ -1,8 +1,14 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { isLockedWorkspacePath, type WorkspaceChildren, type WorkspaceLink, type WorkspaceTree, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import {
+    isLockedWorkspacePath,
+    type WorkspaceChildren,
+    type WorkspaceLink,
+    type WorkspaceTree,
+    type WorkspaceTreeEntry,
+} from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope, NO_IGNORES, toRelPath } from "@intentic/workspace-ignore";
-import { type DirReads, type Entry, followEntries, freshDirReads } from "./dir-reads.js";
+import { type DirReads, type Entry, fileFacts, followEntries, freshDirReads } from "./dir-reads.js";
 import { scanBarrenDirs } from "./empty-dirs.js";
 import { realPathOf, realWithin, resolveWithin } from "./workspace-files-paths.js";
 
@@ -44,6 +50,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
         path: string;
         type: "file" | "dir";
         size?: number;
+        mtime?: number;
         ignored?: boolean;
         link?: WorkspaceLink;
         children?: Draft[];
@@ -99,7 +106,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                         name: entry.name,
                         path,
                         type: "file",
-                        ...(entry.size === undefined ? {} : { size: entry.size }),
+                        ...fileFacts(entry),
                         ...(ignored ? { ignored: true } : {}),
                         ...link,
                     });
@@ -218,7 +225,7 @@ export const listWorkspaceChildren = async (
                         name: entry.name,
                         path,
                         type: "file",
-                        ...(entry.size === undefined ? {} : { size: entry.size }),
+                        ...fileFacts(entry),
                         ...(ignored ? { ignored: true } : {}),
                         ...link,
                     });

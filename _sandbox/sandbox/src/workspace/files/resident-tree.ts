@@ -8,7 +8,7 @@ import {
     type WorkspaceTreeEntry,
 } from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
-import { byKind, type Entry, followEntries } from "./dir-reads.js";
+import { byKind, type Entry, fileFacts, followEntries } from "./dir-reads.js";
 import { descendable, MAX_ENTRIES } from "./workspace-tree.js";
 import { realPathOf } from "./workspace-files-paths.js";
 
@@ -66,7 +66,7 @@ const shallow = (node: Node): WorkspaceTreeEntry => ({
     name: node.name,
     path: node.path,
     type: node.isDir ? "dir" : "file",
-    ...(node.size === undefined ? {} : { size: node.size }),
+    ...fileFacts(node),
     ...(node.ignored ? { ignored: true } : {}),
     ...(node.link === undefined ? {} : { link: node.link }),
 });
@@ -146,8 +146,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
     };
 
     // The ignore state a directory's own layer goes onto: its parent's, or nothing above the root.
-    const scopeAbove = (dir: string): IgnoreScope | undefined =>
-        dir === "" ? createIgnoreScope() : listings.get(parentOf(dir))?.scope;
+    const scopeAbove = (dir: string): IgnoreScope | undefined => (dir === "" ? createIgnoreScope() : listings.get(parentOf(dir))?.scope);
 
     // Re-lists one directory, re-following only the names the batch named and any it never held; a folder that
     // appeared is listed whole, one that went is forgotten whole.
@@ -276,10 +275,12 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
     const rebuild = async (): Promise<WorkspaceTreeDelta | undefined> => {
         const before = listings;
         const after = await build();
-        const changed = new Map([...after].filter(([path, listing]) => {
-            const previous = before.get(path);
-            return previous === undefined || !sameEntries(previous, listing);
-        }));
+        const changed = new Map(
+            [...after].filter(([path, listing]) => {
+                const previous = before.get(path);
+                return previous === undefined || !sameEntries(previous, listing);
+            }),
+        );
         listings = after;
         return deltaOf(changed);
     };
@@ -324,7 +325,16 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
     // The walk's own breadth-first cut over what is held: a folder that won't fit the remaining budget stays unopened
     // whole, and only the root counts what it drops.
     const view = (): WorkspaceTree => {
-        type Draft = { name: string; path: string; type: "file" | "dir"; size?: number; ignored?: boolean; link?: WorkspaceLink; children?: Draft[] };
+        type Draft = {
+            name: string;
+            path: string;
+            type: "file" | "dir";
+            size?: number;
+            mtime?: number;
+            ignored?: boolean;
+            link?: WorkspaceLink;
+            children?: Draft[];
+        };
         let budget = MAX_ENTRIES;
         const tree: Draft[] = [];
         let hidden = 0;
@@ -358,7 +368,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
                         name: node.name,
                         path: node.path,
                         type: node.isDir ? "dir" : "file",
-                        ...(node.size === undefined ? {} : { size: node.size }),
+                        ...fileFacts(node),
                         ...(node.ignored ? { ignored: true } : {}),
                         ...(node.link === undefined ? {} : { link: node.link }),
                     };

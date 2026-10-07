@@ -8860,6 +8860,13 @@
             "pictures": "Obrazy",
             "styles": "Style"
         },
+        "homeDates": {
+            "today": "Dzisiaj",
+            "yesterday": "Wczoraj",
+            "previous7Days": "Ostatnie 7 dni",
+            "previous30Days": "Ostatnie 30 dni",
+            "undated": "Data nieznana"
+        },
         "homeQuickLook": {
             "itemCount": "{count} element | {count} elementy | {count} elementów",
             "more": "i {count} więcej",
@@ -8880,7 +8887,12 @@
             "nothingMatchesIn": "Nic nie pasuje do „{trim}” w {here}.",
             "searchText": "Szukaj w treści",
             "smartSearch": "Inteligentne wyszukiwanie",
-            "toolingHidden": "Ukryto {count} plik narzędziowy | Ukryto {count} pliki narzędziowe | Ukryto {count} plików narzędziowych"
+            "toolingHidden": "Ukryto {count} plik narzędziowy | Ukryto {count} pliki narzędziowe | Ukryto {count} plików narzędziowych",
+            "groupFiles": "Grupuj pliki według",
+            "byKind": "Rodzaj",
+            "byDate": "Data",
+            "byKindHint": "Grupuj pliki według tego, czym są",
+            "byDateHint": "Grupuj pliki według daty ostatniej zmiany, od najnowszych"
         },
         "htmlPreview": {
             "failed": "Nie udało się przygotować tej strony do podglądu.",
@@ -9692,9 +9704,8 @@
             "machineSandbox": "Sandbox tego komputera"
         },
         "folderMenu": {
-            "switchFolder": "{name}: otwórz inny folder lub plik",
+            "switchFolder": "{name}: otwórz inny folder",
             "openFolder": "Otwórz folder…",
-            "openFile": "Otwórz plik…",
             "recent": "Ostatnie",
             "movedOrDeleted": "Przeniesiono lub usunięto",
             "hasSandbox": "Synchronizowany z własnym sandboxem",

@@ -7,11 +7,16 @@ import { type LocalPlace, localHost } from "../app/environments/localHost";
 import { isApplePlatform } from "../workbench/commands/keybindings";
 import { nameOf, openedAtMs, otherPlaces, whereOf } from "./places";
 
-// THE FOLDER MENU: the folder's name at the head of its explorer, pressed for every other place on this computer. Any
-// folder by the system's own dialog, any document by the same, and the folders and documents opened here lately, newest
-// first. A folder takes this window's place (the app re-points the window, localHost.ts `point`), as Open Folder does in
-// any editor, unless Ctrl (Cmd on macOS) is held, which gives it a window of its own. A document opens where the app
-// puts it: in the folder window that holds it, or a window of its own.
+// THE FOLDER MENU: the folder's name at the head of its explorer, pressed for every other folder on this computer: any
+// one by the system's own dialog, and the ones opened here lately, newest first. A folder takes this window's place (the
+// app re-points the window, localHost.ts `point`), as Open Folder does in any editor, unless Ctrl (Cmd on macOS) is held,
+// which gives it a window of its own.
+//
+// FOLDERS ONLY, never a document. A document opened on its own shows without its folder's tree and is gone once its tab
+// closes, which reads as a file that vanished to anyone who does not already know editors. The menu teaches the one
+// model that always holds (open the folder, find the file in it), and the folder page's date grouping (homeOrder.ts) is
+// how the file just saved or downloaded is found there. A document handed over by the system (Open with Intentic, a
+// double-click in the file manager) still opens: that is the system's own gesture, not a choice offered here.
 //
 // (2026-10-07) This list lived in the rail's place chip until the account came to the rail's foot (1d1e690d4b), which
 // left the chip listing sandboxes only and an opened folder with no way to any other. It is here now, on the name a
@@ -122,11 +127,11 @@ const press = (place: LocalPlace, event: MouseEvent | KeyboardEvent): void => {
         offered.value = offered.value === place.path ? undefined : place.path;
         return;
     }
-    if (place.folder && !besides(event)) {
+    if (!besides(event)) {
         replacing(place.path, () => host.point(place.path));
         return;
     }
-    // A document, or a folder in a window of its own (raised instead, where a window already shows it).
+    // A window of its own (raised instead, where a window already shows it).
     void attempt(place.path, () => host.open(place.path));
 };
 
@@ -153,10 +158,9 @@ const pickFolder = (event: MouseEvent): void => {
     }
     replacing(`:folder`, () => host.pickFolder());
 };
-const pickFile = (): void => void attempt(`:file`, () => host.pickFile());
 
 const rowClass = `group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5`;
-const pickFailure = computed(() => (failure.value?.key === `:folder` || failure.value?.key === `:file` ? failure.value.message : undefined));
+const pickFailure = computed(() => (failure.value?.key === `:folder` ? failure.value.message : undefined));
 </script>
 
 <template>
@@ -188,24 +192,18 @@ const pickFailure = computed(() => (failure.value?.key === `:folder` || failure.
                 </span>
             </div>
 
-            <!-- Any other place, by the system's own dialog: a folder in this window's place, a document where the app puts it. -->
+            <!-- Any other folder, by the system's own dialog, in this window's place. -->
             <button type="button" :class="rowClass" data-test="folder-menu-open-folder" @click="pickFolder">
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
                     <Icon :name="working === `:folder` ? `spinner` : `folder-open`" :spin="working === `:folder`" class="text-sm" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-content">{{ t(`local.folderMenu.openFolder`) }}</span>
             </button>
-            <button type="button" :class="rowClass" @click="pickFile">
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
-                    <Icon :name="working === `:file` ? `spinner` : `file`" :spin="working === `:file`" class="text-sm" />
-                </span>
-                <span class="min-w-0 flex-1 truncate text-content">{{ t(`local.folderMenu.openFile`) }}</span>
-            </button>
             <div v-if="pickFailure !== undefined" class="px-2 pb-1">
                 <Notice tone="danger" class="text-2xs">{{ pickFailure }}</Notice>
             </div>
 
-            <!-- What else this computer opened lately, newest first. -->
+            <!-- The other folders opened here lately, newest first. -->
             <template v-if="others.length > 0">
                 <div class="my-1 border-t border-line-subtle"></div>
                 <div class="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`local.folderMenu.recent`) }}</div>
@@ -213,11 +211,7 @@ const pickFailure = computed(() => (failure.value?.key === `:folder` || failure.
                     <template v-for="place in others" :key="place.path">
                         <div :class="rowClass" role="button" tabindex="0" @click="press(place, $event)" @keydown.enter.prevent="press(place, $event)">
                             <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                                <Icon
-                                    :name="working === place.path ? `spinner` : place.folder ? `folder` : `file`"
-                                    :spin="working === place.path"
-                                    class="text-xs"
-                                />
+                                <Icon :name="working === place.path ? `spinner` : `folder`" :spin="working === place.path" class="text-xs" />
                             </span>
                             <span class="flex min-w-0 flex-1 flex-col">
                                 <span class="truncate" :class="place.exists ? `text-content` : `text-subtle`">{{ nameOf(place.path) }}</span>

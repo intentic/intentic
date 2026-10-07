@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listChildren, walkTree } from "../walk.js";
@@ -33,6 +33,15 @@ describe(`walkTree`, () => {
             [`outside.txt`, `file`, false, undefined],
         ]);
         expect(walked.hidden).toBe(0);
+    });
+
+    // The folder page's date grouping reads it (the web's homeOrder.ts); a folder is listed from its dirent alone.
+    it(`carries when a file last changed, and nothing for a folder`, async () => {
+        const changed = new Date(`2026-03-04T05:06:07Z`);
+        utimesSync(join(root, `.gitignore`), changed, changed);
+        const walked = await walkTree(root);
+        expect(walked.tree.find((entry) => entry.name === `.gitignore`)?.mtime).toBe(changed.getTime());
+        expect(walked.tree.find((entry) => entry.name === `src`)?.mtime).toBeUndefined();
     });
 
     it(`marks a link that leads out, and one that leads nowhere`, async () => {

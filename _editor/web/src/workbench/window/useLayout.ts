@@ -130,6 +130,10 @@ const DIFF_OPEN_KEY = `ui-diff-open`;
 // ask for it.
 const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 
+// How the home groups a folder's files (the Kind | Date switch on its bar, homeOrder.ts `HomeArrange`). One choice for
+// every folder rather than one per folder: a view that rearranges itself by which folder it is in reads as random.
+const HOME_ARRANGE_KEY = `ui-home-arrange`;
+
 // Shell-layout state: chat position/width, sidebar width/collapse, terminal open state; app-local since these are
 // layout concepts, not @intentic/ui primitives. Everything below is an account preference (shared across every window
 // at that tile) except `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts.
@@ -198,6 +202,7 @@ const diffProse = computed<boolean>(() => (diffProseChoice.value === `auto` ? us
 const diffDocument = enumPreference(DIFF_DOCUMENT_KEY, [`changes`, `text`, `sides`] as const, `changes`);
 const diffOpen = enumPreference(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
 const markdownOutline = boolPreference(MARKDOWN_OUTLINE_KEY, true);
+const homeArrange = enumPreference(HOME_ARRANGE_KEY, [`kind`, `date`] as const, `kind`);
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -345,6 +350,7 @@ export function useLayout() {
         diffDocument,
         diffOpen,
         markdownOutline,
+        homeArrange,
         set,
         toggle,
         setChatHome,

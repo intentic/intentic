@@ -578,6 +578,17 @@ const parentOf = (path: string): string => (path.includes(`/`) ? path.slice(0, p
 const sizeOf = (entry: string | number): number => (typeof entry === `number` ? entry : entry.length);
 const isIgnored = (path: string): boolean => path.split(`/`).some((segment) => IGNORED_DIRS.has(segment));
 
+// When a fixture file "last changed": the same moment for a path on every load, spread over the last ninety days, so
+// the home grouped by date (homeOrder.ts) has a Today, a Yesterday and older months to draw. FNV-1a over the path.
+const FIXTURE_SPAN_MINUTES = 90 * 24 * 60;
+const mtimeOf = (path: string, now = Date.now()): number => {
+    let hash = 0x81_1c_9d_c5;
+    for (const char of path) {
+        hash = Math.imul(hash ^ char.charCodeAt(0), 0x01_00_01_93) >>> 0;
+    }
+    return now - (hash % FIXTURE_SPAN_MINUTES) * 60_000;
+};
+
 // Entry while the walk builds the tree: a mutable-`children` WorkspaceTreeEntry, since folding a flat table into one
 // means pushing into that array.
 interface TreeNode {
@@ -585,6 +596,7 @@ interface TreeNode {
     path: string;
     type: "file" | "dir";
     size?: number;
+    mtime?: number;
     ignored?: boolean;
     children?: TreeNode[];
 }
@@ -618,7 +630,7 @@ export const workspaceTree = (): WorkspaceTree => {
         return folder.children;
     };
     for (const [path, entry] of FILES) {
-        childrenAt(parentOf(path))?.push({ name: nameOf(path), path, type: `file`, size: sizeOf(entry) });
+        childrenAt(parentOf(path))?.push({ name: nameOf(path), path, type: `file`, size: sizeOf(entry), mtime: mtimeOf(path) });
     }
     for (const folder of folders.values()) {
         folder.children = folder.children === undefined ? undefined : ordered(folder.children);

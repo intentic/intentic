@@ -1,7 +1,7 @@
-<!-- The home: the folder being looked at as large tiles, folders first and files by kind, with a quick look on hover; or read through one file name in every folder. -->
+<!-- The home: the folder being looked at as large tiles, folders first and files by kind or by date, with a quick look on hover; or read through one file name in every folder. -->
 <script setup lang="ts">
 import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import { ContextMenu, formatCount, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { ContextMenu, formatCount, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
@@ -20,7 +20,8 @@ import { workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
 import { bandOfIndex, homeLayout } from "./homeLayout";
-import { homeGroups, homeOrder, labelsShown } from "./homeOrder";
+import { dateLine } from "./homeDates";
+import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
 import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "./useHome";
 import { useHomeActions } from "./useHomeActions";
@@ -104,9 +105,26 @@ const onFieldKey = (event: KeyboardEvent): void => {
 const listed = computed<readonly WorkspaceTreeEntry[]>(() =>
     querying.value ? results.value.map((result) => result.entry) : withProvisionalEntries(homeDir.value, children.value ?? []).filter(shows),
 );
-const groups = computed(() => homeGroups(listed.value));
+// By kind, or by when each file last changed: the switch on the bar, one choice for every folder (useLayout).
+const arrange = layout.homeArrange;
+const byDate = computed(() => arrange.value === `date`);
+// The headings and the lines under the names measure from one moment, taken whenever the tiles are grouped again.
+const arranged = computed(() => {
+    const now = Date.now();
+    return { now, groups: homeGroups(listed.value, arrange.value, now) };
+});
+const groups = computed(() => arranged.value.groups);
 const order = computed(() => homeOrder(groups.value));
-const showLabels = computed(() => labelsShown(groups.value));
+const showLabels = computed(() => labelsShown(groups.value, arrange.value));
+// The line under a tile's name: where a result sits while a query stands, when a file changed while grouped by date.
+const lineOf = (entry: WorkspaceTreeEntry): string | undefined =>
+    querying.value ? (whereByPath.value.get(entry.path) ?? ``) : byDate.value ? dateLine(entry.mtime, arranged.value.now) : undefined;
+// On the bar in words, never behind an icon alone: the switch is how a folder like Downloads is read newest first.
+const arrangeOption = (value: HomeArrange, icon: `th-large` | `clock`, label: string, title: string) => ({ value, icon, label, title });
+const arrangeOptions = computed(() => [
+    arrangeOption(`kind`, `th-large`, t(`workspace.homeView.byKind`), t(`workspace.homeView.byKindHint`)),
+    arrangeOption(`date`, `clock`, t(`workspace.homeView.byDate`), t(`workspace.homeView.byDateHint`)),
+]);
 
 // --- The window -------------------------------------------------------------------------------------------------
 // A folder can hold tens of thousands of entries, so the home draws the bands crossing the viewport and no others. A
@@ -500,13 +518,22 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 <Icon name="box" aria-hidden="true" />
                 {{ t(`workspace.words.readOnly`) }}
             </span>
-            <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. Under a
-                 cover there are no tiles for it to narrow, and the chip naming the cover stands in its place. -->
-            <div v-if="search !== undefined && !covering" class="ml-auto flex items-center gap-2 pl-4">
-                <span v-if="querying && !searching" class="text-2xs tabular-nums text-subtle"
+            <!-- How the tiles are grouped, then the sidebar's query; under a cover there are no tiles for either, and the chip
+                 naming the cover stands in their place. -->
+            <div v-if="!covering" class="ml-auto flex items-center gap-2 pl-4">
+                <!-- Kind | Date, in words on the bar where a reader looks for how the folder is laid out, never only in a menu. -->
+                <SegmentedControl
+                    v-model="arrange"
+                    :options="arrangeOptions"
+                    size="xs"
+                    :aria-label="t(`workspace.homeView.groupFiles`)"
+                    @click.stop
+                />
+                <span v-if="search !== undefined && querying && !searching" class="text-2xs tabular-nums text-subtle"
                     >{{ formatCount(results.length) }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
                 >
-                <div class="relative">
+                <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
+                <div v-if="search !== undefined" class="relative">
                     <Icon
                         class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle"
                         aria-hidden="true"
@@ -535,7 +562,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     </button>
                 </div>
             </div>
-            <HomeCoverPicker :cover="cover" :class="search === undefined || covering ? `ml-auto` : `ml-2`" @choose="showCover" @drop="dropCover" />
+            <HomeCoverPicker :cover="cover" :class="covering ? `ml-auto` : `ml-2`" @choose="showCover" @drop="dropCover" />
         </nav>
 
         <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. Never
@@ -559,7 +586,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     <div class="flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center" ref="probeTile">
                         <span class="flex h-14 w-full items-center justify-center"></span>
                         <span class="h-[2.75em] w-full text-xs leading-snug"></span>
-                        <span v-if="querying" class="w-full text-2xs">&nbsp;</span>
+                        <span v-if="querying || byDate" class="w-full text-2xs">&nbsp;</span>
                     </div>
                 </div>
                 <h3 ref="probeLabel" class="px-2 pt-3 pb-1 text-2xs text-muted">&nbsp;</h3>
@@ -647,7 +674,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                         :key="entry.path"
                                         v-model:draft="draft"
                                         :entry="entry"
-                                        :where="querying ? (whereByPath.get(entry.path) ?? '') : undefined"
+                                        :where="lineOf(entry)"
                                         :aria-setsize="gridLayout.count"
                                         :aria-posinset="band.start + column + 1"
                                         :selected="selection.has(entry.path)"

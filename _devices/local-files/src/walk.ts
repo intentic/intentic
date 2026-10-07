@@ -2,7 +2,13 @@ import type { Dirent } from "node:fs";
 import { readdir, readlink, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { mapPool } from "@intentic/base/async";
-import { isLockedWorkspacePath, type WorkspaceChildren, type WorkspaceLink, type WorkspaceTree, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import {
+    isLockedWorkspacePath,
+    type WorkspaceChildren,
+    type WorkspaceLink,
+    type WorkspaceTree,
+    type WorkspaceTreeEntry,
+} from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope, toRelPath, walkMatchers } from "@intentic/workspace-ignore";
 import { segmentsOf, within } from "./paths.js";
 
@@ -28,6 +34,8 @@ interface Entry {
     readonly isDir: boolean;
     readonly real: string;
     readonly size?: number;
+    // When the file last changed, epoch ms, off the same stat as its size.
+    readonly mtime?: number;
     readonly link?: WorkspaceLink;
 }
 
@@ -41,11 +49,13 @@ const linkOf = async (abs: string, name: string, root: string): Promise<Entry> =
         return { name, isDir: false, real: real ?? abs, link: { to: to ?? name, state: `broken` } };
     }
     const link: WorkspaceLink = within(root, real) ? { to: to ?? name } : { to: to ?? name, state: `outside` };
-    return target.isDirectory() ? { name, isDir: true, real, link } : { name, isDir: false, real, size: target.size, link };
+    return target.isDirectory()
+        ? { name, isDir: true, real, link }
+        : { name, isDir: false, real, size: target.size, mtime: Math.round(target.mtimeMs), link };
 };
 
-// One directory entry resolved: a plain folder costs nothing, a file one stat, a link its target's stat, text and
-// real path, the last so a link back up the tree is not followed round.
+// One directory entry resolved: a plain folder costs nothing, a file one stat (its size and when it changed), a link its
+// target's stat, text and real path, the last so a link back up the tree is not followed round.
 const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, root: string): Promise<Entry> => {
     const name = dirent.name;
     const abs = join(dirAbs, name);
@@ -57,7 +67,7 @@ const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, root
         return { name, isDir: true, real };
     }
     const found = await quietly(stat(abs));
-    return found === undefined ? { name, isDir: false, real } : { name, isDir: false, real, size: found.size };
+    return found === undefined ? { name, isDir: false, real } : { name, isDir: false, real, size: found.size, mtime: Math.round(found.mtimeMs) };
 };
 
 const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
@@ -91,6 +101,7 @@ type Draft = {
     path: string;
     type: `file` | `dir`;
     size?: number;
+    mtime?: number;
     ignored?: boolean;
     link?: WorkspaceLink;
     children?: Draft[];
@@ -100,6 +111,9 @@ const toEntry = (entry: Entry, path: string, ignored: boolean): Draft => {
     const draft: Draft = { name: entry.name, path, type: entry.isDir ? `dir` : `file` };
     if (entry.size !== undefined) {
         draft.size = entry.size;
+    }
+    if (entry.mtime !== undefined) {
+        draft.mtime = entry.mtime;
     }
     if (ignored) {
         draft.ignored = true;

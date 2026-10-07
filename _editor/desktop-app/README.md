@@ -232,9 +232,9 @@ flowchart LR
   link it carries is heard only as `window` or `local`. No sandbox, account or Docker is needed to open anything. What
   fails to open is said in a native dialog in the user's words (the folder menu shows the same sentence under the row),
   and the original error goes to stderr. The folder menu is the folder's name at the head of its explorer
-  (`LocalFolderMenu.vue` in [web](../web)): "Open a folder…" and "Open a file…" by the system's dialog, then the
-  recents, newest first. A folder takes the window's place (`local_point`, `local_pick`), asked about first when that
-  would discard unsaved edits; Ctrl+click (Cmd+click on macOS) gives it a window of its own. The explorer's "Show in file
+  (`LocalFolderMenu.vue` in [web](../web)): "Open a folder…" by the system's dialog, then the folders opened lately,
+  newest first, and never a document. A folder takes the window's place (`local_point`, `local_pick`), asked about first
+  when that would discard unsaved edits; Ctrl+click (Cmd+click on macOS) gives it a window of its own. The explorer's "Show in file
   manager" opens the window's folder itself, and selects an entry picked in the tree in the folder that holds it
   (`local.rs` `reveal`).
 
@@ -242,7 +242,11 @@ flowchart LR
   which still opens them, is not where anyone looks from inside a window. The folders came back on the folder's own
   name, not on the chip, which stays about sandboxes. In the same change "Show in file manager" with nothing picked
   stopped revealing the folder in its parent: a project in Downloads opened Downloads with the project highlighted,
-  which is not the folder the window shows.
+  which is not the folder the window shows. The menu offers folders only: "Open a file…" and documents among the recents
+  were dropped the same day, since a document alone shows without its folder's tree and is gone once its tab closes,
+  which reads as a lost file to anyone who does not know editors. The file just saved or downloaded is found in its
+  folder instead, by the folder page's date grouping. A document the system hands over (Open with Intentic, a
+  double-click) still opens in a window of its own, and so does the tray's "Open a file…".
 
   (2026-10-03) The local window's account menu became the sandbox shell's own (Settings and Sign out), and its Settings
   open in the window, where they used to swap in the workspace on whichever sandbox was last open. The account's calls

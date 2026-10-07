@@ -52,6 +52,8 @@ const DATE_STYLES = {
     // Spelled-out month, for the few places a date is a sentence rather than a column ("renews on October 1, 2026").
     dateLong: { year: `numeric`, month: `long`, day: `numeric` },
     dayMonth: { month: `short`, day: `numeric` },
+    // A month on its own, for a heading over what happened in it: "August".
+    month: { month: `long` },
     dateTime: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
     timestamp: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
     time: { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
@@ -172,6 +174,9 @@ export const formatDate = (at: number): string => dateFormat(`date`).format(at);
  * which renders as the previous day for every reader behind UTC.
  */
 export const formatDateLong = (at: number | string): string => dateFormat(`dateLong`).format(new Date(at));
+
+/** A month's own name, the year left to context: "August". For a heading over the things dated in it. */
+export const formatMonth = (at: number): string => dateFormat(`month`).format(at);
 
 /** A day where the year is already implied by its surroundings: "Jul 28". */
 export const formatDayMonth = (at: number): string => dateFormat(`dayMonth`).format(at);
@@ -318,7 +323,9 @@ const formatSpan = (parts: Partial<Record<SpanUnit, number>>): string => {
         return durationFormat.format(parts);
     }
     return Object.entries(parts)
-        .map(([unit, value]) => shapedFormat(`unit:${unit.slice(0, -1)}`, { style: `unit`, unit: unit.slice(0, -1), unitDisplay: `narrow` }).format(value))
+        .map(([unit, value]) =>
+            shapedFormat(`unit:${unit.slice(0, -1)}`, { style: `unit`, unit: unit.slice(0, -1), unitDisplay: `narrow` }).format(value),
+        )
         .join(` `);
 };
 

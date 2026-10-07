@@ -3897,9 +3897,8 @@
             "machineSandbox": "This computer's sandbox"
         },
         "folderMenu": {
-            "switchFolder": "{name}: open another folder or file",
+            "switchFolder": "{name}: open another folder",
             "openFolder": "Open a folder…",
-            "openFile": "Open a file…",
             "recent": "Recent",
             "movedOrDeleted": "Moved or deleted",
             "hasSandbox": "Synced with its own sandbox",
@@ -9078,6 +9077,13 @@
             "pictures": "Pictures",
             "styles": "Styles"
         },
+        "homeDates": {
+            "today": "Today",
+            "yesterday": "Yesterday",
+            "previous7Days": "Previous 7 days",
+            "previous30Days": "Previous 30 days",
+            "undated": "Date unknown"
+        },
         "homeQuickLook": {
             "itemCount": "{count} item | {count} items",
             "more": "and {count} more",
@@ -9098,7 +9104,12 @@
             "nothingMatchesIn": "Nothing matches \"{trim}\" in {here}.",
             "searchText": "Search text",
             "smartSearch": "Smart search",
-            "toolingHidden": "{count} tooling file hidden | {count} tooling files hidden"
+            "toolingHidden": "{count} tooling file hidden | {count} tooling files hidden",
+            "groupFiles": "Group files by",
+            "byKind": "Kind",
+            "byDate": "Date",
+            "byKindHint": "Group files by what they are",
+            "byDateHint": "Group files by when they last changed, newest first"
         },
         "diffSkeleton": {
             "readingFile": "Reading the file…"

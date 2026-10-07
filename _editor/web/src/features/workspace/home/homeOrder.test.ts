@@ -89,3 +89,52 @@ describe(`when group labels are drawn`, () => {
         expect(labelsShown(homeGroups([file(`a.ts`), file(`a.css`)]))).toBe(true);
     });
 });
+
+describe(`grouped by date`, () => {
+    const at = (month: number, day: number, hour = 12): number => new Date(2026, month - 1, day, hour).getTime();
+    const NOW = at(10, 7, 15);
+    const dated = (name: string, mtime?: number): WorkspaceTreeEntry =>
+        mtime === undefined ? { name, path: name, type: `file` } : { name, path: name, type: `file`, mtime };
+    const byDate = (entries: readonly WorkspaceTreeEntry[]) => homeGroups(entries, `date`, NOW);
+
+    it(`keeps folders first by name, then files under their dates, newest heading and newest file first`, () => {
+        const groups = byDate([
+            dated(`old-invoice.pdf`, at(3, 2)),
+            dir(`zips`),
+            dated(`photo.png`, at(10, 7, 9)),
+            dated(`notes.md`, at(10, 6)),
+            dated(`report.docx`, at(10, 7, 14)),
+            dir(`archive`),
+            dated(`mystery.bin`),
+        ]);
+        expect(groups.map((group) => group.key)).toEqual([`folders`, `today`, `yesterday`, `m-2026-03`, `undated`]);
+        expect(homeOrder(groups).map((entry) => entry.name)).toEqual([
+            `archive`,
+            `zips`,
+            `report.docx`,
+            `photo.png`,
+            `notes.md`,
+            `old-invoice.pdf`,
+            `mystery.bin`,
+        ]);
+    });
+
+    it(`mixes kinds under one date, which is the point of it`, () => {
+        const [today] = byDate([dated(`a.zip`, at(10, 7, 10)), dated(`b.md`, at(10, 7, 11)), dated(`c.png`, at(10, 7, 9))]);
+        expect(today?.entries.map((entry) => entry.name)).toEqual([`b.md`, `a.zip`, `c.png`]);
+    });
+
+    it(`breaks a tie in time by name, so the order holds across renders`, () => {
+        const same = at(10, 7, 10);
+        expect(homeOrder(byDate([dated(`b.txt`, same), dated(`a.txt`, same)])).map((entry) => entry.name)).toEqual([`a.txt`, `b.txt`]);
+    });
+
+    it(`labels a single date heading, but not folders alone`, () => {
+        expect(labelsShown(byDate([dated(`a.ts`, at(10, 7)), dated(`b.ts`, at(10, 7))]), `date`)).toBe(true);
+        expect(labelsShown(byDate([dir(`src`), dir(`docs`)]), `date`)).toBe(false);
+    });
+
+    it(`leaves the kind grouping as it was when asked for kind`, () => {
+        expect(homeGroups([dated(`a.ts`, at(10, 7)), dir(`src`)], `kind`, NOW).map((group) => group.key)).toEqual([`folders`, `code`]);
+    });
+});

@@ -43,6 +43,10 @@ const samePath = (one: string, other: string): boolean => {
 /** How many recents the folder menu lists: as many as the app keeps (state.rs `RECENTS`). */
 export const PLACES_SHOWN = 12;
 
-/** The recents worth a row beside the folder this window shows: every other one, newest first, as many as are kept. */
+/**
+ * The recents worth a row beside the folder this window shows: every other FOLDER, newest first, as many as are kept. A
+ * document the app opened on its own is in its recents too, and left out here: the folder menu offers places, never a
+ * file apart from its folder (LocalFolderMenu.vue).
+ */
 export const otherPlaces = (places: readonly LocalPlace[], here: string | undefined): LocalPlace[] =>
-    places.filter((place) => here === undefined || !samePath(place.path, here)).slice(0, PLACES_SHOWN);
+    places.filter((place) => place.folder && (here === undefined || !samePath(place.path, here))).slice(0, PLACES_SHOWN);
