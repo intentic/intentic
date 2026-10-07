@@ -373,7 +373,7 @@ export const createExtensionBackend = (
         if (spawned === undefined || state.state !== "running") {
             return;
         }
-        const at = generation;
+        const at = converging.current;
         try {
             const response = await fetch(`http://127.0.0.1:${spawned.port}/health?deep=1`, {
                 headers: { [BACKEND_HOST_HEADER]: spawned.hostToken },
@@ -384,7 +384,7 @@ export const createExtensionBackend = (
             }
             // SAFETY: the host is this build's own child (backend-host.ts), which answers /health with its BackendHealth.
             const health = (await response.json()) as BackendHealth;
-            if (host !== spawned || at !== generation || state.state !== "running") {
+            if (host !== spawned || at !== converging.current || state.state !== "running") {
                 return;
             }
             hostStatuses = health.extensions;
@@ -398,7 +398,7 @@ export const createExtensionBackend = (
     // The in-place half of a converge: `done` when the running host took the new set, `superseded` when a later converge
     // started meanwhile, `restart` when it could not or would not, which the caller answers by replacing the host.
     const replaceInPlace = async (
-        run: number,
+        signal: AbortSignal,
         key: string,
         workspaceRoot: string,
         collected: { readonly runnable: readonly BackendHostExtension[]; readonly reported: readonly BackendStatus[] },
@@ -408,7 +408,7 @@ export const createExtensionBackend = (
             return "restart";
         }
         const statuses = await reloadInPlace(spawned, collected.runnable);
-        if (run !== generation) {
+        if (signal.aborted) {
             return "superseded";
         }
         if (statuses === undefined || host !== spawned) {
@@ -452,7 +452,7 @@ export const createExtensionBackend = (
             return;
         }
         // Only backends that can be let go of change: the running host replaces them and keeps the rest running.
-        const inPlace = await replaceInPlace(run, key, workspaceRoot, collected);
+        const inPlace = await replaceInPlace(signal, key, workspaceRoot, collected);
         if (inPlace !== "restart") {
             return;
         }
