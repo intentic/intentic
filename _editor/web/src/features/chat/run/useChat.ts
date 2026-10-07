@@ -40,10 +40,15 @@ import {
     completeTranslator,
     connectLabel,
     connectSent,
+    cancelSignIn,
     connectTranslator,
     disconnectTranslator,
+    dismissSignInFailure,
+    liveSignIn,
     nativeConnectFlow,
     showActiveProvider,
+    signInFailure,
+    signInLanded,
     startConnect,
     translatorConnectFlow,
     translatorKey,
@@ -166,6 +171,11 @@ export function useChat() {
         completeTranslator,
         cancelTranslatorConnect,
         disconnectTranslator,
+        liveSignIn,
+        cancelSignIn,
+        signInFailure,
+        signInLanded,
+        dismissSignInFailure,
     };
 }
 

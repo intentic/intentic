@@ -3,7 +3,7 @@
 // rather than claiming anything, and for a spent trial, which is connected but out of allowance.
 import "@intentic/testing/dom";
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -15,6 +15,17 @@ const accountsLoaded = ref(true);
 const endpointsLoaded = ref(true);
 const nativeConnectFlow = ref<{ provider: AgentProvider; url: string; code: string } | undefined>(undefined);
 const translatorConnectFlow = ref<undefined>(undefined);
+// The store's own reading of the two, as useChat-connect derives it.
+const liveSignIn = computed(() =>
+    nativeConnectFlow.value === undefined ? undefined : { kind: `native` as const, provider: nativeConnectFlow.value.provider },
+);
+const signInFailure = ref<{ provider: AgentProvider; message: string } | undefined>(undefined);
+const cancelSignIn = jest.fn(() => {
+    nativeConnectFlow.value = undefined;
+});
+const dismissSignInFailure = jest.fn(() => {
+    signInFailure.value = undefined;
+});
 const provider = ref<AgentProvider>(`claude`);
 const selectModel = jest.fn();
 const startConnect = jest.fn();
@@ -35,6 +46,10 @@ jest.mock(`../run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
+        liveSignIn,
+        cancelSignIn,
+        signInFailure,
+        dismissSignInFailure,
         startConnect,
         connectTranslator,
         setManagedProvider: () => {},
@@ -100,6 +115,9 @@ beforeEach(() => {
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     endpointProviders.value = [];
     nativeConnectFlow.value = undefined;
+    signInFailure.value = undefined;
+    cancelSignIn.mockClear();
+    dismissSignInFailure.mockClear();
     selectModel.mockClear();
     startConnect.mockClear();
     connectTranslator.mockClear();
@@ -201,7 +219,7 @@ it(`points back at a sign-in already under way instead of offering another`, asy
 
     nativeConnectFlow.value = { provider: `claude`, url: `https://claude.ai/oauth`, code: `` };
     await nextTick();
-    expect(element.textContent).toContain(`it is waiting for you`);
+    expect(element.textContent).toContain(`Your Claude Code sign-in isn't finished yet.`);
     expect(element.textContent).not.toContain(`isn't connected`);
     expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/connect`);
 
@@ -209,6 +227,35 @@ it(`points back at a sign-in already under way instead of offering another`, asy
     nativeConnectFlow.value = undefined;
     await nextTick();
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
+});
+
+// The reported gap: a reader who changed their mind mid-sign-in had to go to /connect only to press Cancel there.
+it(`puts a sign-in down from the strip itself`, async () => {
+    nativeConnectFlow.value = { provider: `cursor`, url: `https://cursor.com/login`, code: `ABCD` };
+    const element = mount();
+
+    buttonNamed(element, `Cancel`)!.click();
+    await nextTick();
+
+    expect(cancelSignIn).toHaveBeenCalledTimes(1);
+    expect(element.textContent).not.toContain(`sign-in isn't finished`);
+});
+
+// A sign-in that expired or was refused used to vanish from the strip with nothing said; now it says which provider,
+// why, and offers the way back to start it again.
+it(`says a sign-in ended without connecting, until tried again or dismissed`, async () => {
+    signInFailure.value = { provider: `cursor`, message: `The Cursor sign-in expired: start the connection again.` };
+    const element = mount();
+
+    expect(element.textContent).toContain(`Cursor didn't connect.`);
+    expect(element.textContent).toContain(`The Cursor sign-in expired`);
+    // Back to the connect view, naming the provider, which is what starts its sign-in there (linkArrival).
+    expect(linkNamed(element, `Try again`)?.getAttribute(`href`)).toBe(`/connect?provider=cursor`);
+
+    buttonNamed(element, `Dismiss`)!.click();
+    await nextTick();
+    expect(dismissSignInFailure).toHaveBeenCalledTimes(1);
+    expect(element.textContent).not.toContain(`didn't connect`);
 });
 
 // A spent trial is connected but out of allowance, not missing a connection, so this gate stands down

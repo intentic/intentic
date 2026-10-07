@@ -877,6 +877,19 @@ export const procedures = {
     // long as you left it open — including in the marketing shots.
     accounts: {
         accounts: ({ provider }) => ({ accounts: provider === `claude` ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [] }),
+        // Starts a provider-account sign-in (Cursor's, Grok's) in its device shape, so the connect view's card can be seen
+        // holding one: a page to open, a code to copy, the wait for approval. Like the routed one below it never lands.
+        start: ({ provider, variant }) => ({
+            url: `https://example.com/demo-sign-in?provider=${provider}`,
+            code: `DEMO-4821`,
+            state: ``,
+            flow: `device`,
+            variant: variant ?? ``,
+            handshake: `demo-handshake-${provider}`,
+            expiresAt: Date.now() + 15 * 60 * 1000,
+        }),
+        status: () => ({ status: `wait` }),
+        cancel: () => ({ ok: true }),
     },
     translator: {
         // Codex authenticates only through the translator, not an oauth account.

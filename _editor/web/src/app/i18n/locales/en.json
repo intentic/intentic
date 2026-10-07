@@ -2184,10 +2184,11 @@
             "working": "Working"
         },
         "chatAccountPanel": {
+            "didntConnect": "{provider} didn't connect.",
             "finishSignIn": "Finish sign-in",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
             "noModelYet": "No model is connected in this sandbox yet.",
-            "signInWaiting": "Signing in to {provider} — it is waiting for you."
+            "signInWaiting": "Your {provider} sign-in isn't finished yet."
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -3691,6 +3692,11 @@
             "title": "Give this workspace a model",
             "whichPlan": "Which plan is this account on?"
         },
+        "connectAttempt": {
+            "didntConnect": "{provider} didn't connect",
+            "oneAtATime": "One sign-in at a time: picking another provider below replaces this one.",
+            "opening": "Opening the sign-in…"
+        },
         "connectLane": {
             "collapse": "Collapse",
             "expand": "Expand"
@@ -3727,7 +3733,8 @@
         "providerTile": {
             "connected": "Connected",
             "needsReconnect": "Needs reconnect",
-            "runs": "Runs {runs}"
+            "runs": "Runs {runs}",
+            "signingIn": "Signing in…"
         }
     },
     "desktop": {

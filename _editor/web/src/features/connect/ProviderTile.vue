@@ -13,7 +13,19 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { provider, selected = false } = defineProps<{ provider: AgentProvider; selected?: boolean }>();
+const {
+    provider,
+    selected = false,
+    signingIn = false,
+} = defineProps<{
+    provider: AgentProvider;
+    // Picked and asking a question of its own before anything starts (which estate).
+    selected?: boolean;
+    // Its sign-in is the one running, in the card at the top of the view: the tile says so instead of what it costs, so a
+    // reader scanning the lane can tell which provider the card belongs to.
+    signingIn?: boolean;
+}>();
+const marked = computed(() => selected || signingIn);
 
 const spec = computed(() => providerSpec(provider));
 const state = computed(() => accessStateFor(provider));
@@ -30,11 +42,11 @@ const pressName = computed(() => connectPitch(provider, turnDefaults.harness.val
     <button
         type="button"
         class="ui-row-select ui-off flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors"
-        :class="selected ? `border-primary-500/60 bg-primary-500/5` : `border-line bg-card hover:border-line-strong`"
-        :aria-pressed="selected"
+        :class="marked ? `border-primary-500/60 bg-primary-500/5` : `border-line bg-card hover:border-line-strong`"
+        :aria-pressed="marked"
         :aria-label="pressName"
     >
-        <ProviderLogo :provider="provider" class="mt-0.5 shrink-0 text-base" :class="selected ? `text-primary-500` : `text-muted`" />
+        <ProviderLogo :provider="provider" class="mt-0.5 shrink-0 text-base" :class="marked ? `text-primary-500` : `text-muted`" />
         <span class="flex min-w-0 flex-1 flex-col gap-0.5">
             <span class="flex items-center gap-1.5">
                 <span class="truncate text-sm font-medium text-content">{{ spec?.accountLabel }}</span>
@@ -54,7 +66,11 @@ const pressName = computed(() => connectPitch(provider, turnDefaults.harness.val
             </span>
             <span class="text-2xs text-muted">{{ t(`connect.providerTile.runs`, { runs }) }}</span>
         </span>
+        <span v-if="signingIn" class="shrink-0 rounded bg-primary-500/15 px-1.5 py-0.5 text-[0.6rem] font-medium text-primary-500">{{
+            t(`connect.providerTile.signingIn`)
+        }}</span>
         <span
+            v-else
             class="shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium"
             :class="spec?.access.kind === `free` ? `bg-success/15 text-success` : `bg-content/5 text-subtle`"
             >{{ requirement }}</span

@@ -1,4 +1,5 @@
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
+import { computed } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import {
@@ -31,6 +32,30 @@ export const translatorConnectFlow = sandboxRef<
 // without this, a card that nobody has acted on still claims to be signing in.
 export const connectSent = sandboxRef(() => false);
 
+// The last sign-in that ended without connecting anything, and the sentence saying why: what the chat's strip and the
+// connect view show until the reader tries again or dismisses it. Without it a sign-in that expired, was refused or
+// never started simply vanished, and the reader was left with a tile that looked picked and nothing else.
+export const signInFailure = sandboxRef<{ readonly provider: AgentProvider; readonly message: string } | undefined>(() => undefined);
+
+// Ends an attempt as failed: `error` for the surfaces that read the store's one error line, the record for the ones that
+// say which provider it was.
+const failSignIn = (provider: AgentProvider, message: string): void => {
+    error.value = message;
+    signInFailure.value = { provider, message };
+};
+
+export const dismissSignInFailure = (): void => {
+    signInFailure.value = undefined;
+};
+
+// The last sign-in that connected an account, stamped so a second landing of the same provider still reads as news. Said
+// by the paths that saw an account arrive, never inferred from a panel going away: a Cancel pressed in the chat's strip
+// takes the panel down too, and a view that read that as success announced a connection nobody made.
+export const signInLanded = sandboxRef<{ readonly provider: AgentProvider; readonly at: number } | undefined>(() => undefined);
+const landSignIn = (provider: AgentProvider): void => {
+    signInLanded.value = { provider, at: Date.now() };
+};
+
 // Routed row key, namespaced away from the provider id: native and translator accounts of the same provider
 // are separate connections. `name` picks one subscription; omitted, the provider's sign-in.
 export const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
@@ -57,8 +82,8 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         return;
     }
     if (Date.now() > deadline) {
-        error.value = t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) });
-        translatorConnectFlow.value = undefined;
+        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: translatorProviderLabel(target) }));
+        settleTranslator();
         return;
     }
     const flow = translatorConnectFlow.value;
@@ -75,12 +100,13 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
             if (translatorConnectFlow.value === flow) {
                 translatorConnectFlow.value = undefined;
                 error.value = null;
+                landSignIn(target);
             }
             return;
         }
         if (result.status === "error") {
-            translatorConnectFlow.value = undefined;
-            error.value = t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: result.error });
+            settleTranslator();
+            failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: translatorProviderLabel(target), reason: result.error }));
             return;
         }
         // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
@@ -91,15 +117,17 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
 };
 
 // Starts a subscription login for a routed provider; returns a sign-in URL and, for some providers, a
-// one-time code. One flow at a time: a new connect supersedes any prior.
+// one-time code. One sign-in at a time, of either mechanism: a new connect supersedes any prior one, and does so up
+// front, so a start that fails leaves nothing behind rather than the old panel with its poll already stopped.
 export const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     if (accountBusy.value !== undefined) {
         return;
     }
+    cancelConnect();
+    settleTranslator();
     accountBusy.value = translatorKey(target);
     error.value = null;
-    connectSent.value = false;
-    clearTimeout(translatorPollTimer.value);
+    signInFailure.value = undefined;
     // A sign-in started in the sandbox the scope has since left belongs to that sandbox's card, not this one's.
     const current = sandboxScopeGuard();
     try {
@@ -110,7 +138,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
         translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
         translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
-        error.value = messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`));
+        failSignIn(target, messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`)));
     } finally {
         accountBusy.value = undefined;
     }
@@ -137,6 +165,7 @@ export const completeTranslator = async (redirectUrl: string): Promise<boolean> 
         // Only if this is still the same attempt: a restarted sign-in owns the panel now.
         if (translatorConnectFlow.value === flow) {
             settleTranslator();
+            landSignIn(flow.provider);
         }
         // Catalog is only discoverable with a credential, so load it now rather than at the next reselect.
         void loadProviderModels(flow.provider);
@@ -229,8 +258,8 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         return;
     }
     if (Date.now() > deadline) {
-        error.value = t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) });
         cancelConnect();
+        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
         return;
     }
     try {
@@ -243,6 +272,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         if (connectedAccounts.length > 0) {
             settleConnect();
             error.value = null;
+            landSignIn(target);
             // Load the catalog now so the picker is populated immediately, not after the next reselect.
             void loadProviderModels(target);
             return;
@@ -265,8 +295,8 @@ const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Pr
         return;
     }
     if (Date.now() > deadline) {
-        error.value = t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) });
         cancelConnect();
+        failSignIn(target, t(`chat.chatConnect.signInExpired`, { provider: providerLabel(target) }));
         return;
     }
     try {
@@ -283,13 +313,14 @@ const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Pr
             if (nativeConnectFlow.value?.handshake === flow.handshake) {
                 settleConnect();
                 error.value = null;
+                landSignIn(target);
             }
             void loadProviderModels(target);
             return;
         }
         if (result.status === `error`) {
             settleConnect();
-            error.value = t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: result.error });
+            failSignIn(target, t(`chat.chatConnect.signInFailed`, { provider: providerLabel(target), reason: result.error }));
             return;
         }
         // allow(silent-catch): The handshake polls again after transient transport failure, bounded by its deadline.
@@ -312,9 +343,11 @@ export const startConnect = async (variant?: string): Promise<void> => {
     if (accountBusy.value !== undefined) {
         return;
     }
+    // One sign-in at a time, of either mechanism (connectTranslator).
     cancelConnect();
+    settleTranslator();
     error.value = null;
-    connectSent.value = false;
+    signInFailure.value = undefined;
     // Held busy for the whole start so the button doesn't flash back to "Connect" before the flow lands.
     accountBusy.value = target;
     // As for a subscription: a start that lands after a switch is the outgoing sandbox's handshake.
@@ -325,14 +358,14 @@ export const startConnect = async (variant?: string): Promise<void> => {
             // Which estate to sign in to (Z.ai sells several); absent takes the provider's default.
             body = await orRefusal(sandboxRpc.accounts.start({ provider: target as NativeProvider, variant }));
         } catch (err) {
-            error.value = messageOr(err, t(`chat.chatConnect.connectionNotStarted`, { provider: providerLabel(target) }));
+            failSignIn(target, messageOr(err, t(`chat.chatConnect.connectionNotStarted`, { provider: providerLabel(target) })));
             return;
         }
         if (!current()) {
             return;
         }
         if (body instanceof SandboxHttpError) {
-            error.value = body.message;
+            failSignIn(target, body.message);
             return;
         }
         nativeConnectFlow.value = {
@@ -357,6 +390,24 @@ export const startConnect = async (variant?: string): Promise<void> => {
     } finally {
         accountBusy.value = undefined;
     }
+};
+
+// The one sign-in in flight, whichever mechanism holds it. Every surface that reports one (the chat's strip, the connect
+// view) reads it here, so they cannot disagree about which provider is waiting.
+export const liveSignIn = computed<{ readonly kind: `native` | `routed`; readonly provider: AgentProvider } | undefined>(() => {
+    if (nativeConnectFlow.value !== undefined) {
+        return { kind: `native`, provider: nativeConnectFlow.value.provider };
+    }
+    if (translatorConnectFlow.value !== undefined) {
+        return { kind: `routed`, provider: translatorConnectFlow.value.provider };
+    }
+    return undefined;
+});
+
+// Abandons whichever sign-in is in flight, from anywhere that shows one.
+export const cancelSignIn = (): void => {
+    cancelConnect();
+    settleTranslator();
 };
 
 // Points the account card at the active conversation's provider on open; skipped mid-handshake so switching
@@ -409,6 +460,7 @@ export const completeConnect = async (pasted: string): Promise<boolean> => {
         }
         addAccount(flow.provider, account);
         settleConnect();
+        landSignIn(flow.provider);
         // Catalog may only now be discoverable, since some providers need a credential to list models.
         void loadProviderModels(flow.provider);
         return true;

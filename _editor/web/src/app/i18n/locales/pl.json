@@ -2184,10 +2184,11 @@
             "working": "Pracuje"
         },
         "chatAccountPanel": {
+            "didntConnect": "Nie udało się podłączyć: {provider}.",
             "finishSignIn": "Dokończ logowanie",
             "isntConnectedInSandbox": "{providerName} nie jest podłączony w tym sandboxie.",
             "noModelYet": "W tym sandboxie nie podłączono jeszcze żadnego modelu.",
-            "signInWaiting": "Logowanie do {provider} czeka na Ciebie."
+            "signInWaiting": "Logowanie do {provider} nie zostało jeszcze dokończone."
         },
         "chatArea": {
             "bringBackHere": "Przywróć tutaj",
@@ -3691,6 +3692,11 @@
             "title": "Daj tej przestrzeni roboczej model",
             "whichPlan": "Na jakim planie jest to konto?"
         },
+        "connectAttempt": {
+            "didntConnect": "Nie udało się podłączyć: {provider}",
+            "oneAtATime": "Naraz trwa tylko jedno logowanie: wybranie innego dostawcy poniżej zastąpi to.",
+            "opening": "Otwieranie logowania…"
+        },
         "connectLane": {
             "collapse": "Zwiń",
             "expand": "Rozwiń"
@@ -3727,7 +3733,8 @@
         "providerTile": {
             "connected": "Połączono",
             "needsReconnect": "Wymaga ponownego połączenia",
-            "runs": "Uruchamia: {runs}"
+            "runs": "Uruchamia: {runs}",
+            "signingIn": "Logowanie…"
         }
     },
     "desktop": {

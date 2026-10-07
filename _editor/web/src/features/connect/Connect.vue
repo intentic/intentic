@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { Button, Icon, Notice, Page, PageHeader, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { defaultModelFor, endpointProviders } from "../chat/accounts/providerCatalog";
 import { refreshConnections } from "../chat/accounts/useChat-accounts";
@@ -24,7 +24,6 @@ import { sandboxJson } from "../../client/sandbox/sandboxClient";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { foundToOffer } from "../../lib/foundOnComputer";
-import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./localPrefetch";
 import {
@@ -41,6 +40,7 @@ import {
     offeredKeys,
     type PickedStanding,
 } from "./connectLanes";
+import ConnectAttempt from "./ConnectAttempt.vue";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";
 import ProviderTile from "./ProviderTile.vue";
@@ -53,18 +53,25 @@ import { useT } from "@intentic/ui/i18n";
 // hold a choice.
 //
 // Three lanes, in cost order, one open at a time. The Agent tab keeps managing accounts; this view makes the first one.
+//
+// One sign-in at a time, and it has one place: the card at the top (ConnectAttempt), whichever lane or row started it.
+// The lanes never give their tiles up to it, so trying a different provider is one press on its tile, which replaces
+// the sign-in rather than queueing behind it. A reader sent back by the chat's "Finish sign-in" lands on that card, with
+// the lane it came from open beneath it.
 
 const t = useT();
 const route = useRoute();
 const router = useRouter();
 
 const {
-    nativeConnectFlow,
-    translatorConnectFlow,
+    liveSignIn: live,
+    cancelSignIn,
+    signInFailure,
+    signInLanded,
+    dismissSignInFailure,
+    error,
     accountBusy,
     translatorKey,
-    cancelConnect,
-    cancelTranslatorConnect,
     setManagedProvider,
     startConnect,
     connectTranslator,
@@ -113,38 +120,41 @@ const toggleLane = (key: ConnectLaneKey): void => {
     openLane.value = openLane.value === key ? undefined : key;
 };
 
-// `?provider=` continues a press made elsewhere (a picker row, a trial strip): open its lane and start its handshake.
-// Anything else opens the free lane, and only for a reader who has connected nothing (arrivalLane).
+// `?provider=` continues a press made elsewhere (a picker row, a trial strip, the chat's "Try again"): open its lane and
+// start its handshake. A sign-in already under way, or one that just ended badly, is what any other visit is about: its
+// lane opens under the card, so a different provider is one press away. Anything else opens the free lane, and only for
+// a reader who has connected nothing (arrivalLane).
 const settleLane = (): void => {
     if (!accessKnown.value || openLane.value !== undefined) {
         return;
     }
     const asked = String(route.query[`provider`] ?? ``);
     // Only a provider with nothing connected starts its sign-in here (linkArrival); a connected one waits for its tile.
+    // One already signing in is not started over: the card above already holds it.
     const arrival = linkArrival(asked, providerReady);
     if (arrival !== undefined) {
         openLane.value = arrival.lane;
-        if (arrival.signIn) {
+        if (arrival.signIn && live.value?.provider !== asked) {
+            // SAFETY: linkArrival answers only for a provider some lane connects, and every lane's providers are native.
             void connect(asked as NativeProvider);
         }
+        // Acted on once: a reload or a step back to this address must not start the sign-in a second time.
+        void router.replace({ query: { ...route.query, provider: undefined } });
+        return;
+    }
+    const current = live.value?.provider ?? signInFailure.value?.provider;
+    const currentLane = current === undefined ? undefined : laneOfProvider(current);
+    if (current !== undefined && currentLane !== undefined) {
+        openLane.value = currentLane;
+        // Picked, as far as this view is concerned: its landing is this visit's to announce.
+        // SAFETY: laneOfProvider answered, so it is one of a lane's providers, which are all native.
+        chosen.value ??= current as NativeProvider;
         return;
     }
     // What this computer is already signed in to is the thing to do here: nothing below opens over it.
     openLane.value = foundRows.value.length > 0 ? undefined : arrivalLane((key) => laneHolds(key) !== undefined);
 };
 
-// The live handshake, wherever it was started: read from the store so a sign-in begun here and finished after a reload
-// still lands.
-const live = computed<{ kind: `native` | `routed`; provider: AgentProvider } | undefined>(() => {
-    if (nativeConnectFlow.value !== undefined) {
-        return { kind: `native`, provider: nativeConnectFlow.value.provider };
-    }
-    if (translatorConnectFlow.value !== undefined) {
-        return { kind: `routed`, provider: translatorConnectFlow.value.provider };
-    }
-    return undefined;
-});
-const abandon = (): void => (live.value?.kind === `native` ? cancelConnect() : cancelTranslatorConnect());
 // What was brought back is being redeemed: there is nothing left to abandon.
 const finishing = computed(
     () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
@@ -154,26 +164,84 @@ const finishing = computed(
 const estate = ref<string | undefined>(undefined);
 const chosen = ref<NativeProvider | undefined>(undefined);
 const offersEstates = computed(() => (mintedVariants(chosen.value ?? ``)?.length ?? 0) > 1);
+// A provider sold through several estates asks which before its sign-in starts: started on the default and asked after,
+// the question sat under a handshake already running against the wrong one.
+const asksEstate = (provider: NativeProvider): boolean => (mintedVariants(provider)?.length ?? 0) > 1;
 
 // The translator holds the subscription OAuth, a stored account serves everything else, as the daemon splits them.
 const routed = (provider: NativeProvider): provider is KeyedProvider => providerSpec(provider)?.auth.kind === `translator`;
 
-const startNative = (): Promise<void> => startConnect(estate.value);
+// The provider whose sign-in is on its way to the sandbox: the card says so from the press, rather than from whenever
+// the sandbox answers.
+const starting = ref<NativeProvider | undefined>(undefined);
+const attemptCard = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemptCard`);
 
-const connect = async (provider: NativeProvider): Promise<void> => {
+const connect = async (provider: NativeProvider, variant?: string): Promise<void> => {
+    if (starting.value !== undefined) {
+        return;
+    }
     chosen.value = provider;
-    estate.value = undefined;
+    // A new attempt is the thing happening now; the last one's banner is over.
+    landed.value = undefined;
+    starting.value = provider;
     setManagedProvider(provider);
-    await (routed(provider) ? connectTranslator(provider) : startNative());
+    await nextTick();
+    void attemptCard.value?.reveal();
+    try {
+        await (routed(provider) ? connectTranslator(provider) : startConnect(variant));
+    } finally {
+        starting.value = undefined;
+    }
 };
 
-// Restarting a sign-in for a provider whose estate was just changed; the panel above is replaced by the new handshake.
+// A tile's press: the sign-in already running for it is shown rather than started over; a provider with estates asks
+// which first (below the tiles); any other starts, replacing whatever sign-in was running.
+const pick = (provider: NativeProvider): void => {
+    if (live.value?.provider === provider) {
+        void attemptCard.value?.reveal();
+        return;
+    }
+    if (asksEstate(provider)) {
+        if (chosen.value !== provider) {
+            estate.value = undefined;
+        }
+        chosen.value = provider;
+        return;
+    }
+    void connect(provider);
+};
+
+// The estate is chosen: start the sign-in it names.
 const connectChosen = (): void => {
     const provider = chosen.value;
     if (provider !== undefined) {
-        void (routed(provider) ? connectTranslator(provider) : startNative());
+        void connect(provider, estate.value);
     }
 };
+
+// Again, as it was: the same estate when it was the one picked here.
+const retry = (): void => {
+    const provider = signInFailure.value?.provider;
+    if (provider !== undefined) {
+        // SAFETY: a failure is only ever recorded by a sign-in, and only native providers have one.
+        void connect(provider as NativeProvider, provider === chosen.value ? estate.value : undefined);
+    }
+};
+
+// What the card shows, if anything: the press on its way, the reader's turn, or how the last attempt ended.
+const attempt = computed<{ provider: AgentProvider; phase: `starting` | `live` | `failed`; problem?: string } | undefined>(() => {
+    if (starting.value !== undefined) {
+        return { provider: starting.value, phase: `starting` };
+    }
+    if (live.value !== undefined) {
+        // The store's one error line, while a sign-in is live, is about it: every start clears it.
+        return { provider: live.value.provider, phase: `live`, problem: error.value ?? undefined };
+    }
+    if (signInFailure.value !== undefined) {
+        return { provider: signInFailure.value.provider, phase: `failed`, problem: signInFailure.value.message };
+    }
+    return undefined;
+});
 
 // Landing on a connection is a state, not a redirect: the lane says who it signed in as and offers the one next move.
 const landed = ref<AgentProvider | undefined>(undefined);
@@ -189,8 +257,8 @@ const landedLabel = (provider: AgentProvider): string =>
 const landedText = computed(() => (landed.value === undefined ? `` : landedLine(landedLabel(landed.value), activeSandbox.value?.name)));
 
 // FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each one
-// press. The press is the tile's own: its sign-in opens in the provider's lane below, where every sign-in on this view
-// runs, and the browser that is already signed in answers it.
+// press. The press is the tile's own: its sign-in opens in the card at the top, where every sign-in on this view runs,
+// with the provider's lane open below it, and the browser that is already signed in answers it.
 // What the address names, else what the desktop app said on an earlier address (a folder's own sandbox opens with no
 // setup page in its way, and the reader may arrive here later, from the chat).
 const found = computed(() => foundToOffer(route.query[`found`]));
@@ -254,6 +322,15 @@ watch(
         }
     },
 );
+// A sign-in that connected an account while this view was open, as the store saw it land. Said whether or not the
+// provider was connected before: a second account lands without its readiness changing at all, and the card simply
+// vanishing read as the attempt having been lost.
+watch(signInLanded, (now) => {
+    if (now !== undefined) {
+        landed.value = now.provider;
+    }
+});
+
 // Fires when the model is actually serving, not when its manifest entry was written: the picker reads endpoints from
 // the connection list fetched on arrival, which has never heard of this one.
 const onLocalReady = (provider: string): void => {
@@ -310,6 +387,21 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
     <Page width="content">
         <PageHeader :title="t(`connect.connect.title`)" :description="t(`connect.connect.description`)" />
 
+        <!-- The sign-in in flight, or how the last one ended: first on the page, since it is the reader's turn. -->
+        <ConnectAttempt
+            v-if="attempt"
+            ref="attemptCard"
+            class="mb-4"
+            :provider="attempt.provider"
+            :phase="attempt.phase"
+            :kind="live?.kind"
+            :problem="attempt.problem"
+            :finishing="finishing"
+            @cancel="cancelSignIn"
+            @retry="retry"
+            @dismiss="dismissSignInFailure"
+        />
+
         <!-- The one thing that just happened, above the lanes that are still offering to do it again. -->
         <div v-if="landed" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3">
             <Icon name="check" class="shrink-0 text-success" />
@@ -330,8 +422,8 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
                     size="small"
                     class="shrink-0"
                     :label="t(`ui.action.connect`)"
-                    :loading="live?.provider === provider"
-                    :disabled="live !== undefined"
+                    :loading="starting === provider"
+                    :disabled="starting !== undefined || live?.provider === provider"
                     @click="connectFound(provider)"
                 />
             </div>
@@ -376,37 +468,23 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
 
                 <LocalModelLane v-if="lane.key === `local`" :fit="fit" @ready="onLocalReady" @stop-prefetch="stopFetching" />
 
+                <!-- The tiles stay while a sign-in runs (it is in the card above): another provider is one press, not a Cancel and a hunt. -->
                 <div v-else class="flex flex-col gap-3">
-                    <!-- The sign-in takes the whole lane once running: while it is the reader's turn, nothing else here is. -->
-                    <template v-if="live && laneOfProvider(live.provider) === lane.key">
-                        <div class="flex items-center gap-2">
-                            <span class="min-w-0 flex-1 text-sm font-medium text-content">{{
-                                t(`connect.connect.connecting`, { provider: providerSpec(live.provider)?.accountLabel })
-                            }}</span>
-                            <button
-                                type="button"
-                                :disabled="finishing"
-                                :class="ui.linkButton(`shrink-0 text-xs text-subtle hover:text-content hover:no-underline`)"
-                                @click="abandon"
-                            >
-                                {{ t(`ui.action.cancel`) }}
-                            </button>
-                        </div>
-                        <ConnectFlow :kind="live.kind" :provider="live.provider" roomy />
-                    </template>
-
-                    <template v-else>
+                    <template v-for="provider in laneProviders(lane.key, providerReady)" :key="provider">
                         <ProviderTile
-                            v-for="provider in laneProviders(lane.key, providerReady)"
-                            :key="provider"
                             :provider="provider"
-                            :selected="chosen === provider"
-                            @click="connect(provider)"
+                            :signing-in="starting === provider || live?.provider === provider"
+                            :selected="chosen === provider && asksEstate(provider) && live?.provider !== provider"
+                            :disabled="starting !== undefined"
+                            @click="pick(provider)"
                         />
-                        <!-- Estate is the sign-in's own first step, so it stands where the sign-in will unfold, not in a settings page. -->
-                        <div v-if="chosen && offersEstates" class="flex flex-col gap-2 rounded-xl border border-line bg-canvas p-3">
+                        <!-- Estate is the sign-in's own first step, asked under the tile that raised it and before anything starts. -->
+                        <div
+                            v-if="chosen === provider && offersEstates && live?.provider !== provider && starting !== provider"
+                            class="-mt-1 flex flex-col gap-2 rounded-xl border border-line bg-canvas p-3"
+                        >
                             <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
-                            <EstatePicker v-model="estate" :provider="chosen" :label="t(`connect.connect.whichPlan`)" />
+                            <EstatePicker v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
                             <Button class="self-start" size="small" :label="t(`ui.action.connect`)" @click="connectChosen" />
                         </div>
                     </template>

@@ -600,6 +600,145 @@ describe(`native account connection`, () => {
     });
 });
 
+// One sign-in at a time, whichever mechanism holds it: the chat's strip and the connect view each draw ONE, so a second
+// running behind it was a handshake nobody could see, still polling, able to land an account nobody asked for.
+describe(`one sign-in at a time`, () => {
+    const cursorStart = {
+        url: `https://cursor.com/loginDeepControl`,
+        code: `WXYZ-1234`,
+        state: ``,
+        flow: `device`,
+        variant: ``,
+        handshake: `cursor-h1`,
+        expiresAt: Date.now() + 900_000,
+    };
+    const kimiStart = { url: `https://www.kimi.com/code/authorize`, code: ``, state: `kimi-attempt-1`, flow: `redirect` };
+
+    beforeEach(() => {
+        storage.clear();
+        resetSandboxScope();
+    });
+
+    it(`replaces a live subscription sign-in with a provider-account one, and the other way round`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure) => {
+            if (procedure === `translator.connect`) {
+                return Promise.resolve(kimiStart);
+            }
+            return procedure === `accounts.start` ? Promise.resolve(cursorStart) : undefined;
+        });
+
+        await chat.connectTranslator(`kimi`);
+        expect(chat.liveSignIn.value).toEqual({ kind: `routed`, provider: `kimi` });
+
+        chat.setManagedProvider(`cursor`);
+        await chat.startConnect();
+        expect(chat.translatorConnectFlow.value).toBeUndefined();
+        expect(chat.liveSignIn.value).toEqual({ kind: `native`, provider: `cursor` });
+
+        await chat.connectTranslator(`kimi`);
+        expect(chat.nativeConnectFlow.value).toBeUndefined();
+        // The one it replaced is told to stop waiting, rather than left to expire on the daemon.
+        expect(daemon).toHaveBeenCalledWith(`accounts.cancel`, { provider: `cursor`, handshake: `cursor-h1` });
+        expect(chat.liveSignIn.value).toEqual({ kind: `routed`, provider: `kimi` });
+    });
+
+    it(`puts down whichever sign-in is live, from anywhere that shows one`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure) => (procedure === `translator.connect` ? Promise.resolve(kimiStart) : undefined));
+        await chat.connectTranslator(`kimi`);
+
+        chat.cancelSignIn();
+
+        expect(chat.liveSignIn.value).toBeUndefined();
+        expect(chat.signInFailure.value).toBeUndefined();
+    });
+
+    it(`remembers which provider failed to start and why, until the next start`, async () => {
+        const chat = useChat();
+        const daemonMessage = `The Cursor SDK download failed: npm registry unavailable.`;
+        chat.setManagedProvider(`cursor`);
+        daemonAnswers((procedure) => {
+            if (procedure === `accounts.start`) {
+                return Promise.reject(daemonRefusal(412, daemonMessage));
+            }
+            return procedure === `translator.connect` ? Promise.resolve(kimiStart) : undefined;
+        });
+
+        await chat.startConnect();
+        expect(chat.signInFailure.value).toEqual({ provider: `cursor`, message: daemonMessage });
+        expect(chat.liveSignIn.value).toBeUndefined();
+
+        await chat.connectTranslator(`kimi`);
+        expect(chat.signInFailure.value).toBeUndefined();
+    });
+
+    it(`leaves nothing behind when a replacing start fails, rather than the old panel with its poll stopped`, async () => {
+        const chat = useChat();
+        let attempt = 0;
+        daemonAnswers((procedure) => {
+            if (procedure !== `translator.connect`) {
+                return undefined;
+            }
+            attempt += 1;
+            return attempt === 1 ? Promise.resolve(kimiStart) : Promise.reject(new Error(`sandbox offline`));
+        });
+        await chat.connectTranslator(`kimi`);
+
+        await chat.connectTranslator(`gemini`);
+
+        expect(chat.translatorConnectFlow.value).toBeUndefined();
+        expect(chat.signInFailure.value?.provider).toBe(`gemini`);
+    });
+
+    // The connect view's "Connected" banner reads this, not the panel going away: a Cancel pressed in the chat's strip
+    // takes the panel down too.
+    it(`says a sign-in landed only when an account arrived, never when it was put down`, async () => {
+        jest.useFakeTimers();
+        const chat = useChat();
+        let approved = false;
+        daemonAnswers((procedure) => {
+            if (procedure === `translator.connect`) {
+                return Promise.resolve(kimiStart);
+            }
+            return procedure === `translator.status` ? Promise.resolve({ status: approved ? `ok` : `wait` }) : undefined;
+        });
+
+        await chat.connectTranslator(`kimi`);
+        chat.cancelSignIn();
+        expect(chat.signInLanded.value).toBeUndefined();
+
+        await chat.connectTranslator(`kimi`);
+        approved = true;
+        await advanceTimersByTimeAsync(3_000);
+
+        expect(chat.liveSignIn.value).toBeUndefined();
+        expect(chat.signInLanded.value?.provider).toBe(`kimi`);
+        expect(chat.signInFailure.value).toBeUndefined();
+    });
+
+    it(`records a sign-in the provider refused, with the provider's reason`, async () => {
+        jest.useFakeTimers();
+        const chat = useChat();
+        daemonAnswers((procedure) => {
+            if (procedure === `translator.connect`) {
+                return Promise.resolve(kimiStart);
+            }
+            return procedure === `translator.status` ? Promise.resolve({ status: `error`, error: `access_denied` }) : undefined;
+        });
+
+        await chat.connectTranslator(`kimi`);
+        await advanceTimersByTimeAsync(3_000);
+
+        expect(chat.liveSignIn.value).toBeUndefined();
+        expect(chat.signInFailure.value?.provider).toBe(`kimi`);
+        expect(chat.signInFailure.value?.message).toContain(`access_denied`);
+
+        chat.dismissSignInFailure();
+        expect(chat.signInFailure.value).toBeUndefined();
+    });
+});
+
 // Account choice persists per sandbox (ids name credential files in one sandbox's store); an already-open chat keeps
 // the account it ran on.
 describe(`the remembered account`, () => {

@@ -239,12 +239,9 @@ export const UNSERVED = {
     "GET /webchat/{id}/installs": UNFILLED_VIEW,
     // The Desktop page's live picture: the demo simulates the browser view's socket (daemon.ts `sockets`), not this one.
     "GET /system/desktop-view": UNFILLED_VIEW,
-    "accounts.cancel": UNSIMULATED_WRITE,
     "accounts.complete": UNSIMULATED_WRITE,
     "accounts.disconnect": UNSIMULATED_WRITE,
     "accounts.rename": UNSIMULATED_WRITE,
-    "accounts.start": UNSIMULATED_WRITE,
-    "accounts.status": UNFILLED_VIEW,
     "agent.resume": UNSIMULATED_WRITE,
     "agent.rewind": UNSIMULATED_WRITE,
     "agent.routeChat": UNSIMULATED_WRITE,
