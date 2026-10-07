@@ -141,3 +141,13 @@ test("offers no way to edit the model, only the address of the one that does", (
     // Models opens on that row rather than on a Simple view with no row for it.
     expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?job=safety-judge`);
 });
+
+// The catalog of what reaches the gate is reference, not a setting: it waits behind the group's (i), not on the page.
+test("keeps what gets stopped behind the (i) until asked", async () => {
+    const host = mount();
+    expect(document.body.textContent).not.toContain(`Always asks`);
+    host.querySelector<HTMLButtonElement>(`button[aria-label="What gets stopped"]`)!.click();
+    await nextTick();
+    await nextTick();
+    expect(document.body.textContent).toContain(`Always asks`);
+});

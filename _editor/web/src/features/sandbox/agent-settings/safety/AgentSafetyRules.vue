@@ -7,8 +7,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
 // Read-only table of COMMAND_RULE_CATALOG (safety-policy.ts): one row per command class, one column per machine
-// (sandbox, device), the same catalog both gates enforce. No controls: change a pattern in the catalog or write a rule
-// in the policy below, not here.
+// (sandbox, device), the same catalog both gates enforce. No controls, so it does not take a place among the settings:
+// it is the body of the Safety judge group's (i) dialog, which names it. Change a pattern in the catalog or write a
+// rule in the policy, not here.
 
 const t = useT();
 
@@ -38,8 +39,8 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
 </script>
 
 <template>
-    <!-- `@container`, not a viewport breakpoint: this panel's width is its containing pane, not the phone. -->
-    <RowGroup class="@container" :label="t(`sandbox.agentSafetyRules.whatGetsStopped`)">
+    <!-- `@container`, not a viewport breakpoint: this table's width is the dialog's, not the phone's. `flat`: the dialog is already the surface. -->
+    <RowGroup class="@container" flat>
         <!-- The heads, the rules and the two tracks behind the machine columns are ONE child of the group. -->
         <div class="relative">
             <!-- TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between them. -->

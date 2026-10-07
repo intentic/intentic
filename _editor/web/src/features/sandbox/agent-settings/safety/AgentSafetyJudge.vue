@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, InfoDialog, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { modelChoiceLabel } from "../../../chat/models/modelPins";
 import { useRoleModel } from "../../../chat/accounts/roleModel";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
+import AgentSafetyRules from "./AgentSafetyRules.vue";
 
 // On/off/watch switch for whether the safety judge runs; the policy below only applies when this is not off. Watch
 // judges and logs every command without holding any. The judge's model is chosen on the Models tab, not here.
@@ -30,6 +31,10 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
 
 <template>
     <RowGroup :label="t(`sandbox.agentSafetyJudge.safetyJudge`)">
+        <!-- Which commands reach this gate at all is reference, not a setting: behind the (i), so the page holds controls. -->
+        <template #info>
+            <InfoDialog :title="t(`sandbox.agentSafetyRules.whatGetsStopped`)" size="lg"><AgentSafetyRules /></InfoDialog>
+        </template>
         <Row icon="shield" :title="t(`sandbox.agentSafetyJudge.toJudge`)" :description="t(`sandbox.agentSafetyJudge.whetherVerdictStopCommand`)">
             <template #control>
                 <SegmentedControl

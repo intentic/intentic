@@ -4,7 +4,8 @@ import { ref } from "vue";
 import Icon from "../primitives/Icon.vue";
 import Modal from "./Modal.vue";
 
-defineProps<{ title: string }>();
+// `lg` for a body that IS a table, whose columns need the room `md` would fold into lines.
+const { size = `md` } = defineProps<{ title: string; size?: `md` | `lg` }>();
 
 const open = ref(false);
 </script>
@@ -20,7 +21,7 @@ const open = ref(false);
         <Icon name="info-circle" />
     </button>
     <!-- The dialog body switches to two columns when its container is wide enough. -->
-    <Modal v-model:open="open" size="md" :header="title">
+    <Modal v-model:open="open" :size="size" :header="title">
         <div class="@container"><slot /></div>
     </Modal>
 </template>

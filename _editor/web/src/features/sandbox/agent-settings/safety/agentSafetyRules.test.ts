@@ -42,9 +42,8 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
 
 test("lists every class from the contract, with nothing to open first", () => {
     const host = mount();
-    // Heading text is the panel's own wording, not from the contract, so it's spelled out here rather than read off
-    // the component.
-    expect(text(host)).toContain(`What gets stopped`);
+    // No heading of its own: the dialog it opens in names it, so a second "What gets stopped" would only repeat it.
+    expect(text(host)).not.toContain(`What gets stopped`);
     // No tally beside the heading: the rows are the answer, and "7 kinds" only competed with the label for the eye.
     expect(text(host)).not.toContain(`${COMMAND_RULE_CATALOG.length} kinds`);
     for (const rule of COMMAND_RULE_CATALOG) {

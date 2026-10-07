@@ -22,7 +22,6 @@ import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
 import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
 import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
-import AgentSafetyRules from "../agent-settings/safety/AgentSafetyRules.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
 import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
@@ -121,8 +120,6 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSafetyJudge />
             <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
             <AgentProjectInstalls />
-            <!-- Between the switch and the policy: what the judge is scoped to precedes the document it judges against. -->
-            <AgentSafetyRules />
             <AgentSafetyPolicy />
             <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last. -->
             <AgentPrivacyShield />
