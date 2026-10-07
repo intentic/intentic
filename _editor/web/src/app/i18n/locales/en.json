@@ -4325,7 +4325,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Repair main when its CI fails",
-            "repairMainCiNote": "The first run that fails on main starts one fix agent once it has finished, with every job it failed, and each later run's failures go to it as one message until main passes again. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
+            "repairMainCiNote": "Main's first failed CI run starts one fix agent with every failed job; later failures go to it until main passes, then it hands off when out of turns or stuck; runner failures re-run once.",
             "mainCi": "Main's CI"
         },
         "agentClock": {
