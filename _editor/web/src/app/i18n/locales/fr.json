@@ -2173,7 +2173,6 @@
             "howAutoChooses": "Comment Auto choisit",
             "howToShow": "Comment afficher {toLowerCase}",
             "nothingJudgingCommandsAt": "Rien ne juge de commandes en ce moment : ceci n'est donc pas utilisé.",
-            "safetyJudgeOffNot": "Le juge de sécurité est désactivé : ce n'est donc pas l'un d'eux et rien ici ne lui écrit.",
             "selectEveryJobUnder": "Sélectionner toutes les tâches sous {toLowerCase}",
             "selectJobs": "Sélectionner des tâches",
             "selected": "{count} sélectionnées",

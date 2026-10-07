@@ -848,15 +848,13 @@ test("a block whose only odd job is switched off still opens as one list, and sa
     expect(group(host, HELPERS.label).textContent).not.toContain(`jobs differ`);
 });
 
-test("the collapsed row counts only the jobs it writes, and says which one it left out", async () => {
+test("the collapsed row counts only the jobs it writes", async () => {
     settings.value = { ...settings.value, commandJudge: `off` };
     const host = mount();
     await Promise.resolve();
 
     const helpers = group(host, HELPERS.label);
     expect(helpers.textContent).toContain(`One list for all ${HELPERS.roles.length - 1} jobs`);
-    const link = [...helpers.querySelectorAll<HTMLAnchorElement>(`a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
 });
 
 test("one model picked in the collapsed list reaches every live job and leaves the switched-off one as it was", async () => {

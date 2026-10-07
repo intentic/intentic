@@ -4121,7 +4121,6 @@
             "howToShow": "Jak pokazywać {toLowerCase}",
             "modelForJobs": "Model dla {count} zadania | Model dla {count} zadań | Model dla {count} zadań",
             "nothingJudgingCommandsAt": "W tej chwili nic nie ocenia poleceń, więc to nie jest w użyciu.",
-            "safetyJudgeOffNot": "Sędzia bezpieczeństwa jest wyłączony, więc to nie jest jedno z tych zadań i nic tutaj do niego nie pisze.",
             "selectEveryJobUnder": "Zaznacz każde zadanie w kategorii {toLowerCase}",
             "selectJobs": "Zaznacz zadania",
             "selected": "Zaznaczono: {count}",

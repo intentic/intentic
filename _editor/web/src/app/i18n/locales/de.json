@@ -2174,7 +2174,6 @@
             "howAutoChooses": "Wie Auto wählt",
             "howToShow": "Wie {toLowerCase} gezeigt wird",
             "nothingJudgingCommandsAt": "Gerade beurteilt nichts Befehle, das hier ist also nicht in Gebrauch.",
-            "safetyJudgeOffNot": "Der Sicherheitsrichter ist aus, das hier ist also keiner davon, und nichts hier schreibt darauf.",
             "selectEveryJobUnder": "Jeden Job unter {toLowerCase} auswählen",
             "selectJobs": "Jobs auswählen",
             "selected": "{count} ausgewählt",

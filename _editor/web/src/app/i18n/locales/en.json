@@ -4473,7 +4473,6 @@
             "howToShow": "How to show {toLowerCase}",
             "modelForJobs": "Model for {count} job | Model for {count} jobs",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
-            "safetyJudgeOffNot": "Safety judge is off, so it is not one of these and nothing here writes to it.",
             "selectEveryJobUnder": "Select every job under {toLowerCase}",
             "selectJobs": "Select jobs",
             "selected": "{count} selected",

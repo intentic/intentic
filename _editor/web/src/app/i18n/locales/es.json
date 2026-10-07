@@ -2182,7 +2182,6 @@
             "howAutoChooses": "Cómo elige Auto",
             "howToShow": "Cómo mostrar {toLowerCase}",
             "nothingJudgingCommandsAt": "Ahora mismo nada está juzgando comandos, así que esto no está en uso.",
-            "safetyJudgeOffNot": "El juez de seguridad está desactivado, así que no es uno de estos y nada de aquí le escribe.",
             "selectEveryJobUnder": "Seleccionar todas las tareas bajo {toLowerCase}",
             "selectJobs": "Seleccionar tareas",
             "selected": "{count} seleccionadas",

@@ -418,20 +418,7 @@ const setPickerOpen = (open: boolean): void => {
                 :disabled="!loaded"
                 :loaded="loaded"
                 @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(block.group, index, anchor)"
-            >
-                <!-- Names the job the count leaves out, and links to the same switch the Advanced row does. -->
-                <template v-if="block.ids.includes(JUDGE) && judgeOff" #note>
-                    <p class="text-2xs text-subtle">
-                        {{ t(`sandbox.agentModels.safetyJudgeOffNot`) }}
-                        <RouterLink
-                            :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
-                            class="text-link hover:underline"
-                            >{{ t(`sandbox.agentModels.turnJudgeOn`) }}</RouterLink
-                        >
-                        {{ t(`sandbox.agentModels.underSafety`) }}
-                    </p>
-                </template>
-            </ModelGroupRow>
+            />
 
             <!-- One row per job, the setting's true shape; `v-for` sits inside `v-else` to avoid combining both directives. -->
             <template v-else>
