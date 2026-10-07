@@ -5589,7 +5589,7 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Garde ce dossier synchronisé",
-            "reveal": "Afficher le fichier",
+            "reveal": "Afficher dans le gestionnaire de fichiers",
             "startsIfStopped": "La démarre si arrêtée",
             "syncedSandbox": "Sandbox synchronisé",
             "toggleFolder": "Basculer le dossier"

@@ -13,9 +13,10 @@ import { useWorkspaceTabs } from "./useWorkspaceTabs";
 // close it silently on the grounds that the dirty dot already showed, but the buffer went with the tab, so Reopen
 // Closed Tab brought back the file without what was typed; rejected for losing work on one click.
 
-/** What a close would discard, and the close itself, run once the reader agrees. */
+/** What a close would discard, and the close itself, run once the reader agrees. `folder` is a local window leaving its
+ * folder for another (local/LocalFolderMenu.vue), which discards as a close does. */
 export interface CloseQuestion {
-    readonly what: `tab` | `tabs` | `window`;
+    readonly what: `tab` | `tabs` | `window` | `folder`;
     readonly paths: readonly string[];
     readonly close: () => void;
 }

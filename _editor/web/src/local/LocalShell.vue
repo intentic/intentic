@@ -66,7 +66,7 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 <template>
     <div class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
-            <!-- Top of the rail: the place this window shows, and every other one this computer has opened. -->
+            <!-- Top of the rail: the place this window shows, and the account's sandboxes (other folders are Files' folder menu). -->
             <LocalPlaceSwitcher />
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 

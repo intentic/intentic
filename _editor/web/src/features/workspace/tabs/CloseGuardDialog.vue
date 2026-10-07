@@ -5,7 +5,7 @@ import { computed } from "vue";
 import type { CloseQuestion } from "./useCloseGuard";
 
 // The question useCloseGuard.ts asks, in the same words wherever a close would discard unsaved edits: a tab's ×, a bulk
-// close from the tab menu, or a local window the app held back.
+// close from the tab menu, a local window the app held back, or a local window leaving its folder for another.
 
 const props = defineProps<{ open: boolean; question: CloseQuestion | undefined }>();
 const emit = defineEmits<{ cancel: []; confirm: [] }>();
@@ -15,10 +15,14 @@ const header = computed(() => {
     const count = props.question?.paths.length ?? 0;
     return count === 1 ? t(`workspace.closeGuard.discardUnsavedChanges`) : t(`workspace.closeGuard.discardUnsavedChangesIn`, { count });
 });
+// Leaving a folder closes nothing the reader asked to close: the button says what they did ask for.
+const leavesFolder = computed(() => props.question?.what === `folder`);
 const consequence = computed(() => {
     switch (props.question?.what) {
         case `window`:
             return t(`workspace.closeGuard.closingWindowDiscardsUnsaved`);
+        case `folder`:
+            return t(`workspace.closeGuard.openingFolderDiscardsUnsaved`);
         case `tabs`:
             return t(`workspace.closeGuard.closingTabsDiscardsUnsaved`);
         default:
@@ -31,8 +35,8 @@ const consequence = computed(() => {
     <ConfirmDialog
         :open="props.open"
         :header="header"
-        :confirm-label="t(`workspace.closeGuard.closeAnyway`)"
-        confirm-icon="times"
+        :confirm-label="leavesFolder ? t(`workspace.closeGuard.openAnyway`) : t(`workspace.closeGuard.closeAnyway`)"
+        :confirm-icon="leavesFolder ? `folder-open` : `times`"
         :items="props.question?.paths ?? []"
         @cancel="emit(`cancel`)"
         @confirm="emit(`confirm`)"

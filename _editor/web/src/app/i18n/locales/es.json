@@ -5670,7 +5670,7 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Mantiene la carpeta sincronizada",
-            "reveal": "Mostrar archivo",
+            "reveal": "Mostrar en el gestor de archivos",
             "startsIfStopped": "La inicia si está parada",
             "syncedSandbox": "Sandbox sincronizado",
             "toggleFolder": "Mostrar carpeta"

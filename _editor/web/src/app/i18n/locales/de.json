@@ -5637,7 +5637,7 @@
     "local": {
         "localFiles": {
             "keepsFolderSynced": "Hält diesen Ordner synchron",
-            "reveal": "Datei zeigen",
+            "reveal": "Im Dateimanager zeigen",
             "startsIfStopped": "Startet sie bei Bedarf",
             "syncedSandbox": "Synchrone Sandbox",
             "toggleFolder": "Ordner umschalten"

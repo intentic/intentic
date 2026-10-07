@@ -218,7 +218,7 @@ flowchart LR
   once the engine wakes, when the workspace is the last face), and otherwise the last face (`opening` in
   `src-tauri/src/lib.rs`). A bare second launch opens the last face too. `home_facts` hands the shell `accountSeen` (a
   sign-in, or the workspace ever shown), `lastFace`, `hostsSandboxes` and `homeFolder`.
-- **Local windows.** The main window, and a folder or a document opened from the tray, the place chip, a
+- **Local windows.** The main window, and a folder or a document opened from the tray, the folder menu, a
   double-click ("Open with Intentic" on documents, folders, the space inside one and a drive root) or a second launch
   in a window of its own (`files-<n>`, `src-tauri/src/local.rs`). Each is the same shell. A document inside the folder of
   a window already open is handed to that window instead (`intentic:open`), and a path already being opened is not
@@ -226,12 +226,23 @@ flowchart LR
   instead of a sandbox. The app starts the sidecar (with the main window, or a few seconds after a launch with recents),
   grants each window one folder by a random token on the sidecar's stdin, and revokes it when the window closes
   (`src-tauri/src/sidecar.rs`). What else a local window may do is the commands its capability names
-  (`capabilities/local.json`): the shell's (its place chip, its account) and This device's, granted by name (`build.rs`); its links are only its
+  (`capabilities/local.json`): the shell's (its place chip, its folder menu, its account) and This device's, granted by name (`build.rs`); its links are only its
   own title bar and `local`. The documents it draws can do none of it: the page's policy runs no script but the
   bundle's own (`vite.local.config.ts`), a frame a document opens is another origin, which holds no capability, and a
   link it carries is heard only as `window` or `local`. No sandbox, account or Docker is needed to open anything. What
-  fails to open is said in a native dialog in the user's words (the place chip shows the same sentence under the row),
-  and the original error goes to stderr.
+  fails to open is said in a native dialog in the user's words (the folder menu shows the same sentence under the row),
+  and the original error goes to stderr. The folder menu is the folder's name at the head of its explorer
+  (`LocalFolderMenu.vue` in [web](../web)): "Open a folder…" and "Open a file…" by the system's dialog, then the
+  recents, newest first. A folder takes the window's place (`local_point`, `local_pick`), asked about first when that
+  would discard unsaved edits; Ctrl+click (Cmd+click on macOS) gives it a window of its own. The explorer's "Show in file
+  manager" opens the window's folder itself, and selects an entry picked in the tree in the folder that holds it
+  (`local.rs` `reveal`).
+
+  (2026-10-07) An opened folder had no way to another one: the place chip had lost its folders (below), and the tray,
+  which still opens them, is not where anyone looks from inside a window. The folders came back on the folder's own
+  name, not on the chip, which stays about sandboxes. In the same change "Show in file manager" with nothing picked
+  stopped revealing the folder in its parent: a project in Downloads opened Downloads with the project highlighted,
+  which is not the folder the window shows.
 
   (2026-10-03) The local window's account menu became the sandbox shell's own (Settings and Sign out), and its Settings
   open in the window, where they used to swap in the workspace on whichever sandbox was last open. The account's calls

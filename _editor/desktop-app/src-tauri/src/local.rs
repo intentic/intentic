@@ -755,7 +755,7 @@ fn granted_folder(
     Ok((grant, granted.name))
 }
 
-/* POINTING A WINDOW AT ANOTHER FOLDER — the place chip's folders (the web's local/LocalPlaceSwitcher.vue). */
+/* POINTING A WINDOW AT ANOTHER FOLDER — the folder menu (the web's local/LocalFolderMenu.vue). */
 
 /// Show `path`, a folder, in the window `label`, in place of the folder it shows: a grant of its own, the old one
 /// revoked, the page reloaded onto the new face. A folder another window already shows is that window's, which is
@@ -1072,16 +1072,45 @@ fn reveal(app: &AppHandle, label: &str, path: Option<&str>) {
     let Some(grant) = grant_of(app, label) else {
         return;
     };
-    let target = match path.and_then(|path| inside(&grant.root, path)) {
-        Some(target) => target,
-        None if grant.folder => grant.root.clone(),
-        None => grant.asked.clone(),
+    let entry = path.and_then(|path| inside(&grant.root, path));
+    let (target, shown) = match showing(&grant, entry) {
+        Showing::Open(folder) => {
+            let shown = app
+                .opener()
+                .open_path(folder.to_string_lossy(), None::<&str>);
+            (folder, shown)
+        }
+        Showing::Select(entry) => {
+            let shown = app.opener().reveal_item_in_dir(&entry);
+            (entry, shown)
+        }
     };
-    if let Err(error) = app.opener().reveal_item_in_dir(&target) {
+    if let Err(error) = shown {
         eprintln!(
             "could not show {} in the file manager: {error}",
             target.display()
         );
+    }
+}
+
+/// What the file manager is asked to show for a reveal.
+#[derive(Debug, PartialEq, Eq)]
+enum Showing {
+    /// A folder, opened on its own contents: what the window's tree lists.
+    Open(PathBuf),
+    /// An entry, selected in the folder that holds it.
+    Select(PathBuf),
+}
+
+/// A folder window's own folder is opened, never selected in its parent. "Reveal" on the root used to open the
+/// folder ABOVE it (a project in Downloads showed Downloads, with the project merely highlighted), which is not the
+/// folder the window shows. An entry inside it is selected where it lies, and a document opened alone is selected
+/// in its own folder.
+fn showing(grant: &Grant, entry: Option<PathBuf>) -> Showing {
+    match entry {
+        Some(entry) if entry != grant.root => Showing::Select(entry),
+        _ if grant.folder => Showing::Open(grant.root.clone()),
+        _ => Showing::Select(grant.asked.clone()),
     }
 }
 
@@ -1182,7 +1211,7 @@ fn handoff_path(port: u16, token: &str, granted: &Granted) -> String {
     )
 }
 
-/* THE SHELL'S COMMANDS: its place chip, from a local window's page (the web's localHost.ts, this app's src/host.ts). */
+/* THE SHELL'S COMMANDS: its folder menu and place chip, from a local window's page (the web's localHost.ts, this app's src/host.ts). */
 
 /// The system dialog, then what was chosen: a folder shown in the window that asked, in place of its own (`point`), a
 /// document opened where [`open`] puts it. Nothing chosen changes nothing; what fails is said in a dialog, since the
@@ -1219,8 +1248,8 @@ pub fn local_pick(app: AppHandle, window: WebviewWindow, folder: bool) {
     }
 }
 
-/// The place chip's folder: shown in the window that asked, in place of its own. What fails comes back as the
-/// sentence the chip shows under the row, so no dialog is raised.
+/// The folder menu's folder: shown in the window that asked, in place of its own. What fails comes back as the
+/// sentence the menu shows under the row, so no dialog is raised.
 #[tauri::command]
 pub async fn local_point(
     app: AppHandle,
@@ -1243,7 +1272,7 @@ pub async fn local_point(
     .map_err(|error| format!("opening stopped: {error}"))?
 }
 
-/// The place chip's document, or a folder asked for by name: what fails comes back as the sentence the chip shows
+/// The folder menu's document, or a folder asked for by name: what fails comes back as the sentence the menu shows
 /// under the row, so no dialog is raised.
 #[tauri::command]
 pub async fn local_open_path(app: AppHandle, path: String) -> Result<(), String> {
@@ -1330,6 +1359,36 @@ mod tests {
         assert_eq!(inside(&root, "/etc/passwd"), None);
         assert_eq!(inside(&root, "docs/missing.md"), None);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The window's own folder opens on its contents; it is never selected in the folder above it.
+    #[test]
+    fn a_reveal_opens_the_window_s_folder_and_selects_an_entry_in_it() {
+        let folder = grant("/home/me/Downloads/site", true, "/home/me/Downloads/site");
+        let root = PathBuf::from("/home/me/Downloads/site");
+        assert_eq!(showing(&folder, None), Showing::Open(root.clone()));
+        assert_eq!(
+            showing(&folder, Some(root.clone())),
+            Showing::Open(root.clone())
+        );
+        assert_eq!(
+            showing(&folder, Some(root.join("index.html"))),
+            Showing::Select(root.join("index.html"))
+        );
+        assert_eq!(
+            showing(&folder, Some(root.join("src"))),
+            Showing::Select(root.join("src"))
+        );
+        // A document opened on its own is selected in the folder that holds it.
+        let document = grant("/home/me/notes.md", false, "/home/me");
+        assert_eq!(
+            showing(&document, None),
+            Showing::Select(PathBuf::from("/home/me/notes.md"))
+        );
+        assert_eq!(
+            showing(&document, Some(PathBuf::from("/home/me"))),
+            Showing::Select(PathBuf::from("/home/me/notes.md"))
+        );
     }
 
     #[test]

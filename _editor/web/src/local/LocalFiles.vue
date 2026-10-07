@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, ui } from "@intentic/ui";
+import { Button, Icon, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref } from "vue";
 import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
@@ -22,8 +22,10 @@ import { openedPath } from "./appEvents";
 import { useFolderSandbox } from "./folderSandbox";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
+import LocalFolderMenu from "./LocalFolderMenu.vue";
 import { type LocalChord, localChord } from "./localKeys";
 import { folderButtonOf } from "./machineCard";
+import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 
@@ -48,13 +50,27 @@ const folderEmpty = computed(() => face?.file === undefined && listingOf(``)?.le
 const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, keepTab } = useWorkspaceTabs();
 // Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
 // shows a closed tab's edits nowhere else, so a tab holding some closes only once the reader agrees.
-const { question, asking, closeTab, closeAnyway, keepOpen } = useUnsavedGuard();
+const { dirty, unsavedPaths, ask: askToClose, question, asking, closeTab, closeAnyway, keepOpen } = useUnsavedGuard();
+// Another folder in this window's place (LocalFolderMenu.vue) takes the unsaved edits with the folder it leaves, so it is
+// asked about as a close is.
+const leaving = (go: () => void): void => {
+    if (!dirty.value) {
+        go();
+        return;
+    }
+    askToClose({ what: `folder`, paths: unsavedPaths(), close: go });
+};
 
 // The breadcrumb and the viewer's actions ride the tab row, as they do in the workspace.
 provide(HOISTED_CONTEXT, true);
 
 const selected = ref<string | undefined>(undefined);
 const treeShown = ref(face?.file === undefined);
+// What the file manager will show, named: the entry picked in the tree, or the folder itself (the app's local.rs `reveal`).
+const revealTip = computed((): Tip => ({
+    title: t(`local.localFiles.reveal`),
+    note: selected.value === undefined ? (face?.name ?? ``) : nameOf(selected.value),
+}));
 
 // Files from the computer's own file manager, dropped anywhere a folder row or the folder's home didn't take them, land
 // in the folder itself, copied by the sidecar as the workspace's drop uploads to /work. Without this an empty folder,
@@ -194,16 +210,17 @@ onUnmounted(() => {
         @drop="onRootDrop"
     >
         <aside v-if="treeShown" class="relative flex w-72 shrink-0 flex-col border-r border-line bg-card">
-            <div class="flex h-9 shrink-0 items-center gap-1 border-b border-line pl-3 pr-1">
-                <Icon name="folder" class="shrink-0 text-sm text-muted" />
-                <span class="min-w-0 flex-1 truncate text-xs font-medium" v-tooltip.bottom="face?.path">{{ face?.name }}</span>
+            <div class="flex h-9 shrink-0 items-center gap-1 border-b border-line pl-1.5 pr-1">
+                <!-- The folder's name, and every other folder and document of this computer behind it (LocalFolderMenu.vue). -->
+                <LocalFolderMenu :leaving="leaving" />
+                <span class="flex-1"></span>
                 <Icon v-if="busy || isLoading" name="spinner" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
-                <!-- Another folder is the place chip's to open (LocalPlaceSwitcher.vue); this row is about this one. -->
+                <!-- The entry picked in the tree, selected in the file manager; with none picked, the folder itself, opened. -->
                 <button
                     type="button"
                     :class="ui.iconButton(`h-7 w-7`)"
-                    v-tooltip.bottom="t(`local.localFiles.reveal`)"
-                    :aria-label="t(`local.localFiles.reveal`)"
+                    v-tooltip.bottom="revealTip"
+                    :aria-label="`${revealTip.title}: ${revealTip.note}`"
                     @click="askLocalApp(`reveal`, { path: selected })"
                 >
                     <Icon name="external-link" class="text-sm" />
