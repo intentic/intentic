@@ -29,6 +29,17 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./permissions": {
+            "types": "./dist/permissions.d.ts",
+            "import": {
+                "@intentic/src": "./src/permissions.ts",
+                "default": "./dist/permissions.js"
+            },
+            "require": {
+                "@intentic/src": "./src/permissions.ts",
+                "default": "./dist/permissions.js"
+            }
         }
     },
     "scripts": {

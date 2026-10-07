@@ -1,3 +1,5 @@
+import type { ExtensionHealth } from "@intentic/extension-api";
+
 // The daemon-to-backend-host contract: one JSON value passed via env, not argv (world-readable on /proc).
 
 export const BACKEND_CONFIG_ENV = "INTENTIC_BACKEND_CONFIG";
@@ -16,6 +18,12 @@ export interface BackendHostExtension {
     // `dir` is the absolute checkout root; `server` is its checkout-relative server bundle path.
     readonly dir: string;
     readonly server: string;
+    // The bundle's content digest: what tells a reload which extensions changed, and the query that makes Node import the
+    // new code rather than the module it already cached under the same path.
+    readonly bundle: string;
+    // Its own directories (extensions/runtime/extension-state.ts), created before the host is told about them.
+    readonly stateDir: string;
+    readonly cacheDir: string;
     // Minted token api.daemon presents; scoped by the daemon to permissions.daemon.
     readonly daemonToken: string;
     // The manifest's permissions.daemon, the same list the token is scoped to: api.daemon.rpc refuses outside it before
@@ -40,9 +48,21 @@ export interface BackendExtensionStatus {
     readonly id: string;
     readonly state: "running" | "error";
     readonly detail?: string;
+    // Whether a change to it alone can be made in place (its activation handed back a `deactivate`); otherwise only a
+    // restart of the whole host replaces its code.
+    readonly reloadable?: boolean;
+    // Its own account of itself (`ServerActivation.health`), as of the supervisor's last sweep; absent while it has said
+    // nothing but `ok`, and before the first sweep reads it.
+    readonly health?: ExtensionHealth;
 }
 
 export interface BackendHealth {
     readonly ok: true;
     readonly extensions: readonly BackendExtensionStatus[];
+}
+
+// The host's in-place reload: the whole set it should run now. It answers the new statuses, or 409 when an extension
+// that would change cannot be let go of in place, which the supervisor answers with a restart.
+export interface BackendReload {
+    readonly extensions: readonly BackendHostExtension[];
 }

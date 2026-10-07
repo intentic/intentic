@@ -19,6 +19,7 @@ import { forgetExtensionSettings, readAllExtensionSettings } from "./extension-s
 import { forgetUpdateState, previousVersionOf } from "./extension-updates.js";
 import { forgetExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { existingExtensionDirs, forgetExtensionDirs } from "./runtime/extension-state.js";
 
 // Removing an extension, and the read an owner gets before deciding to. Removal is the one act that means an
 // extension's IDENTITY is going rather than its checkout: everything else in this directory deliberately keys state by
@@ -116,6 +117,19 @@ const storedSettingsOf = async (services: Services, extension: InstalledExtensio
         .map(([key]) => ({ key, secret: secretKeys.has(key) }));
 };
 
+// What its own code kept (`api.stateDir`, `api.cacheDir`), keyed by its identity, so only when no other copy of the
+// identity stays: a sibling's code keeps using them.
+const ownDirsOf = async (services: Services, extension: InstalledExtension): Promise<ExtensionRemovalPlan["files"]> => {
+    const root = services.workspace.root;
+    const dirs = await existingExtensionDirs(root, extension.manifest);
+    return [
+        ...(dirs.stateDir === undefined
+            ? []
+            : [{ path: relative(root, dirs.stateDir), detail: "what its own code kept to run (resume marks, cached tokens, sessions); a re-install starts without them" }]),
+        ...(dirs.cacheDir === undefined ? [] : [{ path: relative(root, dirs.cacheDir), detail: "what it downloaded or built for itself, fetched again if it is installed again" }]),
+    ];
+};
+
 // The kept-one-back checkout is listed separately because it is a second copy on disk, and because its presence is
 // exactly what "you could still revert" means — removal is what ends that.
 const deletedDirsOf = async (services: Services, extension: InstalledExtension): Promise<ExtensionRemovalPlan["files"]> => {
@@ -170,7 +184,7 @@ const keepsOf = (extension: InstalledExtension, strandedAutomations: number, sib
             : [
                   `another copy of ${extensionIdOf(sibling.manifest)} stays installed as "${sibling.id}", so the connections configured from its cards, its settings and its switch stay with that copy`,
               ]),
-        "anything it wrote in your workspace stays where it is",
+        "anything it wrote in your workspace outside its own directories stays where it is",
         ...(strandedAutomations > 0 || templated ? ["automations you built with it stay; a template is a starting point, not a dependency"] : []),
         ...(presets.length > 0 ? ["connections added from its preset cards stay: those are ordinary connections that never needed it"] : []),
         ...(extension.source === "installed" ? ["its source repository is untouched, so installing it again is one paste of the same address"] : []),
@@ -187,13 +201,15 @@ export const planExtensionRemoval = async (services: Services, extension: Instal
     const identity = extensionIdOf(extension.manifest);
     const contributions = extension.manifest.contributes?.capabilities ?? [];
     const sibling = await remainingSiblingOf(services, extension);
-    const [configured, connectors, settings, files, automations] = await Promise.all([
+    const [configured, connectors, settings, checkouts, own, automations] = await Promise.all([
         sibling === undefined ? contributedCapabilities(services, extension) : [],
         registryIncluding(services, extension),
         sibling === undefined ? storedSettingsOf(services, extension, identity) : [],
         deletedDirsOf(services, extension),
+        sibling === undefined ? ownDirsOf(services, extension) : [],
         sibling === undefined ? strandedAutomationsOf(services, extension) : [],
     ]);
+    const files = [...checkouts, ...own];
     const connections: ExtensionRemovalConnection[] = configured.map((capability) => ({
         id: capability.id,
         kind: capability.kind,
@@ -275,6 +291,7 @@ export const removeExtension = async (
     if (sibling === undefined) {
         await Promise.all([
             forgetExtensionSettings(root, services.extensionSecretVault, identity),
+            forgetExtensionDirs(root, extension.manifest),
             forgetExtensionEnablement(root, identity),
             forgetExtensionApproval(services.config.historyRoot, identity),
             forgetExtensionUsage(root, identity),

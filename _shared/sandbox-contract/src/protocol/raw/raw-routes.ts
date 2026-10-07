@@ -130,6 +130,11 @@ export const RAW_ROUTES = {
     "POST /listeners/{provider}/dispatch": { panel: false, control: "never" },
     "POST /listeners/{provider}/failure": { panel: false, control: "never" },
     "POST /listeners/{provider}/status": { panel: false, control: "never" },
+    // What an extension's own code asks about itself (extension-protocol.ts): its settings with their secrets, and its
+    // event stream. Every extension token reaches both undeclared, and each answers only about the extension asking, so
+    // no other credential reaches them; the handler resolves the caller from its token again.
+    "GET /extension/settings": { floor: "maintainer", panel: false, control: "never" },
+    "GET /extension/events": { floor: "maintainer", panel: false, control: "never", stream: true },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // Below maintainer a pairing is capped to port-mirror, so a collaborator may mint a preview tunnel.

@@ -2,14 +2,15 @@ import { TimeoutError, withDeadline } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { ToolCard, ToolContent, ToolDefinition, ToolResult } from "@intentic/extension-api";
+import type { ToolSource } from "@intentic/extension-api/runtime";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
 // The MCP server the backend host runs for an extension's `api.tools.serve`: the extension says which tools a card
 // gets and what each does; this owns everything else, the handshake, the tool list, each call's deadline, turning an
 // answer into MCP content. Runs in the host process, so it reads nothing of the daemon's.
 
-// What one serve registration answers with, per card.
-export type ToolSource = (card: ToolCard | undefined) => readonly ToolDefinition[] | Promise<readonly ToolDefinition[]>;
+// What one serve registration answers with, per card: the SDK runtime's own type, since it is the runtime's slot.
+export type { ToolSource } from "@intentic/extension-api/runtime";
 
 // A call gets this long before its signal aborts and the model reads a timeout. Far above any tool that answers from a
 // remote API, and a bound rather than a budget: it exists so a hung call cannot hold the agent's turn forever.

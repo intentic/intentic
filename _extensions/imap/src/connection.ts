@@ -140,7 +140,7 @@ export const openImapConnection = async (
     }
 
     const uidValidity = String(box.uidValidity);
-    const path = watermarkPath(ctx.workspaceRoot, capabilityId);
+    const path = watermarkPath(ctx.api.stateDir, capabilityId);
     let point: { lastUid: number; baselined: boolean };
     try {
         const stored = await readWatermark(path, (detail) =>

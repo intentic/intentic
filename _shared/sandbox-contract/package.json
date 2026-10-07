@@ -150,6 +150,17 @@
                 "default": "./dist/protocol/listener-protocol.js"
             }
         },
+        "./extension-protocol": {
+            "types": "./dist/protocol/raw/extension-protocol.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/raw/extension-protocol.ts",
+                "default": "./dist/protocol/raw/extension-protocol.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/raw/extension-protocol.ts",
+                "default": "./dist/protocol/raw/extension-protocol.js"
+            }
+        },
         "./edge-verdict": {
             "types": "./dist/protocol/edge-verdict.d.ts",
             "import": {

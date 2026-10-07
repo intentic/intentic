@@ -27,7 +27,7 @@ const bundlePaths = (manifest: ExtensionManifest): { what: string; path: string 
     ...(manifest.server === undefined ? [] : [{ what: "server bundle", path: manifest.server }]),
 ];
 
-const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; readonly path: string }[] => {
+export const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; readonly path: string }[] => {
     const promised: { what: string; path: string }[] = bundlePaths(manifest);
     const contributes = manifest.contributes;
     if (contributes?.bin !== undefined) {

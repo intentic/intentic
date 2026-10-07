@@ -294,7 +294,12 @@ test("removing an install in dev mode deletes the pinned copy and the pointer, n
     await client.extensions.devSet({ id: ID });
 
     const plan = await client.extensions.removalPlan({ id: ID });
-    expect(plan.files.map((file) => file.path)).toEqual([".intentic/local/extensions/intentic-maintenance"]);
+    // The pinned copy, and the directories its process was handed when dev mode started it; never the checkout.
+    expect(plan.files.map((file) => file.path)).toEqual([
+        ".intentic/local/extensions/intentic-maintenance",
+        ".intentic/local/runtime/extensions/intentic.maintenance",
+        ".intentic/local/cache/extensions/intentic.maintenance",
+    ]);
     expect(plan.keeps).toContain("the source checkout it was pointed at (extensions/maintenance) stays as it is");
 
     await client.extensions.remove({ id: ID });

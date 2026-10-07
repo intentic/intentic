@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sleep } from "@intentic/base/async";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { errorMessage } from "@intentic/base/errors";
+import { connectExtensionProcess, type ExtensionRuntime } from "@intentic/extension-api/runtime";
 import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes a gateway never uses.
 import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
@@ -139,13 +140,19 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         (name: string): (() => void) =>
         () =>
             log.error({ name }, "missing required env: the gateway can't start");
-    const daemonBase = requireEnv("INTENTIC_DAEMON", missing("INTENTIC_DAEMON"));
-    // The extension's own daemon credential, which the daemon starts every extension process with.
-    const extensionToken = requireEnv("INTENTIC_EXTENSION_TOKEN", missing("INTENTIC_EXTENSION_TOKEN"));
+    // The process's own extension api, from the environment the daemon started it with (its token, its directories):
+    // the same api a `server` bundle is handed, so a gateway reaches the daemon the way a backend does.
+    let runtime: ExtensionRuntime;
+    try {
+        runtime = connectExtensionProcess(process.env, { log: (message) => log.info({}, message) });
+    } catch (error) {
+        log.error({ err: error }, `the gateway can't start: ${errorMessage(error)}`);
+        process.exit(1);
+    }
     const port = Number(requireEnv("PORT", missing("PORT")));
-    const workspaceRoot = process.env["INTENTIC_WORKSPACE"] ?? WORKSPACE_ROOT;
+    const workspaceRoot = runtime.api.workspaceRoot;
 
-    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, extensionToken, log);
+    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, runtime.api.daemon, log);
 
     // Which connection each slot holds, and the config key it was built from (to detect a token edit as a change).
     const wired = new Map<string, { key: string; handle: THandle }>();
@@ -156,7 +163,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         fatalUntil.set(key, Date.now() + FATAL_RETRY_MS);
         void daemon.failure(detail);
     };
-    const hooks = spec.create({ daemon, workspaceRoot, log }, { markFatal });
+    const hooks = spec.create({ api: runtime.api, daemon, workspaceRoot, log }, { markFatal });
     let connectors: ReadonlyArray<ConnectorEntry<TConfig>> = [];
     let holding = false;
     let anyDesired = false;
@@ -322,6 +329,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
             wired.clear();
         };
         void Promise.race([wind(), sleep(SHUTDOWN_TIMEOUT_MS)]).finally(() => {
+            runtime.close();
             server.close();
             process.exit(0);
         });

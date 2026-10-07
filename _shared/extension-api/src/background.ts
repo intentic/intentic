@@ -1,10 +1,8 @@
 import {
     at,
-    type Conversion,
     drop,
     dropAll,
     fold,
-    type Granularity,
     mapValue,
     nested,
     pinDefault,
@@ -16,6 +14,7 @@ import {
 } from "@intentic/sandbox-contract/documents";
 import type { Ref } from "vue";
 import type { Disposable, IntenticApi } from "./api.js";
+import type { ServerDocumentOptions, StoredJson } from "./server.js";
 import { sandboxRef, sandboxScopeGuard } from "./scope.js";
 
 // Sandbox-scoped background polling for a badge that needs an answer before its tile opens: state lives at module
@@ -249,15 +248,8 @@ export interface SandboxDocument<T> {
     update(change: (current: T) => T): Promise<boolean>;
 }
 
-export interface SandboxDocumentOptions<T> {
-    // Today's shape, or undefined for a file this version cannot read.
-    readonly parse: (raw: unknown) => T | undefined;
-    readonly fallback: () => T;
-    // Append-only: a conversion is never edited or removed once shipped, only followed by another.
-    readonly history?: readonly Conversion[];
-    // Where the conversions apply: the document, each entry of a top-level array, or each value of an object keyed by id.
-    readonly granularity?: Granularity;
-}
+// The same options a backend's `api.document` takes (server.ts): one file's shape, however the extension reaches it.
+export type SandboxDocumentOptions<T> = ServerDocumentOptions<T>;
 
 // Every handle on one path queues behind the others, not just behind itself: two handles opened on the same file (two
 // panels, a panel and a command) would otherwise each read, change and write, and the second write would drop the first.
@@ -270,7 +262,8 @@ export const sandboxDocument = <T>(host: () => IntenticApi, path: string, option
     const readAs = async () => {
         // Through the contract's own read, which throws for a refused or unreachable read where `readJson` answers absent.
         const answer = await host().sandbox.rpc.workspace.file({ path });
-        return answer.present ? readDocument<T>(answer.content, shape, { kind: `whole`, parse: (raw) => options.parse(raw) }) : undefined;
+        // SAFETY: readDocument hands its parse what JSON.parse produced and the conversions rewrote, which is JSON.
+        return answer.present ? readDocument<T>(answer.content, shape, { kind: `whole`, parse: (raw) => options.parse(raw as StoredJson) }) : undefined;
     };
     const read = async (): Promise<T> => {
         try {

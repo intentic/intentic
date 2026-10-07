@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rmdir, stat, writeFile } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { Readable } from "node:stream";
-import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
+import type { ExtensionServerApi, ServerActivation } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { ENGINES, type DocsState, type Engine, type OpenRequest, type OpenResult } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
@@ -22,14 +22,22 @@ import { Sessions, type FileStat, type OpenInput, type Session } from "./session
 // editor page, and the two engines behind it: the browser engine's bundle (downloaded once, served as files) and the
 // document server's container. Runs inside the daemon's extension host with node builtins only.
 
-// Under the workspace state dir: shared across turns and sessions, never tracked, kept across sandbox rebuilds by the volume.
-const SECRET_PATH = `${STATE_DIR}/local/onlyoffice/jwt-secret`;
+// In the extension's own state directory (`api.stateDir`): shared across turns and sessions, never tracked, kept across
+// sandbox rebuilds by the volume, deleted with the extension.
+const SECRET_FILE = "jwt-secret";
 // The listener's port from its last run. Taken again when free, so a restarted backend answers at the address the
 // browser already knows: the same forwarded origin keeps the editor's service worker cache, and the document server
 // keeps reaching the callback address a session it is still holding was opened with.
-const PORT_PATH = `${STATE_DIR}/local/onlyoffice/listener-port`;
-// The browser engine's bundle, in the workspace's rebuildable cache: the watcher ignores it and no backup carries it.
-const BUNDLE_CACHE = `${STATE_DIR}/local/cache/onlyoffice/bundle`;
+const PORT_FILE = "listener-port";
+// The browser engine's bundle, in the extension's own cache directory (`api.cacheDir`): the watcher ignores it and no
+// backup carries it.
+const BUNDLE_DIR = "bundle";
+
+// Where each of those lived before the host handed the extension directories of its own, workspace-relative. Moved once
+// rather than abandoned: a new secret would recreate the document server's container, and the bundle is a 200 MB
+// download.
+const LEGACY_STATE = `${STATE_DIR}/local/onlyoffice`;
+const LEGACY_BUNDLE = `${STATE_DIR}/local/cache/onlyoffice/bundle`;
 
 // How the document server reaches this listener from inside its container (the engine's host gateway).
 const CONTAINER_TO_SANDBOX = "host.docker.internal";
@@ -81,6 +89,16 @@ const loadPort = async (file: string, log: (line: string) => void): Promise<numb
     }
     const port = Number.parseInt(text.trim(), 10);
     return Number.isInteger(port) && port > 0 && port < 65536 ? port : 0;
+};
+
+// Records the port the listener took, for the next run to take again. Costs only the stable address when it fails.
+const recordPort = async (file: string, port: number, log: (line: string) => void): Promise<void> => {
+    try {
+        await mkdir(posix.dirname(file), { recursive: true });
+        await writeFile(file, `${port}\n`);
+    } catch (error) {
+        log(`could not record the listener's port, the next run takes any: ${error instanceof Error ? error.message : String(error)}`);
+    }
 };
 
 // How long the document server may sit unused before it is stopped, and how often that is asked. Generous next to the
@@ -162,8 +180,44 @@ const prepareAtBoot = (settings: Record<string, unknown> | undefined, deps: { do
     }
 };
 
-export const activateServer = async (api: ExtensionServerApi, context: ExtensionServerContext): Promise<void> => {
-    const secret = await loadSecret(join(api.workspaceRoot, SECRET_PATH));
+// Moves `from` to `to` when only `from` is there; a move that already happened, or never had anything to move, is done.
+const adopt = async (from: string, to: string): Promise<void> => {
+    try {
+        await stat(to);
+        return;
+    } catch (error) {
+        if (!isMissing(error)) {
+            throw error;
+        }
+    }
+    try {
+        await mkdir(posix.dirname(to), { recursive: true });
+        await rename(from, to);
+    } catch (error) {
+        if (!isMissing(error)) {
+            throw error;
+        }
+    }
+};
+
+// What an earlier version kept outside the extension's own directories, moved into them. Best effort: a move that fails
+// costs a fresh secret or a fresh download, never the start.
+const adoptLegacyState = async (api: ExtensionServerApi): Promise<void> => {
+    const legacy = join(api.workspaceRoot, LEGACY_STATE);
+    try {
+        await adopt(join(legacy, SECRET_FILE), join(api.stateDir, SECRET_FILE));
+        await adopt(join(legacy, PORT_FILE), join(api.stateDir, PORT_FILE));
+        await adopt(join(api.workspaceRoot, LEGACY_BUNDLE), join(api.cacheDir, BUNDLE_DIR));
+        // allow(silent-catch): the old directory holding something else of its own is reason enough to leave it
+        await rmdir(legacy).catch(() => undefined);
+    } catch (error) {
+        api.log(`what an earlier version kept could not be moved into this extension's own directories: ${error instanceof Error ? error.message : String(error)}`);
+    }
+};
+
+export const activateServer = async (api: ExtensionServerApi): Promise<ServerActivation> => {
+    await adoptLegacyState(api);
+    const secret = await loadSecret(join(api.stateDir, SECRET_FILE));
     const engine = createDockerEngine();
     const docs = new DocumentServer({ engine, image: IMAGE, secret, log: api.log });
     const sessions = new Sessions();
@@ -171,14 +225,14 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     // The owner's standing choice: bring the server up with the sandbox rather than on the first document. Read once at
     // boot; a later flip is acted on by the viewer, which starts the server as it saves the setting. Without it, a
     // container the engine already runs is still adopted, so the first open does not wait on the readiness check.
-    const settings = await api.daemon.rpc.extensions.settings({ id: context.extensionId }).catch((error: unknown) => {
+    const settings = await api.settings.get().catch((error: unknown) => {
         api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
         return undefined;
     });
-    const bundle = new BundleStore({ root: join(api.workspaceRoot, BUNDLE_CACHE), pin: BUNDLE_PIN, log: api.log });
+    const bundle = new BundleStore({ root: join(api.cacheDir, BUNDLE_DIR), pin: BUNDLE_PIN, log: api.log });
     // Reads what is on disk at once, so the first open knows whether the bundle is there.
     void bundle.load().catch((error: unknown) => api.log(`the editor bundle cache is unreadable: ${error instanceof Error ? error.message : String(error)}`));
-    prepareAtBoot(settings?.settings, { docs, bundle, log: api.log });
+    prepareAtBoot(settings, { docs, bundle, log: api.log });
 
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
     // since the forward table is in-memory and a busy sandbox can evict a slot.
@@ -309,16 +363,11 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
         browser: browser.routes,
         log: api.log,
     });
-    const portFile = join(api.workspaceRoot, PORT_PATH);
+    const portFile = join(api.stateDir, PORT_FILE);
     const lastPort = await loadPort(portFile, api.log);
     listenerPort = await listener.listen(lastPort);
     if (listenerPort !== lastPort) {
-        try {
-            await mkdir(posix.dirname(portFile), { recursive: true });
-            await writeFile(portFile, `${listenerPort}\n`);
-        } catch (error) {
-            api.log(`could not record the listener's port, the next run takes any: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        await recordPort(portFile, listenerPort, api.log);
     }
     api.log(`listening on 0.0.0.0:${listenerPort}`);
 
@@ -400,4 +449,14 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
         }
         return undefined;
     });
+
+    // Let go of everything this activation opened, so a change to this extension alone reloads it in the running host.
+    // The document server's container stays up: the next activation adopts it, and a session still open in a browser
+    // reconnects to the same listener port, recorded above.
+    return {
+        deactivate: async () => {
+            clearInterval(idleTimer);
+            await listener.close();
+        },
+    };
 };

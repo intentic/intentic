@@ -48,6 +48,7 @@ import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "./exte
 import { createTurnMountRoute } from "./agent/tools/turn-mounts.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener/listener.routes.js";
+import { createExtensionOwnRoutes } from "./extensions/runtime/own.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.routes.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { judgeCommand } from "./agent/tools/command-judge.js";
@@ -468,6 +469,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /listeners/{provider}/dispatch", listenerRoutes.dispatch);
     serve("POST /listeners/{provider}/failure", listenerRoutes.failure);
     serve("POST /listeners/{provider}/status", listenerRoutes.status);
+
+    // What an extension's own code asks about itself: its settings with their secrets, and its event stream. Every
+    // extension token reaches both undeclared; each answers only about the extension the token was minted for.
+    const extensionOwnRoutes = createExtensionOwnRoutes(services);
+    serve("GET /extension/settings", extensionOwnRoutes.settings);
+    serve("GET /extension/events", extensionOwnRoutes.events);
 
     // CI webhook receiver, secret-gated in the handler; completed pipelines wake `ci` listener automations.
     serve("POST /ci/webhook/{host}", createCiWebhookRoute(services));

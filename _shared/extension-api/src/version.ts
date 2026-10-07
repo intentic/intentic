@@ -154,4 +154,16 @@
 // the sandbox's credential gateway forwards requests for it. It shipped inside 2.24.0 without a version: an older host's
 // parse drops the block, so there the credential reaches the agent's environment as it did before. No member or
 // top-level key was added, so the manifest digest is the only grain that records it.
-export const extensionApiVersion = "2.25.0";
+// 2.26.0 gives the backend half what the browser half already had, and one shape wherever an extension's Node code runs.
+// `ExtensionServerApi` gains `stateDir` and `cacheDir` (directories of the extension's own, keyed by its identity, made
+// before activation and deleted with it), `document` (a file there, evolved by the same `conversions` as
+// `sandboxDocument`), `settings` (its own values, secrets included, with `onDidChange`) and `workspace` (file, ref and
+// repository changes), the last two over two routes every extension token reaches without declaring them.
+// `activateServer` may hand back `{ deactivate, health }`: with a `deactivate`, a change to that extension alone reloads
+// it in the running host instead of restarting every backend, and on shutdown it is let go of before the host exits;
+// `health` answers ok, starting, degraded or failed, shown on its row. A declared process gets the same api, less the
+// two slots only the host serves (`ExtensionProcessApi`), from `connectExtensionProcess` in the new `./runtime` subpath,
+// and `./testing` holds `fakeExtensionApi`, the backend api on a fake daemon that refuses what the daemon would. Additive:
+// a bundle that returns nothing from activation and never reads the new members is unchanged. The recorded surface grows
+// two grains, the backend api's `settings` and `workspace` members, where those blocks arrived and will grow.
+export const extensionApiVersion = "2.26.0";

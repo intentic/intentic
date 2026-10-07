@@ -384,14 +384,15 @@ const STATE_FILES = [
         why: "Rebuildable indexes and caches, the iq index and its vector sidecar, the whisper model, fileq's derived/ markdown shadows of binary files; ignored by the watcher and recreated from carried workspace content.",
         portability: "derived",
     },
-    // Extension runtime scratch, one directory per extension via `extensionRuntimeDir` below (the only way an
-    // extension may name a home here). Resume watermarks and cached tokens; all of it expires or re-derives.
+    // Extension runtime scratch, one directory per extension via `extensionStateDir` below (the only way an extension
+    // may name a home here), plus the gateways' published control addresses. Resume watermarks and cached tokens; all
+    // of it expires or re-derives.
     {
         path: ".intentic/local/runtime/",
         invalidates: [],
         why: "Extension runtime scratch (watermarks, cached short-lived tokens); nothing renders it and gateways re-derive it.",
         portability: "derived",
-        outsideWriter: "extensions, through extensionRuntimeDir below",
+        outsideWriter: "extensions, through extensionStateDir below",
     },
     {
         path: ".intentic/local/tmp/",
@@ -615,14 +616,28 @@ export const UNBACKED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.fil
     (file) => file.path,
 );
 
-// The only way an extension may name a scratch home, workspace-relative and forward-slash so the browser bundle
-// can hold it too. Extension ids are already validated slugs; the character replace is defense in depth.
-export const extensionRuntimeDir = (extension: string): string =>
-    `${STATE_GROUP_DIR.local}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
+// A name made safe as one path segment. Extension identities are already validated slugs joined by a dot; the replace
+// is defence in depth.
+const segmentOf = (name: string): string => name.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+
+// The only way an extension may name a home for its own state, workspace-relative and forward-slash so the browser
+// bundle can hold it too. Keyed by the extension's identity (`publisher.name`, extensionIdOf), like its settings and its
+// switch, so it survives an update, a re-install and dev mode. The daemon creates it and hands it to the extension's
+// code as `api.stateDir`; an agent-side CLI of the same extension names it by its own identity.
+export const extensionStateDir = (identity: string): string => `${STATE_GROUP_DIR.local}/runtime/extensions/${segmentOf(identity)}`;
+
+// Its counterpart for what can be fetched or built again (`api.cacheDir`), under the rebuildable cache the watcher
+// ignores and no backup carries.
+export const extensionCacheDir = (identity: string): string => `${STATE_GROUP_DIR.local}/cache/extensions/${segmentOf(identity)}`;
+
+// Where an extension kept its state before the directory was keyed by identity: its bare manifest name. Read only by
+// the daemon, which moves a first-party extension's directory from here to extensionStateDir once.
+export const legacyExtensionStateDir = (name: string): string => `${STATE_GROUP_DIR.local}/runtime/extensions/${segmentOf(name)}`;
 
 // Where a gateway publishes its loopback control address for the agent's CLI to read (`publishGatewayUrl`), keyed by
-// the listener provider the gateway serves, which for every gateway that publishes one is also its extension's name.
-export const extensionGatewayUrlFile = (provider: string): string => `${extensionRuntimeDir(provider)}/gateway.url`;
+// the listener provider the gateway serves. Beside the extensions' own directories rather than inside one, since the
+// provider is the rendezvous both sides know, and the CLI never learns which extension owns it.
+export const extensionGatewayUrlFile = (provider: string): string => `${STATE_GROUP_DIR.local}/runtime/gateways/${segmentOf(provider)}.url`;
 
 // Manifests the unreadable-manifest notice reports on: exactly the entries that declare `manifests` in
 // Report broken manifests only when a file change can refresh their notice.

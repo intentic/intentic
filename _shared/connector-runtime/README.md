@@ -12,10 +12,13 @@ flowchart LR
 
 - Runs in the sandbox as each connector extension's auto-started process, not inside the daemon. The daemon holds no
   provider connection; the gateway opens them and talks to the daemon only through the provider-scoped listener
-  routes, authenticated with the extension's own `INTENTIC_EXTENSION_TOKEN`. The daemon answers those routes only for
-  the extension whose manifest names that provider as its listener, and `/state` hands it only the connectors whose card
-  that extension contributes. Their paths and the `/state` feed's schema come from the contract's
-  `./listener-protocol` subpath, the declaration the daemon serves from, so a gateway loads no more of the contract.
+  routes, over the process's own extension api (`connectExtensionProcess` from `@intentic/extension-api/runtime`, the
+  api a `server` bundle is handed), which presents the extension's own token. A connector gets that api as `ctx.api`:
+  its state directory (`ctx.api.stateDir`, where WhatsApp keeps its sessions and IMAP its watermarks), its settings and
+  the workspace's events. The daemon answers those routes only for the extension whose manifest names that provider as
+  its listener, and `/state` hands it only the connectors whose card that extension contributes. Their paths and the
+  `/state` feed's schema come from the contract's `./listener-protocol` subpath, the declaration the daemon serves
+  from, so a gateway loads no more of the contract.
 - `runConnectorGateway` reconciles the connections a connector wants against the daemon's state on a timer, backs off
   after a fatal connect, reports status, serves `/health`, and shuts down on SIGTERM. A connector supplies only its
   `GatewayHooks`.
@@ -27,8 +30,9 @@ flowchart LR
   `MESSAGE_LIMITS`, re-exported here; how a platform decides a message is addressed to us stays in its gateway.
 - Listener memory (duplicate delivery keys, chat rings, typing heartbeats) is bounded and forgotten on restart, with the
   defaults every gateway shares (`RECENT_KEYS_MAX`, `HISTORY_LIMIT`, `TYPING_MAX_MS`).
-- A gateway with a CLI publishes its loopback address at the contract's `extensionGatewayUrlFile`; the CLI finds it with
-  `readGatewayUrl`, which walks up from wherever the agent stands.
+- A gateway with a CLI publishes its loopback address at the contract's `extensionGatewayUrlFile`, keyed by provider
+  beside the extensions' own directories; the CLI finds it with `readGatewayUrl`, which walks up from wherever the agent
+  stands.
 - One process holds every connection, so once it is serving, a stray rejection in one connector is logged instead of
   taking the rest down. A gateway that cannot start still exits non-zero, and its reports to the daemon never reject.
 

@@ -2,14 +2,13 @@ import type { sandboxContract } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Component } from "vue";
 import type { DiffPayload } from "./diff.js";
+import type { Disposable } from "./disposable.js";
 import type { CapabilityFacts, RepoFacts } from "./facts.js";
 
 // The host API an extension programs against; there is no ambient global. Arrives as
 // activate(api, context); everything registered returns a Disposable pushed onto context.subscriptions.
 
-export interface Disposable {
-    dispose(): void;
-}
+export type { Disposable } from "./disposable.js";
 
 // One sidebar element a view contributes, routed at /ext/<viewId>/<key> and rendered by the view's
 // component with `repo` (+ props) bound.

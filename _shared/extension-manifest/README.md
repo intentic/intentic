@@ -20,6 +20,10 @@ flowchart LR
   between slashes and matches one whole path segment, never a `.` or `..` the URL would resolve away. A malformed entry
   (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first
   call it gates.
+- `extensionRouteReach` is the whole rule for an extension's own token: the two routes every extension reaches about
+  itself (`EXTENSION_OWN_ROUTES`: its settings and its event stream), its own listener provider's routes, and whatever
+  `permissions.daemon` declares. The daemon's grant and the SDK's test fake both judge by it, and `./permissions` exports
+  the rule alone, for a process that should not load the manifest schema.
 - What a field MEANS to the host is declared on the field, with `.meta({ power, effect, mintsServer })`
   (`meaning.ts`), and read from there: the powers `diffPowers` folds a manifest into (so an update re-asks only
   when it adds one), the effects a card discloses in the capability catalog, and the capability kinds whose ids

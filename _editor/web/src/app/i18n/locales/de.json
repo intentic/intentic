@@ -2020,6 +2020,7 @@
         "extensionState": {
             "backend": "Backend {state}",
             "backendFailed": "Backend fehlgeschlagen",
+            "backendDegraded": "Backend eingeschränkt",
             "backendNotInImage": "Backend nicht in diesem Image",
             "declarationRefused": "Deklaration abgelehnt",
             "failedToLoad": "Laden fehlgeschlagen",

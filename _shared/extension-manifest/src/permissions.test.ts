@@ -1,5 +1,5 @@
 import { ExtensionManifestSchema } from "./manifest.js";
-import { permissionProblem, sandboxRouteAllowed } from "./permissions.js";
+import { extensionRouteReach, permissionProblem, sandboxRouteAllowed } from "./permissions.js";
 
 // The glob grammar: each segment of the declared path is literal or a lone `*`, and a `*` matches one whole segment
 // that the URL layer would route rather than resolve away.
@@ -94,5 +94,25 @@ describe("a manifest's permissions", () => {
                 message: `invalid permission "GET /files/**": "**" is not a segment glob: a \`*\` stands alone between slashes and matches one whole segment, so \`**\` and a \`*\` inside a segment are not supported`,
             },
         ]);
+    });
+});
+
+describe("extensionRouteReach", () => {
+    const gateway = { permissions: ["GET /ports"], listener: "slack" };
+    test.each([
+        ["its own settings, undeclared", "GET", "/extension/settings", true],
+        ["its own event stream, undeclared", "GET", "/extension/events", true],
+        ["no write through its own routes", "POST", "/extension/settings", false],
+        ["what it declared", "GET", "/ports", true],
+        ["what it did not declare", "GET", "/agents", false],
+        ["its own provider's listener route", "GET", "/listeners/slack/state", true],
+        ["another provider's listener route, however it is declared", "GET", "/listeners/discord/state", false],
+        ["a provider spelled to decode into its own", "GET", "/listeners/sl%61ck/state", false],
+    ])("%s", (_name, method, path, expected) => {
+        expect(extensionRouteReach(gateway, method, path)).toBe(expected);
+    });
+
+    test("an extension without a listener reaches no listener route, even one it globbed", () => {
+        expect(extensionRouteReach({ permissions: ["GET /listeners/*/state"] }, "GET", "/listeners/slack/state")).toBe(false);
     });
 });

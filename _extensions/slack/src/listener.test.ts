@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { SlackConnection } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
@@ -28,6 +29,8 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: object[]; streamed: object[] 
         dispatched,
         streamed,
         ctx: {
+            // The listener never reaches past its daemon client; any touch of the process api fails by name.
+            api: unstubbed<GatewayCtx["api"]>("api", {}),
             log: { info: () => {}, warn: () => {}, error: () => {} },
             workspaceRoot: WORKSPACE_ROOT,
             daemon: {

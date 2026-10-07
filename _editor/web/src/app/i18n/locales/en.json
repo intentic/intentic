@@ -378,11 +378,6 @@
             "archiveFamily": "Archive {title} and its {count} subagent? | Archive {title} and its {count} subagents?",
             "archiveFamilyKept": "They leave the board together. Nothing is lost: branches, conversations and changes are kept, and Undo or the archive brings them back.",
             "archiveWithSubagents": "Archive {count} agent | Archive {count} agents",
-            "limitStopped": "{count} agent stopped by the {provider} usage limit | {count} agents stopped by the {provider} usage limit",
-            "resumeAllNow": "Resume all",
-            "resumeAllNowHint": "No reset time: sends now.",
-            "resumeAllWhenBack": "Resume all when {provider} is back",
-            "resumeAllWhenBackHint": "Each goes at the reset.",
             "archivedAgents": "{count} archived agent | {count} archived agents"
         },
         "liveMetrics": {
@@ -702,9 +697,6 @@
             "deleteScratchFailed": "Couldn't delete it.",
             "archiveFailed": "Archive failed.",
             "otherStaged": "You have {count} other change staged, and saving these settings would commit it too. Commit or unstage it in Changes first, then try again. | You have {count} other changes staged, and saving these settings would commit them too. Commit or unstage them in Changes first, then try again."
-        },
-        "resumeAll": {
-            "couldntResumeEvery": "Couldn't resume every agent."
         },
         "agentsTile": {
             "countingEverySandbox": "Counting every sandbox",
@@ -3852,6 +3844,7 @@
             "agentOnly": "agent-only",
             "backend": "backend {state}",
             "backendFailed": "backend failed",
+            "backendDegraded": "backend degraded",
             "backendNotInImage": "backend not in this image",
             "declarationRefused": "declaration refused",
             "failedToLoad": "failed to load",

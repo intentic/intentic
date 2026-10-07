@@ -378,11 +378,6 @@
             "archiveFamily": "Zarchiwizować {title} i jego {count} podagenta? | Zarchiwizować {title} i jego {count} podagenty? | Zarchiwizować {title} i jego {count} podagentów?",
             "archiveFamilyKept": "Znikną z tablicy razem. Nic nie przepada: gałęzie, rozmowy i zmiany zostają, a Cofnij albo archiwum przywróci je z powrotem.",
             "archiveWithSubagents": "Zarchiwizuj {count} agenta | Zarchiwizuj {count} agenty | Zarchiwizuj {count} agentów",
-            "limitStopped": "{count} agent zatrzymany przez limit użycia {provider} | {count} agenty zatrzymane przez limit użycia {provider} | {count} agentów zatrzymanych przez limit użycia {provider}",
-            "resumeAllNow": "Wznów wszystkie",
-            "resumeAllNowHint": "Brak czasu odnowienia: wysyła teraz.",
-            "resumeAllWhenBack": "Wznów wszystkie, gdy {provider} wróci",
-            "resumeAllWhenBackHint": "Każdy ruszy po odnowieniu.",
             "archivedAgents": "{count} zarchiwizowany agent | {count} zarchiwizowani agenci | {count} zarchiwizowanych agentów"
         },
         "buildIdeas": {
@@ -702,9 +697,6 @@
             "deleteScratchFailed": "Nie udało się tego usunąć.",
             "archiveFailed": "Nie udało się zarchiwizować.",
             "otherStaged": "Masz {count} inną zmianę przygotowaną do commita, a zapisanie tych ustawień zacommitowałoby ją razem z nimi. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
-        },
-        "resumeAll": {
-            "couldntResumeEvery": "Nie udało się wznowić wszystkich agentów."
         },
         "agentsTile": {
             "countingEverySandbox": "Liczone ze wszystkich sandboxów",
@@ -3852,6 +3844,7 @@
             "agentOnly": "tylko dla agenta",
             "backend": "backend: {state}",
             "backendFailed": "backend zawiódł",
+            "backendDegraded": "backend działa częściowo",
             "backendNotInImage": "backendu nie ma w tym obrazie",
             "declarationRefused": "deklaracja odrzucona",
             "failedToLoad": "nie udało się wczytać",

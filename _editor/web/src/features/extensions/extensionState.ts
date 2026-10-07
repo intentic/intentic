@@ -63,6 +63,10 @@ export const backendState = (backend: { state: string; detail?: string } | undef
             return { label: t(`extensions.extensionState.backendFailed`), variant: `danger`, badge: true, attention: true };
         case `incompatible`:
             return { label: t(`extensions.extensionState.incompatible`), variant: `warning`, badge: true, attention: true };
+        // Serving, by its own account, but short of something it relies on; the detail says what. Coloured, not pinned:
+        // it still answers.
+        case `degraded`:
+            return { label: t(`extensions.extensionState.backendDegraded`), variant: `warning`, badge: true, attention: false };
         // Not runnable in this image; a fact about the image, not a fault of the extension.
         case `absent`:
             return { label: t(`extensions.extensionState.backendNotInImage`), variant: `warning`, badge: false, attention: false };

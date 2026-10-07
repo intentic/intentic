@@ -20,6 +20,7 @@ import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
 import { listenerOwnershipOf } from "../listener/listener-state.js";
+import { prepareExtensionDirs } from "../runtime/extension-state.js";
 import {
     BACKEND_CONFIG_ENV,
     BACKEND_HOST_HEADER,
@@ -27,15 +28,19 @@ import {
     type BackendHealth,
     type BackendDeviceConfig,
     type BackendHostExtension,
+    type BackendReload,
 } from "./backend-host-config.js";
 
 // Daemon-side supervisor for the backend host process; extension code runs there, never in the daemon, since loaded
 // code cannot be unloaded.
-// Only a change to what the host runs restarts it: the set of backends, their code, and what each is handed at
-// activation (hostKeyOf). Everything else a converge learns (which tokens resolve, which /x paths are MCP endpoints, which
-// extension is absent or incompatible) is read at request time and lands without one. A restart leaves /x answering 503
-// and holds the MCP door's requests meanwhile (extension-mcp.ts); the daemon spawns, waits for health, forwards logs,
-// and respawns with backoff.
+// Only a change to what the host runs touches it: the set of backends, their code, and what each is handed at
+// activation (hostKeyOf). When every extension that change would replace or remove handed back a `deactivate`, the
+// running host lets those go and loads them again in place (POST /reload) and every other backend keeps running;
+// otherwise the host restarts. Everything else a converge learns (which tokens resolve, which /x paths are MCP endpoints,
+// which extension is absent or incompatible) is read at request time and lands without either. A restart leaves /x
+// answering 503 and holds the MCP door's requests meanwhile (extension-mcp.ts); the daemon spawns, waits for health,
+// forwards logs, and respawns with backoff. A sweep asks every running backend how it is (its own `health`) on a
+// timer, so a backend that stopped serving says so on its row.
 // One host for every extension, not one each: a node process costs tens of megabytes resident before any extension
 // code loads, paid on every sandbox for every extension with a backend, most of which idle.
 // Owns the HOST token (proves a request came through the daemon's gate) and the per-extension tokens, one per enabled
@@ -107,6 +112,8 @@ const hostCommand = (): { readonly file: string; readonly args: readonly string[
 
 const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
+// How often every running backend is asked how it is; the first ask follows the host becoming healthy at once.
+const HEALTH_SWEEP_MS = 30_000;
 const RESTART_DEBOUNCE_MS = 300;
 const BACKOFF_START_MS = 1_000;
 const BACKOFF_CAP_MS = 30_000;
@@ -115,8 +122,11 @@ interface SpawnedHost {
     readonly child: ChildProcess;
     readonly port: number;
     readonly hostToken: string;
-    // What it was started with (hostKeyOf): an unchanged key means a converge leaves it running.
-    readonly key: string;
+    readonly workspaceRoot: string;
+    // What it runs now (hostKeyOf, and the backends behind it): an unchanged key means a converge leaves it running. Moved
+    // by an in-place reload, which keeps the same process, so the object stays the one its exit handler compares.
+    key: string;
+    runnable: readonly BackendHostExtension[];
 }
 
 // A server bundle's content digest: the code the host would load. A bundle it cannot read hashes as absent, which a
@@ -127,14 +137,16 @@ const bundleDigest = async (dir: string, server: string): Promise<string> =>
         () => "unreadable",
     );
 
+// What one backend is handed at activation and the code it runs; tokens are minted once per daemon and so never move it.
+const extensionKeyOf = ({ id, dir, server, daemonPermissions, bundle, stateDir, cacheDir }: BackendHostExtension): string =>
+    JSON.stringify({ id, dir, server, daemonPermissions: [...daemonPermissions].toSorted(), bundle, stateDir, cacheDir });
+
 // Everything the host process is handed that it cannot re-read at request time: which backends, from where, their code,
-// and what each is told at activation. Tokens are minted once per daemon and so never move it.
-const hostKeyOf = (workspaceRoot: string, runnable: readonly (BackendHostExtension & { readonly bundle: string })[]): string =>
+// and what each is told at activation.
+const hostKeyOf = (workspaceRoot: string, runnable: readonly BackendHostExtension[]): string =>
     JSON.stringify({
         workspaceRoot,
-        extensions: runnable
-            .map(({ id, dir, server, daemonPermissions, bundle }) => ({ id, dir, server, daemonPermissions: [...daemonPermissions].toSorted(), bundle }))
-            .toSorted((a, b) => a.id.localeCompare(b.id)),
+        extensions: runnable.map(extensionKeyOf).toSorted(),
     });
 
 export interface ExtensionBackendOptions {
@@ -227,13 +239,13 @@ export const createExtensionBackend = (
     // A backend's reach is enforced on the daemon side, by its token; the host is handed the same list only to refuse a
     // typed call before sending it.
     const collect = async (): Promise<{
-        runnable: (BackendHostExtension & { readonly bundle: string })[];
+        runnable: BackendHostExtension[];
         reported: BackendStatus[];
         tokenReach: Map<string, ExtensionGrant>;
         tools: Map<string, readonly string[]>;
         owners: ReadonlyMap<string, string>;
     }> => {
-        const runnable: (BackendHostExtension & { readonly bundle: string })[] = [];
+        const runnable: BackendHostExtension[] = [];
         const reported: BackendStatus[] = [];
         const tokenReach = new Map<string, ExtensionGrant>();
         const tools = new Map<string, readonly string[]>();
@@ -268,6 +280,8 @@ export const createExtensionBackend = (
                 reported.push({ id: extension.id, state: "absent", detail: RUNTIME_ABSENT_DETAIL });
                 continue;
             }
+            // Its own directories exist before its code runs, made here rather than by the host, which reads no daemon state.
+            const dirs = await prepareExtensionDirs(services().workspace.root, extension.manifest);
             runnable.push({
                 id: extension.id,
                 dir: extension.dir,
@@ -275,6 +289,8 @@ export const createExtensionBackend = (
                 daemonToken: tokenFor(extension.id),
                 daemonPermissions: grant.permissions,
                 bundle: await bundleDigest(extension.dir, server),
+                stateDir: dirs.stateDir,
+                cacheDir: dirs.cacheDir,
             });
         }
         return { runnable, reported, tokenReach, tools, owners: ownership.owners };
@@ -312,6 +328,99 @@ export const createExtensionBackend = (
 
     // The host's own rows from its last /health, kept so a converge that leaves it running can still report them.
     let hostStatuses: readonly BackendExtensionStatus[] = [];
+    // The rows only the supervisor knows (absent, incompatible), as of the last converge, for a sweep to report beside.
+    let lastReported: readonly BackendStatus[] = [];
+
+    // Whether the running host can take `next` in place: the same workspace, and every backend it runs that would change
+    // or go handed back a `deactivate` (its status says `reloadable`). A backend arriving needs nothing of the host.
+    const reloadableTo = (spawned: SpawnedHost, workspaceRoot: string, next: readonly BackendHostExtension[]): boolean => {
+        if (spawned.workspaceRoot !== workspaceRoot) {
+            return false;
+        }
+        const wanted = new Map(next.map((extension) => [extension.id, extensionKeyOf(extension)]));
+        return spawned.runnable.every(
+            (extension) =>
+                wanted.get(extension.id) === extensionKeyOf(extension) || hostStatuses.find((status) => status.id === extension.id)?.reloadable === true,
+        );
+    };
+
+    // The host's answer to an in-place reload, or undefined for a refusal or no answer, which the caller meets with a
+    // restart.
+    const reloadInPlace = async (spawned: SpawnedHost, next: readonly BackendHostExtension[]): Promise<readonly BackendExtensionStatus[] | undefined> => {
+        try {
+            const response = await fetch(`http://127.0.0.1:${spawned.port}/reload`, {
+                method: "POST",
+                headers: { [BACKEND_HOST_HEADER]: spawned.hostToken, "content-type": "application/json" },
+                body: JSON.stringify({ extensions: next } satisfies BackendReload),
+                signal: AbortSignal.timeout(healthTimeoutMs),
+            });
+            if (!response.ok) {
+                logger.info({ status: response.status, detail: await response.text() }, "extension backends could not reload in place: restarting the host");
+                return undefined;
+            }
+            // SAFETY: the host is this build's own child (backend-host.ts), which answers a reload with its BackendHealth.
+            return ((await response.json()) as BackendHealth).extensions;
+        } catch (error) {
+            logger.warn({ err: error }, "extension backend host did not answer its reload: restarting it");
+            return undefined;
+        }
+    };
+
+    // Asks the running host how every backend is (`?deep` runs each one's own health check) and folds the answer into the
+    // rows. A sweep that finds the host gone or replaced says nothing: the exit handler or the next converge does.
+    const sweepHealth = async (): Promise<void> => {
+        const spawned = host;
+        if (spawned === undefined || state.state !== "running") {
+            return;
+        }
+        const at = generation;
+        try {
+            const response = await fetch(`http://127.0.0.1:${spawned.port}/health?deep=1`, {
+                headers: { [BACKEND_HOST_HEADER]: spawned.hostToken },
+                signal: AbortSignal.timeout(healthTimeoutMs),
+            });
+            if (!response.ok) {
+                return;
+            }
+            // SAFETY: the host is this build's own child (backend-host.ts), which answers /health with its BackendHealth.
+            const health = (await response.json()) as BackendHealth;
+            if (host !== spawned || at !== generation || state.state !== "running") {
+                return;
+            }
+            hostStatuses = health.extensions;
+            state = { state: "running", extensions: [...health.extensions, ...lastReported] };
+        } catch (error) {
+            logger.info({ err: error }, "extension backend health sweep got no answer; the exit handler or the next sweep says more");
+        }
+    };
+    let sweep: NodeJS.Timeout | undefined;
+
+    // The in-place half of a converge: `done` when the running host took the new set, `superseded` when a later converge
+    // started meanwhile, `restart` when it could not or would not, which the caller answers by replacing the host.
+    const replaceInPlace = async (
+        run: number,
+        key: string,
+        workspaceRoot: string,
+        collected: { readonly runnable: readonly BackendHostExtension[]; readonly reported: readonly BackendStatus[] },
+    ): Promise<"done" | "superseded" | "restart"> => {
+        const spawned = host;
+        if (spawned === undefined || state.state !== "running" || collected.runnable.length === 0 || !reloadableTo(spawned, workspaceRoot, collected.runnable)) {
+            return "restart";
+        }
+        const statuses = await reloadInPlace(spawned, collected.runnable);
+        if (run !== generation) {
+            return "superseded";
+        }
+        if (statuses === undefined || host !== spawned) {
+            return "restart";
+        }
+        spawned.key = key;
+        spawned.runnable = collected.runnable;
+        hostStatuses = statuses;
+        state = { state: "running", extensions: [...statuses, ...collected.reported] };
+        void sweepHealth();
+        return "done";
+    };
 
     const converge = async (): Promise<void> => {
         const signal = converging.next();
@@ -334,11 +443,17 @@ export const createExtensionBackend = (
         reach = collected.tokenReach;
         toolPaths = collected.tools;
         listenerOwners = collected.owners;
+        lastReported = collected.reported;
         const workspaceRoot = services().workspace.root;
         const key = hostKeyOf(workspaceRoot, collected.runnable);
         // The same backends, the same code, the same activation: the running host is already what this converge wants.
         if (host !== undefined && host.key === key && state.state === "running") {
             state = { state: "running", extensions: [...hostStatuses, ...collected.reported] };
+            return;
+        }
+        // Only backends that can be let go of change: the running host replaces them and keeps the rest running.
+        const inPlace = await replaceInPlace(run, key, workspaceRoot, collected);
+        if (inPlace !== "restart") {
             return;
         }
         kill();
@@ -361,7 +476,7 @@ export const createExtensionBackend = (
             daemonUrl: `http://127.0.0.1:${daemonPort}`,
             workspaceRoot,
             apiVersion: extensionApiVersion,
-            extensions: collected.runnable.map(({ bundle: _bundle, ...extension }) => extension),
+            extensions: collected.runnable,
         };
         const command = hostCommand();
         const child = spawnAs({ class: "service" }, command.file, command.args, {
@@ -372,7 +487,7 @@ export const createExtensionBackend = (
             detached: true,
             stdio: ["ignore", "pipe", "pipe"],
         });
-        const spawned: SpawnedHost = { child, port, hostToken, key };
+        const spawned: SpawnedHost = { child, port, hostToken, workspaceRoot, key, runnable: collected.runnable };
         host = spawned;
         // Both streams feed the daemon log; extension lines carry their own [id] prefix already.
         for (const stream of [child.stdout, child.stderr]) {
@@ -422,11 +537,15 @@ export const createExtensionBackend = (
         ladder.reset();
         hostStatuses = health.extensions;
         state = { state: "running", extensions: [...health.extensions, ...collected.reported] };
+        void sweepHealth();
     };
 
     return {
         start: async () => {
             desired = true;
+            clearInterval(sweep);
+            sweep = setInterval(() => void sweepHealth(), HEALTH_SWEEP_MS);
+            sweep.unref();
             await converge();
         },
         restart: () => {
@@ -444,6 +563,7 @@ export const createExtensionBackend = (
             converging.abort();
             debounce.cancel();
             clearTimeout(retry);
+            clearInterval(sweep);
             kill();
             state = { state: "stopped", extensions: [] };
         },

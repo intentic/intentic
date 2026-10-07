@@ -1,4 +1,4 @@
-import { sandboxRouteAllowed } from "@intentic/extension-manifest";
+import { type ExtensionReach, extensionRouteReach, listenerSegmentOf } from "@intentic/extension-manifest";
 import { EXTENSION_TOKEN_HEADER, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, ControlTokensUnreadableError, controlScoped, type ResolvedControlToken } from "./tokens/control-tokens.js";
@@ -63,32 +63,16 @@ const panelReach = (method: string, path: string): boolean => declared(method, p
 
 // What a per-extension token resolves to: the extension, its manifest's `permissions.daemon`, and the provider its
 // `contributes.listener` names, if any. Minted once per extension for its backend and its processes alike.
-export interface ExtensionGrant {
+export interface ExtensionGrant extends ExtensionReach {
     readonly id: string;
-    readonly permissions: readonly string[];
-    readonly listener?: string;
 }
 
-// The four listener routes, by the provider segment; compared whole and decoded, never as a glob, since a provider name
-// comes from a manifest and may hold anything a glob would widen on.
-const LISTENER_ROUTE = /^\/listeners\/([^/]+)\/(?:state|dispatch|failure|status)$/;
-
-// The provider segment a listener route addresses, as it arrived; undefined for any other path.
-const listenerSegmentOf = (path: string): string | undefined => LISTENER_ROUTE.exec(path.split("?")[0] ?? path)?.[1];
-
-// An extension that declares a listener reaches that provider's listener routes without listing them in
-// `permissions.daemon`: running the gateway is what declaring the provider asked for. Another provider's are never in
-// reach, whatever the manifest globs, since /state hands back that provider's stored credentials.
-const extensionReach = (grant: ExtensionGrant, method: string, path: string): boolean => {
-    const segment = listenerSegmentOf(path);
-    if (segment !== undefined) {
-        // Matched against the declared provider as sent or as encoded, never decoded here: a segment that is neither
-        // (a foreign provider, a malformed escape) is refused rather than parsed.
-        const own = grant.listener !== undefined && (segment === grant.listener || segment === encodeURIComponent(grant.listener));
-        return own && declared(method, path) !== undefined;
-    }
-    return sandboxRouteAllowed(grant.permissions, method, path);
-};
+// The one reach rule (extension-manifest's extensionRouteReach): the extension's own routes, its own listener
+// provider's routes without listing them in `permissions.daemon` (running the gateway is what declaring the provider
+// asked for), and whatever else it declared. A listener route must also be one the contract declares, so a well-formed
+// segment under a path nothing serves is refused here rather than answered 404 deeper in.
+const extensionReach = (grant: ExtensionGrant, method: string, path: string): boolean =>
+    extensionRouteReach(grant, method, path) && (listenerSegmentOf(path) === undefined || declared(method, path) !== undefined);
 
 // Which extension is asking, for the routes that answer only an extension and only about what is its own (the listener
 // routes, the connection read). Resolved from the header in the handler rather than trusted from the middleware, so the

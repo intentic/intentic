@@ -56,7 +56,8 @@ test("writeWatermark leaves nothing staged beside the mark", async () => {
     expect(await readWatermark(path, () => undefined)).toEqual({ mailbox: "INBOX", uidValidity: "1", lastUid: 2 });
 });
 
-test("watermarkPath keeps the file under the runtime tree and sanitizes the id", () => {
-    expect(watermarkPath("/work", "my-inbox")).toBe("/work/.intentic/local/runtime/extensions/imap/my-inbox.json");
-    expect(watermarkPath("/work", "../escape me")).toBe("/work/.intentic/local/runtime/extensions/imap/.._escape_me.json");
+test("watermarkPath keeps one file per account in the extension's own state directory and sanitizes the id", () => {
+    const state = "/state/intentic.imap";
+    expect(watermarkPath(state, "my-inbox")).toBe(`${state}/my-inbox.json`);
+    expect(watermarkPath(state, "../escape me")).toBe(`${state}/.._escape_me.json`);
 });

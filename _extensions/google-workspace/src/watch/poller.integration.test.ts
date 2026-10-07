@@ -49,6 +49,7 @@ test("a mail poll slower than its interval is never overlapped by the next tick"
         return json({ items: [] });
     }) as typeof fetch;
     const ctx: GatewayCtx = {
+        api: unstubbed<GatewayCtx["api"]>("api", {}),
         daemon: unstubbed<DaemonClient<{ readonly provider: string }>>("daemon", { dispatch: async () => {} }),
         workspaceRoot: root,
         log: { info: () => {}, warn: () => {}, error: () => {} },

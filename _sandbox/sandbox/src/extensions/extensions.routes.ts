@@ -79,6 +79,13 @@ export const createExtensionsRoutes = (services: Services) => {
             return {};
         }
         const own = services.extensionBackend.statusOf(extension.id);
+        // A running backend's own account of itself, when it said anything but ok: `failed` is an error like a failed
+        // activation, `starting` and `degraded` are their own words, each with the sentence it gave.
+        const health = own !== undefined && "health" in own ? own.health : undefined;
+        if (own?.state === "running" && health !== undefined && health.state !== "ok") {
+            const backend: NonNullable<ExtensionSummary["backend"]> = { state: health.state === "failed" ? "error" : health.state };
+            return { backend: health.detail === undefined ? backend : { ...backend, detail: health.detail } };
+        }
         if (own !== undefined) {
             return { backend: { state: own.state, ...(own.detail !== undefined ? { detail: own.detail } : {}) } };
         }

@@ -24,3 +24,17 @@ serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, () => {
     // log as-is (extension log lines carry their own [id] prefix).
     console.log(`backend host listening on ${config.port}`);
 });
+
+// The supervisor ends the host's whole process group with SIGTERM and a grace before SIGKILL (process-group.ts): every
+// extension's deactivate gets that grace, all at once and each under its own deadline, so a backend closes what it
+// opened rather than having it cut. A second signal while draining is the same request, not a second drain.
+let draining = false;
+const drain = (): void => {
+    if (draining) {
+        return;
+    }
+    draining = true;
+    void app.drain().finally(() => process.exit(0));
+};
+process.on("SIGTERM", drain);
+process.on("SIGINT", drain);

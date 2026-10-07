@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import { createDaemonApi } from "@intentic/extension-api/runtime";
 import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { type ContractRoute, requestPathFor, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { admitByGrant, type GrantSources, grantsOf } from "../../auth/grants.js";
-import { createDaemonApi } from "./backend-daemon.js";
 
 // Conformance: under every in-repo backend's `permissions.daemon`, each procedure the contract declares is let through
 // `api.daemon.rpc` or refused exactly as the same method and path through `api.daemon.request` are, which the daemon's
@@ -51,8 +51,7 @@ const daemonGranting = (permissions: readonly string[]): Seen[] => {
     return seen;
 };
 
-const apiFor = (permissions: readonly string[]) =>
-    createDaemonApi("http://daemon.test", { id: "acme.conformance", daemonToken: TOKEN, daemonPermissions: permissions });
+const apiFor = (permissions: readonly string[]) => createDaemonApi({ url: "http://daemon.test", token: TOKEN, id: "acme.conformance", permissions });
 
 // A value for every `{param}`, so both doors are judged on a concrete path, as a real call is.
 const inputOf = (route: ContractRoute): Record<string, string> =>

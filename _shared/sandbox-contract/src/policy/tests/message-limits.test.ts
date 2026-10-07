@@ -21,7 +21,7 @@ test("only a held wake with no countdown waits on the owner", () => {
     expect(awaitsOwner({ autoRunAt: 1_700_000_000_000 })).toBe(false);
 });
 
-test("a gateway's control address lives in its provider's runtime directory", () => {
-    expect(extensionGatewayUrlFile("whatsapp")).toBe(".intentic/local/runtime/extensions/whatsapp/gateway.url");
-    expect(extensionGatewayUrlFile("../x")).toBe(".intentic/local/runtime/extensions/.._x/gateway.url");
+test("a gateway's control address lives beside the extensions' own directories, under its provider", () => {
+    expect(extensionGatewayUrlFile("whatsapp")).toBe(".intentic/local/runtime/gateways/whatsapp.url");
+    expect(extensionGatewayUrlFile("../x")).toBe(".intentic/local/runtime/gateways/.._x.url");
 });

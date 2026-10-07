@@ -2028,6 +2028,7 @@
         },
         "extensionState": {
             "backendFailed": "el backend falló",
+            "backendDegraded": "backend degradado",
             "backendNotInImage": "backend no incluido en esta imagen",
             "declarationRefused": "declaración rechazada",
             "failedToLoad": "no se pudo cargar",

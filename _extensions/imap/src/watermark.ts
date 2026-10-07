@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
-import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 
 // Per-account resume state: highest UID dispatched for one capability's watched mailbox, persisted so mail from
 // downtime is recovered on reconnect. uidValidity is a string because imapflow reports it as a bigint, which JSON can't
@@ -12,10 +11,9 @@ export interface Watermark {
     readonly lastUid: number;
 }
 
-// Plain node:fs under the workspace (extensions can't import daemon internals); the layout comes from the contract's
-// extensionRuntimeDir. Capability id characters are sanitized to a safe filename.
-export const watermarkPath = (workspaceRoot: string, capabilityId: string): string =>
-    join(workspaceRoot, extensionRuntimeDir("imap"), `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+// One file per watched account in the extension's own state directory (`api.stateDir`, made by the daemon before the
+// gateway starts). Capability id characters are sanitized to a safe filename.
+export const watermarkPath = (stateDir: string, capabilityId: string): string => join(stateDir, `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
 // A missing file reads as no watermark, and so does a corrupt one, which is reported through `onUnreadable`: either way
 // the caller re-baselines rather than replay history. A read that failed throws, since the baseline would overwrite it.

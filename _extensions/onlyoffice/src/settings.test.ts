@@ -1,11 +1,14 @@
+import { extensionRouteReach } from "@intentic/extension-manifest";
 import { manifest } from "./manifest.js";
 import { AUTO_START, autoStartOf, ENGINE, engineOf } from "./settings.js";
 
 describe(`the auto-start setting`, () => {
-    it(`is declared as a boolean that defaults to off, and the backend may read it`, () => {
+    it(`is declared as a boolean that defaults to off, and the backend reads it without declaring a route`, () => {
         const declared = manifest.contributes?.settings?.find((setting) => setting.key === AUTO_START);
         expect(declared).toMatchObject({ type: `boolean`, default: false });
-        expect(manifest.permissions?.daemon).toContain(`GET /extensions/*/settings`);
+        // Its own settings are an extension's own route (api.settings), which no manifest declares.
+        expect(extensionRouteReach({ permissions: manifest.permissions?.daemon ?? [] }, `GET`, `/extension/settings`)).toBe(true);
+        expect(manifest.permissions?.daemon).not.toContain(`GET /extensions/*/settings`);
     });
 
     it(`reads only a true boolean as on`, () => {

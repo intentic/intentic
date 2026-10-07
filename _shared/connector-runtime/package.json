@@ -36,6 +36,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "tslib": "catalog:"
     },

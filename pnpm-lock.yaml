@@ -3163,6 +3163,9 @@ importers:
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../extension-api
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../sandbox-contract
@@ -3215,19 +3218,37 @@ importers:
 
   _shared/extension-api:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../extension-manifest
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../sandbox-contract
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 1.15.4(@opentelemetry/api@1.9.1)
       '@orpc/contract':
+        specifier: 'catalog:'
+        version: 1.15.4(@opentelemetry/api@1.9.1)
+      '@orpc/openapi-client':
         specifier: 'catalog:'
         version: 1.15.4(@opentelemetry/api@1.9.1)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
     devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
@@ -3237,6 +3258,9 @@ importers:
       vue:
         specifier: 'catalog:'
         version: 3.5.43(typescript@6.0.3)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
 
   _shared/extension-manifest:
     dependencies:

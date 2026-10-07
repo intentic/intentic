@@ -24,6 +24,22 @@ export const extensionSettingsDocument = defineDocument({
 const settingsFile = (root: string): JsonFile<SettingsFile> =>
     openDocument(extensionSettingsDocument, join(root, extensionSettingsDocument.path), { fallback: () => ({}) });
 
+// Every write or forget of one extension's settings, by its identity, for the readers that hold them live (an extension's
+// own event stream, extensions/runtime/own.routes.ts). In-process only: a hand edit of the tracked file reaches those
+// readers through the workspace watcher instead.
+const changeListeners = new Set<(identity: string) => void>();
+
+export const onExtensionSettingsWritten = (listener: (identity: string) => void): (() => void) => {
+    changeListeners.add(listener);
+    return () => changeListeners.delete(listener);
+};
+
+const announce = (identity: string): void => {
+    for (const listener of changeListeners) {
+        listener(identity);
+    }
+};
+
 // Which of an extension's keys hold a credential; passed in since enumerating extensions sits a layer above this file.
 // An unknown id gets an empty set, leaving its values in the file: the safe answer since nothing declares them secret.
 export type SecretKeyResolver = (extensionId: string) => ReadonlySet<string>;
@@ -72,6 +88,7 @@ export const writeExtensionSettings = async (
     }
     await vault.set(extensionId, values);
     await settingsFile(root).update((all) => ({ ...all, [extensionId]: open }));
+    announce(extensionId);
 };
 
 // Drops one extension's values from both halves. The vault goes first for the same reason writes do: the survivable
@@ -86,6 +103,7 @@ export const forgetExtensionSettings = async (root: string, vault: SecretVault, 
         const { [extensionId]: _dropped, ...rest } = all;
         return rest;
     });
+    announce(extensionId);
 };
 
 // Sweeps values that should be vaulted but are not yet (other tools, an import, or a newly declared secret).

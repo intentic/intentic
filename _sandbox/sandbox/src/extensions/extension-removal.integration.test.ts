@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { pathExists } from "@intentic/base/fs";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 
 import { createApp } from "../app.js";
@@ -17,6 +18,7 @@ import { statePath } from "../state-paths.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { approveExtension, extensionApprovals } from "./extension-approvals.js";
+import { extensionDirsOf, prepareExtensionDirs } from "./runtime/extension-state.js";
 
 // Removal, over the daemon's HTTP surface. The claims worth holding: the plan names the connections configured from
 // the extension's own cards before anything happens, removal actually takes them, and the ledgers keyed by the
@@ -117,7 +119,25 @@ test("the removal plan names the connections, credentials and stranded automatio
     expect(plan.files).toEqual([{ path: ".intentic/config/workspace-extensions/toolbox", detail: expect.stringContaining("source") }]);
     // Kept, not removed — and told, because a listener automation's failure is otherwise silent.
     expect(plan.automations).toEqual(["triage"]);
-    expect(plan.keeps).toContain("anything it wrote in your workspace stays where it is");
+    expect(plan.keeps).toContain("anything it wrote in your workspace outside its own directories stays where it is");
+});
+
+test("the plan names the directories its own code kept, once there are any, and removing deletes them", async () => {
+    const { workspace, client } = await withExtension();
+    await prepareExtensionDirs(workspace.root, MANIFEST);
+    const { stateDir } = extensionDirsOf(workspace.root, MANIFEST);
+    await writeFile(join(stateDir, "marks.json"), "{}");
+
+    const plan = await client.extensions.removalPlan({ id: "acme.toolbox" });
+    expect(plan.files.map((file) => file.path)).toEqual([
+        ".intentic/config/workspace-extensions/toolbox",
+        ".intentic/local/runtime/extensions/acme.toolbox",
+        ".intentic/local/cache/extensions/acme.toolbox",
+    ]);
+
+    await client.extensions.remove({ id: "acme.toolbox" });
+    expect(await pathExists(stateDir)).toBe(false);
+    expect(await pathExists(extensionDirsOf(workspace.root, MANIFEST).cacheDir)).toBe(false);
 });
 
 test("removing takes the connections configured from its cards and forgets the state keyed by its identity", async () => {

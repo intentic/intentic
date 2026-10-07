@@ -39,24 +39,60 @@
                 "@intentic/src": "./src/protocol.ts",
                 "default": "./dist/protocol.js"
             }
+        },
+        "./runtime": {
+            "types": "./dist/runtime.d.ts",
+            "import": {
+                "@intentic/src": "./src/runtime.ts",
+                "default": "./dist/runtime.js"
+            },
+            "require": {
+                "@intentic/src": "./src/runtime.ts",
+                "default": "./dist/runtime.js"
+            }
+        },
+        "./testing": {
+            "types": "./dist/testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            }
         }
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsgo --build --watch"
+        "watch": "tsgo --build --watch",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
+        "@orpc/openapi-client": "catalog:",
         "tslib": "catalog:"
     },
     "peerDependencies": {
         "vue": "3"
     },
+    "peerDependenciesMeta": {
+        "vue": {
+            "optional": true
+        }
+    },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "vue": "catalog:"
+        "vue": "catalog:",
+        "zod": "catalog:"
     }
 }

@@ -45,6 +45,9 @@ interface RecordedSurface {
     readonly sideViewRegistration?: readonly string[];
     // ViewRegistration's own fields, recorded from 2.23.0 on: `asks` was added there.
     readonly viewRegistration?: readonly string[];
+    // The backend api's `settings` and `workspace` members (server.ts), recorded from 2.26.0 on, where both arrived.
+    readonly serverSettingsApi?: readonly string[];
+    readonly serverWorkspaceApi?: readonly string[];
     // sha256 of the generated authoring schema, recorded from 2.20.0 on: any change to the manifest at any depth.
     readonly manifestSchema?: string;
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
@@ -107,6 +110,8 @@ const liveSurface = (): RecordedSurface => ({
     sideViewsApi: nestedMembers(`sideViews`),
     sideViewRegistration: apiMembers(`src/api.ts`, `export interface SideViewRegistration {`),
     viewRegistration: apiMembers(`src/api.ts`, `export interface ViewRegistration {`),
+    serverSettingsApi: nestedMembers(`settings`, `src/server.ts`),
+    serverWorkspaceApi: nestedMembers(`workspace`, `src/server.ts`),
     manifestSchema: createHash(`sha256`).update(serializeManifestJsonSchema(manifestJsonSchema())).digest(`hex`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
     // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived. A namespace of functions

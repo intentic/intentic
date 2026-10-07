@@ -1,13 +1,17 @@
+import type { ExtensionProcessApi } from "@intentic/extension-api/runtime";
 import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
-import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
 import { type ListenerState, listenerRouteUrl, ListenerStateSchema } from "@intentic/sandbox-contract/listener-protocol";
 import type { Logger } from "./log.js";
 
 // The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts): the daemon holds
-// no provider connection itself, so every automation interaction rides these four routes, authenticated with the
-// extension's own INTENTIC_EXTENSION_TOKEN: the daemon answers them only for the extension whose manifest declares this
-// provider as its listener. Paths, shapes and the state feed's schema come from the contract's listener-protocol, the
-// same declaration the daemon serves from (the subpath, so a gateway loads no more of the contract than that).
+// no provider connection itself, so every automation interaction rides these four routes, through the process's own
+// `api.daemon` (@intentic/extension-api/runtime), which presents the extension's token: the daemon answers them only for
+// the extension whose manifest declares this provider as its listener. Paths, shapes and the state feed's schema come
+// from the contract's listener-protocol, the same declaration the daemon serves from (the subpath, so a gateway loads no
+// more of the contract than that).
+
+// The one door the client needs: a request to a daemon path with the extension's token already on it.
+export type DaemonDoor = Pick<ExtensionProcessApi["daemon"], "request">;
 
 // The reconcile feed /listeners/<provider>/state serves (the contract's ListenerState): enabled automations for this
 // provider, plus the connector capabilities this extension contributes, with full config (secrets included, the gateway
@@ -25,12 +29,12 @@ export interface DaemonClient<TConfig> {
     readonly status: (snapshot: ListenerStatus) => Promise<void>;
 }
 
-export const createDaemonClient = <TConfig>(provider: string, base: string, token: string, log: Logger): DaemonClient<TConfig> => {
-    const url = (route: Parameters<typeof listenerRouteUrl>[0]): string => `${base}${listenerRouteUrl(route, provider)}`;
-    const jsonHeaders = { "content-type": "application/json", [EXTENSION_TOKEN_HEADER]: token };
+export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor, log: Logger): DaemonClient<TConfig> => {
+    const url = (route: Parameters<typeof listenerRouteUrl>[0]): string => listenerRouteUrl(route, provider);
+    const jsonHeaders = { "content-type": "application/json" };
     const report = async (path: "failure" | "status", body: unknown, context: object): Promise<void> => {
         try {
-            const res = await fetch(url(path), { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) });
+            const res = await daemon.request(url(path), { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) });
             await res.text();
             if (!res.ok) {
                 log.warn({ ...context, status: res.status }, `${listenerRouteUrl(path, provider)} returned ${res.status}`);
@@ -41,7 +45,7 @@ export const createDaemonClient = <TConfig>(provider: string, base: string, toke
     };
     return {
         state: async () => {
-            const res = await fetch(url("state"), { headers: { [EXTENSION_TOKEN_HEADER]: token } });
+            const res = await daemon.request(url("state"));
             if (!res.ok) {
                 throw new Error(`${listenerRouteUrl("state", provider)} returned ${res.status}`);
             }
@@ -49,14 +53,14 @@ export const createDaemonClient = <TConfig>(provider: string, base: string, toke
             return ListenerStateSchema.parse(await res.json()) as DaemonState<TConfig>;
         },
         dispatch: async (message) => {
-            const res = await fetch(url("dispatch"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
+            const res = await daemon.request(url("dispatch"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
             await res.text();
             if (!res.ok) {
                 throw new Error(`${listenerRouteUrl("dispatch", provider)} returned ${res.status}`);
             }
         },
         dispatchStreaming: async (message, onFrame) => {
-            const res = await fetch(`${url("dispatch")}?stream=1`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
+            const res = await daemon.request(`${url("dispatch")}?stream=1`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
             if (!res.ok || res.body === null) {
                 await res.text().catch(() => undefined);
                 throw new Error(`${listenerRouteUrl("dispatch", provider)}?stream returned ${res.status}`);

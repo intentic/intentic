@@ -338,6 +338,64 @@ test("the host restarts when a backend's code changes, and a converge that chang
     expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
 });
 
+// A backend that can be let go of: it answers which build it is, records each deactivate in `marker`, and says it is
+// degraded, as a backend short of something it relies on would.
+const reloadableServer = (marker: string, build: string): string => `export const activateServer = (api) => {
+    api.routes.mount(async (request) =>
+        new URL(request.url).pathname === "/build" ? Response.json({ build: ${JSON.stringify(build)}, stateDir: api.stateDir }) : undefined,
+    );
+    return {
+        deactivate: async () => {
+            const { appendFile } = await import("node:fs/promises");
+            await appendFile(${JSON.stringify(marker)}, "${build}\\n");
+        },
+        health: () => ({ state: "degraded", detail: "the upstream it relays is not answering" }),
+    };
+};
+`;
+
+test("a change to a backend that can deactivate reloads it alone, in the running host", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-reload-"));
+    const marker = join(root, "deactivated");
+    await writeExtension(root, "live", reloadableServer(marker, "one"));
+    await writeExtension(root, "echo", echoServer);
+    const { svc, backend } = harness(root);
+    await backend.start();
+    const app = createApp(svc);
+    const before = backend.proxyTarget();
+    expect(await (await app.request("http://sandbox.test/x/acme.live/build")).json()).toEqual({
+        build: "one",
+        stateDir: join(root, ".intentic/local/runtime/extensions/acme.live"),
+    });
+
+    await writeFile(join(workspaceExtensionsRoot(root), "live", "server.js"), reloadableServer(marker, "two"));
+    await backend.start();
+
+    // The same host, so every other backend kept running; the changed one was let go of and loaded again.
+    expect(backend.proxyTarget()).toEqual(before);
+    expect(await (await app.request("http://sandbox.test/x/acme.live/build")).json()).toMatchObject({ build: "two" });
+    expect(await readFile(marker, "utf8")).toBe("one\n");
+    expect((await app.request("http://sandbox.test/x/acme.echo/ping")).status).toBe(200);
+});
+
+test("a backend's own account of itself reaches its row, and stopping the host lets it deactivate first", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-health-"));
+    const marker = join(root, "deactivated");
+    await writeExtension(root, "live", reloadableServer(marker, "one"));
+    const { svc, backend } = harness(root);
+    await backend.start();
+
+    expect(await pollUntil(() => backend.statusOf("acme.live")?.state === "running" && "health" in backend.statusOf("acme.live")!, { intervalMs: 50, timeoutMs: 5_000 })).toBe(true);
+    expect(await (await createApp(svc).request("http://sandbox.test/extensions")).json()).toMatchObject({
+        extensions: expect.arrayContaining([
+            expect.objectContaining({ id: "acme.live", backend: { state: "degraded", detail: "the upstream it relays is not answering" } }),
+        ]),
+    });
+
+    backend.stop();
+    expect(await pollUntil(async () => (await readFile(marker, "utf8").catch(() => "")) === "one\n", { intervalMs: 50, timeoutMs: 5_000 })).toBe(true);
+});
+
 // Whether a process is still there; signal 0 asks without sending anything.
 const alive = (pid: number): boolean => {
     try {

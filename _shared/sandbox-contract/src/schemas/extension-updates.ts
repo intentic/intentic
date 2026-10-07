@@ -204,9 +204,9 @@ export const ExtensionSummarySchema = z.object({
     backend: z
         .object({
             state: z
-                .enum(["running", "error", "absent", "incompatible", "starting", "stopped"])
+                .enum(["running", "degraded", "error", "absent", "incompatible", "starting", "stopped"])
                 .describe(
-                    "How its server half is doing. Absent means the code is not in this image at all; incompatible means it needs a different sandbox version.",
+                    "How its server half is doing. Degraded means it serves but says something it relies on is not working; absent means the code is not in this image at all; incompatible means it needs a different sandbox version.",
                 ),
             detail: z
                 .string()

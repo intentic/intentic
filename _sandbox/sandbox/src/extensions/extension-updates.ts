@@ -365,6 +365,20 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
 const EARLY_PROBE_MS = 15_000;
 const FINAL_PROBE_MS = 60_000;
 
+// What is wrong with the extension's backend half, by the supervisor's last word on it: an activation that threw, or one
+// that stands and says it is not serving, which is as much a failed update.
+const backendProblem = (services: Services, id: string): string | undefined => {
+    const backend = services.extensionBackend.statusOf(id);
+    if (backend?.state === "error") {
+        return `its backend failed to activate${backend.detail !== undefined ? `: ${backend.detail}` : ""}`;
+    }
+    const health = backend !== undefined && "health" in backend ? backend.health : undefined;
+    if (health?.state === "failed") {
+        return `its backend reports it is not serving${health.detail !== undefined ? `: ${health.detail}` : ""}`;
+    }
+    return undefined;
+};
+
 const healthProblem = async (services: Services, id: string): Promise<string | undefined | "stop"> => {
     const extension = (await installedExtensions(services)).find((candidate) => candidate.id === id);
     // Removed or switched off mid-watch: the owner intervened, and the watch has nothing left to judge.
@@ -378,13 +392,7 @@ const healthProblem = async (services: Services, id: string): Promise<string | u
             }
         }
     }
-    if (extension.manifest.server !== undefined) {
-        const backend = services.extensionBackend.statusOf(id);
-        if (backend?.state === "error") {
-            return `its backend failed to activate${backend.detail !== undefined ? `: ${backend.detail}` : ""}`;
-        }
-    }
-    return undefined;
+    return extension.manifest.server === undefined ? undefined : backendProblem(services, id);
 };
 
 // Resolves once the watch is ARMED (the "watching" record is on disk); the probes themselves stay on timers.

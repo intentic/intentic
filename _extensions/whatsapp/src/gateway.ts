@@ -2,7 +2,6 @@ import { join } from "node:path";
 import type { ListenerPairing } from "@intentic/sandbox-contract";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes this process never
 // uses.
-import { extensionRuntimeDir } from "@intentic/sandbox-contract/workspace-state";
 import { deliverChunked, type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
 import {
     closeWhatsAppConnection,
@@ -34,7 +33,9 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
     statusMs: 5_000,
     publishGatewayUrl: true,
     create: (ctx) => {
-        const runtimeDir = join(ctx.workspaceRoot, extensionRuntimeDir("whatsapp"));
+        // The extension's own state directory, made by the daemon before this process started: the paired sessions
+        // and the media they received.
+        const runtimeDir = ctx.api.stateDir;
         const sessionDirOf = (capabilityId: string): string => join(runtimeDir, `session-${capabilityId}`);
         const mediaDir = join(runtimeDir, "media");
         const listener = createWhatsAppListener(ctx, whatsappConnections);

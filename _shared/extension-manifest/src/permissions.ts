@@ -90,3 +90,36 @@ export const sandboxRouteAllowed = (permissions: readonly string[], method: stri
         );
     });
 };
+
+// The routes every extension's own token reaches without declaring them: what the host tells an extension about
+// itself, its own settings (secrets included) and its own event stream. Each answers only about the extension asking,
+// so declaring them would grant nothing a reviewer could weigh.
+export const EXTENSION_OWN_ROUTES: readonly string[] = ["GET /extension/settings", "GET /extension/events"];
+
+// What an extension token's reach is judged by: the manifest's `permissions.daemon`, and the provider its
+// `contributes.listener` names, when the extension owns that listener.
+export interface ExtensionReach {
+    readonly permissions: readonly string[];
+    readonly listener?: string | undefined;
+}
+
+const LISTENER_ROUTE = /^\/listeners\/([^/]+)\/(?:state|dispatch|failure|status)$/u;
+
+// The provider segment a listener route addresses, as it arrived; undefined for any other path.
+export const listenerSegmentOf = (path: string): string | undefined => LISTENER_ROUTE.exec(path.split("?")[0] ?? path)?.[1];
+
+// Whether an extension's token reaches `method path`: its own routes always; a listener route only for the provider its
+// listener names, matched as sent or as encoded and never decoded, since a provider comes from a manifest and may hold
+// anything a glob would widen on (another provider's /state hands back that provider's stored credentials); anything
+// else by `permissions.daemon`. The daemon's grant (auth/grants.ts) and the SDK's test fake both judge by this, so a
+// fake can't admit what the daemon refuses.
+export const extensionRouteReach = (reach: ExtensionReach, method: string, path: string): boolean => {
+    if (sandboxRouteAllowed(EXTENSION_OWN_ROUTES, method, path)) {
+        return true;
+    }
+    const segment = listenerSegmentOf(path);
+    if (segment !== undefined) {
+        return reach.listener !== undefined && (segment === reach.listener || segment === encodeURIComponent(reach.listener));
+    }
+    return sandboxRouteAllowed(reach.permissions, method, path);
+};

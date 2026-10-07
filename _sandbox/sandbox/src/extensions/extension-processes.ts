@@ -1,9 +1,11 @@
 import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-manifest";
+import { EXTENSION_PROCESS_ENV } from "@intentic/sandbox-contract/extension-protocol";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerOwnership, listenerProcessesDesired, listenerState } from "./listener/listener-state.js";
+import { prepareExtensionDirs } from "./runtime/extension-state.js";
 
 // Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
 // Extension processes run under the service supervisor, never tmux; the prefix marks it apart from a dev panel.
@@ -16,16 +18,23 @@ const processCwd = (extension: InstalledExtension, process: ProcessContribution)
 
 export const startExtensionProcess = async (services: Services, extension: InstalledExtension, process: ProcessContribution): Promise<void> => {
     const key = extensionProcessKey(extension.id, process.name);
+    const dirs = await prepareExtensionDirs(services.workspace.root, extension.manifest);
     await services.serviceProcesses.start(key, {
         command: process.command,
         cwd: processCwd(extension, process),
-        // Reaches the daemon over loopback with its extension's own token, so it gets the reach the manifest declared
-        // (`permissions.daemon`, plus its listener provider's routes), never the panel token's; INTENTIC_WORKSPACE lets
-        // it write into the workspace.
+        // Everything `connectExtensionProcess` (@intentic/extension-api/runtime) builds the process's api from, the same
+        // api its extension's backend is handed. It reaches the daemon over loopback with its extension's own token, so
+        // it gets the reach the manifest declared (`permissions.daemon`, plus its listener provider's routes and its own
+        // routes), never the panel token's; the workspace root lets it write into the workspace.
         env: {
-            INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`,
-            INTENTIC_EXTENSION_TOKEN: services.extensionBackend.grantFor(extension),
-            INTENTIC_WORKSPACE: services.workspace.root,
+            [EXTENSION_PROCESS_ENV.daemon]: `http://127.0.0.1:${services.config.sandbox.port}`,
+            [EXTENSION_PROCESS_ENV.token]: services.extensionBackend.grantFor(extension),
+            [EXTENSION_PROCESS_ENV.id]: extension.id,
+            [EXTENSION_PROCESS_ENV.workspace]: services.workspace.root,
+            [EXTENSION_PROCESS_ENV.dir]: extension.dir,
+            [EXTENSION_PROCESS_ENV.state]: dirs.stateDir,
+            [EXTENSION_PROCESS_ENV.cache]: dirs.cacheDir,
+            [EXTENSION_PROCESS_ENV.permissions]: JSON.stringify(extension.manifest.permissions?.daemon ?? []),
         },
     });
 };
