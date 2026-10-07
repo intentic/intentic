@@ -35,8 +35,15 @@ const edgeGap = 8;
 // PrimeVue opens the menu at the pointer and only ever flips it whole, so a model longer than the screen (a fleet's
 // worth of conversations) is drawn straight past the bottom edge with no way to reach its last rows. Cap the list to
 // the roomier side of the click before it renders — PrimeVue measures after this style lands — and let it scroll.
+// A submenu is drawn as an absolutely positioned list nested inside its parent row, so a scrolling root list clips
+// it (and grows scrollbars both ways). Menus with submenus therefore stay uncapped; the long ones are flat lists.
+const hasSubmenu = computed(() => model.some((item) => (item.items?.length ?? 0) > 0));
 const maxHeight = ref<string>();
 const capToViewport = (event: Event): void => {
+    if (hasSubmenu.value) {
+        maxHeight.value = undefined;
+        return;
+    }
     // Duck-typed, not `instanceof MouseEvent`: an extension's menu is opened by an event from its own iframe realm.
     // A keyboard-opened menu reports no pointer, and 0 is where PrimeVue puts it anyway.
     const y = (event as Partial<MouseEvent>).clientY ?? 0;
@@ -78,7 +85,7 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
         @hide="emit(`hide`)"
         :pt="{
             root: { class: `!text-xs !border-line-subtle`, style: { minWidth: `${minWidth}rem` } },
-            rootList: { class: `!p-1 overflow-y-auto overscroll-contain`, style: { maxHeight } },
+            rootList: { class: [`!p-1`, !hasSubmenu && `overflow-y-auto overscroll-contain`], style: { maxHeight } },
             itemLink: `!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs`,
             separator: `!my-1 !border-line-subtle`,
         }"
