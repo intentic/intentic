@@ -4688,7 +4688,7 @@
             "watch": "Watch",
             "watchNote": "Every request the gateway can cover goes through it: it records what it would mask and sends everything unchanged.",
             "watched": "Watched",
-            "whatItKeeps": "Untrusted providers get tokens like ⟦PERSON_3⟧ instead of personal data; real values are restored in answers. Runtimes the gateway can't cover (Cursor, ACP agents, Pi) are refused unless trusted.",
+            "whatItKeeps": "Untrusted providers get tokens like ⟦PERSON_3⟧ instead of personal data; real values are restored in answers.",
             "wouldMask": "Sent as it was, since the shield only watches."
         },
         "agentProjectInstalls": {
