@@ -2333,7 +2333,6 @@
             "googleAccount": "Google-Konto",
             "kimiCodeSubscription": "Kimi-Code-Abo",
             "outdatedMissing": "Bis zur Aktualisierung können diese Konten nicht anzeigen, ob sie einen Zug übernehmen können: eine verlorene Anmeldung oder Lizenz oder ein aufgebrauchtes oder gesperrtes Kontingent erscheint als unbekannt.",
-            "plan": "Welcher {managedLabel}-Tarif",
             "restingFor": "Pausiert: {reason}.",
             "restingUntil": "Pausiert bis {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Ihre Sandbox ist offline: ihre Konten lassen sich von hier aus nicht lesen oder ändern.",

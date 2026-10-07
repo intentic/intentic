@@ -1,8 +1,8 @@
-import type { AccountState, AgentProvider } from "@intentic/sandbox-contract";
+import { type AccountState, type AgentProvider, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { CONNECT_LANES } from "./connectLanes";
 
-// EVERYTHING THIS SANDBOX CAN RUN A MODEL ON, one row per source: a provider's accounts (its own sign-ins and its
+// EVERYTHING THIS SANDBOX CAN RUN A MODEL ON, one entry per source, which the grid's tiles and the Models row in the
+// sandbox's menu are both read from: a provider's accounts (its own sign-ins and its
 // subscriptions together), a model on this machine, an endpoint, the free trial. The overview the old AI-account card
 // never gave: there, eight chips each showed one provider's rows, so "what do I have, and is any of it broken" took
 // eight presses to answer. Pure: the view judges each account (usageStatus) and hands the verdicts in.
@@ -31,6 +31,8 @@ export interface ModelSource {
     readonly provider: AgentProvider;
     readonly kind: ModelSourceKind;
     readonly label: string;
+    // How many accounts it holds; one for anything that is not an account provider.
+    readonly count: number;
     // Beside the name: who it signs in as, how many accounts, or what kind of source it is.
     readonly summary: string;
     // Under the name, only when there is something to say: what needs doing, or what it is waiting on.
@@ -70,7 +72,7 @@ const soonest = (accounts: readonly AccountReading[]): number | undefined => {
 
 const accountSource = (provider: AgentProvider, label: string, accounts: readonly AccountReading[], when: WhenWords): ModelSource => {
     const summary = accounts.length === 1 ? accounts[0]!.label : t(`connect.modelSources.accounts`, { count: accounts.length }, accounts.length);
-    const base = { provider, kind: `account` as const, label, summary, manage: undefined };
+    const base = { provider, kind: `account` as const, label, summary, count: accounts.length, manage: undefined };
     const personal = accounts.filter((account) => blockedFix(account.state) === `reconnect` || blockedFix(account.state) === `verify`);
     if (personal.length > 0) {
         return {
@@ -110,6 +112,7 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
                 provider: input.provider,
                 kind: `local`,
                 label: input.label,
+                count: 1,
                 summary: t(`connect.modelSources.local`),
                 line: undefined,
                 standing: `ready`,
@@ -120,6 +123,7 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
                 provider: input.provider,
                 kind: `endpoint`,
                 label: input.label,
+                count: 1,
                 summary: t(`connect.modelSources.endpoint`),
                 line: undefined,
                 standing: `ready`,
@@ -130,6 +134,7 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
                 provider: input.provider,
                 kind: `trial`,
                 label: input.label,
+                count: 1,
                 summary: t(`connect.modelSources.trialLeft`, { count: input.remaining }, input.remaining),
                 line: input.remaining > 0 ? undefined : t(`connect.modelSources.trialSpent`),
                 standing: input.remaining > 0 ? `ready` : `waiting`,
@@ -140,12 +145,11 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
 
 const STANDING_ORDER = { attention: 0, blocked: 1, ready: 2, waiting: 3 } as const satisfies Record<ModelSourceStanding, number>;
 const KIND_ORDER = { account: 0, local: 1, endpoint: 2, trial: 3 } as const satisfies Record<ModelSourceKind, number>;
-// Providers in the order the ways in offer them (cost first), so the list and the lanes under it agree.
-const LANE_ORDER: readonly string[] = CONNECT_LANES.flatMap((lane) => lane.providers);
-const laneRank = (provider: AgentProvider): number => {
-    const at = LANE_ORDER.indexOf(provider);
-    return at === -1 ? LANE_ORDER.length : at;
-};
+// Providers in the grid's order (the spec table's), so the sources and the tiles they sit under agree.
+// Built once from the table, so a provider outside it (an endpoint, the trial) ranks after every provider without asking
+// the narrow tuple to hold a wider string.
+const PROVIDER_RANK = new Map<string, number>(NATIVE_PROVIDERS.map((provider, at) => [provider, at]));
+const providerRank = (provider: AgentProvider): number => PROVIDER_RANK.get(provider) ?? NATIVE_PROVIDERS.length;
 
 /** Every source, what needs a person first; an account provider with no accounts is not a source and is left out. */
 export const modelSources = (inputs: readonly ModelSourceInput[], when: WhenWords): readonly ModelSource[] =>
@@ -156,7 +160,7 @@ export const modelSources = (inputs: readonly ModelSourceInput[], when: WhenWord
             (a, b) =>
                 STANDING_ORDER[a.standing] - STANDING_ORDER[b.standing] ||
                 KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
-                laneRank(a.provider) - laneRank(b.provider) ||
+                providerRank(a.provider) - providerRank(b.provider) ||
                 a.label.localeCompare(b.label),
         );
 

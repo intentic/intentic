@@ -2,8 +2,7 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { CONNECT_LANES } from "../../../sandbox/models/connectLanes";
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { endpointProviders } from "../../accounts/providerCatalog";
 import { accessKnown, providerReady, trialPhase } from "../../session/access";
 import { MODELS_PATH } from "../../../../lib/routes/modelsPath";
@@ -25,7 +24,7 @@ const offerUncapped = computed(
         accessKnown.value &&
         trialPhase(TRIAL_PROVIDER) === `fresh` &&
         !endpointProviders.value.some((endpoint) => endpoint.kind === `localmodel`) &&
-        !CONNECT_LANES.some((lane) => lane.providers.some(providerReady)),
+        !NATIVE_PROVIDERS.some(providerReady),
 );
 </script>
 

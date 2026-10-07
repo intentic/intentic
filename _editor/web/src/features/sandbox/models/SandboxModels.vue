@@ -3,72 +3,64 @@ import {
     type AgentProvider,
     endpointProvider,
     type KeyedProvider,
-    mintedVariants,
     type NativeProvider,
     type ProviderKey,
     ProviderKeysAppliedSchema,
     ProviderKeysSchema,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
-import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
-import { defaultModelFor, endpointProviders } from "../../chat/accounts/providerCatalog";
+import { useT } from "@intentic/ui/i18n";
+import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { foundToOffer } from "../../../lib/foundOnComputer";
+import { defaultModelFor, endpointProviders, trialStatus } from "../../chat/accounts/providerCatalog";
+import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
-import { accessKnown, accessStateFor, providerReady } from "../../chat/session/access";
 import { rememberPick } from "../../chat/run/turnDefaults";
 import { useChat } from "../../chat/run/useChat";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useRole } from "../../../client/sandbox/useRole";
-import { foundToOffer } from "../../../lib/foundOnComputer";
-import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
-import SandboxOutdatedNotice from "../overview/version/SandboxOutdatedNotice.vue";
-import ConnectionRow from "../secrets/ConnectionRow.vue";
-import EstatePicker from "../secrets/EstatePicker.vue";
+import { accessKnown, providerReady } from "../../chat/session/access";
+import LocalModelsPanel from "./LocalModelsPanel.vue";
 import { localPrefetchStopped } from "./localPrefetch";
+import type { ModelSource, ModelSourceStanding } from "./modelSources";
+import ProviderPanel from "./ProviderPanel.vue";
 import {
-    arrivalLane,
-    connectLane,
-    type ConnectLaneKey,
+    arrivalTile,
     foundSignIns,
-    justLanded,
+    isProviderTile,
     KEY_SOURCE_LABELS,
     landedLine,
-    laneOfProvider,
-    laneProviders,
     linkArrival,
+    LOCAL_TILE,
+    MODEL_TILES,
     offeredKeys,
-    type PickedStanding,
-} from "./connectLanes";
-import ConnectAttempt from "./ConnectAttempt.vue";
-import ConnectLane from "./ConnectLane.vue";
-import LocalModelLane from "./LocalModelLane.vue";
-import ModelSources from "./ModelSources.vue";
+    type TileKey,
+    tileLine,
+    tileOf,
+} from "./providerGrid";
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
 import { useModelSources } from "./useModelSources";
-import { useT } from "@intentic/ui/i18n";
 
-// SANDBOX ▸ MODELS: everything this sandbox can run a model on, and the one place one is connected. It was two places
-// until 2026-10 — a page of its own at /connect that only links reached, for the first model, and an AI-account card
-// inside Agent ▸ Models that showed one provider's accounts at a time — and the reader had to know which was which.
-// Everything that offers a sign-in elsewhere (the chat's strip, the model picker, setup's landing, a job whose model is
-// not connected) sends the reader here (lib/routes/modelsPath.ts), because the decision is a choice, not a setting.
+// SANDBOX ▸ MODELS: every way this sandbox can run a model, as a grid of peers, and one panel for whichever is open.
 //
-// Top to bottom: the sign-in card when one runs, what is CONNECTED (ModelSources: every source, what needs a person
-// first, each provider opening onto its accounts), what was FOUND on this computer, then the ways to ADD one. With
-// nothing connected the page is the first-run one: the connected list is not drawn, and the free lane opens.
+// A tile per provider and one for Local models, always the same tiles in the same places (providerGrid.ts), each saying
+// what it holds ("3 accounts", a dot for how they are) or why it is worth a look ("Free"). Pressing one opens its panel
+// below the grid, as a persona's tile opens its editor: the provider's accounts, the one button that adds one, and the
+// sign-in itself while it runs (ProviderPanel); or this machine's models and the servers it is pointed at
+// (LocalModelsPanel). That panel is the only door to a sign-in on the page, so there is never a second way to do one
+// thing, and no provider is promoted over another by where it sits.
 //
-// Three lanes, in cost order, one open at a time. Which model does which job is Agent ▸ Jobs: how the agent uses what
-// is here, not what is here.
+// It replaced a list of what was connected stacked over three "ways in" lanes, and before that a page of its own at
+// /connect plus an AI-account card in Agent ▸ Models. Every link that offers a sign-in elsewhere (the chat's strip, the
+// model picker, setup's landing, a job whose model is not connected) lands here (lib/routes/modelsPath.ts), and the page
+// opens the tile it is about.
 //
-// One sign-in at a time, and it has one place: the card at the top (ConnectAttempt), whichever lane or row started it.
-// The lanes never give their tiles up to it, so trying a different provider is one press on its tile, which replaces
-// the sign-in rather than queueing behind it. A reader sent back by the chat's "Finish sign-in" lands on that card, with
-// the lane it came from open beneath it.
+// One sign-in at a time: starting one replaces whichever was waiting, and every other panel says so before the press.
 
 const t = useT();
 const route = useRoute();
@@ -88,20 +80,17 @@ const {
     connectTranslator,
     loadUsage,
 } = useChat();
-const { reachable } = useSandbox();
+const { reachable, active: activeSandbox } = useSandbox();
 
-// Every source, what needs a person first. Empty is the first visit: nothing above the ways in.
+// What each tile holds, judged the way the Models row in the sandbox's menu judges it.
 const sources = useModelSources();
-// A provider a link named that is already connected (a reconnect from the chat): its row opens, rather than a second
-// sign-in starting over the account it already holds (linkArrival).
-const focus = ref<AgentProvider | undefined>(undefined);
 
 const { fit, startPrefetch, stopPrefetch } = useLocalModelFit();
 
-// A local model is a capability, not an account: the local lane holds whichever one is installed.
+// A local model is a capability, not an account.
 const localModel = computed(() => endpointProviders.value.find((endpoint) => endpoint.kind === `localmodel`));
 
-// The weights that make the local lane instant, fetched while the reader is still reading the page — but only where
+// The weights that make the local offer instant, fetched while the reader is still reading the page — but only where
 // they could be used at all, and only if nobody has already declined them. A gigabyte started on a machine that cannot
 // serve it, or one whose owner pressed Stop last time, is bandwidth spent on nothing.
 // Asked at most once per visit: the start's own answer lands back in `fit`, so a daemon that answers anything but
@@ -132,50 +121,120 @@ const stopFetching = (): void => {
     void stopPrefetch();
 };
 
-// Which lane is open. `undefined` before the connection lists land: opening a lane against an unread list would open
-// the wrong one and then move under the reader.
-const openLane = ref<ConnectLaneKey | undefined>(undefined);
-const toggleLane = (key: ConnectLaneKey): void => {
-    openLane.value = openLane.value === key ? undefined : key;
+// THE GRID AND WHICH TILE IS OPEN.
+const selected = ref<TileKey | undefined>(undefined);
+const panelId = useId();
+const select = (tile: TileKey): void => {
+    selected.value = selected.value === tile ? undefined : tile;
 };
 
-// `?provider=` continues a press made elsewhere (a picker row, a trial strip, the chat's "Try again"): open its lane and
-// start its handshake. A sign-in already under way, or one that just ended badly, is what any other visit is about: its
-// lane opens under the card, so a different provider is one press away. Anything else opens the free lane, and only for
-// a reader who has connected nothing (arrivalLane).
-const settleLane = (): void => {
-    if (!accessKnown.value || openLane.value !== undefined || focus.value !== undefined) {
+// What each tile says, from the sources that live under it: a provider's own, or every model this sandbox serves or is
+// pointed at for Local models. The worst standing among them colours its dot.
+const STANDING_RANK = { attention: 0, blocked: 1, ready: 2, waiting: 3 } as const satisfies Record<ModelSourceStanding, number>;
+const sourcesOf = (tile: TileKey): readonly ModelSource[] =>
+    sources.value.filter((source) => source.kind !== `trial` && tileOf(source.provider) === tile);
+const tileFacts = computed(() =>
+    Object.fromEntries(
+        MODEL_TILES.map((tile) => {
+            const under = sourcesOf(tile);
+            const standing = under.reduce<ModelSourceStanding | undefined>(
+                (worst, source) => (worst === undefined || STANDING_RANK[source.standing] < STANDING_RANK[worst] ? source.standing : worst),
+                undefined,
+            );
+            const facts = {
+                count: under.reduce((sum, source) => sum + source.count, 0),
+                standing,
+                signingIn: starting.value === tile || live.value?.provider === tile,
+                failed: signInFailure.value?.provider === tile,
+                found: foundRows.value.some((provider) => provider === tile),
+            };
+            // Before the lists land a count would read as zero, which is a claim: nothing is said until they do.
+            return [tile, { line: accessKnown.value ? tileLine(tile, facts) : undefined, standing: accessKnown.value ? standing : undefined }];
+        }),
+    ),
+);
+
+// ARRIVAL: `?provider=` continues a press made elsewhere (a picker row, a trial strip, the chat's "Try again"): open its
+// tile, and start its sign-in when nothing of it is connected yet (linkArrival). Without one, the tile whose turn it is:
+// the sign-in waiting on the reader, the one that just failed, else whatever needs a person (arrivalTile). Otherwise
+// nothing opens: the grid says what is here, and an open panel nobody asked for is a pitch.
+let arrived = false;
+const settleArrival = (): void => {
+    if (!accessKnown.value) {
         return;
     }
     const asked = String(route.query[`provider`] ?? ``);
-    // Only a provider with nothing connected starts its sign-in here (linkArrival); a connected one waits for its tile.
-    // One already signing in is not started over: the card above already holds it.
-    const arrival = linkArrival(asked, providerReady);
+    const arrival = asked === `` ? undefined : linkArrival(asked, providerReady);
     if (arrival !== undefined) {
-        if (!arrival.signIn) {
-            focus.value = asked;
-        } else {
-            openLane.value = arrival.lane;
-            if (live.value?.provider !== asked) {
-                // SAFETY: linkArrival answers only for a provider some lane connects, and every lane's providers are native.
-                void connect(asked as NativeProvider);
-            }
+        selected.value = arrival.tile;
+        if (arrival.signIn && live.value?.provider !== asked && isProviderTile(asked)) {
+            void connect(asked);
         }
         // Acted on once: a reload or a step back to this address must not start the sign-in a second time.
         void router.replace({ query: { ...route.query, provider: undefined } });
+        arrived = true;
         return;
     }
-    const current = live.value?.provider ?? signInFailure.value?.provider;
-    const currentLane = current === undefined ? undefined : laneOfProvider(current);
-    if (current !== undefined && currentLane !== undefined) {
-        openLane.value = currentLane;
-        // Picked, as far as this view is concerned: its landing is this visit's to announce.
-        // SAFETY: laneOfProvider answered, so it is one of a lane's providers, which are all native.
-        chosen.value ??= current as NativeProvider;
+    if (arrived) {
         return;
     }
-    // What this computer is already signed in to is the thing to do here: nothing below opens over it.
-    openLane.value = foundRows.value.length > 0 ? undefined : arrivalLane((key) => laneHolds(key) !== undefined);
+    arrived = true;
+    selected.value = arrivalTile({
+        live: live.value?.provider,
+        failed: signInFailure.value?.provider,
+        needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
+    });
+};
+
+// THE ONE SIGN-IN.
+// Which estate to sign in to is the panel's to ask; the provider whose sign-in is on its way to the sandbox is the page's,
+// so its tile and panel say so from the press rather than from whenever the sandbox answers.
+const starting = ref<NativeProvider | undefined>(undefined);
+// The variant the last sign-in asked for, so Try again asks for the same one.
+let lastVariant: string | undefined;
+const panel = useTemplateRef<InstanceType<typeof ProviderPanel>>(`panel`);
+
+// The translator holds the subscription OAuth, a stored account serves everything else, as the daemon splits them.
+const routedByDefault = (provider: NativeProvider): boolean => providerSpec(provider)?.auth.kind === `translator`;
+
+// `via` picks the mechanism where a provider has two (Grok's own xAI account, or its subscription under Claude Code);
+// left out, the provider's own auth kind decides.
+const connect = async (provider: NativeProvider, { variant, via }: { variant?: string; via?: `native` | `routed` } = {}): Promise<void> => {
+    if (starting.value !== undefined) {
+        return;
+    }
+    // A new attempt is the thing happening now; the last one's banner is over.
+    landed.value = undefined;
+    selected.value = provider;
+    starting.value = provider;
+    lastVariant = variant;
+    setManagedProvider(provider);
+    await nextTick();
+    void panel.value?.reveal();
+    try {
+        const routed = via === undefined ? routedByDefault(provider) : via === `routed`;
+        // SAFETY: only a translator-held provider is asked for its subscription, by its own panel's button.
+        await (routed ? connectTranslator(provider as KeyedProvider) : startConnect(variant));
+    } finally {
+        starting.value = undefined;
+    }
+};
+
+// What the open panel's sign-in block shows, if anything: the press on its way, the reader's turn, or how it ended.
+const attemptFor = (
+    provider: NativeProvider,
+): { phase: `starting` | `live` | `failed`; kind?: `native` | `routed`; problem?: string } | undefined => {
+    if (starting.value === provider) {
+        return { phase: `starting` };
+    }
+    if (live.value?.provider === provider) {
+        // The store's one error line, while a sign-in is live, is about it: every start clears it.
+        return { phase: `live`, kind: live.value.kind, problem: error.value ?? undefined };
+    }
+    if (signInFailure.value?.provider === provider) {
+        return { phase: `failed`, problem: signInFailure.value.message };
+    }
+    return undefined;
 };
 
 // What was brought back is being redeemed: there is nothing left to abandon.
@@ -183,120 +242,34 @@ const finishing = computed(
     () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
 );
 
-// Which estate to sign in to (a vendor can sell one product through estates whose keys are not interchangeable).
-const estate = ref<string | undefined>(undefined);
-const chosen = ref<NativeProvider | undefined>(undefined);
-const offersEstates = computed(() => (mintedVariants(chosen.value ?? ``)?.length ?? 0) > 1);
-// A provider sold through several estates asks which before its sign-in starts: started on the default and asked after,
-// the question sat under a handshake already running against the wrong one.
-const asksEstate = (provider: NativeProvider): boolean => (mintedVariants(provider)?.length ?? 0) > 1;
-
-// The translator holds the subscription OAuth, a stored account serves everything else, as the daemon splits them.
-const routed = (provider: NativeProvider): provider is KeyedProvider => providerSpec(provider)?.auth.kind === `translator`;
-
-// The provider whose sign-in is on its way to the sandbox: the card says so from the press, rather than from whenever
-// the sandbox answers.
-const starting = ref<NativeProvider | undefined>(undefined);
-const attemptCard = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemptCard`);
-
-// `via` picks the mechanism where a provider has two (Grok's own xAI account, or its subscription under Claude Code);
-// left out, the provider's own auth kind decides, which is what every tile means.
-const connect = async (provider: NativeProvider, { variant, via }: { variant?: string; via?: `native` | `routed` } = {}): Promise<void> => {
-    if (starting.value !== undefined) {
-        return;
-    }
-    chosen.value = provider;
-    // A new attempt is the thing happening now; the last one's banner is over.
-    landed.value = undefined;
-    starting.value = provider;
-    setManagedProvider(provider);
-    await nextTick();
-    void attemptCard.value?.reveal();
-    try {
-        const routedHere = via === undefined ? routed(provider) : via === `routed`;
-        // SAFETY: only a translator-held provider is asked for its subscription, by its own tile or by its account rows.
-        await (routedHere ? connectTranslator(provider as KeyedProvider) : startConnect(variant));
-    } finally {
-        starting.value = undefined;
+// The open panel's own press: its Connect, its Add another account, a row's Reconnect.
+const connectSelected = (request: { via: `native` | `routed`; variant?: string }): void => {
+    const tile = selected.value;
+    if (tile !== undefined && isProviderTile(tile)) {
+        void connect(tile, request);
     }
 };
 
-// A tile's press: the sign-in already running for it is shown rather than started over; a provider with estates asks
-// which first (below the tiles); any other starts, replacing whatever sign-in was running.
-const pick = (provider: NativeProvider): void => {
-    if (live.value?.provider === provider) {
-        void attemptCard.value?.reveal();
-        return;
-    }
-    if (asksEstate(provider)) {
-        if (chosen.value !== provider) {
-            estate.value = undefined;
-        }
-        chosen.value = provider;
-        return;
-    }
-    void connect(provider);
-};
-
-// The estate is chosen: start the sign-in it names.
-const connectChosen = (): void => {
-    const provider = chosen.value;
-    if (provider !== undefined) {
-        void connect(provider, { variant: estate.value });
-    }
-};
-
-// A provider's account rows asking for a sign-in (another account, a reconnect): the one already running for it is
-// shown rather than started over, as a tile's press is.
-const connectFrom = (provider: AgentProvider, request: { via: `native` | `routed`; variant?: string }): void => {
-    if (live.value?.provider === provider) {
-        void attemptCard.value?.reveal();
-        return;
-    }
-    // SAFETY: the rows that ask are a native provider's own accounts (ModelSources lists no other kind with rows).
-    void connect(provider as NativeProvider, request);
-};
-
-// Again, as it was: the same estate when it was the one picked here.
 const retry = (): void => {
     const provider = signInFailure.value?.provider;
-    if (provider !== undefined) {
-        // SAFETY: a failure is only ever recorded by a sign-in, and only native providers have one.
-        void connect(provider as NativeProvider, { variant: provider === chosen.value ? estate.value : undefined });
+    if (provider !== undefined && isProviderTile(provider)) {
+        void connect(provider, { variant: lastVariant });
     }
 };
 
-// What the card shows, if anything: the press on its way, the reader's turn, or how the last attempt ended.
-const attempt = computed<{ provider: AgentProvider; phase: `starting` | `live` | `failed`; problem?: string } | undefined>(() => {
-    if (starting.value !== undefined) {
-        return { provider: starting.value, phase: `starting` };
-    }
-    if (live.value !== undefined) {
-        // The store's one error line, while a sign-in is live, is about it: every start clears it.
-        return { provider: live.value.provider, phase: `live`, problem: error.value ?? undefined };
-    }
-    if (signInFailure.value !== undefined) {
-        return { provider: signInFailure.value.provider, phase: `failed`, problem: signInFailure.value.message };
-    }
-    return undefined;
-});
-
-// What went wrong that is not a sign-in's own (a refused disconnect, an unreachable account list): a sign-in's failure
-// has the card, and a live one says its own trouble inside it.
+// What went wrong that is not a sign-in's own (a refused disconnect): shown in the open panel, where the press was.
 const accountsNotice = computed<NoticeModel | undefined>(() =>
     error.value === null || live.value !== undefined || signInFailure.value !== undefined
         ? undefined
         : { tone: `danger`, title: t(`sandbox.aiAccountSection.couldntReachAiAccounts`), detail: error.value },
 );
-
 const dismissAccountsNotice = (): void => {
     error.value = null;
 };
 
-// Landing on a connection is a state, not a redirect: the lane says who it signed in as and offers the one next move.
+// LANDING: a state, not a redirect. The panel of what connected says so, naming the sandbox it went to (landedLine), with
+// the one next move.
 const landed = ref<AgentProvider | undefined>(undefined);
-// Named with the sandbox it went to: a connection lives in that sandbox alone (landedLine).
-const { active: activeSandbox } = useSandbox();
 // An endpoint made from a found key is named for its provider ("OpenRouter"); any other as the picker names it.
 const keyEndpointLabels = new Map<AgentProvider, string>();
 const landedLabel = (provider: AgentProvider): string =>
@@ -304,19 +277,40 @@ const landedLabel = (provider: AgentProvider): string =>
     keyEndpointLabels.get(provider) ??
     endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
     provider;
-const landedText = computed(() => (landed.value === undefined ? `` : landedLine(landedLabel(landed.value), activeSandbox.value?.name)));
+const landedFor = (tile: TileKey): string | undefined =>
+    landed.value === undefined || tileOf(landed.value) !== tile ? undefined : landedLine(landedLabel(landed.value), activeSandbox.value?.name);
+
+// A sign-in that connected an account while this view was open, as the store saw it land: said whether or not the
+// provider was connected before, since a second account lands without its readiness changing at all.
+watch(signInLanded, (now) => {
+    if (now !== undefined) {
+        landed.value = now.provider;
+        selected.value = tileOf(now.provider) ?? selected.value;
+    }
+});
+
+// Fires when the model is actually serving, not when its manifest entry was written: the picker reads endpoints from
+// the connection list fetched on arrival, which has never heard of this one.
+const onLocalReady = (provider: string): void => {
+    landed.value = provider;
+    void refreshConnections();
+};
+
+// Points the next conversation at what was just connected and goes there: the errand ends in a chat, not on a settings
+// page.
+const startChatting = (): void => {
+    const provider = landed.value;
+    if (provider !== undefined) {
+        rememberPick({ provider, value: defaultModelFor(provider) });
+    }
+    void router.push(`/chat`);
+};
 
 // FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each one
-// press. The press is the tile's own: its sign-in opens in the card at the top, where every sign-in on this view runs,
-// with the provider's lane open below it, and the browser that is already signed in answers it.
-// What the address names, else what the desktop app said on an earlier address (a folder's own sandbox opens with no
-// setup page in its way, and the reader may arrive here later, from the chat).
+// press that opens the provider's panel with its sign-in started, which the browser already signed in answers. What the
+// address names, else what the desktop app said on an earlier address.
 const found = computed(() => foundToOffer(route.query[`found`]));
 const foundRows = computed(() => foundSignIns(found.value, providerReady));
-const connectFound = (provider: NativeProvider): void => {
-    openLane.value = laneOfProvider(provider);
-    void connect(provider);
-};
 
 // And the API keys the owner's devices hold (the daemon's GET /arrivals/keys, migrations/provider-keys.ts): copied,
 // unlike a sign-in, since a key is not bound to the install that holds it. Read once on open, and only by a tier that
@@ -354,72 +348,24 @@ const addKey = (key: ProviderKey): Promise<void> =>
             if (capability !== undefined) {
                 keyEndpointLabels.set(endpointProvider(capability), key.label);
                 landed.value = endpointProvider(capability);
+                selected.value = LOCAL_TILE;
             }
         } finally {
             adding.value = undefined;
         }
     }, t(`connect.connect.foundKeyFailed`));
 
-// A provider that became ready while this view was open is the thing that just happened, whichever lane did it; one
-// picked while already connected is a sign-in starting, and "Connected" above it would contradict it (justLanded).
-watch(
-    (): PickedStanding | undefined =>
-        chosen.value === undefined ? undefined : { provider: chosen.value, settled: providerReady(chosen.value) && !accessStateFor(chosen.value).needsReauth },
-    (now, before) => {
-        const provider = justLanded(now, before);
-        if (provider !== undefined) {
-            landed.value = provider;
-        }
-    },
+// The platform's free trial is not something to connect, so it has no tile; while it is on offer it is worth one line,
+// since it is what a chat runs on until something here is connected.
+const trialLine = computed(() =>
+    trialStatus.value.available
+        ? t(`connect.modelSources.trialLeft`, { count: trialStatus.value.remaining }, trialStatus.value.remaining)
+        : undefined,
 );
-// A sign-in that connected an account while this view was open, as the store saw it land. Said whether or not the
-// provider was connected before: a second account lands without its readiness changing at all, and the card simply
-// vanishing read as the attempt having been lost.
-watch(signInLanded, (now) => {
-    if (now !== undefined) {
-        landed.value = now.provider;
-    }
-});
 
-// Fires when the model is actually serving, not when its manifest entry was written: the picker reads endpoints from
-// the connection list fetched on arrival, which has never heard of this one.
-const onLocalReady = (provider: string): void => {
-    landed.value = provider;
-    void refreshConnections();
-};
-
-// Points the next conversation at what was just connected and goes there: the whole errand ends in a chat, not on a
-// settings page.
-const startChatting = (): void => {
-    const provider = landed.value;
-    if (provider !== undefined) {
-        rememberPick({ provider, value: defaultModelFor(provider) });
-    }
-    void router.push(`/chat`);
-};
-
-// Spelled out rather than built from the lane key: a composed `t()` path is invisible to the catalog check, and a
-// missing one renders as its own dotted path in front of a reader.
-const LANES = computed(() => [
-    { key: `free` as const, icon: `sparkles` as const, title: t(`connect.connect.freeTitle`), subtitle: t(`connect.connect.freeSubtitle`), free: true },
-    { key: `local` as const, icon: `cpu` as const, title: t(`connect.connect.localTitle`), subtitle: t(`connect.connect.localSubtitle`), free: true },
-    {
-        key: `subscription` as const,
-        icon: `key` as const,
-        title: t(`connect.connect.subscriptionTitle`),
-        subtitle: t(`connect.connect.subscriptionSubtitle`),
-        free: false,
-    },
-]);
-
-// What a shut lane is already holding, named rather than ticked: a green check over "A subscription you already pay
-// for" says something is connected and not which, which is the one thing a reader of a closed lane wants.
-const laneHolds = (key: ConnectLaneKey): string | undefined => {
-    if (key === `local`) {
-        return localModel.value?.label;
-    }
-    const ready = connectLane(key).providers.filter((provider) => providerReady(provider));
-    return ready.length === 0 ? undefined : ready.map((provider) => providerSpec(provider)?.accountLabel ?? provider).join(`, `);
+const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {
+    const other = live.value?.provider ?? starting.value;
+    return other !== undefined && other !== tile ? other : undefined;
 };
 
 onMounted(() => {
@@ -427,161 +373,124 @@ onMounted(() => {
     void refreshConnections();
     // Each account's spend, for the meter's card on its row; the rows draw without it until it lands.
     void loadUsage();
-    settleLane();
+    settleArrival();
     if (canShip.value) {
         void readKeys();
     }
 });
-watch([accessKnown, () => route.query[`provider`]], settleLane);
+watch([accessKnown, () => route.query[`provider`]], settleArrival);
 </script>
 
 <template>
-    <!-- `@container`: the docked chat can leave this pane a third of the window, and the rows below thin against it. -->
-    <div class="@container flex flex-col gap-4">
+    <!-- `@container`: the docked chat can leave this pane a third of the window, and the grid reflows against it. -->
+    <div class="@container flex flex-col gap-6">
+        <div class="flex flex-col gap-1">
+            <p class="text-xs text-muted">{{ t(`connect.providerGrid.intro`) }}</p>
+            <p v-if="trialLine" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="gift" class="text-2xs" />{{ trialLine }}</p>
+        </div>
 
-        <!-- The sign-in in flight, or how the last one ended: first on the page, since it is the reader's turn. -->
-        <ConnectAttempt
-            v-if="attempt"
-            ref="attemptCard"
-            :provider="attempt.provider"
-            :phase="attempt.phase"
-            :kind="live?.kind"
-            :problem="attempt.problem"
-            :finishing="finishing"
-            @cancel="cancelSignIn"
-            @retry="retry"
-            @dismiss="dismissSignInFailure"
+        <Notice
+            v-if="!accessKnown && !reachable"
+            :of="{
+                tone: `warning`,
+                title: t(`sandbox.aiAccountSection.connectionsUnavailable`),
+                detail: t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`),
+            }"
         />
 
-        <!-- The one thing that just happened, above the lanes that are still offering to do it again. -->
-        <div v-if="landed" class="flex flex-wrap items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3">
-            <Icon name="check" class="shrink-0 text-success" />
-            <span class="min-w-0 flex-1 text-sm text-content">{{ landedText }}</span>
-            <Button :label="t(`connect.connect.startChatting`)" @click="startChatting" />
-        </div>
-
-        <Notice v-if="accountsNotice" :of="accountsNotice" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissAccountsNotice" />
-
-        <!-- CONNECTED: nothing read yet holds the list's place (offline says so and stops); then every source, if any. -->
-        <RowGroup v-if="!accessKnown" :label="t(`connect.modelSources.title`)">
-            <ConnectionRow
-                v-if="!reachable"
-                :title="t(`sandbox.aiAccountSection.connectionsUnavailable`)"
-                state="missing"
-                :description="t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`)"
-            />
-            <template v-else>
-                <ConnectionRow v-for="placeholder in 2" :key="`loading-${placeholder}`" state="unknown" pending aria-hidden="true" />
-            </template>
-        </RowGroup>
-        <template v-else-if="sources.length > 0">
-            <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
-            <RowNote v-if="accountsOutdated" variant="block">
-                <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
-            </RowNote>
-            <ModelSources :sources="sources" :live="starting ?? live?.provider" :focus="focus" @connect="connectFrom" />
-        </template>
-
-        <!-- The ways in, named for what this visit is: the first model, or one more. The promise about where it is kept
-             stands either way, since it is the whole argument for connecting anything here. -->
-        <header class="flex flex-col gap-1" :class="sources.length > 0 ? `mt-2` : ``">
-            <h2 class="text-lg font-medium leading-tight text-content">
-                {{ sources.length > 0 ? t(`connect.connect.addTitle`) : t(`connect.connect.title`) }}
-            </h2>
-            <p class="text-xs text-muted">{{ t(`connect.connect.description`) }}</p>
-        </header>
-
-        <!-- What this computer already holds, above the ways in: the first thing to do when there is any of it. -->
-        <section v-if="foundRows.length > 0 || keyRows.length > 0" class="ui-card flex flex-col gap-3 p-4 sm:p-5">
-            <h2 class="font-medium leading-tight">{{ t(`connect.connect.foundTitle`) }}</h2>
-            <div v-for="provider in foundRows" :key="provider" class="flex items-center gap-3 rounded-xl border border-line bg-card p-3">
-                <ProviderLogo :provider="provider" class="shrink-0 text-base text-muted" />
-                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="truncate text-sm font-medium text-content">{{ providerSpec(provider)?.accountLabel }}</span>
-                    <span class="text-2xs text-muted">{{ t(`connect.connect.foundSignedIn`) }}</span>
-                </span>
-                <Button
-                    size="small"
-                    class="shrink-0"
-                    :label="t(`ui.action.connect`)"
-                    :loading="starting === provider"
-                    :disabled="starting !== undefined || live?.provider === provider"
-                    @click="connectFound(provider)"
-                />
-            </div>
-            <div v-for="key in keyRows" :key="key.id" class="flex items-center gap-3 rounded-xl border border-line bg-card p-3">
-                <Icon name="key" class="shrink-0 text-base text-muted" />
-                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="truncate text-sm font-medium text-content">{{ t(`connect.connect.foundKeyTitle`, { provider: key.label }) }}</span>
-                    <span class="text-2xs text-muted">{{ t(`connect.connect.foundKeyFrom`, { source: KEY_SOURCE_LABELS[key.source], hint: key.hint }) }}</span>
-                </span>
-                <span v-if="key.added" class="flex shrink-0 items-center gap-1 text-2xs text-success">
-                    <Icon name="check" class="text-2xs" />{{ t(`connect.connect.foundKeyAdded`) }}
-                </span>
-                <Button
-                    v-else
-                    size="small"
-                    class="shrink-0"
-                    :label="t(`ui.action.add`)"
-                    :loading="adding === key.id"
-                    :disabled="adding !== undefined"
-                    @click="addKey(key)"
-                />
-            </div>
-            <Notice v-if="keyNotice" :of="keyNotice" />
-        </section>
-
-        <div class="flex flex-col gap-3">
-            <ConnectLane
-                v-for="lane in LANES"
-                :key="lane.key"
-                :icon="lane.icon"
-                :title="lane.title"
-                :subtitle="lane.subtitle"
-                :open="openLane === lane.key"
-                :done="laneHolds(lane.key) !== undefined"
-                @toggle="toggleLane(lane.key)"
+        <!-- What this computer already holds: the first thing to do when there is any of it, one press each. -->
+        <RowGroup v-if="foundRows.length > 0 || keyRows.length > 0" :label="t(`connect.connect.foundTitle`)">
+            <Row
+                v-for="provider in foundRows"
+                :key="provider"
+                :title="providerSpec(provider)?.accountLabel"
+                :description="t(`connect.connect.foundSignedIn`)"
             >
-                <template #badge>
-                    <!-- What is in it wins over what it costs: a lane already holding something is past the price. -->
-                    <span v-if="laneHolds(lane.key)" class="min-w-0 max-w-[40%] truncate text-2xs text-success">{{ laneHolds(lane.key) }}</span>
-                    <StatusBadge v-else-if="lane.free" variant="success" size="xs" class="shrink-0" :label="t(`connect.connect.free`)" />
+                <template #lead="{ mark }">
+                    <span class="flex shrink-0 items-center justify-center text-base text-muted" :style="{ width: `${mark}px` }"
+                        ><ProviderLogo :provider="provider"
+                    /></span>
                 </template>
+                <template #control>
+                    <Button
+                        size="small"
+                        :label="t(`ui.action.connect`)"
+                        :loading="starting === provider"
+                        :disabled="starting !== undefined || live?.provider === provider"
+                        @click="connect(provider)"
+                    />
+                </template>
+            </Row>
+            <Row
+                v-for="key in keyRows"
+                :key="key.id"
+                icon="key"
+                :title="t(`connect.connect.foundKeyTitle`, { provider: key.label })"
+                :description="t(`connect.connect.foundKeyFrom`, { source: KEY_SOURCE_LABELS[key.source], hint: key.hint })"
+            >
+                <template #control>
+                    <span v-if="key.added" class="flex items-center gap-1 text-2xs text-success"
+                        ><Icon name="check" class="text-2xs" />{{ t(`connect.connect.foundKeyAdded`) }}</span
+                    >
+                    <Button
+                        v-else
+                        size="small"
+                        :label="t(`ui.action.add`)"
+                        :loading="adding === key.id"
+                        :disabled="adding !== undefined"
+                        @click="addKey(key)"
+                    />
+                </template>
+            </Row>
+        </RowGroup>
+        <Notice v-if="keyNotice" :of="keyNotice" />
 
-                <LocalModelLane v-if="lane.key === `local`" :fit="fit" @ready="onLocalReady" @stop-prefetch="stopFetching" />
-
-                <!-- The tiles stay while a sign-in runs (it is in the card above): another provider is one press, not a Cancel and a hunt. -->
-                <div v-else class="flex flex-col gap-3">
-                    <template v-for="provider in laneProviders(lane.key, providerReady)" :key="provider">
-                        <ProviderTile
-                            :provider="provider"
-                            :signing-in="starting === provider || live?.provider === provider"
-                            :selected="chosen === provider && asksEstate(provider) && live?.provider !== provider"
-                            :disabled="starting !== undefined"
-                            @click="pick(provider)"
-                        />
-                        <!-- Estate is the sign-in's own first step, asked under the tile that raised it and before anything starts. -->
-                        <div
-                            v-if="chosen === provider && offersEstates && live?.provider !== provider && starting !== provider"
-                            class="-mt-1 flex flex-col gap-2 rounded-xl border border-line bg-canvas p-3"
-                        >
-                            <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
-                            <EstatePicker v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
-                            <Button class="self-start" size="small" :label="t(`ui.action.connect`)" @click="connectChosen" />
-                        </div>
-                    </template>
-                </div>
-            </ConnectLane>
+        <!-- The grid: every way in, always the same tiles in the same places. -->
+        <div role="group" :aria-label="t(`shared.models`)" class="-mx-1.5 flex flex-wrap gap-1">
+            <ProviderTile
+                v-for="tile in MODEL_TILES"
+                :key="tile"
+                :tile="tile"
+                :selected="selected === tile"
+                :line="tileFacts[tile]?.line"
+                :standing="tileFacts[tile]?.standing"
+                :controls="panelId"
+                @select="select(tile)"
+            />
         </div>
 
-        <!-- The power path, named once and sent sideways: somebody already running a server does not need a tour. -->
-        <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`text-xs`)">
-            {{ t(`connect.connect.ownServer`) }}<Icon name="arrow-right" class="text-2xs" />
-        </RouterLink>
-
-        <!-- The other half of models: which one does which job is how the agent uses what is here, so it stays with the agent. -->
-        <RouterLink v-if="sources.length > 0" to="/sandbox/agent" :class="ui.textAction(`-mt-2 text-xs`)">
-            {{ t(`connect.connect.jobsLink`) }}
-        </RouterLink>
+        <!-- The open tile's panel. Nothing until the lists land: an empty provider would claim "not connected". -->
+        <div :id="panelId">
+            <template v-if="selected !== undefined && accessKnown">
+                <LocalModelsPanel
+                    v-if="selected === LOCAL_TILE"
+                    :fit="fit"
+                    :landed="landedFor(LOCAL_TILE)"
+                    @ready="onLocalReady"
+                    @stop-prefetch="stopFetching"
+                    @chat="startChatting"
+                />
+                <ProviderPanel
+                    v-else
+                    ref="panel"
+                    :key="selected"
+                    :provider="selected"
+                    :attempt="attemptFor(selected)"
+                    :finishing="finishing"
+                    :other-live="otherLiveFor(selected)"
+                    :busy="starting !== undefined"
+                    :landed="landedFor(selected)"
+                    :found="foundRows.some((provider) => provider === selected)"
+                    :notice="accountsNotice"
+                    @connect="connectSelected"
+                    @cancel="cancelSignIn"
+                    @retry="retry"
+                    @dismiss="dismissSignInFailure"
+                    @chat="startChatting"
+                    @show="(provider) => (selected = tileOf(provider) ?? selected)"
+                    @dismiss-notice="dismissAccountsNotice"
+                />
+            </template>
+        </div>
     </div>
 </template>

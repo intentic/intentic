@@ -2342,7 +2342,6 @@
             "googleAccount": "Cuenta de Google",
             "kimiCodeSubscription": "Suscripción de Kimi Code",
             "outdatedMissing": "Hasta que se actualice, estas cuentas no pueden indicar si pueden atender un turno: un inicio de sesión o puesto perdido, o un cupo agotado o en pausa, aparece como desconocido.",
-            "plan": "Qué plan de {managedLabel}",
             "restingFor": "En pausa: {reason}.",
             "restingUntil": "En pausa hasta {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Tu sandbox está desconectado: sus cuentas no se pueden leer ni cambiar desde aquí.",

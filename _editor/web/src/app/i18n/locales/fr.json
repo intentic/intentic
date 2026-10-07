@@ -2332,7 +2332,6 @@
             "googleAccount": "Compte Google",
             "kimiCodeSubscription": "Abonnement Kimi Code",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, ces comptes ne peuvent pas dire s'ils peuvent prendre un tour : une connexion ou un siège perdu, ou un quota épuisé ou suspendu, apparaît comme inconnu.",
-            "plan": "Quelle offre {managedLabel}",
             "restingFor": "En pause : {reason}.",
             "restingUntil": "En pause jusqu'à {when} : {reason}.",
             "sandboxOfflineAccountsCant": "Votre sandbox est hors ligne : ses comptes ne peuvent être ni lus ni modifiés d'ici.",

@@ -8,9 +8,11 @@ import {
     type OauthAccount,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatMoney, formatTokens, timeAgo } from "@intentic/ui";
+import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
+import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
+import { requirementWords, runsWords } from "../../chat/accounts/providerWords";
 import { translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { accountsOf, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
 import { useChat } from "../../chat/run/useChat";
@@ -25,13 +27,18 @@ import {
     planHeadroom,
     routedAccountFacts,
 } from "../../chat/session/usageStatus";
+import SandboxOutdatedNotice from "../overview/version/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
+import ConnectAttempt from "./ConnectAttempt.vue";
 
-// One provider's accounts, opened from its row in Sandbox ▸ Models: who each one signs in as, what it is spending, what
-// it needs, and the way to add another or drop one. The AI-account card's rows, kept whole; what went is its eight-chip
-// switcher (the overview above lists every provider at once) and its in-row sign-in (every sign-in on the page runs in
-// the card at its top, so "Add another account" and "Reconnect" ask the page for one instead of unfolding it here).
+// ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
+// one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
+// while it runs, under the accounts it is adding to. There is no other door to a provider's sign-in on the page: the
+// grid picks the provider, this panel connects it.
+//
+// Empty, the card is the explanation and the Connect button, as an empty persona list is its own Add button; once it holds
+// an account, adding another moves to the group's header, where every list in the app keeps its "add one".
 //
 // Two mechanisms draw the same: a provider's own account (Claude, Cursor, Grok's xAI, the minted ones) and a subscription
 // held by the bundled translator (ChatGPT, Kimi, Google, Grok under Claude Code). Which one is behind a row is the
@@ -39,14 +46,54 @@ import EstatePicker from "../secrets/EstatePicker.vue";
 
 const t = useT();
 
-const { provider, live = false } = defineProps<{
+const {
+    provider,
+    attempt,
+    finishing = false,
+    otherLive,
+    busy = false,
+    landed,
+    found = false,
+    notice,
+} = defineProps<{
     provider: AgentProvider;
-    // A sign-in for this provider is in flight, in the page's card: the add row says so rather than offering another.
-    live?: boolean;
+    // This provider's sign-in, when one is starting, waiting on the reader, or just failed.
+    attempt?: { readonly phase: `starting` | `live` | `failed`; readonly kind?: `native` | `routed`; readonly problem?: string };
+    finishing?: boolean;
+    // Another provider's sign-in still waiting: starting one here replaces it, which the panel says before the press.
+    otherLive?: AgentProvider;
+    // A sign-in is on its way to the sandbox: no second press until it answers.
+    busy?: boolean;
+    // What just connected here, in a sentence naming the sandbox it went to.
+    landed?: string;
+    // The desktop app found this provider signed in on this computer.
+    found?: boolean;
+    // Something an account write here was refused for (a disconnect).
+    notice?: NoticeModel;
 }>();
-// The page owns every sign-in; this list only says which kind it wants and, for a provider sold under several plans,
-// which plan.
-const emit = defineEmits<{ connect: [request: { via: `native` | `routed`; variant?: string }] }>();
+// The page owns every sign-in, so there is one at a time; this panel only says which kind it wants and, for a provider
+// sold under several plans, which plan.
+const emit = defineEmits<{
+    connect: [request: { via: `native` | `routed`; variant?: string }];
+    cancel: [];
+    retry: [];
+    dismiss: [];
+    chat: [];
+    show: [provider: AgentProvider];
+    dismissNotice: [];
+}>();
+
+const spec = computed(() => providerSpec(provider));
+// What it needs and what it runs, beside its name: the two facts a reader compares providers on.
+const caption = computed(() =>
+    spec.value === undefined
+        ? undefined
+        : `${requirementWords(spec.value.access, `name`)} · ${t(`connect.providerTile.runs`, { runs: runsWords(spec.value.access) })}`,
+);
+const signingInHere = computed(() => attempt !== undefined && attempt.phase !== `failed`);
+
+const attemptBlock = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemptBlock`);
+defineExpose({ reveal: () => attemptBlock.value?.reveal() });
 
 const { accountBusy, accountUsage, usageLoaded, renameAccount, disconnect, disconnectTranslator, translatorKey } = useChat();
 
@@ -248,17 +295,23 @@ const routedViews = computed<readonly AccountView[]>(() =>
     })),
 );
 
-// Collapses beyond COLLAPSE_THRESHOLD rows (both mechanisms together), so one provider cannot push the rest of the list
-// off screen.
+// Collapses beyond COLLAPSE_THRESHOLD rows, so a provider holding thirty accounts does not push its own sign-in a
+// screen down.
 const COLLAPSE_THRESHOLD = 5;
 const VISIBLE_WHEN_COLLAPSED = 3;
 const expanded = ref(false);
-const total = computed(() => nativeViews.value.length + routedViews.value.length);
-const shouldCollapse = computed(() => total.value > COLLAPSE_THRESHOLD);
+const rows = computed(() => [
+    ...nativeViews.value.map((row) => ({ ...row, via: `native` as const })),
+    ...routedViews.value.map((row) => ({ ...row, via: `routed` as const })),
+]);
+const shouldCollapse = computed(() => rows.value.length > COLLAPSE_THRESHOLD);
+const shownRows = computed(() => (shouldCollapse.value && !expanded.value ? rows.value.slice(0, VISIBLE_WHEN_COLLAPSED) : rows.value));
 
-// What an empty mechanism is called, before there is an account to name it. Only drawn beside the other mechanism's
-// rows: a provider with no account at all is offered under "Add a model", not here.
-const ROUTED_EMPTY = computed(
+const providerName = computed(() => spec.value?.accountLabel ?? provider);
+
+// The ways in this provider offers. One for nearly all; Grok's two (its own xAI account, a SuperGrok subscription under
+// Claude Code) each get a button named for what it connects, since "Connect" twice would ask the reader to guess.
+const ROUTED_NAME = computed(
     () =>
         ({
             codex: t(`sandbox.aiAccountSection.chatgptSubscription`),
@@ -267,147 +320,148 @@ const ROUTED_EMPTY = computed(
             gemini: t(`sandbox.aiAccountSection.googleAccount`),
         }) satisfies Record<KeyedProvider, string>,
 );
-const providerName = computed(() => providerSpec(provider)?.accountLabel ?? provider);
-
-interface AccountGroup {
-    readonly key: string;
-    readonly via: `native` | `routed`;
-    readonly rows: readonly AccountView[];
-    readonly empty: boolean;
-    readonly emptyTitle: string;
-    readonly canAdd: boolean;
-    // Filled only where it is the provider's second way in; under Grok the subscription stays the quieter one.
-    readonly secondary: boolean;
-}
-
-const groups = computed<readonly AccountGroup[]>(() => {
-    const collapsed = shouldCollapse.value && !expanded.value;
-    // Collapsed, native rows take the first slots and routed rows fill whatever they left.
-    const nativeShown = collapsed ? nativeViews.value.slice(0, VISIBLE_WHEN_COLLAPSED) : nativeViews.value;
-    const routedShown = collapsed ? routedViews.value.slice(0, Math.max(0, VISIBLE_WHEN_COLLAPSED - nativeShown.length)) : routedViews.value;
-    const shown: AccountGroup[] = [];
-    if (hasNative.value) {
-        shown.push({
-            key: `native`,
-            via: `native`,
-            rows: nativeShown,
-            empty: nativeViews.value.length === 0,
-            emptyTitle: t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value }),
-            canAdd: canAddNative.value,
-            secondary: false,
-        });
-    }
-    if (keyed.value !== undefined) {
-        shown.push({
-            key: `routed`,
-            via: `routed`,
-            rows: routedShown,
-            empty: routedViews.value.length === 0,
-            emptyTitle: ROUTED_EMPTY.value[keyed.value],
-            canAdd: true,
-            secondary: provider === `grok`,
-        });
-    }
-    return shown;
+const ways = computed(() => {
+    const native =
+        hasNative.value && canAddNative.value
+            ? [{ via: `native` as const, name: t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value }) }]
+            : [];
+    const routedWay = keyed.value === undefined ? [] : [{ via: `routed` as const, name: ROUTED_NAME.value[keyed.value] }];
+    const both = [...native, ...routedWay];
+    const several = (hasNative.value ? 1 : 0) + (keyed.value === undefined ? 0 : 1) > 1;
+    return both.map((way) => ({
+        via: way.via,
+        label: several
+            ? t(`connect.providerPanel.connectWay`, { way: way.name })
+            : rows.value.length === 0
+              ? t(`ui.action.connect`)
+              : t(`sandbox.aiAccountSection.addAnotherAccount`),
+    }));
 });
 
 const ask = (via: `native` | `routed`): void => emit(`connect`, via === `native` && offersEstates.value ? { via, variant: estate.value } : { via });
+const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(otherLive)?.accountLabel ?? otherLive)));
 </script>
 
 <template>
-    <div class="divide-y divide-line-subtle">
-        <template v-for="group in groups" :key="group.key">
-            <ConnectionRow
-                v-for="row in group.rows"
-                :key="row.key"
-                :title="row.title"
-                :state="connectionState(row.state)"
-                :tone="row.state.kind === `blocked` && row.state.fix !== `wait` ? `warning` : `default`"
-                :note="row.note"
-                :description="row.description"
-                :activity="row.activity"
-                :rename="row.rename"
-                :headroom="row.headroom"
-                :exhausted="row.exhausted"
-            >
-                <template #control>
-                    <!-- The fix is the account owner's, on the provider's page: the one action this row wants. -->
-                    <Button
-                        v-if="row.verify !== undefined"
-                        :label="t(`sandbox.aiAccountSection.verify`)"
-                        size="small"
-                        @click="openVerify(row.verify)"
-                    >
-                        <template #icon><Icon name="external-link" /></template>
-                    </Button>
-                    <Button v-else-if="row.reconnect && !live" :label="t(`ui.action.reconnect`)" size="small" @click="ask(group.via)" />
-                    <Button
-                        :label="t(`ui.action.disconnect`)"
-                        size="small"
-                        severity="danger"
-                        :text="true"
-                        :loading="accountBusy === row.busy"
-                        @click="row.disconnect()"
-                    />
-                </template>
-            </ConnectionRow>
-
-            <!-- A mechanism with nothing in it, beside the other's rows (Grok's two ways in): a missing connection, not an apology. -->
-            <ConnectionRow
-                v-if="group.empty"
-                :key="`${group.key}-empty`"
-                :title="group.emptyTitle"
-                state="missing"
-                :note="live ? t(`connect.providerTile.signingIn`) : t(`sandbox.words.notConnected`)"
-            >
-                <template v-if="!live" #control>
-                    <Button
-                        :label="t(`ui.action.connect`)"
-                        size="small"
-                        :severity="group.secondary ? `secondary` : undefined"
-                        @click="ask(group.via)"
-                    >
-                        <template #icon><Icon name="link" /></template>
-                    </Button>
-                </template>
-            </ConnectionRow>
-
-            <!-- A second account is a different act from having none: its own quiet row. Its sign-in runs in the card at the top. -->
-            <ConnectionRow
-                v-else-if="group.canAdd"
-                :key="`${group.key}-add`"
-                :title="t(`sandbox.aiAccountSection.addAnotherAccount`)"
-                state="action"
-                icon="plus"
-                :note="live ? t(`connect.providerTile.signingIn`) : undefined"
-                :interactive="!live"
-                @click="!live && ask(group.via)"
-            >
-                <!-- The plan is the sign-in's own first step, so it is asked where the press is made, before anything starts. -->
-                <template v-if="group.via === `native` && offersEstates && !live" #below>
-                    <!-- `.stop`: a press on the plan must not also count as the row's press, which starts the sign-in. -->
-                    <div @click.stop>
-                        <EstatePicker
-                            v-model="estate"
-                            :provider="provider"
-                            :label="t(`sandbox.aiAccountSection.plan`, { managedLabel: providerName })"
-                        />
-                    </div>
-                </template>
-            </ConnectionRow>
+    <RowGroup :label="providerName" :caption="caption">
+        <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
+        <template v-if="rows.length > 0 && !signingInHere" #actions>
+            <Button v-for="way in ways" :key="way.via" size="small" severity="secondary" :label="way.label" :disabled="busy" @click="ask(way.via)">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
         </template>
 
+        <!-- The one thing that just happened here, with the one next move. -->
+        <RowNote v-if="landed" variant="block">
+            <div class="flex flex-wrap items-center gap-3">
+                <Icon name="check" class="shrink-0 text-success" />
+                <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
+                <Button size="small" :label="t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
+            </div>
+        </RowNote>
+
+        <RowNote v-if="notice" variant="block">
+            <Notice :of="notice" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="emit(`dismissNotice`)" />
+        </RowNote>
+
+        <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
+        <RowNote v-if="accountsOutdated && rows.length > 0" variant="block">
+            <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
+        </RowNote>
+
         <ConnectionRow
+            v-for="row in shownRows"
+            :key="row.key"
+            :title="row.title"
+            :state="connectionState(row.state)"
+            :tone="row.state.kind === `blocked` && row.state.fix !== `wait` ? `warning` : `default`"
+            :note="row.note"
+            :description="row.description"
+            :activity="row.activity"
+            :rename="row.rename"
+            :headroom="row.headroom"
+            :exhausted="row.exhausted"
+        >
+            <template #control>
+                <!-- The fix is the account owner's, on the provider's page: the one action this row wants. -->
+                <Button v-if="row.verify !== undefined" :label="t(`sandbox.aiAccountSection.verify`)" size="small" @click="openVerify(row.verify)">
+                    <template #icon><Icon name="external-link" /></template>
+                </Button>
+                <Button
+                    v-else-if="row.reconnect && !signingInHere"
+                    :label="t(`ui.action.reconnect`)"
+                    size="small"
+                    :disabled="busy"
+                    @click="ask(row.via)"
+                />
+                <Button
+                    :label="t(`ui.action.disconnect`)"
+                    size="small"
+                    severity="danger"
+                    :text="true"
+                    :loading="accountBusy === row.busy"
+                    @click="row.disconnect()"
+                />
+            </template>
+        </ConnectionRow>
+
+        <RowNote
             v-if="shouldCollapse"
-            :title="
+            variant="action"
+            :icon="expanded ? `chevron-up` : `chevron-down`"
+            :label="
                 expanded
                     ? t(`ui.action.showLess`)
-                    : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount: total - VISIBLE_WHEN_COLLAPSED })
+                    : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount: rows.length - VISIBLE_WHEN_COLLAPSED })
             "
-            state="action"
-            :icon="expanded ? `chevron-up` : `chevron-down`"
-            interactive
             @click="expanded = !expanded"
         />
-    </div>
+
+        <!-- Nothing here yet: what connecting needs, and the button that does it. -->
+        <RowNote v-if="rows.length === 0 && attempt === undefined" variant="block">
+            <div class="flex flex-col items-start gap-3">
+                <p class="text-xs text-muted">
+                    {{ found ? t(`connect.connect.foundSignedIn`) : t(`connect.providerPanel.empty`) }}
+                </p>
+                <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
+                <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
+                <div class="flex flex-wrap gap-2">
+                    <Button v-for="way in ways" :key="way.via" size="small" :label="way.label" :disabled="busy" @click="ask(way.via)">
+                        <template #icon><Icon name="sign-in" /></template>
+                    </Button>
+                </div>
+            </div>
+        </RowNote>
+
+        <!-- With accounts already here, a provider sold under several plans asks which one the next account is on. -->
+        <RowNote v-else-if="offersEstates && !signingInHere && attempt === undefined" variant="block">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
+                <EstatePicker v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
+            </div>
+        </RowNote>
+
+        <!-- The sign-in, under the accounts it is adding to. -->
+        <RowNote v-if="attempt" variant="block">
+            <ConnectAttempt
+                ref="attemptBlock"
+                :provider="provider"
+                :phase="attempt.phase"
+                :kind="attempt.kind"
+                :problem="attempt.problem"
+                :finishing="finishing"
+                @cancel="emit(`cancel`)"
+                @retry="emit(`retry`)"
+                @dismiss="emit(`dismiss`)"
+            />
+        </RowNote>
+
+        <!-- One sign-in at a time: said before the press that would end the other one, with the way back to it. -->
+        <RowNote v-else-if="otherLive" variant="note" icon="info-circle">
+            <span>{{ t(`connect.providerPanel.otherLive`, { other: otherName, provider: providerName }) }}</span>
+            <button type="button" :class="ui.linkButton(`ml-2 text-xs`)" @click="emit(`show`, otherLive)">
+                {{ t(`connect.providerPanel.showOther`, { other: otherName }) }}
+            </button>
+        </RowNote>
+    </RowGroup>
 </template>

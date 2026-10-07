@@ -8,12 +8,14 @@ import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { suggestName } from "../../capabilities/model/tiles";
 import { useT } from "@intentic/ui/i18n";
 
-// The machine the reader already owns, offered as a peer of the two account lanes. Two rungs and no arithmetic: one
+// The machine the reader already owns, inside the Local models panel (LocalModelsPanel). Two rungs and no arithmetic: one
 // that is ready in a minute and says plainly what it is good for, one that is the most this box can hold. Everything
 // quoted here is measured in the sandbox (memory, GPU, weights on disk) rather than assumed from a table.
 //
 // A rung that has been taken reports instead of offering: the add writes a manifest entry in seconds and the server
 // then loads for minutes, so the press that looks finished is the start of the wait, not the end of it.
+//
+// Drawn as rows of the panel's card, hairline-divided like the rows above it, never as cards of its own on that card.
 
 const t = useT();
 
@@ -198,24 +200,26 @@ const stateTone = (entry: CapabilitySummary): string =>
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <div>
         <!-- Nothing is offered before the machine has answered; a skeleton beats a number we would have to take back. The
              lane as this machine last drew it, once it has been seen; until then the words. -->
         <SkeletonSnapshot v-if="fit === undefined" of="connect.local-model" :label="t(`connect.localModelLane.measuring`)">
-            <p class="flex items-center gap-1.5 text-xs text-subtle"><Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}</p>
+            <p class="flex items-center gap-1.5 px-4 py-3.5 text-xs text-subtle">
+                <Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}
+            </p>
         </SkeletonSnapshot>
 
-        <!-- One element, so its imprint is the whole lane; spaced as the column it sits in. -->
-        <div v-else v-skeleton-source="`connect.local-model`" class="flex flex-col gap-3">
-            <p class="text-xs text-muted">
+        <!-- One element, so its imprint is the whole lane; its parts divided as the rows of the card it sits in. -->
+        <div v-else v-skeleton-source="`connect.local-model`" class="divide-y divide-line-subtle">
+            <p class="px-4 py-3.5 text-xs text-muted">
                 {{ memoryLine }} <span class="text-subtle">{{ gpuLine }}</span>
                 <span v-if="fullSpeedLine" class="text-subtle">{{ fullSpeedLine }}</span>
             </p>
 
             <!-- llama-server is baked into the standard image, so this is the dev-run and core-image case, not the usual one. -->
-            <p v-if="!fit.serverReady" :class="ui.emptyState(`text-left`)">{{ t(`connect.localModelLane.needsRebuild`) }}</p>
+            <p v-if="!fit.serverReady" :class="ui.emptyState(`px-4 py-3.5 text-left`)">{{ t(`connect.localModelLane.needsRebuild`) }}</p>
 
-            <p v-else-if="nothingFits" :class="ui.emptyState(`text-left`)">
+            <p v-else-if="nothingFits" :class="ui.emptyState(`px-4 py-3.5 text-left`)">
                 {{
                     fit.fullSpeedBytes === undefined
                         ? t(`connect.localModelLane.nothingFits`, { memory: gb(fit.memoryBytes) })
@@ -223,7 +227,7 @@ const stateTone = (entry: CapabilitySummary): string =>
                 }}
             </p>
 
-            <div v-for="rung in rungs" v-else :key="rung.key" class="flex flex-col gap-2 rounded-xl bg-card shadow-sm p-3">
+            <div v-for="rung in rungs" v-else :key="rung.key" class="flex flex-col gap-2 px-4 py-3.5">
                 <div class="flex flex-wrap items-center gap-2">
                     <Icon :name="rung.icon" class="shrink-0" :class="rung.iconClass" />
                     <span class="text-sm font-medium text-content">{{ optionOf(rung.model)?.label }}</span>
@@ -286,13 +290,14 @@ const stateTone = (entry: CapabilitySummary): string =>
                 </p>
             </div>
 
-            <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
-            <p v-if="failure" class="text-2xs text-danger">{{ failure }}</p>
-
-            <!-- Everything this lane decides for the reader is changeable on the card it just wrote. -->
-            <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-2xs`)">
-                {{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
-            </RouterLink>
+            <div class="flex flex-col items-start gap-1.5 px-4 py-3.5">
+                <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
+                <p v-if="failure" class="text-2xs text-danger">{{ failure }}</p>
+                <!-- Everything this lane decides for the reader is changeable on the card it just wrote. -->
+                <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-2xs`)">
+                    {{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
+                </RouterLink>
+            </div>
         </div>
     </div>
 </template>

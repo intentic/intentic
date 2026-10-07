@@ -3697,9 +3697,7 @@
     },
     "connect": {
         "connect": {
-            "addTitle": "Dodaj model",
             "connecting": "Podłączanie: {provider}",
-            "description": "Dane logowania są przechowywane w Twoim sandboxie, nigdy na platformie. Wybierz to, co już masz.",
             "foundKeyAdded": "Dodano",
             "foundKeyFailed": "Nie udało się dodać tego klucza.",
             "foundKeyFrom": "Z {source}, kończy się na {hint}. Dodanie kopiuje klucz do tego sandboxa.",
@@ -3707,28 +3705,15 @@
             "foundSignedIn": "Zalogowano na tym komputerze. Połącz tutaj jednym kliknięciem w przeglądarce; tam też logowanie pozostaje bez zmian.",
             "foundTitle": "Znalezione na tym komputerze",
             "free": "Za darmo",
-            "freeSubtitle": "Wystarczy się zalogować: bez karty, bez subskrypcji",
-            "freeTitle": "Za darmo, z kontem Google",
-            "jobsLink": "Wybierz, który model wykonuje każde zadanie",
             "landed": "Połączono. Ta przestrzeń robocza może już uruchamiać tury.",
             "landedIn": "Połączono {provider} z sandboxem „{sandbox}”. Czaty w tym sandboxie mogą już z tego korzystać.",
             "localSubtitle": "Za darmo na zawsze, prywatnie, działa offline",
-            "localTitle": "Na tej maszynie",
-            "ownServer": "Masz już Ollamę albo vLLM? Wskaż swój serwer",
             "startChatting": "Zacznij rozmowę",
-            "subscriptionSubtitle": "Claude, ChatGPT, Kimi, Grok, Cursor, Z.ai, Muse",
-            "subscriptionTitle": "Subskrypcja, za którą już płacisz",
-            "title": "Daj tej przestrzeni roboczej model",
             "whichPlan": "Na jakim planie jest to konto?"
         },
         "connectAttempt": {
             "didntConnect": "Nie udało się podłączyć: {provider}",
-            "oneAtATime": "Naraz trwa tylko jedno logowanie: wybranie innego dostawcy poniżej zastąpi to.",
             "opening": "Otwieranie logowania…"
-        },
-        "connectLane": {
-            "collapse": "Zwiń",
-            "expand": "Rozwiń"
         },
         "localModelLane": {
             "alreadyDownloadedNeeds": "Już pobrany; podczas działania zajmuje około {total}.",
@@ -3773,14 +3758,26 @@
             "signInAgain": "{account}: zaloguj się ponownie",
             "signingInTo": "logowanie do {provider}",
             "someWaiting": "{count} z {total} na razie odpoczywa",
-            "title": "Podłączone",
             "trialLeft": "Zostało {count} darmowa wiadomość na dziś | Zostały {count} darmowe wiadomości na dziś | Zostało {count} darmowych wiadomości na dziś",
             "trialSpent": "Dzisiejsze darmowe wiadomości się skończyły",
             "verify": "{account}: zweryfikuj je na stronie dostawcy"
         },
+        "providerGrid": {
+            "didntConnect": "Nie podłączono",
+            "intro": "Wybierz dostawcę, aby go podłączyć lub zarządzać jego kontami. Wszystko, co podłączysz, jest przechowywane w tym sandboxie, nigdy na platformie.",
+            "local": "Modele lokalne",
+            "models": "{count} model | {count} modele | {count} modeli",
+            "onThisComputer": "Na tym komputerze",
+            "ownServer": "Masz już Ollamę lub vLLM?",
+            "pointAtServer": "Wskaż swój serwer"
+        },
+        "providerPanel": {
+            "connectWay": "Podłącz: {way}",
+            "empty": "Jeszcze nie podłączono. Logowanie zajmuje minutę, a konto zostaje w tym sandboxie.",
+            "otherLive": "Logowanie do {other} wciąż czeka. Podłączenie {provider} je zastąpi.",
+            "showOther": "Pokaż {other}"
+        },
         "providerTile": {
-            "connected": "Połączono",
-            "needsReconnect": "Wymaga ponownego połączenia",
             "runs": "Uruchamia: {runs}",
             "signingIn": "Logowanie…"
         }
@@ -4514,7 +4511,6 @@
             "kimiCodeSubscription": "Subskrypcja Kimi Code",
             "noTurnsYet": "To konto nie ma jeszcze żadnych tur.",
             "outdatedMissing": "Do czasu aktualizacji te konta nie pokażą, czy mogą przyjąć turę: utracone logowanie lub miejsce albo wyczerpana lub wstrzymana pula wyglądają jak nieznane.",
-            "plan": "Który plan {managedLabel}",
             "restingFor": "Wstrzymane: {reason}.",
             "restingUntil": "Wstrzymane do {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Twój sandbox jest offline: jego kont nie da się stąd odczytać ani zmienić.",

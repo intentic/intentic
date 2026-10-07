@@ -3697,9 +3697,7 @@
     },
     "connect": {
         "connect": {
-            "addTitle": "Add a model",
             "connecting": "Connecting {provider}",
-            "description": "It is stored in your sandbox and never on the platform. Pick whichever of these you already have.",
             "foundKeyAdded": "Added",
             "foundKeyFailed": "Could not add that key.",
             "foundKeyFrom": "From {source}, ending in {hint}. Adding it copies the key into this sandbox.",
@@ -3707,28 +3705,15 @@
             "foundSignedIn": "Signed in on this computer. Connect it here with one click in your browser; it stays signed in there too.",
             "foundTitle": "Found on this computer",
             "free": "Free",
-            "freeSubtitle": "A sign-in, no card, no subscription",
-            "freeTitle": "Free, with a Google account",
-            "jobsLink": "Choose which model does each job",
             "landed": "Connected. This workspace can run turns now.",
             "landedIn": "{provider} connected to \"{sandbox}\". Chats in this sandbox can use it now.",
             "localSubtitle": "Free forever, private, works offline",
-            "localTitle": "On this machine",
-            "ownServer": "Already run Ollama or vLLM? Point at your server",
             "startChatting": "Start a conversation",
-            "subscriptionSubtitle": "Claude, ChatGPT, Kimi, Grok, Cursor, Z.ai, Muse",
-            "subscriptionTitle": "A subscription you already pay for",
-            "title": "Give this workspace a model",
             "whichPlan": "Which plan is this account on?"
         },
         "connectAttempt": {
             "didntConnect": "{provider} didn't connect",
-            "oneAtATime": "One sign-in at a time: picking another provider below replaces this one.",
             "opening": "Opening the sign-in…"
-        },
-        "connectLane": {
-            "collapse": "Collapse",
-            "expand": "Expand"
         },
         "localModelLane": {
             "alreadyDownloadedNeeds": "Already downloaded; holds about {total} while it runs.",
@@ -3773,14 +3758,26 @@
             "signInAgain": "{account}: sign in again",
             "signingInTo": "signing in to {provider}",
             "someWaiting": "{count} of {total} resting for now",
-            "title": "Connected",
             "trialLeft": "{count} free message left today | {count} free messages left today",
             "trialSpent": "Today's free messages are used up",
             "verify": "{account}: verify it on the provider's page"
         },
+        "providerGrid": {
+            "didntConnect": "Didn't connect",
+            "intro": "Pick a provider to connect it or manage its accounts. Whatever you connect is stored in this sandbox, never on the platform.",
+            "local": "Local models",
+            "models": "{count} model | {count} models",
+            "onThisComputer": "On this computer",
+            "ownServer": "Already run Ollama or vLLM?",
+            "pointAtServer": "Point at your server"
+        },
+        "providerPanel": {
+            "connectWay": "Connect {way}",
+            "empty": "Not connected yet. Signing in takes a minute, and the account stays in this sandbox.",
+            "otherLive": "Your {other} sign-in is still waiting. Connecting {provider} replaces it.",
+            "showOther": "Show {other}"
+        },
         "providerTile": {
-            "connected": "Connected",
-            "needsReconnect": "Needs reconnect",
             "runs": "Runs {runs}",
             "signingIn": "Signing in…"
         }
@@ -4866,7 +4863,6 @@
             "kimiCodeSubscription": "Kimi Code subscription",
             "noTurnsYet": "No turns on this account yet.",
             "outdatedMissing": "Until it updates, these accounts can't say whether they can take a turn: a lost sign-in or seat, or a spent or benched pool, shows as unknown.",
-            "plan": "Which {managedLabel} plan",
             "restingFor": "Resting: {reason}.",
             "restingUntil": "Resting until {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Your sandbox is offline: its accounts can't be read or changed from here.",

@@ -1,79 +1,83 @@
 <script setup lang="ts">
-import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
+import { providerSpec } from "@intentic/sandbox-contract";
 import { Icon } from "@intentic/ui";
-import { computed } from "vue";
-import { accessStateFor, connectPitch } from "../../chat/session/access";
-import { turnDefaults } from "../../chat/run/turnDefaults";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import { requirementWords, runsWords } from "../../chat/accounts/providerWords";
 import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
+import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import type { ModelSourceStanding } from "./modelSources";
+import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerGrid";
 
-// One provider as a pressable tile in the connect view: its mark, what it is called, what it needs, and whether this
-// sandbox already holds it. Says the price on the tile rather than behind it, so comparing providers costs no clicks.
+// One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, and one line that says what it
+// holds or what is happening with it. Every tile is the same size whatever it says, so the grid reads as a set of peers
+// rather than a list whose rows grow with their news. Pressing it opens its panel below the grid, as a persona's tile
+// opens its editor; pressing the open one closes it.
 
 const t = useT();
 
-const {
-    provider,
-    selected = false,
-    signingIn = false,
-} = defineProps<{
-    provider: AgentProvider;
-    // Picked and asking a question of its own before anything starts (which estate).
-    selected?: boolean;
-    // Its sign-in is the one running, in the card at the top of the view: the tile says so instead of what it costs, so a
-    // reader scanning the lane can tell which provider the card belongs to.
-    signingIn?: boolean;
+const { tile, selected, line, standing, controls } = defineProps<{
+    tile: TileKey;
+    selected: boolean;
+    line: { readonly text: string; readonly tone: TileTone } | undefined;
+    // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
+    standing: ModelSourceStanding | undefined;
+    // The panel this tile opens, for assistive tech.
+    controls: string;
 }>();
-const marked = computed(() => selected || signingIn);
+const emit = defineEmits<{ select: [] }>();
 
-const spec = computed(() => providerSpec(provider));
-const state = computed(() => accessStateFor(provider));
-// The vendor's own noun for what the reader has to have ("Claude subscription", "Google sign-in"), in the reader's language.
-const requirement = computed(() => (spec.value === undefined ? `` : requirementWords(spec.value.access, `name`)));
-const runs = computed(() => (spec.value === undefined ? `` : runsWords(spec.value.access)));
-// What the press is, said in full for a reader who hears the tile rather than seeing it: the visible text is three
-// fragments in three places, which is legible to an eye and nothing to a screen reader. Asked against the harness a new
-// turn would actually run on, which is the only thing Grok's answer depends on.
-const pressName = computed(() => connectPitch(provider, turnDefaults.harness.value)?.action);
+const name = computed(() => (tile === LOCAL_TILE ? t(`connect.providerGrid.local`) : (providerSpec(tile)?.accountLabel ?? tile)));
+
+// The same four tones a connection row draws, so the tile and the rows behind it agree on what a colour means.
+const DOT = {
+    attention: `bg-warning`,
+    blocked: `bg-danger`,
+    ready: `bg-success`,
+    waiting: `bg-content/30`,
+} as const satisfies Record<ModelSourceStanding, string>;
+
+const LINE = {
+    muted: `text-subtle`,
+    live: `text-primary-500`,
+    warning: `text-warning`,
+    danger: `text-danger`,
+} as const satisfies Record<TileTone, string>;
 </script>
 
 <template>
     <button
         type="button"
-        class="ui-row-select ui-off flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors"
-        :class="marked ? `border-primary-500/60 bg-primary-500/5` : `border-line bg-card hover:border-line-strong`"
-        :aria-pressed="marked"
-        :aria-label="pressName"
+        class="ui-row-select group relative flex size-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl px-1.5"
+        :class="{ 'ui-row-select-on': selected }"
+        :aria-pressed="selected"
+        :aria-controls="controls"
+        @click="emit(`select`)"
     >
-        <ProviderLogo :provider="provider" class="mt-0.5 shrink-0 text-base" :class="marked ? `text-primary-500` : `text-muted`" />
-        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span class="flex items-center gap-1.5">
-                <span class="truncate text-sm font-medium text-content">{{ spec?.accountLabel }}</span>
-                <!-- A connected provider keeps its tile (a second account, a reconnect) and says so rather than vanishing. -->
-                <Icon
-                    v-if="state.ready"
-                    name="check"
-                    class="shrink-0 text-2xs text-success"
-                    :aria-label="t(`connect.providerTile.connected`)"
-                />
-                <Icon
-                    v-if="state.needsReauth"
-                    name="exclamation-triangle"
-                    class="shrink-0 text-2xs text-warning"
-                    :aria-label="t(`connect.providerTile.needsReconnect`)"
-                />
-            </span>
-            <span class="text-2xs text-muted">{{ t(`connect.providerTile.runs`, { runs }) }}</span>
-        </span>
-        <span v-if="signingIn" class="shrink-0 rounded bg-primary-500/15 px-1.5 py-0.5 text-[0.6rem] font-medium text-primary-500">{{
-            t(`connect.providerTile.signingIn`)
-        }}</span>
+        <!-- The price, where it is nothing: a corner label rather than the tile's line, so it outlives the first account. -->
         <span
-            v-else
-            class="shrink-0 rounded px-1.5 py-0.5 text-[0.6rem] font-medium"
-            :class="spec?.access.kind === `free` ? `bg-success/15 text-success` : `bg-content/5 text-subtle`"
-            >{{ requirement }}</span
+            v-if="isFreeTile(tile)"
+            class="absolute right-1.5 top-1.5 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
+            >{{ t(`connect.connect.free`) }}</span
         >
+        <!-- An app-icon square, so a monochrome mark has the same weight as the next one whatever its shape. -->
+        <span
+            class="relative flex size-10 items-center justify-center rounded-xl bg-card text-xl shadow-sm"
+            :class="selected ? `text-content` : `text-muted group-hover:text-content`"
+        >
+            <Icon v-if="tile === LOCAL_TILE" name="cpu" />
+            <ProviderLogo v-else :provider="tile" />
+            <span
+                v-if="standing"
+                class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-canvas"
+                :class="DOT[standing]"
+                aria-hidden="true"
+            />
+        </span>
+        <span class="w-full truncate text-center text-xs font-medium leading-tight" :class="selected ? `text-content` : `text-muted`">{{
+            name
+        }}</span>
+        <!-- Always the line's height, said or not, so a tile with news is the size of one without. -->
+        <span class="flex h-4 max-w-full items-center">
+            <span v-if="line" class="truncate text-[0.65rem] leading-4" :class="LINE[line.tone]">{{ line.text }}</span>
+        </span>
     </button>
 </template>

@@ -18,7 +18,7 @@ it(`lists only providers that hold something, and names a lone account by who it
         when,
     );
 
-    // In the order the ways in offer them, so this list and the lanes under it agree.
+    // In the grid's order, so a source and the tile it sits under agree.
     expect(sources.map((source) => source.provider)).toEqual([`claude`, `codex`]);
     expect(sources.find((source) => source.provider === `claude`)?.summary).toBe(`you@example.com`);
     expect(sources.find((source) => source.provider === `codex`)?.summary).toBe(`2 accounts`);
