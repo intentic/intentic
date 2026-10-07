@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
@@ -28,6 +28,7 @@ import {
     stopBackgroundJob,
 } from "./jobs/background-jobs.js";
 import { followRun } from "./jobs/input-wait-follow.js";
+import { writeRunFile } from "./jobs/run-files.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
@@ -193,7 +194,7 @@ const holdForeground = (
 ): void => {
     const soft = softTimeoutOf(call.timeoutMs);
     if (soft !== undefined) {
-        writeFileSync(join(call.dir, "soft"), `${String(soft)}\n`, { mode: 0o600 });
+        writeRunFile(call.dir, "soft", `${String(soft)}\n`);
     }
     if (foreground !== undefined) {
         foreground.set(call.toolUseId, { ...call, unfollow: followRun(call.dir) });
@@ -412,14 +413,15 @@ export const bashTmuxHooks = (
                         const dir = job?.dir ?? mkdtempSync(join(runRootFor(isolation), "intentic-run-"));
                         mkdirSync(dir, { recursive: true, mode: 0o700 });
                         const agentFile = join(dir, "agent");
-                        writeFileSync(agentFile, `${PIPESTATUS_TRAP}${executed}\n`, { mode: 0o600 });
+                        // Through run-files.ts: for a fenced turn this dir is in the turn's own temp dir.
+                        writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
                         const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}bash ${shellQuote(agentFile)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
                         const inner = `${stamp}${paneHop(isolation)}${run}`;
-                        writeFileSync(join(dir, "line"), `${inner}\n`, { mode: 0o600 });
-                        writeFileSync(join(dir, "said"), command, { mode: 0o600 });
-                        writeFileSync(join(dir, "name"), windowSlug(tool.description), { mode: 0o600 });
+                        writeRunFile(dir, "line", `${inner}\n`);
+                        writeRunFile(dir, "said", command);
+                        writeRunFile(dir, "name", windowSlug(tool.description));
                         if (job === undefined) {
                             const { description, timeout } = CallFieldsSchema.parse(tool);
                             holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout }, foreground);

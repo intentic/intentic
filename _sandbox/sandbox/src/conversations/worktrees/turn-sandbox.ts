@@ -22,11 +22,14 @@ import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolatio
 //   - the system, read-only: /usr and its links, /etc (with the password hashes and ssh host keys masked), /opt, and
 //     the runtime engines the daemon installs;
 //   - the conversation's own checkout at /work, read-write, with every repository's `.git` pointer masked: git
-//     history holds the whole tree, so the daemon keeps committing for the turn and the turn sees files only;
-//   - dependency and build mirrors from the main checkout, as overlays, only where the checkout itself has the parent
-//     directory (isolation.ts planFor filters them);
-//   - the conversation's own session store, the read-only reference shelf, the shared pnpm store, and the heavy-command
-//     queue's lock directory, so its builds still take turns with everyone else's;
+//     history holds the whole tree, so the daemon keeps committing for the turn and the turn sees files only; and any
+//     directory in it the fence does not reach covered by an empty layer, whatever the sparse checkout left there;
+//   - dependency and build mirrors from the main checkout, as overlays, where the fence admits them (isolation.ts
+//     mirrorAdmitted);
+//   - the conversation's own session store, the reference shelf read-only and only as far as the fence names folders
+//     in it, the pnpm store behind a layer of the conversation's own (the turn runs as the files' owner, and the
+//     store's files are hard links into every checkout's dependencies), and the heavy-command queue's lock directory,
+//     so its builds still take turns with everyone else's;
 //   - a home of its own, with the shell and tool dotfiles read-only and the Claude config behind a throwaway overlay;
 //   - one directory of its own (`dir`), at the same path inside and out, holding its TMPDIR, its tmux socket and its
 //     terminal logs. Same path on purpose: the daemon writes the Bash tool's command files there and the turn reads
@@ -116,6 +119,13 @@ export const defaultSources = (): SandboxSources => ({
     queue: queueRoot(),
 });
 
+// The fence's own folders on the shelf, shallowest first and none inside another: all of it for a fence holding the
+// shelf whole, nothing for one naming nothing there.
+export const shelfFolders = (folders: readonly string[]): string[] => {
+    const onShelf = folders.filter((folder) => folder === SHELF || folder.startsWith(`${SHELF}/`)).toSorted();
+    return onShelf.filter((folder) => !onShelf.some((other) => other !== folder && folder.startsWith(`${other}/`)));
+};
+
 export const hostPathsFor = (plan: IsolationPlan, sources: SandboxSources): string[] => [
     ...SYSTEM_PATHS,
     "/opt",
@@ -124,9 +134,12 @@ export const hostPathsFor = (plan: IsolationPlan, sources: SandboxSources): stri
     ...ETC_DIRS_MASKED,
     ...HOME_READ_ONLY.map((name) => join(sources.home, name)),
     ...HOME_OVERLAID.map((name) => join(sources.home, name)),
-    join(plan.root, SHELF),
+    ...shelfFolders(plan.fence?.folders ?? []).map((folder) => join(plan.root, folder)),
     join(plan.root, PACKAGE_STORE),
 ];
+
+// Where a layer over a main-checkout directory keeps this conversation's writes; the mirrors' convention, shared.
+export const layerOf = (plan: Pick<IsolationPlan, "overlays">, rel: string): string => join(plan.overlays, encodeURIComponent(rel));
 
 export const readHostView = (paths: readonly string[]): HostView => {
     const links = new Map<string, string>();
@@ -186,25 +199,33 @@ const homeArgs = (host: HostView, sources: SandboxSources): string[] => [
     ),
 ];
 
-// The conversation's checkout at the workspace root, its repository pointers masked, its own session store, and what
-// it shares with the main checkout: the shelf read-only, the package store, and the mirrors as overlays.
+// A main-checkout directory read through a layer of the conversation's own, which takes every write.
+const overlayArgs = (plan: FencedPlan, rel: string): string[] => {
+    const layer = layerOf(plan, rel);
+    return ["--overlay-src", join(plan.root, rel), "--overlay", join(layer, "upper"), join(layer, "work"), join(plan.root, rel)];
+};
+
+// The conversation's checkout at the workspace root, what the fence does not reach in it covered, its repository
+// pointers masked, its own session store, and what it shares with the main checkout: the fence's part of the shelf
+// read-only, and the package store and the mirrors behind layers of its own. The covers come right after the checkout,
+// so whatever is placed inside one later (a session store under `.intentic`, the store at the root) still shows.
 const checkoutArgs = (plan: FencedPlan, layout: SandboxLayout, host: HostView): string[] => {
-    const shelf = join(plan.root, SHELF);
     const store = join(plan.root, PACKAGE_STORE);
     return [
         "--bind",
         plan.worktree,
         plan.root,
+        ...plan.fence.hidden.flatMap((rel) => ["--tmpfs", join(plan.root, rel)]),
         ...plan.fence.gitPointers.flatMap((rel) => ["--ro-bind", layout.empty, join(plan.root, rel, ".git")]),
         "--bind",
         plan.fence.sessions,
         join(plan.root, SESSION_STORE),
-        ...(host.present.has(shelf) ? ["--ro-bind", shelf, shelf] : []),
-        ...(host.present.has(store) ? ["--bind", store, store] : []),
-        ...plan.mirrors.flatMap((rel) => {
-            const layer = join(plan.overlays, encodeURIComponent(rel));
-            return ["--overlay-src", join(plan.root, rel), "--overlay", join(layer, "upper"), join(layer, "work"), join(plan.root, rel)];
+        ...shelfFolders(plan.fence.folders).flatMap((folder) => {
+            const shelf = join(plan.root, folder);
+            return host.present.has(shelf) ? ["--ro-bind", shelf, shelf] : [];
         }),
+        ...(host.present.has(store) ? overlayArgs(plan, PACKAGE_STORE) : []),
+        ...plan.mirrors.flatMap((rel) => overlayArgs(plan, rel)),
     ];
 };
 
@@ -341,10 +362,9 @@ export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSourc
     }
     await writeFile(layout.held, "");
     await writeFile(layout.empty, "", { mode: 0o444 });
-    for (const rel of plan.mirrors) {
-        const layer = join(plan.overlays, encodeURIComponent(rel));
-        await mkdir(join(layer, "upper"), { recursive: true });
-        await mkdir(join(layer, "work"), { recursive: true });
+    for (const rel of [...plan.mirrors, PACKAGE_STORE]) {
+        await mkdir(join(layerOf(plan, rel), "upper"), { recursive: true });
+        await mkdir(join(layerOf(plan, rel), "work"), { recursive: true });
     }
     const host = readHostView(hostPathsFor(plan, sources));
     const args = [...sandboxArgs(plan, layout, host, sources), "--", "sh", "-c", ANCHOR_SCRIPT, "anchor", layout.held, layout.tmuxSocket];

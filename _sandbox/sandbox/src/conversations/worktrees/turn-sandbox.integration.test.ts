@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { requires } from "@intentic/testing/requires";
 import { nsenterArgv } from "../../workload/namespace-entry.js";
-import type { IsolationAnchor } from "./isolation.js";
+import { hiddenIn, type IsolationAnchor } from "./isolation.js";
 import { type FencedPlan, SANDBOX_UID, type SandboxSources, startSandboxAnchor } from "./turn-sandbox.js";
 
 // A real fenced sandbox around a small workspace: what a turn inside can see, what it holds, and when it ends. The argv
@@ -26,17 +26,35 @@ interface World {
     readonly neighbour: string;
 }
 
-// A main checkout holding two areas and a dependency tree; this conversation's sparse checkout holding one of them with
-// its repository pointer; a neighbour conversation's checkout; and a daemon home holding a key no turn should see.
+// A main checkout holding two areas, a dependency tree hard-linked from the package store as pnpm installs it, and a
+// shelf of two folders; this conversation's sparse checkout holding one area with its repository pointer, and a folder
+// of the other left behind (a narrowing that failed); a neighbour conversation's checkout; and a daemon home holding a
+// key no turn should see. The fence: the one area, and one folder of the shelf.
 const world = async (): Promise<World> => {
     const base = await mkdtemp(join(HISTORY_ROOT, ".turn-sandbox-"));
     const main = join(base, "work");
     const worktree = join(base, "history", "worktrees", "conv-1");
     const neighbour = join(base, "history", "worktrees", "conv-2");
     const home = join(base, "home");
-    for (const dir of [join(main, "support"), join(main, "finance"), join(main, "node_modules", "dep"), join(worktree, "support"), neighbour, join(home, ".ssh")]) {
+    for (const dir of [
+        join(main, "support"),
+        join(main, "finance"),
+        join(main, "node_modules", "dep"),
+        join(main, ".pnpm-store", "files"),
+        join(main, "refs", "sdk"),
+        join(main, "refs", "private"),
+        join(worktree, "support"),
+        join(worktree, "finance"),
+        neighbour,
+        join(home, ".ssh"),
+    ]) {
         await mkdir(dir, { recursive: true });
     }
+    await writeFile(join(main, ".pnpm-store", "files", "dep-linked"), "stored");
+    await link(join(main, ".pnpm-store", "files", "dep-linked"), join(main, "node_modules", "dep", "linked.js"));
+    await writeFile(join(main, "refs", "sdk", "README.md"), "sdk");
+    await writeFile(join(main, "refs", "private", "notes.md"), "private");
+    await writeFile(join(worktree, "finance", "leftover.csv"), "left behind");
     await writeFile(join(main, "finance", "payroll.csv"), "main's");
     await writeFile(join(main, "node_modules", "dep", "index.js"), "dependency");
     await writeFile(join(worktree, "support", "notes.md"), "mine");
@@ -44,12 +62,18 @@ const world = async (): Promise<World> => {
     await writeFile(join(neighbour, "draft.md"), "theirs");
     await writeFile(join(home, ".bashrc"), "# shell");
     await writeFile(join(home, ".ssh", "id_ed25519"), "key");
+    const folders = ["support", "refs/sdk"];
     const plan: FencedPlan = {
         worktree,
         root: main,
         mirrors: ["node_modules"],
         overlays: join(base, "history", "overlays", "conv-1"),
-        fence: { sessions: join(base, "history", "conversations", "conv-1", "sessions"), gitPointers: [""] },
+        fence: {
+            folders,
+            hidden: await hiddenIn(worktree, folders),
+            sessions: join(base, "history", "conversations", "conv-1", "sessions"),
+            gitPointers: [""],
+        },
     };
     const sources: SandboxSources = { home, engines: join(base, "engines"), queue: join(base, "queue") };
     return { base, plan, sources, neighbour };
@@ -86,8 +110,9 @@ test.skipIf(!sandbox.runs)(sandbox.title("a fenced turn sees its own checkout at
     const anchor = await startSandboxAnchor(w.plan, w.sources);
     try {
         expect(inside(anchor, "pwd; cat support/notes.md")).toEqual({ code: 0, out: `${w.plan.root}\nmine` });
-        // The other area, present in the main checkout, is not on this filesystem at all.
-        expect(inside(anchor, `test -e ${join(w.plan.root, "finance")}`).code).toBe(1);
+        // The other area, present in the main checkout, is not on this filesystem: at most an empty cover where the
+        // checkout still held its directory.
+        expect(inside(anchor, `test -e ${join(w.plan.root, "finance", "payroll.csv")}`).code).toBe(1);
         // Nor is another conversation's checkout, nor the history volume around them.
         expect(inside(anchor, `test -e ${join(w.neighbour, "draft.md")}`).code).toBe(1);
         expect(inside(anchor, `ls ${join(w.base, "history", "worktrees")}`).code).not.toBe(0);
@@ -100,6 +125,27 @@ test.skipIf(!sandbox.runs)(sandbox.title("a fenced turn sees its own checkout at
         // What it writes in its checkout is in the conversation's worktree, where the daemon commits it from.
         expect(inside(anchor, "echo edited > support/notes.md").code).toBe(0);
         expect(spawnSync("cat", [join(w.plan.worktree, "support", "notes.md")], { encoding: "utf8" }).stdout).toBe("edited\n");
+    } finally {
+        anchor.dispose();
+        await rm(w.base, { recursive: true, force: true });
+    }
+});
+
+test.skipIf(!sandbox.runs)(sandbox.title("the fence, not the checkout, decides what of the shelf, the store and leftovers a fenced turn reaches"), async () => {
+    const w = await world();
+    const anchor = await startSandboxAnchor(w.plan, w.sources);
+    try {
+        // The shelf folder the fence names, and not its sibling.
+        expect(inside(anchor, `cat ${join(w.plan.root, "refs", "sdk", "README.md")}`)).toEqual({ code: 0, out: "sdk" });
+        expect(inside(anchor, `test -e ${join(w.plan.root, "refs", "private", "notes.md")}`).code).toBe(1);
+        // A folder of the other area still in the checkout is covered, and the file is untouched on disk.
+        expect(inside(anchor, "ls finance").out).toBe("");
+        expect(await readFile(join(w.plan.worktree, "finance", "leftover.csv"), "utf8")).toBe("left behind");
+        // The turn is the owner of the store's files, and they are the same inodes as the main checkout's dependencies:
+        // a write through the store stays in the conversation's layer.
+        expect(inside(anchor, `cat .pnpm-store/files/dep-linked && echo tampered > .pnpm-store/files/dep-linked`)).toEqual({ code: 0, out: "stored" });
+        expect(await readFile(join(w.plan.root, "node_modules", "dep", "linked.js"), "utf8")).toBe("stored");
+        expect(await readFile(join(w.plan.root, ".pnpm-store", "files", "dep-linked"), "utf8")).toBe("stored");
     } finally {
         anchor.dispose();
         await rm(w.base, { recursive: true, force: true });

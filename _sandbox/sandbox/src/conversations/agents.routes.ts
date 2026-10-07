@@ -34,23 +34,21 @@ import { readSubagentSession } from "../sessions/sessions.js";
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
-    const entryOf = (id: string): PersistedAgent => {
+    // The one lookup every route here addresses a conversation through: unknown is NOT_FOUND, and one the caller may not
+    // see (a guest's colleague's, or work outside a fenced member's areas) is FORBIDDEN (auth/fleet-scope.ts). A route's
+    // role floor says what a caller may do, never to whose conversation, so no route reads or acts on an id without it.
+    const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
         const entry = services.agents.entry(id);
         if (entry === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
         }
-        return entry;
-    };
-    // The same lookup for a route a guest may reach: theirs, or FORBIDDEN (auth/fleet-scope.ts).
-    const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
-        const entry = entryOf(id);
         refuseUnlessVisible(context.identity, provenanceOf(entry));
         return entry;
     };
     // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
     // so it's BAD_REQUEST, not NOT_FOUND.
-    const isolatedEntryOf = (id: string): IsolatedAgent => {
-        const entry = entryOf(id);
+    const isolatedEntryOf = (id: string, context: OrpcContext): IsolatedAgent => {
+        const entry = entryFor(id, context);
         if (!isIsolated(entry)) {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation works in the shared workspace and has no isolated branch" });
         }
@@ -65,8 +63,8 @@ export const createAgentsRoutes = (services: Services) => {
     };
     // Scratch of a resting conversation's live copy, as it stands now and exactly as named: a list the review drew
     // earlier must not reach a file that has since stopped looking like scratch.
-    const scratchNamed = async (input: AgentScratch): Promise<{ dir: string; named: ScratchPath[] }> => {
-        const entry = isolatedEntryOf(input.id);
+    const scratchNamed = async (input: AgentScratch, context: OrpcContext): Promise<{ dir: string; named: ScratchPath[] }> => {
+        const entry = isolatedEntryOf(input.id, context);
         notRunning(input.id);
         // Refused like a second land press, not queued behind the lease: a land reads this very index.
         if (services.conversations.landing(input.id)) {
@@ -119,11 +117,13 @@ export const createAgentsRoutes = (services: Services) => {
         })),
         // Answers over the live roster and the archive, since the board hides finished/archived agents from the live
         // list. Matches the title or either side's said lines; a title hit carries no snippet.
-        search: i.search.handler(async ({ input }) => {
+        search: i.search.handler(async ({ input, context }) => {
             // Folded once here so needle and haystack share a case; the index folds its side the same way.
             const caseSensitive = input.caseSensitive === true;
             const needle = caseSensitive ? input.query : input.query.toLowerCase();
-            const entries = [...services.agents.list(), ...services.agents.listArchived()];
+            // Only what the caller may see: a snippet is a reading of the transcript, and even a bare id says a
+            // conversation behind the fence matched the words.
+            const entries = [...services.agents.list(), ...services.agents.listArchived()].filter((agent) => visibleTo(context.identity, agent));
             // One query for the whole fleet, not a read per entry.
             const said = await services.saidIndex.search(input.query, "conversation", caseSensitive);
             const matches = entries.flatMap((agent) => {
@@ -176,7 +176,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Fills in what `transcript` counted rather than carried. Off the record, so it answers for an archived
         // conversation too, unlike the subagent registry, which is an in-memory map.
-        toolChildren: i.toolChildren.handler(async ({ input }) => ({ children: await services.transcripts.toolChildren(entryOf(input.id), input.toolId) })),
+        toolChildren: i.toolChildren.handler(async ({ input, context }) => ({ children: await services.transcripts.toolChildren(entryFor(input.id, context), input.toolId) })),
         // A subagent the conversation's runtime ran in-process, as a transcript of its own. Seen by whoever may see the
         // conversation whose turn it ran in, since its work is that conversation's.
         subagentTranscript: i.subagentTranscript.handler(async ({ input, context }) => {
@@ -206,8 +206,8 @@ export const createAgentsRoutes = (services: Services) => {
         // - runs under the rewind lease, not notRunning, so a resuming turn cannot race the clear
         // - a channel-origin conversation delivers outward before appending (a Visitor chat into the visitor's outbox,
         //   every other provider to its gateway); a failed delivery refuses the whole place
-        place: i.place.handler(async ({ input }) => {
-            const agent = entryOf(input.id);
+        place: i.place.handler(async ({ input, context }) => {
+            const agent = entryFor(input.id, context);
             const origin = agent.identity.origin;
             const outcome = await services.conversations.withRewindLease(input.id, async () => {
                 if (origin?.channelId !== undefined) {
@@ -252,8 +252,8 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Legal mid-turn: the flag is read at completion, so flipping it mid-run holds this turn's work for review.
-        autoLand: i.autoLand.handler(async ({ input }) => {
-            isolatedEntryOf(input.id);
+        autoLand: i.autoLand.handler(async ({ input, context }) => {
+            isolatedEntryOf(input.id, context);
             const summary = await services.agents.setAutoLand(input.id, input.autoLand);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
@@ -265,8 +265,8 @@ export const createAgentsRoutes = (services: Services) => {
         // window can be hours out, which is why the control also lives on the card and not only in an open transcript.
         // A NOT_FOUND covers both misses the registry can report: an unknown conversation, and an answer this ending
         // does not allow. Handed the answer the pass will now read, cleared or not, so a held limit's card re-books.
-        breakPolicy: i.breakPolicy.handler(async ({ input }) => {
-            entryOf(input.id);
+        breakPolicy: i.breakPolicy.handler(async ({ input, context }) => {
+            entryFor(input.id, context);
             const effective = input.policy ?? (await sandboxBreakPolicy(services, input.ending));
             const summary = await services.agents.setBreakPolicy(input.id, input.ending, input.policy, effective);
             if (summary === undefined) {
@@ -275,8 +275,8 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Legal on any conversation between turns; a refusal says why nothing can be kept, in words the press can show.
-        keepWarm: i.keepWarm.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+        keepWarm: i.keepWarm.handler(async ({ input, context }) => {
+            const entry = entryFor(input.id, context);
             if (input.until === null) {
                 dropKeepWarm(services, entry.id);
             } else {
@@ -294,7 +294,7 @@ export const createAgentsRoutes = (services: Services) => {
         // Isolated agents only, a workspace conversation has no land to ask for. Legal mid-turn, like `autoLand`; needs
         // a verified identity to attribute the request to.
         requestLand: i.requestLand.handler(async ({ input, context }) => {
-            isolatedEntryOf(input.id);
+            isolatedEntryOf(input.id, context);
             if (context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to attribute the request to" });
             }
@@ -310,7 +310,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Changes hands. Legal in every state, like a reaction: it says who answers for the work, not anything about it.
         assign: i.assign.handler(async ({ input, context }) => {
-            const entry = entryOf(input.id);
+            const entry = entryFor(input.id, context);
             if (context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to assign on behalf of" });
             }
@@ -392,8 +392,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // The only user-initiated way to end a watch; every other exit is automatic (it fires, times out, or a later
         // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
-        stopWatching: i.stopWatching.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+        stopWatching: i.stopWatching.handler(async ({ input, context }) => {
+            const entry = entryFor(input.id, context);
             // Awaited: the disarm must reach the watch journal, or a recreate would restore it on boot. A named watch
             // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
             await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
@@ -406,8 +406,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // A person's way to end what a conversation left running: the server it handed over, the build it waits on.
         // Legal in every state, mid-turn included; the job's watch is disarmed before it ends, so nothing wakes.
-        stopJob: i.stopJob.handler(async ({ input }) => {
-            const entry = entryOf(input.id);
+        stopJob: i.stopJob.handler(async ({ input, context }) => {
+            const entry = entryFor(input.id, context);
             const job = backgroundJobOf(services.conversations, entry.id, input.jobId);
             // An unknown id is a job already gone (it exited, or a restart forgot it), not an error: the press is satisfied.
             if (job !== undefined) {
@@ -421,8 +421,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Measured against main as it stands, not the last land's record. A committed row leaves the list; uncommitted
         // stays flagged `landed`; discarded-after-land goes back to unflagged.
-        diff: i.diff.handler(({ input }) => {
-            const entry = isolatedEntryOf(input.id);
+        diff: i.diff.handler(({ input, context }) => {
+            const entry = isolatedEntryOf(input.id, context);
             // Every tab and panel showing this conversation asks at once; the ones asking while a reading is under way
             // share it instead of each paying for the same git runs and counts.
             const underway = reviewsUnderway.get(entry.id);
@@ -434,17 +434,17 @@ export const createAgentsRoutes = (services: Services) => {
             return reading;
         }),
         // The verdict `diff` carries, by the same function, so the two cannot disagree; none of the review's line counts.
-        conflicts: i.conflicts.handler(async ({ input }) => {
-            const conflicts = await liveConflicts(services, isolatedEntryOf(input.id));
+        conflicts: i.conflicts.handler(async ({ input, context }) => {
+            const conflicts = await liveConflicts(services, isolatedEntryOf(input.id, context));
             return conflicts.length > 0 ? { conflicts } : {};
         }),
         // Reads the same rows `diff` filtered out to absorbed, from the same pass over the tree, so the two routes
         // can't disagree. Span starts at the recorded `landedHead` when it still resolves, else the merge-base anchor.
-        history: i.history.handler(async ({ input }) => await historyOf(services, isolatedEntryOf(input.id))),
+        history: i.history.handler(async ({ input, context }) => await historyOf(services, isolatedEntryOf(input.id, context))),
         // Diffs from the same cumulative anchor as the list above, so a file can't drop out of its own row when it
         // lands, and another agent's synced-in work can't appear as this one's.
-        fileDiff: i.fileDiff.handler(async ({ input }) => {
-            const entry = isolatedEntryOf(input.id);
+        fileDiff: i.fileDiff.handler(async ({ input, context }) => {
+            const entry = isolatedEntryOf(input.id, context);
             const composed = entry.placement.repos.find((repo) => repo.repo === input.repo);
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
@@ -464,8 +464,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return services.git.fileDiff(dir, input.path, await anchorOf(entry.placement, dir, main, entry.placement.branch, undefined, composed.base));
         }),
-        includeScratch: i.includeScratch.handler(async ({ input }) => {
-            const { dir, named } = await scratchNamed(input);
+        includeScratch: i.includeScratch.handler(async ({ input, context }) => {
+            const { dir, named } = await scratchNamed(input, context);
             if (named.some((entry) => entry.reason === "checkout")) {
                 throw new ORPCError("BAD_REQUEST", { message: "a checkout of its own cannot ride a merge; add it to the workspace as a repository" });
             }
@@ -476,8 +476,8 @@ export const createAgentsRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
-        deleteScratch: i.deleteScratch.handler(async ({ input }) => {
-            const { dir, named } = await scratchNamed(input);
+        deleteScratch: i.deleteScratch.handler(async ({ input, context }) => {
+            const { dir, named } = await scratchNamed(input, context);
             for (const entry of named) {
                 await rm(join(dir, entry.path), { recursive: true, force: true });
             }
@@ -488,8 +488,8 @@ export const createAgentsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
-        land: i.land.handler(async ({ input }) => {
-            const entry = isolatedEntryOf(input.id);
+        land: i.land.handler(async ({ input, context }) => {
+            const entry = isolatedEntryOf(input.id, context);
             landable(input.id, input.force === true);
             // A second press while one is in flight would rebase the worktree the first is reading; the card already
             // reads `landing`, so a refusal is all it needs.
@@ -498,8 +498,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return landByHandLeased(services, entry, input.mode ?? "check", input.span ?? "outstanding");
         }),
-        discard: i.discard.handler(async ({ input }) => {
-            const entry = isolatedEntryOf(input.id);
+        discard: i.discard.handler(async ({ input, context }) => {
+            const entry = isolatedEntryOf(input.id, context);
             notRunning(input.id);
             // Read while the conversation exists, since its dispose takes the records of the children it supervises.
             const family = familyOf(services, [entry.id]);
@@ -542,7 +542,11 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Destructive: deletes everything filed away, branches included (purgeArchived). Archived run records go too,
         // since their steps must not point into an emptied archive.
-        purge: i.purge.handler(async () => {
+        purge: i.purge.handler(async ({ context }) => {
+            // The whole archive or nothing (purgeArchived), so a caller who cannot see all of it cannot empty it.
+            if (services.agents.listArchived().some((agent) => !visibleTo(context.identity, agent))) {
+                throw new ORPCError("FORBIDDEN", { message: "the archive holds conversations outside your areas; only someone who can see all of it can empty it" });
+            }
             // Same disarm-before-delete as `discard`: an outlived watch would try to start a turn on a removed id.
             for (const summary of services.agents.listArchived()) {
                 await cancelWatchersFor(summary.id);

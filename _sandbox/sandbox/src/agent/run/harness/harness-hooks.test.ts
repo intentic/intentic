@@ -30,7 +30,7 @@ const depsHolding = (entry: PersistedAgent | undefined): HarnessHooksDeps => ({
 // The same turn, in a conversation's own worktree, as the route hands it over.
 const isolated = async (): Promise<TurnContext> => {
     const worktree = join(HISTORY_ROOT, "worktrees", "c1");
-    const plan = await noIsolation(WORKSPACE_ROOT).planFor(worktree, false);
+    const plan = await noIsolation(WORKSPACE_ROOT).planFor(worktree, undefined);
     return { ...context, localCwd: worktree, base: { ...context.base, spec: { ...context.base.spec, conversationId: "c1", isolation: { plan } } } };
 };
 

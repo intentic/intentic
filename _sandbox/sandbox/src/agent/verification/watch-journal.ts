@@ -18,7 +18,7 @@ const JournalledWatchSchema = z.object({
     // The tree the check runs in; a restore that can't find it wakes the watch as broken, never runs elsewhere.
     cwd: z.string(),
     // An isolated conversation's world, rebuilt for every check; absent for the workspace root.
-    placement: z.object({ worktree: z.string(), fenced: z.boolean() }).optional(),
+    placement: z.object({ worktree: z.string(), fenced: z.boolean(), fence: z.array(z.string()).readonly().optional() }).optional(),
     // The source a fetching check's output is outside content from.
     outside: z.string().optional(),
     // A local file whose appearance re-checks at once; the interval stays the floor.

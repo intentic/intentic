@@ -278,6 +278,45 @@ impl Controls {
             rows,
         });
     }
+
+    /// Controls on no hub, for a socket's tests: what they forward is read back from the other half.
+    #[cfg(test)]
+    pub fn unhubbed() -> (Self, Forwarded) {
+        let (commands, forwarded) = mpsc::unbounded_channel();
+        (
+            Self {
+                viewer: 1,
+                commands,
+            },
+            Forwarded(forwarded),
+        )
+    }
+}
+
+/// What a socket's reader forwarded to its hub, as `input <data>` or `resize <cols>x<rows>`.
+#[cfg(test)]
+pub struct Forwarded(mpsc::UnboundedReceiver<Command>);
+
+#[cfg(test)]
+impl Forwarded {
+    fn said(command: Command) -> String {
+        match command {
+            Command::Input(bytes) => format!("input {}", String::from_utf8_lossy(&bytes)),
+            Command::Resize { cols, rows, .. } => format!("resize {cols}x{rows}"),
+            _ => "other".into(),
+        }
+    }
+
+    pub async fn next(&mut self) -> Option<String> {
+        self.0.recv().await.map(Self::said)
+    }
+
+    /// Everything forwarded and not yet read, without waiting.
+    pub fn rest(&mut self) -> Vec<String> {
+        std::iter::from_fn(|| self.0.try_recv().ok())
+            .map(Self::said)
+            .collect()
+    }
 }
 
 impl Viewer {

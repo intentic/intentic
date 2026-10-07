@@ -3,6 +3,7 @@ import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { PersonasStore } from "../personas/personas-store.js";
 import type { AreasStore } from "../areas/areas-store.js";
+import type { SshKeyStore } from "../capabilities/ssh-key-store.js";
 
 // In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
 // state and read back what a route wrote without touching the filesystem. A store a slice holds lives beside that
@@ -76,3 +77,21 @@ export const automationRecord = (id: string, extra: Partial<AutomationRecord> = 
     ...extra,
 });
 
+
+// An in-memory ssh key store: the route suites' sandbox holds whatever keys a test files, and none to begin with.
+export const memorySshKeyStore = (initial: Record<string, string> = {}): SshKeyStore => {
+    const keys = new Map(Object.entries(initial));
+    return {
+        dir: "/nonexistent/ssh-keys",
+        pathOf: (alias) => `/nonexistent/ssh-keys/${alias}`,
+        put: async (alias, privateKey) => {
+            keys.set(alias, privateKey);
+        },
+        get: async (alias) => keys.get(alias),
+        has: async (alias) => keys.has(alias),
+        remove: async (alias) => {
+            keys.delete(alias);
+        },
+        aliases: async () => [...keys.keys()].toSorted(),
+    };
+};

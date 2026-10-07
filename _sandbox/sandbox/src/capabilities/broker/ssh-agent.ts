@@ -164,9 +164,17 @@ export const serveSshAgent = (socket: Socket, principal: SshPrincipal, deps: Ssh
     });
     socket.pipe(messages).pipe(protocol).pipe(socket);
 
+    // One key may be held under several cards (two machines sharing a key, a machine's key that is also a git account's),
+    // and a signature asked for under one is good against every host trusting it: the agent never learns which host it
+    // is for. So every entry holding the key answers together: a conversation may use it only if all of them are open to
+    // conversations, and only past every one of their cards' gates.
+    const twinsOf = (keys: readonly HeldKey[], key: ParsedKey): HeldKey[] => keys.filter((candidate) => sameKey(candidate.key, key));
+    const open = (twins: readonly HeldKey[]): boolean => principal.kind === "owner" || twins.every((twin) => twin.forConversations);
+
+    // Each key once, and only one this principal may sign with.
     const usable = async (): Promise<readonly HeldKey[]> => {
         const keys = await deps.keys();
-        return principal.kind === "owner" ? keys : keys.filter((held) => held.forConversations);
+        return keys.filter((held, index) => keys.findIndex((other) => sameKey(other.key, held.key)) === index && open(twinsOf(keys, held.key)));
     };
 
     protocol.on("identities", (request) => {
@@ -181,28 +189,32 @@ export const serveSshAgent = (socket: Socket, principal: SshPrincipal, deps: Ssh
 
     protocol.on("sign", (request, asked, data, options) => {
         const sign = async (): Promise<void> => {
-            const held = (await usable()).find((candidate) => sameKey(candidate.key, asked));
-            if (held === undefined) {
+            const twins = twinsOf(await deps.keys(), asked);
+            const held = twins[0];
+            if (held === undefined || !open(twins)) {
                 protocol.failureReply(request);
                 return;
             }
             let approvedBy: string | undefined;
             if (principal.kind === "conversation") {
-                // Who: every card answering for the key, through the same gate every other credential exit consults.
-                for (const card of held.cards) {
-                    const verdict = await deps.credentialGate.check({
-                        subject: card,
-                        kind: "capability",
-                        lane: "ssh",
-                        detail: `ssh ${held.alias}`,
-                        conversationId: principal.conversationId,
-                        signal: gone.signal,
-                    });
-                    if (!verdict.allow) {
-                        protocol.failureReply(request);
-                        return;
+                // Who: every card answering for the key, under any alias, through the same gate every other credential
+                // exit consults.
+                for (const twin of twins) {
+                    for (const card of twin.cards) {
+                        const verdict = await deps.credentialGate.check({
+                            subject: card,
+                            kind: "capability",
+                            lane: "ssh",
+                            detail: `ssh ${twin.alias}`,
+                            conversationId: principal.conversationId,
+                            signal: gone.signal,
+                        });
+                        if (!verdict.allow) {
+                            protocol.failureReply(request);
+                            return;
+                        }
+                        approvedBy = verdict.approvedBy ?? approvedBy;
                     }
-                    approvedBy = verdict.approvedBy ?? approvedBy;
                 }
             }
             const signature = sshSignature(held.key, data, options.hash);
@@ -211,13 +223,18 @@ export const serveSshAgent = (socket: Socket, principal: SshPrincipal, deps: Ssh
                 return;
             }
             protocol.signReply(request, signature);
-            if (principal.kind === "conversation" && held.ledgerName !== undefined) {
-                deps.used({
-                    alias: held.alias,
-                    ledgerName: held.ledgerName,
-                    conversationId: principal.conversationId,
-                    ...(approvedBy !== undefined ? { approvedBy } : {}),
-                });
+            if (principal.kind === "conversation") {
+                // A use of every credential the signature is good as.
+                for (const twin of twins) {
+                    if (twin.ledgerName !== undefined) {
+                        deps.used({
+                            alias: twin.alias,
+                            ledgerName: twin.ledgerName,
+                            conversationId: principal.conversationId,
+                            ...(approvedBy !== undefined ? { approvedBy } : {}),
+                        });
+                    }
+                }
             }
         };
         sign().catch((error: unknown) => {

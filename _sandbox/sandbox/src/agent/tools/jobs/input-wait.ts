@@ -1,4 +1,4 @@
-import { readdir, readlink, stat } from "node:fs/promises";
+import { lstat, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { pidsOf, procFile } from "../../../seams/session-processes.js";
 import { parseProcStat } from "../../../system/resources/proc-stat.js";
@@ -176,8 +176,10 @@ const serves = async (procRoot: string, leader: number, members: readonly number
     return false;
 };
 
+// lstat: for a fenced turn the capture file sits in the turn's own temp dir, where a link there must not report the size
+// of whatever it names.
 const outputSize = (path: string): Promise<number> =>
-    stat(path).then(
+    lstat(path).then(
         (info) => info.size,
         // allow(silent-catch): no capture file yet is no output yet.
         () => 0,

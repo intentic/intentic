@@ -1,4 +1,4 @@
-import type { AgentEvent, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, Fence, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
 import { settleIndex } from "@intentic/base/git";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
 import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
@@ -22,8 +22,8 @@ import type { ReachWatch } from "./turn-reach.js";
 export interface WorktreeRun {
     readonly id: string;
     readonly cwd: string;
-    // Whether the checkout was cut to a fence, which the turn's namespace must not hand back.
-    readonly fenced: boolean;
+    // The fence the checkout was cut to, which the turn's sandbox is built from; absent for the whole workspace.
+    readonly fence: Fence;
     readonly synced: readonly RepoSync[];
     // Re-syncs after a settled card, answering the frame to restate where the branch stands, or nothing if it didn't move.
     readonly resync: () => Promise<AgentEvent | undefined>;
@@ -192,7 +192,7 @@ export const worktreePlacement = (
             }
             // Reported per turn, not once at boot: it depends on how the container launched. A fenced checkout is
             // enforced by its sandbox, and a turn without one is refused before it runs (stream-agent.ts).
-            const enforced = worktree.fenced ? await deps.turnIsolation.sandboxAvailable() : await deps.turnIsolation.available();
+            const enforced = worktree.fence !== undefined ? await deps.turnIsolation.sandboxAvailable() : await deps.turnIsolation.available();
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebaseLeased();
             opened = { repos: worktree.repos, refs: await snapshotRefs(deps.agentWorktrees, worktree.repos) };
@@ -235,7 +235,7 @@ export const worktreePlacement = (
                     return undefined;
                 }
             };
-            return steps.run({ id: conversationId, cwd: worktree.cwd, fenced: worktree.fenced, synced, resync });
+            return steps.run({ id: conversationId, cwd: worktree.cwd, fence: worktree.fence, synced, resync });
         },
         async *land(failed, awaiting) {
             await carryOnce();

@@ -32,8 +32,9 @@ export interface ConversationWorktree {
     readonly branch: string;
     // Each repo's full sha on the main line, updated by the pre-turn rebase (conversations/sync.ts); not the start.
     readonly repos: readonly { repo: string; base: string }[];
-    // Whether this checkout was cut to a fence; what the turn's namespace must not hand back (isolation.ts).
-    readonly fenced: boolean;
+    // The fence this checkout was cut to, as folders; what the turn's sandbox is built from (isolation.ts). Absent for a
+    // conversation that may see the whole workspace.
+    readonly fence: Fence;
     // Repos whose checkout is standing somewhere other than `branch`, with what it stands on (absent = detached HEAD).
     // Never moved back: a turn that cut a branch of its own, or was asked to work on one, is doing real work there, and
     // yanking its checkout back would take that work's context away. What it commits there is carried onto `branch` at
@@ -597,7 +598,8 @@ export const createAgentWorktrees = (
         }
         const worktree = worktreeDir(id, repo);
         // Best-effort like the mirrors: a checkout that refuses to narrow is reported and left whole rather than
-        // failing the turn — the file-tool hook and the route fence still hold.
+        // failing the turn, since the sandbox covers every directory the fence does not reach whatever the checkout
+        // holds (isolation.ts hiddenIn). Narrowing is what keeps the rest off disk, not what keeps it out of reach.
         await git(worktree, ["sparse-checkout", "set", "--cone", ...cone]).catch((error: unknown) =>
             logger.warn({ err: error, id, repo, cone }, "agents: could not narrow a fenced conversation's checkout"),
         );
@@ -729,7 +731,7 @@ export const createAgentWorktrees = (
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
                 // Asked only on the repair path: a checkout this call just created stands on `branch` by construction.
-                return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined, elsewhere: await elsewhereIn(id, repos) };
+                return { cwd: conversationDir(id), branch, repos, fence, elsewhere: await elsewhereIn(id, repos) };
             }
             // Root first: its checkout creates the dir nested worktrees mount into (root excludes each repo dir).
             const live = await wanted();
@@ -748,7 +750,7 @@ export const createAgentWorktrees = (
             // a fenced conversation's folders exist on disk closes before its first turn can run.
             await sparsenComposition(id, repos, fence);
             await linkComposition(id, repos, namespaced);
-            return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined, elsewhere: [] };
+            return { cwd: conversationDir(id), branch, repos, fence, elsewhere: [] };
         },
         remove: async (id, recorded) => {
             await eachRepo(recorded, "root-last", (repo) =>

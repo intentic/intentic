@@ -107,6 +107,25 @@ test("a runner nobody paired is refused before the conversation exists", async (
     expect(s.agents.entry("placed-unpaired")).toBeUndefined();
 });
 
+test("a fenced conversation is refused a runner, which would run it over the whole workspace", async () => {
+    const { services: s } = placedServices(scripted([{ kind: "done" }]), {
+        runners: unstubbed<Services["runners"]>("runners", { enrolled: async () => true }),
+    });
+
+    const frames = await collect(
+        streamAgent(s, { prompt: "go", conversationId: "placed-fenced", areas: ["support"], placement: { kind: "runner", id: "r-1" } }, undefined),
+    );
+
+    expect(frames).toStrictEqual([
+        {
+            kind: "error",
+            message: "This conversation is limited to some areas of the workspace, and a runner cannot keep it to them yet. Run it here instead.",
+        },
+        { kind: "done" },
+    ]);
+    expect(s.agents.entry("placed-fenced")).toBeUndefined();
+});
+
 test("a conversation already running a turn refuses a second one as busy", async () => {
     const { services: s } = placedServices(scripted([{ kind: "done" }]));
     expect(

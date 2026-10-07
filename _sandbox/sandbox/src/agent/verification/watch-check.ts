@@ -17,10 +17,12 @@ const MAX_CAPTURE = 1024 * 1024;
 // Printed once the namespace is up; absent from stdout means the namespace failed, not the check.
 const CHECK_READY = "intentic-watch-check-ready";
 
-/** An isolated conversation's worktree and whether its namespace is fenced. */
+/** An isolated conversation's worktree, whether its namespace is fenced, and to which folders. */
 export interface WatchPlacement {
     readonly worktree: string;
     readonly fenced: boolean;
+    // Absent on a watch armed before the folders were recorded: read as a fence naming nothing, the narrowest it could be.
+    readonly fence?: readonly string[] | undefined;
 }
 
 export interface CheckResult {
@@ -127,7 +129,7 @@ export const watchCheck =
         if (!(await exists(placement.worktree))) {
             return { exitCode: undefined, output: "", broken: `its conversation's worktree, ${placement.worktree}, is gone` };
         }
-        const plan = await isolation.planFor(placement.worktree, placement.fenced);
+        const plan = await isolation.planFor(placement.worktree, placement.fenced ? (placement.fence ?? []) : undefined);
         if (placement.fenced) {
             return (await isolation.sandboxAvailable())
                 ? sandboxedCheck(command, options, plan)

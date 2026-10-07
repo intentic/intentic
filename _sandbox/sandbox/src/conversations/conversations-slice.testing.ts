@@ -39,7 +39,7 @@ const absentWorktrees = () =>
             cwd: `${HISTORY_ROOT}/worktrees/${id}`,
             branch: `agent/${id}`,
             repos: [{ repo: "root", base: "a".repeat(40) }],
-            fenced: false,
+            fence: undefined,
             elsewhere: [],
         }),
         remove: async () => {},

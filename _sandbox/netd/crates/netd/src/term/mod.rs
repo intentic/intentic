@@ -9,7 +9,7 @@ mod screen;
 
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -126,9 +126,35 @@ pub fn size_of(query: &str) -> (u16, u16) {
     size
 }
 
+// A socket's revocation, latched: a look after it still sees it, and every waiter is woken, its reader and its pump.
+#[derive(Default)]
+struct Revocation {
+    revoked: AtomicBool,
+    woken: Notify,
+}
+
+impl Revocation {
+    fn revoke(&self) {
+        self.revoked.store(true, Ordering::SeqCst);
+        self.woken.notify_waiters();
+    }
+
+    fn revoked(&self) -> bool {
+        self.revoked.load(Ordering::SeqCst)
+    }
+
+    // A `Notified` counts toward `notify_waiters` from its creation, so one made before the look misses nothing.
+    async fn wait(&self) {
+        let woken = self.woken.notified();
+        if !self.revoked() {
+            woken.await;
+        }
+    }
+}
+
 struct Open {
     member: Option<String>,
-    revoked: Arc<Notify>,
+    revocation: Arc<Revocation>,
 }
 
 /// Every open terminal socket, by the member whose ticket opened it.
@@ -142,7 +168,7 @@ pub struct Terminals {
 struct Seat {
     terminals: Arc<Terminals>,
     id: u64,
-    revoked: Arc<Notify>,
+    revocation: Arc<Revocation>,
 }
 
 impl Drop for Seat {
@@ -168,7 +194,7 @@ impl Terminals {
     pub fn revoke(&self, member: Option<&str>) {
         for open in self.open.lock().expect("terminals poisoned").values() {
             if open.member.is_some() && (member.is_none() || open.member.as_deref() == member) {
-                open.revoked.notify_one();
+                open.revocation.revoke();
             }
         }
     }
@@ -179,18 +205,18 @@ impl Terminals {
             return None;
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let revoked = Arc::new(Notify::new());
+        let revocation = Arc::new(Revocation::default());
         open.insert(
             id,
             Open {
                 member,
-                revoked: revoked.clone(),
+                revocation: revocation.clone(),
             },
         );
         Some(Seat {
             terminals: self.clone(),
             id,
-            revoked,
+            revocation,
         })
     }
 
@@ -316,70 +342,86 @@ async fn pump<T, E>(
     let (mut sink, stream) = socket.split();
     let (replies, mut answering) = mpsc::unbounded_channel();
     let heard = Heard::now();
-    let reader = tokio::spawn(read(stream, controls, replies, heard.clone()));
+    let revocation = &seat.revocation;
+    let reader = tokio::spawn(read(
+        stream,
+        controls,
+        replies,
+        heard.clone(),
+        revocation.clone(),
+    ));
     let mut listening =
         tokio::time::interval_at(tokio::time::Instant::now() + LISTEN_EVERY, LISTEN_EVERY);
-    loop {
-        match outbox.take(FRAME_MAX) {
-            Taken::Grid(cols, rows) => {
-                if sink
-                    .send(text(&TerminalServerMessage::Grid { cols, rows }))
-                    .await
-                    .is_err()
-                {
+    // Endless output never reaches the select at the bottom, so the revocation is looked at on every frame.
+    let serving = async {
+        while !revocation.revoked() {
+            match outbox.take(FRAME_MAX) {
+                Taken::Grid(cols, rows) => {
+                    if sink
+                        .send(text(&TerminalServerMessage::Grid { cols, rows }))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                    continue;
+                }
+                Taken::Bytes(bytes) => {
+                    if sink.send(Message::Binary(bytes)).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                Taken::Ended(code, reason) => {
+                    let _ = sink.feed(exit(code, reason)).await;
+                    let _ = sink.feed(Message::Close(None)).await;
                     break;
                 }
-                continue;
-            }
-            Taken::Bytes(bytes) => {
-                if sink.send(Message::Binary(bytes)).await.is_err() {
-                    break;
+                Taken::Resync => {
+                    if sink.flush().await.is_err() {
+                        break;
+                    }
+                    resync();
+                    continue;
                 }
-                continue;
+                Taken::Nothing => {}
             }
-            Taken::Ended(code, reason) => {
-                let _ = sink.feed(exit(code, reason)).await;
-                let _ = sink.feed(Message::Close(None)).await;
-                break;
-            }
-            Taken::Resync => {
-                if sink.flush().await.is_err() {
-                    break;
+            tokio::select! {
+                () = outbox.changed() => {}
+                reply = answering.recv() => {
+                    let Some(reply) = reply else {
+                        break;
+                    };
+                    if sink.send(reply).await.is_err() {
+                        break;
+                    }
                 }
-                resync();
-                continue;
-            }
-            Taken::Nothing => {}
-        }
-        tokio::select! {
-            () = outbox.changed() => {}
-            reply = answering.recv() => {
-                let Some(reply) = reply else {
-                    break;
-                };
-                if sink.send(reply).await.is_err() {
-                    break;
+                _ = listening.tick() => {
+                    let silent = heard.silent();
+                    if silent >= SILENT {
+                        break;
+                    }
+                    if silent >= QUIET && sink.send(Message::Ping(Bytes::new())).await.is_err() {
+                        break;
+                    }
                 }
-            }
-            _ = listening.tick() => {
-                let silent = heard.silent();
-                if silent >= SILENT {
-                    break;
-                }
-                if silent >= QUIET && sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                    break;
-                }
-            }
-            () = seat.revoked.notified() => {
-                let _ = sink.feed(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Policy,
-                    reason: Utf8Bytes::from_static("authorization revoked"),
-                }))).await;
-                break;
             }
         }
+    };
+    // A send to a client that does not read blocks wherever the loop is: the revocation drops it there.
+    tokio::select! {
+        biased;
+        () = revocation.wait() => {}
+        () = serving => {}
     }
     reader.abort();
+    if revocation.revoked() {
+        let revoked = Message::Close(Some(CloseFrame {
+            code: CloseCode::Policy,
+            reason: Utf8Bytes::from_static("authorization revoked"),
+        }));
+        let _ = tokio::time::timeout(CLOSE_PATIENCE, sink.feed(revoked)).await;
+    }
     let _ = tokio::time::timeout(CLOSE_PATIENCE, sink.close()).await;
 }
 
@@ -410,16 +452,30 @@ impl Heard {
     }
 }
 
-// Ends when the browser closes or goes silent, and its end ends the pump: it drops the only sender of `replies`.
+// Ends when the browser closes or goes silent, and its end ends the pump: it drops the only sender of `replies`. A
+// revocation ends it too, and nothing read after one reaches the pane.
 async fn read<R, E>(
     mut stream: R,
     controls: Option<Controls>,
     replies: mpsc::UnboundedSender<Message>,
     heard: Heard,
+    revocation: Arc<Revocation>,
 ) where
     R: Stream<Item = Result<Message, E>> + Unpin,
 {
-    while let Some(Ok(message)) = stream.next().await {
+    loop {
+        let message = tokio::select! {
+            biased;
+            () = revocation.wait() => return,
+            message = stream.next() => message,
+        };
+        let Some(Ok(message)) = message else {
+            return;
+        };
+        // Read as the revocation landed: dropped with everything after it.
+        if revocation.revoked() {
+            return;
+        }
         heard.hear();
         let payload = match message {
             Message::Text(payload) => payload,
@@ -485,7 +541,209 @@ async fn follow(path: String, outbox: Arc<Outbox>) {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
+    use tokio::io::DuplexStream;
+    use tokio::task::JoinHandle;
+    use tokio::time::timeout;
+
     use super::*;
+
+    const PATIENCE: Duration = Duration::from_secs(10);
+
+    const GONE: &str = "gone@example.com";
+
+    fn said(message: &TerminalClientMessage) -> Message {
+        Message::text(serde_json::to_string(message).unwrap())
+    }
+
+    fn typed(data: &str) -> Message {
+        said(&TerminalClientMessage::Input { data: data.into() })
+    }
+
+    // netd's half and the browser's, over memory; a browser that does not read fills it at 64 KiB.
+    async fn sockets() -> (WebSocketStream<DuplexStream>, WebSocketStream<DuplexStream>) {
+        let (ours, theirs) = tokio::io::duplex(64 * 1024);
+        (
+            WebSocketStream::from_raw_socket(ours, Role::Server, None).await,
+            WebSocketStream::from_raw_socket(theirs, Role::Client, None).await,
+        )
+    }
+
+    // `yes`: an outbox that never runs dry.
+    fn endless() -> (Arc<Outbox>, JoinHandle<()>) {
+        let outbox = Arc::new(Outbox::live());
+        let filling = outbox.clone();
+        let producing = tokio::spawn(async move {
+            loop {
+                filling.push(&[b'y'; 4096]).await;
+            }
+        });
+        (outbox, producing)
+    }
+
+    fn pumping(
+        socket: WebSocketStream<DuplexStream>,
+        outbox: Arc<Outbox>,
+        controls: Option<Controls>,
+        seat: Seat,
+    ) -> JoinHandle<()> {
+        tokio::spawn(async move { pump(socket, &outbox, controls, &seat, || {}).await })
+    }
+
+    // The browser's frames, as the socket's stream; `landing` runs as each is handed over.
+    fn frames(
+        mut landing: impl FnMut() + Send + Unpin + 'static,
+    ) -> (
+        mpsc::UnboundedSender<Result<Message, Infallible>>,
+        impl Stream<Item = Result<Message, Infallible>> + Unpin + Send + 'static,
+    ) {
+        let (sending, mut sent) = mpsc::unbounded_channel();
+        let stream = futures_util::stream::poll_fn(move |cx| {
+            let frame = sent.poll_recv(cx);
+            if frame.is_ready() {
+                landing();
+            }
+            frame
+        });
+        (sending, stream)
+    }
+
+    #[tokio::test]
+    async fn a_revocation_wakes_every_waiter_and_is_seen_by_a_look_after_it() {
+        let revocation = Arc::new(Revocation::default());
+        let waiters: Vec<_> = (0..2)
+            .map(|_| {
+                let revocation = revocation.clone();
+                tokio::spawn(async move { revocation.wait().await })
+            })
+            .collect();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(waiters.iter().all(|waiter| !waiter.is_finished()));
+        revocation.revoke();
+        for waiter in waiters {
+            timeout(PATIENCE, waiter).await.unwrap().unwrap();
+        }
+        // `notify_waiters` keeps no permit: the latch is what a late look sees.
+        assert!(revocation.revoked());
+        timeout(PATIENCE, revocation.wait()).await.unwrap();
+    }
+
+    #[test]
+    fn a_members_revocation_closes_only_theirs_and_none_closes_the_owners() {
+        let terminals = Terminals::new(Hubs::new(Tmux::default()));
+        let gone = terminals.seat(Some(GONE.into())).unwrap();
+        let kept = terminals.seat(Some("kept@example.com".into())).unwrap();
+        let owner = terminals.seat(None).unwrap();
+        let revoked = || [&gone, &kept, &owner].map(|seat| seat.revocation.revoked());
+        terminals.revoke(Some(GONE));
+        assert_eq!(revoked(), [true, false, false]);
+        terminals.revoke(None);
+        assert_eq!(revoked(), [true, true, false]);
+    }
+
+    #[tokio::test]
+    async fn the_reader_forwards_nothing_sent_after_a_revocation_and_ends_by_itself() {
+        let revocation = Arc::new(Revocation::default());
+        let (controls, mut forwarded) = Controls::unhubbed();
+        let (browser, stream) = frames(|| {});
+        let (replies, _answering) = mpsc::unbounded_channel();
+        let reading = tokio::spawn(read(
+            stream,
+            Some(controls),
+            replies,
+            Heard::now(),
+            revocation.clone(),
+        ));
+        browser.send(Ok(typed("before"))).unwrap();
+        let first = timeout(PATIENCE, forwarded.next()).await.unwrap();
+        assert_eq!(first.as_deref(), Some("input before"));
+        revocation.revoke();
+        browser.send(Ok(typed("after"))).unwrap();
+        browser
+            .send(Ok(said(&TerminalClientMessage::Resize {
+                cols: 100,
+                rows: 30,
+            })))
+            .unwrap();
+        // Nothing aborts it here.
+        timeout(PATIENCE, reading).await.unwrap().unwrap();
+        assert_eq!(forwarded.next().await, None);
+    }
+
+    #[tokio::test]
+    async fn a_frame_read_as_the_revocation_lands_is_not_forwarded() {
+        let revocation = Arc::new(Revocation::default());
+        let (controls, mut forwarded) = Controls::unhubbed();
+        let revoking = revocation.clone();
+        let mut handed = 0;
+        let (browser, stream) = frames(move || {
+            handed += 1;
+            if handed == 2 {
+                revoking.revoke();
+            }
+        });
+        for data in ["before", "during", "after"] {
+            browser.send(Ok(typed(data))).unwrap();
+        }
+        let (replies, _answering) = mpsc::unbounded_channel();
+        let reading = tokio::spawn(read(
+            stream,
+            Some(controls),
+            replies,
+            Heard::now(),
+            revocation,
+        ));
+        timeout(PATIENCE, reading).await.unwrap().unwrap();
+        assert_eq!(forwarded.rest(), ["input before"]);
+    }
+
+    #[tokio::test]
+    async fn a_revocation_ends_a_pump_stuck_sending_endless_output_to_a_browser_that_never_reads() {
+        let (ours, mut theirs) = sockets().await;
+        let (outbox, producing) = endless();
+        let terminals = Terminals::new(Hubs::new(Tmux::default()));
+        let seat = terminals.seat(Some(GONE.into())).unwrap();
+        let (controls, mut forwarded) = Controls::unhubbed();
+        let pump = pumping(ours, outbox, Some(controls), seat);
+        theirs.send(typed("before")).await.unwrap();
+        let first = timeout(PATIENCE, forwarded.next()).await.unwrap();
+        assert_eq!(first.as_deref(), Some("input before"));
+        terminals.revoke(Some(GONE));
+        theirs.send(typed("after")).await.unwrap();
+        // Bounded by the close's own patience alone: the send it was stuck in is dropped, not waited out.
+        timeout(CLOSE_PATIENCE * 3, pump).await.unwrap().unwrap();
+        assert_eq!(forwarded.next().await, None);
+        producing.abort();
+    }
+
+    #[tokio::test]
+    async fn a_revocation_ends_endless_output_with_the_policy_close() {
+        let (ours, mut theirs) = sockets().await;
+        let (outbox, producing) = endless();
+        let terminals = Terminals::new(Hubs::new(Tmux::default()));
+        let seat = terminals.seat(Some(GONE.into())).unwrap();
+        let pump = pumping(ours, outbox, None, seat);
+        let flowing = timeout(PATIENCE, theirs.next()).await.unwrap();
+        assert!(matches!(flowing, Some(Ok(Message::Binary(_)))));
+        terminals.revoke(Some(GONE));
+        let closed = timeout(PATIENCE, async {
+            while let Some(Ok(message)) = theirs.next().await {
+                if let Message::Close(frame) = message {
+                    return frame.map(|frame| (frame.code, frame.reason.to_string()));
+                }
+            }
+            None
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            closed,
+            Some((CloseCode::Policy, "authorization revoked".into()))
+        );
+        timeout(PATIENCE, pump).await.unwrap().unwrap();
+        producing.abort();
+    }
 
     #[test]
     fn the_routes_the_netd_serves_are_the_ones_the_contract_marks_netd() {

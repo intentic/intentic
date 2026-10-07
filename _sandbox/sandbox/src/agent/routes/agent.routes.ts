@@ -144,14 +144,13 @@ export const createAgentRoutes = (services: Services) => {
                 () => new ORPCError("TIMEOUT", { message: "fell behind the run; attach again for its rows as they stand" }),
                 signal,
             );
-            // Registered like /events: a member removed, re-graded or re-fenced stops reading the run now, not at their
-            // next attach.
+            // Registered like /events: a member removed, re-graded or re-fenced, or a control token revoked, stops
+            // reading the run now, not at their next attach.
+            const holder = context.identity ?? context.principal;
             const unregister =
-                context.identity === undefined
+                holder === undefined
                     ? undefined
-                    : services.auth?.connections.register(context.identity, () =>
-                          cut(new ORPCError("FORBIDDEN", { message: "authorization revoked" })),
-                      );
+                    : services.auth?.connections.register(holder, () => cut(new ORPCError("FORBIDDEN", { message: "authorization revoked" })));
             try {
                 yield head;
                 for await (const entry of entries) {

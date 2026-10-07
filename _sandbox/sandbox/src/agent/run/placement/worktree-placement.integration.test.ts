@@ -38,7 +38,7 @@ const begun = async (id: string, change: { readonly runner?: string } = {}, extr
         cwd: made.worktree,
         branch: `agent/${id}`,
         repos: [{ repo: "root", base }],
-        fenced: false,
+        fence: undefined,
         elsewhere: [],
     };
     return { ...made, deps, writes: recorded.writes, lines, base, composed };
@@ -136,8 +136,8 @@ test("a pinned workflow step runs on its run's snapshot, and is never rebased on
 
     expect(bases).toStrictEqual([snapshot]);
     expect(frames[0]).toStrictEqual({ kind: "worktree", branch: "agent/pinned", base: base.slice(0, 7), unenforced: true });
-    expect(runs.map(({ id, cwd, fenced, synced }) => ({ id, cwd, fenced, synced }))).toStrictEqual([
-        { id: "pinned", cwd: composed.cwd, fenced: false, synced: [] },
+    expect(runs.map(({ id, cwd, fence, synced }) => ({ id, cwd, fence, synced }))).toStrictEqual([
+        { id: "pinned", cwd: composed.cwd, fence: undefined, synced: [] },
     ]);
     expect(await runs[0]?.resync()).toBeUndefined();
     expect(writes.spans.filter(({ name }) => name === "agent.sync")).toStrictEqual([]);

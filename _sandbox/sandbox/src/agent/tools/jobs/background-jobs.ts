@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { open } from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentJob, profileOf, type TurnProfile, TurnProfileSchema } from "@intentic/sandbox-contract";
@@ -12,6 +11,7 @@ import { publishRuntimeChange } from "../../../seams/runtime-feed.js";
 import { endSession } from "../../../seams/session-processes.js";
 import { opt } from "../../../opt.js";
 import { followRun, inputWaitAt } from "./input-wait-follow.js";
+import { appendRunFile, readRunFile, renameRunFile, writeRunFile } from "./run-files.js";
 import { jobRunnerPids } from "./job-processes.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
@@ -177,10 +177,10 @@ const STOPPED_STATUS = "143";
 const endInPlace = (job: BackgroundJob, status: string, output?: string): void => {
     try {
         if (output !== undefined) {
-            writeFileSync(jobOutputPath(job), output);
+            writeRunFile(job.dir, OUTPUT_FILE, output);
         }
-        writeFileSync(`${jobStatusPath(job)}.part`, `${status}\n`);
-        renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
+        writeRunFile(job.dir, `${STATUS_FILE}.part`, `${status}\n`);
+        renameRunFile(job.dir, `${STATUS_FILE}.part`, STATUS_FILE);
     } catch {
         // A dir that cannot be written is one the tmp sweep already took.
     }
@@ -211,9 +211,10 @@ const endOf = (record: JobRecord): AgentJob => {
     // What it was waiting on, or left running for, is over once it ends; who stopped it is what stays worth saying.
     const { watch: _watch, handed: _handed, inputWait: _inputWait, ...card } = cardOf(record);
     try {
-        const code = Number(readFileSync(jobStatusPath(job), "utf8").trim());
+        const status = readRunFile(job.dir, STATUS_FILE);
+        const code = Number(status.text.trim());
         // Clamped to the start: a filesystem clock coarser than Date.now() can date a quick exit before it began.
-        const endedAt = Math.max(job.startedAt, Math.round(statSync(jobStatusPath(job)).mtimeMs));
+        const endedAt = Math.max(job.startedAt, Math.round(status.mtimeMs));
         return { ...card, endedAt, ...(Number.isInteger(code) ? { exitCode: code } : {}) };
     } catch {
         return { ...card, endedAt: Date.now() };
@@ -313,10 +314,11 @@ const forgetJob = (actors: Actors, record: JobRecord): void => {
 // Sibling temp plus rename, so a reader after a crash finds one whole version or the other.
 const persist = (record: JobRecord): void => {
     const { dir: _dir, profile, ...job } = record.job;
-    const file = join(record.job.dir, JOB_FILE);
+    const { dir } = record.job;
     try {
-        writeFileSync(
-            `${file}.tmp`,
+        writeRunFile(
+            dir,
+            `${JOB_FILE}.tmp`,
             JSON.stringify({
                 ...job,
                 turn: profile,
@@ -328,9 +330,8 @@ const persist = (record: JobRecord): void => {
                 // JSON drops an undefined field, so an ordinary job's file stays as it was.
                 overran: record.overran ? true : undefined,
             }),
-            { mode: 0o600 },
         );
-        renameSync(`${file}.tmp`, file);
+        renameRunFile(dir, `${JOB_FILE}.tmp`, JOB_FILE);
     } catch {
         // Only a restart under the job would miss what this write carried.
     }
@@ -424,7 +425,7 @@ const UNJUDGED = {
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
 const recordOf = (dir: string): JobRecord | undefined => {
     try {
-        const parsed = JobFileSchema.safeParse(JSON.parse(readFileSync(join(dir, JOB_FILE), "utf8")));
+        const parsed = JobFileSchema.safeParse(JSON.parse(readRunFile(dir, JOB_FILE).text));
         if (!parsed.success) {
             return undefined;
         }
@@ -469,12 +470,13 @@ export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"
     for (const dir of lost) {
         const started = existsSync(join(dir, COMMAND_FILE)) || existsSync(join(dir, OUTPUT_FILE));
         try {
-            appendFileSync(
-                join(dir, OUTPUT_FILE),
+            appendRunFile(
+                dir,
+                OUTPUT_FILE,
                 started ? "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n" : "--- intentic: this command never reached a terminal, so it never ran\n",
             );
-            writeFileSync(join(dir, `${STATUS_FILE}.part`), `${started ? LOST : NEVER_RAN}\n`);
-            renameSync(join(dir, `${STATUS_FILE}.part`), join(dir, STATUS_FILE));
+            writeRunFile(dir, `${STATUS_FILE}.part`, `${started ? LOST : NEVER_RAN}\n`);
+            renameRunFile(dir, `${STATUS_FILE}.part`, STATUS_FILE);
         } catch {
             // allow(silent-catch): a dir that cannot be written is one the tmp sweep is already taking; its watch reads that as broken.
         }
@@ -782,18 +784,10 @@ export const jobShellId = (actors: Holders, job: BackgroundJob): string | undefi
 export const jobHandle = (actors: Holders, job: BackgroundJob): string => actors.holdings(JOBS).get(job.id)?.shellId ?? job.id;
 
 // Empty when the file cannot be read.
-const tailOf = async (path: string, bytes: number): Promise<string> => {
+// Through run-files.ts, never a link: what this returns is handed to the agent as its job's output.
+const tailOf = async (job: BackgroundJob, name: string, bytes: number): Promise<string> => {
     try {
-        const handle = await open(path, "r");
-        try {
-            const { size } = await handle.stat();
-            const length = Math.min(size, bytes);
-            const buffer = Buffer.alloc(length);
-            await handle.read(buffer, 0, length, size - length);
-            return buffer.toString("utf8");
-        } finally {
-            await handle.close();
-        }
+        return readRunFile(job.dir, name, bytes).text;
     } catch {
         return "";
     }
@@ -826,7 +820,7 @@ const quietSince = (job: BackgroundJob, now: number): number | undefined => {
 
 export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now()): Promise<JobReport> => {
     const finished = jobFinished(job);
-    const status = finished ? (await tailOf(jobStatusPath(job), 64)).trim() : "";
+    const status = finished ? (await tailOf(job, STATUS_FILE, 64)).trim() : "";
     const code = status === "" ? Number.NaN : Number(status);
     const quiet = finished ? undefined : quietSince(job, now);
     const waiting = finished ? undefined : inputWaitAt(job.dir);
@@ -835,7 +829,7 @@ export const jobReport = async (actors: Holders, job: BackgroundJob, now: number
         command: jobCommandLine(job.command),
         exitCode: Number.isInteger(code) ? code : undefined,
         running: !finished,
-        outputTail: await tailOf(jobOutputPath(job), OUTPUT_TAIL_BYTES),
+        outputTail: await tailOf(job, OUTPUT_FILE, OUTPUT_TAIL_BYTES),
         outputFile: jobOutputPath(job),
         ...opt("quietForSeconds", quiet),
         ...opt(

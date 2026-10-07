@@ -211,7 +211,7 @@ test("a conversation's socket offers no git account key, signs through the card'
     await sockets.start();
     try {
         const socket = await sockets.forConversation("conv-1");
-        expect(socket).toBeDefined();
+        expect(socket).toEqual(expect.any(String));
         const path = socket ?? "";
         expect(path.startsWith(sockets.owner.replace("owner.sock", "c-conv-1."))).toBe(true);
         // The account key is the owner's: a turn's git goes through the credential gateway, where its rules apply.
@@ -235,6 +235,45 @@ test("a gate that does not release the card refuses the signature, and nothing i
         const socket = (await sockets.forConversation("conv-2")) ?? "";
         expect(await signsThrough(socket, publicFile(scratch, "box", ed25519), scratch)).toBe(false);
         expect(uses).toEqual([]);
+    } finally {
+        await sockets.stop();
+    }
+});
+
+// The same key under two machine cards: a signature asked for under the open one is just as good against the gated
+// one's host, so the gated card's gate decides too, whichever entry comes first.
+test("a key held under several cards signs only past every one of their gates, and is offered once", async () => {
+    const shared = generateSshKey("shared").privateKey;
+    const open = held("open-box", shared);
+    const gated = held("gated-box", shared);
+    const { sockets, checks, uses } = harness([open, gated], (check) =>
+        check.subject === "gated-box" ? { allow: false, reason: "needs a named approver" } : { allow: true },
+    );
+    await sockets.start();
+    try {
+        const socket = (await sockets.forConversation("conv-twin")) ?? "";
+        expect(await listed(socket)).toHaveLength(1);
+        expect(await signsThrough(socket, publicFile(scratch, "open-box", open), scratch)).toBe(false);
+        expect(checks.map((check) => check.subject)).toEqual(["open-box", "gated-box"]);
+        expect(uses).toEqual([]);
+    } finally {
+        await sockets.stop();
+    }
+});
+
+// A machine's key that is also a git account's is the owner's alone, as the account's key is.
+test("a key a git account also holds is not offered to a conversation under the machine's card", async () => {
+    const shared = generateSshKey("both").privateKey;
+    const machine = held("both-box", shared);
+    const gitAccount = held("github.com", shared, { card: "github" });
+    const { sockets } = harness([machine, gitAccount]);
+    await sockets.start();
+    try {
+        const socket = (await sockets.forConversation("conv-both")) ?? "";
+        // `ssh-add -L` exits 1 on an agent with no identities to list.
+        expect(await listed(socket).catch(() => [])).toEqual([]);
+        expect(await signsThrough(socket, publicFile(scratch, "both-box", machine), scratch)).toBe(false);
+        expect(await signsThrough(sockets.owner, publicFile(scratch, "both-box", machine), scratch)).toBe(true);
     } finally {
         await sockets.stop();
     }

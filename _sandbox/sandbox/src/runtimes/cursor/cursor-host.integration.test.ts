@@ -135,7 +135,7 @@ test.skipIf(!namespace.runs)(namespace.title("an anchored Cursor turn's SDK runs
     await mkdir(worktree, { recursive: true });
     await writeFile(join(root, "marker"), "the owner's checkout");
     await writeFile(join(worktree, "marker"), "the conversation's worktree");
-    const plan = await createTurnIsolation({ root, historyRoot: history, logger }).planFor(worktree, false);
+    const plan = await createTurnIsolation({ root, historyRoot: history, logger }).planFor(worktree, undefined);
     const anchor = await startAnchor(plan);
     try {
         // The anchor's own cwd, the root as the namespace names it, is what stream-agent.ts makes the request's cwd.

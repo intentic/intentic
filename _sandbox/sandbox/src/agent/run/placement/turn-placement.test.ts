@@ -305,7 +305,7 @@ const worktree = (repos: ConversationWorktree["repos"]): ConversationWorktree =>
     cwd: "/w",
     branch: "agent/c",
     repos,
-    fenced: false,
+    fence: undefined,
     elsewhere: [],
 });
 const moved = (repo: string, commits: number): RepoSync => ({ repo, onto: "f".repeat(40), commits, moved: [], overlap: [] });

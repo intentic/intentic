@@ -100,3 +100,24 @@ test("marking everything read, for a guest, marks only its own", async () => {
     const { agents } = await client.agents.seenAll();
     expect(agents.map((agent) => agent.id)).toEqual(["d1"]);
 });
+
+// Every route that names a conversation by id applies the same visibility as `get`, whatever its role floor: a
+// maintainer fenced to one area may land and read work inside it, and nothing about the owner's wider conversation.
+test("a fenced maintainer cannot read, search into or press on work born outside their fence", async () => {
+    const { client, actAs } = await seeded();
+    actAs(`fay@example.com`, `maintainer`, [`support`]);
+    expect(await client.agents.search({ query: "owner's work" })).toMatchObject({ matches: [], scanned: 0 });
+    expect(await errorCode(client.agents.toolChildren({ id: "owners", toolId: "t1" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.diff({ id: "owners" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.history({ id: "owners" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.fileDiff({ id: "owners", repo: "root", path: "a.txt" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.place({ id: "owners", text: "said for them" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.land({ id: "owners" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.agents.discard({ id: "owners" }))).toBe("FORBIDDEN");
+
+    // The owner archives it; the archive is then partly outside the fenced maintainer's sight, so it is not theirs to empty.
+    actAs(`ada@example.com`, `owner`);
+    await client.agents.archive({ ids: ["owners"] });
+    actAs(`fay@example.com`, `maintainer`, [`support`]);
+    expect(await errorCode(client.agents.purge())).toBe("FORBIDDEN");
+});

@@ -48,9 +48,30 @@ const sandbox = async () => {
         });
     const minted = await as("tok-max", "POST", "/system/control/tokens", { label: "max's CI", scope: "land" });
     expect(minted.status).toBe(200);
-    const { token } = (await minted.json()) as { token: string };
+    // SAFETY: a 200 from the mint route is always the store's { id, token }, checked just above.
+    const { id, token } = (await minted.json()) as { id: string; token: string };
     const withToken = async (): Promise<number> => (await app.request("/agents", { headers: { "x-intentic-control": token } })).status;
-    return { as, withToken };
+    return { app, as, id, token, withToken };
+};
+
+// True once the stream has ended; false while it is still open, when `done` accepts what arrived or the time runs out.
+const readUntil = async (reader: ReadableStreamDefaultReader<Uint8Array>, done: (text: string) => boolean, ms: number): Promise<boolean> => {
+    const decoder = new TextDecoder();
+    let text = "";
+    const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), ms));
+    for (;;) {
+        const next = await Promise.race([reader.read(), timeout]);
+        if (next === "timeout") {
+            return false;
+        }
+        if (next.done) {
+            return true;
+        }
+        text += decoder.decode(next.value, { stream: true });
+        if (done(text)) {
+            return false;
+        }
+    }
 };
 
 test("a maintainer's control token stops working once the owner removes them", async () => {
@@ -67,4 +88,19 @@ test("a maintainer's control token stops working once they are re-graded below m
     const { as, withToken } = await sandbox();
     expect((await as("tok-owner", "POST", "/members", { email: MAINTAINER, role: "collaborator" })).status).toBe(200);
     expect(await withToken()).toBe(401);
+});
+
+test("revoking a control token cuts the event stream it holds open, not only its next request", async () => {
+    const { app, as, id, token } = await sandbox();
+    const stream = await app.request("/events", { headers: { "x-intentic-control": token } });
+    expect(stream.status).toBe(200);
+    const reader = stream.body!.getReader();
+    // Every frame after hello comes from the loop, which starts only once the stream is registered.
+    expect(await readUntil(reader, (text) => text.split("data:").length > 2, 5_000)).toBe(false);
+
+    expect((await as("tok-owner", "DELETE", `/system/control/tokens/${id}`)).status).toBe(200);
+
+    // Ends well inside a heartbeat or two; a stream nobody cut would beat every 2s for as long as the test waited.
+    expect(await readUntil(reader, () => false, 5_000)).toBe(true);
+    expect((await app.request("/events", { headers: { "x-intentic-control": token } })).status).toBe(401);
 });

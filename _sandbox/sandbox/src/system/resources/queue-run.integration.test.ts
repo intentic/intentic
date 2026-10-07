@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -79,6 +79,24 @@ test("runs the command, passing through its output and its real exit code", asyn
     const run = await queueRun(await dir(), ["--pool", "p", "--limit", "2"], "echo hello; exit 7");
     expect(run.stdout.trim()).toBe("hello");
     expect(run.code).toBe(7);
+});
+
+// The queue directory is shared with fenced turns, whose user owns what root owns there: a slot planted as a link
+// must not make root's open truncate what it names, and a pool planted as a link is no pool at all.
+test("a slot or a pool planted as a link is never opened through, and the command still runs", async () => {
+    const queue = await dir();
+    const victim = join(queue, "victim.txt");
+    await writeFile(victim, "precious\n");
+    await mkdir(join(queue, "p"), { recursive: true });
+    await symlink(victim, join(queue, "p", "slot.1"));
+    const run = await queueRun(queue, ["--pool", "p", "--limit", "2"], "echo ran");
+    expect(run.stdout.trim()).toBe("ran");
+    expect(await readFile(victim, "utf8")).toBe("precious\n");
+
+    const elsewhere = await dir();
+    await symlink(elsewhere, join(queue, "q"));
+    expect((await queueRun(queue, ["--pool", "q", "--limit", "1"], "echo ran")).stdout.trim()).toBe("ran");
+    expect(await readdir(elsewhere)).toEqual([]);
 });
 
 test("holds the pool to its limit, and every queued command still runs", async () => {

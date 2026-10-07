@@ -132,7 +132,15 @@ const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess):
     });
 
 const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
-    isolation === undefined ? {} : { placement: { worktree: isolation.plan.worktree, fenced: isolation.plan.fence !== undefined } };
+    isolation === undefined
+        ? {}
+        : {
+              placement: {
+                  worktree: isolation.plan.worktree,
+                  fenced: isolation.plan.fence !== undefined,
+                  ...(isolation.plan.fence === undefined ? {} : { fence: isolation.plan.fence.folders }),
+              },
+          };
 
 // The condition watch: the agent names an outside check command the daemon polls, waking the conversation when it exits
 // 0; a replacement for hand-rolled sleep loops, which can't fire once the turn's process is gone.

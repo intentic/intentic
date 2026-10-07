@@ -9,7 +9,7 @@ export interface RulePromptDeps extends CardDeps {
     readonly deadlineMs?: number;
 }
 
-const passKey = (conversationId: string, capability: string, rule: number): string => `${conversationId}\u0000${capability}\u0000${String(rule)}`;
+const passKey = (conversationId: string, capability: string, rule: string): string => `${conversationId}\u0000${capability}\u0000${rule}`;
 
 const titleOf = (input: RuleAsk): string => `Let the agent send ${input.method} ${input.target} with ${input.name}?`;
 

@@ -70,8 +70,14 @@ export const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
         if (denied !== undefined) {
             return denied;
         }
-        return unavailableIfUnreadable(c, async () =>
-            (await services.controlTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404),
-        );
+        const id = c.req.param("id");
+        return unavailableIfUnreadable(c, async () => {
+            if (!(await services.controlTokens.revoke(id))) {
+                return c.json({ error: "no such token" }, 404);
+            }
+            // Refusing its next request is not enough: an /events or attach stream it opened would keep reading.
+            services.auth?.connections.revokeControl(id);
+            return c.json({ ok: true });
+        });
     },
 });

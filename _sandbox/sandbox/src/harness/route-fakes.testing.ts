@@ -103,7 +103,7 @@ export const realCheckout = async (
                 return branch === `agent/${id}` ? [] : [{ repo: "root", ...opt("branch", branch === "HEAD" ? undefined : branch) }];
             },
             snapshot: async () => repos,
-            ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos, fenced: false, elsewhere: [] }),
+            ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos, fence: undefined, elsewhere: [] }),
             remove: async () => {},
             retire: async () => {},
             reapRepoCheckout: async () => {},

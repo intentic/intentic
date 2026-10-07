@@ -41,7 +41,7 @@ import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { type WorkspaceFakeOverrides, workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
-import { memoryAreasStore, memoryPersonasStore } from "./route-stores.testing.js";
+import { memoryAreasStore, memoryPersonasStore, memorySshKeyStore } from "./route-stores.testing.js";
 import type { SliceFakeContext } from "./slice-fake.testing.js";
 
 // Composes the daemon's `Services` for route suites driving its HTTP surface: each slice's members from that slice's
@@ -158,6 +158,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         }),
         // Shipped policy: a planned turn snapshots it for the judge, so every route running a turn reads it.
         safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // An empty key store, in memory, as a fresh sandbox holds: every turn asks it (capabilities/turn-env.ts) and,
+        // holding none, binds no agent socket; a git card's hook files its key here. A suite about the agent builds its own.
+        sshKeys: memorySshKeyStore(),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         // Three slice members composed here, each because its module already reaches the slice's subsystem, so the

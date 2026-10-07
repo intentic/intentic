@@ -12,6 +12,7 @@ import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSI
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
 import type { Caller } from "../auth/auth.js";
+import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
 import { desktopState } from "../desktop/agent-desktop.js";
@@ -67,6 +68,7 @@ async function* systemEvents(
     signal: AbortSignal | undefined,
     identity: Caller | undefined,
     clientId: string | undefined,
+    principal?: Principal,
 ): AsyncGenerator<SystemEvent> {
     const controller = new AbortController();
     const abort = controller.signal;
@@ -194,9 +196,11 @@ async function* systemEvents(
             onWake();
         }),
     );
-    // Registered after every step that could throw, right before the loop, so a dead entry can't leak.
-    if (identity !== undefined) {
-        const unregisterAccess = services.auth?.connections.register(identity, () => controller.abort());
+    // Registered after every step that could throw, right before the loop, so a dead entry can't leak. A control token's
+    // stream registers too, so revoking the token cuts it rather than only refusing its next request.
+    const holder = identity ?? principal;
+    if (holder !== undefined) {
+        const unregisterAccess = services.auth?.connections.register(holder, () => controller.abort());
         if (unregisterAccess !== undefined) {
             releases.push(unregisterAccess);
         }
@@ -359,7 +363,7 @@ export const createSystemRoutes = (services: Services) => {
             const { token, expiresAt } = await services.auth.mintSession(context.identity);
             return { token, expiresAt, email: context.identity.email };
         }),
-        events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input.clientId)),
+        events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input.clientId, context.principal)),
         // A tab's self-report, accepted only for its own live connection; identity-less callers update nothing.
         presence: i.presence.handler(({ input, context }) => {
             if (context.identity !== undefined) {

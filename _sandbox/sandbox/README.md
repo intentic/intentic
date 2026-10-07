@@ -66,8 +66,8 @@ flowchart LR
   filesystem holding only the system, its own checkout with every `.git` pointer masked, its own session store and a
   private home. Its processes join through the same `nsenter` helpers as everyone else's
   (`workload/namespace-entry.ts`), and its Bash panes run on a tmux server inside the sandbox. It shares the container's
-  network for now. A fenced turn on a runtime other than Claude Code, or in a container where the sandbox cannot be
-  built, is refused.
+  network for now. A fenced turn on a runtime other than Claude Code, on a runner, or in a container where the sandbox
+  cannot be built, is refused.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
   The panel token that repo operator panels hold reaches no route that returns a stored secret. A listener provider

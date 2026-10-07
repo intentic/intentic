@@ -249,6 +249,16 @@ async function* runConversationTurn(
         yield { kind: "done" };
         return;
     }
+    // A fenced conversation runs only inside the sandbox its fence builds here (isolationOf); a runner is told nothing
+    // of the fence and would run the turn over its whole copy of the workspace. Refused, either half of the latch.
+    if (runner !== undefined && (existing?.identity.areas ?? input.areas) !== undefined) {
+        yield {
+            kind: "error",
+            message: "This conversation is limited to some areas of the workspace, and a runner cannot keep it to them yet. Run it here instead.",
+        };
+        yield { kind: "done" };
+        return;
+    }
     const isolated = isolatedOf(existing, input, runner);
     const begin = services.conversations.send(conversationId, {
         kind: "begin",
@@ -414,18 +424,18 @@ const isolationOf = async (
     worktree: WorktreeRun | undefined,
     localCwd: string,
 ): Promise<TurnPlacement | undefined | { readonly refused: string }> => {
-    if (worktree?.fenced === true) {
+    if (worktree?.fence !== undefined) {
         const refused = await fencedRefusal(services, input);
         if (refused !== undefined) {
             return { refused };
         }
-        const plan = await services.turnIsolation.planFor(localCwd, true);
+        const plan = await services.turnIsolation.planFor(localCwd, worktree.fence);
         return { plan, anchor: await startAnchor(plan) };
     }
     if (worktree === undefined || !entersNamespace(input)) {
         return undefined;
     }
-    const plan = await services.turnIsolation.planFor(localCwd, worktree.fenced);
+    const plan = await services.turnIsolation.planFor(localCwd, undefined);
     if (!(await services.turnIsolation.available())) {
         return { plan };
     }

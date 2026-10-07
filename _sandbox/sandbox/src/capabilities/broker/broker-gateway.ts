@@ -4,7 +4,7 @@ import { credentialRequest } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 import { brokerRoutes, type ExpandedRoute, GATEWAY_PLACEHOLDER } from "./broker-routes.js";
-import { effectiveRules, evaluateRules } from "./broker-rules.js";
+import { effectiveRules, evaluateRules, ruleIdentity } from "./broker-rules.js";
 import type { BrokerSessions } from "./broker-session.js";
 
 // The credential gateway: where a brokered credential is attached to a request, and the only place it ever is. A request
@@ -25,7 +25,9 @@ export interface GatewayCard {
 export interface RuleAsk {
     readonly capability: string;
     readonly name: string;
-    readonly rule: number;
+    // The rule that asked, as its own content (ruleIdentity), so a pass left by "allow in this conversation" follows that
+    // rule and nothing that later takes its place in the list.
+    readonly rule: string;
     readonly why: string | undefined;
     readonly method: string;
     // Host and path, never the query: a query can carry what the agent put there, which a card has no need to show.
@@ -40,7 +42,7 @@ export type GatewayAnswer = { readonly allow: true; readonly approvedBy?: string
 // card itself (broker-prompts.ts).
 export interface RulePrompts {
     readonly canPark: (conversationId: string | undefined) => boolean;
-    readonly passed: (conversationId: string | undefined, capability: string, rule: number) => boolean;
+    readonly passed: (conversationId: string | undefined, capability: string, rule: string) => boolean;
     readonly ask: (input: RuleAsk) => Promise<GatewayAnswer>;
 }
 
@@ -204,9 +206,10 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
             );
         }
         const ruling = evaluateRules(rules, method, rest);
+        const asking = ruling.action === "allow" ? undefined : ruleIdentity(rules[ruling.rule]);
         const verdict = guard(credentialRequest, {
             rule: ruling.action,
-            passed: ruling.action === "ask" && deps.prompts.passed(conversationId, capability, ruling.rule),
+            passed: ruling.action === "ask" && asking !== undefined && deps.prompts.passed(conversationId, capability, asking),
             canPark: deps.prompts.canPark(conversationId),
         });
         let approvedBy: string | undefined;
@@ -221,7 +224,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
             const answer = await deps.prompts.ask({
                 capability,
                 name: card.name,
-                rule: ruling.rule,
+                rule: asking ?? "",
                 why: ruling.why,
                 method,
                 target: where,

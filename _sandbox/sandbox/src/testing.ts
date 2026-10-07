@@ -126,12 +126,12 @@ export const syncHookOutput = (output: HookJSONOutput): SyncHookJSONOutput => {
 export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): TurnIsolation => ({
     available: async () => false,
     sandboxAvailable: async () => false,
-    planFor: async (worktree: string, fenced: boolean): Promise<IsolationPlan> => ({
+    planFor: async (worktree: string, fence: readonly string[] | undefined): Promise<IsolationPlan> => ({
         worktree,
         root,
         mirrors: [],
         overlays: overlaysDir(historyRoot, basename(worktree)),
-        fence: fenced ? { sessions: sessionsDir(historyRoot, basename(worktree)), gitPointers: [] } : undefined,
+        fence: fence === undefined ? undefined : { folders: fence, hidden: [], sessions: sessionsDir(historyRoot, basename(worktree)), gitPointers: [] },
     }),
 });
 

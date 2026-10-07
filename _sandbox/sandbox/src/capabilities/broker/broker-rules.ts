@@ -48,6 +48,14 @@ export const evaluateRules = (rules: readonly BrokerRule[], method: string, path
     return rule.action === "allow" ? { action: "allow", rule: index } : { action: rule.action, rule: index, why: rule.why };
 };
 
+/**
+ * A rule as its own content, which is what a person's "allow requests like this in this conversation" is filed under:
+ * its place in the list would hand the pass to whatever rule an edit or a reorder puts there next. A rule covering
+ * different requests, or explaining itself differently, is a different rule and is asked about afresh.
+ */
+export const ruleIdentity = (rule: BrokerRule | undefined): string | undefined =>
+    rule === undefined ? undefined : JSON.stringify([rule.methods ?? null, rule.paths ?? null, rule.action, rule.why ?? null]);
+
 /** The rules in force for one card: the owner's where written, else the connector's own. */
 export const effectiveRules = (owner: readonly BrokerRule[] | undefined, connector: readonly BrokerRule[] | undefined): readonly BrokerRule[] =>
     owner ?? connector ?? [];

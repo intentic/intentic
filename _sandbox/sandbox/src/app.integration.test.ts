@@ -1243,6 +1243,58 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     expect(await client.agent.stop({ conversationId: "conv1", run })).toEqual({ stopped: false });
 });
 
+// A control token holds no member identity, so it is registered by its id: revoking it ends the attach it holds open.
+test("revoking a control token cuts the run it is attached to, not only its next request", async () => {
+    let started: (() => void) | undefined;
+    let abort: (() => void) | undefined;
+    const running = new Promise<void>((resolve) => (started = resolve));
+    const aborted = new Promise<void>((resolve) => (abort = resolve));
+    const app = createApp(
+        services({
+            auth: {
+                authorize: async () => proven("owner@example.com", "owner"),
+                authorizeOwner: async () => {},
+                connections: createAuthConnections(),
+            },
+            async *agent(request) {
+                request.signal.addEventListener("abort", () => abort?.(), { once: true });
+                started?.();
+                await aborted;
+                yield { kind: "done" };
+            },
+        }),
+    );
+    const owner = clientFor(app, { bearer: "owner" });
+    const run = await startedRun(owner, { prompt: "long task", conversationId: "conv-control-attach", isolated: true });
+    await running;
+    const attached = await app.request("/agent/attach", {
+        method: "POST",
+        headers: { "x-intentic-control": "ict_read-token", "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: "conv-control-attach" }),
+    });
+    expect(attached.status).toBe(200);
+    const reader = attached.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    // The head goes out after the attach registered, so once it arrives the revoke has something to cut.
+    while (!text.includes("data:")) {
+        const next = await reader.read();
+        if (next.done) {
+            break;
+        }
+        text += decoder.decode(next.value, { stream: true });
+    }
+
+    expect((await app.request("/system/control/tokens/ct-read", { method: "DELETE", headers: { authorization: "Bearer owner" } })).status).toBe(200);
+
+    // A stream nobody cut stays open on the held turn, so a regression fails on this test's timeout.
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+        text += decoder.decode(next.value, { stream: true });
+    }
+    expect(text).toContain("authorization revoked");
+    expect(await owner.agent.stop({ conversationId: "conv-control-attach", run })).toEqual({ stopped: true });
+}, 10_000);
+
 test("environment: lower roles read state, maintainers approve/reject, and failures map to statuses", async () => {
     const disk = new Map<string, string>();
     const memoryFiles = fakeFiles({

@@ -332,6 +332,42 @@ describe("the credential gateway", () => {
         }
     });
 
+    // A pass is the rule a person answered, not the slot it sat in: a rule inserted above it in an edit is asked about
+    // afresh, and the answered rule keeps its pass wherever it moved.
+    test("a pass a person gave follows the rule they answered, not its place in the list", async () => {
+        const upstream = await upstreamServer();
+        try {
+            const card: GatewayCard = { name: "Service", config: { token: "t", url: upstream.origin }, broker: { routes: [{ upstream: "${url}" }] } };
+            const deletes: BrokerRule = { methods: ["DELETE"], action: "ask", why: "deletes things" };
+            let owner: BrokerRule[] = [deletes];
+            const passes = new Set<string>();
+            const asked: string[] = [];
+            const { deps } = harness(card, {
+                ownerRules: async () => owner,
+                prompts: {
+                    canPark: () => true,
+                    passed: (_conversation, _capability, rule) => passes.has(rule),
+                    ask: async (input) => {
+                        asked.push(`${input.method} ${input.why ?? ""}`);
+                        passes.add(input.rule);
+                        return { allow: true };
+                    },
+                },
+            });
+            const gateway = createGateway(deps);
+            const base = await addressFor(0, `${upstream.origin}/`);
+            expect((await gateway(new Request(`${base}/x`, { method: "DELETE" }))).status).toBe(200);
+            expect(asked).toEqual(["DELETE deletes things"]);
+
+            owner = [{ methods: ["PUT"], action: "ask", why: "overwrites things" }, deletes];
+            expect((await gateway(new Request(`${base}/x`, { method: "PUT", body: "x" }))).status).toBe(200);
+            expect((await gateway(new Request(`${base}/x`, { method: "DELETE" }))).status).toBe(200);
+            expect(asked).toEqual(["DELETE deletes things", "PUT overwrites things"]);
+        } finally {
+            await upstream.close();
+        }
+    });
+
     test("refuses when the owner's host guard leaves the upstream off, or a named approver declines", async () => {
         const card: GatewayCard = {
             name: "Service",

@@ -1,7 +1,8 @@
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { type InputWait, inputWaitOf, type RunStillness, type RunToSample, sampleRuns, stillnessAfter } from "./input-wait.js";
 import { jobRunnerPids } from "./job-processes.js";
+import { writeRunFile } from "./run-files.js";
 
 // The runs the daemon is watching for an input wait (input-wait.ts says how one is told), by capture dir: every agent
 // command still in its pane (agent-terminals.ts follows a foreground call until it returns) and every background job
@@ -50,7 +51,7 @@ const mark = (dir: string, wait: InputWait | undefined): void => {
         if (wait === undefined) {
             rmSync(join(dir, INPUT_WAIT_FILE), { force: true });
         } else {
-            writeFileSync(join(dir, INPUT_WAIT_FILE), `${wait.program} (pid ${String(wait.pid)})\n`, { mode: 0o600 });
+            writeRunFile(dir, INPUT_WAIT_FILE, `${wait.program} (pid ${String(wait.pid)})\n`);
         }
     } catch {
         // allow(silent-catch): the run's dir is gone with the run, so there is no reader left for the marker.

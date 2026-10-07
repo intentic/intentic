@@ -15,6 +15,7 @@ import {
     ANCHOR_READY,
     createTurnIsolation,
     fromWorktree,
+    hiddenIn,
     inWorktree,
     type IsolationPlan,
     isolationScript,
@@ -99,7 +100,7 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
 
 // A fenced turn runs in a sandbox (turn-sandbox.ts) rather than this script, so the script itself has no fenced
 // branch; what the plan carries for the sandbox is pinned here, where the plan is made.
-test("a fenced conversation's placement names its own session store and every repository pointer in its checkout", async () => {
+test("a fenced conversation's placement names its fence, its own session store, every repository pointer, and what to cover", async () => {
     const worktree = await mkdtemp(join(tmpdir(), "fenced-wt-"));
     tempDirs.push(worktree);
     await writeFile(join(worktree, ".git"), "gitdir: /history/gits/root/worktrees/x\n");
@@ -109,10 +110,28 @@ test("a fenced conversation's placement names its own session store and every re
     // A dependency tree is never walked into: a package there carrying its own `.git` is not the checkout's.
     await mkdir(join(worktree, "node_modules", "pkg"), { recursive: true });
     await writeFile(join(worktree, "node_modules", "pkg", ".git"), "");
-    const placed = await isolation.planFor(worktree, true);
+    const placed = await isolation.planFor(worktree, ["support/docs/"]);
+    expect(placed.fence?.folders).toEqual(["support/docs"]);
     expect(placed.fence?.sessions).toBe(sessionsDir(HISTORY_ROOT, basename(worktree)));
     expect(placed.fence?.gitPointers).toEqual(["", "intent"]);
-    expect((await isolation.planFor(worktree, false)).fence).toBeUndefined();
+    // Neither inside the fence nor on the way to it: covered in the sandbox, whatever put them there.
+    expect(placed.fence?.hidden).toEqual(["intent", "node_modules"]);
+    expect((await isolation.planFor(worktree, undefined)).fence).toBeUndefined();
+});
+
+// A checkout that failed to narrow, or kept untracked work in a folder its area has since dropped, holds more than the
+// fence; the walk finds it by the fence alone, going down only the paths that lead to the fence's folders.
+test("whatever a fenced checkout holds outside its fence is listed for covering, however it got there", async () => {
+    const worktree = await mkdtemp(join(tmpdir(), "fenced-wt-"));
+    tempDirs.push(worktree);
+    for (const dir of ["support/web/src", "support/billing", "finance/q3", ".intentic/config", "refs/sdk", "refs/private"]) {
+        await mkdir(join(worktree, dir), { recursive: true });
+    }
+    await writeFile(join(worktree, "README.md"), "kept by cone mode");
+    await writeFile(join(worktree, "finance", "q3", "numbers.csv"), "left behind");
+    expect(await hiddenIn(worktree, ["support/web", "refs/sdk"])).toEqual([".intentic", "finance", "refs/private", "support/billing"]);
+    // A fence holding the whole workspace covers nothing.
+    expect(await hiddenIn(worktree, [""])).toEqual([]);
 });
 
 test("a fenced checkout gets the main tree's mirrors only where it has the parent directory", async () => {
@@ -125,9 +144,23 @@ test("a fenced checkout gets the main tree's mirrors only where it has the paren
     // The sparse checkout holds `support/web` and not `finance`: finance's build output must not come back as a mirror.
     await mkdir(join(worktree, "support", "web"), { recursive: true });
     const scoped = createTurnIsolation({ root: main, historyRoot: HISTORY_ROOT, logger: unstubbed<Logger>("logger", { warn: () => {} }) });
-    expect((await scoped.planFor(worktree, true)).mirrors).toEqual(["node_modules", "support/web/dist"]);
+    expect((await scoped.planFor(worktree, ["support/web"])).mirrors).toEqual(["node_modules", "support/web/dist"]);
     // Unfenced, every mirror goes in as before: the checkout is whole there.
-    expect((await scoped.planFor(worktree, false)).mirrors).toEqual(["node_modules", "finance/app/dist", "support/web/dist"]);
+    expect((await scoped.planFor(worktree, undefined)).mirrors).toEqual(["node_modules", "finance/app/dist", "support/web/dist"]);
+});
+
+// The checkout keeps `project` on the way down to `project/support`, and `project/dist` is built from every sibling the
+// fence leaves out; its dependencies are what `project/support` resolves through, so those still come in.
+test("a fenced checkout gets build output only inside its fence, and dependencies on the way down to it", async () => {
+    const main = await mkdtemp(join(tmpdir(), "fenced-main-"));
+    const worktree = await mkdtemp(join(tmpdir(), "fenced-wt-"));
+    tempDirs.push(main, worktree);
+    for (const dir of ["dist", "node_modules", "project/dist", "project/node_modules", "project/support/dist", "project/secret/dist"]) {
+        await mkdir(join(main, dir), { recursive: true });
+    }
+    await mkdir(join(worktree, "project", "support"), { recursive: true });
+    const scoped = createTurnIsolation({ root: main, historyRoot: HISTORY_ROOT, logger: unstubbed<Logger>("logger", { warn: () => {} }) });
+    expect((await scoped.planFor(worktree, ["project/support"])).mirrors).toEqual(["node_modules", "project/node_modules", "project/support/dist"]);
 });
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {

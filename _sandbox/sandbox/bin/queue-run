@@ -157,6 +157,10 @@ command -v flock >/dev/null 2>&1 || run "$@"
 
 dir="${INTENTIC_QUEUE_DIR:-${TMPDIR:-/tmp}/intentic-queue}/$pool"
 mkdir -p "$dir" 2>/dev/null || run "$@"
+# THE QUEUE DIRECTORY IS SHARED WITH FENCED TURNS, whose sandbox user owns whatever root owns in it
+# (conversations/worktrees/turn-sandbox.ts), so anything in it may be a link planted to send root's open somewhere
+# else. A pool that is itself a link is no pool: run plainly, as on any other failure.
+[ -L "$dir" ] && run "$@"
 
 # One pass over the pool: the first slot whose lock is free is taken and kept (fd 9 stays open, deliberately
 # un-closed, all the way through the exec below). A slot we cannot even open is skipped rather than fatal.
@@ -167,10 +171,15 @@ mkdir -p "$dir" 2>/dev/null || run "$@"
 # command sat in the queue, and `bash -x` output stopped mid-function, which is how it was found. A failed
 # `exec` redirection returns non-zero without killing a non-interactive bash (verified), so `|| continue` is
 # the whole error path it needs.
+#
+# `>>`, NEVER `>`: the lock needs an open descriptor, not an empty file, and `>` would truncate whatever a slot
+# planted as a link names (see the queue directory note above). A slot that is a link is skipped, not removed: the
+# check and the open are two steps, and appending through a link won in that gap writes nothing.
 acquire() {
     local i
     for ((i = 1; i <= limit; i++)); do
-        exec 9>"$dir/slot.$i" || continue
+        [ -L "$dir/slot.$i" ] && continue
+        exec 9>>"$dir/slot.$i" || continue
         if flock -n 9; then
             slot="$dir/slot.$i"
             return 0
