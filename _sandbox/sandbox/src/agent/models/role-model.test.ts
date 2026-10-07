@@ -1,4 +1,5 @@
 import {
+    type AgentEvent,
     type AgentHarness,
     type AgentProvider,
     type ModelPin,
@@ -22,7 +23,8 @@ const readiness = async (): Promise<Record<NativeProvider, boolean>> => {
     return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, named[provider] === true])) as Record<NativeProvider, boolean>;
 };
 
-// Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
+// Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took. Each stands for the model's
+// answer to one sealed request: its words, or the failure its loop reports as an error frame.
 const oneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
 const geminiOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
 const cursorOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
@@ -32,17 +34,33 @@ const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
     cursor: (ask) => cursorOneShot(ask),
 };
 type Adapter = ReturnType<Services[`adapters`][`for`]>;
-// A runtime with no runner here is one that runs no helper, so its adapter carries no `oneShot` at all.
+// The frames a loop would send for one answer: the words as a delta, or the failure as its error frame.
+async function* framesOf(run: (ask: { model: string }) => Promise<string>, model: string): AsyncGenerator<AgentEvent> {
+    const said = await run({ model }).then(
+        (text) => ({ text }),
+        (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+    );
+    yield "text" in said ? { kind: `delta`, text: said.text } : { kind: `error`, message: said.error };
+    yield { kind: `done` };
+}
+// A runtime with no runner here is one that runs no helper, so its adapter does not declare `sealed` at all.
 const adapterFor = (provider: AgentProvider, harness: AgentHarness): Adapter => {
     const runtime = capabilitiesOf(provider, harness).runtime;
     const run = runners[runtime];
     const unasked = unstubbed<Adapter>(`adapters.${runtime}`, {});
+    if (run === undefined) {
+        return { runtime, preflight: unasked.preflight, health: unasked.health, holdsSession: unasked.holdsSession };
+    }
     return {
         runtime,
-        preflight: unasked.preflight,
+        sealed: true,
+        // The arm's plan for the sealed request it was handed: the loop bound to the model the request names.
+        preflight: async (_deps, input, context) => {
+            const request = { ...context.base, credential: { kind: `container` as const } };
+            return { ok: true, request, run: () => framesOf(run, input.model ?? ``) };
+        },
         health: unasked.health,
         holdsSession: unasked.holdsSession,
-        ...(run === undefined ? {} : { oneShot: (_deps: unknown, ask: { model: string }) => run(ask) }),
     };
 };
 
@@ -93,6 +111,10 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
             Object.entries(CATALOGS).map(([provider, models]) => [provider, { models: async () => ({ models: models.map((id) => ({ id })) }) }]),
         ) as Services[`providerCatalogs`],
         workspace: unstubbed<Services[`workspace`]>(`workspace`, { root: `/work` }),
+        // The seam a sealed request's hooks carry; nothing is ever parked on it.
+        cards: unstubbed<Services[`cards`]>(`cards`, {}),
+        // An answer settles what its provider last refused, as a turn's first words do.
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {} }),
         logger: unstubbed<Services[`logger`]>(`logger`, { debug: () => {} }),
         // Records each rung's timing under its model name for the walk's perf trace.
         perf: unstubbed<Services[`perf`]>(`perf`, { record: (op, ms, fields, failed) => void timed.push({ op, ms, fields, failed }) }),

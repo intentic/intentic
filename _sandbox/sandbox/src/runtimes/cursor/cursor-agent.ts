@@ -72,6 +72,17 @@ const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorS
     return { kind: "error", message };
 };
 
+// A sealed request's agent (agent-request.ts `policy.sealed`): its prompt is everything the model reads, so no tool is
+// offered, no MCP server or custom tool mounted, and no setting source read, the command gate's included, since nothing
+// can run for it to gate. An empty allowlist rather than a denylist: an unknown tool name in disallowedTools makes
+// Agent.create reject outright.
+const sealedOptions = (model: ModelSelection, apiKey: string, cwd: string): AgentOptions => ({
+    model,
+    apiKey,
+    tools: [],
+    local: { cwd, settingSources: [] },
+});
+
 // Ends one phase's drain without ending the turn's queue: a plan turn runs two phases, and the tools that push into it
 // were bound to it once, when the agent was created.
 const PHASE_END = Symbol("cursor-phase-end");
@@ -275,9 +286,12 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         const selection: ModelSelection = item === undefined ? { id: modelId } : selectionFor(item, request.spec.effort);
 
         // Attachments ride the prompt as a file list; Cursor's read tool takes them off disk, like the OpenCode/Pi
-        // runtimes.
+        // runtimes. A sealed request's system prompt rides in front of its words: Cursor's SDK has no system seam, and the
+        // hook service a turn's instructions go through is a setting source a sealed request does not load.
         const { images, others } = splitAttachments(request.spec.attachments ?? []);
-        const basePrompt = withFileNote(request.spec.prompt, [...images, ...others]);
+        const system = request.policy.sealed === true ? request.spec.systemPrompt : undefined;
+        const words = system === undefined || system === "" ? request.spec.prompt : `${system}\n\n${request.spec.prompt}`;
+        const basePrompt = withFileNote(words, [...images, ...others]);
 
         // One stream for the turn, two producers: the SDK's mapped deltas, and the custom tool handlers and hooks that
         // run inside Cursor's loop with no generator to yield from. They share it because a handler that parks on a
@@ -291,19 +305,22 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // own handler, where no hook can reach it.
         const { gate, taint, release } = vendorTurnGate(request);
 
-        const options: AgentOptions = {
-            model: selection,
-            apiKey,
-            disallowedTools: [...TOOLS_WITHHELD],
-            local: {
-                cwd: request.spec.cwd,
-                // mdm carries the command gate (cursor-hooks.ts); user is skipped, it also reads this daemon's Claude
-                // settings.
-                settingSources: ["mdm", "project"],
-                customTools: cursorCustomTools(request, { gate, taint }, push),
-            },
-            mcpServers: cursorMcpServers(request),
-        };
+        const options: AgentOptions =
+            request.policy.sealed === true
+                ? sealedOptions(selection, apiKey, request.spec.cwd)
+                : {
+                      model: selection,
+                      apiKey,
+                      disallowedTools: [...TOOLS_WITHHELD],
+                      local: {
+                          cwd: request.spec.cwd,
+                          // mdm carries the command gate (cursor-hooks.ts); user is skipped, it also reads this daemon's
+                          // Claude settings.
+                          settingSources: ["mdm", "project"],
+                          customTools: cursorCustomTools(request, { gate, taint }, push),
+                      },
+                      mcpServers: cursorMcpServers(request),
+                  };
 
         // An anchored turn's agent runs in a runtime process born in its namespace, so the shell the SDK spawns and the
         // files it edits resolve /work to the worktree, as every other isolated runtime's do. The anchor's cwd is already

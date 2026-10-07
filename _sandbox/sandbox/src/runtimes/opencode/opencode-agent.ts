@@ -42,14 +42,20 @@ export interface OpenCodeTurn {
     // The turn's MCP servers, mounted for the turn under its conversation's own names (opencode-mcp.ts); absent mounts
     // none, and the turn still sees no other conversation's.
     readonly mounts?: OpenCodeMounts;
-    // Standing instructions appended via OpenCode's `system` field (added to, not replacing, OpenCode's own prompt);
-    // per message, not per session.
+    // Standing instructions (a sealed request's system prompt) sent in OpenCode's `system` field (added to, not replacing,
+    // OpenCode's own prompt); per message, not per session.
     readonly system?: string;
     // Images already read off disk, sent as native parts rather than named as paths in the prompt; read in the adapter
     // so an unreadable one falls back to a prompt note.
     readonly images?: readonly FilePartInput[];
+    // A sealed request (agent-request.ts `policy.sealed`): every tool hidden, and its session deleted once it answered,
+    // since nothing resumes it.
+    readonly sealed?: true;
     readonly signal: AbortSignal;
 }
+
+// Every tool hidden, OpenCode's own included: the wildcard keeps this from tracking OpenCode's tool names in step.
+const NO_TOOLS = { "*": false } as const;
 
 // A frame the daemon raised for the turn itself (a permission card, then its resolution), carried in order with the
 // session's events; OpenCode sends no event of this type.
@@ -193,7 +199,7 @@ const promptBodyOf = (turn: OpenCodeTurn, mounts: OpenCodeMounts, modelId: strin
     agent: turn.agent,
     ...opt("model", modelId === undefined || modelId === "" ? undefined : { providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, modelID: modelId }),
     ...opt("system", turn.system),
-    tools: visibleToolsOf(mounts),
+    tools: turn.sealed === true ? { ...NO_TOOLS } : visibleToolsOf(mounts),
     // Images precede the text part.
     parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
 });
@@ -357,11 +363,13 @@ async function* runOpenCodeTurn(
     let opened: OpenedStream | undefined;
     let family: ReturnType<typeof sessionFamily> | undefined;
     let unmount = async (): Promise<void> => {};
+    let sealedSession: string | undefined;
     try {
         const sse = await openCode.events(turn.cwd, stopStream.signal);
         await openCode.watch(turn.cwd);
         opened = await openStream(sse);
         const sessionId = await sessionFor(c, turn);
+        sealedSession = turn.sealed === true ? sessionId : undefined;
         // whenAborted also handles a signal aborted before the session id existed.
         whenAborted(turn.signal, () => void abortSession(c, sessionId));
         const clock = turnWatchdog(timeouts);
@@ -399,6 +407,8 @@ async function* runOpenCodeTurn(
         await opened?.iterator.return?.().catch(() => {});
         family?.release();
         await unmount();
+        // allow(silent-catch): a session that could not be deleted holds one answered request and nothing to resume
+        await (sealedSession === undefined ? undefined : c.session.delete({ path: { id: sealedSession } }).catch(() => {}));
     }
 }
 
@@ -648,6 +658,11 @@ async function* streamTurn(
     return capture;
 }
 
+// The words OpenCode's `system` field carries: a turn's standing instructions, or a sealed request's own system prompt,
+// which is the whole of what it is told besides its prompt.
+const systemOf = (request: AgentRequest): string | undefined =>
+    request.policy.sealed === true ? request.spec.systemPrompt : request.spec.systemAppend;
+
 // The turn one OpenCode message runs as. Every message carries the same standing instructions, since a plan's two phases
 // are two messages of one turn and the execute phase must not drop them.
 const openCodeTurnOf =
@@ -667,7 +682,8 @@ const openCodeTurnOf =
         agent: message.agent,
         gate,
         mounts,
-        ...(request.spec.systemAppend !== undefined ? { system: request.spec.systemAppend } : {}),
+        ...opt("system", systemOf(request)),
+        ...(request.policy.sealed === true ? { sealed: true as const } : {}),
         signal: request.signal,
     });
 

@@ -1,10 +1,11 @@
-import type {
-    AgentHarness,
-    Capability,
-    PrivacyKnownSource,
-    PrivacyKnownValue,
-    PrivacyShieldPolicy,
-    PrivacyShieldStatus,
+import {
+    type AgentHarness,
+    type Capability,
+    PRIVACY_REPLACEMENTS_MAX,
+    type PrivacyKnownSource,
+    type PrivacyKnownValue,
+    type PrivacyShieldPolicy,
+    type PrivacyShieldStatus,
 } from "@intentic/sandbox-contract";
 import { detectPersonalData, normalizeAllowed } from "./detect/detect.js";
 import { createMasker, createMaskMemo, type EntityRecognizer, type Masker } from "./masker.js";
@@ -17,6 +18,7 @@ import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
 import { paintRegions, readingText, regionsFor } from "./image-mask.js";
 import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
+import { opt } from "../opt.js";
 
 // The privacy shield as the rest of the daemon sees it: the owner's policy, the decision whether a turn may run, the
 // base URL a runtime is pointed at, and the masker every other exit (push, shares) borrows. The gateway route that does
@@ -25,13 +27,33 @@ import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
 // Why a turn was refused, or nothing: it may run.
 export type ShieldAdmission = { readonly allowed: true } | { readonly allowed: false; readonly reason: string };
 
+// A sealed request (agent/providers/agent-request.ts `policy.sealed`): its prompt is everything the model reads, since
+// it carries no tools, reads no file and continues no session. Who it goes to, for the trust it is read against.
+export interface SealedRequest {
+    readonly provider: string;
+    readonly harness: AgentHarness;
+    readonly conversationId?: string | undefined;
+    readonly prompt: string;
+}
+
+// A sealed request as the shield hands it on: the words to send, and how to read the answer back.
+export interface SealedPrompt {
+    readonly prompt: string;
+    readonly restore: (text: string) => string;
+}
+
 export interface PrivacyShield {
     readonly policy: () => Promise<PrivacyShieldPolicy>;
     readonly setPolicy: (policy: PrivacyShieldPolicy) => Promise<void>;
     readonly status: () => Promise<PrivacyShieldStatus>;
-    // Whether a turn on this provider and harness may run under the policy in force; in a conversation, a grant the owner
-    // made for that one counts.
+    // Whether an open request (a turn, whose runtime goes on to read what the shield never sees) on this provider and
+    // harness may run under the policy in force; in a conversation, a grant the owner made for that one counts.
     readonly admit: (provider: string, harness: AgentHarness, conversationId?: string) => Promise<ShieldAdmission>;
+    // A sealed request, read for what it holds rather than refused for its runtime: sent as it is when the gateway
+    // already stands in front of that runtime, the provider is trusted, or nothing is found; masked here, with the
+    // restore that reads tokens in the answer back, when something is. Never refuses: the whole request is in hand.
+    // Throws when the policy can't be read or masking fails, which refuses the request rather than sending it as it is.
+    readonly seal: (request: SealedRequest) => Promise<SealedPrompt>;
     // The base URL a runtime should send its model requests to instead of `upstream`; undefined while the shield is off,
     // so a sandbox that never turned it on sends nothing through the daemon.
     readonly baseUrlFor: (session: GatewaySession) => Promise<string | undefined>;
@@ -95,6 +117,11 @@ export const unshieldedRefusal = (label: string, inConversation: boolean): strin
 // One whole token, in either spelling.
 const WHOLE_TOKEN = new RegExp(`^(?:${TOKEN_SOURCE})$`, "u");
 
+// What a sealed request is logged as speaking: no wire format, since it was read here before any runtime had it.
+export const SEALED_PROTOCOL = "sealed";
+
+const unchanged = (text: string): string => text;
+
 export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const memo = createMaskMemo();
     const readings = createReadingMemo();
@@ -145,6 +172,34 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             }
             const label = privacyProviders(await deps.capabilities()).find((entry) => entry.id === provider)?.label ?? provider;
             return { allowed: false, reason: unshieldedRefusal(label, conversationId !== undefined) };
+        },
+        seal: async ({ provider, harness, conversationId, prompt }) => {
+            const policy = await deps.policyStore.get();
+            // The gateway masks this runtime's wire as it masks a turn's, so reading it here as well would log it twice.
+            if (policy.mode === "off" || shieldableRuntime(provider, harness) || (await trusted(policy, provider, conversationId))) {
+                return { prompt, restore: unchanged };
+            }
+            const reading = await masker(policy);
+            const masking = policy.mode === "on";
+            const found = masking ? await reading.mask(prompt) : await reading.find(prompt);
+            // The tokens the provider is about to read must be on disk before it reads them, as on the wire.
+            await deps.vault.commit();
+            void deps.ledger
+                .record({
+                    at: new Date().toISOString(),
+                    ...opt("conversationId", conversationId),
+                    provider,
+                    trusted: false,
+                    action: masking ? "masked" : "watched",
+                    counts: found.counts,
+                    images: 0,
+                    documents: 0,
+                    protocol: SEALED_PROTOCOL,
+                    ...opt("replacements", found.found.length > 0 ? found.found.slice(0, PRIVACY_REPLACEMENTS_MAX) : undefined),
+                })
+                // allow(silent-catch): the log is the owner's record of what left, and a write it lost costs the request nothing
+                .catch(() => undefined);
+            return "text" in found ? { prompt: found.text, restore: reading.restore } : { prompt, restore: unchanged };
         },
         baseUrlFor: async (session) => {
             const policy = await deps.policyStore.get();

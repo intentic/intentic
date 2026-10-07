@@ -1,6 +1,6 @@
 import { isDeclinedAnswer, isFailureSentence, isSelfIdentityAnswer, withoutToolCallStandIns } from "../providers/failure-sentences.js";
 
-// Shared contract for one-shot reply helpers (titles, commit subjects, permission-card text, verdicts): askRoleModel
+// Shared contract for helper replies (titles, commit subjects, permission-card text, verdicts): askRoleModel
 // returns a usable value or nothing, never an unchecked reply.
 
 // An unusable answer is not a dead rung: it is sampling noise rather than a lasting condition, so unlike a refusal it

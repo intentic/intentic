@@ -42,6 +42,15 @@ flowchart LR
   copy, a main-tree one in the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
   `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
+- A helper job (a session title, a land's commit subject, the safety judge's verdict, the chat router's pick) is a
+  sealed request on the same seam (`agent/run/sealed/sealed-request.ts`): the runtime's own arm plans it and its own loop
+  runs it, with `policy.sealed` (`agent/providers/agent-request.ts`) withholding every tool, server, instruction file
+  and saved session, so its prompt is everything the model reads. Its failures go through the turn's classifier into
+  the records the next request's account choice reads, and a spent allowance is planned once more onto a sibling
+  account. No conversation or board row is made for it; `agent/models/role-model.ts` walks the job's chain of models
+  over it. A runtime serves helpers by declaring `sealed` on its adapter (Claude Code, Cursor, OpenCode's Gemini).
+  (2026-10-07) Before, each runtime had a one-shot path of its own beside its turn, and each had drifted: the privacy
+  shield refused Cursor's for its runtime, a conversation's grant never reached it, and Cursor kept its own account loop.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps
@@ -283,7 +292,9 @@ flowchart LR
   front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`) before a word is read,
   which the refusal and the chat's strip above the composer both say; the owner can let a provider read one
   conversation as it is (the policy's `conversations`, read by the turn's door and the gateway alike) instead of
-  trusting it everywhere. Helper jobs step over such a rung, children stay off runners, and a native push or a public
+  trusting it everywhere. A helper job's sealed request is read whole instead (`privacyShield.seal`): on such a
+  runtime what its prompt holds is masked here and the answer's tokens restored, and a prompt holding nothing goes as
+  it is. Children stay off runners, and a native push or a public
   share carries the kind of data instead of the data: a share's pictures are painted over with it, or left out where
   they cannot be read, and published under numbers rather than their file names. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.

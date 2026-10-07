@@ -330,6 +330,17 @@ test("a build turn resumes the session on the xai provider, passes the model, an
     expect(turn.images).toBeUndefined();
 });
 
+test("a sealed request runs as one build message carrying its own system prompt, not a turn's standing instructions", async () => {
+    const { runner, calls } = fakeRunner([]);
+    await collect(createOpenCodeAgent(runner, OPENCODE_GEMINI_PROVIDER), {
+        ...request,
+        spec: { ...request.spec, model: "gemini-3-flash", systemPromptMode: "custom", systemPrompt: "Answer exactly.", systemAppend: "## Delegating" },
+        policy: { sealed: true },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ agent: "build", provider: OPENCODE_GEMINI_PROVIDER, model: "gemini-3-flash", system: "Answer exactly.", sealed: true });
+});
+
 // Image-attachment tests live in opencode-agent.integration.test.ts, which needs real files on disk.
 
 test("a failing tool first seen at its error state arrives as one whole failed tool_call", async () => {
@@ -649,6 +660,7 @@ const fakeOpenCode = (
     prompts: (string | undefined)[];
     systems: (string | undefined)[];
     shown: (Record<string, boolean> | undefined)[];
+    deleted: string[];
     scopes: { subscribed: string[]; watched: string[] };
     order: string[];
     mounted: { directory: string; servers: readonly OpenCodeMcpServer[] }[];
@@ -661,6 +673,7 @@ const fakeOpenCode = (
     const prompts: (string | undefined)[] = [];
     const systems: (string | undefined)[] = [];
     const shown: (Record<string, boolean> | undefined)[] = [];
+    const deleted: string[] = [];
     const recorded: string[][] = [];
     // Mimics the real stream's opening `server.connected`, which the runner awaits before creating a session.
     const withHello: Event[] = [{ type: "server.connected", properties: {} } as unknown as Event, ...events];
@@ -709,6 +722,10 @@ const fakeOpenCode = (
                 aborted = true;
                 return {};
             },
+            delete: async (options: { path: { id: string } }) => {
+                deleted.push(options.path.id);
+                return {};
+            },
         },
     } as unknown as Awaited<ReturnType<OpenCodeService["client"]>>;
     const scopes = { subscribed: [] as string[], watched: [] as string[] };
@@ -755,6 +772,7 @@ const fakeOpenCode = (
         prompts,
         systems,
         shown,
+        deleted,
         scopes,
         order,
         mounted,
@@ -763,6 +781,27 @@ const fakeOpenCode = (
 };
 
 const runnerTurn: OpenCodeTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
+
+// A helper's request (agent-request.ts `policy.sealed`): every tool hidden, OpenCode's own included, its system prompt
+// in OpenCode's `system` field, and its session deleted once it answered, since nothing resumes it.
+test("a sealed request asks with every tool hidden and leaves no session behind", async () => {
+    const fake = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);
+    for await (const event of createOpenCodeRunner(fake.openCode)({ ...runnerTurn, system: "Answer exactly.", sealed: true })) {
+        void event;
+    }
+    expect(fake.shown).toEqual([{ "*": false }]);
+    expect(fake.systems).toEqual(["Answer exactly."]);
+    expect(fake.deleted).toEqual(["s1"]);
+    expect(fake.leases.released).toBe(1);
+});
+
+test("a turn keeps its session, to be resumed", async () => {
+    const fake = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);
+    for await (const event of createOpenCodeRunner(fake.openCode)(runnerTurn)) {
+        void event;
+    }
+    expect(fake.deleted).toEqual([]);
+});
 
 test("an ungated Google turn leases its exact requested model and releases it on completion", async () => {
     const { openCode, leases, prompts } = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);

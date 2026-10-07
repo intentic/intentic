@@ -92,8 +92,8 @@ const shieldedEnv = (credential: HarnessCredential): Record<string, string> =>
         ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_ERROR_REPORTING: "1", DISABLE_TELEMETRY: "1" }
         : {};
 
-// Env for a Claude Code harness process. `helper` is a one-shot rather than a turn: a turn tolerates waiting
-// (resumable), a helper should fail fast.
+// Env for a Claude Code harness process. `helper` is a sealed request rather than a turn (agent-request.ts
+// `policy.sealed`): a turn tolerates waiting (resumable), a helper should fail fast.
 export const harnessEnv = (
     credential: HarnessCredential,
     options: { readonly model?: string | undefined; readonly helper?: boolean } = {},

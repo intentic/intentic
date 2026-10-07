@@ -24,7 +24,7 @@ export interface LimitWay {
 export const limitWayOf = async (
     services: Services,
     params: {
-        // Undefined conversation ⇒ nothing held, no way-on to work out (bench runs, one-shots).
+        // Undefined conversation ⇒ nothing held, no way-on to work out (bench runs, sealed requests).
         readonly turn: AgentTurn;
         readonly provider: AgentProvider;
         readonly model: string | undefined;

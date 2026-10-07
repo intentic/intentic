@@ -161,6 +161,11 @@ export const planHarnessTurn = async (
     } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };
     }
+    // A sealed request reads nothing past its prompt: nothing is mounted for it and no hook is wired, so its credential,
+    // behind the gateway like a turn's, and the model that credential resolves to are all this arm decides for it.
+    if (context.base.policy.sealed === true) {
+        return armPlan(deps.agent, { ...context.base, spec: harnessSpec(deps, input, context, resolved.credentials), credential }, resolved.credentials.account);
+    }
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
     // Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);

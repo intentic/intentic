@@ -152,7 +152,8 @@ export const describeLanding = async (services: Services, id: string): Promise<v
                 // model on a small window gets a clipped diff instead of a prompt it has to refuse.
                 { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote, diffs.flatMap((diff) => diff.subjects)) },
                 new AbortController().signal,
-                { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }) },
+                // The land's own conversation: a provider the owner let read it reads the diff it made too.
+                { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }), conversationId: id },
             ),
         );
         // `!` is forced whenever a shrink was detected, not trusted from the model: release tooling majors on it.

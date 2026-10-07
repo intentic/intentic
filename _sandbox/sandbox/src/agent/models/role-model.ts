@@ -17,6 +17,8 @@ import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom }
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "./role-answer.js";
 import { rungLimit, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
+import { runSealedRequest } from "../run/sealed/sealed-request.js";
+import { opt } from "../../opt.js";
 
 // Resolves what a role's chain actually runs on (connected accounts, catalogs, the walk itself); the contract
 // (model-pins.ts) decides the order, this file supplies the facts and executes it. Every ask names its own role and
@@ -151,30 +153,22 @@ const chainWindows = async (services: Services, chain: readonly ModelChoice[]): 
 // The prompt as this rung would receive it: built to its room when the ask can size itself, taken whole when it cannot.
 const promptFor = <T>(ask: RoleAsk<T>, room: number): string => (typeof ask.prompt === `function` ? ask.prompt(room) : ask.prompt);
 
-// Runtime is decided by the adapter table/capabilitiesOf, never here, so a provider that refuses a harness always lands on its
-// own regardless of the pin. Effort, thinking and fast ride along unchanged.
-const askRung = async (services: Services, pin: ModelPin, prompt: string, signal: AbortSignal): Promise<string> => {
-    const adapter = services.adapters.for(pin.provider, pin.harness ?? `claude-code`);
-    if (adapter.oneShot === undefined) {
-        throw new Error(`${adapter.runtime} runs no helper, so there is nothing to ask it one line with.`);
-    }
-    // A helper's prompt is a model request like a turn's (a title from the first message, a diff, a command): the same
-    // privacy shield rule, stepped over to the next rung like any refusal.
-    const shield = await services.privacyShield.admit(pin.provider, pin.harness ?? `claude-code`);
-    if (!shield.allowed) {
-        throw new Error(shield.reason);
-    }
-    return adapter.oneShot(services, {
+// One rung asked as a sealed request (agent/run/sealed/sealed-request.ts), on the same arm, loop, privacy shield and
+// failure records a turn on that model would meet. Runtime is decided by the adapter table/capabilitiesOf, never here,
+// so a provider that refuses a harness always lands on its own regardless of the pin. Effort, thinking and fast ride
+// along unchanged.
+const askRung = (services: Services, pin: ModelPin, prompt: string, signal: AbortSignal, conversationId: string | undefined): Promise<string> =>
+    runSealedRequest(services, {
         provider: pin.provider,
+        harness: pin.harness ?? `claude-code`,
         prompt,
-        cwd: services.workspace.root,
         model: pin.model,
-        ...(pin.effort === undefined ? {} : { effort: pin.effort }),
-        ...(pin.thinking === undefined ? {} : { thinking: pin.thinking }),
-        ...(pin.fast === undefined ? {} : { fast: pin.fast }),
+        ...opt("effort", pin.effort),
+        ...opt("thinking", pin.thinking),
+        ...opt("fast", pin.fast),
+        ...opt("conversationId", conversationId),
         signal,
     });
-};
 
 // Every refusal (allowance, credential, outage, or a wrong-shaped reply) is stepped over the same way, asking the next
 // rung; a user cancel stops the walk outright.
@@ -182,6 +176,9 @@ export interface RoleModelOptions {
     // Caller-supplied snapshot of this role's list instead of a fresh read; absent means read settings now.
     readonly pins?: readonly ModelPin[] | undefined;
     readonly onProgress?: RoleModelProgress | undefined;
+    // The conversation the job is for, where it has one (a land's commit subject, a chat's title): a provider the owner
+    // let read that conversation reads this job about it too.
+    readonly conversationId?: string | undefined;
 }
 
 export const askRoleModel = async <T>(
@@ -278,7 +275,7 @@ export const askRoleModel = async <T>(
             };
             try {
                 // A credential failing at resolution is the same dead end as one failing outright.
-                const text = await askRung(services, choice, prompt, signal);
+                const text = await askRung(services, choice, prompt, signal, options.conversationId);
                 // Reply is validated here, not by the caller, so a bad-shaped answer is stepped over like a refusal.
                 const value = readRoleAnswer(ask.answer, text);
                 // Clears any memo: an answer proves whatever this rung refused for before is over.

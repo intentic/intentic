@@ -7,7 +7,6 @@ import {
     type AgentTurn,
     capabilitiesOf,
     type ContextTrim,
-    KeyedProviderSchema,
     type PromptFingerprint,
     type SnapshotTurn,
     type TranscriptRow,
@@ -38,7 +37,6 @@ import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
 import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import type { TurnBriefing } from "../prompt/turn-briefing.js";
-import { limitReopensAt } from "../models/limit-reset.js";
 import type { RoutedTurn, TurnInput } from "../../seams/turn-starter.js";
 import type { LiveRun } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
@@ -50,12 +48,12 @@ import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
-import { limitWayOf } from "../models/limit-way.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { planTurn, type TurnPlan } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, providerAnswered, recordFrame, turnActivity } from "./frames/frame-effects.js";
+import { recordQueries } from "./frames/failure-queries.js";
 import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
 import { endedAfterStop } from "./frames/stop-grace.js";
 import { performSettlement } from "./settle/settle-turn.js";
@@ -720,21 +718,13 @@ const remintFor = (input: RoutedTurn, account: string | undefined, request: Agen
         ? { account, refusedToken: request.credential.token }
         : undefined;
 
-// The questions a failure's classification asks, answered from the daemon's own records.
+// The questions a failure's classification asks: the daemon's records, and this conversation's own resume state.
 const failureQueries = (services: Services): FailureQueries => ({
+    ...recordQueries(services),
     breakPolicy: (conversationId, ending) => breakPolicyFor(services, conversationId, ending),
-    reopensAt: (at) => limitReopensAt({ services, ...at }),
-    limitWay: (params) => limitWayOf(services, params),
     stopLadder: (conversationId) => {
         const made = services.conversations.state(conversationId)?.resume.stopTries ?? 0;
         return { made, nextAt: stopResumeAt(made) };
-    },
-    awaitingVerification: async (provider) => {
-        const keyed = KeyedProviderSchema.safeParse(provider);
-        if (!keyed.success) {
-            return [];
-        }
-        return (await services.cliProxy.accounts())[keyed.data].flatMap((account) => (account.cooling?.verify === undefined ? [] : [account.label]));
     },
 });
 

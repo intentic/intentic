@@ -160,3 +160,24 @@ test("a model neither account was refused keeps first-connected-is-default", asy
 
     expect(plan.account).toBe("one");
 });
+
+// A helper's request reads nothing past its prompt: the webext card the owner granted is not mounted for it, whatever
+// the grant, and the account and model are all the arm decides.
+test("a sealed request is planned with nothing mounted, on the account and model a turn would start from", async () => {
+    const mounts = testTurnMounts();
+    const sealed: TurnContext = { ...context, base: { ...context.base, policy: { sealed: true } } };
+    // SAFETY: a webext card is granted by kind and id alone; the arm reads nothing else off it.
+    const chrome = { kind: "webext", id: "chrome", config: {} } as Capability;
+    const plan = await planCursorTurn(services(mounts), turn({ model: "composer-2.5" }), sealed, [chrome]);
+    if (!plan.ok) {
+        throw new Error(`planning refused the sealed request: ${plan.message}`);
+    }
+
+    expect(plan.account).toBe("cursor-one");
+    const { request } = plan;
+    expect(request.tools).toEqual({});
+    expect(request.policy).toEqual({ sealed: true });
+    expect(request.credential).toEqual({ kind: "cursor-key", apiKey: "key" });
+    expect(request.spec.model).toBe("composer-2.5");
+    expect(browserServers).not.toHaveBeenCalled();
+});

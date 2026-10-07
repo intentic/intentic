@@ -40,8 +40,8 @@ export const versionFloorOf = (text: string): VersionFloor | undefined => {
     return running === undefined ? { floor } : { floor, running };
 };
 
-// Neither condition is ever a name, subject, or anything a caller asked a model to produce; the one-shot seam and both
-// naming guards read this, never a single member.
+// Neither condition is ever a name, subject, or anything a caller asked a model to produce; a helper's answer contract
+// (role-answer.ts) and both naming guards read this, never a single member.
 export const isFailureSentence = (text: string): boolean => isUsageLimitText(text) || isAuthFailureText(text);
 
 // A model that answered the asker instead of the ask, nobody's failure. Everything asked through these seams is a noun

@@ -27,7 +27,6 @@ import { createCursorHookService, type CursorHookService } from "./cursor-hooks.
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
 import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
-import { type CursorOneShotDeps, cursorOneShot } from "./cursor-one-shot.js";
 import { cursorAccountForTurn, cursorTurnLimit } from "./cursor-usage.js";
 
 // Everything Cursor contributes to the daemon, listed in runtimes/runtime-table.ts; the directory's other files keep
@@ -90,6 +89,15 @@ export const planCursorTurn = async (
         // Reachable only if disconnected after the readiness check, or a pinned id never existed; both mean pick one.
         return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
     }
+    // A sealed request reads nothing past its prompt, so nothing is mounted for it: the account and the model are all
+    // this arm decides, the same two a turn's start from.
+    if (context.base.policy.sealed === true) {
+        return armPlan(
+            services.cursorAgent,
+            { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "cursor-key", apiKey: account.apiKey } },
+            account.id,
+        );
+    }
     // The same remote MCP set every arm mounts, which cursorMcpServers turns into http servers: a browser, a machine, an
     // extension card or an mcp capability the owner granted must reach a Cursor turn like any other.
     const mounted = await turnToolsOf(services, granted, {
@@ -117,12 +125,13 @@ export const planCursorTurn = async (
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,
 // and cursorReadiness answers both in the order that names the right fix.
-// What the Cursor adapter reads: its arm's deps and the one-shot helper's.
-export type CursorAdapterDeps = CursorPlanDeps & CursorOneShotDeps;
+// What the Cursor adapter reads: its arm's deps, which a sealed request plans from as a turn does.
+export type CursorAdapterDeps = CursorPlanDeps;
 
 const CURSOR_ADAPTER: AgentAdapter<"cursor", CursorAdapterDeps> = {
     runtime: "cursor",
-    oneShot: cursorOneShot,
+    // Serves helpers too: planCursorTurn and the Cursor loop read `policy.sealed`.
+    sealed: true,
     preflight: (services, input, context, granted) => planCursorTurn(services, input, context, granted),
     health: async (services) => {
         const readiness = await attemptProbe(() => cursorReadiness(services.cursorStore));

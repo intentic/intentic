@@ -123,6 +123,12 @@ export interface TurnPolicy {
     readonly subagentDepth?: number;
     // A cache refresh, not a turn: one forked, unsaved request with every tool refused and every hook off.
     readonly keepWarm?: boolean;
+    // A sealed request, not a turn (agent/run/sealed/sealed-request.ts): the prompt is everything the model reads. No
+    // tool, no MCP server, no instruction file and no session, answered once and saved nowhere, under the system prompt
+    // the spec names. What a helper job (a title, a commit subject, a verdict) runs as, on the same arm and loop a turn
+    // takes; the privacy shield reads it whole for that reason (privacy-shield.ts `seal`). Only a runtime whose adapter
+    // declares `sealed` is handed one.
+    readonly sealed?: true;
 }
 
 // What is mounted: the servers and plugins the model can call, the shell's environment and filters, and the browser stack.

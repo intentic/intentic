@@ -16,6 +16,7 @@ import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
+import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 jest.mock("../prompt/preset-prompt.js", () => ({
@@ -1745,6 +1746,49 @@ test("a cache refresh forks its session unsaved, answers once, refuses every too
     const [options] = captured;
     expect(options).toMatchObject({ forkSession: true, persistSession: false, maxTurns: 1, settings: expect.objectContaining({ disableAllHooks: true }) });
     expect(Object.keys(options?.hooks ?? {})).toEqual(["PreToolUse"]);
+});
+
+// A helper's request (agent-request.ts `policy.sealed`): the prompt is everything the model reads, so nothing that
+// could read past it is offered, and nothing of it is kept.
+test("a sealed request offers no tool or server, reads no settings file, saves nothing, answers once and fails fast", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield* proseBlock("fix: tighten the tree truncation", "s");
+        // SAFETY: the stream reads only `type` and `subtype` off a result that reports nothing else.
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const sealed: HarnessRequest = {
+        spec: { prompt: "Write a commit subject.", cwd: WORKSPACE_ROOT, model: "claude-haiku-4-5", systemPromptMode: "custom", systemPrompt: "Answer with exactly what the prompt asks for." },
+        policy: { sealed: true },
+        tools: {},
+        credential: { kind: "claude-oauth", token: "tok-xyz" },
+        hooks: { cards },
+        signal: new AbortController().signal,
+    };
+    const events = await collect(sealed, capture);
+    const [options] = captured;
+
+    expect(events.filter((event) => event.kind === "delta")).toEqual([{ kind: "delta", text: "fix: tighten the tree truncation" }]);
+    expect(options).toMatchObject({ tools: [], allowedTools: [], mcpServers: {}, settingSources: [], persistSession: false, maxTurns: 1 });
+    // Disabled in so many words: left out, the SDK's own default would make every unpinned helper think.
+    expect(options?.thinking).toEqual({ type: "disabled" });
+    expect(options?.systemPrompt).toBe("Answer with exactly what the prompt asks for.");
+    expect(Object.keys(options?.hooks ?? {})).toEqual(["PreToolUse"]);
+    // The CLI's built-in agents-md mod ignores settingSources: without its own option a commit subject would be
+    // written with the workspace's AGENTS.md in context.
+    expect(options?.settings).toMatchObject({
+        disableAllHooks: true,
+        pluginConfigs: { "agents-md@builtin": { options: { instructionFiles: "claude-md" } } },
+    });
+    // The credential, the helper's retry policy (no watchdog riding a slow provider out) and the stamp the leftovers
+    // sweep knows a helper's CLI by.
+    expect(options?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("tok-xyz");
+    expect(options?.env?.["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
+    expect(options?.env?.["CLAUDE_CODE_ENABLE_TASKS"]).toBeUndefined();
+    expect(options?.env).toMatchObject(workloadStamp(ONE_SHOT_OWNER));
+    // Its caller waits for the last frame, so the account's pools are not read at its settle.
+    expect(events.some((event) => event.kind === "account_usage")).toBe(false);
 });
 
 test("without steering the prompt stays a plain string (single-message mode)", async () => {

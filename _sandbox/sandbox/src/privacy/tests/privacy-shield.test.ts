@@ -174,7 +174,7 @@ describe("whether a turn may run", () => {
         expect(reason).toContain("nothing in what you sent was flagged");
         expect(reason).toContain("Cursor's agent sends what it reads");
         expect(reason).toContain("Let Cursor read this conversation as it is");
-        // A helper job has no conversation to grant, so it is not offered one.
+        // A turn with no conversation has none to grant, so it is not offered one.
         const helper = await privacyShield.admit("cursor", "native");
         expect(helper.allowed ? "" : helper.reason).not.toContain("this conversation");
     });
@@ -236,6 +236,68 @@ describe("whether a turn may run", () => {
         const policy = await privacyShield.policy();
         expect(await privacyShield.trusted(policy, "endpoint/lmstudio")).toBe(true);
         expect(await privacyShield.trusted(policy, "endpoint/gpu-box")).toBe(false);
+    });
+});
+
+// A helper's request holds everything its model reads, so the shield reads it rather than refusing the runtime: the
+// rule a turn on Cursor meets (above) is about what such a turn goes on to read, which a sealed request never does.
+describe("a sealed request", () => {
+    const sealed = (prompt: string, conversationId?: string) => ({ provider: "cursor", harness: "native" as const, prompt, conversationId });
+
+    test("with nothing in it, goes to a runtime the gateway can't cover exactly as it was, and is logged as read", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "on" } });
+        const out = await privacyShield.seal(sealed("fix: tighten the tree truncation"));
+        expect(out.prompt).toBe("fix: tighten the tree truncation");
+        expect(out.restore("fix: tighten the tree truncation")).toBe("fix: tighten the tree truncation");
+        await Promise.resolve();
+        expect(privacyLedger.entries).toEqual([
+            expect.objectContaining({ provider: "cursor", trusted: false, action: "masked", counts: {}, protocol: "sealed", images: 0, documents: 0 }),
+        ]);
+    });
+
+    test("what it holds is masked before it leaves, and the tokens the answer carries read back", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "on" } });
+        const out = await privacyShield.seal(sealed(`diff: add PESEL ${PESEL} to the fixture`, "vivid-rowan-moks"));
+        const token = tokenOf("NATIONAL_ID", 1);
+        expect(out.prompt).toBe(`diff: add PESEL ${token} to the fixture`);
+        expect(out.restore(`test: fixture for ${token}`)).toBe(`test: fixture for ${PESEL}`);
+        await Promise.resolve();
+        expect(privacyLedger.entries).toEqual([
+            expect.objectContaining({
+                conversationId: "vivid-rowan-moks",
+                action: "masked",
+                counts: { "national-id": 1 },
+                replacements: [expect.objectContaining({ token, class: "national-id" })],
+            }),
+        ]);
+    });
+
+    test("watching, it is read and logged but leaves as it was", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "watch" } });
+        const out = await privacyShield.seal(sealed(`PESEL ${PESEL}`));
+        expect(out.prompt).toBe(`PESEL ${PESEL}`);
+        await Promise.resolve();
+        expect(privacyLedger.entries).toEqual([expect.objectContaining({ action: "watched", counts: { "national-id": 1 } })]);
+    });
+
+    test("an off shield, a trusted provider and a runtime behind the gateway send it as it was and log nothing here", async () => {
+        const off = privacySliceFake({ policy: { mode: "off" } });
+        expect((await off.privacyShield.seal(sealed(`PESEL ${PESEL}`))).prompt).toBe(`PESEL ${PESEL}`);
+        const trusting = privacySliceFake({ policy: { mode: "on", trusted: ["cursor"] } });
+        expect((await trusting.privacyShield.seal(sealed(`PESEL ${PESEL}`))).prompt).toBe(`PESEL ${PESEL}`);
+        // Claude's wire runs through the gateway, which masks it there as it masks a turn's.
+        const gateway = privacySliceFake({ policy: { mode: "on" } });
+        expect((await gateway.privacyShield.seal({ provider: "claude", harness: "claude-code", prompt: `PESEL ${PESEL}` })).prompt).toBe(`PESEL ${PESEL}`);
+        await Promise.resolve();
+        expect([...off.privacyLedger.entries, ...trusting.privacyLedger.entries, ...gateway.privacyLedger.entries]).toEqual([]);
+    });
+
+    test("a grant for one conversation is read there and nowhere else", async () => {
+        const { privacyShield } = privacySliceFake({
+            policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "cursor" }] },
+        });
+        expect((await privacyShield.seal(sealed(`PESEL ${PESEL}`, "vivid-rowan-moks"))).prompt).toBe(`PESEL ${PESEL}`);
+        expect((await privacyShield.seal(sealed(`PESEL ${PESEL}`, "smart-moth-pq04"))).prompt).toBe(`PESEL ${tokenOf("NATIONAL_ID", 1)}`);
     });
 });
 

@@ -111,6 +111,34 @@ test("a run that takes the turn and then says nothing at all ends as an outage r
     }
 });
 
+// A helper's request (agent-request.ts `policy.sealed`). The empty ALLOWLIST is the assertion, and `disallowedTools`
+// being absent is half of it: an unknown name in a denylist makes Agent.create reject outright.
+test("a sealed request asks with no tool, server or setting source, its system prompt in front of its words", async () => {
+    const prompts: string[] = [];
+    create.mockResolvedValue({
+        agentId: `agent-sealed`,
+        send: async (prompt: string, options: SendOptions) => {
+            prompts.push(prompt);
+            // SAFETY: the mapper reads only `type` and `text` off a text delta.
+            options.onDelta?.({ update: { type: `text-delta`, text: `fix: tree truncation` } as InteractionUpdate });
+            return { wait: async () => ({ status: `success` }), cancel };
+        },
+        close: () => {},
+    });
+    const sealed: AgentRequest<CursorCredential> = {
+        ...request(),
+        spec: { ...request().spec, prompt: `fix: name the change`, systemPromptMode: `custom`, systemPrompt: `Answer with exactly what is asked.` },
+        policy: { sealed: true },
+    };
+
+    const events = await collect(createCursorAgent(deps())(sealed));
+
+    expect(create).toHaveBeenCalledWith({ model: { id: MODEL }, apiKey: `key`, tools: [], local: { cwd: WORKSPACE_ROOT, settingSources: [] } });
+    expect(prompts).toEqual([`Answer with exactly what is asked.\n\nfix: name the change`]);
+    expect(events.filter((event) => event.kind === `delta`)).toEqual([{ kind: `delta`, text: `fix: tree truncation` }]);
+    expect(events.at(-1)).toEqual({ kind: `done` });
+});
+
 const QUESTION = {
     question: `Which store?`,
     header: `Store`,

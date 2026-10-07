@@ -209,7 +209,7 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   is one on the hand-written lists or in [`common-words.ts`](../../_sandbox/sandbox/src/privacy/detect/data/common-words.ts):
   the names the Leipzig corpora of 33 languages write in lowercase, rebuilt by `generate-common-words.mjs` beside it.
 - A runtime it cannot stand in front of (Cursor's own wire, an ACP agent, Pi, Codex on the container's own key) is
-  turned away on an untrusted provider before it starts (`privacy-unshielded`), a helper job steps over such a rung, a
+  turned away on an untrusted provider before it starts (`privacy-unshielded`), a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a
   runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data; a share's
   pictures are painted over with it, or left out where they cannot be read, and published under numbers rather than
@@ -225,6 +225,15 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   first tool result carrying personal data (Cursor's `postToolUse` hook is awaited before a result goes back) was
   considered and not built: unproven against Cursor's own wire, and a conversation about sessions would have tripped it
   anyway.
+- (2026-10-07) A helper job (a title, a commit subject, a verdict) is a sealed request: the turn's own arm and loop with
+  `policy.sealed`, no tool, no session, nothing read past its prompt
+  ([`sealed-request.ts`](../../_sandbox/sandbox/src/agent/run/sealed/sealed-request.ts)). The shield reads it whole
+  instead of refusing its runtime ([`privacy-shield.ts`](../../_sandbox/sandbox/src/privacy/privacy-shield.ts) `seal`):
+  where the gateway covers the runtime's wire it masks the request there as it masks a turn's; where it cannot
+  (Cursor), what the prompt holds is masked here and the answer's tokens restored, logged with protocol `sealed`, and
+  a prompt holding nothing goes as it is. A conversation's grant counts for the jobs about it (its land's subject, its
+  title). Refused by runtime, as a turn is, Composer was turned away from every commit subject over diffs that held no
+  personal data, and the refusal's "nothing was flagged" was true because nothing had been read.
 - (2026-10-01) The gateway rejected masking at each source (a tool hook, a prompt composer, a channel's inbound
   message), which is how stored secrets are masked: only the Claude Code loop can rewrite a tool's result before the model
   reads it, and a source-side filter misses every door nobody listed (resume, compaction, a runtime handoff's replayed

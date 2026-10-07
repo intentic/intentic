@@ -6,7 +6,6 @@ import { type HarnessPlanDeps, planHarnessTurn } from "../../agent/run/harness/h
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-credentials.js";
-import { claudeOneShot } from "./claude-one-shot.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
 import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "./claude-seat-check.js";
@@ -51,7 +50,8 @@ export type ClaudeCodeDeps = HarnessPlanDeps & Pick<Services, "claudeStore" | "c
 
 const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
     runtime: "claude-code",
-    oneShot: claudeOneShot,
+    // Serves helpers too: the harness arm and the Claude Code loop read `policy.sealed` (harness-plan.ts, agent.ts).
+    sealed: true,
     preflight: (services, input, context, installed) => planHarnessTurn(services, input, context, installed),
     // In-process (Agent SDK, no CLI binary), so only a credential can be missing, and which one depends on the turn.
     // Answers the weaker question the picker needs: is any way in configured.

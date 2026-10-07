@@ -1014,3 +1014,25 @@ test("the flag alone is not enough: a workspace with iq search off still pays no
     expect(asked).toBe(0);
     expect(wire(plan)).not.toContain(RETRIEVED);
 });
+
+// A helper's request on the Claude Code arm: the credential a turn would spend, behind the gateway like a turn's, and
+// nothing else, since its prompt is everything the model reads.
+test("a sealed request on the harness arm is planned with its credential and nothing mounted", async () => {
+    const sealed: TurnContext = {
+        ...context,
+        base: { ...base, spec: { ...base.spec, model: "claude-haiku-4-5", systemPromptMode: "custom", systemPrompt: "Answer exactly." }, policy: { sealed: true } },
+    };
+    const services = servicesWith({});
+
+    const plan = await services.adapters.for("claude", "claude-code").preflight(services, turn({ model: "claude-haiku-4-5" }), sealed, []);
+    if (!plan.ok) {
+        throw new Error(`planning refused the sealed request: ${plan.message}`);
+    }
+
+    expect(plan.account).toBe("acc-1");
+    expect(plan.request.tools).toEqual({});
+    expect(plan.request.policy).toEqual({ sealed: true });
+    expect(plan.request.spec).toMatchObject({ model: "claude-haiku-4-5", systemPromptMode: "custom", systemPrompt: "Answer exactly." });
+    expect(Object.keys(plan.request.hooks)).toEqual(["cards"]);
+    expect(browserServers).not.toHaveBeenCalled();
+});

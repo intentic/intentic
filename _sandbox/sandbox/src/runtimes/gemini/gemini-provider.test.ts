@@ -99,3 +99,20 @@ test("hands the turn its remote MCP servers, the browser among them", async () =
 
     expect(plan.request.tools.remote).toEqual([web]);
 });
+
+// A helper's request reads nothing past its prompt, so the browser the persona could drive is not mounted for it.
+test("a sealed request is handed no MCP server, on the model it pinned", async () => {
+    const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
+    browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });
+    const sealed = { ...context, base: { ...context.base, policy: { sealed: true as const } } };
+
+    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low" }), sealed, []);
+    if (!plan.ok) {
+        throw new Error(`planning refused the sealed request: ${plan.message}`);
+    }
+
+    expect(plan.request.tools).toEqual(context.base.tools);
+    expect(plan.request.policy).toEqual({ sealed: true });
+    expect(plan.request.spec.model).toBe("gemini-3.1-pro-low");
+    expect(browserServers).not.toHaveBeenCalled();
+});

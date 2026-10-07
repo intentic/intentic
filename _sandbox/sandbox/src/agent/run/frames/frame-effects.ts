@@ -105,43 +105,42 @@ export const fileAccountUsage = async (
     }
 };
 
-// Performs what a failure's classification named, in its order.
-export const performFailureWrites = (
-    deps: Pick<Services, "providerRefusals" | "headroom" | "observedLimits" | "modelRefusals" | "claudeSeats" | "modelCooldowns" | "logger">,
-    writes: readonly FailureWrite[],
-): void => {
-    for (const write of writes) {
-        performFailureWrite(deps, write);
-    }
+type FailureWriteDeps = Pick<Services, "providerRefusals" | "headroom" | "observedLimits" | "modelRefusals" | "claudeSeats" | "modelCooldowns" | "logger">;
+
+// Performs what a failure's classification named, in its order, without waiting on any of it: a turn's frames go out
+// whatever the records do.
+export const performFailureWrites = (deps: FailureWriteDeps, writes: readonly FailureWrite[]): void => {
+    void fileFailureWrites(deps, writes);
 };
 
-const performFailureWrite = (
-    deps: Pick<Services, "providerRefusals" | "headroom" | "observedLimits" | "modelRefusals" | "claudeSeats" | "modelCooldowns" | "logger">,
-    write: FailureWrite,
-): void => {
+// The same writes, settled once every record is on file (never rejecting: each failure has its own named line), for a
+// caller whose next step reads them back, as a sealed request re-planned off the account that just refused does.
+export const fileFailureWrites = async (deps: FailureWriteDeps, writes: readonly FailureWrite[]): Promise<void> => {
+    await Promise.all(writes.map((write) => performFailureWrite(deps, write)));
+};
+
+const performFailureWrite = (deps: FailureWriteDeps, write: FailureWrite): Promise<void> => {
     const warn = (message: string) => (error: unknown) => deps.logger.warn({ err: error }, message);
     switch (write.kind) {
         case "provider-refusal":
-            void deps.providerRefusals.record(write.provider, write.refusal).catch(warn("provider refusal: write failed"));
-            return;
+            return deps.providerRefusals.record(write.provider, write.refusal).catch(warn("provider refusal: write failed"));
         case "headroom-refresh":
+            // Unwaited even here: a re-measure is the freshest signal, not a record anything reads back at once.
             void deps.headroom.refresh(write.options);
-            return;
+            return Promise.resolve();
         case "observed-limit":
-            void deps.observedLimits
-                .record(write.provider, write.account, write.model, write.limit)
-                // Re-read at once, so an open picker's ring moves with the refusal instead of at the next sweep.
-                .then(() => deps.headroom.refresh({ scope: { providers: [write.provider], account: write.account }, maxAgeMs: 0 }))
-                .catch(warn("observed limit: write failed"));
-            return;
+            return (
+                deps.observedLimits
+                    .record(write.provider, write.account, write.model, write.limit)
+                    // Re-read at once, so an open picker's ring moves with the refusal instead of at the next sweep.
+                    .then(() => void deps.headroom.refresh({ scope: { providers: [write.provider], account: write.account }, maxAgeMs: 0 }))
+                    .catch(warn("observed limit: write failed"))
+            );
         case "model-refusal":
-            void deps.modelRefusals.record(write.provider, write.model, write.refusal).catch(warn("model refusal: write failed"));
-            return;
+            return deps.modelRefusals.record(write.provider, write.model, write.refusal).catch(warn("model refusal: write failed"));
         case "seat-refusal":
-            void deps.claudeSeats.refuse(write.account, write.reason).catch(warn("claude account: could not record the entitlement refusal"));
-            return;
+            return deps.claudeSeats.refuse(write.account, write.reason).catch(warn("claude account: could not record the entitlement refusal"));
         case "model-cooldown":
-            void deps.modelCooldowns.record(write.provider, write.model, write.cooldown).catch(warn("model cooldown: write failed"));
-            return;
+            return deps.modelCooldowns.record(write.provider, write.model, write.cooldown).catch(warn("model cooldown: write failed"));
     }
 };

@@ -60,7 +60,7 @@ import { planRevision } from "../prompt/plan-revision.js";
 import { trialUnavailableFrame } from "./error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
 import { harnessEnv } from "../providers/harness-credentials.js";
-import { workloadStamp } from "../../seams/workload-stamp.js";
+import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
 import { readClaudeUsage } from "../../runtimes/claude/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
@@ -277,30 +277,62 @@ const turnSettings = (request: HarnessRequest): Exclude<NonNullable<Options["set
 });
 
 // Refuses from a PreToolUse hook, which runs even under bypassPermissions where canUseTool is never asked.
-const REFUSE_EVERY_TOOL: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {
-    PreToolUse: [
-        {
-            hooks: [
-                async () => ({
-                    hookSpecificOutput: {
-                        hookEventName: "PreToolUse" as const,
-                        permissionDecision: "deny" as const,
-                        permissionDecisionReason: "This request only refreshes the prompt cache; nothing runs.",
-                    },
-                }),
-            ],
-        },
-    ],
-};
+const refuseEveryTool = (reason: string) =>
+    ({
+        PreToolUse: [
+            {
+                hooks: [
+                    async () => ({
+                        hookSpecificOutput: {
+                            hookEventName: "PreToolUse" as const,
+                            permissionDecision: "deny" as const,
+                            permissionDecisionReason: reason,
+                        },
+                    }),
+                ],
+            },
+        ],
+    }) satisfies Partial<Record<HookEvent, HookCallbackMatcher[]>>;
 
 // Everything a refresh changes about the turn it replays; none of it reaches the request's prefix.
 const keepWarmOptions = (request: HarnessRequest): Partial<Options> => ({
     forkSession: true,
     persistSession: false,
     maxTurns: 1,
-    hooks: REFUSE_EVERY_TOOL,
+    hooks: refuseEveryTool("This request only refreshes the prompt cache; nothing runs."),
     settings: { ...turnSettings(request), disableAllHooks: true },
 });
+
+// Everything a sealed request (agent-request.ts `policy.sealed`) changes about a turn: its prompt is everything the model
+// reads, so no built-in or MCP tool is offered (and a call is refused besides), no settings file or instruction file is
+// read, nothing is saved, and one answer ends it. Its env is the credential's alone with the harness failing fast, since
+// a helper is stepped over rather than resumed, stamped so an abandoned CLI is still swept (system/boot/leftovers.ts).
+const sealedOptions = (request: HarnessRequest): Partial<Options> => ({
+    tools: [],
+    allowedTools: [],
+    mcpServers: {},
+    settingSources: [],
+    persistSession: false,
+    maxTurns: 1,
+    // Written as disabled rather than left out unless the pin asked to think: left out is the SDK's own adaptive
+    // default, which would make every unpinned helper think.
+    thinking: { type: sendableThinking(request.spec.effort, request.spec.thinking) === true ? "adaptive" : "disabled" },
+    hooks: refuseEveryTool("This request answers in words only; nothing runs."),
+    settings: { ...turnSettings(request), disableAllHooks: true },
+    env: {
+        ...process.env,
+        ...harnessEnv(request.credential, { helper: true, model: request.spec.model }),
+        ...workloadStamp(ONE_SHOT_OWNER),
+    },
+});
+
+// What a request that is not a turn changes about one: a cache refresh's options, a sealed request's, or nothing.
+const profileOptions = (request: HarnessRequest): Partial<Options> => {
+    if (request.policy.sealed === true) {
+        return sealedOptions(request);
+    }
+    return request.policy.keepWarm === true ? keepWarmOptions(request) : {};
+};
 
 // The session a turn resumes, cut back to `resumeAt` when its re-run names one (a response the provider's safety
 // classifier stopped, refusal-fork.ts): the cut means nothing without the session it was made in.
@@ -986,13 +1018,14 @@ export async function* runAgent(
         planModeInstructions:
             "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
         canUseTool: permissionGate(conversations, request, push, shell, documents, prose, posture),
-        ...(request.policy.keepWarm === true ? keepWarmOptions(request) : {}),
+        ...profileOptions(request),
     };
 
-    // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under.
+    // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under. A sealed
+    // request is waited on by its caller to the last frame, so it does not pay for the read either.
     const credential = request.credential;
     const readUsage =
-        credential.kind !== "claude-oauth"
+        credential.kind !== "claude-oauth" || request.policy.sealed === true
             ? undefined
             : (): Promise<UsageWindow[]> => readClaudeUsage(credential.token, usageFetch).then((reading) => reading.windows);
 

@@ -122,6 +122,8 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
         `session-title`,
         { prompt: namePrompt(prompt), answer: titleAnswer },
         new AbortController().signal,
+        // Named from this conversation's first message, so a provider let read the conversation may read it here too.
+        { conversationId },
     );
     const { title, action } = splitTitleAction(named);
     await services.agents.setTitle(conversationId, chosen ?? title, "model", action);

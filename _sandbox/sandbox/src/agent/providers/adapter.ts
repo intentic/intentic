@@ -1,4 +1,4 @@
-import type { AgentCapabilities, AgentEvent, AgentProvider, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, AgentEvent, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
@@ -117,54 +117,7 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     // Whether this runtime still holds `sessionId` under `cwd`, from the store rather than the id's existence: a
     // runtime can report an id before the session is saved.
     readonly holdsSession: (deps: D, sessionId: string, cwd: string) => Promise<boolean>;
-    // One prompt in, one string out: no tools, no session, no transcript, its own deadline, every failure thrown as the
-    // provider's own sentence. Absent for a runtime nothing asks a one-liner of.
-    readonly oneShot?: (deps: D, ask: OneShotAsk) => Promise<string>;
+    // This runtime's arm and loop honour `policy.sealed` (agent-request.ts): a helper's request, no tools, no session,
+    // answered once. Absent, nothing sealed is sent to it, since a loop that ignored the flag would run with its tools.
+    readonly sealed?: true;
 }
-
-export interface OneShotAsk {
-    // Whose credential and catalog this runs on; a routed provider's helper bills to that vendor.
-    readonly provider: AgentProvider;
-    readonly prompt: string;
-    // Where the model runs; nothing is read from it, but a path that doesn't exist fails the spawn.
-    readonly cwd: string;
-    readonly model: string;
-    // How the pin says to run it; absent means thinking disabled, no effort, no speed request.
-    readonly effort?: string | undefined;
-    readonly thinking?: boolean | undefined;
-    readonly fast?: boolean | undefined;
-    // The caller's cancel: a second click, a closed panel.
-    readonly signal: AbortSignal;
-}
-
-// A one-shot's own deadline beside its caller's cancel, both ending the call through `stop` until it is released.
-export interface OneShotDeadline {
-    // Whether the clock, rather than the caller, is what ended the call.
-    readonly expired: () => boolean;
-    // The call came back with nothing: said as the deadline when that is what ended it.
-    readonly unanswered: () => Error;
-    // A failure once the deadline passed is the deadline's, whatever the torn-down call threw instead.
-    readonly claim: (error: unknown) => unknown;
-    readonly release: () => void;
-}
-
-// `namedMs` is the figure the sentence gives, which is the deadline itself unless a caller has always named another.
-export const oneShotDeadline = (caller: AbortSignal, ms: number, stop: () => void, namedMs = ms): OneShotDeadline => {
-    let expired = false;
-    caller.addEventListener("abort", stop, { once: true });
-    const timer = setTimeout(() => {
-        expired = true;
-        stop();
-    }, ms);
-    const overdue = (cause?: unknown): Error =>
-        new Error(`the model did not answer within ${namedMs / 1_000}s`, cause === undefined ? undefined : { cause });
-    return {
-        expired: () => expired,
-        unanswered: () => (expired ? overdue() : new Error("the model did not answer")),
-        claim: (error) => (expired ? overdue(error) : error),
-        release: () => {
-            clearTimeout(timer);
-            caller.removeEventListener("abort", stop);
-        },
-    };
-};

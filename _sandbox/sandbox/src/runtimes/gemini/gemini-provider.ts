@@ -24,7 +24,6 @@ import {
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
-import { geminiOneShot } from "./gemini-one-shot.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
 
 // Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
@@ -99,6 +98,10 @@ export const planGeminiTurn = async (
     }
     // Never empty, so this always resolves.
     const model = pinned ?? catalog.default;
+    // A sealed request reads nothing past its prompt, so nothing is mounted for it.
+    if (context.base.policy.sealed === true) {
+        return armPlan(services.geminiAgent, { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } });
+    }
     // The turn's remote MCP servers, as Grok's and Codex's; leased last, once nothing can refuse the turn, since only the
     // loop it arms releases it.
     const mounted = await turnToolsOf(services, granted, {
@@ -124,12 +127,13 @@ export const planGeminiTurn = async (
 // Own adapter row, not a second provider on Grok's, since health is keyed by runtime: sharing one entry would grey
 // Gemini out over a missing xAI sign-in, or Grok out over a missing Google account. OpenCode holds no Gemini credential
 // (CLIProxyAPI does); the binary is Grok's, so if `opencode` is missing, neither runs.
-// What the Gemini adapter reads: its arm's deps, and the OpenCode sessions a resume and the one-shot helper ask.
+// What the Gemini adapter reads: its arm's deps, and the OpenCode sessions a resume asks.
 export type GeminiAdapterDeps = GeminiPlanDeps & Pick<Services, "openCode">;
 
 const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini", GeminiAdapterDeps> = {
     runtime: "opencode-gemini",
-    oneShot: geminiOneShot,
+    // Serves helpers too: planGeminiTurn and the OpenCode loop read `policy.sealed`.
+    sealed: true,
     preflight: (services, input, context, granted) => planGeminiTurn(services, input, context, granted),
     health: async (services) => {
         if (services.config.translator.url === "") {

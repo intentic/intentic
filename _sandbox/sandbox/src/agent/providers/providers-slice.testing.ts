@@ -59,8 +59,8 @@ const emptyCliProxy = (overrides: ProvidersFakeOverrides["cliProxy"]) =>
 // No OpenCode server and no xAI sign-in: nothing connected, no events, every write swallowed.
 const idleOpenCode = () =>
     ({
-        // SAFETY: an empty client for a server never started. What reads a member off it (Grok's sign-in, Gemini's
-        // one-shot, an OpenCode turn) runs only in suites that pass their own `openCode`, and Grok's boot warm-up asks
+        // SAFETY: an empty client for a server never started. What reads a member off it (Grok's sign-in, an OpenCode
+        // turn or sealed request) runs only in suites that pass their own `openCode`, and Grok's boot warm-up asks
         // for it only once xAI is connected, which it never is here.
         client: async () => ({}) as never,
         // SAFETY: like client() above, this idle lease is never executed; helper/turn suites supply their own OpenCode.
