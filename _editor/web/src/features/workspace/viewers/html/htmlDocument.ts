@@ -409,6 +409,16 @@ const seal = (doc: Document, extra?: string): void => {
     }
 };
 
+// A sandboxed frame has an opaque origin, so it runs in a process of its own and learns its size a beat after its
+// document starts: through parse, DOMContentLoaded and load it is 0×0, and a page that measures itself as it loads (a
+// chart sizing its SVG from clientWidth) draws into nothing and stays that way. This shell holds the page until the
+// frame has a width, then writes it into itself, so the page's first script already sees the size it is drawn at.
+// Only for a frame that runs scripts: in one that does not, the shell would be all there is.
+export const sizedFirst = (html: string): string =>
+    `<!DOCTYPE html><script>(function(){var page=${JSON.stringify(html).replace(/</g, `\\u003c`)},done=false;` +
+    `function go(){if(done||window.innerWidth===0)return;done=true;removeEventListener("resize",go);` +
+    `document.open();document.write(page);document.close();}addEventListener("resize",go);go();})()</script>`;
+
 // What a frame's message may ask of the window, parsed where it arrives since the page's own scripts can post anything:
 // a workspace file to open, named as a path inside the workspace, or an internet address to open in a tab; or what it
 // tells, whether a mouse is over it, which at worst shows a Copy button over the page.

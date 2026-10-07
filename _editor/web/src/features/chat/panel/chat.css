@@ -9,11 +9,6 @@
 .chat-realize .chat-message {
     content-visibility: visible;
 }
-/* A ROW HOLDING A PAGE (show_page, ask_page) IS NEVER SKIPPED: a skipped row lays its frame out 0px wide, so a page whose
-   script measures itself on load (a chart sizing its SVG from clientWidth) draws into nothing and stays that way. */
-.chat-message:has([data-page]) {
-    content-visibility: visible;
-}
 /* A ROW THAT HOSTS A CONTROL IN THE GUTTER CANNOT BE PAINT-CONTAINED, and this is the rule that says so once instead of each control discovering it. */
 .chat-gutter-host {
     content-visibility: visible;

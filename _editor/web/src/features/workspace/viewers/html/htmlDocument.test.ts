@@ -1,7 +1,7 @@
 // A web page made into one sealed document: what it refuses (the policy, pinned directive by directive), which files
 // beside it are carried in and from where, what is counted and left out, and how a link is handed to the window.
 import "@intentic/testing/dom";
-import { buildPreviewDocument, candidatePaths, MAX_FILE_BYTES, mimeOf, PREVIEW_POLICY, PreviewAskSchema, refKind } from "./htmlDocument";
+import { buildPreviewDocument, candidatePaths, MAX_FILE_BYTES, mimeOf, PREVIEW_POLICY, PreviewAskSchema, refKind, sizedFirst } from "./htmlDocument";
 
 // A workspace of text files, recording every read.
 const workspaceOf = (files: Record<string, string | Blob>) => {
@@ -193,5 +193,23 @@ describe(`PreviewAskSchema`, () => {
                 null,
             ].map(ask),
         ).toEqual([undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined]);
+    });
+});
+
+describe(`sizedFirst`, () => {
+    const page = `<!DOCTYPE html><html><head><script>var a = "</script>";</script></head><body>x</body></html>`;
+    const shell = sizedFirst(page);
+
+    it(`carries the page whole inside one script the page cannot close`, () => {
+        expect(shell.startsWith(`<!DOCTYPE html><script>`)).toBe(true);
+        expect(shell.endsWith(`</script>`)).toBe(true);
+        // The only `</` left is the shell's own closing tag: the page's markup cannot end the script early.
+        expect(shell.split(`</`).length).toBe(2);
+    });
+
+    it(`writes back exactly the page it was given`, () => {
+        const literal = /var page=(".*?"),done=/.exec(shell)?.[1];
+        expect(literal).toBeDefined();
+        expect(JSON.parse(literal!)).toBe(page);
     });
 });

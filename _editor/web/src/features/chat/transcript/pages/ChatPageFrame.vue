@@ -3,6 +3,7 @@ import { deliverableKindOf, type McpAppData, type Page, PAGE_MAX_HEIGHT } from "
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useChatSurface } from "../../tools/chatToolSurface";
+import { sizedFirst } from "../../../workspace/viewers/html/htmlDocument";
 import { setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
@@ -87,7 +88,7 @@ watch(
             if (current) {
                 app = built.app;
                 handedOver = false;
-                srcdoc.value = built.html;
+                srcdoc.value = sizedFirst(built.html);
             }
         } catch {
             if (current) {

@@ -6,7 +6,7 @@ import { useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { changeEpochOf } from "../../changes/live/useWorkspaceLive";
-import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema } from "./htmlDocument";
+import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema, sizedFirst } from "./htmlDocument";
 
 // A web page rendered, in a frame sealed off from this window (htmlDocument.ts has what goes in and why). The frame has
 // scripts and an opaque origin: no `allow-same-origin`, so it cannot read this window, its storage or its cookies; no
@@ -202,7 +202,7 @@ defineExpose({ notes, pointerIn });
             v-else
             ref="frame"
             :key="`${shown}:${scripted}`"
-            :srcdoc="built.html"
+            :srcdoc="scripted ? sizedFirst(built.html) : built.html"
             :sandbox="scripted ? `allow-scripts` : ``"
             referrerpolicy="no-referrer"
             :title="t(`workspace.htmlPreview.title`, { name })"
