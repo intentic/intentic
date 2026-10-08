@@ -67,10 +67,18 @@ export const ENGINE_PINS = [
     {
         id: "opencode",
         label: "OpenCode",
-        // The SDK and the CLI are two packages released as one version; a version only one of them published would
+        // OpenCode 2, blessed under a key of its own: released daemons drive OpenCode 1 and read `opencode`, so a 2.x
+        // number there would be installed under a client that cannot speak to it. engines.json keeps that key frozen.
+        listKey: "opencode-v2",
+        // The client and the CLI are two packages released as one version; a version only one of them published would
         // fail the lockstep test, so both have to have it.
-        upstream: { kind: "npm", package: "@opencode-ai/sdk", alsoPublished: ["opencode-ai"] },
-        sites: [site(WORKSPACE, /^ {2}"@opencode-ai\/sdk": (\S+)$/gm, 1), site(pack("opencode"), /opencode-ai@(\S+) /g, 1)],
+        upstream: { kind: "npm", package: "@opencode/client", alsoPublished: ["@opencode/cli"] },
+        sites: [
+            site(WORKSPACE, /^ {2}"@opencode\/client": (\S+)$/gm, 1),
+            // The client's own packages, excused from pnpm's release-age hold by exact name@version, as Claude's are.
+            site(WORKSPACE, /^ {2}- "@opencode\/(?:client|protocol|schema)@(\S+)"$/gm, 3),
+            site(pack("opencode"), /@opencode\/cli@(\S+) /g, 1),
+        ],
     },
     {
         id: "translator",
@@ -81,6 +89,9 @@ export const ENGINE_PINS = [
 ];
 
 export const enginePin = (id) => ENGINE_PINS.find((engine) => engine.id === id);
+
+// The engines.json key an engine is blessed under: its id, unless a major the released daemons cannot drive moved it.
+export const listKeyOf = (engine) => engine.listKey ?? engine.id;
 
 const readFile = (file) => readFileSync(join(root, file), "utf8");
 

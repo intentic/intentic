@@ -134,7 +134,7 @@ export const grokProvider: ProviderModule<GrokProviderDeps> = {
             await services.openCode.client();
         })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed, first grok connect boots it lazily"));
     },
-    // OpenCode is Grok's credential store too: `connected` reads the auth.json a device sign-in wrote, on disk whether
+    // OpenCode is Grok's credential store too: `connected` reads the credential a device sign-in stored, on disk whether
     // or not a server is up.
     packs: async (services) => ((await services.openCode.connected(OPENCODE_XAI_PROVIDER)) ? ["opencode"] : []),
     // OpenCode holds one xAI auth per data dir, so Grok is a single fixed row rather than a list.

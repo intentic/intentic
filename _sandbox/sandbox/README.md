@@ -161,8 +161,8 @@ flowchart LR
   mounts. An ACP agent's warm session keeps the MCP config it was opened with, so its turns share the conversation's
   bearer, one live turn at a time, and between turns it reaches nothing. OpenCode (Grok, Gemini) keeps MCP servers per
   directory, not per session, on the one `opencode serve` every conversation shares, so a turn mounts its servers there
-  under its conversation's own names and each prompt shows its session those and hides every other conversation's
-  (`runtimes/opencode/opencode-mcp.ts`). (2026-09-29: rejected the spawn config, which is fixed at boot and cannot carry
+  under its conversation's own names and its session's own permission rules show it those and deny it every other
+  conversation's (`runtimes/opencode/opencode-mcp.ts`). (2026-09-29: rejected the spawn config, which is fixed at boot and cannot carry
   a turn's bearer, and per-turn names, which change the tool list every turn and throw away the provider's prompt
   cache.) An extension's card-less tool server and its
   agent plugin reach a turn only when the persona's `extensions` list grants that extension (absent: every one). `agent/tools/turn-tools.ts` composes these mounts
@@ -171,6 +171,14 @@ flowchart LR
   handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through
   the door. The contribution inventory is built once and kept until an extension, the enablement file or the
   capability manifest changes (`capabilities/contributions.ts`).
+- OpenCode (version 2, `@opencode/cli`) runs as one `opencode serve` the daemon spawns itself, on loopback with a
+  per-boot password, never OpenCode's own shared background server, which would not read the daemon's environment
+  (`runtimes/opencode/opencode-serve.ts`). Its one event stream is opened at boot and read once: it answers every
+  session's permission asks and hands each turn its own session family's events (`opencode-events.ts`). Grok's
+  sign-in lives in OpenCode's database, read from disk so asking whether Grok is connected never boots the server
+  (`opencode-credentials.ts`). The engine store refuses an OpenCode 1 copy an older daemon installed, and the blessed
+  list carries OpenCode 2 under `opencode-v2`, so daemons still on OpenCode 1 never read a 2.x number
+  (`engines/engine-descriptors.ts`).
 - OpenCode fixes its provider config at spawn, so a Google turn compares the translator's catalog (ids and input
   modalities) with what the running server registered, and restarts the server onto the new list only when it is idle
   (`runtimes/opencode/opencode.ts`). A turn holds the server from setup through cleanup, helpers and Grok sign-in

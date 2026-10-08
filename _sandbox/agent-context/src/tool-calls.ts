@@ -7,9 +7,11 @@ import { isAbsolute, relative } from "node:path";
 // ACP's tool kinds, the categories every card icon and reading is keyed on.
 export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other";
 
-// Native tool ids to display names; OpenCode's lowercase ids map over, Claude SDK names pass through.
+// Native tool ids to display names; OpenCode's lowercase ids map over (OpenCode 2's `shell` and `subagent` as well as
+// OpenCode 1's `bash` and `task`, which older transcripts still name), Claude SDK names pass through.
 const DISPLAY_NAMES: Record<string, string> = {
     bash: "Bash",
+    shell: "Bash",
     edit: "Edit",
     write: "Write",
     read: "Read",
@@ -19,7 +21,9 @@ const DISPLAY_NAMES: Record<string, string> = {
     webfetch: "WebFetch",
     websearch: "WebSearch",
     task: "Task",
+    subagent: "Task",
     patch: "Edit",
+    skill: "Skill",
     // The page tools a chat draws from (the sandbox's agent/pages), named for a reader rather than by their server.
     mcp__ui__show_page: "Show page",
     mcp__ui__ask_page: "Ask on a page",

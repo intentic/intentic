@@ -114,6 +114,11 @@ export const installEngine = (id: EngineId, version: string): Promise<EngineInst
 
 const installOnce = async (id: EngineId, version: string): Promise<EngineInstallOutcome> => {
     const descriptor = engineDescriptor(id);
+    // Not quarantined: the version is fine, this daemon is the wrong one for it, and a later build may drive it.
+    const refusal = descriptor.incompatible?.(version);
+    if (refusal !== undefined) {
+        return { ok: false, version, reason: refusal, quarantined: false };
+    }
     const target = engineVersionDir(id, version);
     const reused = (await installedVersions(id)).includes(version);
     if (!reused) {
@@ -154,6 +159,7 @@ const stage = async (
     const prefix = await mkdtemp(join(staging, `${version}-`)).catch(() => mkdtemp(join(tmpdir(), `engine-${descriptor.id}-`)));
     try {
         await (descriptor.source.kind === "npm" ? npmInstall(descriptor, version, prefix) : releaseInstall(descriptor, version, prefix));
+        await descriptor.afterInstall?.(prefix);
         return { ok: true, prefix };
     } catch (error) {
         await rm(prefix, { recursive: true, force: true });

@@ -1,6 +1,6 @@
-import { type EngineChannel, type EngineId, ENGINE_IDS, isNewer } from "@intentic/sandbox-contract";
+import { type EngineChannel, type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { engineDescriptor } from "./engine-descriptors.js";
+import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineState, isQuarantined } from "./engine-store.js";
 
 // What upstream publishes is read straight from its registry (npm or GitHub releases); what this project has blessed is
@@ -33,8 +33,6 @@ interface ListCache {
 
 let list: ListCache | undefined;
 
-const isEngineId = (id: string): id is EngineId => (ENGINE_IDS as readonly string[]).includes(id);
-
 const fetchList = async (): Promise<ListCache | undefined> => {
     try {
         const response = await fetch(LIST_URL(), {
@@ -52,7 +50,13 @@ const fetchList = async (): Promise<ListCache | undefined> => {
         if (parsed.data === undefined) {
             return undefined;
         }
-        const entries = Object.fromEntries(Object.entries(parsed.data.engines).filter(([id]) => isEngineId(id)));
+        // Read by each engine's own key: one whose major the released daemons cannot drive is blessed under another.
+        const entries = Object.fromEntries(
+            ENGINE_DESCRIPTORS.flatMap((descriptor) => {
+                const entry = parsed.data.engines[descriptor.listKey ?? descriptor.id];
+                return entry === undefined ? [] : [[descriptor.id, entry]];
+            }),
+        );
         const etag = response.headers.get("etag");
         return { entries, readAt: new Date().toISOString(), ...(etag === null ? {} : { etag }), at: Date.now() };
     } catch {
@@ -153,7 +157,7 @@ export const lowestSatisfying = async (id: EngineId, floor: string): Promise<str
     // Fresh: the floor was raised by a refusal just now, which a held answer may predate.
     const upstream = await publishedVersions(id, true);
     return upstream?.versions
-        .filter((version) => satisfies(version, floor))
+        .filter((version) => satisfies(version, floor) && descriptor.incompatible?.(version) === undefined)
         .sort((left, right) => (isNewer(left, right) ? 1 : -1))
         .at(0);
 };
@@ -162,7 +166,8 @@ export const lowestSatisfying = async (id: EngineId, floor: string): Promise<str
 // is applied here, not at install time, so a version already refused is not offered on every check.
 export const targetVersion = async (id: EngineId, channel: EngineChannel, state: EngineState): Promise<string | undefined> => {
     const target = await targetOf(id, channel);
-    return target === undefined || isQuarantined(state, target) ? undefined : target;
+    // A pin or a list naming a version this daemon cannot drive offers nothing, rather than an install that is refused.
+    return target === undefined || isQuarantined(state, target) || engineDescriptor(id).incompatible?.(target) !== undefined ? undefined : target;
 };
 
 const targetOf = async (id: EngineId, channel: EngineChannel): Promise<string | undefined> => {

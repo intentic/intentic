@@ -1,959 +1,413 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
-import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { createTurnGate } from "../../guard/turn-gate.js";
+import { DatabaseSync } from "node:sqlite";
+import type { CredentialEntry, OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import { humanizeModelId } from "@intentic/sandbox-contract";
-import { SEED_XAI_MODELS } from "./xai-models.js";
-import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import type { CommandGuard } from "../../guard/command-guard.js";
-import { createOpencodeServer, type Config as OpenCodeConfig } from "@opencode-ai/sdk";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
-import { createOpenCodeService, geminiProviderConfig, type OpenCodeGeminiConfig, type OpenCodeService, type SessionJudge } from "./opencode.js";
-import { mcpServersOf, openCodeMounts } from "./opencode-mcp.js";
-import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { createOpenCodeService, type OpenCodeService } from "./opencode.js";
+import { createXaiCatalog, openCodeCredentials } from "./opencode-credentials.js";
+import type { ServedServer } from "./opencode-serve.js";
 
-// Where a turn here parks its cards: one fleet's actors.
-const cards = parkedCards(memoryFleet().conversations);
+// Where OpenCode keeps a sign-in, read off disk without asking its server: OpenCode 2's SQLite database once a boot has
+// migrated the directory, OpenCode 1's auth.json until then. And xAI's catalog over that sign-in: live with an unexpired
+// token, else the persisted list, else the seed. Real temp directories, real SQLite files.
 
-// Captures server-spawn options instead of booting a real `opencode serve`; the client doubles also feed an event
-// stream and record every permission answered, on whichever route answered it, and every MCP server mounted.
-const serverSpawns: { config?: OpenCodeConfig }[] = [];
-const serverCloses: number[] = [];
-const subscriptionSignals: (AbortSignal | null | undefined)[] = [];
-const liveServices: OpenCodeService[] = [];
-// The per-session route an older ask is answered on, which carries no reason.
-const legacyReplies: { sessionID: string; permissionID: string; directory: string | undefined; response: string | undefined }[] = [];
-// The current route, whose refusal carries the reason back to the model.
-const permissionReplies: { requestID: string; directory: string | undefined; reply: string | undefined; message?: string }[] = [];
-const mcpCalls: (
-    | { call: "add"; name: string; directory: string | undefined; config: unknown }
-    | { call: "disconnect"; name: string; directory: string | undefined }
-)[] = [];
-const streamEvents = [] as unknown[];
-// Every event subscription asked for, by directory; `refused` makes each one fail the way a dead server's does.
-const subscriptions = { refused: false, asked: [] as (string | undefined)[] };
-jest.mock("@opencode-ai/sdk", () => ({
-    createOpencodeServer: async (options: { config?: OpenCodeConfig }) => {
-        const index = serverSpawns.push(options) - 1;
-        return {
-            url: "http://127.0.0.1:0",
-            close: (): void => {
-                serverCloses.push(index);
-            },
-        };
-    },
-    createOpencodeClient: () => ({
-        mcp: {
-            add: async (options: { body?: { name: string; config: unknown }; query?: { directory?: string } }) => {
-                mcpCalls.push({ call: "add", name: options.body?.name ?? "", directory: options.query?.directory, config: options.body?.config });
-                return {};
-            },
-            disconnect: async (options: { path: { name: string }; query?: { directory?: string } }) => {
-                mcpCalls.push({ call: "disconnect", name: options.path.name, directory: options.query?.directory });
-                return {};
-            },
-        },
-    }),
-}));
-jest.mock("@opencode-ai/sdk/v2/client", () => ({
-    createOpencodeClient: () => ({
-        // The event stream rides the current API's client, the one whose fetch can be replaced.
-        event: {
-            subscribe: async (parameters?: { directory?: string }, options?: { signal?: AbortSignal | null }) => {
-                subscriptions.asked.push(parameters?.directory);
-                subscriptionSignals.push(options?.signal);
-                if (subscriptions.refused) {
-                    throw new Error("connect ECONNREFUSED");
-                }
-                return {
-                    stream: {
-                        async *[Symbol.asyncIterator]() {
-                            yield* streamEvents;
-                            // Stays open until this boot is stopped, as the real SDK's signal-aware stream does.
-                            await new Promise<void>((resolve) => {
-                                if (options?.signal?.aborted === true) {
-                                    resolve();
-                                    return;
-                                }
-                                options?.signal?.addEventListener("abort", () => resolve(), { once: true });
-                            });
-                        },
-                    },
-                };
-            },
-        },
-        permission: {
-            respond: async (parameters: { sessionID: string; permissionID: string; directory?: string; response?: string }) => {
-                legacyReplies.push({
-                    sessionID: parameters.sessionID,
-                    permissionID: parameters.permissionID,
-                    directory: parameters.directory,
-                    response: parameters.response,
-                });
-                return {};
-            },
-            reply: async (parameters: { requestID: string; directory?: string; reply?: string; message?: string }) => {
-                const answered: (typeof permissionReplies)[number] = {
-                    requestID: parameters.requestID,
-                    directory: parameters.directory,
-                    reply: parameters.reply,
-                };
-                if (parameters.message !== undefined) {
-                    answered.message = parameters.message;
-                }
-                permissionReplies.push(answered);
-                return {};
-            },
-        },
-    }),
-}));
+// The `credential` table exactly as OpenCode 2.0.26 creates it (copied from a database a real server wrote).
+const CREDENTIAL_TABLE = `CREATE TABLE \`credential\` (
+          \`id\` text PRIMARY KEY,
+          \`integration_id\` text,
+          \`label\` text NOT NULL,
+          \`value\` text NOT NULL,
+          \`connector_id\` text,
+          \`method_id\` text,
+          \`active\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        )`;
+
+// A value as OpenCode 2 files an xAI device sign-in (the shape a real migrated row holds), and an API key's.
+const oauth = (token: string, expires: number) => ({ type: "oauth", methodID: "device", refresh: `refresh-${token}`, access: token, expires });
+const apiKey = { type: "key", key: "xai-api-key" };
+const HOUR = 3_600_000;
 
 const roots: string[] = [];
-const scratch = async (): Promise<string> => {
-    const root = await mkdtemp(join(tmpdir(), "opencode-"));
-    roots.push(root);
-    return root;
-};
+const databases: DatabaseSync[] = [];
+afterEach(async () => {
+    for (const db of databases.splice(0)) {
+        db.close();
+    }
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
-// OpenCode persists provider auth at <XDG_DATA_HOME>/opencode/auth.json (the store connected()/disconnect() use).
-const writeAuth = async (xdg: string, auth: unknown): Promise<void> => {
+// An XDG data home and the opencode directory inside it, where OpenCode and this daemon both keep their files.
+const scratch = async (): Promise<{ xdg: string; dir: string }> => {
+    const xdg = await mkdtemp(join(tmpdir(), "opencode-"));
+    roots.push(xdg);
     const dir = join(xdg, "opencode");
     await mkdir(dir, { recursive: true });
+    return { xdg, dir };
+};
+
+interface Row {
+    readonly id: string;
+    readonly integration: string;
+    readonly value: unknown;
+    // The column's text as written, for a value that is not JSON at all.
+    readonly text?: string;
+    // OpenCode leaves it unset on a lone credential.
+    readonly active?: 0 | 1;
+    readonly updated?: number;
+}
+
+// The database a running OpenCode 2 server holds open: WAL, its connection kept, so a row it just wrote may still sit in
+// the log rather than the main file when the daemon reads.
+const migratedDatabase = (dir: string, rows: readonly Row[] = []) => {
+    const db = new DatabaseSync(join(dir, "opencode.db"));
+    databases.push(db);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec(CREDENTIAL_TABLE);
+    const add = (row: Row): void => {
+        const updated = row.updated ?? 1_791_000_000_000;
+        db.prepare(
+            "INSERT INTO credential (id, integration_id, label, value, connector_id, method_id, active, time_created, time_updated) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?)",
+        ).run(row.id, row.integration, "OAuth", row.text ?? JSON.stringify(row.value), row.active ?? null, updated, updated);
+    };
+    for (const row of rows) {
+        add(row);
+    }
+    return { db, add };
+};
+
+// OpenCode 1's store, keyed by provider; still the record until an OpenCode 2 boot migrates the directory.
+const writeAuth = async (dir: string, auth: unknown): Promise<void> => {
     await writeFile(join(dir, "auth.json"), JSON.stringify(auth));
 };
-const modelsPath = (xdg: string): string => join(xdg, "opencode", "xai-models.json");
-const fileExists = async (path: string): Promise<boolean> =>
+
+const exists = async (path: string): Promise<boolean> =>
     access(path)
         .then(() => true)
         .catch(() => false);
-// Fails the test if the discovery path ever touches the network.
-const forbiddenFetch = (() => {
-    throw new Error("discovery must not hit the network in this case");
-}) as unknown as typeof fetch;
-// The catalog the seed floor produces (ids humanized), for the not-connected assertions.
-const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humanizeModelId(id) })), default: SEED_XAI_MODELS[0]! };
 
-afterEach(async () => {
-    await Promise.all(liveServices.splice(0).map((service) => service.stop()));
-    serverCloses.length = 0;
-    subscriptionSignals.length = 0;
-    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-    // The three doubles are module-level; reset so one test's stream/permissions don't leak into the next.
-    streamEvents.length = 0;
-    permissionReplies.length = 0;
-    legacyReplies.length = 0;
-    mcpCalls.length = 0;
-    serverSpawns.length = 0;
-    subscriptions.refused = false;
-    subscriptions.asked.length = 0;
-    jest.useRealTimers();
-});
-
-test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCode's cached snapshot", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg);
-    // No auth file yet ⇒ not connected.
-    expect(await service.connected("xai")).toBe(false);
-    // OAuth token written by the device flow ⇒ connected, with no opencode-server restart.
-    await writeAuth(xdg, { xai: { type: "oauth", access: "tok", refresh: "r", expires: 1 } });
-    expect(await service.connected("xai")).toBe(true);
-});
-
-test("connected('xai') is false for a non-oauth entry or a different provider", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg);
-    // An api-key entry has no OAuth access token, so "connected" must stay false to match what a turn can actually use.
-    await writeAuth(xdg, { xai: { type: "api", key: "sk-xxx" } });
-    expect(await service.connected("xai")).toBe(false);
-    await writeAuth(xdg, { anthropic: { type: "oauth", access: "tok" } });
-    expect(await service.connected("xai")).toBe(false);
-});
-
-test("disconnect clears the auth store AND the persisted catalog so connected flips back to false", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg);
-    await writeAuth(xdg, { xai: { type: "oauth", access: "tok" } });
-    await service.recordModels(["grok-4"]);
-    expect(await service.connected("xai")).toBe(true);
-    expect(await fileExists(modelsPath(xdg))).toBe(true);
-    await service.disconnect("xai");
-    expect(await service.connected("xai")).toBe(false);
-    expect(await fileExists(modelsPath(xdg))).toBe(false);
-});
-
-test("xaiModels() returns the seed catalog (non-empty, with a default) when not connected: never blank", async () => {
-    const xdg = await scratch();
-    // No auth ⇒ no token ⇒ discovery is skipped entirely (forbiddenFetch proves it), and the seed floor is served.
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    expect(await service.xaiModels()).toEqual(SEED_CATALOG);
-});
-
-test("xaiModels() skips REST discovery when the token is expired, serving the persisted catalog instead", async () => {
-    const xdg = await scratch();
-    // expires is a past ms epoch ⇒ every discovery probe would 401, so this must not even try (forbiddenFetch).
-    await writeAuth(xdg, { xai: { type: "oauth", access: "tok", expires: 1 } });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    await service.recordModels(["grok-4.20-0309-reasoning"]);
-    expect(await service.xaiModels()).toEqual({
-        models: [{ id: "grok-4.20-0309-reasoning", label: humanizeModelId("grok-4.20-0309-reasoning") }],
-        default: "grok-4.20-0309-reasoning",
-    });
-});
-
-test("xaiModels() discovers live with an unexpired token, then persists the result", async () => {
-    const xdg = await scratch();
-    await writeAuth(xdg, { xai: { type: "oauth", access: "tok", expires: Number.MAX_SAFE_INTEGER } });
-    const liveFetch = (async (url: string | URL) =>
-        String(url).endsWith("/v1/models")
-            ? new Response(JSON.stringify({ data: [{ id: "grok-4-latest" }] }), { status: 200 })
-            : new Response("{}", { status: 404 })) as unknown as typeof fetch;
-    const service = createOpenCodeService(xdg, { fetchImpl: liveFetch });
-    expect(await service.xaiModels()).toEqual({ models: [{ id: "grok-4-latest", label: "Grok 4 Latest" }], default: "grok-4-latest" });
-    // The live result is persisted so a later expired-token read still serves the real catalog.
-    expect(JSON.parse(await readFile(modelsPath(xdg), "utf8"))).toEqual(["grok-4-latest"]);
-});
-
-test("recordModels persists xAI's named models (chat-only) and xaiModels() serves them next", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    // Media ids are dropped; the survivors are persisted and become the catalog + default.
-    await service.recordModels(["grok-4", "grok-2-image", "grok-3"]);
-    expect(JSON.parse(await readFile(modelsPath(xdg), "utf8"))).toEqual(["grok-4", "grok-3"]);
-    expect(await service.xaiModels()).toEqual({
-        models: [
-            { id: "grok-4", label: "Grok 4" },
-            { id: "grok-3", label: "Grok 3" },
-        ],
-        default: "grok-4",
-    });
-});
-
-test("client() spawns the server with store:false for every known xai model (seed + persisted)", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    await service.recordModels(["grok-4-latest"]);
-    await service.client();
-
-    // xAI stores conversations server-side unless each model call opts out; per-model config is the only seam OpenCode
-    // forwards, so every known id must carry store:false.
-    const spawn = serverSpawns.at(-1) as { config: { provider: { xai: { models: Record<string, { options: unknown }> } } } };
-    const models = spawn.config.provider.xai.models;
-    expect(Object.keys(models).toSorted()).toEqual([...new Set([...SEED_XAI_MODELS, "grok-4-latest"])].toSorted());
-    for (const model of Object.values(models)) {
-        expect(model.options).toEqual({ store: false });
-    }
-});
-
-// A cloned repo's opencode.json can say `"share": "auto"`, which uploads every session to OpenCode's servers; the spawn
-// config is merged after it, so its own `share` is what decides.
-test("client() spawns the server with session sharing disabled", async () => {
-    const xdg = await scratch();
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
-    expect(serverSpawns.at(-1)?.config).toHaveProperty("share", "disabled");
-});
-
-// OpenCode defaults an omitted key to `ask`, which nobody on this runtime can answer, so the turn just stops;
-// `external_directory` is the one that found it (attachments read from outside an isolated worktree).
-test("client() spawns the server with EVERY permission answered, not merely the ones anyone thought of", async () => {
-    const xdg = await scratch();
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
-    const spawn = serverSpawns.at(-1) as { config: { permission: Record<string, unknown> } };
-    const permission = spawn.config.permission;
-
-    // Every key must be present: an omitted one defaults to `ask`, which nobody here can answer.
-    expect(Object.keys(permission).toSorted()).toEqual(["bash", "doom_loop", "edit", "external_directory", "webfetch"]);
-    for (const key of ["edit", "webfetch", "doom_loop", "external_directory"]) {
-        expect(permission[key], key).toBe("allow");
-    }
-
-    // `bash`'s default is still allow; only shapes the rulebook might care about are pre-filtered to `ask` and answered
-    // by the real classifier.
-    const bash = permission["bash"] as Record<string, string>;
-    expect(bash["*"]).toBe("allow");
-    expect(bash["*git push*"]).toBe("ask");
-    expect(bash["*rm *"]).toBe("ask");
-    // Nothing in the map may be `deny`: that verdict must come from the rulebook, never from this layer alone.
-    expect([...new Set(Object.values(bash))].toSorted()).toEqual(["allow", "ask"]);
-});
-
-// A future OpenCode permission key defaults to `ask` and is absent from the spawned config, same as
-// `external_directory` was; answered on the spot rather than stalling.
-test("a permission ask on a watched directory is answered with a standing yes", async () => {
-    const xdg = await scratch();
-    streamEvents.push({ type: "permission.updated", properties: { id: "per_1", sessionID: "ses_1", type: "some_future_gate" } });
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
-    // The watcher reads its stream detached from the boot that started it, so let its first read land.
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(legacyReplies).toEqual([{ sessionID: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
-});
-
-// A watcher that exhausted its retries answers nothing more; a directory still marked watched would leave every later
-// permission ask there unanswered until the turn's watchdog killed it.
-test("a permission watcher that gave up is reopened by the next turn in its directory", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    await service.client();
-    // Boot polls for the spawned process on the real clock; only the watcher's retry ladder needs advancing.
-    jest.useFakeTimers();
-    subscriptions.refused = true;
-    const worktree = `${WORKSPACE_ROOT}/worktree`;
-    await service.watch(worktree);
-    await advanceTimersByTimeAsync(20_000);
-    expect(subscriptions.asked).toEqual([worktree, worktree, worktree]);
-
-    subscriptions.refused = false;
-    await service.watch(worktree);
-    expect(subscriptions.asked).toHaveLength(4);
-});
-
-interface RecordedJudge {
-    readonly judge: SessionJudge;
-    readonly frames: AgentEvent[];
-    readonly holds: string[];
-}
-
-// What a turn registers for its sessions: the gate its rulebook built, a sink for the frames the card raises, and a hold
-// on its watchdog, recorded here so a test can see the clock held for exactly the consult.
-const judgeOf = (gate: CommandGuard): RecordedJudge => {
-    const frames: AgentEvent[] = [];
-    const holds: string[] = [];
-    return {
-        frames,
-        holds,
-        judge: {
-            gate,
-            push: (frame) => void frames.push(frame),
-            hold: () => {
-                holds.push("held");
-                return () => void holds.push("released");
-            },
+// Every request discovery made, each answered by `answer`.
+const recordingFetch = (answer: (url: string) => Response) => {
+    const requests: { url: string; authorization: string | null }[] = [];
+    const fetchImpl: typeof fetch = Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            const url = String(input);
+            requests.push({ url, authorization: new Headers(init?.headers).get("authorization") });
+            return answer(url);
         },
+        { preconnect: () => undefined },
+    );
+    return { fetchImpl, requests };
+};
+// For a case that must not reach the network: any request fails the read that made it, and is recorded.
+const offline = (url: string): Response => {
+    throw new Error(`no request expected, got ${url}`);
+};
+const listing = (ids: readonly string[]) => (url: string) =>
+    url === "https://api.x.ai/v1/models" ? new Response(JSON.stringify({ data: ids.map((id) => ({ id })) })) : new Response("{}", { status: 404 });
+
+// The catalog as served: the ids in the order it ranks them, the first its default.
+const catalogOf = (head: string, ...rest: string[]) => ({ models: [head, ...rest].map((id) => ({ id, label: humanizeModelId(id) })), default: head });
+const SEED_CATALOG = catalogOf("grok-4", "grok-3");
+
+// The xAI catalog as the service wires it: over the credential OpenCode holds for xai.
+const xaiCatalog = (dir: string, fetchImpl: typeof fetch) => {
+    const credentials = openCodeCredentials(dir);
+    return createXaiCatalog(dir, () => credentials.stored("xai"), fetchImpl);
+};
+
+describe("whether a provider is connected", () => {
+    test("an OAuth sign-in in OpenCode 2's table connects xai, read afresh on every ask", async () => {
+        const { dir } = await scratch();
+        const credentials = openCodeCredentials(dir);
+        const { add } = migratedDatabase(dir);
+        expect(await credentials.connected("xai")).toBe(false);
+
+        // Written by the running server after the first ask: no restart, no cache, the next ask sees it.
+        add({ id: "cred_xai", integration: "xai", value: oauth("tok", Date.now() + HOUR) });
+
+        expect(await credentials.connected("xai")).toBe(true);
+    });
+
+    test("an API key is not a subscription, and another integration's sign-in is not xai's", async () => {
+        const { dir } = await scratch();
+        const credentials = openCodeCredentials(dir);
+        const { add } = migratedDatabase(dir, [{ id: "cred_key", integration: "xai", value: apiKey }]);
+        expect(await credentials.connected("xai")).toBe(false);
+
+        add({ id: "cred_other", integration: "anthropic", value: oauth("tok", Date.now() + HOUR) });
+        expect(await credentials.connected("xai")).toBe(false);
+        expect(await credentials.connected("anthropic")).toBe(true);
+    });
+
+    test("before any OpenCode 2 boot (no database), auth.json is the record", async () => {
+        const { dir } = await scratch();
+        const credentials = openCodeCredentials(dir);
+        expect(await credentials.connected("xai")).toBe(false);
+
+        await writeAuth(dir, { xai: { type: "oauth", access: "tok", refresh: "r", expires: 1 } });
+        expect(await credentials.connected("xai")).toBe(true);
+
+        await writeAuth(dir, { xai: { type: "api", key: "sk-xxx" } });
+        expect(await credentials.connected("xai")).toBe(false);
+        await writeAuth(dir, { anthropic: { type: "oauth", access: "tok" } });
+        expect(await credentials.connected("xai")).toBe(false);
+    });
+
+    test("a database without the credential table has not been migrated yet, so auth.json is still the record", async () => {
+        const { dir } = await scratch();
+        const db = new DatabaseSync(join(dir, "opencode.db"));
+        databases.push(db);
+        db.exec("CREATE TABLE `kv` (`key` text PRIMARY KEY, `value` text)");
+        const legacy = { type: "oauth", access: "legacy-tok", refresh: "r", expires: 1 };
+        await writeAuth(dir, { xai: legacy });
+
+        expect(await openCodeCredentials(dir).stored("xai")).toEqual(legacy);
+    });
+
+    // The first OpenCode 2 boot moves auth.json's entries into the table and leaves the file: a sign-out after that
+    // empties the table, and the stale file must not sign the account back in.
+    test("once the table exists, auth.json is ignored, even with the table empty", async () => {
+        const { dir } = await scratch();
+        await writeAuth(dir, { xai: { type: "oauth", access: "legacy-tok", refresh: "r", expires: 1 } });
+        migratedDatabase(dir);
+
+        const credentials = openCodeCredentials(dir);
+        expect(await credentials.stored("xai")).toBeUndefined();
+        expect(await credentials.connected("xai")).toBe(false);
+    });
+
+    test("of several accounts, the active one is read, else the newest", async () => {
+        const { dir } = await scratch();
+        const signedIn = oauth("old-tok", Date.now() + HOUR);
+        const { add } = migratedDatabase(dir, [
+            { id: "cred_old", integration: "xai", value: signedIn, active: 1, updated: 1_000 },
+            { id: "cred_new", integration: "xai", value: apiKey, active: 0, updated: 2_000 },
+        ]);
+        const credentials = openCodeCredentials(dir);
+        expect(await credentials.stored("xai")).toEqual(signedIn);
+        expect(await credentials.connected("xai")).toBe(true);
+
+        // No account marked active: the newest wins.
+        add({ id: "cred_a", integration: "grok-team", value: oauth("a-tok", 1), updated: 1_000 });
+        add({ id: "cred_b", integration: "grok-team", value: oauth("b-tok", 2), updated: 3_000 });
+        expect(await credentials.stored("grok-team")).toEqual(oauth("b-tok", 2));
+    });
+
+    test("a row it cannot parse is passed over for the next one", async () => {
+        const { dir } = await scratch();
+        migratedDatabase(dir, [
+            { id: "cred_bad", integration: "xai", value: undefined, text: "{not json", updated: 2_000 },
+            { id: "cred_good", integration: "xai", value: oauth("tok", 5), updated: 1_000 },
+        ]);
+
+        expect(await openCodeCredentials(dir).stored("xai")).toEqual(oauth("tok", 5));
+    });
+});
+
+describe("xAI's model catalog", () => {
+    test("with no sign-in, the seed is served without a request: never blank", async () => {
+        const { dir } = await scratch();
+        const { fetchImpl, requests } = recordingFetch(offline);
+
+        expect(await xaiCatalog(dir, fetchImpl).models()).toEqual(SEED_CATALOG);
+        expect(requests).toEqual([]);
+    });
+
+    test("an API key cannot list a subscription's models: the seed, without a request", async () => {
+        const { dir } = await scratch();
+        migratedDatabase(dir, [{ id: "cred_key", integration: "xai", value: apiKey }]);
+        const { fetchImpl, requests } = recordingFetch(offline);
+
+        expect(await xaiCatalog(dir, fetchImpl).models()).toEqual(SEED_CATALOG);
+        expect(requests).toEqual([]);
+    });
+
+    // Every discovery probe would 401 on an expired token, so it must not even try.
+    test("with an expired token, the persisted list is served without a request", async () => {
+        const { dir } = await scratch();
+        migratedDatabase(dir, [{ id: "cred_xai", integration: "xai", value: oauth("tok", Date.now() - 1) }]);
+        await writeFile(join(dir, "xai-models.json"), JSON.stringify(["grok-4.20-0309-reasoning"]));
+        const { fetchImpl, requests } = recordingFetch(offline);
+
+        expect(await xaiCatalog(dir, fetchImpl).models()).toEqual(catalogOf("grok-4.20-0309-reasoning"));
+        expect(requests).toEqual([]);
+    });
+
+    test("with an unexpired token, the catalog is discovered live with it, chat models only, and persisted", async () => {
+        const { dir } = await scratch();
+        migratedDatabase(dir, [{ id: "cred_xai", integration: "xai", value: oauth("live-tok", Date.now() + HOUR) }]);
+        const { fetchImpl, requests } = recordingFetch(listing(["grok-4-latest", "grok-imagine-video", "grok-3-mini"]));
+        const catalog = xaiCatalog(dir, fetchImpl);
+
+        expect(await catalog.models()).toEqual(catalogOf("grok-4-latest", "grok-3-mini"));
+        expect(requests).toEqual([{ url: "https://api.x.ai/v1/models", authorization: "Bearer live-tok" }]);
+        // Persisted, so a later boot or an expired-token read still serves the real catalog.
+        expect(JSON.parse(await readFile(join(dir, "xai-models.json"), "utf8"))).toEqual(["grok-4-latest", "grok-3-mini"]);
+        expect(await catalog.persisted()).toEqual(["grok-4-latest", "grok-3-mini"]);
+    });
+
+    test("an unexpired token in auth.json, before any OpenCode 2 boot, is discovered with too", async () => {
+        const { dir } = await scratch();
+        await writeAuth(dir, { xai: { type: "oauth", access: "legacy-tok", refresh: "r", expires: Date.now() + HOUR } });
+        const { fetchImpl, requests } = recordingFetch(listing(["grok-4-latest"]));
+
+        expect(await xaiCatalog(dir, fetchImpl).models()).toEqual(catalogOf("grok-4-latest"));
+        expect(requests).toEqual([{ url: "https://api.x.ai/v1/models", authorization: "Bearer legacy-tok" }]);
+    });
+
+    test("a model list a turn proved is kept chat-only and served next", async () => {
+        const { dir } = await scratch();
+        const { fetchImpl } = recordingFetch(offline);
+        const catalog = xaiCatalog(dir, fetchImpl);
+
+        // Media ids are dropped and a repeat collapses; the survivors are persisted and become the catalog and its default.
+        await catalog.record(["grok-4", "grok-2-image", "grok-3", "grok-4"]);
+
+        expect(JSON.parse(await readFile(join(dir, "xai-models.json"), "utf8"))).toEqual(["grok-4", "grok-3"]);
+        expect(await catalog.models()).toEqual(catalogOf("grok-4", "grok-3"));
+        // A fresh read of the file, as the next boot's store opt-out reads it.
+        expect(await xaiCatalog(dir, fetchImpl).persisted()).toEqual(["grok-4", "grok-3"]);
+    });
+
+    test("an empty or media-only list replaces nothing: the seed floor, or the list already kept", async () => {
+        const { dir } = await scratch();
+        const { fetchImpl } = recordingFetch(offline);
+        const catalog = xaiCatalog(dir, fetchImpl);
+
+        await catalog.record([]);
+        await catalog.record(["grok-2-image", "grok-imagine-video"]);
+        expect(await exists(join(dir, "xai-models.json"))).toBe(false);
+        expect(await catalog.models()).toEqual(SEED_CATALOG);
+
+        await catalog.record(["grok-4"]);
+        await catalog.record(["grok-imagine-video"]);
+        expect(JSON.parse(await readFile(join(dir, "xai-models.json"), "utf8"))).toEqual(["grok-4"]);
+        expect(await catalog.models()).toEqual(catalogOf("grok-4"));
+    });
+
+    test("forgetting drops the cached answer and the persisted list, so a signed-out account serves the seed at once", async () => {
+        const { dir } = await scratch();
+        const { db } = migratedDatabase(dir, [{ id: "cred_xai", integration: "xai", value: oauth("tok", Date.now() + HOUR) }]);
+        const { fetchImpl } = recordingFetch(listing(["grok-4-latest"]));
+        const catalog = xaiCatalog(dir, fetchImpl);
+        expect(await catalog.models()).toEqual(catalogOf("grok-4-latest"));
+
+        db.prepare("DELETE FROM credential WHERE id = ?").run("cred_xai");
+        await catalog.forget();
+
+        expect(await exists(join(dir, "xai-models.json"))).toBe(false);
+        expect(await catalog.models()).toEqual(SEED_CATALOG);
+    });
+
+    // A different account signing in within the grace window (ABSENT_FOR_MS) was once served, and had persisted, the
+    // signed-out account's models after its own, which its token cannot run.
+    test("after forgetting, the next account's catalog is its own, without the signed-out account's models", async () => {
+        const { dir } = await scratch();
+        const { db, add } = migratedDatabase(dir, [{ id: "cred_first", integration: "xai", value: oauth("first-tok", Date.now() + HOUR) }]);
+        let listed: readonly string[] = ["grok-4-heavy", "grok-4-latest"];
+        const { fetchImpl } = recordingFetch((url) => listing(listed)(url));
+        const catalog = xaiCatalog(dir, fetchImpl);
+        expect(await catalog.models()).toEqual(catalogOf("grok-4-latest", "grok-4-heavy"));
+
+        db.prepare("DELETE FROM credential WHERE id = ?").run("cred_first");
+        await catalog.forget();
+        add({ id: "cred_second", integration: "xai", value: oauth("second-tok", Date.now() + HOUR) });
+        listed = ["grok-4-latest"];
+
+        expect(await catalog.models()).toEqual(catalogOf("grok-4-latest"));
+        expect(JSON.parse(await readFile(join(dir, "xai-models.json"), "utf8"))).toEqual(["grok-4-latest"]);
+    });
+});
+
+describe("signing out", () => {
+    // The table's rows go through the server, which also drops its own copy; the file is the daemon's to remove.
+    test("forgetting the legacy store removes auth.json only, and is quiet when there is none", async () => {
+        const { dir } = await scratch();
+        migratedDatabase(dir, [{ id: "cred_xai", integration: "xai", value: oauth("tok", Date.now() + HOUR) }]);
+        await writeAuth(dir, { xai: { type: "oauth", access: "legacy-tok" } });
+        const credentials = openCodeCredentials(dir);
+
+        await credentials.forgetLegacy();
+        await credentials.forgetLegacy();
+
+        expect(await exists(join(dir, "auth.json"))).toBe(false);
+        expect(await credentials.connected("xai")).toBe(true);
+    });
+
+    // A server that answers only what a sign-out asks of it, from the database it owns: its credential list and removal.
+    const credentialServer = (db: DatabaseSync) => {
+        const removed: string[] = [];
+        const list = async (): Promise<CredentialEntry[]> =>
+            db
+                .prepare("SELECT id, integration_id, label, active, value FROM credential")
+                .all()
+                .map((row) => ({
+                    id: String(row["id"]),
+                    integrationID: String(row["integration_id"]),
+                    label: String(row["label"]),
+                    active: row["active"] === 1,
+                    value: JSON.parse(String(row["value"])),
+                }));
+        const remove = async ({ credentialID }: { readonly credentialID: string }): Promise<void> => {
+            removed.push(credentialID);
+            db.prepare("DELETE FROM credential WHERE id = ?").run(credentialID);
+        };
+        const connected: OpenCodeEvent = { id: "evt_connected", type: "server.connected", data: {} };
+        async function* subscribe(options?: { readonly signal?: AbortSignal }): AsyncGenerator<OpenCodeEvent> {
+            yield connected;
+            // Open until the service lets it go, as the real stream is.
+            await new Promise<void>((resolve) => {
+                if (options?.signal?.aborted === true) {
+                    resolve();
+                    return;
+                }
+                options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+            });
+        }
+        const client = unstubbed<OpenCodeClient>("client", {
+            event: unstubbed<OpenCodeClient["event"]>("event", { subscribe }),
+            credential: unstubbed<OpenCodeClient["credential"]>("credential", { list, remove }),
+        });
+        const served: ServedServer = { url: "http://127.0.0.1:4096", headers: {}, process: undefined, close: () => {}, onExit: () => {} };
+        return { client, served, removed };
     };
-};
 
-// What capabilitiesOf("grok", …) declares: a hold parks on a card like Codex's.
-const approvalGate = (judge: () => Promise<{ decision: "allow" | "ask" | "refuse"; sentence: string }>) =>
-    createTurnGate({ cards, judge, rulebook: "approval", signal: new AbortController().signal });
-
-// A registered session's permission goes through the same pipeline every other runtime uses; unregistered keeps the
-// standing yes. The judge is a stub: the channel is under test, not the model.
-test("a registered session's permission is judged by the policy, and a refused command is rejected", async () => {
-    const xdg = await scratch();
-    const { gate, release } = approvalGate(async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }));
-    streamEvents.push({
-        type: "permission.updated",
-        properties: { id: "per_2", sessionID: "ses_gated", type: "bash", metadata: { command: "git push --force origin main" }, title: "bash" },
+    const services: OpenCodeService[] = [];
+    afterEach(async () => {
+        await Promise.all(services.splice(0).map((service) => service.stop()));
     });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_gated", judgeOf(gate).judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
-    // The older route has no field for the reason; OpenCode releases that serve it stop the session instead.
-    expect(legacyReplies).toEqual([{ sessionID: "ses_gated", permissionID: "per_2", directory: "/work", response: "reject" }]);
-    release();
-});
+    test("disconnect removes the provider's sign-ins through the server and forgets the legacy file and the catalog", async () => {
+        const { xdg, dir } = await scratch();
+        const { db } = migratedDatabase(dir, [
+            { id: "cred_xai", integration: "xai", value: oauth("tok", Date.now() + HOUR), active: 1 },
+            { id: "cred_xai_2", integration: "xai", value: apiKey, active: 0 },
+            { id: "cred_other", integration: "anthropic", value: oauth("other-tok", Date.now() + HOUR) },
+        ]);
+        await writeAuth(dir, { xai: { type: "oauth", access: "legacy-tok" } });
+        const server = credentialServer(db);
+        const { fetchImpl } = recordingFetch(listing(["grok-4-latest"]));
+        const service = createOpenCodeService(xdg, {
+            fetchImpl,
+            idleStopMs: 0,
+            spawnServer: async () => server.served,
+            makeClient: () => server.client,
+        });
+        services.push(service);
+        expect(await service.connected("xai")).toBe(true);
+        expect(await service.xaiModels()).toEqual(catalogOf("grok-4-latest"));
 
-// OpenCode 1.18 renamed the ask and reshaped it (`permission.asked`, with `permission` and `patterns`); a watcher
-// listening only for the old name answered nothing, and every ask the config raises waited on the turn's watchdog.
-test("OpenCode 1.18's ask is judged by the same policy, and a refusal goes back with its reason", async () => {
-    const xdg = await scratch();
-    const { gate, release } = approvalGate(async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }));
-    streamEvents.push({
-        type: "permission.asked",
-        properties: {
-            id: "per_5",
-            sessionID: "ses_asked",
-            permission: "bash",
-            patterns: ["git push --force*"],
-            metadata: { command: "git push --force origin main" },
-            always: [],
-        },
+        await service.disconnect("xai");
+
+        expect(server.removed.toSorted()).toEqual(["cred_xai", "cred_xai_2"]);
+        expect(await service.connected("xai")).toBe(false);
+        expect(await service.connected("anthropic")).toBe(true);
+        expect(await exists(join(dir, "auth.json"))).toBe(false);
+        expect(await exists(join(dir, "xai-models.json"))).toBe(false);
+        expect(await service.xaiModels()).toEqual(SEED_CATALOG);
     });
-    streamEvents.push({
-        type: "permission.asked",
-        properties: { id: "per_6", sessionID: "ses_open", permission: "bash", patterns: ["rm -rf dist"], metadata: {}, always: [] },
-    });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_asked", judgeOf(gate).judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    // Answered concurrently, so in either order; what each got is the contract. The reason is what OpenCode hands the
-    // model as the call's feedback, and a reply with one keeps the session going where a bare reject would stop it.
-    expect(permissionReplies.toSorted((left, right) => left.requestID.localeCompare(right.requestID))).toEqual([
-        {
-            requestID: "per_5",
-            directory: WORKSPACE_ROOT,
-            reply: "reject",
-            message: "Discards commits the remote has. Refused by your owner's safety policy. Do not retry.",
-        },
-        { requestID: "per_6", directory: WORKSPACE_ROOT, reply: "always" },
-    ]);
-    release();
-});
-
-// `always` would stop OpenCode asking about that pattern for the rest of the session, and the next match could be one
-// the policy would refuse.
-test("a command the policy allows is approved for this call only", async () => {
-    const xdg = await scratch();
-    const { gate, release } = approvalGate(async () => ({ decision: "allow", sentence: "Pushes a feature branch." }));
-    const { judge, holds } = judgeOf(gate);
-    streamEvents.push({
-        type: "permission.updated",
-        properties: { id: "per_3", sessionID: "ses_ok", type: "bash", metadata: { command: "git push origin feature" }, title: "bash" },
-    });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_ok", judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(legacyReplies).toEqual([{ sessionID: "ses_ok", permissionID: "per_3", directory: "/work", response: "once" }]);
-    // The judge's own call is a wait on the daemon too, so the clock is held across it.
-    expect(holds).toEqual(["held", "released"]);
-    release();
-});
-
-// The whole reason this runtime was refuse-only: a card waits on a person far past the two-minute silence limit. The
-// turn's clock is held from the ask until the answer, the card reaches the turn's stream through its judge, and the
-// person's answer goes back to OpenCode.
-test("a hold parks on a card: the turn's clock is held until the person answers, and their yes lets the call run once", async () => {
-    const xdg = await scratch();
-    const { gate, release } = approvalGate(async () => ({ decision: "ask", sentence: "Pushes straight to the shared main branch." }));
-    const { judge, frames, holds } = judgeOf(gate);
-    streamEvents.push({
-        type: "permission.asked",
-        properties: {
-            id: "per_7",
-            sessionID: "ses_card",
-            permission: "bash",
-            patterns: ["git push --force*"],
-            metadata: { command: "git push --force origin main" },
-            always: [],
-        },
-    });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_card", judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    // Parked: the card is out, the clock held, and OpenCode not yet answered.
-    expect(frames).toMatchObject([
-        { kind: "permission", toolName: "Bash", displayName: "Run command", program: { text: "git push --force origin main" } },
-    ]);
-    expect(holds).toEqual(["held"]);
-    expect(permissionReplies).toEqual([]);
-
-    const card = frames[0];
-    if (card?.kind !== "permission") {
-        throw new Error("no card was raised");
-    }
-    expect(cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(frames.map((frame) => frame.kind)).toEqual(["permission", "resolved"]);
-    expect(holds).toEqual(["held", "released"]);
-    expect(permissionReplies).toEqual([{ requestID: "per_7", directory: "/work", reply: "once" }]);
-    release();
-});
-
-// A person's no with words goes back as the model's feedback: the turn carries on told why, as a Claude turn's does.
-test("a person's no goes back to OpenCode with their words", async () => {
-    const xdg = await scratch();
-    const { gate, release } = approvalGate(async () => ({ decision: "ask", sentence: "Pushes straight to the shared main branch." }));
-    const { judge, frames } = judgeOf(gate);
-    streamEvents.push({
-        type: "permission.asked",
-        properties: {
-            id: "per_8",
-            sessionID: "ses_no",
-            permission: "bash",
-            patterns: ["git push --force*"],
-            metadata: { command: "git push --force origin main" },
-            always: [],
-        },
-    });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_no", judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    const card = frames[0];
-    if (card?.kind !== "permission") {
-        throw new Error("no card was raised");
-    }
-    cards.resolve({ kind: "permission", requestId: card.requestId, decision: "deny", feedback: "Open a pull request instead." });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(permissionReplies).toEqual([{ requestID: "per_8", directory: "/work", reply: "reject", message: "Open a pull request instead." }]);
-    release();
-});
-
-// An ask left unanswered stalls the turn until its watchdog kills it; a consult with no verdict refuses instead.
-test("a consult that fails is answered as a refusal rather than left unanswered", async () => {
-    const xdg = await scratch();
-    const broken = unstubbed<CommandGuard>("gate", {
-        enforcing: true,
-        // Fails before it has anything to say.
-        consult: () => {
-            throw new Error("the card store is gone");
-        },
-    });
-    const { judge, holds } = judgeOf(broken);
-    streamEvents.push({
-        type: "permission.asked",
-        properties: {
-            id: "per_9",
-            sessionID: "ses_broken",
-            permission: "bash",
-            patterns: ["git push*"],
-            metadata: { command: "git push origin main" },
-            always: [],
-        },
-    });
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
-    service.judges.register("ses_broken", judge);
-    await service.client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(permissionReplies).toEqual([
-        {
-            requestID: "per_9",
-            directory: WORKSPACE_ROOT,
-            reply: "reject",
-            message:
-                "This could not be checked against your owner's safety policy, so it was refused. " +
-                "Do not retry: carry on with what you can do without it, and say plainly what you left undone.",
-        },
-    ]);
-    expect(holds).toEqual(["held", "released"]);
-});
-
-// A session whose turn has settled, or a delegation nobody registered, is where it always was: the standing yes.
-test("an unregistered session keeps the standing yes", async () => {
-    const xdg = await scratch();
-    streamEvents.push({
-        type: "permission.updated",
-        properties: { id: "per_4", sessionID: "ses_unknown", type: "bash", metadata: { command: "git push --force origin main" }, title: "bash" },
-    });
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(legacyReplies).toEqual([{ sessionID: "ses_unknown", permissionID: "per_4", directory: "/work", response: "always" }]);
-});
-
-// Every conversation shares the one server, and OpenCode keeps MCP servers per directory: a turn's servers go on in its
-// directory under its conversation's names, and come off once nothing holds them.
-test("a turn's servers are added in its directory and disconnected once it lets go", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    const servers = mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token: "turn-1" }]));
-    const name = servers[0]?.name ?? "";
-
-    const unmount = await service.mount(WORKSPACE_ROOT, servers);
-    expect(mcpCalls).toEqual([{ call: "add", name, directory: "/work", config: servers[0]?.config }]);
-
-    await unmount();
-    await unmount();
-    expect(mcpCalls).toEqual([
-        { call: "add", name, directory: "/work", config: servers[0]?.config },
-        { call: "disconnect", name, directory: "/work" },
-    ]);
-});
-
-// Two turns of one conversation hold the same names; the one client each name gets must carry a bearer a live turn
-// still holds, whichever of them ends first.
-test("a server two turns hold carries the newer turn's bearer, and the older one's again once the newer lets go", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    const serversOf = (token: string) => mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token }]));
-    const older = serversOf("turn-1");
-    const newer = serversOf("turn-2");
-    const name = older[0]?.name ?? "";
-
-    const releaseOlder = await service.mount(WORKSPACE_ROOT, older);
-    const releaseNewer = await service.mount(WORKSPACE_ROOT, newer);
-    await releaseNewer();
-    await releaseOlder();
-
-    expect(mcpCalls).toEqual([
-        { call: "add", name, directory: "/work", config: older[0]?.config },
-        { call: "add", name, directory: "/work", config: newer[0]?.config },
-        { call: "add", name, directory: "/work", config: older[0]?.config },
-        { call: "disconnect", name, directory: "/work" },
-    ]);
-});
-
-test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {
-    const xdg = await scratch();
-    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
-    await service.recordModels(["grok-2-image", "grok-imagine-video"]);
-    expect(await fileExists(modelsPath(xdg))).toBe(false);
-    expect(await service.xaiModels()).toEqual(SEED_CATALOG);
-});
-
-// OpenCode has no models.dev row for this loopback provider, so an omitted capability defaults to false; a model
-// missing "image" input has images stripped from the request.
-test("the Google provider declares each model's published modalities, so a screenshot is not stripped out", () => {
-    const config = geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789/", token: "local", models: async () => [] }, [
-        { id: "claude-opus-4-6-thinking", inputModalities: ["text", "image"] },
-        { id: "gemini-pro-agent", inputModalities: ["text", "image", "audio", "video"] },
-        { id: "gpt-oss-120b-medium", inputModalities: ["text"] },
-    ]);
-
-    const provider = config["intentic-gemini"]!;
-    // The trailing slash on the translator URL is normalized away, and the OpenAI surface is under /v1.
-    expect(provider.options).toEqual({ baseURL: "http://127.0.0.1:8789/v1", apiKey: "local" });
-    expect(provider.models).toEqual({
-        "claude-opus-4-6-thinking": { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
-        "gemini-pro-agent": { attachment: true, modalities: { input: ["text", "image", "audio", "video"], output: ["text"] } },
-        // Truthful, not generous: a text-only model on the channel stays text-only.
-        "gpt-oss-120b-medium": { attachment: false, modalities: { input: ["text"], output: ["text"] } },
-    });
-});
-
-// A catalog read that failed must cost Google its provider, not Grok its runtime: one opencode serve is both.
-test("no Google models means no Google provider at all, rather than one registered serving nothing", () => {
-    expect(geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789", token: "local", models: async () => [] }, [])).toEqual({});
-    expect(geminiProviderConfig(undefined, [{ id: "gemini-pro-agent", inputModalities: ["text", "image"] }])).toEqual({});
-});
-
-const OLD_GOOGLE_MODEL = { id: "claude-opus-4-6-thinking", inputModalities: ["text", "image"] as const };
-const NEW_GOOGLE_MODEL = { id: "claude-opus-5-5-high", inputModalities: ["text", "image"] as const };
-const OLD_SELECTION = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: OLD_GOOGLE_MODEL.id };
-const NEW_SELECTION = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: NEW_GOOGLE_MODEL.id };
-
-// The real service with the same SDK doubles as the lifecycle tests above; only its read-through catalog changes.
-const googleRuntime = async (options: Omit<NonNullable<Parameters<typeof createOpenCodeService>[1]>, "gemini"> = {}) => {
-    const models = jest.fn<OpenCodeGeminiConfig["models"]>().mockResolvedValue([OLD_GOOGLE_MODEL]);
-    const service = createOpenCodeService(await scratch(), {
-        fetchImpl: forbiddenFetch,
-        ...options,
-        gemini: { baseUrl: "http://127.0.0.1:8789", token: "local", models },
-    });
-    liveServices.push(service);
-    return { service, models };
-};
-const registeredGoogleModels = () => serverSpawns.at(-1)?.config?.provider?.[OPENCODE_GEMINI_PROVIDER]?.models;
-
-test("a stalled Google refresh times out without blocking warm Grok or poisoning the acquisition queue", async () => {
-    const { service, models } = await googleRuntime();
-    const previous = await service.client();
-    const entered = Promise.withResolvers<void>();
-    const stalled = Promise.withResolvers<Awaited<ReturnType<OpenCodeGeminiConfig["models"]>>>();
-    models.mockImplementationOnce(() => {
-        entered.resolve();
-        return stalled.promise;
-    });
-    jest.useFakeTimers();
-    const grok = service.acquire({ providerID: "xai", modelID: "grok-4" });
-    const google = service.acquire(OLD_SELECTION);
-    await entered.promise;
-    await advanceTimersByTimeAsync(5_000);
-    const first = await grok;
-    const second = await google;
-    expect(first.client).toBe(previous);
-    expect(second.client).toBe(previous);
-    expect(serverSpawns).toHaveLength(1);
-    expect(serverCloses).toEqual([]);
-    // A late answer must not mutate the running registration behind already-acquired turns.
-    stalled.resolve([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    await stalled.promise;
-    expect(serverSpawns).toHaveLength(1);
-    expect(serverCloses).toEqual([]);
-    expect(registeredGoogleModels()).toEqual({
-        [OLD_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
-    });
-    first.release();
-    second.release();
-    jest.useRealTimers();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const retry = await service.acquire(NEW_SELECTION);
-    expect(serverSpawns).toHaveLength(2);
-    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
-    retry.release();
-});
-
-test("turn stream cancellation is passed to the SDK without cancelling its directory's permission watcher", async () => {
-    const { service } = await googleRuntime();
-    await service.watch(WORKSPACE_ROOT);
-    const watcher = subscriptionSignals.at(-1);
-    const controller = new AbortController();
-    await service.events(WORKSPACE_ROOT, controller.signal);
-    expect(subscriptionSignals.at(-1)).toBe(controller.signal);
-    controller.abort();
-    expect(watcher?.aborted).toBe(false);
-});
-
-test("an already-warm server registers newly discovered Opus before its next turn, preserving privacy routing", async () => {
-    const { service, models } = await googleRuntime({ route: async (provider) => `http://127.0.0.1:9000/${provider}` });
-    await service.recordModels(["grok-4-latest"]);
-    const previous = await service.client();
-    expect(registeredGoogleModels()).not.toHaveProperty(NEW_GOOGLE_MODEL.id);
-    models.mockClear();
-    // A second discovery would be stale again: boot must register the exact snapshot acquisition compared.
-    models.mockResolvedValueOnce([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const lease = await service.acquire(NEW_SELECTION);
-    expect(lease.client).not.toBe(previous);
-    expect(serverSpawns).toHaveLength(2);
-    expect(serverCloses).toEqual([0]);
-    expect(models).toHaveBeenCalledTimes(1);
-    expect(registeredGoogleModels()).toEqual({
-        [OLD_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
-        [NEW_GOOGLE_MODEL.id]: { attachment: true, modalities: { input: ["text", "image"], output: ["text"] } },
-    });
-    expect(serverSpawns.at(-1)?.config).toMatchObject({
-        share: "disabled",
-        provider: {
-            xai: { options: { baseURL: "http://127.0.0.1:9000/grok" }, models: { "grok-4-latest": { options: { store: false } } } },
-            [OPENCODE_GEMINI_PROVIDER]: { options: { baseURL: "http://127.0.0.1:9000/gemini/v1", apiKey: "local" } },
-        },
-    });
-    lease.release();
-});
-
-test("a modality-only catalog change refreshes the model's runtime capabilities", async () => {
-    const { service, models } = await googleRuntime();
-    const previous = await service.client();
-    models.mockResolvedValue([{ id: OLD_GOOGLE_MODEL.id, inputModalities: ["text"] }]);
-    const lease = await service.acquire(OLD_SELECTION);
-    expect(lease.client).not.toBe(previous);
-    expect(serverSpawns).toHaveLength(2);
-    expect(registeredGoogleModels()).toEqual({
-        [OLD_GOOGLE_MODEL.id]: { attachment: false, modalities: { input: ["text"], output: ["text"] } },
-    });
-    lease.release();
-});
-
-test("identical catalogs and reordered models/modalities reuse the existing server", async () => {
-    const { service, models } = await googleRuntime();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const previous = await service.client();
-    const identical = await service.acquire(NEW_SELECTION);
-    identical.release();
-    models.mockResolvedValue([
-        { id: NEW_GOOGLE_MODEL.id, inputModalities: ["image", "text"] },
-        { id: OLD_GOOGLE_MODEL.id, inputModalities: ["image", "text"] },
-    ]);
-    const reordered = await service.acquire(NEW_SELECTION);
-    expect(identical.client).toBe(previous);
-    expect(reordered.client).toBe(previous);
-    expect(serverSpawns).toHaveLength(1);
-    expect(serverCloses).toEqual([]);
-    reordered.release();
-});
-
-test("a warm Grok acquisition never reads Google's catalog or restarts for it", async () => {
-    const { service, models } = await googleRuntime();
-    const previous = await service.client();
-    models.mockClear();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const grok = await service.acquire({ providerID: "xai", modelID: "grok-4" });
-    expect(grok.client).toBe(previous);
-    expect(models).not.toHaveBeenCalled();
-    expect(serverSpawns).toHaveLength(1);
-    grok.release();
-});
-
-test.each(["rejected", "empty"])("a %s catalog refresh retains a working registration and retries later", async (failure) => {
-    const { service, models } = await googleRuntime();
-    const previous = await service.client();
-    if (failure === "rejected") {
-        models.mockRejectedValueOnce(new Error("translator unavailable"));
-    } else {
-        models.mockResolvedValueOnce([]);
-    }
-    const unchanged = await service.acquire(OLD_SELECTION);
-    expect(unchanged.client).toBe(previous);
-    expect(serverSpawns).toHaveLength(1);
-    expect(serverCloses).toEqual([]);
-    expect(registeredGoogleModels()).toHaveProperty(OLD_GOOGLE_MODEL.id);
-    unchanged.release();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const recovered = await service.acquire(NEW_SELECTION);
-    expect(serverSpawns).toHaveLength(2);
-    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
-    recovered.release();
-});
-
-test.each(["rejected", "empty"])("an initially %s Google registration recovers without losing the Grok runtime", async (failure) => {
-    const { service, models } = await googleRuntime();
-    if (failure === "rejected") {
-        models.mockRejectedValueOnce(new Error("translator unavailable"));
-    } else {
-        models.mockResolvedValueOnce([]);
-    }
-    await service.client();
-    expect(serverSpawns.at(-1)?.config?.provider).not.toHaveProperty(OPENCODE_GEMINI_PROVIDER);
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const lease = await service.acquire(NEW_SELECTION);
-    expect(serverSpawns).toHaveLength(2);
-    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
-    lease.release();
-});
-
-test.each([OPENCODE_GEMINI_PROVIDER, "xai"])("active %s leases protect ungated turns and helpers; only new models wait", async (providerID) => {
-    const { service, models } = await googleRuntime();
-    const first = await service.acquire({ providerID, modelID: providerID === "xai" ? "grok-4" : OLD_GOOGLE_MODEL.id });
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const existing = await service.acquire(OLD_SELECTION);
-    expect(existing.client).toBe(first.client);
-    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/running other turns.*once they finish.*claude-opus-5-5-high/);
-    expect(serverSpawns).toHaveLength(1);
-    expect(serverCloses).toEqual([]);
-    first.release();
-    // The other turn still owns it, even after the turn that held it first has finished.
-    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/once they finish/);
-    existing.release();
-    const next = await service.acquire(NEW_SELECTION);
-    expect(serverSpawns).toHaveLength(2);
-    expect(next.client).not.toBe(first.client);
-    next.release();
-});
-
-test("concurrent acquisitions refresh once, and releasing twice cannot make another turn look idle", async () => {
-    const { service, models } = await googleRuntime();
-    await service.client();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const [first, second] = await Promise.all([service.acquire(NEW_SELECTION), service.acquire(NEW_SELECTION)]);
-    expect(serverSpawns).toHaveLength(2);
-    expect(serverCloses).toEqual([0]);
-    expect(first.client).toBe(second.client);
-    first.release();
-    first.release();
-    const third = { id: "gemini-next", inputModalities: ["text", "image"] as const };
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL, third]);
-    const selection = { providerID: OPENCODE_GEMINI_PROVIDER, modelID: third.id };
-    await expect(service.acquire(selection)).rejects.toThrow(/once they finish/);
-    second.release();
-    const next = await service.acquire(selection);
-    expect(serverSpawns).toHaveLength(3);
-    expect(registeredGoogleModels()).toHaveProperty(third.id);
-    next.release();
-});
-
-test("a failed boot neither poisons queued acquisitions nor leaks an active lease", async () => {
-    const spawnServer = jest.fn<typeof createOpencodeServer>().mockImplementation(createOpencodeServer);
-    spawnServer.mockRejectedValueOnce(new Error("boot failed"));
-    const { service, models } = await googleRuntime({ spawnServer });
-    const failed = service.acquire(OLD_SELECTION);
-    const waiting = service.acquire(OLD_SELECTION);
-    await expect(failed).rejects.toThrow("boot failed");
-    const lease = await waiting;
-    expect(spawnServer).toHaveBeenCalledTimes(2);
-    lease.release();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const next = await service.acquire(NEW_SELECTION);
-    expect(spawnServer).toHaveBeenCalledTimes(3);
-    expect(serverCloses).toEqual([0]);
-    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
-    next.release();
-});
-
-test("a failed refresh boot is retried on the next acquisition", async () => {
-    const spawnServer = jest.fn<typeof createOpencodeServer>().mockImplementation(createOpencodeServer);
-    const { service, models } = await googleRuntime({ spawnServer });
-    await service.client();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    spawnServer.mockRejectedValueOnce(new Error("refresh boot failed"));
-    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow("refresh boot failed");
-    const next = await service.acquire(NEW_SELECTION);
-    expect(spawnServer).toHaveBeenCalledTimes(3);
-    expect(serverSpawns).toHaveLength(2);
-    expect(serverCloses).toEqual([0]);
-    expect(registeredGoogleModels()).toHaveProperty(NEW_GOOGLE_MODEL.id);
-    next.release();
-});
-
-test("a registered legacy judge also prevents an idle refresh", async () => {
-    const { service, models } = await googleRuntime();
-    await service.client();
-    service.judges.register("legacy", judgeOf(unstubbed<CommandGuard>("gate", { enforcing: true })).judge);
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    await expect(service.acquire(NEW_SELECTION)).rejects.toThrow(/once they finish/);
-    expect(serverCloses).toEqual([]);
-    service.judges.release("legacy");
-    const lease = await service.acquire(NEW_SELECTION);
-    expect(serverSpawns).toHaveLength(2);
-    lease.release();
-});
-
-test("a privacy change cannot restart a leased runtime, including asynchronous acquisition setup", async () => {
-    let shield = false;
-    const { service, models } = await googleRuntime({ route: async () => (shield ? "http://127.0.0.1:9000/gateway" : undefined) });
-    await service.client();
-    const entered = Promise.withResolvers<void>();
-    const discovery = Promise.withResolvers<Awaited<ReturnType<OpenCodeGeminiConfig["models"]>>>();
-    models.mockImplementationOnce(() => {
-        entered.resolve();
-        return discovery.promise;
-    });
-    const acquiring = service.acquire(OLD_SELECTION);
-    await entered.promise;
-    shield = true;
-    expect(await service.shielded()).toBe(false);
-    expect(serverCloses).toEqual([]);
-    discovery.resolve([OLD_GOOGLE_MODEL]);
-    const lease = await acquiring;
-    expect(await service.shielded()).toBe(false);
-    expect(serverCloses).toEqual([]);
-    lease.release();
-    expect(await service.shielded()).toBe(true);
-    expect(serverCloses).toEqual([0]);
-    const next = await service.acquire(OLD_SELECTION);
-    expect(serverSpawns.at(-1)?.config).toMatchObject({
-        provider: {
-            xai: { options: { baseURL: "http://127.0.0.1:9000/gateway" } },
-            [OPENCODE_GEMINI_PROVIDER]: { options: { baseURL: "http://127.0.0.1:9000/gateway/v1" } },
-        },
-    });
-    next.release();
-});
-
-test("refresh aborts old permission streams without reconnecting them or erasing replacement watchers", async () => {
-    const { service, models } = await googleRuntime({ workspaceRoot: WORKSPACE_ROOT });
-    const worktree = `${WORKSPACE_ROOT}/worktree`;
-    const first = await service.acquire(OLD_SELECTION);
-    await service.watch(worktree);
-    first.release();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const next = await service.acquire(NEW_SELECTION);
-    await service.watch(worktree);
-    expect(subscriptions.asked).toEqual([WORKSPACE_ROOT, worktree, WORKSPACE_ROOT, worktree]);
-    expect(subscriptionSignals.map((signal) => signal?.aborted)).toEqual([true, true, false, false]);
-    // Old streams finish after their retry delay; neither may delete the new watcher's same-directory registration.
-    jest.useFakeTimers();
-    await advanceTimersByTimeAsync(6_000);
-    await service.watch(WORKSPACE_ROOT);
-    await service.watch(worktree);
-    expect(subscriptions.asked).toHaveLength(4);
-    next.release();
-});
-
-test("an idle refresh leaves per-directory MCP mounting usable with the next turn's bearer", async () => {
-    const { service, models } = await googleRuntime();
-    const servers = (token: string) => mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token }]));
-    const older = servers("turn-1");
-    const newer = servers("turn-2");
-    const name = older[0]?.name ?? "";
-    const first = await service.acquire(OLD_SELECTION);
-    const releaseOld = await service.mount(WORKSPACE_ROOT, older);
-    await releaseOld();
-    first.release();
-    models.mockResolvedValue([OLD_GOOGLE_MODEL, NEW_GOOGLE_MODEL]);
-    const next = await service.acquire(NEW_SELECTION);
-    const releaseNew = await service.mount(WORKSPACE_ROOT, newer);
-    await releaseNew();
-    next.release();
-    expect(mcpCalls).toEqual([
-        { call: "add", name, directory: WORKSPACE_ROOT, config: older[0]?.config },
-        { call: "disconnect", name, directory: WORKSPACE_ROOT },
-        { call: "add", name, directory: WORKSPACE_ROOT, config: newer[0]?.config },
-        { call: "disconnect", name, directory: WORKSPACE_ROOT },
-    ]);
-    expect(serverSpawns).toHaveLength(2);
 });

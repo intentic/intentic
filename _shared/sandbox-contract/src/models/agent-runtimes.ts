@@ -121,7 +121,7 @@ export const OPENCODE: AgentCapabilities = {
     steering: false,
     permissions: "plan",
     questions: false,
-    // Added at runtime under the conversation's own names, each prompt showing its session only its own (opencode-mcp.ts).
+    // Added at runtime under the conversation's own names, each session's own rules showing it only its own (opencode-mcp.ts).
     mcp: "http",
     execution: ["shell"],
     effort: false,
@@ -131,7 +131,7 @@ export const OPENCODE: AgentCapabilities = {
     terminals: false,
     recovery: false,
     warm: false,
-    // `system` on the prompt body, per message; adds to OpenCode's own prompt, with no seam to replace it.
+    // The session's own instruction entry, set per message; adds to OpenCode's own prompt, with no seam to replace it.
     instructions: "append",
     skillDiscovery: "prompt",
     // OpenCode raises its permission asks for the commands its config names; the daemon answers from the rulebook, a

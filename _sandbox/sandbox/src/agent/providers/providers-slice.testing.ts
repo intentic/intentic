@@ -64,10 +64,8 @@ const idleOpenCode = () =>
         // for it only once xAI is connected, which it never is here.
         client: async () => ({}) as never,
         // SAFETY: like client() above, this idle lease is never executed; helper/turn suites supply their own OpenCode.
-        acquire: async () => ({ client: {} as never, release: () => {} }),
+        acquire: async () => ({ client: {} as never, listen: () => () => {}, release: () => {} }),
         stop: async () => {},
-        events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
-        watch: async () => {},
         connected: async () => false,
         sessionExists: async () => true,
         xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),

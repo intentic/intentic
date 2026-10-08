@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { readPack } from "../image/packs.js";
@@ -47,6 +47,15 @@ export interface EngineDescriptor {
     readonly reportedVersion?: (prefix: string) => Promise<string | undefined>;
     // Whether a published version satisfies a stated floor; only Claude overrides the default comparison.
     readonly satisfiesFloor?: (published: string, floor: string) => boolean;
+    // Undefined when this daemon can drive a version at all, else the sentence saying why not. Checked wherever a
+    // version could reach a turn (the store's pointer, a channel's target, an install), because a copy downloaded for an
+    // older daemon outlives the upgrade on the volume.
+    readonly incompatible?: (version: string) => string | undefined;
+    // The engines.json key this build reads its blessed version under, when not the id. A major the released daemons
+    // cannot drive gets a key of its own, so blessing it never reaches them: every daemon reads the list from main.
+    readonly listKey?: string;
+    // Runs on a freshly downloaded prefix before it is verified; trims what the package fetched and this machine never runs.
+    readonly afterInstall?: (prefix: string) => Promise<void>;
 }
 
 const majorOf = (version: string): string => version.split(".")[0] ?? "";
@@ -230,13 +239,37 @@ const cursorDescriptor: EngineDescriptor = {
     },
 };
 
+const OPENCODE_PACKAGE = "@opencode/cli";
+// The OpenCode major the runtime in runtimes/opencode speaks. V2 changed the server API, its events, its config and its
+// credential store; a 1.x copy left on the volume by an older daemon is ignored rather than spawned under a V2 client.
+const OPENCODE_MAJOR = 2;
+
+// @opencode/cli lists every platform build as an optional dependency, and npm fetches all four for the OS and CPU (glibc and
+// musl, regular and baseline) at about 200 MB each. Its postinstall links the one this machine runs into
+// @opencode/cli/bin, so the packages themselves are dead weight once it has run; only a prefix whose binary is in place
+// is trimmed, so a failed postinstall still fails verify() rather than losing the copy it could have fallen back to.
+export const pruneOpencodeBuilds = async (scope: string): Promise<void> => {
+    if (!(await pathExists(join(scope, "cli", "bin", "opencode.exe")))) {
+        return;
+    }
+    // Hoisted beside the CLI by a local install, nested under it by a global one.
+    for (const dir of [scope, join(scope, "cli", "node_modules", "@opencode")]) {
+        const builds = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => name.startsWith("cli-"));
+        await Promise.all(builds.map((name) => rm(join(dir, name), { recursive: true, force: true })));
+    }
+};
+
 const opencodeDescriptor: EngineDescriptor = {
     id: "opencode",
     label: "OpenCode",
-    source: { kind: "npm", package: "opencode-ai" },
+    source: { kind: "npm", package: OPENCODE_PACKAGE },
     command: "opencode",
+    listKey: "opencode-v2",
+    incompatible: (version) =>
+        Number(majorOf(version)) >= OPENCODE_MAJOR ? undefined : `OpenCode ${version} predates OpenCode ${OPENCODE_MAJOR}, the version this sandbox drives`,
     paths: async (prefix) => ({ binPath: join(prefix, "node_modules", ".bin", "opencode") }),
-    baked: () => packPin("opencode", /opencode-ai@(\S+)/g),
+    baked: () => packPin("opencode", /@opencode\/cli@(\S+)/g),
+    afterInstall: (prefix) => pruneOpencodeBuilds(join(prefix, "node_modules", "@opencode")),
     verify: async (prefix) => {
         const { binPath } = await opencodeDescriptor.paths(prefix);
         return binPath === undefined || !(await pathExists(binPath)) ? "the downloaded package has no opencode binary" : answersVersion(binPath);

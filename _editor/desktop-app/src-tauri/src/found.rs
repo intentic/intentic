@@ -528,7 +528,9 @@ fn gemini_cli(home: &Home, providers: &mut Providers) {
     providers.add("gemini", "gemini-cli", email, None, home);
 }
 
-/// opencode's `auth.json`: one entry per provider, `type: "oauth"` for a subscription it signed in to.
+/// opencode's `auth.json`: one entry per provider, `type: "oauth"` for a subscription it signed in to. OpenCode 2 moves
+/// these into its SQLite database (`opencode.db`) on its first run and leaves the file, so a login made only under
+/// OpenCode 2 is not found here.
 fn opencode(home: &Home, providers: &mut Providers) {
     let Some(auth) = read_json(&home.data.join("opencode").join("auth.json")) else {
         return;

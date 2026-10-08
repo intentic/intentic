@@ -5,6 +5,9 @@ const CWD = "/repo";
 
 test("displayNameOf maps OpenCode's lowercase ids and passes Claude names through", () => {
     expect(displayNameOf("bash")).toBe("Bash");
+    // OpenCode 2's names for the same tools read the same as OpenCode 1's.
+    expect(displayNameOf("shell")).toBe("Bash");
+    expect(displayNameOf("subagent")).toBe("Task");
     expect(displayNameOf("patch")).toBe("Edit");
     expect(displayNameOf("list")).toBe("LS");
     expect(displayNameOf("Edit")).toBe("Edit");

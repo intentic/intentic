@@ -208,6 +208,17 @@ test("a chat-completions shell step arrives as a tool_calls delta, and a failWit
     }
 });
 
+// OpenCode 2 renamed its shell tool; a shell step calls whichever the request offered.
+test("a chat-completions shell step calls OpenCode 2's shell tool when that is what the request offers", async () => {
+    const model = await startFakeModel({ script: [{ shell: "/bin/echo hi" }] });
+    try {
+        const call = await post(model.baseUrl, "/v1/chat/completions", { model: "m", messages: [], tools: [{ type: "function", function: { name: "shell" } }] });
+        expect(call.text).toContain('"name":"shell"');
+    } finally {
+        await model.close();
+    }
+});
+
 // OpenCode's MCP tools are function tools like any other on the chat surface, named by OpenCode's own key.
 test("a chat-completions call step arrives as a tool_calls delta naming that function and its arguments", async () => {
     const model = await startFakeModel({ script: [{ call: { name: "intentic_0123abcd_echo_say", args: { text: "hi" } } }] });

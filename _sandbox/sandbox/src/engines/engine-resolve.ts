@@ -35,7 +35,8 @@ const imageAnswer = (id: EngineId): ResolvedEngine => ({ id, source: "image", pa
 const resolveNow = async (id: EngineId): Promise<ResolvedEngine> => {
     const state = await readEngineState(id);
     const version = state.active;
-    if (version === undefined || isQuarantined(state, version)) {
+    // A copy an older daemon installed can be one this build no longer drives; the image's own copy serves instead.
+    if (version === undefined || isQuarantined(state, version) || engineDescriptor(id).incompatible?.(version) !== undefined) {
         return imageAnswer(id);
     }
     const prefix = engineVersionDir(id, version);

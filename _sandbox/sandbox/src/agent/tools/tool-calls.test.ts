@@ -46,6 +46,9 @@ test("editDiffContent derives an Edit diff from either spelling family", () => {
         oldText: "x",
         newText: "y",
     });
+    // OpenCode 2 names the file `path`.
+    expect(editDiffContent("Edit", { path: "c.ts", oldString: "p", newString: "q" }, CWD)).toEqual({ type: "diff", path: "c.ts", oldText: "p", newText: "q" });
+    expect(editDiffContent("Write", { path: "d.ts", content: "new" }, CWD)).toEqual({ type: "diff", path: "d.ts", newText: "new" });
 });
 
 test("editDiffContent derives a whole-file diff (no oldText) from Write and NotebookEdit", () => {

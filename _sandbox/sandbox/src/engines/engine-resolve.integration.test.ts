@@ -67,6 +67,16 @@ test("the cached answer expires, so an update reaches the next turn", async () =
     expect((await resolveEngine("cursor", start + 6_000)).source).toBe("store");
 });
 
+// The volume outlives the daemon: an OpenCode 1 copy an older daemon installed must not be spawned under the OpenCode 2
+// client, so it reads as no store copy and the image's own serves.
+test("a store copy of a major this daemon cannot drive is passed over for the image's", async () => {
+    mkdirSync(engineVersionDir("opencode", "1.18.35"), { recursive: true });
+    await activateVersion("opencode", "1.18.35");
+    forgetEngineResolution();
+
+    expect((await resolveEngine("opencode")).source).toBe("image");
+});
+
 // The Engines card installs into the store, never onto PATH, so a PATH-only probe read that install as missing.
 test("a spawned engine installed from the store reads ready with no copy on PATH", async () => {
     const path = process.env["PATH"];
@@ -74,12 +84,12 @@ test("a spawned engine installed from the store reads ready with no copy on PATH
     try {
         expect(await engineReady("opencode")).toBe(false);
 
-        mkdirSync(engineVersionDir("opencode", "1.14.0"), { recursive: true });
-        await activateVersion("opencode", "1.14.0");
+        mkdirSync(engineVersionDir("opencode", "2.0.14"), { recursive: true });
+        await activateVersion("opencode", "2.0.14");
         forgetEngineResolution();
 
         expect(await engineReady("opencode")).toBe(true);
-        expect(await engineBinary("opencode")).toBe(join(engineVersionDir("opencode", "1.14.0"), "node_modules", ".bin", "opencode"));
+        expect(await engineBinary("opencode")).toBe(join(engineVersionDir("opencode", "2.0.14"), "node_modules", ".bin", "opencode"));
     } finally {
         if (path === undefined) {
             delete process.env["PATH"];

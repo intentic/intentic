@@ -621,8 +621,8 @@ ENV TRANSLATOR_URL=http://127.0.0.1:8789 TRANSLATOR_TOKEN=intentic-translator-lo
 # reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
 # probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex
 # reads no env switches at all (its equivalents live in CODEX_HOME/config.toml — codex/codex-config.ts).
-# OPENCODE_DISABLE_SHARE is the one share switch a repo cannot undo: a cloned repo's opencode.json outranks the
-# global `share: "disabled"` (image-packs/opencode.Dockerfile), and `"share": "auto"` uploads every session.
+# OPENCODE_DISABLE_SHARE was OpenCode 1's one share switch a repo could not undo. OpenCode 2 has no sharing and no
+# longer reads it; it stays for a 1.x `opencode` a person installs by hand, and costs nothing otherwise.
 ENV DO_NOT_TRACK=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
     DISABLE_TELEMETRY=1 \

@@ -161,8 +161,8 @@ export const shellPrefix = (workload: Workload): string => {
     return `nice -n ${String(priority.nice)} ${priority.lowIo ? "ionice -c 2 -n 7 " : ""}choom -n ${String(priority.oomScoreAdj)} -- `;
 };
 
-// Set in this process's environment for the one synchronous call that spawns a child through a library with no spawn
-// hook (the OpenCode SDK's `createOpencodeServer`), so the child it started can be told apart from every other.
+// Set in the environment of a child whose pid may later be handed to something else (OpenCode's server, or a child
+// spawned through a library with no spawn hook), so the child it started can be told apart from every other.
 export const SPAWN_STAMP_ENV = "INTENTIC_SPAWN_STAMP";
 
 const ownChildren = (): number[] => {

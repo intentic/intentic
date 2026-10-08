@@ -44,7 +44,10 @@ install_npm() {
 }
 
 install_npm "@openai/codex" "$(pin_from "${packs}/codex.Dockerfile" '@openai/codex@[0-9][0-9.]*')"
-install_npm "opencode-ai" "$(pin_from "${packs}/opencode.Dockerfile" 'opencode-ai@[0-9][0-9.]*')"
+install_npm "@opencode/cli" "$(pin_from "${packs}/opencode.Dockerfile" '@opencode/cli@[0-9][0-9.]*')"
+# OpenCode 2 fetches every build for the runner's OS and CPU (about 200 MB each) and links the one this runner uses into its bin; the
+# rest are dropped, as the pack does, so a warm runner's cache does not carry four copies.
+rm -rf "$(npm root -g)"/@opencode/cli/node_modules/@opencode/cli-* "$(npm root -g)"/@opencode/cli-*
 
 # @cursor/sdk is a MODULE the daemon imports, not a CLI on PATH, and its licence grants no redistribution, so it
 # is installed into the prefix the daemon resolves from (cursor-sdk.ts, INTENTIC_CURSOR_SDK_DIR) exactly as the

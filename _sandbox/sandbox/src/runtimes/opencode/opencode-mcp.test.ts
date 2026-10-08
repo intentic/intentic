@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
-import { mcpServersOf, mcpToolNameOf, openCodeMounts, visibleToolsOf } from "./opencode-mcp.js";
+import { mcpServersOf, mcpToolNameOf, openCodeMounts, sessionToolRules } from "./opencode-mcp.js";
 
 // How a turn's MCP servers are named, configured and shown on the one OpenCode server every conversation shares.
 
@@ -28,7 +28,7 @@ test("a turn with no conversation gets a key of its own each time", () => {
     expect(openCodeMounts(undefined, []).prefix).not.toBe(one);
 });
 
-test("each server is remote, carries the turn's bearer and its call bound, and never starts an OAuth sign-in", () => {
+test("each server is remote, carries the turn's bearer and its call bound, exposes its tools directly, and never starts an OAuth sign-in", () => {
     const mounts = openCodeMounts("chat-1", [WEB, CARD]);
 
     expect(mcpServersOf(mounts)).toEqual([
@@ -39,27 +39,27 @@ test("each server is remote, carries the turn's bearer and its call bound, and n
                 url: "http://127.0.0.1:7000/mcp/web",
                 headers: { Authorization: "Bearer turn-bearer" },
                 oauth: false,
-                timeout: 120_000,
+                codemode: false,
+                timeout: { execution: 120_000 },
             },
         },
         // An unauthenticated endpoint with no bound of its own: no header, and OpenCode's default wait.
-        { name: `${mounts.prefix}acme.billing`, config: { type: "remote", url: "https://mcp.example.com/billing", oauth: false } },
+        { name: `${mounts.prefix}acme.billing`, config: { type: "remote", url: "https://mcp.example.com/billing", oauth: false, codemode: false } },
     ]);
 });
 
-// OpenCode keeps the last rule a tool matches, so the hiding rule comes first and the conversation's own after it.
-test("a prompt hides every mounted server and then shows its own conversation's, in that order", () => {
+// OpenCode keeps the last rule a call matches, so the denying rule comes first and the conversation's own after it.
+test("a session denies every mounted server and then allows its own conversation's, in that order", () => {
     const mounts = openCodeMounts("chat-1", [WEB]);
-    const rules = visibleToolsOf(mounts);
 
-    expect(Object.entries(rules)).toEqual([
-        ["intentic_*", false],
-        [`${mounts.prefix}*`, true],
+    expect(sessionToolRules(mounts)).toEqual([
+        { action: "intentic_*", resource: "*", effect: "deny" },
+        { action: `${mounts.prefix}*`, resource: "*", effect: "allow" },
     ]);
 });
 
-test("a turn that mounts nothing still hides every other conversation's servers", () => {
-    expect(visibleToolsOf(openCodeMounts("chat-1", []))).toEqual({ "intentic_*": false });
+test("a turn that mounts nothing still denies every other conversation's servers", () => {
+    expect(sessionToolRules(openCodeMounts("chat-1", []))).toEqual([{ action: "intentic_*", resource: "*", effect: "deny" }]);
 });
 
 test("a mounted tool reads as the MCP call it is, and anything else passes through", () => {

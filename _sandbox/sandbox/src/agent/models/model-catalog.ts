@@ -27,8 +27,9 @@ export interface DiscoveredCatalog<Item, Value, Args extends unknown[]> {
     readonly live: (...args: Args) => Promise<readonly Item[] | undefined>;
     // Persist items proved some other way (a turn's self-heal) as the last-known-good, and cache them.
     readonly record: (items: readonly Item[]) => Promise<void>;
-    // Forgets the cached answer, for a provider whose account can disconnect while the daemon runs; the file remains
-    // the caller's to remove. Without this, a signed-out account's models would keep serving until the TTL expired.
+    // Forgets the cached answer and the grace window's record, for a provider whose account can change while the daemon
+    // runs; the file remains the caller's to remove. Without this, a signed-out account's models would keep serving
+    // until the TTL expired, and the next account's list would carry them for the window after its own.
     readonly forget: () => void;
 }
 
@@ -113,6 +114,7 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
         },
         forget: () => {
             cache = undefined;
+            published.clear();
         },
     };
 };

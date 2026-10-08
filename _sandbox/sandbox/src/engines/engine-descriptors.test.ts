@@ -54,3 +54,10 @@ test("the spawned engines report the version they are published under", () => {
         expect(descriptor.reportedVersion, `${descriptor.id}`).toBeUndefined();
     }
 });
+
+test("OpenCode refuses a major its runtime cannot drive, and only that", () => {
+    const opencode = engineDescriptor("opencode");
+    expect(opencode.incompatible?.("1.18.35")).toEqual(expect.stringContaining("1.18.35"));
+    expect(opencode.incompatible?.("2.0.26")).toBeUndefined();
+    expect(opencode.incompatible?.("3.1.0")).toBeUndefined();
+});

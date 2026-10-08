@@ -127,7 +127,8 @@ const envKeys = (raw: string | undefined, source: ProviderKeySource): FoundKey[]
 };
 
 // opencode's auth.json: one entry per provider id, `{type: "api", key}` for a pasted key; `oauth` and `wellknown` entries
-// are logins, and fail this schema.
+// are logins, and fail this schema. OpenCode 2 moves these into its SQLite database on its first run and leaves the file,
+// which a device's text read cannot open, so a key pasted only under OpenCode 2 is not found here.
 const OpencodeAuthSchema = z.record(z.string(), z.unknown());
 const OpencodeKeySchema = z.object({ type: z.literal("api"), key: z.string() });
 const opencodeKeys = (raw: string | undefined): FoundKey[] =>

@@ -70,11 +70,11 @@ test("an unreachable registry is asked again on the next read, not remembered as
 test("a floor always asks the registry afresh", async () => {
     const fetchMock = jest
         .fn()
-        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.0.0" }, versions: { "1.0.0": {} } }))
-        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.2.0" }, versions: { "1.0.0": {}, "1.2.0": {} } }));
+        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "2.0.0" }, versions: { "2.0.0": {} } }))
+        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "2.2.0" }, versions: { "2.0.0": {}, "2.2.0": {} } }));
     stubGlobal("fetch", fetchMock);
-    expect(await targetVersion("opencode", { kind: "latest" }, CLEAN)).toBe("1.0.0");
-    expect(await lowestSatisfying("opencode", "1.2.0")).toBe("1.2.0");
+    expect(await targetVersion("opencode", { kind: "latest" }, CLEAN)).toBe("2.0.0");
+    expect(await lowestSatisfying("opencode", "2.2.0")).toBe("2.2.0");
 });
 
 test("a version already refused here is not offered again", async () => {
@@ -103,8 +103,25 @@ test("a floor stated in the package's own numbers still compares normally", asyn
 });
 
 test("the smallest step is taken, not the newest release", async () => {
-    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "1.0.0": {}, "1.2.0": {}, "1.5.0": {} } })));
-    expect(await lowestSatisfying("opencode", "1.2.0")).toBe("1.2.0");
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "2.0.0": {}, "2.2.0": {}, "2.5.0": {} } })));
+    expect(await lowestSatisfying("opencode", "2.2.0")).toBe("2.2.0");
+});
+
+// Released daemons drive OpenCode 1 and read the list's `opencode` key; this build reads `opencode-v2`, so neither ever
+// sees the other's version.
+test("an engine whose major moved reads its blessed version under its own key", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "1.18.35" }, "opencode-v2": { blessed: "2.0.26" } } })));
+    expect(await targetVersion("opencode", { kind: "blessed" }, CLEAN)).toBe("2.0.26");
+});
+
+test("a pin to a major this daemon cannot drive offers nothing to install", async () => {
+    stubGlobal("fetch", jest.fn());
+    expect(await targetVersion("opencode", { kind: "pinned", version: "1.18.35" }, CLEAN)).toBeUndefined();
+});
+
+test("a floor is never met by a major this daemon cannot drive", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "1.18.35": {}, "2.0.26": {} } })));
+    expect(await lowestSatisfying("opencode", "1.18.0")).toBe("2.0.26");
 });
 
 test("a failed refresh keeps the last list that was read", async () => {

@@ -71,7 +71,7 @@ test("a pack naming an architecture branches on the one it is building for", asy
 // as a runtime skew.
 //   browser : the packed playwright version matches the daemon's own.
 //   codex : the packed CLI matches @openai/codex-sdk's exact dependency.
-//   opencode: the packed CLI matches @opencode-ai/sdk.
+//   opencode: the packed CLI matches @opencode/client.
 test("pack pins are in lockstep with the daemon's own dependency versions", async () => {
     const pin = (content: string, pattern: RegExp): string => {
         const match = pattern.exec(content);
@@ -85,7 +85,7 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
     const sdkDeps = JSON.parse(readFileSync(join(sandboxRoot, "node_modules/@openai/codex-sdk/package.json"), "utf8")).dependencies;
     expect(pin(codex.content, /@openai\/codex@(\S+) /)).toBe(sdkDeps["@openai/codex"]);
     const opencode = (await readPack("opencode"))!;
-    expect(pin(opencode.content, /opencode-ai@(\S+) /)).toBe(version("@opencode-ai/sdk"));
+    expect(pin(opencode.content, /@opencode\/cli@(\S+) /)).toBe(version("@opencode/client"));
     // cursor: the packed module must match the daemon's compiled-against version; it's imported, not just invoked.
     const cursor = (await readPack("cursor"))!;
     expect(pin(cursor.content, /@cursor\/sdk@(\S+) /)).toBe(version("@cursor/sdk"));

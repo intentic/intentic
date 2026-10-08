@@ -123,13 +123,20 @@ const chatToolCall = (head: { readonly id: string }, index: number, name: string
     { ...head, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
 ];
 
+// Whether a chat-completions request offered a function by this name (its tools are `{ type, function: { name } }`).
+const chatOffers = (request: ResponsesRequest, name: string): boolean => {
+    const tools = (request as Record<string, unknown>)["tools"];
+    return Array.isArray(tools) && tools.some((tool) => (tool as { function?: { name?: unknown } } | null)?.function?.name === name);
+};
+
 // OpenCode's dialect: tool calls arrive as delta.tool_calls fragments, and finish_reason ends the turn, not a typed
-// event. id/created are fixed so a fixture diffs cleanly across CLI versions. A shell step is OpenCode's own `bash`.
-const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => {
+// event. id/created are fixed so a fixture diffs cleanly across CLI versions. A shell step is OpenCode's own shell tool:
+// `shell` in OpenCode 2, `bash` before it, picked from what the request offered.
+const chatChunks = (step: ScriptedStep, index: number, request: ResponsesRequest): readonly JsonValue[] => {
     const id = `chatcmpl_${index + 1}`;
     const head = { id, object: "chat.completion.chunk", created: 0, model: "fake-model" };
     if (step.shell !== undefined) {
-        return chatToolCall(head, index, "bash", { command: step.shell });
+        return chatToolCall(head, index, chatOffers(request, "shell") ? "shell" : "bash", { command: step.shell });
     }
     if (step.call !== undefined) {
         return chatToolCall(head, index, step.call.name, step.call.args);
@@ -250,7 +257,7 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
                     sendJson(response, step.failWith.status, step.failWith.body);
                     return;
                 }
-                sendChatSse(response, chatChunks(step, index));
+                sendChatSse(response, chatChunks(step, index, requests.at(-1)!));
                 return;
             }
 

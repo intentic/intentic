@@ -1,148 +1,115 @@
-import type { Event, ToolPart } from "@opencode-ai/sdk";
+import type { OpenCodeEvent } from "@opencode/client";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import type { UsageTotals } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
+import { isToolEvent, stepTokens, type ToolCards, type ToolEvent } from "./opencode-frames.js";
 
-// OpenCode's own subagents. Its `task` tool opens a child session naming the parent, runs a subagent there, and tells
-// the parent's task part that session's id once it exists. The runner lets a subagent's events through
-// (opencode-agent.ts); these frames put the subagent under its task's card the way the Claude loop's stream does: the
-// subagent itself as `subagent` frames, its own calls, thinking and prose tagged with the task call's id.
+// OpenCode's own subagents. Its `subagent` tool opens a child session naming the parent, runs a subagent there, and
+// tells the parent's call that session's id once it exists (the call's progress metadata). The runner lets a subagent's
+// events through (opencode-agent.ts); these frames put the subagent under its call's card the way the Claude loop's
+// stream does: the subagent itself as `subagent` frames, its own calls, thinking and prose tagged with the call's id.
 
-// A task part's input and running metadata, read tolerantly: another shape reads as absent, never as a throw.
-const TaskInputSchema = z.object({ description: z.string().optional().catch(undefined), subagent_type: z.string().optional().catch(undefined) }).catch({});
-const TaskMetadataSchema = z.object({ sessionId: z.string().optional().catch(undefined) }).catch({});
+// OpenCode's name for the tool that starts a subagent.
+export const SUBAGENT_TOOL = "subagent";
 
-// The task's answer wraps the subagent's closing words: `<task id="…" state="…"><task_result>…</task_result></task>`.
-const TASK_RESULT = /<task_(?:result|error)>\n?([\s\S]*?)\n?<\/task_(?:result|error)>/u;
-// Enough of a report to read it by without opening the subagent; the whole of it is the task's own card.
+// A subagent call's input and progress metadata, read tolerantly: another shape reads as absent, never as a throw.
+const SubagentInputSchema = z.object({ agent: z.string().optional().catch(undefined), description: z.string().optional().catch(undefined) }).catch({});
+const SubagentMetadataSchema = z.object({ sessionID: z.string().optional().catch(undefined) }).catch({});
+
+// The call's answer wraps the subagent's closing words: `<subagent sessionID="…" state="…">…</subagent>`.
+const SUBAGENT_RESULT = /<subagent\b[^>]*>\n?([\s\S]*?)\n?<\/subagent>/u;
+// Enough of a report to read it by without opening the subagent; the whole of it is the call's own card.
 const REPORT_KEPT = 4_000;
-const reportOf = (output: string): string => (TASK_RESULT.exec(output)?.[1] ?? output).trim().slice(0, REPORT_KEPT);
+const reportOf = (output: string): string => (SUBAGENT_RESULT.exec(output)?.[1] ?? output).trim().slice(0, REPORT_KEPT);
 
-// Events a subagent's session sends before its task names that session are held, up to this many each.
+// Events a subagent's session sends before its call names that session are held, up to this many each.
 const HELD_PER_SESSION = 500;
 
-// The adapter's own mapping of one tool part, opening its card under `parent`.
-export type ToolPartFrames = (part: ToolPart, parent: string) => AgentEvent[];
-
 export interface OpenCodeSubagents {
-    // What a parent `task` part says beyond its own card: the subagent's birth, the session it runs in, its ending.
-    readonly task: (part: ToolPart) => AgentEvent[];
-    // One event of a subagent's own session, as frames under its task; held until the task has named that session.
-    readonly child: (event: Event, session: string) => AgentEvent[];
+    // What a parent's tool event says beyond its own card, for a subagent call: the subagent's birth, the session it runs
+    // in, its ending. Nothing for any other tool.
+    readonly call: (event: ToolEvent) => AgentEvent[];
+    // One event of a subagent's own session, as frames under its call; held until the call has named that session.
+    readonly child: (event: OpenCodeEvent, session: string) => AgentEvent[];
 }
 
 // What one subagent has done so far, as its record counts it.
 interface Progress {
     toolUses: number;
-    readonly tokens: Map<string, number>;
+    tokens: number;
 }
 
-export const openCodeSubagents = (toolFrames: ToolPartFrames, usage: UsageTotals): OpenCodeSubagents => {
+export const openCodeSubagents = (cards: ToolCards, usage: UsageTotals): OpenCodeSubagents => {
     const callOf = new Map<string, string>();
-    const held = new Map<string, Event[]>();
+    const held = new Map<string, OpenCodeEvent[]>();
     const born = new Set<string>();
     const progress = new Map<string, Progress>();
-    // A subagent's messages by id, to tell its own prose from the prompt its task sent it.
-    const roles = new Map<string, "user" | "assistant">();
-    const emitted = new Map<string, number>();
 
     const progressOf = (call: string): Progress => {
         const known = progress.get(call);
         if (known !== undefined) {
             return known;
         }
-        const fresh = { toolUses: 0, tokens: new Map<string, number>() };
+        const fresh = { toolUses: 0, tokens: 0 };
         progress.set(call, fresh);
         return fresh;
     };
 
-    // A text or reasoning part's new suffix; a snapshot no longer than what went out carries nothing new.
-    const suffixOf = (id: string, text: string): string | undefined => {
-        const before = emitted.get(id) ?? 0;
-        if (text.length <= before) {
-            return undefined;
+    // A subagent's own status, retries and endings say nothing its call's card does not say better.
+    const childFrames = (event: OpenCodeEvent, call: string): AgentEvent[] => {
+        if (event.type === "session.text.delta") {
+            return [{ kind: "delta", text: event.data.delta, parentToolUseId: call }];
         }
-        emitted.set(id, text.length);
-        return text.slice(before);
-    };
-
-    // The subagent's spend is the turn's spend too, filed under its own message; its record counts it as its own.
-    const spent = (event: Extract<Event, { type: "message.updated" }>, call: string): AgentEvent[] => {
-        const info = event.properties.info;
-        roles.set(info.id, info.role);
-        if (info.role !== "assistant") {
+        if (event.type === "session.reasoning.delta") {
+            return [{ kind: "thinking", text: event.data.delta, parentToolUseId: call }];
+        }
+        if (event.type === "session.step.ended") {
+            // The subagent's spend is the turn's spend too; its record counts it as its own.
+            const tokens = stepTokens(event);
+            usage.add(tokens, event.id);
+            const count = progressOf(call);
+            count.tokens += tokens.inputTokens + tokens.outputTokens;
+            return [{ kind: "subagent_update", id: call, tokens: count.tokens }];
+        }
+        if (!isToolEvent(event)) {
             return [];
         }
-        usage.add(
-            {
-                inputTokens: info.tokens.input,
-                outputTokens: info.tokens.output,
-                cacheReadTokens: info.tokens.cache.read,
-                cacheCreationTokens: info.tokens.cache.write,
-                costUsd: info.cost,
-            },
-            info.id,
-        );
-        const tokens = progressOf(call).tokens;
-        tokens.set(info.id, info.tokens.input + info.tokens.output);
-        return [{ kind: "subagent_update", id: call, tokens: [...tokens.values()].reduce((sum, count) => sum + count, 0) }];
-    };
-
-    const partFrames = (part: Extract<Event, { type: "message.part.updated" }>["properties"]["part"], call: string): AgentEvent[] => {
-        if (part.type === "text" && roles.get(part.messageID) !== "user") {
-            const text = suffixOf(part.id, part.text);
-            return text === undefined ? [] : [{ kind: "delta", text, parentToolUseId: call }];
-        }
-        if (part.type === "reasoning") {
-            const text = suffixOf(part.id, part.text);
-            return text === undefined ? [] : [{ kind: "thinking", text, parentToolUseId: call }];
-        }
-        if (part.type !== "tool" || part.tool === "todowrite") {
-            return [];
-        }
-        const frames = toolFrames(part, call);
+        const frames = cards.frames(event, call);
         if (!frames.some((frame) => frame.kind === "tool_call")) {
             return frames;
         }
         const count = progressOf(call);
         count.toolUses += 1;
-        return [...frames, { kind: "subagent_update", id: call, toolUses: count.toolUses, lastTool: displayNameOf(part.tool) }];
-    };
-
-    // A subagent's own status, retries and idle say nothing its task's part does not say better.
-    const childFrames = (event: Event, call: string): AgentEvent[] => {
-        if (event.type === "message.updated") {
-            return spent(event, call);
-        }
-        return event.type === "message.part.updated" ? partFrames(event.properties.part, call) : [];
+        return [...frames, { kind: "subagent_update", id: call, toolUses: count.toolUses, lastTool: displayNameOf(cards.call(event.data.id).raw ?? "tool") }];
     };
 
     return {
-        task: (part) => {
-            if (part.tool !== "task" || part.state.status === "pending") {
+        call: (event) => {
+            const id = event.data.id;
+            const { raw, input } = cards.call(id);
+            if (raw !== SUBAGENT_TOOL || event.type === "session.tool.input.started") {
                 return [];
             }
-            const state = part.state;
             const frames: AgentEvent[] = [];
-            if (!born.has(part.callID)) {
-                born.add(part.callID);
-                const input = TaskInputSchema.parse(state.input);
-                frames.push({ kind: "subagent", id: part.callID, subagentKind: "subagent", ...opt("agentType", input.subagent_type), ...opt("description", input.description) });
+            if (!born.has(id) && input !== undefined) {
+                born.add(id);
+                const read = SubagentInputSchema.parse(input);
+                frames.push({ kind: "subagent", id, subagentKind: "subagent", ...opt("agentType", read.agent), ...opt("description", read.description) });
             }
-            const session = TaskMetadataSchema.parse(state.metadata).sessionId;
+            const session = event.type === "session.tool.called" ? undefined : SubagentMetadataSchema.parse(event.data.metadata).sessionID;
             if (session !== undefined && !callOf.has(session)) {
-                callOf.set(session, part.callID);
-                for (const event of held.get(session) ?? []) {
-                    frames.push(...childFrames(event, part.callID));
+                callOf.set(session, id);
+                for (const waiting of held.get(session) ?? []) {
+                    frames.push(...childFrames(waiting, id));
                 }
                 held.delete(session);
             }
-            if (state.status === "completed") {
-                frames.push({ kind: "subagent_update", id: part.callID, status: "completed", summary: reportOf(state.output) });
-            } else if (state.status === "error") {
-                frames.push({ kind: "subagent_update", id: part.callID, status: "failed", error: state.error });
+            if (event.type === "session.tool.success") {
+                frames.push({ kind: "subagent_update", id, status: "completed", summary: reportOf(event.data.content.map((part) => (part.type === "text" ? part.text : "")).join("\n")) });
+            } else if (event.type === "session.tool.failed") {
+                frames.push({ kind: "subagent_update", id, status: "failed", error: event.data.error.message });
             }
             return frames;
         },

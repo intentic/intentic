@@ -13,7 +13,7 @@
 // An engine upstream could not be reached for is reported and left alone, never guessed at.
 
 import { appendFileSync } from "node:fs";
-import { ENGINE_PINS, blessedFor, enginePin, readBlessedList, readPin, writeBlessed, writePin } from "./engine-pins.mjs";
+import { ENGINE_PINS, blessedFor, enginePin, listKeyOf, readBlessedList, readPin, writeBlessed, writePin } from "./engine-pins.mjs";
 import { isNewer, npmManifest, publishedVersions } from "./upstream.mjs";
 
 const args = process.argv.slice(2);
@@ -36,7 +36,7 @@ if (only !== undefined && enginePin(only) === undefined) {
 
 const list = readBlessedList();
 const DEFAULT_SOAK_HOURS = list.policy?.soakHours ?? 6;
-const soakHoursFor = (id) => list.engines?.[id]?.soakHours ?? DEFAULT_SOAK_HOURS;
+const soakHoursFor = (id) => list.engines?.[listKeyOf(enginePin(id))]?.soakHours ?? DEFAULT_SOAK_HOURS;
 
 const HOUR_MS = 60 * 60_000;
 const now = Date.now();
@@ -82,7 +82,7 @@ const verdictFor = async (engine) => {
     if (pin.problems.length > 0) {
         return { id: engine.id, status: "broken", problems: pin.problems };
     }
-    const hold = list.engines?.[engine.id]?.hold;
+    const hold = list.engines?.[listKeyOf(engine)]?.hold;
     if (typeof hold === "string" && hold !== "") {
         return { id: engine.id, status: "held", from: pin.blessed, reason: hold };
     }
@@ -129,7 +129,7 @@ const written = [];
 if (apply && broken.length === 0) {
     for (const verdict of ready) {
         writePin(enginePin(verdict.id), { tracked: verdict.trackedTo, blessed: verdict.to });
-        writeBlessed(verdict.id, verdict.to);
+        writeBlessed(listKeyOf(enginePin(verdict.id)), verdict.to);
         written.push(verdict.id);
     }
 }

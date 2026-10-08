@@ -18,7 +18,7 @@ flowchart LR
 
 ## Running it
 
-1. `bash _tools/scripts/ci/install-provider-clis.sh` installs `@openai/codex` and `opencode-ai` globally and `@cursor/sdk` into `INTENTIC_CURSOR_SDK_DIR` (default `/opt/cursor-sdk`), all at the pack pins. `--latest` installs the newest instead.
+1. `bash _tools/scripts/ci/install-provider-clis.sh` installs `@openai/codex` and `@opencode/cli` (OpenCode 2) globally and `@cursor/sdk` into `INTENTIC_CURSOR_SDK_DIR` (default `/opt/cursor-sdk`), all at the pack pins. `--latest` installs the newest instead.
 2. `pnpm e2e:providers` from the repository root builds what the suites import and runs them. `pnpm --filter @intentic/sandbox e2e:providers` runs them alone.
 3. The package script sets `INTENTIC_E2E_PROVIDERS=1`; without it the suites stand down.
 

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { McpRemoteConfig, SessionPromptAsyncData } from "@opencode-ai/sdk";
+import type { McpAddInput, PermissionRule } from "@opencode/client";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import { opt } from "../../opt.js";
 
@@ -7,8 +7,9 @@ import { opt } from "../../opt.js";
 // MCP door's browsers, machines and extension tools, and the mcp-kind cards), each server carrying the turn's bearer.
 // OpenCode keeps MCP servers per directory rather than per session, and offers every session there every server's
 // tools, while two conversations often share one directory. So a conversation's servers are mounted under names of
-// its own, `intentic_<key>_<server>`, and every prompt shows its session those and hides everyone else's. A tool's key
-// is OpenCode's own spelling, `<server>_<tool>` with both sanitized, which is what the session's rules match.
+// its own, `intentic_<key>_<server>`, and every session's own rules show it those and deny it everyone else's (a denied
+// action's tool is not offered to the model). A tool's key is OpenCode's own spelling, `<server>_<tool>`, which is
+// also the permission action its calls are checked as.
 
 // What every server this runtime mounts is named from; the one pattern a prompt hides.
 const PREFIX = "intentic_";
@@ -22,6 +23,9 @@ export interface OpenCodeMounts {
     readonly prefix: string;
     readonly tools: readonly AgentTool[];
 }
+
+// A remote server's config as OpenCode's `mcp.add` takes it.
+export type McpRemoteConfig = Extract<McpAddInput["config"], { readonly type: "remote" }>;
 
 // One server as OpenCode's `mcp.add` takes it.
 export interface OpenCodeMcpServer {
@@ -37,8 +41,10 @@ export const openCodeMounts = (conversationId: string | undefined, tools: readon
 };
 
 // Each server remote (Streamable HTTP, SSE its fallback), the bearer as a header, and OAuth off: a bearer the door
-// refuses is an error to read, never a sign-in flow started from a headless server. `timeout` is how long OpenCode
-// waits on one call, so a browser server's long bound carries over.
+// refuses is an error to read, never a sign-in flow started from a headless server (OpenCode 2 tries OAuth on a remote
+// server unless told not to). Code mode off: OpenCode 2 would otherwise fold every tool into one `execute` runner the
+// model scripts against, which would lose the per-tool cards and the per-tool rules below. `execution` is how long
+// OpenCode waits on one call, so a browser server's long bound carries over.
 export const mcpServersOf = (mounts: OpenCodeMounts): OpenCodeMcpServer[] =>
     mounts.tools.map((tool) => ({
         name: `${mounts.prefix}${tool.name}`,
@@ -47,24 +53,17 @@ export const mcpServersOf = (mounts: OpenCodeMounts): OpenCodeMcpServer[] =>
             url: tool.url,
             ...opt("headers", tool.token === undefined ? undefined : { Authorization: `Bearer ${tool.token}` }),
             oauth: false,
-            ...opt("timeout", tool.timeoutMs),
+            codemode: false,
+            ...opt("timeout", tool.timeoutMs === undefined ? undefined : { execution: tool.timeoutMs }),
         },
     }));
 
-// A prompt's tool switches, by tool key or wildcard pattern.
-type PromptTools = NonNullable<NonNullable<SessionPromptAsyncData["body"]>["tools"]>;
-
-// The prompt's `tools` map, which OpenCode keeps as the session's own rules: every mounted server hidden, then this
-// conversation's shown (the later rule wins). Sent even by a turn that mounts nothing, so it never sees another's. A
-// subagent's session inherits only the hiding (OpenCode's task tool carries a parent's deny rules alone), so OpenCode's
-// own subagents run without these tools.
-export const visibleToolsOf = (mounts: OpenCodeMounts): PromptTools => {
-    const rules: PromptTools = { [`${PREFIX}*`]: false };
-    if (mounts.tools.length > 0) {
-        rules[`${mounts.prefix}*`] = true;
-    }
-    return rules;
-};
+// The session's own permission rules, which OpenCode applies after the server's (the last match wins): every mounted
+// server denied, then this conversation's allowed. Set even on a turn that mounts nothing, so it never sees another's.
+export const sessionToolRules = (mounts: OpenCodeMounts): PermissionRule[] => [
+    { action: `${PREFIX}*`, resource: "*", effect: "deny" },
+    ...(mounts.tools.length > 0 ? [{ action: `${mounts.prefix}*`, resource: "*", effect: "allow" } as const] : []),
+];
 
 // A mounted tool's key as the rest of the daemon spells an MCP call, `mcp__<server>__<tool>`, so its card reads the way
 // Claude's and Cursor's do (a browser call as "Browser navigate"); any other name passes through as it came.

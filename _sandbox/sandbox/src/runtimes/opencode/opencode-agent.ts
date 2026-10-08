@@ -1,29 +1,34 @@
 import { basename } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
-import type { Event, FilePartInput, OpencodeClient, SessionPromptAsyncData, ToolPart } from "@opencode-ai/sdk";
+import type { OpenCodeClient, OpenCodeEvent, PermissionRule } from "@opencode/client";
 import { type AgentEvent, OPENCODE } from "@intentic/sandbox-contract";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
-import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
+import { DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
-import { contextOverflowFrame, modelUnavailableFrame } from "../../agent/run/error-frames.js";
-import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { editDiffContent, toolLocations } from "../../agent/tools/tool-calls.js";
+import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../decorators/vendor-events.js";
+import { planPhaseOf, type TurnCapture, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { opt } from "../../opt.js";
 import { isChatModel, OPENCODE_XAI_PROVIDER, parseModelSuggestions } from "./xai-models.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
-import { openCodeBackendLabel, type OpenCodeService, type SessionJudge, type SessionJudges } from "./opencode.js";
-import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, visibleToolsOf } from "./opencode-mcp.js";
-import { type OpenCodeSubagents, openCodeSubagents } from "./opencode-subagents.js";
+import { openCodeBackendLabel, type OpenCodeLease, type OpenCodeService } from "./opencode.js";
+import type { SessionJudge, SessionJudges } from "./opencode-permissions.js";
+import { isToolEvent, sessionOf, stepTokens, toolCards, type TurnView } from "./opencode-frames.js";
+import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, sessionToolRules } from "./opencode-mcp.js";
+import { openCodeSubagents } from "./opencode-subagents.js";
 
 // The OpenCode loop Grok and Gemini both run on: AgentRequest in, AgentEvent frames out, over one shared `opencode serve`.
+
+// A picture as OpenCode's prompt takes it: a data URL, since the server is reached over HTTP and reads no path of ours.
+export interface PromptFile {
+    readonly uri: string;
+    readonly name?: string;
+}
 
 // One OpenCode turn: the runner creates or resumes its session and yields its events; injected so tests drive a fake stream.
 export interface OpenCodeTurn {
@@ -42,20 +47,23 @@ export interface OpenCodeTurn {
     // The turn's MCP servers, mounted for the turn under its conversation's own names (opencode-mcp.ts); absent mounts
     // none, and the turn still sees no other conversation's.
     readonly mounts?: OpenCodeMounts;
-    // Standing instructions (a sealed request's system prompt) sent in OpenCode's `system` field (added to, not replacing,
-    // OpenCode's own prompt); per message, not per session.
+    // Standing instructions (a sealed request's system prompt), set as the session's own instruction entry, which
+    // OpenCode adds to its system prompt rather than replacing it; set again by every message.
     readonly system?: string;
     // Images already read off disk, sent as native parts rather than named as paths in the prompt; read in the adapter
     // so an unreadable one falls back to a prompt note.
-    readonly images?: readonly FilePartInput[];
-    // A sealed request (agent-request.ts `policy.sealed`): every tool hidden, and its session deleted once it answered,
+    readonly images?: readonly PromptFile[];
+    // A sealed request (agent-request.ts `policy.sealed`): every tool denied, and its session deleted once it answered,
     // since nothing resumes it.
     readonly sealed?: true;
     readonly signal: AbortSignal;
 }
 
-// Every tool hidden, OpenCode's own included: the wildcard keeps this from tracking OpenCode's tool names in step.
-const NO_TOOLS = { "*": false } as const;
+// Every tool denied, OpenCode's own included: the wildcard keeps this from tracking OpenCode's tool names in step.
+const NO_TOOLS: readonly PermissionRule[] = [{ action: "*", resource: "*", effect: "deny" }];
+
+// The session's own instruction entry the turn's standing instructions ride in; one key, replaced by every message.
+const INSTRUCTIONS_KEY = "intentic";
 
 // A frame the daemon raised for the turn itself (a permission card, then its resolution), carried in order with the
 // session's events; OpenCode sends no event of this type.
@@ -63,200 +71,77 @@ export interface RaisedFrame {
     readonly type: "intentic.frame";
     readonly frame: AgentEvent;
 }
-export type OpenCodeTurnEvent = Event | RaisedFrame;
+// The session the turn runs on, said before any of its events; `created` when this turn made it.
+export interface TurnSession {
+    readonly type: "intentic.session";
+    readonly sessionId: string;
+    readonly created: boolean;
+}
+export type OpenCodeTurnEvent = OpenCodeEvent | RaisedFrame | TurnSession;
 export type OpenCodeRunner = (turn: OpenCodeTurn) => AsyncIterable<OpenCodeTurnEvent>;
 
-// What a race against the stream's next event answers when a raised frame is waiting instead.
-const RAISED: unique symbol = Symbol("raised");
+// How long a turn whose own work has ended waits for OpenCode to pick up what a background shell or subagent left it
+// (OpenCode wakes the session with their result as soon as they end, within milliseconds).
+const FOLLOW_UP_MS = 5_000;
 
-// The frames a turn's judge raises from the detached permission watcher, queued for the runner, which wakes on the next.
-interface RaisedFrames {
-    readonly push: (frame: AgentEvent) => void;
-    readonly take: () => AgentEvent | undefined;
-    readonly arrived: () => Promise<typeof RAISED>;
-}
+// Inactivity is not a hang while only a background shell runs: its output reaches the turn when it ends, not as it goes.
+const BACKGROUND_WAIT = Number.MAX_SAFE_INTEGER / 2;
 
-const raisedFrames = (): RaisedFrames => {
-    const queue: AgentEvent[] = [];
-    let wake = (): void => {};
+// What a read answers once the follow-up wait passed with nothing new.
+const SETTLED: unique symbol = Symbol("settled");
+
+// Everything one turn reads, in arrival order: its session family's events, and the cards its judge raises.
+const turnQueue = () => {
+    const items: (OpenCodeEvent | RaisedFrame)[] = [];
+    let lost: Error | undefined;
+    let wake: (() => void) | undefined;
+    const ping = (): void => {
+        wake?.();
+        wake = undefined;
+    };
     return {
-        push: (frame: AgentEvent): void => {
-            queue.push(frame);
-            wake();
+        push: (item: OpenCodeEvent | RaisedFrame): void => {
+            items.push(item);
+            ping();
         },
-        take: (): AgentEvent | undefined => queue.shift(),
-        // Settles once a frame is pushed; asked for only with the queue empty, so none is missed.
-        arrived: (): Promise<typeof RAISED> =>
-            new Promise((resolve) => {
-                wake = () => resolve(RAISED);
-            }),
+        lose: (reason: Error): void => {
+            lost ??= reason;
+            ping();
+        },
+        // The next item, or why there will be none: the stream lost, the watchdog's deadline, or the follow-up wait over.
+        next: async (clock: TurnWatchdog, followUpUntil: number | undefined): Promise<OpenCodeEvent | RaisedFrame | Error | typeof EXPIRED | typeof SETTLED> => {
+            for (;;) {
+                const item = items.shift();
+                if (item !== undefined) {
+                    return item;
+                }
+                if (lost !== undefined) {
+                    return lost;
+                }
+                if (clock.remaining() <= 0) {
+                    return EXPIRED;
+                }
+                if (followUpUntil !== undefined && Date.now() >= followUpUntil) {
+                    return SETTLED;
+                }
+                let timer: NodeJS.Timeout | undefined;
+                await new Promise<void>((resolve) => {
+                    wake = resolve;
+                    timer = setTimeout(resolve, Math.max(1, Math.min(clock.remaining(followUpUntil), 60_000)));
+                });
+                clearTimeout(timer);
+            }
+        },
     };
 };
 
-// The session an event belongs to, for filtering the global stream down to this turn's session.
-const eventSessionId = (event: Event): string | undefined => {
-    switch (event.type) {
-        case "session.created":
-            return event.properties.info.id;
-        case "session.idle":
-        case "session.error":
-        case "todo.updated":
-        case "permission.updated":
-        // Counts as watchdog liveness; a model can think for minutes before its first token. Also where a retry
-        // announces itself (see streamTurn).
-        case "session.status":
-            return event.properties.sessionID;
-        case "message.part.updated":
-            return event.properties.part.sessionID;
-        case "message.updated":
-            return event.properties.info.sessionID;
-        default:
-            return undefined;
-    }
-};
-
-// How long the stream gets to say hello before the turn proceeds without proof it's listening; short compared to the
-// inactivity watchdog.
-const CONNECT_MS = 5_000;
-
-// A closed stream without session.idle/session.error means the shared opencode serve went away, not a finished turn;
-// throws, except when this turn's own abort is what closed it (returns quietly).
-const refuseEarlyClose = (turn: OpenCodeTurn): void => {
-    if (turn.signal.aborted) {
-        return;
-    }
-    throw new Error(`${openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER)} stopped sending events before the turn ended.`);
-};
-
-// A turn's stream as the connect handshake left it: the iterator, the read in flight, and an event already read.
-interface OpenedStream {
-    readonly iterator: AsyncIterator<Event>;
-    readonly pending: Promise<IteratorResult<Event>>;
-    readonly buffered: Event | undefined;
-}
-
-// `subscribe()` is lazy: the HTTP request fires only on the first read, so it must happen before the session is created
-// or `session.created` is missed. The first read is awaited here, bounded by CONNECT_MS, and what it read is kept for
-// the loop rather than dropped; unread, the same promise is still what the loop first awaits.
-const openStream = async (sse: { readonly stream: AsyncIterable<Event> }): Promise<OpenedStream> => {
-    const iterator = sse.stream[Symbol.asyncIterator]();
-    const first = iterator.next();
-    const hello = await Promise.race([first, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
-    return hello === "unopened" || hello.done === true
-        ? { iterator, pending: first, buffered: undefined }
-        : { iterator, pending: iterator.next(), buffered: hello.value };
-};
-
-// Reads one turn's stream: a frame the turn's judge raised first, then the event the handshake already read, then the
-// stream's next event raced against the watchdog and against the next raised frame. A read a frame or the deadline cut
-// short stays in flight for the next call; undefined is the stream ending.
-const turnReader = (opened: OpenedStream, clock: TurnWatchdog, raised: RaisedFrames) => {
-    let pending = opened.pending;
-    let held = opened.buffered;
-    return async (): Promise<Event | RaisedFrame | typeof EXPIRED | undefined> => {
-        for (;;) {
-            const frame = raised.take();
-            if (frame !== undefined) {
-                return { type: "intentic.frame", frame };
-            }
-            if (held !== undefined) {
-                const event = held;
-                held = undefined;
-                return event;
-            }
-            const next = pending;
-            const result = await beforeDeadline(Promise.race([next, raised.arrived()]), clock);
-            if (result === EXPIRED) {
-                next.catch(() => {}); // allow(silent-catch): the abandoned read lost to the deadline, whose error is the answer
-                return EXPIRED;
-            }
-            if (result !== RAISED) {
-                pending = result.done === true ? pending : opened.iterator.next();
-                return result.done === true ? undefined : result.value;
-            }
-        }
-    };
-};
-
-// The session a turn runs on: the one it resumes, else a new one, named on creation so OpenCode skips auto-titling (an
-// extra model call per unnamed session); the title string itself is unused.
-const sessionFor = async (c: OpencodeClient, turn: OpenCodeTurn): Promise<string> => {
-    if (turn.sessionId !== undefined) {
-        return turn.sessionId;
-    }
-    const created = await c.session.create({ query: { directory: turn.cwd }, body: { title: `intentic conversation` } });
-    const id = created.data?.id;
-    if (id === undefined) {
-        throw new Error("OpenCode did not return a session id");
-    }
-    return id;
-};
-
-// One message of the turn on a model id (empty means let OpenCode choose). `tools` shows the session its own
-// conversation's MCP servers and no one else's; OpenCode keeps it as the session's rules until the next prompt replaces
-// them.
-const promptBodyOf = (turn: OpenCodeTurn, mounts: OpenCodeMounts, modelId: string | undefined): NonNullable<SessionPromptAsyncData["body"]> => ({
-    agent: turn.agent,
-    ...opt("model", modelId === undefined || modelId === "" ? undefined : { providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, modelID: modelId }),
-    ...opt("system", turn.system),
-    tools: turn.sealed === true ? { ...NO_TOOLS } : visibleToolsOf(mounts),
-    // Images precede the text part.
-    parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
-});
-
-// xAI's named alternatives in a model-not-found rejection, chat models only; none for any other failure.
-const modelSuggestions = (message: string): string[] => (MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : []);
-
-// Sends the turn's first message. xAI rejects a stale/renamed model id by rejecting promptAsync (thrown), not via a
-// session.error event, so the in-loop self-heal never sees it; healed here the same way, once. Answers whether that one
-// attempt is spent. No events stream on rejection, so no stale idle to skip.
-const sendFirst = async (
-    send: (modelId: string | undefined) => ReturnType<OpencodeClient["session"]["promptAsync"]>,
-    model: string | undefined,
-    heal: ((suggestions: string[]) => Promise<void>) | undefined,
-): Promise<boolean> => {
-    try {
-        await send(model);
-        return false;
-    } catch (error) {
-        const suggestions = heal === undefined ? [] : modelSuggestions(errorMessage(error));
-        if (heal === undefined || suggestions[0] === undefined) {
-            throw error;
-        }
-        await heal(suggestions);
-        return true;
-    }
-};
-
-// The one mid-turn self-heal: xAI names the account's valid models when it rejects a stale/renamed id, so they are
-// recorded and the same session re-prompted once; nothing streams before that rejection, so nothing is duplicated, and a
-// second failure falls through as a real error. Until the corrected turn's first real event, a lingering idle from the
-// failed prompt is swallowed. Answers whether an event was the heal's own, kept from the turn.
-const modelSelfHeal = (spent: boolean, heal: (suggestions: string[]) => Promise<void>) => {
-    let retried = spent;
-    let awaitingRetryStart = false;
-    return async (event: Event): Promise<boolean> => {
-        const suggestions = event.type === "session.error" && !retried ? modelSuggestions(errorText(event.properties.error)) : [];
-        if (suggestions[0] !== undefined) {
-            retried = true;
-            awaitingRetryStart = true;
-            await heal(suggestions);
-            return true;
-        }
-        if (!awaitingRetryStart) {
-            return false;
-        }
-        // Any event but an idle means the corrected turn is under way.
-        awaitingRetryStart = event.type === "session.idle";
-        return awaitingRetryStart;
-    };
-};
-
-// A turn's session and the subagent sessions its task tool opens beneath it, each naming its parent, followed the way
-// OpenCode's own `run` follows them: a subagent's work reaches the turn instead of being dropped as another session's,
-// keeps the turn's watchdog fed, and answers to the rules its parent does, since its asks carry its own session id.
+// A turn's session and the subagent sessions its subagent calls open beneath it, each naming its parent: a subagent's
+// work reaches the turn instead of being dropped as another session's, keeps the turn's watchdog fed, and answers to the
+// rules its parent does, since its asks carry its own session id. Also the background shells the family started, whose
+// endings are the turn's business though their events name no session.
 export const sessionFamily = (root: string, judge: SessionJudge | undefined, judges: SessionJudges) => {
     const members = new Set<string>();
+    const shells = new Set<string>();
     const join = (session: string): void => {
         members.add(session);
         if (judge !== undefined) {
@@ -265,19 +150,30 @@ export const sessionFamily = (root: string, judge: SessionJudge | undefined, jud
     };
     join(root);
     return {
-        // Whose an event is: the turn's own session's, one of its subagents', or no concern of this turn's.
-        whose: (event: Event): "own" | "subagent" | undefined => {
-            if (event.type === "session.created" && event.properties.info.parentID !== undefined && members.has(event.properties.info.parentID)) {
-                join(event.properties.info.id);
+        // Whose an event is: the turn's own session's, one of its subagents', one of its background shells', or no
+        // concern of this turn's.
+        whose: (event: OpenCodeEvent): "own" | "subagent" | "shell" | undefined => {
+            if (event.type === "shell.exited" || event.type === "shell.deleted") {
+                const id = event.type === "shell.exited" ? event.data.id : event.data.id;
+                return shells.delete(id) ? "shell" : undefined;
             }
-            const session = eventSessionId(event);
+            if (event.type === "session.created" && event.data.parentID !== undefined && members.has(event.data.parentID)) {
+                join(event.data.sessionID);
+            }
+            const session = sessionOf(event);
             if (session === undefined || !members.has(session)) {
                 return undefined;
             }
+            // A shell the model sent to the background: its id rides the call's progress.
+            if (event.type === "session.tool.progress" && typeof event.data.metadata["shellID"] === "string") {
+                shells.add(event.data.metadata["shellID"]);
+            }
             return session === root ? "own" : "subagent";
         },
+        // Background shells still running.
+        shells: (): ReadonlySet<string> => shells,
         // The judges die with their phase; a later permission belongs to no session judging it and gets the standing yes
-        // (opencode.ts answerPermission).
+        // (opencode-permissions.ts answerPermission).
         release: (): void => {
             for (const member of members) {
                 judges.release(member);
@@ -286,129 +182,245 @@ export const sessionFamily = (root: string, judge: SessionJudge | undefined, jud
     };
 };
 
-const abortSession = async (c: OpencodeClient, sessionId: string): Promise<void> => {
-    // allow(silent-catch): a refused abort leaves the session ending on its own events or the watchdog
-    await c.session.abort({ path: { id: sessionId } }).catch(() => {});
+const interrupt = async (c: OpenCodeClient, sessionId: string): Promise<void> => {
+    // allow(silent-catch): a refused interrupt leaves the session ending on its own events or the watchdog
+    await c.session.interrupt({ sessionID: sessionId }).catch(() => {});
 };
 
-// Consumes only this session family's events; the setup/cleanup owner keeps its stream and runtime leased throughout.
+// xAI's named alternatives in a model-not-found rejection, chat models only; none for any other failure.
+const modelSuggestions = (message: string): string[] => (MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : []);
+
+// A structured error's whole text: its sentence and, where the provider answered, the body it answered with, which is
+// where xAI names its valid models.
+type StructuredError = { readonly type: string; readonly message: string; readonly status?: number; readonly response?: { readonly body: string } };
+const errorDetail = (error: StructuredError): string => (error.response === undefined ? error.message : `${error.message} ${error.response.body}`);
+
+const EXECUTION_ENDS: ReadonlySet<string> = new Set(["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"]);
+
+// Reads one turn's session family until its work is done. The turn's own session ends each execution with one of three
+// events; a success is the end unless something the turn started in the background is still to report, in which case
+// OpenCode wakes the session again when it does, and the turn waits for that execution too. The setup/cleanup owner
+// keeps its runtime leased throughout.
 async function* consumeTurn({
-    c,
     turn,
     sessionId,
-    read,
+    queue,
     clock,
     family,
-    absorbed,
+    heal,
+    interruptSession,
 }: {
-    readonly c: OpencodeClient;
     readonly turn: OpenCodeTurn;
     readonly sessionId: string;
-    readonly read: ReturnType<typeof turnReader>;
+    readonly queue: ReturnType<typeof turnQueue>;
     readonly clock: TurnWatchdog;
     readonly family: ReturnType<typeof sessionFamily>;
-    readonly absorbed: ReturnType<typeof modelSelfHeal>;
+    // Re-prompts on one of xAI's suggested models after a rejection naming them; undefined once spent or never offered.
+    heal: ((suggestions: string[]) => Promise<void>) | undefined;
+    readonly interruptSession: () => Promise<void>;
 }): AsyncGenerator<OpenCodeTurnEvent> {
+    const label = openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER);
+    const running = new Set<string>();
+    // Whether the turn's own session's latest execution ended well; the turn is done once nothing else is pending.
+    let ownEnded = false;
+    let followUpUntil: number | undefined;
     for (;;) {
-        const event = await read();
-        if (event === EXPIRED) {
-            await abortSession(c, sessionId);
-            throw new Error(
-                `${openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER)} turn timed out waiting for OpenCode: ${clock.expiry()}.`,
-            );
+        const item = await queue.next(clock, followUpUntil);
+        if (item === EXPIRED) {
+            await interruptSession();
+            throw new Error(`${label} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
         }
-        if (event === undefined) {
-            refuseEarlyClose(turn);
+        if (item === SETTLED) {
             return;
         }
-        // A card the judge raised goes out as it came; it is the daemon's own doing, not OpenCode's activity.
-        if (event.type === "intentic.frame") {
-            yield event;
-            continue;
+        if (item instanceof Error) {
+            // The server's stream ended, so nothing will say this turn ended: only this turn's own stop explains that.
+            if (turn.signal.aborted) {
+                return;
+            }
+            throw new Error(`${label} stopped sending events before the turn ended.`);
         }
-        const whose = family.whose(event);
-        if (whose === undefined) {
+        // A card the judge raised goes out as it came; it is the daemon's own doing, not OpenCode's activity.
+        if (item.type === "intentic.frame") {
+            yield item;
             continue;
         }
         clock.touch();
-        // A subagent's event never ends, retries or re-prompts the turn; streamTurn puts it under its task.
-        if (whose === "subagent") {
-            yield event;
-            continue;
+        const session = sessionOf(item);
+        if (item.type === "session.execution.started" && session !== undefined) {
+            running.add(session);
+            followUpUntil = undefined;
+            if (session === sessionId) {
+                ownEnded = false;
+            }
+        } else if (EXECUTION_ENDS.has(item.type) && session !== undefined) {
+            running.delete(session);
         }
-        // Move inactivity past a retry's next attempt, still bounded by the hard turn cap.
-        if (event.type === "session.status" && event.properties.status.type === "retry") {
-            clock.extendPast(event.properties.status.next);
+        // A background shell or subagent that ended after the turn's own work did is what the session is woken with.
+        const backgroundEnded = item.type === "shell.exited" || item.type === "shell.deleted" || (session !== sessionId && EXECUTION_ENDS.has(item.type));
+        if (backgroundEnded && ownEnded) {
+            followUpUntil = Date.now() + FOLLOW_UP_MS;
         }
-        if (await absorbed(event)) {
-            continue;
+        if (session === sessionId) {
+            // Move inactivity past a retry's next attempt, still bounded by the hard turn cap.
+            if (item.type === "session.retry.scheduled") {
+                clock.extendPast(item.data.at);
+            }
+            if (item.type === "session.execution.failed" && heal !== undefined) {
+                const suggestions = modelSuggestions(errorDetail(item.data.error));
+                if (suggestions[0] !== undefined) {
+                    const healing = heal;
+                    heal = undefined;
+                    await healing(suggestions);
+                    continue;
+                }
+            }
+            if (item.type === "session.execution.interrupted" && !turn.signal.aborted) {
+                throw new Error(`OpenCode stopped the ${label} turn (${item.data.reason}).`);
+            }
+            if (item.type === "session.execution.succeeded") {
+                ownEnded = true;
+            }
         }
-        yield event;
-        if (event.type === "session.idle" || event.type === "session.error") {
+        if (item.type !== "shell.exited" && item.type !== "shell.deleted") {
+            yield item;
+        }
+        if (session === sessionId && (item.type === "session.execution.failed" || item.type === "session.execution.interrupted")) {
             return;
+        }
+        if (ownEnded && running.size === 0) {
+            if (family.shells().size > 0) {
+                clock.extendPast(BACKGROUND_WAIT);
+            } else if (followUpUntil === undefined) {
+                return;
+            }
         }
     }
 }
 
+// The session a turn runs on: the one it resumes, set up for this message, else a new one, named on creation so
+// OpenCode skips auto-titling (an extra model call per unnamed session).
+const sessionFor = async (c: OpenCodeClient, turn: OpenCodeTurn, rules: readonly PermissionRule[]): Promise<{ id: string; created: boolean }> => {
+    const model = turn.model === undefined || turn.model === "" ? undefined : { providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, id: turn.model };
+    if (turn.sessionId === undefined) {
+        const created = await c.session.create({
+            location: { directory: turn.cwd },
+            title: "intentic conversation",
+            agent: turn.agent,
+            ...opt("model", model),
+            permissions: [...rules],
+        });
+        return { id: created.id, created: true };
+    }
+    const sessionID = turn.sessionId;
+    // A session keeps its rules, agent and model; each message sets the ones it runs with.
+    await c.session.update({ sessionID, permissions: [...rules] });
+    await c.session.switchAgent({ sessionID, agent: turn.agent });
+    if (model !== undefined) {
+        await c.session.switchModel({ sessionID, model });
+    }
+    return { id: sessionID, created: false };
+};
+
+// Sets or clears the session's standing instructions for this message.
+const instruct = async (c: OpenCodeClient, sessionID: string, turn: OpenCodeTurn, created: boolean): Promise<void> => {
+    if (turn.system !== undefined) {
+        await c.session.instructions.entry.put({ sessionID, key: INSTRUCTIONS_KEY, value: turn.system });
+    } else if (!created) {
+        // allow(silent-catch): a session that never had the entry has nothing to clear
+        await c.session.instructions.entry.remove({ sessionID, key: INSTRUCTIONS_KEY }).catch(() => {});
+    }
+};
+
 // Runs on a leased client; even setup before the session has a judge belongs to this turn's server lifetime.
-async function* runOpenCodeTurn(
-    openCode: OpenCodeService,
-    c: OpencodeClient,
-    turn: OpenCodeTurn,
-    timeouts: TurnTimeouts,
-): AsyncGenerator<OpenCodeTurnEvent> {
-    // Subscribe/read before creating/prompting so the session's earliest events aren't missed; scoped to this turn's
-    // directory, since an unscoped stream carries no session events.
-    const stopStream = new AbortController();
-    let opened: OpenedStream | undefined;
+async function* runOpenCodeTurn(openCode: OpenCodeService, lease: OpenCodeLease, turn: OpenCodeTurn, timeouts: TurnTimeouts): AsyncGenerator<OpenCodeTurnEvent> {
+    const c = lease.client;
     let family: ReturnType<typeof sessionFamily> | undefined;
+    let stopListening = (): void => {};
     let unmount = async (): Promise<void> => {};
     let sealedSession: string | undefined;
+    // The interrupt a Stop sent; the turn's judges stay in place until OpenCode has taken it, since an ask from a session
+    // nobody judges is answered with the standing yes.
+    let stopping: Promise<void> | undefined;
     try {
-        const sse = await openCode.events(turn.cwd, stopStream.signal);
-        await openCode.watch(turn.cwd);
-        opened = await openStream(sse);
-        const sessionId = await sessionFor(c, turn);
+        const mounts = turn.mounts ?? openCodeMounts(undefined, []);
+        const session = await sessionFor(c, turn, turn.sealed === true ? NO_TOOLS : sessionToolRules(mounts));
+        const sessionId = session.id;
         sealedSession = turn.sealed === true ? sessionId : undefined;
-        // whenAborted also handles a signal aborted before the session id existed.
-        whenAborted(turn.signal, () => void abortSession(c, sessionId));
+        const queue = turnQueue();
+        // whenAborted also handles a signal aborted before the session id existed. The queue is woken too: a turn waiting
+        // on a background shell has no execution for OpenCode to say it interrupted, so nothing else would end the wait.
+        whenAborted(turn.signal, () => {
+            stopping = interrupt(c, sessionId);
+            queue.lose(new Error("The turn was stopped."));
+        });
+        await instruct(c, sessionId, turn, session.created);
         const clock = turnWatchdog(timeouts);
-        const raised = raisedFrames();
-        family = sessionFamily(
+        const own = sessionFamily(
             sessionId,
-            turn.gate === undefined ? undefined : { gate: turn.gate, push: raised.push, hold: clock.hold },
+            turn.gate === undefined ? undefined : { gate: turn.gate, push: (frame) => queue.push({ type: "intentic.frame", frame }), hold: clock.hold },
             openCode.judges,
         );
-        const mounts = turn.mounts ?? openCodeMounts(undefined, []);
-        const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
-            c.session.promptAsync({ path: { id: sessionId }, query: { directory: turn.cwd }, body: promptBodyOf(turn, mounts, modelId) });
-        const heal = async (suggestions: string[]): Promise<void> => {
-            await openCode.recordModels(suggestions);
-            await sendPrompt(suggestions[0]);
+        family = own;
+        // Listening starts before the prompt, so none of the session's events is missed; the stream itself is the
+        // server's, open since it booted.
+        stopListening = lease.listen({
+            event: (event) => {
+                if (own.whose(event) !== undefined) {
+                    queue.push(event);
+                }
+            },
+            lost: queue.lose,
+        });
+        unmount = await openCode.mount(turn.cwd, turn.sealed === true ? [] : mcpServersOf(mounts));
+        yield { type: "intentic.session", sessionId, created: session.created };
+        const prompt = async (): Promise<void> => {
+            // A Stop during setup interrupted a session with nothing running yet; a prompt sent now would start an
+            // execution that outlives the turn, unjudged once it lets go.
+            if (turn.signal.aborted) {
+                return;
+            }
+            await c.session.prompt({ sessionID: sessionId, text: turn.prompt, ...(turn.images === undefined || turn.images.length === 0 ? {} : { files: [...turn.images] }) });
+            // Stopped while the prompt went out: that interrupt may have reached the session before this execution did.
+            if (turn.signal.aborted) {
+                stopping = interrupt(c, sessionId);
+            }
         };
+        await prompt();
+        clock.touch();
         // The self-heal remains xAI-specific. Google must never silently substitute another model.
         const selfHeals = (turn.provider ?? OPENCODE_XAI_PROVIDER) === OPENCODE_XAI_PROVIDER;
-        unmount = await openCode.mount(turn.cwd, mcpServersOf(mounts));
-        const healed = await sendFirst(sendPrompt, turn.model, selfHeals ? heal : undefined);
-        clock.touch();
         yield* consumeTurn({
-            c,
             turn,
             sessionId,
-            read: turnReader(opened, clock, raised),
+            queue,
             clock,
-            family,
-            absorbed: modelSelfHeal(!selfHeals || healed, heal),
+            family: own,
+            // xAI names the account's valid models when it rejects a stale or renamed id: they are recorded and the same
+            // session asked again once on the first of them; a second failure falls through as a real error.
+            heal: selfHeals
+                ? async (suggestions) => {
+                      await openCode.recordModels(suggestions);
+                      await c.session.switchModel({ sessionID: sessionId, model: { providerID: OPENCODE_XAI_PROVIDER, id: suggestions[0] ?? "" } });
+                      await prompt();
+                  }
+                : undefined,
+            interruptSession: () => interrupt(c, sessionId),
         });
     } finally {
-        // The SDK prefetches on a native async generator: return() alone queues behind its pending read forever.
-        stopStream.abort();
-        // allow(silent-catch): closing a stream that already failed has nothing left to report
-        await opened?.iterator.return?.().catch(() => {});
+        stopListening();
+        await stopping;
+        // A background shell outliving its turn would wake the session with nobody judging what it does next.
+        await Promise.all(
+            [...(family?.shells() ?? [])].map((id) =>
+                // allow(silent-catch): a shell that already ended has nothing left to stop
+                c.shell.remove({ id, location: { directory: turn.cwd } }).catch(() => {}),
+            ),
+        );
         family?.release();
         await unmount();
         // allow(silent-catch): a session that could not be deleted holds one answered request and nothing to resume
-        await (sealedSession === undefined ? undefined : c.session.delete({ path: { id: sealedSession } }).catch(() => {}));
+        await (sealedSession === undefined ? undefined : c.session.remove({ sessionID: sealedSession }).catch(() => {}));
     }
 }
 
@@ -416,21 +428,16 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
     async function* (turn) {
         const lease = await openCode.acquire({ providerID: turn.provider ?? OPENCODE_XAI_PROVIDER, ...opt("modelID", turn.model) });
         try {
-            yield* runOpenCodeTurn(openCode, lease.client, turn, timeouts);
+            yield* runOpenCodeTurn(openCode, lease, turn, timeouts);
         } finally {
             lease.release();
         }
     };
 
-// Flattens an OpenCode session error onto a message (every NamedError carries data.message).
-const errorText = (error: unknown): string => {
-    const named = error as { data?: { message?: string }; name?: string } | undefined;
-    return named?.data?.message ?? named?.name ?? "agent error";
-};
-
-// xAI surfaces an unknown/retired model id as a "model not found" error naming valid alternatives; tagged so the client
-// reloads the catalog and drops the bad pinned model.
-const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
+// xAI surfaces an unknown/retired model id as a "model not found" error naming valid alternatives; OpenCode itself says
+// "Model unavailable" for one it cannot route at all. Tagged so the client reloads the catalog and drops the bad pinned
+// model.
+const MODEL_INVALID = /model not found|does not exist|no such model|did you mean|model unavailable/i;
 
 // Google's own NOT_FOUND sentence. The translator lists models from its built-in catalog, not per account, so a model it
 // lists can still be one Google does not offer these accounts; Google answers 404 with this sentence. Coded
@@ -454,214 +461,103 @@ const OPENCODE_FAILURES: readonly VendorRule[] = [
     [isContextOverflowText, "context-overflow"],
 ];
 
-// A session error as its frame. OpenCode names an overflow its own compaction could not clear, in whatever words the
-// provider used, so the name decides before the sentence rules do.
-const sessionErrorFrame = (error: unknown): AgentEvent => {
-    const message = errorText(error);
-    return (error as { name?: string } | undefined)?.name === "ContextOverflowError"
-        ? contextOverflowFrame(message)
-        : vendorFailureFrame({ kind: "error", message }, OPENCODE_FAILURES);
-};
-
-// completed | error: an edit/write derives its diff from the final input; otherwise the tool's own output/error is
-// used. A call first seen here arrives as one whole tool_call with its final status.
-const finishedToolCall = (
-    part: ToolPart,
-    name: string,
-    state: Extract<ToolPart["state"], { status: "completed" | "error" }>,
-    cwd: string,
-    first: boolean,
-    parent: string | undefined,
-): AgentEvent => {
-    const failed = state.status === "error";
-    const diff = failed ? undefined : editDiffContent(name, state.input, cwd);
-    const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
-    const status = failed ? ("failed" as const) : ("completed" as const);
-    return first
-        ? toolCallOpened({
-              id: part.callID,
-              name,
-              status,
-              target: toolTarget(state.input),
-              locations: toolLocations(state.input, cwd),
-              content,
-              parentToolUseId: parent,
-          })
-        : { kind: "tool_call_update", id: part.callID, status, content };
-};
-
-// What a turn's frames are read against: where it runs, and how its tool keys are spelled for a reader (a mounted MCP
-// server's tool as `mcp__<server>__<tool>`, opencode-mcp.ts).
-interface TurnView {
-    readonly cwd: string;
-    readonly toolName: (raw: string) => string;
-}
-
-// Frames for one tool part, kept out of streamTurn's event walk. `started` is the set of callIDs that already opened a
-// card, telling a first announcement from a later update; `parent` is the task call whose subagent made this one.
-const toolPartFrames = (part: ToolPart, view: TurnView, started: Set<string>, parent?: string): AgentEvent[] => {
-    const { cwd } = view;
-    const name = displayNameOf(view.toolName(part.tool));
-    const state = part.state;
-    // `pending` is skipped: OpenCode is still streaming input args, so target/locations would read as partial.
-    if (state.status === "pending") {
-        return [];
-    }
-    const first = !started.has(part.callID);
-    if (first) {
-        started.add(part.callID);
-    }
-    if (state.status === "running") {
-        return first
-            ? [
-                  toolCallOpened({
-                      id: part.callID,
-                      name,
-                      target: toolTarget(state.input),
-                      locations: toolLocations(state.input, cwd),
-                      parentToolUseId: parent,
-                  }),
-              ]
-            : [];
-    }
-    return [finishedToolCall(part, name, state, cwd, first, parent)];
-};
-
-// The subagent session an event belongs to: any session but the turn's own, once that is known (the runner lets only
-// the turn's family through).
-const subagentSession = (event: Event, own: string | undefined): string | undefined => {
-    const session = eventSessionId(event);
-    return session !== undefined && own !== undefined && session !== own ? session : undefined;
-};
-
-// What goes out without the turn's own reading: a card the turn's judge raised, as it came, wherever the stream is, or a
-// subagent's event, under its task. Undefined for the turn's own events.
-const passedThrough = (event: OpenCodeTurnEvent, own: string | undefined, subagents: OpenCodeSubagents): AgentEvent[] | undefined => {
-    if (event.type === "intentic.frame") {
-        return [event.frame];
-    }
-    const subagent = subagentSession(event, own);
-    return subagent === undefined ? undefined : subagents.child(event, subagent);
-};
-
-// OpenCode's checklist as the panel's; anything past in-progress and completed reads as still to do.
-const todoStatus = (status: string): "pending" | "in_progress" | "completed" =>
-    status === "in_progress" || status === "completed" ? status : "pending";
-const todosFrame = (todos: Extract<Event, { type: "todo.updated" }>["properties"]["todos"]): AgentEvent => ({
-    kind: "todos",
-    items: todos.map((todo) => ({ content: todo.content, status: todoStatus(todo.status) })),
-});
+// An execution's failure as its frame, coded off OpenCode's own sentence (an overflow its compaction could not clear is
+// the provider's words, whichever provider said them).
+const executionErrorFrame = (error: StructuredError): AgentEvent => vendorFailureFrame({ kind: "error", message: error.message }, OPENCODE_FAILURES);
 
 // An in-turn provider retry, so the chat shows a wait rather than an apparent hang; `status: 429` lets the UI say it is
 // rate-limiting rather than a dead turn. No maxAttempts: OpenCode names none, so none is invented.
-const retryFrame = (status: { readonly attempt: number; readonly next: number; readonly message: string }): AgentEvent => ({
+const retryFrame = (retry: { readonly attempt: number; readonly at: number; readonly error: StructuredError }): AgentEvent => ({
     kind: "provider_retry",
-    attempt: status.attempt,
-    nextAttemptAt: status.next,
-    ...(isRateLimited(status.message) ? { status: 429 } : {}),
+    attempt: retry.attempt,
+    nextAttemptAt: retry.at,
+    ...(retry.error.status === 429 || isRateLimited(retry.error.message) ? { status: 429 } : {}),
 });
 
-// Normalizes one turn's OpenCode Event stream onto AgentEvents, returning what it captured (the plan phase reads this
-// off `yield*`). `holdText` accumulates text into one `plan` frame instead of streaming deltas; ends on session.idle
-// without emitting the terminal `done`.
-async function* streamTurn(
-    events: AsyncIterable<OpenCodeTurnEvent>,
-    view: TurnView,
-    holdText = false,
-    resumedSessionId?: string,
-): AsyncGenerator<AgentEvent, TurnCapture> {
-    const capture: TurnCapture = resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {};
-    // Per-part emitted text length, so each message.part.updated yields only the new suffix.
-    const emitted = new Map<string, number>();
-    // callIDs that have already emitted their opening tool_call frame, so later states ride tool_call_update instead of
-    // repeating it.
-    const started = new Set<string>();
-    // Token/cost per assistant message, keyed by id (an agentic turn has several); latest snapshot wins, summed once at
-    // idle.
+// Normalizes one turn's OpenCode events onto AgentEvents, returning what it captured (the plan phase reads this off
+// `yield*`). `holdText` accumulates text into one `plan` frame instead of streaming deltas; ends where the runner ends
+// the turn, without emitting the terminal `done`.
+async function* streamTurn(events: AsyncIterable<OpenCodeTurnEvent>, view: TurnView, holdText = false): AsyncGenerator<AgentEvent, TurnCapture> {
+    const capture: TurnCapture = {};
+    // Token/cost per model step (an agentic turn has several), summed once the turn ends.
     const usage = usageTotals();
-    // Message id to role, since a text part carries no role itself; OpenCode broadcasts the user's echoed prompt on the
-    // same stream, so without this it would leak into planText/delta.
-    const roleOf = new Map<string, "user" | "assistant">();
-    // The subagents this turn's task calls start, and their sessions' events put under those calls.
-    const subagents = openCodeSubagents((part, parent) => toolPartFrames(part, view, started, parent), usage);
+    const cards = toolCards(view);
+    // The subagents this turn's calls start, and their sessions' events put under those calls.
+    const subagents = openCodeSubagents(cards, usage);
+    // What text each block already streamed, so a block that ended with more than its deltas carried sends the rest.
+    const streamed = new Map<string, number>();
+    const text = function* (block: string, chunk: string, kind: "delta" | "thinking"): Generator<AgentEvent> {
+        streamed.set(block, (streamed.get(block) ?? 0) + chunk.length);
+        if (kind === "delta" && holdText) {
+            capture.planText = (capture.planText ?? "") + chunk;
+        } else {
+            yield { kind, text: chunk };
+        }
+    };
+    const rest = function* (block: string, whole: string, kind: "delta" | "thinking"): Generator<AgentEvent> {
+        const before = streamed.get(block) ?? 0;
+        if (whole.length > before) {
+            yield* text(block, whole.slice(before), kind);
+        }
+    };
 
     for await (const event of events) {
-        const passed = passedThrough(event, capture.sessionId, subagents);
-        if (passed !== undefined) {
-            yield* passed;
+        if (event.type === "intentic.frame") {
+            yield event.frame;
             continue;
         }
-        if (event.type === "session.created") {
-            capture.sessionId = event.properties.info.id;
-            yield { kind: "session", sessionId: event.properties.info.id };
-        } else if (event.type === "message.part.updated") {
-            const part = event.properties.part;
-            // Only assistant text is the answer/plan; a user part (the echoed prompt) is skipped, and an unknown role
-            // is treated as assistant so early text isn't dropped.
-            if (part.type === "text" && roleOf.get(part.messageID) !== "user") {
-                const prev = emitted.get(part.id) ?? 0;
-                // A snapshot no longer than what's already emitted carries no new suffix.
-                if (part.text.length <= prev) {
-                    continue;
-                }
-                const slice = part.text.slice(prev);
-                emitted.set(part.id, part.text.length);
-                if (holdText) {
-                    capture.planText = (capture.planText ?? "") + slice;
-                } else {
-                    yield { kind: "delta", text: slice };
-                }
-            } else if (part.type === "reasoning") {
-                const prev = emitted.get(part.id) ?? 0;
-                if (part.text.length > prev) {
-                    yield { kind: "thinking", text: part.text.slice(prev) };
-                    emitted.set(part.id, part.text.length);
-                }
-            } else if (part.type === "tool" && part.tool !== "todowrite") {
-                yield* toolPartFrames(part, view, started);
-                yield* subagents.task(part);
+        if (event.type === "intentic.session") {
+            capture.sessionId = event.sessionId;
+            if (event.created) {
+                yield { kind: "session", sessionId: event.sessionId };
             }
-        } else if (event.type === "todo.updated") {
-            yield todosFrame(event.properties.todos);
-        } else if (event.type === "message.updated") {
-            const info = event.properties.info;
-            // Attributes this message's role so its text parts are captured (assistant) or skipped (user) above.
-            roleOf.set(info.id, info.role);
-            if (info.role === "assistant") {
-                usage.add(
-                    {
-                        inputTokens: info.tokens.input,
-                        outputTokens: info.tokens.output,
-                        cacheReadTokens: info.tokens.cache.read,
-                        cacheCreationTokens: info.tokens.cache.write,
-                        costUsd: info.cost,
-                    },
-                    info.id,
-                );
-            }
-        } else if (event.type === "session.status" && event.properties.status.type === "retry") {
-            yield retryFrame(event.properties.status);
-        } else if (event.type === "session.error") {
-            yield sessionErrorFrame(event.properties.error);
-            capture.errored = true;
-            // Terminal: OpenCode doesn't reliably emit session.idle after an error, so ending here is what lets the
-            // caller reach `done`.
-            return capture;
-        } else if (event.type === "session.idle") {
-            const total = usage.frame();
-            if (total !== undefined) {
-                yield total;
-            }
-            return capture;
+            continue;
         }
+        const session = sessionOf(event);
+        if (session !== undefined && capture.sessionId !== undefined && session !== capture.sessionId) {
+            yield* subagents.child(event, session);
+            continue;
+        }
+        switch (event.type) {
+            case "session.text.delta":
+                yield* text(`t:${event.data.assistantMessageID}:${String(event.data.ordinal)}`, event.data.delta, "delta");
+                break;
+            case "session.text.ended":
+                yield* rest(`t:${event.data.assistantMessageID}:${String(event.data.ordinal)}`, event.data.text, "delta");
+                break;
+            case "session.reasoning.delta":
+                yield* text(`r:${event.data.assistantMessageID}:${String(event.data.ordinal)}`, event.data.delta, "thinking");
+                break;
+            case "session.reasoning.ended":
+                yield* rest(`r:${event.data.assistantMessageID}:${String(event.data.ordinal)}`, event.data.text, "thinking");
+                break;
+            case "session.step.ended":
+                usage.add(stepTokens(event), event.id);
+                break;
+            case "session.retry.scheduled":
+                yield retryFrame(event.data);
+                break;
+            case "session.execution.failed":
+                yield executionErrorFrame(event.data.error);
+                capture.errored = true;
+                return capture;
+            default:
+                if (isToolEvent(event)) {
+                    yield* cards.frames(event);
+                    yield* subagents.call(event);
+                }
+        }
+    }
+    const total = usage.frame();
+    if (total !== undefined) {
+        yield total;
     }
     return capture;
 }
 
-// The words OpenCode's `system` field carries: a turn's standing instructions, or a sealed request's own system prompt,
-// which is the whole of what it is told besides its prompt.
-const systemOf = (request: AgentRequest): string | undefined =>
-    request.policy.sealed === true ? request.spec.systemPrompt : request.spec.systemAppend;
+// The words a turn's standing instructions carry: a turn's own, or a sealed request's system prompt, which is the whole
+// of what it is told besides its prompt.
+const systemOf = (request: AgentRequest): string | undefined => (request.policy.sealed === true ? request.spec.systemPrompt : request.spec.systemAppend);
 
 // The turn one OpenCode message runs as. Every message carries the same standing instructions, since a plan's two phases
 // are two messages of one turn and the execute phase must not drop them.
@@ -669,7 +565,7 @@ const openCodeTurnOf =
     (request: AgentRequest, provider: string, gate: CommandGuard, mounts: OpenCodeMounts) =>
     (message: {
         readonly prompt: string;
-        readonly images: readonly FilePartInput[];
+        readonly images: readonly PromptFile[];
         readonly sessionId: string | undefined;
         readonly agent: OpenCodeTurn["agent"];
     }): OpenCodeTurn => ({
@@ -695,13 +591,13 @@ const openCodePlan = (
     runner: OpenCodeRunner,
     turnOf: ReturnType<typeof openCodeTurnOf>,
     prompt: string,
-    firstImages: readonly FilePartInput[],
+    firstImages: readonly PromptFile[],
 ): EmulatedPlan => {
     let images = firstImages;
     return {
         prompt: PLAN_PREAMBLE + prompt,
         async *plan(phasePrompt, sessionId) {
-            const capture = yield* streamTurn(runner(turnOf({ prompt: phasePrompt, images, sessionId, agent: "plan" })), view, true, sessionId);
+            const capture = yield* streamTurn(runner(turnOf({ prompt: phasePrompt, images, sessionId, agent: "plan" })), view, true);
             images = [];
             return planPhaseOf(capture);
         },
@@ -709,28 +605,26 @@ const openCodePlan = (
     };
 };
 
-// undici's bare "fetch failed" names neither what was unreachable nor why: said as the local OpenCode server the turn
-// could not reach, with the cause undici tucked away, since the next turn boots that server afresh (opencode.ts ensure).
+// A transport failure names neither what was unreachable nor why: said as the local OpenCode server the turn could not
+// reach, since the next turn boots that server afresh (opencode.ts ensure).
 const unreachableServer = (error: unknown, provider: string): string | undefined => {
-    if (!(error instanceof TypeError) || error.message !== "fetch failed") {
+    const transport =
+        (error instanceof TypeError && error.message === "fetch failed") || (error as { readonly reason?: unknown } | undefined)?.reason === "Transport";
+    if (!transport) {
         return undefined;
     }
-    const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
-    return `The local OpenCode server that runs ${openCodeBackendLabel(provider)} turns could not be reached${cause}. Send again: it is restarted for the next turn.`;
+    const cause = (error as { readonly cause?: unknown }).cause;
+    const detail = cause instanceof Error ? ` (${cause.message})` : "";
+    return `The local OpenCode server that runs ${openCodeBackendLabel(provider)} turns could not be reached${detail}. Send again: it is restarted for the next turn.`;
 };
 
 // A provider's loop on OpenCode's `provider` backend; capability limits are declared in the contract's agent-catalog.ts.
 export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = OPENCODE_XAI_PROVIDER) =>
     async function* runOpenCodeAgent(request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
-        // Pictures go to the model as pictures, base64 data URLs since the server is reached over HTTP; everything else,
-        // including an unreadable picture, is named in the prompt for the read tool.
+        // Pictures go to the model as pictures; everything else, including an unreadable picture, is named in the prompt
+        // for the read tool.
         const attached = await loadAttachments(request.spec, true);
-        const images: FilePartInput[] = attached.images.map((image) => ({
-            type: "file",
-            mime: image.mimeType,
-            filename: basename(image.path),
-            url: `data:${image.mimeType};base64,${image.data}`,
-        }));
+        const images: PromptFile[] = attached.images.map((image) => ({ uri: `data:${image.mimeType};base64,${image.data}`, name: basename(image.path) }));
         const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
         // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel, a hold parked
         // on a card while the runner holds its watchdog (the capability record says `rulebook: "approval"`). Releasing
@@ -760,8 +654,8 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = O
             if (!surfacedError) {
                 const message =
                     unreachableServer(error, provider) ?? (error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`);
-                // A thrown model-not-found (self-heal found no alternatives) gets the same code as the event path, so
-                // the client reloads the catalog and drops the bad pinned model.
+                // A thrown model-not-found gets the same code as the event path, so the client reloads the catalog and
+                // drops the bad pinned model.
                 yield googleRefusalFrame(provider, request.spec.model, message) ?? {
                     kind: "error",
                     message,

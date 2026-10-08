@@ -137,7 +137,8 @@ export const editDiffContent = (name: string, input: unknown, cwd: string): Tool
         return undefined;
     }
     const record = input as Record<string, unknown>;
-    const rawPath = record["file_path"] ?? record["filePath"] ?? record["notebook_path"];
+    // OpenCode 2's edit and write name their file `path`.
+    const rawPath = record["file_path"] ?? record["filePath"] ?? record["notebook_path"] ?? record["path"];
     if (typeof rawPath !== "string") {
         return undefined;
     }

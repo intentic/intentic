@@ -158,3 +158,15 @@ test("forget drops the cached answer", async () => {
     catalog.forget();
     expect(await catalog.models()).toEqual({ models: ["seed"], default: "seed" });
 });
+
+// A forget is an account changing. What the last account was served is no row the next one has dropped, so the grace
+// window does not carry it into the next account's list.
+test("forget also forgets what was published, so the next account's list is only its own", async () => {
+    let available = ["shared", "first-only"];
+    const catalog = catalogOf(async () => available);
+    expect(await catalog.models()).toEqual({ models: ["shared", "first-only"], default: "shared" });
+
+    catalog.forget();
+    available = ["shared"];
+    expect(await catalog.models()).toEqual({ models: ["shared"], default: "shared" });
+});

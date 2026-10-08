@@ -3,27 +3,44 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { createOpenCodeAgent, type OpenCodeRunner, type OpenCodeTurn } from "./opencode-agent.js";
+import { createOpenCodeAgent, type OpenCodeRunner, type OpenCodeTurn, type OpenCodeTurnEvent, type TurnSession } from "./opencode-agent.js";
+import type { EventOf } from "./opencode-frames.js";
+import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "../decorators/plan-mode.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
+// The real filesystem read behind attached images, which the faked runner in opencode-agent.test.ts cannot exercise.
+
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
 
-// The real filesystem read behind attached images, which the mocked runner in opencode-agent.test.ts cannot exercise.
-
-// One canned OpenCode Event list per invocation, capturing each turn.
-const fakeRunner = (...turns: unknown[][]): { runner: OpenCodeRunner; calls: OpenCodeTurn[] } => {
+// One canned list of the runner's events per invocation (a plan turn calls it once per phase), capturing each turn.
+const fakeRunner = (...turns: (readonly OpenCodeTurnEvent[])[]): { runner: OpenCodeRunner; calls: OpenCodeTurn[] } => {
     const calls: OpenCodeTurn[] = [];
     const runner: OpenCodeRunner = async function* (turn) {
         calls.push(turn);
-        yield* (turns[Math.min(calls.length - 1, turns.length - 1)] ?? []) as Event[];
+        yield* turns[Math.min(calls.length - 1, turns.length - 1)] ?? [];
     };
     return { runner, calls };
 };
+
+// The session a turn runs on, as the runner says it before any of the session's events.
+const session = (sessionId: string, created: boolean): TurnSession => ({ type: "intentic.session", sessionId, created });
+const textDelta = (sessionID: string, delta: string): EventOf<"session.text.delta"> => ({
+    id: "evt_text",
+    created: 1,
+    type: "session.text.delta",
+    data: { sessionID, assistantMessageID: "m1", ordinal: 0, delta },
+});
+const succeeded = (sessionID: string): EventOf<"session.execution.succeeded"> => ({
+    id: "evt_done",
+    created: 2,
+    type: "session.execution.succeeded",
+    durable: { aggregateID: sessionID, seq: 2, version: 1 },
+    data: { sessionID },
+});
 
 const request: AgentRequest<ContainerCredential> = {
     execution: unstubbed("execution", {}),
@@ -35,19 +52,14 @@ const request: AgentRequest<ContainerCredential> = {
     signal: new AbortController().signal,
 };
 
-// `onPlan` fires via `setTimeout` because the generator's yield suspends before `wait()` registers the pending-plan
-// bridge.
-const collect = async (
-    agent: ReturnType<typeof createOpenCodeAgent>,
-    turnRequest: Parameters<ReturnType<typeof createOpenCodeAgent>>[0],
-    onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
-): Promise<AgentEvent[]> => {
+// Approves each plan as it is proposed; resolved on a timer, since the generator's yield suspends before the plan card's
+// wait registers.
+const collect = async (agent: ReturnType<typeof createOpenCodeAgent>, turnRequest: AgentRequest<ContainerCredential>): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of agent(turnRequest)) {
         events.push(event);
-        if (event.kind === "plan" && onPlan !== undefined) {
-            const decision = onPlan(event.requestId);
-            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+        if (event.kind === "plan") {
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, approve: true }), 0);
         }
     }
     return events;
@@ -55,8 +67,9 @@ const collect = async (
 
 // Minimal valid PNG signature, enough to satisfy a real file read in the test.
 const PNG_HEADER = Buffer.from("89504e470d0a1a0a", "hex");
+const PNG_URI = `data:image/png;base64,${PNG_HEADER.toString("base64")}`;
 
-test("attached images ride as native picture parts while other files stay referenced by path", async () => {
+test("attached images ride as data URLs while other files and an unreadable image are named in the prompt", async () => {
     const dir = await mkdtemp(join(tmpdir(), "grok-images-"));
     const shot = join(dir, "shot.png");
     await writeFile(shot, PNG_HEADER);
@@ -67,14 +80,13 @@ test("attached images ride as native picture parts while other files stay refere
     const { runner, calls } = fakeRunner([]);
     await collect(createOpenCodeAgent(runner), { ...request, spec: { ...request.spec, attachments: [shot, missing, report] } });
 
-    const turn = calls[0]!;
-    expect(turn.images).toEqual([
-        { type: "file", mime: "image/png", filename: "shot.png", url: `data:image/png;base64,${PNG_HEADER.toString("base64")}` },
+    expect(calls.map((call) => ({ prompt: call.prompt, images: call.images }))).toEqual([
+        {
+            // An unreadable image degrades to a path note instead of failing the turn; the picture itself is not named.
+            prompt: `what is wrong with this screen?\n\nThe user attached these files: read them as needed:\n- ${report}\n- ${missing}`,
+            images: [{ uri: PNG_URI, name: "shot.png" }],
+        },
     ]);
-    expect(turn.prompt).toContain(report);
-    // An unreadable image degrades to a path note instead of failing the turn.
-    expect(turn.prompt).toContain(missing);
-    expect(turn.prompt).not.toContain(shot);
 
     await rm(dir, { recursive: true, force: true });
 });
@@ -85,22 +97,19 @@ test("a plan turn sends attached images on the first planning message only: the 
     await writeFile(shot, PNG_HEADER);
 
     const { runner, calls } = fakeRunner(
-        [
-            { type: "session.created", properties: { info: { id: "s1" } } },
-            { type: "message.part.updated", properties: { part: { type: "text", sessionID: "s1", text: "The plan." } } },
-            { type: "session.idle", properties: { sessionID: "s1" } },
-        ],
-        [{ type: "session.idle", properties: { sessionID: "s1" } }],
+        [session("s1", true), textDelta("s1", "The plan."), succeeded("s1")],
+        [session("s1", false), succeeded("s1")],
     );
-    await collect(
-        createOpenCodeAgent(runner),
-        { ...request, spec: { ...request.spec, attachments: [shot] }, policy: { ...request.policy, permissionMode: "plan" } },
-        () => ({ approve: true }),
-    );
+    await collect(createOpenCodeAgent(runner), {
+        ...request,
+        spec: { ...request.spec, attachments: [shot] },
+        policy: { ...request.policy, permissionMode: "plan" },
+    });
 
-    expect(calls).toHaveLength(2);
-    expect(calls[0]!.images).toHaveLength(1);
-    expect(calls[1]!.images).toBeUndefined();
+    expect(calls.map((call) => ({ agent: call.agent, prompt: call.prompt, sessionId: call.sessionId, images: call.images }))).toEqual([
+        { agent: "plan", prompt: `${PLAN_PREAMBLE}what is wrong with this screen?`, sessionId: undefined, images: [{ uri: PNG_URI, name: "shot.png" }] },
+        { agent: "build", prompt: EXECUTE_PROMPT, sessionId: "s1", images: undefined },
+    ]);
 
     await rm(dir, { recursive: true, force: true });
 });

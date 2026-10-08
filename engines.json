@@ -40,7 +40,12 @@
         },
         "opencode": {
             "blessed": "1.18.35",
+            "frozen": "Read only by daemons released before OpenCode 2, which drive OpenCode 1; their last 1.x. Newer daemons read opencode-v2.",
             "notes": "npm opencode-ai, the runtime behind Grok turns."
+        },
+        "opencode-v2": {
+            "blessed": "2.0.26",
+            "notes": "npm @opencode/cli, the runtime behind Grok and Gemini turns. Its own key, so released daemons, which drive OpenCode 1, never read a 2.x number."
         },
         "translator": {
             "blessed": "8.0.17",
