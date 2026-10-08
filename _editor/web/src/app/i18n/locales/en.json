@@ -73,7 +73,8 @@
             "queued": "The fix starts when the current turn ends.",
             "saveSettingsAndLand": "Save settings and land",
             "commitThenLand": "Commit, then land again.",
-            "markersHint": "Lands everything now; you finish the conflicts by hand"
+            "markersHint": "You finish conflicts by hand",
+            "markersTitle": "Lands everything now"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} doesn't have this agent any more: it may have been discarded, or its id belongs to another sandbox.",
@@ -751,9 +752,10 @@
         },
         "agentLandPress": {
             "fix": "Fix {count} conflict | Fix {count} conflicts",
-            "fixHint": "The agent updates its branch, then lands",
+            "fixHint": "Then it lands",
             "fixing": "Fixing…",
-            "fixQueued": "Fix queued"
+            "fixQueued": "Fix queued",
+            "fixTitle": "Agent updates branch"
         }
     },
     "app": {
@@ -2037,6 +2039,14 @@
                 "destructive": {
                     "hint": "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
                     "label": "Run destructive commands",
+                    "options": {
+                        "off": "Blocked",
+                        "on": "Allowed"
+                    }
+                },
+                "programs": {
+                    "hint": "A program built in the sandbox (a Windows .exe, an app folder) is copied to this computer and started, watched and stopped by the agent. It runs as you, with your files and network.",
+                    "label": "Run programs this sandbox sends",
                     "options": {
                         "off": "Blocked",
                         "on": "Allowed"

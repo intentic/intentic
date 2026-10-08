@@ -43,7 +43,7 @@ const t = useT();
         :class="block ? `w-full` : ``"
         :disabled="fix.state !== `ready` || fix.busy"
         @click="emit(`fix`)"
-        v-tooltip.bottom="fix.state === `ready` ? t(`agents.agentLandPress.fixHint`) : undefined"
+        v-tooltip.bottom="fix.state === `ready` ? { title: t(`agents.agentLandPress.fixTitle`), note: t(`agents.agentLandPress.fixHint`) } : undefined"
     >
         <template v-if="fix.state === `working`"><Icon name="spinner" spin />{{ t(`agents.agentLandPress.fixing`) }}</template>
         <template v-else-if="fix.state === `queued`"><Icon name="clock" />{{ t(`agents.agentLandPress.fixQueued`) }}</template>

@@ -59,7 +59,8 @@
             "queued": "La resolución empieza cuando acabe el turno actual.",
             "saveSettingsAndLand": "Guardar ajustes e integrar",
             "commitThenLand": "Haz commit y vuelve a integrar.",
-            "markersHint": "Integra todo ahora; tú terminas los conflictos a mano"
+            "markersHint": "Terminas los conflictos a mano",
+            "markersTitle": "Integra todo ahora"
         },
         "agentDetail": {
             "asksOnTheirBoard": "Pide en su tablero",
@@ -559,9 +560,10 @@
         },
         "agentLandPress": {
             "fix": "Resolver {count} conflicto | Resolver {count} conflictos",
-            "fixHint": "El agente actualiza su rama y luego integra",
+            "fixHint": "Luego integra",
             "fixing": "Resolviendo…",
-            "fixQueued": "Resolución en cola"
+            "fixQueued": "Resolución en cola",
+            "fixTitle": "El agente actualiza su rama"
         }
     },
     "app": {

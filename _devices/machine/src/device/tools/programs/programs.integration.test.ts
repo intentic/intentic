@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Desktop } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { ScopeError } from "../policy.js";
+import { ScopeError } from "../../policy.js";
 import { listArtifacts, sandboxRunsDir, stageArtifact } from "./artifacts.js";
 import { appLogs, appStatus, appStop, descendantsOf, describeExit, parseRows, startApp } from "./programs.js";
 

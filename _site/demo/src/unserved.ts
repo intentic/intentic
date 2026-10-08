@@ -89,6 +89,7 @@ export const UNSERVED = {
     "GET /fleet": NOT_THE_EDITORS,
     "POST /fleet/message": NOT_THE_EDITORS,
     "GET /fleet/{handle}": NOT_THE_EDITORS,
+    "POST /devices/{name}/artifacts": NOT_THE_EDITORS,
     "GET /listeners/{provider}/state": NOT_THE_EDITORS,
     "POST /listeners/{provider}/dispatch": NOT_THE_EDITORS,
     "POST /listeners/{provider}/failure": NOT_THE_EDITORS,

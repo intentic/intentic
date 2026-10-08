@@ -46,7 +46,7 @@ import {
     swapSandbox,
 } from "./tools/sandboxes.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
-import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs.js";
+import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
 import { calling } from "./indicator.js";
 import { MACHINE_VERSION } from "../version.js";
 

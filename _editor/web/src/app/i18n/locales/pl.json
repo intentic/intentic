@@ -73,7 +73,8 @@
             "queued": "Naprawa ruszy po zakończeniu bieżącej tury.",
             "saveSettingsAndLand": "Zapisz ustawienia i scal",
             "commitThenLand": "Zrób commit, potem scal ponownie.",
-            "markersHint": "Scala wszystko teraz; konflikty kończysz ręcznie"
+            "markersHint": "Konflikty kończysz ręcznie",
+            "markersTitle": "Scala wszystko teraz"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} nie ma już tego agenta: mógł zostać odrzucony albo jego id należy do innego sandboxa.",
@@ -751,9 +752,10 @@
         },
         "agentLandPress": {
             "fix": "Napraw {count} konflikt | Napraw {count} konflikty | Napraw {count} konfliktów",
-            "fixHint": "Agent aktualizuje swoją gałąź, potem scala",
+            "fixHint": "Potem scala",
             "fixing": "Naprawia…",
-            "fixQueued": "Naprawa w kolejce"
+            "fixQueued": "Naprawa w kolejce",
+            "fixTitle": "Agent aktualizuje swoją gałąź"
         }
     },
     "app": {
@@ -2037,6 +2039,14 @@
                 "destructive": {
                     "hint": "Rekurencyjne usuwanie folderów, formatowanie dysku, usuwanie wolumenu Dockera. Wszystko inne, co może uruchamiać, pozostaje dozwolone.",
                     "label": "Uruchamianie poleceń niszczących",
+                    "options": {
+                        "off": "Zablokowane",
+                        "on": "Dozwolone"
+                    }
+                },
+                "programs": {
+                    "hint": "Program zbudowany w sandboxie (plik .exe dla Windows, folder aplikacji) jest kopiowany na ten komputer, a agent go uruchamia, obserwuje i zatrzymuje. Działa jako ty, z dostępem do twoich plików i sieci.",
+                    "label": "Uruchamianie programów wysyłanych przez ten sandbox",
                     "options": {
                         "off": "Zablokowane",
                         "on": "Dozwolone"

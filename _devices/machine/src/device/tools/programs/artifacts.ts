@@ -3,10 +3,10 @@ import { createHash, type Hash } from "node:crypto";
 import { mkdir, open, readdir, rename, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { DeviceScopes, StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract";
-import { baseDir } from "../../config.js";
-import { assertScope } from "../policy.js";
+import { baseDir } from "../../../config.js";
+import { assertScope } from "../../policy.js";
 
 const exec = promisify(execFile);
 
@@ -107,7 +107,7 @@ const unpack = async (archive: string, into: string): Promise<void> => {
     try {
         await exec("tar", ["-xf", archive, "-C", into], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
     } catch (error) {
-        throw new Error(`could not unpack the pushed folder: ${errorMessage(error)}`);
+        throw new Error(`could not unpack the pushed folder: ${errorMessage(error)}`, { cause: error });
     }
 };
 
@@ -185,7 +185,7 @@ export const listArtifacts = async (sandboxUrl: string): Promise<{ name: string;
     const found: { name: string; version: string; path: string; at: Date }[] = [];
     for (const name of names.filter((entry) => !entry.startsWith("."))) {
         for (const version of await readdir(join(root, name)).catch(() => [] as string[])) {
-            const marker = await stat(join(root, name, version, COMPLETE)).catch(() => undefined);
+            const marker = await stat(join(root, name, version, COMPLETE)).catch(undefinedIfMissing);
             if (marker !== undefined) {
                 found.push({ name, version, path: join(root, name, version), at: marker.mtime });
             }

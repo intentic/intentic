@@ -4,10 +4,10 @@ import { mkdir, open, readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { writeFileAtomic } from "@intentic/base/fs";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { assertPath, assertScope } from "../policy.js";
+import { assertPath, assertScope } from "../../policy.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 
 const exec = promisify(execFile);
@@ -81,6 +81,7 @@ const updateRuns = async (sandboxUrl: string, change: (runs: AppRun[]) => AppRun
         await mkdir(dirname(registryPath(sandboxUrl)), { recursive: true });
         await writeFileAtomic(registryPath(sandboxUrl), `${JSON.stringify(kept, null, 2)}\n`);
     });
+    // allow(silent-catch): the chain only orders the writes; this one's failure reaches its caller through `await turn`
     writing = turn.catch(() => undefined);
     await turn;
 };
@@ -150,7 +151,7 @@ export const describeExit = (run: Pick<AppRun, "exitCode" | "signal" | "stoppedB
 };
 
 const tailLines = async (path: string, lines: number): Promise<{ text: string; total: number }> => {
-    const handle = await open(path, "r").catch(() => undefined);
+    const handle = await open(path, "r").catch(undefinedIfMissing);
     if (handle === undefined) {
         return { text: "", total: 0 };
     }
@@ -190,7 +191,7 @@ const judgeProgram = async (program: string, scopes: DeviceScopes, sandboxUrl: s
     }
     const path = resolve(program);
     assertScope(scopes, inRuns(path, sandboxUrl) ? "programs" : "shell");
-    const stats = await stat(path).catch(() => undefined);
+    const stats = await stat(path).catch(undefinedIfMissing);
     if (stats === undefined) {
         throw new Error(`Nothing at ${path}. A pushed build's path is what \`devices push\` printed.`);
     }
@@ -242,7 +243,7 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
             child.once("error", (error) => fail(error));
         });
     } catch (error) {
-        throw new Error(`Could not start ${program}: ${errorMessage(error)}`);
+        throw new Error(`Could not start ${program}: ${errorMessage(error)}`, { cause: error });
     } finally {
         // The child holds its own copy of the descriptor.
         await logHandle.close();
@@ -379,7 +380,7 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
         try {
             pattern = new RegExp(grep, "i");
         } catch (error) {
-            throw new Error(`grep is not a usable pattern: ${errorMessage(error)}`);
+            throw new Error(`grep is not a usable pattern: ${errorMessage(error)}`, { cause: error });
         }
         shown = text
             .split("\n")
@@ -405,6 +406,7 @@ const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
 const signalTree = async (pid: number, force: boolean): Promise<void> => {
     if (process.platform === "win32") {
         // /T takes everything it started; without /F a window is asked to close, as its close button would.
+        // allow(silent-catch): taskkill fails when the tree already ended, which is the outcome a stop wants
         await exec("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { windowsHide: true }).catch(() => undefined);
         return;
     }

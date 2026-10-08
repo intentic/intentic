@@ -125,7 +125,7 @@ const ROW = `flex flex-wrap items-center gap-x-2 gap-y-1`;
                 class="whitespace-nowrap"
                 :disabled="busy || writing"
                 @click="emit('merge')"
-                v-tooltip.bottom="writing ? t(`agents.agentConflictReport.agentWriting`) : t(`agents.agentConflictReport.markersHint`)"
+                v-tooltip.bottom="writing ? t(`agents.agentConflictReport.agentWriting`) : { title: t(`agents.agentConflictReport.markersTitle`), note: t(`agents.agentConflictReport.markersHint`) }"
             >
                 {{ t(`agents.agentConflictReport.landConflictMarkers`) }}
             </Button>

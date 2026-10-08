@@ -59,7 +59,8 @@
             "queued": "La résolution démarre à la fin du tour en cours.",
             "saveSettingsAndLand": "Enregistrer les réglages et intégrer",
             "commitThenLand": "Committez, puis intégrez à nouveau.",
-            "markersHint": "Intègre tout maintenant ; vous finissez les conflits à la main"
+            "markersHint": "Conflits à finir à la main",
+            "markersTitle": "Intègre tout maintenant"
         },
         "agentDetail": {
             "asksOnTheirBoard": "Demande sur son tableau",
@@ -555,9 +556,10 @@
         },
         "agentLandPress": {
             "fix": "Résoudre {count} conflit | Résoudre {count} conflits",
-            "fixHint": "L'agent met sa branche à jour, puis intègre",
+            "fixHint": "Puis il intègre",
             "fixing": "Résolution…",
-            "fixQueued": "Résolution prévue"
+            "fixQueued": "Résolution prévue",
+            "fixTitle": "L'agent met sa branche à jour"
         }
     },
     "app": {

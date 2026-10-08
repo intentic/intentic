@@ -59,7 +59,8 @@
             "queued": "Die Behebung startet, wenn der aktuelle Zug endet.",
             "saveSettingsAndLand": "Einstellungen speichern und landen",
             "commitThenLand": "Committen, dann erneut landen.",
-            "markersHint": "Landet jetzt alles; die Konflikte lösen Sie selbst"
+            "markersHint": "Konflikte lösen Sie selbst",
+            "markersTitle": "Landet jetzt alles"
         },
         "agentDetail": {
             "asksOnTheirBoard": "Fragt auf deren Board",
@@ -553,9 +554,10 @@
         },
         "agentLandPress": {
             "fix": "{count} Konflikt beheben | {count} Konflikte beheben",
-            "fixHint": "Der Agent aktualisiert seinen Branch und landet dann",
+            "fixHint": "Danach landet er",
             "fixing": "Wird behoben…",
-            "fixQueued": "Behebung geplant"
+            "fixQueued": "Behebung geplant",
+            "fixTitle": "Agent aktualisiert seinen Branch"
         }
     },
     "app": {

@@ -28,7 +28,7 @@ test("windows carry pid and window id together, and off-screen ones are left out
         }),
     );
     expect(listed).toEqual([
-        { id: "1813321:4194341", title: "xmessage", app: "Xmessage", bounds: { x: 565, y: 389, width: 150, height: 68 }, focused: true },
+        { id: "1813321:4194341", title: "xmessage", app: "Xmessage", bounds: { x: 565, y: 389, width: 150, height: 68 }, focused: true, pid: 1813321 },
     ]);
 });
 
