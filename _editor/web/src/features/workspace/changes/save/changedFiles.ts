@@ -1,5 +1,5 @@
 import type { ChangeStatus } from "@intentic/ui";
-import type { GitChange, GitDiffSide, RepoChanges } from "@intentic/sandbox-contract";
+import type { GitChange, GitDiffSide, RepoChanges, RepoTarget } from "@intentic/sandbox-contract";
 
 // One changed file as the maker's Changes sidebar reads it: git's three sides flattened to one row a person can
 // press. Shared by the panel that lists them (SavePanel.vue) and the whole-tree actions that act on them
@@ -41,4 +41,15 @@ export const fileRows = (repo: RepoChanges): readonly ChangedFile[] => {
         }
     }
     return [...seen.values()];
+};
+
+// What throwing these files away sends git: one target a repository, naming every leg of each file. A rename has two,
+// since an explicit path list is passed to git verbatim and undoing the new name alone would leave the old one deleted.
+// Never empty-pathed, which git reads as the whole repository.
+export const discardTargets = (files: readonly ChangedFile[]): readonly RepoTarget[] => {
+    const byRepo = new Map<string, string[]>();
+    for (const file of files) {
+        byRepo.set(file.repo, [...(byRepo.get(file.repo) ?? []), ...(file.from === undefined ? [file.path] : [file.path, file.from])]);
+    }
+    return [...byRepo].map(([repo, paths]) => ({ repo, paths }));
 };

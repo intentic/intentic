@@ -6,17 +6,27 @@ import { computed } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { ahead, behind, syncable, unpublished } from "../../push/outgoingWork";
 import { usePushFlow } from "../../push/usePushFlow";
-import { fileRows, type ChangedFile } from "./changedFiles";
+import { discardTargets, fileRows, type ChangedFile } from "./changedFiles";
 import { truncatedTotal } from "../truncation";
 import { useChanges } from "../useChanges";
 
-// What a maker can do to the whole tree — throw it away, back it up — and the one question throwing away raises.
-// Kept out of the panel because the presses live in the sidebar's icon row (SaveActions.vue) while the card that
-// answers them is drawn over the list (SavePanel.vue): one module-level ask is what stops those two halves from
-// disagreeing about what was pressed.
+// What a maker can do to the tree — name and save it, throw some of it away, back it up — and the one question
+// throwing away raises. State lives at module level, per sandbox: the name being typed outlives a trip to the Files tab,
+// as the developer's commit message does (commitMessage.ts).
 
-/** The file a press is asking about, or `all` for the whole tree; undefined when nothing is being asked. */
-const asked = sandboxRef<ChangedFile | "all" | undefined>(() => undefined);
+/** One heading's files, thrown away together; `who` names them in the card that asks. */
+export interface ChangeBatch {
+    readonly who: string;
+    readonly files: readonly ChangedFile[];
+}
+
+/** What a press is asking about: one file, one heading's files, or `all` of the tree; undefined when nothing is. */
+const asked = sandboxRef<ChangedFile | ChangeBatch | "all" | undefined>(() => undefined);
+
+/** The name the maker typed for the next version; empty means the suggested one (savedMessage.ts). */
+const versionName = sandboxRef<string>(() => ``);
+
+const isBatch = (target: ChangedFile | ChangeBatch): target is ChangeBatch => `files` in target;
 
 export function useSaveActions() {
     const t = useT();
@@ -38,7 +48,7 @@ export function useSaveActions() {
 
     // THROWING WORK AWAY. One pending ask at a time, spelled out before it runs; restore points are the net under it.
 
-    const ask = (what: ChangedFile | "all"): void => {
+    const ask = (what: ChangedFile | ChangeBatch | "all"): void => {
         asked.value = what;
     };
     const dismiss = (): void => {
@@ -52,11 +62,16 @@ export function useSaveActions() {
         if (target === undefined) {
             return undefined;
         }
-        const files = target === `all` ? scannable.value.flatMap((repo) => [...fileRows(repo)]) : [target];
+        const files = target === `all` ? scannable.value.flatMap((repo) => [...fileRows(repo)]) : isBatch(target) ? target.files : [target];
         // A file no version holds has no copy anywhere; undoing it deletes it rather than rewinding it.
         const gone = files.filter((file) => file.status === `added`);
         return {
-            what: target === `all` ? t(`workspace.savePanel.allChanges`, { count: changes.count.value }, changes.count.value) : target.label,
+            what:
+                target === `all`
+                    ? t(`workspace.savePanel.allChanges`, { count: changes.count.value }, changes.count.value)
+                    : isBatch(target)
+                      ? t(`workspace.savePanel.changesFrom`, { count: files.length, who: target.who }, files.length)
+                      : target.label,
             gone: gone.map((file) => file.label),
             back: files.length - gone.length,
             // The counts are a floor while the daemon truncated the list; the act still covers everything.
@@ -70,13 +85,8 @@ export function useSaveActions() {
         if (target === undefined) {
             return;
         }
-        // An empty target is the whole repository. A named one sends both legs of a rename: an explicit path list is
-        // passed to git verbatim, so undoing the new name alone would leave the old one deleted.
-        await changes.discardGroups(
-            target === `all`
-                ? dirtyRepos.value
-                : [{ repo: target.repo, paths: target.from === undefined ? [target.path] : [target.path, target.from] }],
-        );
+        // An empty target is the whole repository; a named one is every leg of every file it names.
+        await changes.discardGroups(target === `all` ? dirtyRepos.value : discardTargets(isBatch(target) ? target.files : [target]));
     };
 
     // BACKING UP, for the maker who cloned their project from somewhere. One button for git's four verbs, since the
@@ -109,6 +119,7 @@ export function useSaveActions() {
         );
 
     return {
+        versionName,
         dirtyRepos,
         notListed,
         ask,
@@ -117,6 +128,7 @@ export function useSaveActions() {
         runDiscard,
         backupRepos,
         backupTip,
+        backupCommits,
         backingUp: pushFlow.running,
         doBackUp,
     };

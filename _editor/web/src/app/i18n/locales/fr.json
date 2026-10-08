@@ -5348,7 +5348,6 @@
             "personas": "{count} persona | {count} personas"
         },
         "savePanel": {
-            "all": "tous",
             "allChanges": "{count} changement au total | les {count} changements",
             "andMoreFiles": "…et {count} fichier de plus, trop nombreux pour être listés. Enregistrer les prend aussi. | …et {count} fichiers de plus, trop nombreux pour être listés. Enregistrer les prend aussi.",
             "backingUp": "Sauvegarde en cours…",
@@ -5376,7 +5375,6 @@
             "statusRenamed": "renommé",
             "twoEditsToSame": "Deux modifications du même fichier entrent en conflit. Demandez à votre {agent} de trancher, ou annulez les changements ci-dessous.",
             "versionHowThingsNow": "Une version de l'état actuel est enregistrée d'abord, sous",
-            "willBeCalled": "S'appellera «",
             "writingDescriptionSWork": "Rédaction d'une description du travail de {describing}…"
         },
         "specialPaths": {

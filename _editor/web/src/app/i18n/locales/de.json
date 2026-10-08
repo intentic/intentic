@@ -5398,7 +5398,6 @@
             "personas": "{count} Persona | {count} Personas"
         },
         "savePanel": {
-            "all": "alle",
             "allChanges": "alle {count} Änderung | alle {count} Änderungen",
             "andMoreFiles": "…und {count} weitere Datei, zu viele zum Auflisten. Das Speichern nimmt sie mit. | …und {count} weitere Dateien, zu viele zum Auflisten. Das Speichern nimmt sie mit.",
             "backingUp": "Wird gesichert…",
@@ -5427,7 +5426,6 @@
             "twoEditsToSame": "Zwei Änderungen an derselben Datei kollidieren. Bitten Sie Ihren {agent}, das zu klären, oder machen Sie die Änderungen unten rückgängig.",
             "versionCount": "{count} Fassung | {count} Fassungen",
             "versionHowThingsNow": "Zuerst wird eine Fassung des jetzigen Stands gesichert, unter",
-            "willBeCalled": "Wird heißen „",
             "writingDescriptionSWork": "Eine Beschreibung der Arbeit von {describing} wird geschrieben…"
         },
         "specialPaths": {

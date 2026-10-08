@@ -55,7 +55,6 @@ import { useEmptyDirs } from "../explorer/useEmptyDirs";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
-import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
@@ -383,9 +382,6 @@ const onPick = (event: Event): void => {
                 <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
                 <WorkspaceScopeChip />
-                <!-- The maker's whole-tree presses ride this row rather than a bar along the panel's floor, and lead the
-                     icons: what acts on the work sits left of what only changes what is shown. -->
-                <SaveActions v-if="maker && segment === 'changes'" />
                 <button
                     type="button"
                     :class="ui.iconButton({ on: segment === `history`, size: `xl` })"

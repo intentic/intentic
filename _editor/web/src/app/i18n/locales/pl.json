@@ -9200,7 +9200,6 @@
             "runTargets": "Uruchom na komputerze | {count} rzeczy do uruchomienia na Twoich komputerach | {count} rzeczy do uruchomienia na Twoich komputerach"
         },
         "savePanel": {
-            "all": "wszystkie",
             "allChanges": "wszystkie zmiany ({count}) | wszystkie zmiany ({count}) | wszystkie zmiany ({count})",
             "andMoreFiles": "…i {count} plik więcej, za dużo, żeby je wypisać. Zapis bierze je też. | …i {count} pliki więcej, za dużo, żeby je wypisać. Zapis bierze je też. | …i {count} plików więcej, za dużo, żeby je wypisać. Zapis bierze je też.",
             "backingUp": "Tworzenie kopii zapasowej…",
@@ -9218,7 +9217,7 @@
             "notBackedUp": "Bez kopii",
             "notBackedUpYet": "Jeszcze bez kopii zapasowej",
             "oneVersion": "Jedna wersja",
-            "ownEdits": "Your own edits",
+            "ownEdits": "Twoje zmiany",
             "saveChanges": "Zapisz {count} zmianę | Zapisz {count} zmiany | Zapisz {count} zmian",
             "saving": "Zapisywanie…",
             "seeChanges": "Zobacz zmiany",
@@ -9229,8 +9228,12 @@
             "twoEditsToSame": "Dwie zmiany w tym samym pliku kolidują. Niech {agent} to uporządkuje albo cofnij zmiany poniżej.",
             "versionCount": "{count} wersja | {count} wersje | {count} wersji",
             "versionHowThingsNow": "Najpierw zapisujemy wersję obecnego stanu, pod",
-            "willBeCalled": "Będzie się nazywać „",
-            "writingDescriptionSWork": "Pisanie opisu pracy: {describing}…"
+            "writingDescriptionSWork": "Pisanie opisu pracy: {describing}…",
+            "modelDescribing": "{model} pisze opis…",
+            "describeVersion": "Opisz tę wersję (opcjonalnie)",
+            "versionName": "Nazwa tej wersji",
+            "savedAs": "Zapisane jako",
+            "changesFrom": "{count} zmianę od: {who} | {count} zmiany od: {who} | {count} zmian od: {who}"
         },
         "specialPaths": {
             "noSearchSetupSync": "Bez wyszukiwania, instalacji, sync",

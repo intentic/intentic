@@ -210,7 +210,7 @@ export interface ChipMessageState {
 
 // The model the draft is waiting on right now: its newest step, while that step is still out. Undefined while the diff is
 // still being read, and between a refusal and the next ask.
-const askingModel = (draft: LandedMessageDraft | undefined): string | undefined => {
+export const askingModel = (draft: LandedMessageDraft | undefined): string | undefined => {
     const step = draft?.steps.at(-1);
     return step?.status === `asking` ? modelLabelFor(step.provider, step.model) : undefined;
 };

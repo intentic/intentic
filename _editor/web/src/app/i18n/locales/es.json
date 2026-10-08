@@ -5428,7 +5428,6 @@
             "personas": "{count} persona | {count} personas"
         },
         "savePanel": {
-            "all": "todos",
             "allChanges": "{count} cambio en total | los {count} cambios",
             "andMoreFiles": "…y {count} archivo más, demasiados para listarlos. Guardar también se los lleva. | …y {count} archivos más, demasiados para listarlos. Guardar también se los lleva.",
             "backingUp": "Haciendo copia de seguridad…",
@@ -5457,7 +5456,6 @@
             "twoEditsToSame": "Dos ediciones del mismo archivo chocan. Pide a tu {agent} que lo resuelva, o deshaz los cambios de abajo.",
             "versionCount": "{count} versión | {count} versiones",
             "versionHowThingsNow": "Primero se guarda una versión de cómo están las cosas ahora, bajo",
-            "willBeCalled": "Se llamará «",
             "writingDescriptionSWork": "Escribiendo una descripción del trabajo de {describing}…"
         },
         "specialPaths": {

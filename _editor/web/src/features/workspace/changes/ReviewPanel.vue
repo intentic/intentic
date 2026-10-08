@@ -15,8 +15,6 @@ import {
     clipboardOf,
     ContextMenu,
     formatElapsed,
-    growTextarea,
-    type IconName,
     Modal,
     Notice,
     timeAgo,
@@ -33,6 +31,7 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
+import CommitField from "./CommitField.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../explorer/fileType";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -43,9 +42,7 @@ import {
     ALL_SIDES,
     chipMessageNotice,
     commitMessageOf,
-    draftReport,
     draftRunning,
-    type DraftReportRow,
     isFrom,
     landedMessage,
     originHue,
@@ -221,53 +218,10 @@ followFilledMessage(filterMessage);
 // "nothing was written" from "one is coming", which used to be the same empty box.
 const originDraft = (id: string): LandedMessageDraft | undefined => agentOf(id)?.landedMessageDraft;
 const originDrafting = (id: string): boolean => draftRunning(originDraft(id));
-// The lit chip's own report, for the box's placeholder and the progress mark inside the box.
+// The lit chip's own report, for the box's placeholder and the progress mark inside the box (CommitField).
 const filterDraft = computed<LandedMessageDraft | undefined>(() =>
     originFilter.value === undefined || originFilter.value === YOURS ? undefined : originDraft(originFilter.value),
 );
-// Ticks only while the lit chip's draft is running, so its in-flight step's elapsed time actually moves.
-const draftClock = useNow(() => draftRunning(filterDraft.value));
-// The step list while a draft runs, and the post-mortem after it fails; a draft that succeeded clears from
-// here, since its message in the box is report enough.
-const filterDraftRows = computed<readonly DraftReportRow[]>(() => {
-    const draft = filterDraft.value;
-    return draft === undefined || draft.outcome === `written` ? [] : draftReport(draft, draftClock.value);
-});
-
-// The draft's newest step, as a glyph and a clock at the edge of the box it is filling, rather than as a list or a line
-// of its own: the list grew a row per model asked, pushing the button down, then vanished with the message, so the
-// button jumped as it was reached. The placeholder names the model being asked (chipMessageNotice); the whole report
-// rides the mark's hover.
-const draftLine = computed<DraftReportRow | undefined>(() => filterDraftRows.value.at(-1));
-// The mark's words for a screen reader, which gets neither its glyph nor its hover.
-const draftSpoken = computed<string>(() => {
-    const line = draftLine.value;
-    return line === undefined ? `` : [line.model, line.detail, line.elapsed].filter((part) => part !== undefined).join(` `);
-});
-const draftTip = computed((): Tip | undefined =>
-    filterDraftRows.value.length === 0
-        ? undefined
-        : {
-              title: filterLabel.value ?? ``,
-              rows: filterDraftRows.value.map((row) => ({
-                  label: row.model ?? row.detail ?? ``,
-                  value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
-                  tone: row.status === `failed` ? `warning` : undefined,
-              })),
-          },
-);
-
-// One glyph and colour per row status, isolated to a narrow column so the reason text stays untinted.
-// A refusal mid-chain isn't an error (the fallback is working); only a draft that ends with nothing is amber.
-const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: boolean; tone: string }> = {
-    reading: { icon: `spinner`, spin: true, tone: `text-subtle` },
-    asking: { icon: `spinner`, spin: true, tone: `text-link` },
-    answered: { icon: `check`, tone: `text-success` },
-    refused: { icon: `times`, tone: `text-subtle` },
-    skipped: { icon: `forward`, tone: `text-subtle` },
-    failed: { icon: `exclamation-triangle`, tone: `text-warning` },
-};
-
 // Both edges of the wait (it started, what became of it) are reported above this panel and outlive it
 // (draftingReceipts.ts) — the wait begins on the /agents board and often outlasts a visit here.
 
@@ -698,21 +652,6 @@ const doCommit = async (): Promise<void> => {
     await runCommit(commitGroups.value);
 };
 
-// A textarea, not an input, since a message can carry a release-note trailer as a body. Measured via
-// `scrollHeight`, not counted newlines — a single wrapped line is still one line to `split`.
-// Eight lines at this box's font/padding, matching the composer's own ceiling (ChatPane), scaled to the sidebar.
-const MAX_COMMIT_HEIGHT = 142;
-const commitBox = ref<HTMLTextAreaElement | null>(null);
-// This box has its own border (the composer's doesn't), so growTextarea reads it off the element rather than a
-// constant.
-const growCommitBox = (): void => {
-    growTextarea(commitBox.value, MAX_COMMIT_HEIGHT);
-};
-// Watched, not `@input`: most of what fills this box isn't typing (a chip fill, a clear, a sandbox switch).
-// Sidebar width, `chipNotice` and the progress mark are in the list too, since a re-wrap, a longer placeholder and the
-// room the mark keeps at the field's edge all change the needed height.
-watch([commitBox, commitMessage, chipNotice, layout.sidebarWidth, () => draftLine.value !== undefined], growCommitBox, { flush: `post` });
-
 // `staged` is the one side moving OUT of the index; the other two move in — a conflict's inward move is `git add`,
 // resolving it.
 const movesIntoIndex = (side: GitDiffSide): boolean => side !== `staged`;
@@ -1131,36 +1070,15 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
              share one bar under the field, so the box costs the field and a single row of presses. A container, so the
              bar thins against its own width (sidebar, phone or pop-out) rather than the window's. -->
         <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-1.5" :class="changes.count.value > 0 ? `p-2` : `px-2 py-1.5`">
-            <div v-if="changes.count.value > 0" class="relative">
-                <!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
-                <textarea
-                    ref="commitBox"
-                    v-model="commitMessage"
-                    rows="1"
-                    :placeholder="chipNotice ?? commitPlaceholder"
-                    class="ui-field-box ui-field-sm block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
-                    :class="draftLine ? `pr-18` : undefined"
-                    @keydown.ctrl.enter="doCommit"
-                    @keydown.meta.enter="doCommit"
-                ></textarea>
-                <!-- The lit chip's message being written, or why none was, inside the field it is filling: the newest
-                     step's glyph and clock at the edge, the placeholder naming the model, the whole report on hover. -->
-                <span
-                    v-if="draftLine"
-                    class="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap text-2xs"
-                    v-tooltip.right="draftTip"
-                    @click="commitBox?.focus()"
-                >
-                    <Icon
-                        :name="STEP_MARKS[draftLine.status].icon"
-                        :spin="STEP_MARKS[draftLine.status].spin"
-                        class="text-2xs"
-                        :class="STEP_MARKS[draftLine.status].tone"
-                    />
-                    <span v-if="draftLine.elapsed !== undefined" class="tabular-nums text-subtle" aria-hidden="true">{{ draftLine.elapsed }}</span>
-                    <span class="sr-only">{{ draftSpoken }}</span>
-                </span>
-            </div>
+            <!-- The lit chip's message being written, or why none was, reports inside the field it is filling. -->
+            <CommitField
+                v-if="changes.count.value > 0"
+                v-model="commitMessage"
+                :placeholder="chipNotice ?? commitPlaceholder"
+                :draft="filterDraft"
+                :draft-title="filterLabel"
+                @submit="doCommit"
+            />
             <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
                  under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
                  and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons
