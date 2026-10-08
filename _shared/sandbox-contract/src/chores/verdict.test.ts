@@ -10,6 +10,7 @@ import type {
     UiScan,
 } from "../schemas/maintenance.js";
 import { choreById, CHORES } from "./chores.js";
+import { digestOf } from "./digest.js";
 import { assessReport, choreAnswer, choreAnswered, ledgerKey, unseenVerdicts } from "./verdict.js";
 
 // The chore verdict state machine, tested at the distinctions a simpler design gets wrong: reporting an unmeasured repo
@@ -98,6 +99,34 @@ describe(`what "we have not measured this" means`, () => {
         const verdict = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([])], signals: signals() }] }), `security-advisories`);
         expect(verdict.state).toBe(`clear`);
         expect(verdict.prompt).toBeUndefined();
+    });
+});
+
+// A package the pnpm workspace leaves out is fixed in its own folder, so its findings have to say which folder; the
+// workspace's own findings keep the digest they always had, so adding the field rebadges nothing already settled.
+describe(`findings from a package the workspace leaves out`, () => {
+    const advisory = (name: string, standalone?: string) => ({
+        name,
+        severity: `critical` as const,
+        title: `${name} is bad`,
+        patched: `>=2`,
+        dev: false,
+        ...(standalone === undefined ? {} : { standalone }),
+    });
+    const withFacts = (advisories: ReturnType<typeof advisory>[]) =>
+        report({ repos: [{ repo: `app`, probes: [probe({ id: `audit`, facts: { id: `audit`, advisories } })], signals: signals() }] });
+
+    test(`name their folder in the panel and in the prompt`, () => {
+        const verdict = verdictFor(withFacts([advisory(`@capacitor/ios`, `_editor/ios-app`)]), `security-advisories`);
+        expect(verdict.detail).toEqual([`critical · @capacitor/ios in _editor/ios-app, @capacitor/ios is bad`]);
+        expect(verdict.prompt).toContain(`@capacitor/ios in _editor/ios-app (critical`);
+    });
+
+    test(`are a different finding from the same package in the workspace, which keeps its old digest`, () => {
+        const workspace = verdictFor(withFacts([advisory(`left-pad`)]), `security-advisories`);
+        const standalone = verdictFor(withFacts([advisory(`left-pad`, `shell`)]), `security-advisories`);
+        expect(workspace.digest).toBe(digestOf(`left-pad@critical`));
+        expect(standalone.digest).not.toBe(workspace.digest);
     });
 });
 

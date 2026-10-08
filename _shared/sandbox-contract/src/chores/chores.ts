@@ -1,6 +1,7 @@
 import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas/maintenance.js";
 import { plural, sizeLabel } from "@intentic/base/format";
 import { bucketOf, digestOf } from "./digest.js";
+import { AUDIT_COMMAND } from "./probes.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
 import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG } from "./workspace-scope.js";
@@ -97,9 +98,18 @@ export const repoLabel = (repo: string): string => (repo === `root` || repo === 
 // workspace root reposi…").
 export const repoName = (repo: string): string => (repo === `root` || repo === `` ? `workspace root` : repo);
 
+// Where a finding lives when it is not the workspace's own tree: a package pnpm-workspace.yaml leaves out, whose fix
+// goes in its own package.json. Empty for the workspace, so its lines read as they always did.
+const whereOf = (finding: { readonly standalone?: string | undefined }): string =>
+    finding.standalone === undefined ? `` : ` in ${finding.standalone}`;
+// The same folder prefixed to a digest identity; a workspace finding keeps the identity it always had, so this change
+// rebadges nothing that was already settled.
+const identityOf = (finding: { readonly standalone?: string | undefined }, identity: string): string =>
+    finding.standalone === undefined ? identity : `${finding.standalone}:${identity}`;
+
 // One outdated dependency, as the panel lists it; the semver step leads, since it decides whether the row is a
 // morning's work or a project.
-const outdatedLine = (entry: OutdatedPackage): string => `${entry.kind} · ${entry.name} ${entry.current} → ${entry.latest}`;
+const outdatedLine = (entry: OutdatedPackage): string => `${entry.kind} · ${entry.name}${whereOf(entry)} ${entry.current} → ${entry.latest}`;
 
 // The facts of a probe that actually ran; anything else (never run, unavailable, failed) reads as absent, so
 // assess() can't mistake an unmeasured repo for a clean one.
@@ -124,7 +134,7 @@ const security: Chore = {
     icon: `shield`,
     description: `Published advisories against this dependency tree, and the ones whose fix is a version bump.`,
     kind: `carrying`,
-    criterion: `pnpm audit reports an advisory of high or critical severity against the resolved tree.`,
+    criterion: `pnpm audit reports an advisory of high or critical severity against the resolved tree, or against a package the workspace leaves out.`,
     applies: (signals) => (signals.shape.lockfile ? undefined : `no lockfile`),
     stance: `act`,
     needs: [`audit`],
@@ -132,11 +142,14 @@ const security: Chore = {
     automation: {
         cron: `0 4 * * *`,
         guard:
-            `pnpm audit --json > ${AUDIT_REPORT} 2>/dev/null; ` +
-            `[ "$(jq '(.metadata.vulnerabilities.high // 0) + (.metadata.vulnerabilities.critical // 0)' ${AUDIT_REPORT} 2>/dev/null || echo 0)" -gt 0 ]`,
+            `{ ${AUDIT_COMMAND}; } > ${AUDIT_REPORT}; ` +
+            `[ "$(jq -s '[.[] | .metadata.vulnerabilities? // empty | (.high // 0) + (.critical // 0)] | add // 0' ${AUDIT_REPORT} 2>/dev/null || echo 0)" -gt 0 ]`,
         note: `nightly · high + critical only`,
         report: AUDIT_REPORT,
-        woke: `pnpm audit's report for this workspace is in ${AUDIT_REPORT} (JSON), and it woke you because it carries a high or critical advisory.`,
+        woke:
+            `pnpm audit's report for this workspace is in ${AUDIT_REPORT}, a stream of JSON documents (read it with \`jq -s\`): pnpm's own ` +
+            `report first, then for each package the workspace leaves out a \`{"standalone": dir}\` line and that package's report. ` +
+            `It woke you because it carries a high or critical advisory.`,
     },
     assess: (context) => {
         const facts = factsOf(context, `audit`);
@@ -155,18 +168,18 @@ const security: Chore = {
                 .toSorted((left, right) => left.name.localeCompare(right.name))
                 .map(
                     (advisory) =>
-                        `${advisory.severity} · ${advisory.name}, ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
+                        `${advisory.severity} · ${advisory.name}${whereOf(advisory)}, ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
                 ),
             // Identities, not counts: every advisory that appears or is fixed is genuinely news, with no ordinary drift
             // to absorb.
-            digest: digestOf(...blocking.map((advisory) => `${advisory.name}@${advisory.severity}`).toSorted()),
+            digest: digestOf(...blocking.map((advisory) => identityOf(advisory, `${advisory.name}@${advisory.severity}`)).toSorted()),
             severity: production.length > 0 ? `warning` : `info`,
             // Named, not counted; re-deriving the list itself would be slow, and pnpm audit would read a different tree
             // by then.
             why:
                 `pnpm audit reports ${plural(blocking.length, `high or critical advisory`, `high or critical advisories`)} against ` +
                 `${repoLabel(context.repo)}, ${production.length} reaching a production dependency path, ${patchable.length} with a published patched range: ` +
-                `${blocking.map((advisory) => `${advisory.name} (${advisory.severity}${advisory.dev ? `, dev-only` : ``}${advisory.patched === undefined ? `, no patch` : `, fixed in ${advisory.patched}`})`).join(`; `)}.`,
+                `${blocking.map((advisory) => `${advisory.name}${whereOf(advisory)} (${advisory.severity}${advisory.dev ? `, dev-only` : ``}${advisory.patched === undefined ? `, no patch` : `, fixed in ${advisory.patched}`})`).join(`; `)}.`,
         };
     },
     diagnosis: `An advisory with a published fix is a version bump someone has to actually make; one without is a risk to decide about.`,
@@ -174,8 +187,12 @@ const security: Chore = {
         `For each advisory, establish whether this workspace reaches the vulnerable code path at all: a transitive dependency of a ` +
         `build-time tool is a different problem from one in a running service. Where the fix is a version bump the lockfile can absorb, ` +
         `make it. Where it needs a real upgrade or has no patch published, leave it and say what it would take. Never rewrite ` +
-        `application code to route around a CVE.`,
-    done: `Done when \`pnpm audit\` reports fewer high/critical advisories than it did, and the type-check and tests of what it changed pass.`,
+        `application code to route around a CVE. An advisory named "in <folder>" is in a package the pnpm workspace leaves out ` +
+        `and installs on its own: bump it in that folder's package.json, and check it by auditing a scratch copy of the folder ` +
+        `(\`pnpm install --lockfile-only --ignore-workspace\`, then \`pnpm audit --ignore-workspace\`), never by leaving a lockfile in it.`,
+    done:
+        `Done when \`pnpm audit\`, and the scratch-copy audit of any folder you touched, reports fewer high/critical advisories than ` +
+        `it did, and the type-check and tests of what it changed pass.`,
 };
 
 // Majors are the finding, the total is context: the digest is keyed to which packages have a major waiting, with
@@ -210,14 +227,17 @@ const dependencies: Chore = {
                     ? `${plural(facts.packages.length, `package`)} behind`
                     : `${plural(majors.length, `major`)} waiting, ${facts.packages.length} behind in total`,
             detail: majors.toSorted((left, right) => left.name.localeCompare(right.name)).map(outdatedLine),
-            digest: digestOf(...majors.map((entry) => `${entry.name}@${entry.latest}`).toSorted(), `total:${bucketOf(facts.packages.length)}`),
+            digest: digestOf(
+                ...majors.map((entry) => identityOf(entry, `${entry.name}@${entry.latest}`)).toSorted(),
+                `total:${bucketOf(facts.packages.length)}`,
+            ),
             severity: `info`,
             // Majors are named since they are what the turn is about; minors and patches are a bulk operation the agent
             // enumerates itself.
             why:
                 `pnpm outdated reports ${plural(facts.packages.length, `dependency`, `dependencies`)} behind the registry in ` +
                 `${repoLabel(context.repo)}, ${majors.length} of them by a major version` +
-                `${majors.length === 0 ? `` : `: ${majors.map((entry) => `${entry.name} ${entry.current} → ${entry.latest}`).join(`; `)}`}.`,
+                `${majors.length === 0 ? `` : `: ${majors.map((entry) => `${entry.name}${whereOf(entry)} ${entry.current} → ${entry.latest}`).join(`; `)}`}.`,
         };
     },
     diagnosis: `Version drift is cheap to fix continuously and expensive to fix in one go, because the majors start depending on each other.`,
@@ -225,7 +245,9 @@ const dependencies: Chore = {
         `Take the patch and minor upgrades in one pass: those are what the lockfile can absorb without argument. Then take the majors ` +
         `ONE AT A TIME, reading each one's changelog for breaking changes before you touch anything, and stop at the first one that ` +
         `needs more than a mechanical fix: leave it, and say what it would take. Do not batch majors; a failing test after eight of them ` +
-        `is a bisect nobody wanted.`,
+        `is a bisect nobody wanted. Where a manifest says \`catalog:\`, the version lives in the catalog in pnpm-workspace.yaml: bump ` +
+        `it there, once, then \`pnpm install\`. A dependency named "in <folder>" is in a package the workspace leaves out and installs ` +
+        `on its own, so it is bumped in that folder's package.json.`,
     done: `Done when the type-check and tests of what it changed pass, and your summary names every major you took and every one you left, with the reason.`,
 };
 

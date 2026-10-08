@@ -1,5 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { choreById } from "./chores.js";
-import { probeSpec } from "./probes.js";
+import { AUDIT_COMMAND, probeSpec } from "./probes.js";
 import { IDIOM_RULES } from "./stack.js";
 import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG, WORKSPACE_ROOT_RG_EXCLUDE_ARG } from "./workspace-scope.js";
 
@@ -53,6 +57,49 @@ describe(`outdated`, () => {
     test(`output that is not JSON at all is a failure, never a clean result`, () => {
         expect(parse(`outdated`, `ERR_PNPM_NO_LOCKFILE  Cannot proceed`)).toBeUndefined();
     });
+
+    // pnpm 12's recursive report, verbatim in shape: a package seen as both a dependency and a devDependency is keyed
+    // `name@version` and `name@version (dev)`, which once surfaced as two rows under names no registry knows.
+    test(`reads pnpm 12's disambiguated keys as the package they name, one row per upgrade`, () => {
+        const facts = parse(
+            `outdated`,
+            JSON.stringify({
+                "mermaid@12.0.0 (dev)": { current: `12.0.0`, latest: `12.1.0`, dependencyType: `devDependencies` },
+                "mermaid@12.0.0": { current: `12.0.0`, latest: `12.1.0`, dependencyType: `dependencies` },
+                "@scope/tool@1.0.0 (dev)": { current: `1.0.0`, latest: `2.0.0`, dependencyType: `devDependencies` },
+                "@scope/tool@1.1.0": { current: `1.1.0`, latest: `2.0.0`, dependencyType: `dependencies` },
+            }),
+        );
+        expect(facts).toEqual({
+            id: `outdated`,
+            packages: [
+                // The shipped copy wins the section, whichever order pnpm listed them in.
+                { name: `mermaid`, current: `12.0.0`, latest: `12.1.0`, kind: `minor`, section: `dependencies` },
+                // Two versions in the tree are two upgrades, so they stay two rows.
+                { name: `@scope/tool`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `devDependencies` },
+                { name: `@scope/tool`, current: `1.1.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` },
+            ],
+        });
+    });
+
+    test(`a package the workspace leaves out is measured too, and says which folder it is`, () => {
+        const stdout = [
+            JSON.stringify({ vue: { current: `3.4.1`, latest: `3.4.2`, dependencyType: `dependencies` } }, null, 2),
+            `{"standalone":"_editor/ios-app"}`,
+            JSON.stringify({ "@capacitor/ios": { current: `8.5.0`, latest: `8.5.2`, dependencyType: `dependencies` } }, null, 2),
+        ].join(`\n`);
+        expect(parse(`outdated`, stdout)).toEqual({
+            id: `outdated`,
+            packages: [
+                { name: `vue`, current: `3.4.1`, latest: `3.4.2`, kind: `patch`, section: `dependencies` },
+                { name: `@capacitor/ios`, current: `8.5.0`, latest: `8.5.2`, kind: `patch`, section: `dependencies`, standalone: `_editor/ios-app` },
+            ],
+        });
+    });
+
+    test(`a standalone package that printed nothing fails the probe rather than reading as up to date`, () => {
+        expect(parse(`outdated`, `{}\n{"standalone":"_editor/ios-app"}\n`)).toBeUndefined();
+    });
 });
 
 describe(`audit`, () => {
@@ -86,6 +133,92 @@ describe(`audit`, () => {
 
     test(`a report with no advisories key is clean, not unparseable`, () => {
         expect(parse(`audit`, JSON.stringify({ metadata: { vulnerabilities: { high: 0 } } }))).toEqual({ id: `audit`, advisories: [] });
+    });
+});
+
+// The audit command run for real, against a fake `pnpm` on PATH: what is under test is the shell (which folders count
+// as standalone, the scratch copy, the markers), not pnpm, and not the network.
+describe(`the audit command across packages the workspace leaves out`, () => {
+    const roots: string[] = [];
+    afterEach(() => {
+        for (const root of roots.splice(0)) {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    // Reports one advisory named after the package it was run in, so the test can see where each run happened.
+    // `FAIL_INSTALL` stands in for a registry that cannot be reached.
+    const FAKE_PNPM = `#!/bin/sh
+name=$(sed -n 's/.*"name": *"\\([^"]*\\)".*/\\1/p' package.json)
+case "$*" in
+  *"install --lockfile-only"*) [ -z "$FAIL_INSTALL" ] || exit 1; echo "lockfileVersion: '9.0'" > pnpm-lock.yaml ;;
+  *audit*) printf '{"advisories":{"1":{"module_name":"%s","severity":"critical","title":"ran in %s","findings":[{"dev":false}]}}}\\n' "$name" "$PWD"; exit 1 ;;
+esac
+`;
+
+    const repo = (files: Record<string, string>): string => {
+        const root = mkdtempSync(join(tmpdir(), `probe-standalone-`));
+        roots.push(root);
+        for (const [path, text] of Object.entries({ ...files, "bin/pnpm": FAKE_PNPM })) {
+            mkdirSync(dirname(join(root, path)), { recursive: true });
+            writeFileSync(join(root, path), text);
+        }
+        chmodSync(join(root, `bin/pnpm`), 0o755);
+        return root;
+    };
+
+    const audit = (root: string, env: Record<string, string> = {}) =>
+        probeSpec(`audit`).parse(
+            execFileSync(`sh`, [`-c`, AUDIT_COMMAND], {
+                cwd: root,
+                encoding: `utf8`,
+                env: { ...process.env, ...env, PATH: `${join(root, `bin`)}:${process.env[`PATH`] ?? ``}` },
+            }),
+        );
+
+    const WORKSPACE = [
+        `packages:`,
+        `  - "app"`,
+        `  # The shell is installed on its own.`,
+        `  - "!shell"`,
+        `  - '!native/**'`,
+        `  - "!**/fixtures/**"`,
+        `  - "!gone"`,
+        `publicHoistPattern:`,
+        `  - "!app"`,
+        ``,
+    ].join(`\n`);
+
+    test(`audits each literal exclusion with a manifest, in a scratch copy, and names the folder`, () => {
+        const root = repo({
+            "pnpm-workspace.yaml": WORKSPACE,
+            "package.json": `{"name": "root"}`,
+            "app/package.json": `{"name": "app"}`,
+            "shell/package.json": `{"name": "shell"}`,
+            "native/package.json": `{"name": "native"}`,
+            "fixtures/x/package.json": `{"name": "fixture"}`,
+        });
+        const facts = audit(root);
+        const advisories = facts?.id === `audit` ? facts.advisories : [];
+        // The workspace's own report carries no folder; a fixture, a hoist pattern and a folder that is gone are not packages.
+        expect(advisories.map((advisory) => [advisory.name, advisory.standalone])).toEqual([
+            [`root`, undefined],
+            [`shell`, `shell`],
+            [`native`, `native`],
+        ]);
+        // Measured in a copy: nothing was written into the folder pnpm deliberately does not manage.
+        expect(existsSync(join(root, `shell/pnpm-lock.yaml`))).toBe(false);
+        expect(JSON.stringify(facts)).not.toContain(`ran in ${join(root, `shell`)}`);
+    });
+
+    test(`a standalone package that cannot be resolved fails the probe, never reads as clean`, () => {
+        const root = repo({ "pnpm-workspace.yaml": WORKSPACE, "package.json": `{"name": "root"}`, "shell/package.json": `{"name": "shell"}` });
+        expect(audit(root, { FAIL_INSTALL: `1` })).toBeUndefined();
+    });
+
+    test(`a repo with no workspace file is audited as it always was`, () => {
+        const root = repo({ "package.json": `{"name": "root"}` });
+        expect(audit(root)).toMatchObject({ advisories: [{ name: `root` }] });
     });
 });
 

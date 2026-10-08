@@ -74,16 +74,99 @@ const semverKind = (current: string, latest: string): OutdatedPackage["kind"] =>
     return latestMinor !== currentMinor ? `minor` : `patch`;
 };
 
+// ---- packages the workspace leaves out -------------------------------------------------------------------------
+// `pnpm outdated -r` and `pnpm audit` read the workspace's own tree, so a package the repo deliberately keeps OUT of
+// it (the iOS shell, whose dependencies Xcode consumes and which is installed with npm on the Mac that builds it)
+// was measured by neither, while Dependabot reads every manifest: GitHub reported a critical Capacitor advisory
+// this panel never saw. Every literal `!dir` under `packages:` in pnpm-workspace.yaml naming a folder with its own
+// package.json counts. A glob negation (`!**/fixtures/**`) is how fixtures are left out; it never names a folder
+// that exists, so the package.json test drops it without a rule of its own.
+const STANDALONE_DIRS =
+    `sed -n '/^packages:/,/^[^[:space:]#-]/p' pnpm-workspace.yaml 2>/dev/null | tr -d "\\"'" | ` +
+    `sed -n -e 's|/\\*\\*[[:space:]]*$||' -e 's|^[[:space:]]*-[[:space:]]*!\\([^[:space:]#]*\\).*$|\\1|p'`;
+
+// The line that opens one standalone package's report, as JSON so a guard can still read the stream with `jq -s`.
+const STANDALONE_KEY = `standalone`;
+const STANDALONE_LINE = /^\{"standalone":"([^"]*)"\}$/;
+
+// Runs `measure` against each standalone package in a scratch copy, never in place: `--lockfile-only` would write
+// a pnpm lockfile into a folder whose whole point is that pnpm does not manage it. A lockfile the folder already
+// has is honoured (an npm one through `pnpm import`); without one the tree is what a fresh install there resolves
+// today, which for a folder that commits none is exactly what its next build installs. A copy that cannot be
+// resolved prints nothing after its marker, and the parser turns that into a failed probe, never a clean package.
+const standaloneCommand = (measure: string): string =>
+    `${STANDALONE_DIRS} | while IFS= read -r dir; do ` +
+    `[ -f "$dir/package.json" ] || continue; ` +
+    `printf '{"${STANDALONE_KEY}":"%s"}\\n' "$dir"; ` +
+    `scratch=$(mktemp -d) || continue; ` +
+    `for file in package.json pnpm-lock.yaml package-lock.json .npmrc; do [ -f "$dir/$file" ] && cp "$dir/$file" "$scratch/"; done; ` +
+    `( cd "$scratch" && { [ -f pnpm-lock.yaml ] || { [ -f package-lock.json ] && pnpm import >/dev/null 2>&1; } || ` +
+    `pnpm install --lockfile-only --ignore-workspace --ignore-scripts >/dev/null 2>&1; } && ${measure} ); ` +
+    `rm -rf "$scratch"; ` +
+    `done`;
+
+// The workspace's own report, then one per standalone package; `true` at the end because pnpm exits non-zero when
+// it has findings, and the runner judges by whether the output parses.
+const withStandalone = (measure: string, standaloneMeasure: string): string => `${measure}; ${standaloneCommand(standaloneMeasure)}; true`;
+
+interface Section {
+    readonly standalone?: string;
+    readonly text: string;
+}
+
+// Splits a probe's output at each standalone marker; the first section, before any marker, is the workspace's own.
+const sectionsOf = (stdout: string): Section[] => {
+    const sections: { standalone?: string; lines: string[] }[] = [{ lines: [] }];
+    for (const line of stdout.split(`\n`)) {
+        const marker = STANDALONE_LINE.exec(line.trim());
+        if (marker === null) {
+            sections.at(-1)?.lines.push(line);
+        } else {
+            sections.push({ standalone: marker[1] ?? ``, lines: [] });
+        }
+    }
+    return sections.map(({ standalone, lines }) => ({ ...(standalone === undefined ? {} : { standalone }), text: lines.join(`\n`) }));
+};
+
+// Every section has to parse: a standalone package that could not be measured is not a clean one, so one unreadable
+// report fails the whole probe rather than vanishing from it.
+const parseSections = <T>(stdout: string, parse: (section: Section) => readonly T[] | undefined): T[] | undefined => {
+    const found: T[] = [];
+    for (const section of sectionsOf(stdout)) {
+        const parsed = parse(section);
+        if (parsed === undefined) {
+            return undefined;
+        }
+        found.push(...parsed);
+    }
+    return found;
+};
+
+const standaloneOf = (section: Section): { standalone?: string } => (section.standalone === undefined ? {} : { standalone: section.standalone });
+
+// pnpm 12 keys a package that appears more than once in the workspace (two versions, or both a dependency and a
+// devDependency somewhere) as `name@version` and `name@version (dev)`; taken as the name, that listed mermaid twice
+// under a name no registry knows.
+const DISAMBIGUATED_KEY = /^(@?[^@\s]+)@\S+(?:\s+\([^)]*\))?$/;
+const packageNameOf = (key: string): string => DISAMBIGUATED_KEY.exec(key)?.[1] ?? key;
+
+// What ships outranks what only builds, so the merged row says `dependencies` if any of its copies does.
+const SECTION_RANK = [`dependencies`, `optionalDependencies`, `peerDependencies`, `devDependencies`];
+const rankOf = (section: string): number => {
+    const rank = SECTION_RANK.indexOf(section);
+    return rank === -1 ? SECTION_RANK.length : rank;
+};
+
 // `pnpm outdated --json` prints a name→{current,latest,dependencyType} map; the recursive workspace form merges into
 // the same shape.
 // Entries missing `current` or `latest` are skipped: pnpm could not resolve them against the registry.
-const parseOutdated = (stdout: string): ProbeFacts | undefined => {
-    const root = asObject(stdout);
+const parseOutdatedSection = (section: Section): OutdatedPackage[] | undefined => {
+    const root = asObject(section.text);
     if (root === undefined) {
         return undefined;
     }
-    const packages: OutdatedPackage[] = [];
-    for (const [name, raw] of Object.entries(root)) {
+    const packages = new Map<string, OutdatedPackage>();
+    for (const [key, raw] of Object.entries(root)) {
         if (typeof raw !== `object` || raw === null) {
             continue;
         }
@@ -93,9 +176,28 @@ const parseOutdated = (stdout: string): ProbeFacts | undefined => {
         if (current === undefined || latest === undefined || current === latest) {
             continue;
         }
-        packages.push({ name, current, latest, kind: semverKind(current, latest), section: asString(entry[`dependencyType`]) ?? `dependencies` });
+        const name = packageNameOf(key);
+        const row: OutdatedPackage = {
+            name,
+            current,
+            latest,
+            kind: semverKind(current, latest),
+            section: asString(entry[`dependencyType`]) ?? `dependencies`,
+            ...standaloneOf(section),
+        };
+        // One row per version pair: the same upgrade seen from a dependency and a devDependency is one upgrade.
+        const identity = `${name}@${current}→${latest}`;
+        const seen = packages.get(identity);
+        if (seen === undefined || rankOf(row.section) < rankOf(seen.section)) {
+            packages.set(identity, row);
+        }
     }
-    return { id: `outdated`, packages };
+    return [...packages.values()];
+};
+
+const parseOutdated = (stdout: string): ProbeFacts | undefined => {
+    const packages = parseSections(stdout, parseOutdatedSection);
+    return packages === undefined ? undefined : { id: `outdated`, packages };
 };
 
 const SEVERITIES = new Set([`critical`, `high`, `moderate`, `low`, `info`]);
@@ -104,15 +206,15 @@ const SEVERITIES = new Set([`critical`, `high`, `moderate`, `low`, `info`]);
 // and whether a patch exists.
 // `dev` is read from the findings' own flag: a build-time-only advisory is a different risk than one in a running
 // service.
-const parseAudit = (stdout: string): ProbeFacts | undefined => {
-    const root = asObject(stdout);
+const parseAuditSection = (section: Section): Advisory[] | undefined => {
+    const root = asObject(section.text);
     if (root === undefined) {
         return undefined;
     }
     const raw = root[`advisories`];
     // No `advisories` key is pnpm's clean report (empty list), not an unrecognized shape.
     if (raw === undefined) {
-        return { id: `audit`, advisories: [] };
+        return [];
     }
     if (typeof raw !== `object` || raw === null) {
         return undefined;
@@ -137,10 +239,21 @@ const parseAudit = (stdout: string): ProbeFacts | undefined => {
             // `<0.0.0` is npm's spelling of "no patch exists"; treated as absent rather than a fixable range.
             ...(patched === undefined || patched === `<0.0.0` ? {} : { patched }),
             dev: findings.length > 0 && findings.every((finding) => finding[`dev`] === true),
+            ...standaloneOf(section),
         });
     }
-    return { id: `audit`, advisories };
+    return advisories;
 };
+
+const parseAudit = (stdout: string): ProbeFacts | undefined => {
+    const advisories = parseSections(stdout, parseAuditSection);
+    return advisories === undefined ? undefined : { id: `audit`, advisories };
+};
+
+// Shared with the security chore's nightly guard, so the automation wakes on exactly what the panel shows. The output
+// is a stream of JSON documents (`jq -s` reads it whole): pnpm's report, then a `{"standalone": dir}` line and that
+// package's report for each standalone package.
+export const AUDIT_COMMAND = withStandalone(`pnpm audit --json 2>/dev/null`, `pnpm audit --json --ignore-workspace 2>/dev/null`);
 
 // Sample of paths only; the agent re-runs knip live, so a full list would already be stale.
 const DEAD_CODE_SAMPLE = 8;
@@ -404,9 +517,10 @@ export const PROBES: readonly ProbeSpec[] = [
         timeoutMs: 5 * 60_000,
         available: `test -f package.json`,
         unavailable: `no package.json`,
-        // `-r` reports every workspace package, not just root; `|| true` since pnpm exits non-zero when it has
-        // findings.
-        command: `pnpm outdated -r --json 2>/dev/null || true`,
+        // `-r` reports every workspace package, not just root, and resolves `catalog:` through pnpm-workspace.yaml,
+        // so the catalog is what gets measured. It also honours `minimumReleaseAge`: a release younger than the
+        // floor is not reported as latest, by the same policy that would refuse to install it.
+        command: withStandalone(`pnpm outdated -r --json 2>/dev/null`, `pnpm outdated --json --ignore-workspace 2>/dev/null`),
         parse: parseOutdated,
     },
     {
@@ -419,7 +533,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // A lockfile, not package.json: audit resolves the installed tree, and without one pnpm has nothing to check.
         available: `test -f pnpm-lock.yaml || test -f package-lock.json`,
         unavailable: `no lockfile`,
-        command: `pnpm audit --json 2>/dev/null || true`,
+        command: AUDIT_COMMAND,
         parse: parseAudit,
     },
     {

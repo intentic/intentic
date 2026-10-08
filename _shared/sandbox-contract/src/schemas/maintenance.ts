@@ -8,6 +8,13 @@ import { WorkspaceHotspotSchema, WorkspaceKeyModuleSchema } from "./codebase-hea
 export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle", "mutation"] as const;
 export const ProbeIdSchema = z.enum(PROBE_IDS);
 export type ProbeId = z.infer<typeof ProbeIdSchema>;
+// Absent for the repo's own pnpm workspace, so every finding recorded before this field existed still reads right.
+const StandaloneSchema = z
+    .string()
+    .optional()
+    .describe(
+        "The folder that declares it, when that folder is a package the pnpm workspace leaves out and installs on its own (the iOS shell, built with npm on a Mac). The fix goes in that folder's package.json, not the workspace catalog.",
+    );
 // `kind` is the semver distance; that's why this isn't collapsed to one number.
 export const OutdatedPackageSchema = z.object({
     name: z.string().describe("The dependency."),
@@ -22,6 +29,7 @@ export const OutdatedPackageSchema = z.object({
     section: z
         .string()
         .describe("Which part of the manifest declares it. A major version behind on a build-time tool is a different risk from one that ships."),
+    standalone: StandaloneSchema,
 });
 export type OutdatedPackage = z.infer<typeof OutdatedPackageSchema>;
 export const AdvisorySchema = z.object({
@@ -39,6 +47,7 @@ export const AdvisorySchema = z.object({
             "Which versions fix it. Absent means no fix has been published, which is exactly when nothing should offer to upgrade and something should say so instead.",
         ),
     dev: z.boolean().describe("Whether it only reaches build-time tooling, which is a different problem from one that reaches what you ship."),
+    standalone: StandaloneSchema,
 });
 export type Advisory = z.infer<typeof AdvisorySchema>;
 // A stale sample could send the agent chasing files already gone; it re-runs knip live anyway.

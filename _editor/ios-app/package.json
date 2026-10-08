@@ -10,11 +10,11 @@
         "cap:run": "cap run ios"
     },
     "dependencies": {
-        "@capacitor/core": "8.5.0",
+        "@capacitor/core": "8.5.2",
+        "@capacitor/ios": "8.5.2",
         "@capacitor/push-notifications": "8.1.2"
     },
     "devDependencies": {
-        "@capacitor/cli": "8.5.0",
-        "@capacitor/ios": "8.5.0"
+        "@capacitor/cli": "8.5.2"
     }
 }
