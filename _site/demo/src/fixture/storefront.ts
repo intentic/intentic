@@ -206,3 +206,42 @@ export const cartPage = (options: { readonly coupon: string; readonly rejected: 
         )}${text(970, 449, `Checkout`, { size: 15, weight: 600, fill: `#fff`, anchor: `middle` })}${cursor(1_126, 300)}`,
     );
 };
+
+// Any address the visitor types into their own window: the demo loads nothing, so the page says where it would be. A
+// blank tab is just blank, the way a browser's new tab is before anything is typed.
+const parsedUrl = (url: string): URL | undefined => {
+    try {
+        return new URL(url);
+    } catch {
+        // allow(silent-catch): not an address; the page is drawn as typed.
+        return undefined;
+    }
+};
+
+export const visitedPage = (url: string): string => {
+    if (url === `` || url === `about:blank`) {
+        return page(``);
+    }
+    const parsed = parsedUrl(url);
+    const host = parsed?.host || url;
+    const search = parsed?.host === `duckduckgo.com` ? parsed.searchParams.get(`q`) : null;
+    const heading = search === null ? host : `Results for “${search}”`;
+    const lines =
+        search === null
+            ? [`A page from ${host}`, `In the demo nothing is fetched, so this stands in for it.`]
+            : [`Ten results would be listed here.`];
+    return page(
+        `${box(0, 0, WIDTH, 64, `#faf9f8`)}${box(0, 63, WIDTH, 1, `#e6e3e0`, 0)}${text(48, 40, search === null ? host : `DuckDuckGo`, {
+            size: 20,
+            weight: 700,
+            fill: search === null ? `#1b1a19` : `#de5833`,
+        })}${text(48, 150, heading, { size: 34, weight: 700 })}${lines
+            .map((line, index) => text(48, 200 + index * 30, line, { size: 16, fill: `#6c6862` }))
+            .join(``)}${[0, 1, 2]
+            .map(
+                (row) =>
+                    `${box(48, 280 + row * 120, 760, 96, `#f6f5f4`, 12)}${box(72, 304 + row * 120, 320, 14, `#e6e3e0`, 7)}${box(72, 332 + row * 120, 560, 10, `#ecebe9`, 5)}`,
+            )
+            .join(``)}`,
+    );
+};

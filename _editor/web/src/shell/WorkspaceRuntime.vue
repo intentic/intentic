@@ -14,6 +14,7 @@ import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import { startAutoUpdateWatch } from "../features/sandbox/overview/version/autoUpdateWatch";
 import { startBrowserTab } from "./browser-tab/browserTab";
+import { startBrowserAgents } from "./browserAgents";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
 // (App.vue) rather than inside the workspace shell, so /setup, an invite link, and the desktop handoff
@@ -77,6 +78,10 @@ startAutoUpdateWatch();
 // The browser tab tells what needs the reader, what finished while they were away and whether work is under way, in
 // its title, its icon and (when they asked for it) a sound. Same lifetime: it is about the session, not a screen.
 startBrowserTab();
+
+// The browser view tells an agent at work in its window from one that is done by the agent's own turn, which the board
+// knows and the view can't import; handed across here.
+startBrowserAgents();
 </script>
 
 <template>

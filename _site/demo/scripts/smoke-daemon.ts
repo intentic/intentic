@@ -181,6 +181,7 @@ const samplesOf = (
             // A log tail and a pause: the two that leave the fixture's containers and pairings as they were.
             manageDeviceSandbox: { id: host, slug: `docs-site`, op: `logs` },
             runDeviceCommand: { id: host, command: `sync-pause`, sandboxId: `billing-api` },
+            openBrowser: { url: `https://example.com` },
             closeBrowser: { name: `smoke` },
             desktop: undefined,
             subagents: undefined,

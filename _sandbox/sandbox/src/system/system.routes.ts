@@ -9,12 +9,14 @@ import {
     systemContract,
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
+import { openOwnBrowser } from "../browser/sessions/own-browser.js";
 import { desktopState } from "../desktop/agent-desktop.js";
 import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { Services } from "../composition.js";
@@ -488,6 +490,16 @@ export const createSystemRoutes = (services: Services) => {
         }),
         // The agent's Chromiums and open pages; records this daemon keeps itself, not shelled out for.
         browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),
+        // The person's own window: a tab in it, starting it first when it is closed. A start that fails says why (no
+        // browser installed, no display) rather than leaving the view waiting on a window that will never come.
+        openBrowser: i.openBrowser.handler(async ({ input }) => {
+            try {
+                return await openOwnBrowser({ root: services.workspace.root, warn: (fields, message) => services.logger.warn(fields, message) }, input.url);
+            } catch (error) {
+                services.logger.warn({ err: error }, "own browser: could not open");
+                throw new ORPCError("SERVICE_UNAVAILABLE", { message: `Couldn't open your browser: ${errorMessage(error)}` });
+            }
+        }),
         closeBrowser: i.closeBrowser.handler(async ({ input }) => {
             await closeBrowserSession(input.name);
             return { ok: true };

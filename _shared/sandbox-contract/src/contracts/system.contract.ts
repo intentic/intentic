@@ -18,6 +18,8 @@ import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
+    OpenBrowserInputSchema,
+    OpenBrowserResultSchema,
     DesktopStateSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
@@ -230,6 +232,17 @@ export const systemContract = {
                 "Every browser a conversation currently has running and the pages inside each one. The picture of what they are showing comes over a separate socket; this is the roster.",
         })
         .output(BrowsersListSchema),
+    // The person's own window: started on the first call, given a new tab on every later one, never an agent's.
+    openBrowser: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/browsers",
+            summary: "Open a tab in your own browser",
+            description:
+                "Opens a tab in your own browser window, starting the window first when it is not running. It is a Chromium of its own, with a profile that keeps your sign-ins between windows, and no agent drives it. Answers once the window can be watched.",
+        })
+        .input(OpenBrowserInputSchema)
+        .output(OpenBrowserResultSchema),
     closeBrowser: systemRoute
         .route({
             method: "DELETE",

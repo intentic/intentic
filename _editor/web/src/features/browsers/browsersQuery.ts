@@ -1,6 +1,7 @@
-import type { BrowserSession, BrowsersList } from "@intentic/sandbox-contract";
+import type { BrowserSession, BrowsersList, OpenBrowserResult } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { optimisticUpdate } from "../../lib/optimistic";
+import { queryClient } from "../../lib/queryPersistence";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
@@ -40,4 +41,13 @@ export const closeBrowser = async (name: string): Promise<void> => {
     } catch (error) {
         console.error(`browser ${name}: close failed`, error);
     }
+};
+
+// A tab in the person's own window, starting the window first when it isn't running; answers where it opened, so the
+// view can go there and put the new tab in front. The list is re-read rather than patched: the daemon pushes the
+// window's arrival anyway, and this keeps the first frame from waiting on that push.
+export const openBrowser = async (url?: string): Promise<OpenBrowserResult> => {
+    const opened = await sandboxRpc.system.openBrowser(url === undefined ? {} : { url });
+    void queryClient.invalidateQueries({ queryKey: browsersKey });
+    return opened;
 };

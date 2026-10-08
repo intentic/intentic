@@ -31,7 +31,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
-import { BROWSER_SESSIONS, browserSession } from "./browser";
+import { BROWSER_SESSIONS, browserSession, closeOwnBrowser, OWN_SESSION, openOwnBrowser, ownSession, watchOwnBrowser } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import {
     automationApprovals,
@@ -150,6 +150,14 @@ const boardAgents = (): AgentSummary[] => roster.agents.map(withNeeds);
 const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
+
+// The visitor's own window changed (a tab opened, closed or went somewhere): the list is re-read, as the daemon's push
+// makes it.
+watchOwnBrowser(() => {
+    for (const listener of listeners) {
+        listener({ kind: `runtimeChanged`, domains: [`browsers`] });
+    }
+});
 
 const broadcastRoster = (): void => {
     roster.rev += 1;
@@ -799,11 +807,20 @@ export const procedures = {
         }),
         // One still-driven browser session and one already closed, rendered as history, not a broken stream.
         // Quiet, the agent has put its browser down: the session is history, so the status bar has no open one to count.
-        browsers: () => ({
-            sessions: BROWSER_SESSIONS(Date.now()).map((session) =>
-                demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
-            ),
-        }),
+        browsers: () => {
+            const now = Date.now();
+            const mine = ownSession(now);
+            return {
+                sessions: [
+                    ...(mine === undefined ? [] : [mine]),
+                    ...BROWSER_SESSIONS(now).map((session) =>
+                        demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
+                    ),
+                ],
+            };
+        },
+        // The visitor's own window opens for real (browser.ts): a tab per call, its picture drawn from the address.
+        openBrowser: ({ url }) => openOwnBrowser(url),
         // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
         // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
         devices: () => ({ devices: demoDevices(Date.now()) }),
@@ -818,7 +835,13 @@ export const procedures = {
             switchDemoPairings(id, command, sandboxId);
             return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
         },
-        closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
+        closeBrowser: ({ name }) => {
+            if (name !== OWN_SESSION) {
+                return refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`);
+            }
+            closeOwnBrowser();
+            return { ok: true };
+        },
         // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no status bar chip
         // for it, and no claim that it is empty.
         desktop: () => ({ running: false }),

@@ -120,6 +120,18 @@ export const BrowserSessionSchema = z.object({
     pages: z
         .array(BrowserPageSchema)
         .describe("Every page it has open. A browser holds several at once, which is the reason it is listed apart from the terminals."),
+    // Opened from the browser view by the person, not by an agent's tool; absent on an agent's and from an older daemon.
+    own: z
+        .boolean()
+        .optional()
+        .describe("Your own window, opened from the browser view rather than by an agent. Yours to use whenever it is open; no agent drives it."),
+    // The conversation whose agent opened it; the client reads that agent's turn to know whether it is driving now.
+    owner: z
+        .string()
+        .optional()
+        .describe(
+            "The conversation whose agent opened it. While that conversation has a turn running the agent may act in this window at any moment; once it has not, the window is yours to use.",
+        ),
 });
 export type BrowserPage = z.infer<typeof BrowserPageSchema>;
 export type BrowserSession = z.infer<typeof BrowserSessionSchema>;
@@ -128,6 +140,15 @@ export const BrowsersListSchema = z.object({
 });
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
 export const BrowserNameParamSchema = z.object({ name: z.string().describe("Which browser.") });
+export const OpenBrowserInputSchema = z.object({
+    url: z.string().optional().describe("Where the new tab goes. Absent opens a blank tab, the way a browser's own new tab does."),
+});
+export type OpenBrowserInput = z.infer<typeof OpenBrowserInputSchema>;
+export const OpenBrowserResultSchema = z.object({
+    name: z.string().describe("The window it opened in: what the browser view, the live picture and the close route take."),
+    pageId: z.string().optional().describe("The tab it opened, once the window has it. Absent when the tab had not appeared in time."),
+});
+export type OpenBrowserResult = z.infer<typeof OpenBrowserResultSchema>;
 // The sandbox's own desktop (desktop/agent-desktop.ts): one screen, so a state rather than a roster. `windows` is what
 // tells an empty desktop from a broken picture of one, and what puts its tile on the rail.
 export const DesktopStateSchema = z.object({

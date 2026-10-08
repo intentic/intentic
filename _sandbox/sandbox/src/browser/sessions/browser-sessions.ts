@@ -19,6 +19,10 @@ import { armPasskeys } from "../tools/passkeys.js";
 const ATTACH_TIMEOUT_MS = 45_000;
 const ATTACH_POLL_MS = 250;
 
+// How long a new tab's id is waited for after the tab itself exists; see browserSessionNewTab.
+const TAB_ID_TICKS = 10;
+const TAB_ID_TICK_MS = 25;
+
 // How long a finished session stays listable, matching terminal-session.ts's retention window.
 const RETAIN_FINISHED_MS = 2 * 3_600_000;
 
@@ -35,9 +39,15 @@ interface PageRecord {
     dialog: Dialog | undefined;
 }
 
-// What the daemon knows about one agent browser; `context` is set only once the CDP attach lands.
+// What the daemon knows about one browser; `context` is set only once the CDP attach lands. Most are an agent's; the
+// person's own window (own-browser.ts) is adopted with its context already in hand and a shutdown of its own.
 interface BrowserSessionRecord {
     readonly name: string;
+    // The person's own window rather than an agent's: never reaped for idleness, and labelled by its page alone.
+    readonly own: boolean;
+    // How the window is ended when it is ours to end: Chromium's orderly close for a browser this daemon started, where
+    // Playwright's close() on an attached browser would only disconnect and leave the process running.
+    readonly shutdown: (() => Promise<void>) | undefined;
     // Owning conversation, the reaper's key; undefined for a turn with no conversation (the bench).
     readonly owner: string | undefined;
     // MCP server driving it: `web`, or a logged-in capability's id.
@@ -284,6 +294,8 @@ export const openBrowserSession = (input: {
     }
     const record: BrowserSessionRecord = {
         name,
+        own: false,
+        shutdown: undefined,
         owner: input.owner,
         server: input.server,
         port: input.port,
@@ -313,6 +325,82 @@ export const openBrowserSession = (input: {
         return context;
     });
     return name;
+};
+
+// Registers a browser this daemon started itself and already holds the context of: the person's own window. No attach
+// to poll for and no hook to refresh it; it ends when Chromium disconnects or when it is closed through `shutdown`.
+// A finished record under the same name is replaced, so the window keeps one name across every time it is opened.
+export const adoptBrowserSession = (input: {
+    readonly name: string;
+    readonly server: string;
+    readonly context: BrowserContext;
+    readonly shutdown: () => Promise<void>;
+}): void => {
+    const now = Date.now();
+    const record: BrowserSessionRecord = {
+        name: input.name,
+        own: true,
+        shutdown: input.shutdown,
+        owner: undefined,
+        server: input.server,
+        port: 0,
+        passkeyStore: undefined,
+        startedAt: now,
+        activityAt: now,
+        pages: new Map(),
+        nextPageId: 1,
+        activePageId: undefined,
+        lastPageId: undefined,
+        finishedAt: undefined,
+        help: undefined,
+        abandonHelp: undefined,
+        browser: input.context.browser() ?? undefined,
+        context: input.context,
+        attaching: undefined,
+    };
+    sessions.set(input.name, record);
+    record.browser?.on("disconnected", () => finish(record));
+    input.context.on("page", (page) => watchPage(record, page));
+    for (const page of input.context.pages()) {
+        watchPage(record, page);
+    }
+    publishRuntimeChange("browsers");
+};
+
+// Whether a session by this name is open now; a finished record still listed for its strip is not.
+export const browserSessionRunning = (name: string): boolean => {
+    const record = sessions.get(name);
+    return record !== undefined && record.finishedAt === undefined && record.context !== undefined;
+};
+
+// Opens a tab in a running session and answers its page id, the one the strip and a `bind` know it by. The page is
+// registered by the context's own `page` event, so it is looked up rather than minted here.
+export const browserSessionNewTab = async (name: string): Promise<{ readonly page: Page; readonly id: string | undefined } | undefined> => {
+    const record = sessions.get(name);
+    const context = record?.finishedAt === undefined ? record?.context : undefined;
+    if (record === undefined || context === undefined) {
+        return undefined;
+    }
+    const page = await context.newPage();
+    const idOf = (): string | undefined => [...record.pages.values()].find((entry) => entry.page === page)?.id;
+    // The `page` event normally lands before newPage resolves; a few ticks cover a connection that orders them the
+    // other way, after which the tab is answered without an id rather than waited on.
+    for (let tick = 0; tick < TAB_ID_TICKS && idOf() === undefined; tick += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- waiting on one event, a handful of ticks at most
+        await sleep(TAB_ID_TICK_MS);
+    }
+    return { page, id: idOf() };
+};
+
+// The tab a freshly started window opened on by itself, so the first address goes there rather than into a second tab
+// beside an empty one.
+export const browserSessionBlankPage = (name: string): { readonly page: Page; readonly id: string } | undefined => {
+    const record = sessions.get(name);
+    if (record === undefined || record.finishedAt !== undefined) {
+        return undefined;
+    }
+    const entry = [...record.pages.values()].find((candidate) => !candidate.closed && (candidate.url === "" || candidate.url === "about:blank"));
+    return entry === undefined ? undefined : { page: entry.page, id: entry.id };
 };
 
 // Live context behind a session, once attach lands. The view route awaits this instead of polling, since the socket can
@@ -403,9 +491,16 @@ export const answerBrowserDialog = async (name: string, accept: boolean, text?: 
     await (accept ? dialog.accept(text) : dialog.dismiss()).catch(() => undefined);
 };
 
-// Logged-in label leads with owner so same-site identities stay distinct; web has none, so it's page-first.
-const labelOf = (server: string, page: string | undefined): string =>
-    server === "web" ? (page ?? server) : page === undefined ? server : `${server} · ${page}`;
+// Logged-in label leads with owner so same-site identities stay distinct; web has none, so it's page-first, and so is
+// the person's own window, which is nobody's account but theirs.
+const labelOf = (record: BrowserSessionRecord, page: string | undefined): string =>
+    record.own
+        ? (page ?? "Your browser")
+        : record.server === "web"
+          ? (page ?? record.server)
+          : page === undefined
+            ? record.server
+            : `${record.server} · ${page}`;
 
 // A field present only with a value, per exactOptionalPropertyTypes: an absent one is omitted, never set undefined.
 const optional = <K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> =>
@@ -418,7 +513,7 @@ const summarize = (record: BrowserSessionRecord): BrowserSession => {
     const active = activeId === undefined ? undefined : record.pages.get(activeId);
     return {
         name: record.name,
-        label: labelOf(record.server, active?.title ?? hostOf(active?.url)),
+        label: labelOf(record, active?.title ?? hostOf(active?.url)),
         server: record.server,
         running,
         activityAt: record.activityAt,
@@ -426,6 +521,8 @@ const summarize = (record: BrowserSessionRecord): BrowserSession => {
         ...optional("help", record.help),
         ...optional("dialog", running ? openDialog(record) : undefined),
         ...optional("finishedAt", record.finishedAt),
+        ...optional("own", record.own ? true : undefined),
+        ...optional("owner", record.owner),
     };
 };
 
@@ -461,9 +558,9 @@ export const closeBrowserSession = async (name: string): Promise<void> => {
     if (record === undefined) {
         return;
     }
-    const { browser } = record;
+    const { browser, shutdown } = record;
     finish(record);
-    await browser?.close().catch(() => undefined);
+    await (shutdown === undefined ? browser?.close() : shutdown())?.catch(() => undefined);
 };
 
 // Closes every running record a conversation owns (platform/reaper.ts): a backstop for a disconnect that never fired,
@@ -486,10 +583,11 @@ export const runningBrowserOwners = (): string[] => [
 // the PostToolUse hook on every browser call, so "idle" here means no browser tool has run, not that the turn is quiet.
 //
 // A session parked on a help request is never idle: the agent is blocked precisely BECAUSE nobody has driven it, and
-// closing it would answer the owner's pending question by destroying what it was about.
+// closing it would answer the owner's pending question by destroying what it was about. Nor is the person's own
+// window: a browser left open on a desktop is still open when its owner comes back to it, and theirs is closed by them.
 export const idleBrowserSessionNames = (now: number, idleMs: number): string[] =>
     [...sessions.values()]
-        .filter((record) => record.finishedAt === undefined && record.help === undefined && record.activityAt <= now - idleMs)
+        .filter((record) => !record.own && record.finishedAt === undefined && record.help === undefined && record.activityAt <= now - idleMs)
         .map((record) => record.name);
 
 // Hooks that register or refresh a browser session: PreToolUse fires before Chromium launches, so the session appears
