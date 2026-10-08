@@ -2186,7 +2186,7 @@
             "commitWhatEachLanded": "Hacer commit de lo que cambió cada agente integrado, con un asunto escrito para él, y de tus propias ediciones antes de que empiece el siguiente agente.",
             "finishedWork": "Trabajo terminado",
             "followOrigin": "Mantenerse al día con el remoto",
-            "followOriginNote": "Cada pocos minutos, traer la rama remota de cada repositorio e incorporar lo que otros subieron, con un commit de merge si tienes commits propios. Un conflicto, o un archivo sin commit en medio, deja el repositorio como estaba. No se sube nada.",
+            "followOriginNote": "Cada pocos minutos, traer e integrar lo que otros subieron; se omiten repos con conflictos o archivos sin commit. No se sube nada.",
             "n1Day": "1 día",
             "n1Week": "1 semana",
             "n3Days": "3 días"

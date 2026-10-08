@@ -4090,7 +4090,7 @@
             "commitWhatEachLanded": "Commituj to, co zmienił każdy scalony agent, pod tematem napisanym dla niego, oraz Twoje własne zmiany, zanim ruszy następny agent.",
             "finishedWork": "Skończona praca",
             "followOrigin": "Nadążaj za zdalnym repozytorium",
-            "followOriginNote": "Co kilka minut pobieraj zdalną gałąź każdego repozytorium i wprowadzaj to, co wypchnęli inni, z commitem scalającym, jeśli masz własne commity. Konflikt lub niezacommitowany plik na drodze zostawia repozytorium bez zmian. Nic nie jest wypychane.",
+            "followOriginNote": "Co kilka minut pobieraj i scalaj to, co wypchnęli inni; pomijane są repozytoria z konfliktem lub niezacommitowanymi plikami. Nic nie jest wypychane.",
             "n1Day": "1 dzień",
             "n1Week": "1 tydzień",
             "n3Days": "3 dni"

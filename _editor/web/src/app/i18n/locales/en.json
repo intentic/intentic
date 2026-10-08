@@ -4497,7 +4497,7 @@
             "commitWhatEachLanded": "Commit what each landed agent changed, under a subject written for it, and your own edits before the next agent starts.",
             "finishedWork": "Finished work",
             "followOrigin": "Keep up with the remote",
-            "followOriginNote": "Every couple of minutes, fetch each repo's remote branch and bring what others pushed into your workspace, with a merge commit when you have commits of your own. A conflict, or an uncommitted file in the way, leaves the repo as it was. Nothing is pushed.",
+            "followOriginNote": "Every few minutes, fetch and merge what others pushed, skipping repos with conflicts or uncommitted files; never pushes.",
             "n1Day": "1 day",
             "n1Week": "1 week",
             "n3Days": "3 days"
