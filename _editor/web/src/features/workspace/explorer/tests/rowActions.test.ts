@@ -37,6 +37,18 @@ afterEach(() => {
 });
 
 describe(`rowActionsFor`, () => {
+    // A repository that declares programs to run on the owner's computers says so on its row, standing like checks do:
+    // the file is there whether or not anyone hovers.
+    it(`gives a repo with run targets a standing run action that opens them`, () => {
+        const openRuns = jest.fn();
+        const actions = rowActionsFor(`intentic`, sources({ runDirs: new Map([[`intentic`, 2]]), openRuns }));
+        expect(actions.map((action) => [action.id, action.standing])).toEqual([[`runs`, true]]);
+        expect(actions[0]?.tooltip).toBe(`2 things to run on your computers`);
+        actions[0]?.run();
+        expect(openRuns).toHaveBeenCalledWith(`intentic`);
+        expect(rowActionsFor(`other`, sources({ runDirs: new Map([[`intentic`, 2]]), openRuns }))).toEqual([]);
+    });
+
     it(`gives an ordinary directory without personas no actions`, () => {
         expect(rowActionsFor(`intentic/_editor/web/src`, sources())).toEqual([]);
     });

@@ -13,8 +13,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app-env.js";
-import type { Services } from "../composition.js";
-import { soleLiveConversation } from "../conversations/actor/conversation-holdings.js";
+import { type DoorServices, refusalFor } from "./device-door.js";
 
 // THE `devices push` DOOR: a program the agent built, carried from its shell to one of the owner's computers
 // (schemas/device-artifacts.ts). The CLI reads the bytes in the agent's own view of /work, so a build in a conversation's
@@ -23,7 +22,6 @@ import { soleLiveConversation } from "../conversations/actor/conversation-holdin
 // withholds pushing to it too. What may run there is the machine's to decide: it refuses every chunk unless "Run
 // programs this sandbox sends" is on.
 
-type DeviceServices = Pick<Services, "conversations" | "hostHub" | "turnMounts">;
 
 const QuerySchema = z.object({
     name: ArtifactNameSchema,
@@ -36,11 +34,6 @@ const QuerySchema = z.object({
 });
 
 const refuse = (c: Context<AppEnv>, status: 400 | 403 | 404 | 409 | 502, error: string): Response => c.json({ error }, status);
-
-const conversationOf = (services: Pick<Services, "conversations">, c: Context<AppEnv>): string | undefined => {
-    const named = c.req.header("x-intentic-conversation");
-    return named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
-};
 
 // The body cut into the machine's chunk size, whatever sizes the socket hands over.
 async function* chunksOf(body: ReadableStream<Uint8Array>, size: number): AsyncGenerator<Buffer> {
@@ -61,7 +54,7 @@ async function* chunksOf(body: ReadableStream<Uint8Array>, size: number): AsyncG
     }
 }
 
-export const createDeviceArtifactRoutes = (services: DeviceServices) => ({
+export const createDeviceArtifactRoutes = (services: DoorServices) => ({
     // POST /devices/{name}/artifacts?name=&kind=&file=&size=&sha256=[&probe=1], the bytes as the body.
     push: async (c: Context<AppEnv>): Promise<Response> => {
         const device = c.req.param("name") ?? "";
@@ -70,16 +63,9 @@ export const createDeviceArtifactRoutes = (services: DeviceServices) => ({
             return refuse(c, 400, `bad push: ${query.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`);
         }
         const { name, kind, file, size, sha256, probe } = query.data;
-        const conversationId = conversationOf(services, c);
-        if (conversationId === undefined) {
-            return refuse(c, 400, "no conversation named: run this from an agent's shell");
-        }
-        if (!services.turnMounts.reaches(conversationId, { kind: "device", id: device })) {
-            return refuse(
-                c,
-                403,
-                `this conversation's turn does not reach a device called "${device}": push only to a computer whose tools this turn has (mcp__<name>__…)`,
-            );
+        const refused = refusalFor(services, c, device);
+        if (refused !== undefined) {
+            return refuse(c, refused.status, refused.error);
         }
         const client = services.hostHub.client(device);
         if (client === undefined || !services.hostHub.online(device)) {

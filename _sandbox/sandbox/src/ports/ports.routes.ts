@@ -21,7 +21,7 @@ export interface PortJob {
 
 // `jobOn` answers from the background-job registry (agent/tools/jobs/background-jobs.ts), handed in by the router rather than
 // imported, which would tie this subsystem to the agent's in a cycle.
-export type PortsRoutesDeps = Pick<Services, "config" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
+export type PortsRoutesDeps = Pick<Services, "config" | "deviceTunnels" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost & { readonly jobOn: (port: number) => PortJob | undefined };
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
@@ -33,6 +33,8 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     return {
         list: i.list.handler(async () => {
             const listeners = await services.scanPorts();
+            // A tunnel to one of the owner's computers is that computer's own port: mirrored back, it would loop.
+            const tunnels = services.deviceTunnels.ports();
             // Read once for the whole list, not per row, to avoid re-reading the extensions directory per port. A
             // failure here costs one row's name, never the list, since the desktop mirror reconciles against this route
             // on a loop.
@@ -41,7 +43,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             const attribution = { workspaceRoot: services.workspace.root, extensionProcesses, servicePorts };
             return {
                 ports: listeners
-                    .filter(({ port }) => !reserved.has(port))
+                    .filter(({ port }) => !reserved.has(port) && !tunnels.has(port))
                     .map((listener) => {
                         const slot = services.portForwards.slotOf(listener.port);
                         const url = slot !== undefined ? portUrl(slot, zone, sandboxId) : undefined;

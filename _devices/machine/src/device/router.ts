@@ -9,6 +9,7 @@ import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { ScopeError } from "./policy.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
+import { dialLoopback } from "./tools/programs/tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import { machineReport } from "../sync/report.js";
@@ -37,6 +38,9 @@ export interface HostRuntime {
     readonly scopes: () => DeviceScopes;
     readonly setScopes: (scopes: DeviceScopes) => void;
     readonly log: (message: string) => void;
+    // The daemon address this link dialled (its loopback shortcut, or the public one), for a connection the sandbox asks
+    // this machine to open back to it (a `devices reach` tunnel). Undefined while it is not connected.
+    readonly linkBase?: () => string | undefined;
 }
 
 // A flow's callback-reported lines as the stream the browser reads (@intentic/base's `narrate`); this is only
@@ -220,6 +224,14 @@ export const createHostRouter = (runtime: HostRuntime) => {
         deliverProject: os.deliverProject.handler(async ({ input }) => await deliverOverLink(runtime, input)),
         // A program the sandbox built, carried in pieces into this sandbox's runs folder (tools/programs/artifacts.ts). Behind
         // "Run programs this sandbox sends", read per piece; only a commit is audited, since a build is fifty pieces.
+        // One connection of a `devices reach` tunnel: dial this machine's own port, then back to the sandbox (tunnel.ts).
+        dialLoopback: os.dialLoopback.handler(async ({ input }) => {
+            try {
+                return await dialLoopback(input, runtime.scopes(), runtime.linkBase?.());
+            } catch (error) {
+                throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
+            }
+        }),
         stageArtifact: os.stageArtifact.handler(async ({ input }) => {
             try {
                 const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);

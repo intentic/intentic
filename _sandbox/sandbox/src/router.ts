@@ -28,6 +28,7 @@ import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
 import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
+import { createRunsRoutes } from "./hosts/runs.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createPublicRoutes } from "./public/public.routes.js";
 import { createPagesRoutes } from "./agent/pages/pages.routes.js";
@@ -94,6 +95,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     panels: createPanelsRoutes(services),
     // A server an agent left running for the person is named on its port's row by its job.
     ports: createPortsRoutes({ ...services, jobOn: (port) => portJobOf(services.conversations, port) }),
+    // A repository's programs run on the owner's own computers: its declared targets, and the button that runs one.
+    runs: createRunsRoutes(services),
     public: createPublicRoutes(services),
     providers: createProvidersRoutes(services),
     push: createPushRoutes(services),

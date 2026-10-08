@@ -18,4 +18,6 @@ export const hostsSliceFake = ({ historyRoot }: SliceFakeContext) =>
         syncFleet: () => enrolledFleet(historyRoot),
         // No device holds a socket, which a sign-in asks before offering the loopback catch (loopback-bridge.ts).
         hostHub: unstubbed<HostsSlice["hostHub"]>("hostHub", { connected: () => [] }),
+        // No tunnel is open, which the ports list asks on every read.
+        deviceTunnels: unstubbed<HostsSlice["deviceTunnels"]>("deviceTunnels", { ports: () => new Set<number>(), list: () => [] }),
     }) satisfies Partial<HostsSlice>;

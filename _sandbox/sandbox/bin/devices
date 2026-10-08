@@ -1,39 +1,59 @@
 #!/usr/bin/env node
-// The in-sandbox devices command: carry a program this sandbox built to one of the owner's connected computers, so the
-// device's own tools (app_start, app_status, app_logs, app_stop) can run it there (schemas/device-artifacts.ts).
+// The in-sandbox devices command: run a program this sandbox built on one of the owner's connected computers.
+//
+//   push    carry a build (a file, or a whole folder) to the computer
+//   start   start a program there and keep it running (its app_start tool, for a shell)
+//   reach   open one of the computer's own loopback ports at the same port here
+//   run     all of it from the repository's `.intentic/run.json`: build, push, reach, start
 //
 // It reads the bytes HERE, in this shell's own view of /work, which is the conversation's own checkout during an
-// isolated turn: the build that goes is the one this agent made. The daemon only relays them over the device link, held
-// to the computers this turn's tools reach; the computer files them under its runs folder, one folder per content hash,
-// and refuses all of it unless its "Run programs this sandbox sends" switch is on.
+// isolated turn: the build that goes is the one this shell made. The daemon relays everything over the device link and
+// holds it to the computers this caller may act on: the ones this conversation's turn reaches, or, in a run the owner
+// started from the editor, the one computer that run was started for. The computer decides the rest: it refuses all of
+// it unless its "Run programs this sandbox sends" switch is on.
 //
-// node:http rather than fetch: the upload streams from disk with back-pressure, and a 100 MB build over a tunnel takes
+// node:http rather than fetch: an upload streams from disk with back-pressure, and a 100 MB build over a tunnel takes
 // longer than undici's default timeouts like.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const COMMAND = "devices";
 const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
 const PORT = process.env.SANDBOX_PORT ?? "8787";
 const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+// Set by the editor's "Run on <device>" in the terminal it opens (hosts/runs.routes.ts): what lets that run act on its
+// one computer.
+const RUN_GRANT = process.env.INTENTIC_RUN_GRANT ?? "";
+const RUN_FILE = ".intentic/run.json";
 
-const USAGE = `devices — carry a program built here to one of the owner's connected computers
+const USAGE = `devices — run a program built here on one of the owner's connected computers
+
+  devices run [<target>] [--device <device>] [--no-build] [--repo <dir>]
+      Everything a repository's ${RUN_FILE} declares for <target> (the only one, when there is one): run its build
+      here, carry the result to the computer, open the ports it says the sandbox needs, start it there. Prints the
+      run id the computer's app_status, app_logs and app_stop take.
 
   devices push <device> <path> [--name <name>]
-      Copy a file (an .exe, an installer, a zip) or a whole folder (a build output with its DLLs) to <device>, the
-      computer's name as its tools are mounted (mcp__<device>__…). It lands in that computer's runs folder, under a
-      folder named for its content, and the path printed is what to give mcp__<device>__app_start as its program
-      (for a folder: the folder; start the .exe inside it). The same build pushed again is not sent twice.
-      --name   what to file it under there (default: the file or folder name); letters, digits, . - _
+      Copy a file (an .exe, an installer) or a whole folder (a build with its DLLs) to <device>, the computer's name as
+      its tools are mounted (mcp__<device>__…). It lands in that computer's runs folder, in a folder named for its
+      content; the path printed is what to start. The same build pushed again is not sent twice.
 
-Exit 0: pushed; the last line is the path on the computer. Exit 1: refused (the computer is offline, this turn does not
-reach it, its agent is too old, or "Run programs this sandbox sends" is off on its card): say so and carry on. Exit 2:
-misuse or a transport failure.`;
+  devices start <device> <program> [--isolated] [--no-network] [--name <name>] [-- <args>…]
+      Start a program on <device> (a path push printed, or the .exe inside a pushed folder) and keep it running.
+      --isolated runs it inside Windows Sandbox, a throwaway VM (Windows Pro/Enterprise with the feature on).
+
+  devices reach <device> <port> [--as <port>]      open the computer's 127.0.0.1:<port> at 127.0.0.1:<as|port> here
+  devices reach <device> <port> --off              close it
+  devices reach --list                             what is open
+
+Exit 0: done; the last line is what to use next. Exit 1: refused (the computer is offline, this caller may not act on
+it, its agent is too old, or "Run programs this sandbox sends" is off on its card), or the build failed: say so and
+carry on. Exit 2: misuse or a transport failure.`;
 
 const die = (message, code = 2) => {
     // Agents discard stderr, so a failure must survive on the stream they read.
@@ -41,9 +61,16 @@ const die = (message, code = 2) => {
     process.exit(code);
 };
 
+const say = (line) => process.stdout.write(`${line}\n`);
+
+let tokenCache;
 const token = () => {
+    if (tokenCache !== undefined) {
+        return tokenCache;
+    }
     try {
-        return readFileSync(TOKEN_PATH, "utf8").trim();
+        tokenCache = readFileSync(TOKEN_PATH, "utf8").trim();
+        return tokenCache;
     } catch {
         return die(`no daemon token at ${TOKEN_PATH}: is the intentic daemon running in this container?`);
     }
@@ -73,9 +100,10 @@ const hashOf = (path) =>
             .on("end", () => done(hash.digest("hex")));
     });
 
-const post = (path, file) =>
+// One call to the daemon: `body` is a file path to stream, a JSON value, or undefined.
+const call = (method, path, body) =>
     new Promise((done, fail) => {
-        const req = request({ host: "127.0.0.1", port: PORT, path, method: "POST" }, (response) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
             let raw = "";
             response.on("data", (chunk) => {
                 raw += chunk.toString();
@@ -87,38 +115,67 @@ const post = (path, file) =>
         if (CONVERSATION !== "") {
             req.setHeader("x-intentic-conversation", CONVERSATION);
         }
-        req.setHeader("content-type", "application/octet-stream");
-        if (file === undefined) {
-            req.end();
-            return;
+        if (RUN_GRANT !== "") {
+            req.setHeader("x-intentic-run-grant", RUN_GRANT);
         }
-        req.setHeader("content-length", String(statSync(file).size));
-        createReadStream(file).on("error", fail).pipe(req);
+        if (body === undefined) {
+            req.end();
+        } else if (typeof body === "object" && body.file !== undefined) {
+            req.setHeader("content-type", "application/octet-stream");
+            req.setHeader("content-length", String(statSync(body.file).size));
+            createReadStream(body.file).on("error", fail).pipe(req);
+        } else {
+            const text = JSON.stringify(body);
+            req.setHeader("content-type", "application/json");
+            req.setHeader("content-length", String(Buffer.byteLength(text)));
+            req.end(text);
+        }
     });
+
+// The answer as JSON, or the refusal as exit 1.
+const answered = async (method, path, body) => {
+    const reply = await call(method, path, body).catch((error) => die(`the daemon could not be reached: ${error.message}`));
+    if (reply.status < 200 || reply.status >= 300) {
+        die(refusalOf(reply.text), 1);
+    }
+    return JSON.parse(reply.text);
+};
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-const push = async (args) => {
-    let name;
+// Splits argv into named options and positionals; `--` ends options (what follows is the program's own arguments).
+const parse = (args, { flags = [], values = [] }) => {
+    const options = {};
     const rest = [];
+    let after;
     for (let index = 0; index < args.length; index += 1) {
-        if (args[index] === "--name") {
-            name = args[index + 1];
-            index += 1;
-            if (name === undefined) {
-                die("--name needs a value");
+        const arg = args[index];
+        if (arg === "--") {
+            after = args.slice(index + 1);
+            break;
+        }
+        if (flags.includes(arg)) {
+            options[arg.slice(2)] = true;
+        } else if (values.includes(arg)) {
+            const value = args[index + 1];
+            if (value === undefined) {
+                die(`${arg} needs a value`);
             }
-        } else if (args[index].startsWith("--")) {
-            die(`unknown option ${args[index]}`);
+            options[arg.slice(2)] = value;
+            index += 1;
+        } else if (arg.startsWith("--")) {
+            die(`unknown option ${arg}`);
         } else {
-            rest.push(args[index]);
+            rest.push(arg);
         }
     }
-    const [device, source] = rest;
-    if (device === undefined || source === undefined || rest.length > 2) {
-        die(`push takes a device and a path\n\n${USAGE}`);
-    }
-    const absolute = resolve(source);
+    return { options, rest, after: after ?? [] };
+};
+
+const deviceRoute = (device, tail) => `/devices/${encodeURIComponent(device)}${tail}`;
+
+// Pushes a file or a folder; answers { path, reused, size, sha256, kind }.
+const pushPath = async (device, absolute, name) => {
     let stats;
     try {
         stats = statSync(absolute);
@@ -150,22 +207,10 @@ const push = async (args) => {
         const sha256 = await hashOf(file);
         const fileName = kind === "tar" ? `${filed}.tar` : own;
         const query = new URLSearchParams({ name: filed, kind, file: fileName, size: String(size), sha256 });
-        const route = `/devices/${encodeURIComponent(device)}/artifacts`;
-        const probed = await post(`${route}?${query}&probe=1`);
-        if (probed.status < 200 || probed.status >= 300) {
-            die(refusalOf(probed.text), 1);
-        }
-        const known = JSON.parse(probed.text);
-        const answer = typeof known.path === "string" ? probed : await post(`${route}?${query}`, file);
-        if (answer.status < 200 || answer.status >= 300) {
-            die(refusalOf(answer.text), 1);
-        }
-        const pushed = JSON.parse(answer.text);
-        const megabytes = (size / 1024 / 1024).toFixed(1);
-        process.stdout.write(
-            `${pushed.reused ? `${device} already had this build (${megabytes} MB, sha256 ${sha256.slice(0, 12)}); nothing was sent.` : `Pushed ${megabytes} MB to ${device} (sha256 ${sha256.slice(0, 12)}).`}\n` +
-                `${kind === "tar" ? "Unpacked into" : "Saved as"}: ${pushed.path}\n`,
-        );
+        const route = `${deviceRoute(device, "/artifacts")}?${query}`;
+        const known = await answered("POST", `${route}&probe=1`);
+        const pushed = typeof known.path === "string" ? known : await answered("POST", route, { file });
+        return { path: pushed.path, reused: pushed.reused === true, size, sha256, kind };
     } finally {
         if (scratch !== undefined) {
             rmSync(scratch, { recursive: true, force: true });
@@ -173,13 +218,218 @@ const push = async (args) => {
     }
 };
 
+const pushedLine = (device, pushed) => {
+    const megabytes = (pushed.size / 1024 / 1024).toFixed(1);
+    return pushed.reused
+        ? `${device} already had this build (${megabytes} MB, sha256 ${pushed.sha256.slice(0, 12)}); nothing was sent.`
+        : `Pushed ${megabytes} MB to ${device} (sha256 ${pushed.sha256.slice(0, 12)}).`;
+};
+
+const push = async (args) => {
+    const { options, rest } = parse(args, { values: ["--name"] });
+    const [device, source] = rest;
+    if (device === undefined || source === undefined || rest.length > 2) {
+        die(`push takes a device and a path\n\n${USAGE}`);
+    }
+    const pushed = await pushPath(device, resolve(source), options.name);
+    say(pushedLine(device, pushed));
+    say(`${pushed.kind === "tar" ? "Unpacked into" : "Saved as"}: ${pushed.path}`);
+};
+
+const startOn = async (device, body) => {
+    const started = await answered("POST", deviceRoute(device, "/apps"), body);
+    return started.text;
+};
+
+const start = async (args) => {
+    const { options, rest, after } = parse(args, { flags: ["--isolated", "--no-network"], values: ["--name"] });
+    const [device, program] = rest;
+    if (device === undefined || program === undefined || rest.length > 2) {
+        die(`start takes a device and a program (its arguments after --)\n\n${USAGE}`);
+    }
+    say(
+        await startOn(device, {
+            program,
+            args: after,
+            ...(options.name === undefined ? {} : { name: options.name }),
+            ...(options.isolated === true ? { isolated: true } : {}),
+            ...(options["no-network"] === true ? { network: false } : {}),
+        }),
+    );
+};
+
+const reach = async (args) => {
+    const { options, rest } = parse(args, { flags: ["--list", "--off"], values: ["--as"] });
+    if (options.list === true) {
+        const { tunnels } = await answered("GET", "/devices/tunnels");
+        if (tunnels.length === 0) {
+            say("No device port is open here.");
+            return;
+        }
+        for (const tunnel of tunnels) {
+            say(`${tunnel.device}:${tunnel.devicePort} → ${tunnel.url}  (since ${tunnel.openedAt})`);
+        }
+        return;
+    }
+    const [device, portText] = rest;
+    const port = Number(portText);
+    if (device === undefined || !Number.isInteger(port) || port < 1 || port > 65535 || rest.length > 2) {
+        die(`reach takes a device and a port\n\n${USAGE}`);
+    }
+    if (options.off === true) {
+        const { closed } = await answered("DELETE", deviceRoute(device, `/tunnels/${port}`));
+        say(closed ? `Closed ${device}:${port}.` : `${device}:${port} was not open.`);
+        return;
+    }
+    const local = options.as === undefined ? undefined : Number(options.as);
+    const tunnel = await answered("POST", deviceRoute(device, "/tunnels"), { port, ...(local === undefined ? {} : { as: local }) });
+    say(`${device}'s 127.0.0.1:${tunnel.devicePort} answers here at ${tunnel.url} (until the daemon restarts, or --off).`);
+};
+
+// --- run: the repository's declared targets ----------------------------------------------------------------------
+
+const repoRoot = (given) => {
+    if (given !== undefined) {
+        return resolve(given);
+    }
+    const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+    return top.status === 0 ? top.stdout.trim() : process.cwd();
+};
+
+// The file's shape as schemas/run-targets.ts declares it, checked here by hand: this command runs before any package is
+// installed, so it carries no validator. What the daemon lists in the editor is checked by the schema itself.
+const targetsOf = (root) => {
+    const path = join(root, RUN_FILE);
+    if (!existsSync(path)) {
+        die(`${root} declares nothing to run: there is no ${RUN_FILE} (see \`devices --help\`, or push and start by hand)`);
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+        die(`${path} is not JSON: ${error.message}`);
+    }
+    const targets = Array.isArray(parsed?.targets) ? parsed.targets : die(`${path} has no "targets" list`);
+    for (const [index, target] of targets.entries()) {
+        const where = `${path}: targets[${index}]`;
+        if (typeof target?.name !== "string" || !NAME.test(target.name)) {
+            die(`${where} needs a "name" of letters, digits, . - _`);
+        }
+        const artifact = target.artifact;
+        const paths = typeof artifact === "string" ? [artifact] : artifact !== null && typeof artifact === "object" ? Object.values(artifact) : [];
+        if (paths.length === 0 || paths.some((entry) => typeof entry !== "string" || entry.startsWith("/") || entry.split(/[\\/]/).includes(".."))) {
+            die(`${where} needs an "artifact": a path inside the repository, or an object of name → path`);
+        }
+        for (const key of ["build", "device", "program", "description"]) {
+            if (target[key] !== undefined && typeof target[key] !== "string") {
+                die(`${where}.${key} must be text`);
+            }
+        }
+        if (target.args !== undefined && !(Array.isArray(target.args) && target.args.every((arg) => typeof arg === "string"))) {
+            die(`${where}.args must be a list of text`);
+        }
+        if (target.reach !== undefined && !(Array.isArray(target.reach) && target.reach.every((port) => Number.isInteger(port) && port > 0 && port < 65536))) {
+            die(`${where}.reach must be a list of port numbers`);
+        }
+    }
+    return targets;
+};
+
+// What is pushed: the declared file or folder as it is, or a set of files gathered into a scratch folder under their
+// own names (the folder name is the target's).
+const stage = (root, target) => {
+    if (typeof target.artifact === "string") {
+        return { path: join(root, target.artifact), scratch: undefined };
+    }
+    const scratch = mkdtempSync(join(tmpdir(), "devices-run-"));
+    const folder = join(scratch, target.name);
+    for (const [name, rel] of Object.entries(target.artifact)) {
+        const from = join(root, rel);
+        if (!existsSync(from)) {
+            rmSync(scratch, { recursive: true, force: true });
+            die(`${target.name}'s artifact "${name}" is not there: ${from}${target.build === undefined ? "" : " (did its build make it?)"}`, 1);
+        }
+        const to = join(folder, name);
+        mkdirSync(dirname(to), { recursive: true });
+        // A folder (resources an app reads beside itself) is copied whole.
+        if (statSync(from).isDirectory()) {
+            cpSync(from, to, { recursive: true });
+        } else {
+            copyFileSync(from, to);
+        }
+    }
+    return { path: folder, scratch };
+};
+
+// The program inside a pushed folder: the one the target names, or the folder's only .exe.
+const programIn = (pushedPath, localFolder, target) => {
+    const separator = pushedPath.includes("\\") ? "\\" : "/";
+    let program = target.program;
+    if (program === undefined) {
+        const exes = readdirSync(localFolder).filter((entry) => entry.toLowerCase().endsWith(".exe"));
+        if (exes.length !== 1) {
+            die(`${target.name} carries a folder; say which file in it to start with "program" (it holds ${readdirSync(localFolder).slice(0, 8).join(", ")})`);
+        }
+        program = exes[0];
+    }
+    return `${pushedPath.replace(/[\\/]$/, "")}${separator}${program.replace(/[\\/]/g, separator)}`;
+};
+
+const run = async (args) => {
+    const { options, rest } = parse(args, { flags: ["--no-build"], values: ["--device", "--repo"] });
+    const root = repoRoot(options.repo);
+    const targets = targetsOf(root);
+    const [wanted] = rest;
+    const target = wanted === undefined ? (targets.length === 1 ? targets[0] : undefined) : targets.find((entry) => entry.name === wanted);
+    if (target === undefined) {
+        die(`${wanted === undefined ? "which target?" : `no target called "${wanted}"`} ${RUN_FILE} declares: ${targets.map((entry) => entry.name).join(", ")}`);
+    }
+    const device = options.device ?? target.device;
+    if (device === undefined) {
+        die(`${target.name} names no device: pass --device <name>`);
+    }
+    if (target.build !== undefined && options["no-build"] !== true) {
+        say(`▸ building ${target.name}: ${target.build}`);
+        const built = spawnSync("sh", ["-c", target.build], { cwd: root, stdio: "inherit" });
+        if (built.status !== 0) {
+            die(`the build failed (exit ${built.status ?? built.signal}); nothing was pushed`, 1);
+        }
+    }
+    const staged = stage(root, target);
+    let programPath;
+    try {
+        say(`▸ pushing to ${device}`);
+        const pushed = await pushPath(device, staged.path, target.name);
+        say(pushedLine(device, pushed));
+        programPath = pushed.kind === "tar" ? programIn(pushed.path, staged.path, target) : pushed.path;
+    } finally {
+        if (staged.scratch !== undefined) {
+            rmSync(staged.scratch, { recursive: true, force: true });
+        }
+    }
+    for (const port of target.reach ?? []) {
+        const tunnel = await answered("POST", deviceRoute(device, "/tunnels"), { port });
+        say(`▸ ${device}'s port ${port} answers here at ${tunnel.url}`);
+    }
+    say(`▸ starting ${programPath}${target.isolated === true ? " inside Windows Sandbox" : ""}`);
+    say(
+        await startOn(device, {
+            program: programPath,
+            name: target.name,
+            args: target.args ?? [],
+            ...(target.env === undefined ? {} : { env: target.env }),
+            ...(target.isolated === true ? { isolated: true } : {}),
+        }),
+    );
+};
+
 const [verb, ...args] = process.argv.slice(2);
 if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help") {
-    process.stdout.write(`${USAGE}\n`);
+    say(USAGE);
     process.exit(verb === undefined ? 2 : 0);
 }
-if (verb === "push") {
-    await push(args);
-} else {
+const verbs = { push, start, reach, run };
+if (verbs[verb] === undefined) {
     die(`unknown command "${verb}"\n\n${USAGE}`);
 }
+await verbs[verb](args);

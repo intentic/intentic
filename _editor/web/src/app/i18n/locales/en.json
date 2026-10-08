@@ -9303,6 +9303,19 @@
             "runTheseChecks": "Run these checks",
             "whenIsEditOrTurn": "{when} is {edit} or {turn}, and the command runs in this folder, so write it as you would in a terminal here."
         },
+        "directoryRuns": {
+            "agentTooOld": "Its agent is too old to run programs: update it there",
+            "declaredIn": "Declared in {path}, so it travels with the repository.",
+            "declaresNothing": "This repository declares nothing to run on your computers. Put a file at",
+            "howItRuns": "A run builds here, carries the build to the computer and starts it there, in a terminal you can watch. Agents run the same targets with devices run.",
+            "isolated": "in Windows Sandbox",
+            "noComputers": "No computer is connected to this sandbox.",
+            "offline": "Not connected right now",
+            "runIn": "Run {dir} on your computers",
+            "runOn": "Run on {device}",
+            "switchOff": "\"Run programs this sandbox sends\" is off on its card",
+            "yourComputers": "Your computers"
+        },
         "directoryPersonas": {
             "addAPersona": "Add a persona",
             "addNewOneInstead": "Add a new one instead",
@@ -9609,7 +9622,8 @@
             "checksOn": "Checks on",
             "checksPaused": "Checks paused",
             "manage": "Manage",
-            "personas": "{count} persona | {count} personas"
+            "personas": "{count} persona | {count} personas",
+            "runTargets": "Run on a computer | {count} things to run on your computers"
         },
         "savePanel": {
             "all": "all",

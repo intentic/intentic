@@ -119,8 +119,9 @@ export const connect = (
     // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
     // from the new session's first call.
     let scopes: DeviceScopes = config.scopes;
-    // The socket this link is on now.
+    // The socket this link is on now, and the daemon address it dialled (what a tunnel back to the sandbox dials).
     let held: WebSocket | undefined;
+    let linkBase: string | undefined;
     // Attempts since the socket last opened, and since when the sandbox has been said to be gone (from device.json at
     // start, so an agent restarted mid-way keeps the clock).
     let attempts = 0;
@@ -181,6 +182,7 @@ export const connect = (
                 );
             },
             log,
+            linkBase: () => linkBase,
         }),
     );
 
@@ -197,6 +199,7 @@ export const connect = (
             if (local) {
                 loopbackUrls.add(config.sandboxUrl);
             }
+            linkBase = base;
             return {
                 socket: dial.socket(hostConnectUrl(base)),
                 // The loopback case is logged; it's the one fact about this connection the link's own address doesn't

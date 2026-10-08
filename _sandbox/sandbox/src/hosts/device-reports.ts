@@ -99,7 +99,7 @@ const toolText = (answer: unknown): { text: string; refused: boolean } => {
 
 // Exported so every caller of the hub's MCP door reads an answer the same way.
 export const callTool = async (
-    services: Services,
+    services: Pick<Services, "hostHub">,
     id: string,
     name: string,
     args: Record<string, unknown>,

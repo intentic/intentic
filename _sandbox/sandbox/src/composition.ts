@@ -113,6 +113,8 @@ import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { authRootOf, statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import type { HostsSlice } from "./hosts/hosts-slice.js";
+import { createDeviceTunnels } from "./hosts/device-tunnels.js";
+import { createRunGrants } from "./hosts/device-door.js";
 import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
 import { createPhonesSlice, type PhonesSlice } from "./phones/phone-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
@@ -401,6 +403,8 @@ const createHostsSlice = ({ historyRoot, logger, peerTools, whole }: PeerDoorDep
     syncFleet: () => enrolledFleet(historyRoot),
     hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
     syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
+    deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
+    runGrants: createRunGrants(),
 });
 
 // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.

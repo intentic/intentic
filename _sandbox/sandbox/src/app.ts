@@ -30,6 +30,7 @@ import { createSyncSshRoute } from "./hosts/desktop-sync-ssh.js";
 import { createSandboxesRoutes } from "./sandboxes/sandboxes.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createDeviceArtifactRoutes } from "./hosts/device-artifacts.routes.js";
+import { createDeviceDoorRoutes } from "./hosts/device-door.js";
 import { createFleetRoutes } from "./conversations/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
@@ -465,6 +466,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // The `devices push` CLI: a program built here, carried to one of the owner's computers to run there.
     serve("POST /devices/{name}/artifacts", createDeviceArtifactRoutes(services).push);
+    const deviceDoor = createDeviceDoorRoutes(services);
+    serve("POST /devices/{name}/apps", deviceDoor.start);
+    serve("POST /devices/{name}/tunnels", deviceDoor.openTunnel);
+    serve("DELETE /devices/{name}/tunnels/{port}", deviceDoor.closeTunnel);
+    serve("GET /devices/tunnels", deviceDoor.listTunnels);
+    // A device's end of a `devices reach` tunnel, redeeming its one-time ticket.
+    serve("GET /system/hosts/tunnel", services.deviceTunnels.route);
 
     // Realtime-listener control for an extension's gateway process: reconciles via /state, POSTs inbound events to
     // /dispatch, reports failures/status.

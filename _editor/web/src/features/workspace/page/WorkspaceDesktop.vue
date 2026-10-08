@@ -49,6 +49,8 @@ import { useRootDrop } from "../explorer/transfer/useRootDrop";
 import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
+import DirectoryRuns from "../directory-ui/DirectoryRuns.vue";
+import { useRunTargets } from "../directory-ui/useRunTargets";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
@@ -278,6 +280,10 @@ const checkDirs = computed(
 );
 // Repository whose checks are open in the quick panel; undefined means closed.
 const checksDir = ref<string | undefined>(undefined);
+// Repositories declaring programs to run on the owner's computers, and the one whose runs are open.
+const { repos: runningRepos } = useRunTargets();
+const runDirs = computed(() => new Map((runningRepos.value ?? []).map((entry) => [entry.repo, Math.max(entry.targets.length, 1)])));
+const runsDir = ref<string | undefined>(undefined);
 
 // What each directory row offers beside its name (documents, personas, checks, management). Composed here, where the
 // openers live; passed as a function so only on-screen rows are asked.
@@ -293,6 +299,10 @@ const rowActions = (dir: string): readonly RowAction[] =>
         },
         openChecks: (target: string): void => {
             checksDir.value = target;
+        },
+        runDirs: runDirs.value,
+        openRuns: (target: string): void => {
+            runsDir.value = target;
         },
         openDocument,
     });
@@ -1159,6 +1169,7 @@ const includeTip = computed((): Tip => ({
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />
+        <DirectoryRuns v-model="runsDir" />
         <!-- The pill a row or tile becomes while the pointer carries it, over either surface. -->
         <EntryDragGhost />
     </div>

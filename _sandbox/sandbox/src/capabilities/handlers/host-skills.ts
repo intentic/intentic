@@ -212,6 +212,19 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
 3. \`app_status <id>\` lists its windows: pass a window id to \`screenshot\` and \`ui_elements\` to look at it and drive it.
    \`app_logs\` reads what it printed. \`app_stop\` ends it with every process it started; do that when you are done.
 
+When the repository has a \`.intentic/run.json\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
+its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
+the sandbox needs, the start. The owner's "Run on" button in the file tree runs the very same command. A new target is
+a few lines in that file (\`devices --help\`); write one when you will run a program here more than once.
+
+- **Isolated:** \`app_start\` with \`isolated: true\` (or \`devices start \${id} <program> --isolated\`) runs it inside
+  Windows Sandbox, a throwaway VM that sees only the build, read-only, and is discarded by \`app_stop\`. It needs Windows
+  Pro or Enterprise with the feature on, runs one at a time, and its window is the VM's: screenshot that window, since
+  ui_elements cannot reach inside. Prefer it for anything you would not run on the owner's own profile.
+- **Its ports, from the sandbox:** \`devices reach \${id} <port>\` makes this machine's \`127.0.0.1:<port>\` (the app's
+  local API, a server only it runs) answer at the same port in the sandbox, so a test there can call it.
+  \`devices reach --list\` shows what is open, \`--off\` closes one.
+
 \`devices push\` and starting a pushed program need this device's "Run programs this sandbox sends" switch, which is
 off unless the owner turned it on: a refusal names it, and the way on is \`capabilities request \${id} --set programs=on
 --why "…"\`. Starting any other program here needs "Run commands". A program you started runs as the owner, with their

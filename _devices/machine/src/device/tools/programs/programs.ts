@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, open, readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
@@ -9,6 +9,7 @@ import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope } from "../../policy.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
+import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
 const exec = promisify(execFile);
 
@@ -34,6 +35,9 @@ export interface AppRun {
     readonly exitCode?: number;
     readonly signal?: string;
     readonly stoppedByAgent?: boolean;
+    // Run inside Windows Sandbox (isolated.ts): `pid` is the launcher's, `log` the program's output inside the VM, and
+    // it is running while a Windows Sandbox is open.
+    readonly isolated?: true;
 }
 
 export interface StartRequest {
@@ -42,6 +46,8 @@ export interface StartRequest {
     readonly cwd?: string | undefined;
     readonly env?: Readonly<Record<string, string>> | undefined;
     readonly name?: string | undefined;
+    readonly isolated?: boolean | undefined;
+    readonly network?: boolean | undefined;
 }
 
 // The runs a sandbox keeps on record; an older ended one is forgotten (its log file stays until the folder is cleared).
@@ -113,6 +119,9 @@ const pidAlive = (pid: number): boolean => {
 const isRunning = (run: AppRun): boolean => {
     if (run.endedAt !== undefined) {
         return false;
+    }
+    if (run.isolated === true) {
+        return true;
     }
     const child = children.get(run.id);
     return child !== undefined ? child.exitCode === null && child.signalCode === null : pidAlive(run.pid);
@@ -211,6 +220,9 @@ const judgeProgram = async (program: string, scopes: DeviceScopes, sandboxUrl: s
 
 export const startApp = async (request: StartRequest, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     const program = await judgeProgram(request.program, scopes, sandboxUrl);
+    if (request.isolated === true) {
+        return await startIsolated(program, request, sandboxUrl);
+    }
     const cwd =
         request.cwd !== undefined
             ? await assertPath(request.cwd, scopes, "start a program in")
@@ -267,6 +279,73 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
     return `Started ${name} as ${id} (pid ${pid}) in ${cwd}. Its output goes to ${log}. Give it a moment, then app_status ${id} lists its windows (pass a window id to screenshot or ui_elements); app_logs reads what it printed; app_stop ends it with everything it started.`;
 };
 
+// A program started inside Windows Sandbox: the folder it is in mapped read-only, a log folder of its own writable, the
+// launcher supervised like any program. One sandbox at a time is Windows' rule, said rather than queued.
+const startIsolated = async (program: string, request: StartRequest, sandboxUrl: string): Promise<string> => {
+    const missing = await windowsSandboxMissing();
+    if (missing !== undefined) {
+        throw new Error(missing);
+    }
+    if (!isAbsolute(program)) {
+        throw new Error("An isolated run needs the program's full path: its folder is what the sandbox is given.");
+    }
+    if (request.cwd !== undefined) {
+        throw new Error("An isolated run starts in its own folder inside the sandbox (C:\\app); leave cwd out.");
+    }
+    if (await windowsSandboxRunning()) {
+        throw new Error("A Windows Sandbox is already open on this machine, and Windows runs one at a time: app_stop the isolated run holding it (or close it), then start again.");
+    }
+    const name = request.name ?? basename(program, extname(program));
+    const id = idFor(name);
+    const logFolder = join(logsDir(sandboxUrl), id);
+    await mkdir(logFolder, { recursive: true });
+    const spec = {
+        appFolder: dirname(program),
+        program: relative(dirname(program), program),
+        args: [...(request.args ?? [])],
+        env: { ...request.env },
+        logFolder,
+        network: request.network ?? true,
+    };
+    await writeFile(join(logFolder, "start.ps1"), startScript(spec));
+    const wsb = join(logFolder, `${id}.wsb`);
+    await writeFile(wsb, wsbConfig(spec));
+    const child = spawn(windowsSandboxExe(), [wsb], { detached: true, windowsHide: false, stdio: "ignore" });
+    await new Promise<void>((done, fail) => {
+        child.once("spawn", () => done());
+        child.once("error", (error) => fail(new Error(`Could not start Windows Sandbox: ${errorMessage(error)}`, { cause: error })));
+    });
+    child.unref();
+    const log = join(logFolder, "output.log");
+    const run: AppRun = { id, name, program, args: spec.args, cwd: spec.appFolder, pid: child.pid ?? 0, startedAt: new Date().toISOString(), log, isolated: true };
+    await updateRuns(sandboxUrl, (runs) => [...runs, run]);
+    return `Started ${name} as ${id} inside Windows Sandbox: it boots in ten or twenty seconds, then runs the program from ${spec.appFolder} (read-only, at C:\\app)${spec.network ? "" : " with networking off"}. Its output goes to ${logFolder}. app_status ${id} shows the "Windows Sandbox" window to screenshot; the app's own controls are inside the VM, out of ui_elements' reach. app_stop closes the sandbox, and everything in it is discarded.`;
+};
+
+// An isolated run ends when its Windows Sandbox closes, which nothing here hears: it is read when someone asks.
+const refreshIsolated = async (sandboxUrl: string): Promise<void> => {
+    const open = (await readRuns(sandboxUrl)).filter((run) => run.isolated === true && run.endedAt === undefined);
+    if (open.length === 0 || (await windowsSandboxRunning().catch(() => true))) {
+        return;
+    }
+    const ids = new Set(open.map((run) => run.id));
+    await updateRuns(sandboxUrl, (runs) => runs.map((run) => (ids.has(run.id) && run.endedAt === undefined ? { ...run, endedAt: new Date().toISOString() } : run)));
+};
+
+// What an isolated run's program said about its end, from inside the VM.
+const insideExit = async (run: AppRun): Promise<string | undefined> =>
+    run.isolated === true ? isolatedExit(await readFile(join(dirname(run.log), "exit-code"), "utf8").catch(() => undefined)) : undefined;
+
+// An isolated run's output is two files (Start-Process cannot merge them); the error one follows, marked.
+const runOutput = async (run: AppRun, lines: number): Promise<{ text: string; total: number }> => {
+    const out = await tailLines(run.log, lines);
+    if (run.isolated !== true) {
+        return out;
+    }
+    const err = await tailLines(join(dirname(run.log), "error.log"), lines);
+    return err.text === "" ? out : { text: [out.text, `[stderr]\n${err.text}`].filter((part) => part !== "").join("\n"), total: out.total + err.total };
+};
+
 // Every process descended from `root`, root included, from (pid, parent) rows.
 export const descendantsOf = (rows: readonly (readonly [number, number])[], root: number): Set<number> => {
     const tree = new Set<number>([root]);
@@ -303,6 +382,9 @@ export const parseRows = (text: string): [number, number][] =>
     });
 
 const windowsOf = async (run: AppRun, screen: Desktop): Promise<WindowInfo[]> => {
+    if (run.isolated === true) {
+        return (await screen.windows()).filter((window) => /windows ?sandbox/i.test(`${window.app} ${window.title}`));
+    }
     const tree = descendantsOf(await processRows(), run.pid);
     return (await screen.windows()).filter((window) => window.pid !== undefined && tree.has(window.pid));
 };
@@ -332,6 +414,7 @@ const runLine = (run: AppRun): string => {
 
 export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sandboxUrl: string, screen: () => Desktop): Promise<string> => {
     assertEither(scopes);
+    await refreshIsolated(sandboxUrl);
     if (id === undefined) {
         const runs = (await readRuns(sandboxUrl)).toReversed();
         const builds = await listArtifacts(sandboxUrl);
@@ -346,6 +429,10 @@ export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sa
     }
     const run = await findRun(id, sandboxUrl);
     const lines = [runLine(run), `program: ${run.program}${run.args.length === 0 ? "" : ` ${run.args.join(" ")}`}`, `folder: ${run.cwd}`, `log: ${run.log}`];
+    const inside = await insideExit(run);
+    if (run.isolated === true) {
+        lines.push(`isolated in Windows Sandbox${inside === undefined ? "" : `; ${inside}`}`);
+    }
     if (isRunning(run)) {
         if (scopes.screen !== "on") {
             lines.push(`(Its windows are not listed: "See the screen" is off for this device.)`);
@@ -363,7 +450,7 @@ export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sa
             );
         }
     }
-    const { text } = await tailLines(run.log, 10);
+    const { text } = await runOutput(run, 10);
     if (text !== "") {
         lines.push(`Last output:\n${text}`);
     }
@@ -372,8 +459,9 @@ export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sa
 
 export const appLogs = async (id: string, lines: number, grep: string | undefined, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     assertEither(scopes);
+    await refreshIsolated(sandboxUrl);
     const run = await findRun(id, sandboxUrl);
-    const { text, total } = await tailLines(run.log, grep === undefined ? lines : MAX_LOG_LINES * 5);
+    const { text, total } = await runOutput(run, grep === undefined ? lines : MAX_LOG_LINES * 5);
     let shown = text;
     if (grep !== undefined) {
         let pattern: RegExp;
@@ -419,9 +507,17 @@ const signalTree = async (pid: number, force: boolean): Promise<void> => {
 
 export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     assertEither(scopes);
+    await refreshIsolated(sandboxUrl);
     const run = await findRun(id, sandboxUrl);
     if (!isRunning(run)) {
         return `${run.id} is not running: it ${describeExit(run)}.`;
+    }
+    if (run.isolated === true) {
+        await stopWindowsSandbox();
+        await updateRuns(sandboxUrl, (runs) =>
+            runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedByAgent: true } : entry)),
+        );
+        return `Closed the Windows Sandbox ${run.id} ran in; everything inside it is gone.`;
     }
     await signalTree(run.pid, force);
     let forced = force;

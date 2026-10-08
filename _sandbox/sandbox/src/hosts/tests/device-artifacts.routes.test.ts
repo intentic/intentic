@@ -30,13 +30,14 @@ const fake = (over: { reaches?: boolean; online?: boolean; features?: readonly s
     };
     const services = {
         conversations: {} as Services["conversations"],
+        runGrants: { allows: () => false },
         turnMounts: { reaches: (conversation: string, target: { kind: string; id: string }) => (over.reaches ?? true) && conversation === "conv-a" && target.id === "rog" },
         hostHub: {
             client: (id: string) => (id === "rog" ? client : undefined),
             online: () => over.online ?? true,
             state: () => ({ facts: { features: over.features ?? ["programs"] } }),
         },
-    } as unknown as Pick<Services, "conversations" | "hostHub" | "turnMounts">;
+    } as unknown as Pick<Services, "conversations" | "hostHub" | "turnMounts" | "runGrants">;
     const app = new Hono<AppEnv>();
     app.post("/devices/:name/artifacts", createDeviceArtifactRoutes(services).push);
     return { calls, app };

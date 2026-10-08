@@ -28,6 +28,7 @@ import { loopsContract } from "./contracts/loops.contract.js";
 import { pagesContract } from "./contracts/pages.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
+import { runsContract } from "./contracts/runs.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { netdiskContract } from "./contracts/netdisk.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
@@ -96,6 +97,7 @@ export * from "./protocol/vitals.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
+export { runsContract } from "./contracts/runs.contract.js";
 export { pagesContract, PageAppCallResultSchema, PageAppCallSchema, PageErrorsResultSchema, PageErrorsSchema } from "./contracts/pages.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
@@ -212,6 +214,7 @@ export * from "./schemas/context-trim.js";
 export * from "./schemas/devices.js";
 export * from "./schemas/project-delivery.js";
 export * from "./schemas/device-artifacts.js";
+export * from "./schemas/run-targets.js";
 export * from "./schemas/engines.js";
 export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";
@@ -316,6 +319,7 @@ export const sandboxContract = {
     pages: pagesContract,
     panels: panelsContract,
     ports: portsContract,
+    runs: runsContract,
     public: publicContract,
     providers: providersContract,
     push: pushContract,

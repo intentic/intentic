@@ -93,10 +93,12 @@ Thumbs.db
 /reports/mutation
 
 # intentic dogfood / demo (local only): when this repo is itself opened as a workspace, the daemon writes its
-# config, records and caches here. `checks.json` is the exception and is ours to commit — it is this repository
-# telling any sandbox what to run on it (rules/repo-checks.ts), which is only worth writing if it travels.
+# config, records and caches here. `checks.json` and `run.json` are the exceptions and are ours to commit — this
+# repository telling any sandbox what to run on it (rules/repo-checks.ts) and what it can run on the owner's computers
+# (schemas/run-targets.ts), which is only worth writing if it travels.
 /.intentic/*
 !/.intentic/checks.json
+!/.intentic/run.json
 /intent
 /desired-state
 /app

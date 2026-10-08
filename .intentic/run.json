@@ -1,0 +1,33 @@
+{
+    "targets": [
+        {
+            "name": "desktop",
+            "description": "The Intentic desktop app for Windows: cross-built here, laid out as its installer would lay it out, started on the computer.",
+            "device": "omen",
+            "build": "bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only",
+            "artifact": {
+                "intentic-desktop.exe": "_editor/desktop-app/src-tauri/target/x86_64-pc-windows-msvc/release/intentic-desktop.exe",
+                "intentic-files.exe": "_editor/desktop-app/src-tauri/binaries/intentic-files-x86_64-pc-windows-msvc.exe",
+                "intentic-ic.exe": "_editor/desktop-app/src-tauri/binaries/intentic-ic-x86_64-pc-windows-msvc.exe",
+                "scripts": "_editor/desktop-app/src-tauri/staged-scripts",
+                "onlyoffice-page": "_extensions/onlyoffice/dist/editor"
+            },
+            "program": "intentic-desktop.exe"
+        },
+        {
+            "name": "desktop-isolated",
+            "description": "The same build inside Windows Sandbox: a throwaway VM that sees the build and nothing else of the computer.",
+            "device": "omen",
+            "build": "bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only",
+            "artifact": {
+                "intentic-desktop.exe": "_editor/desktop-app/src-tauri/target/x86_64-pc-windows-msvc/release/intentic-desktop.exe",
+                "intentic-files.exe": "_editor/desktop-app/src-tauri/binaries/intentic-files-x86_64-pc-windows-msvc.exe",
+                "intentic-ic.exe": "_editor/desktop-app/src-tauri/binaries/intentic-ic-x86_64-pc-windows-msvc.exe",
+                "scripts": "_editor/desktop-app/src-tauri/staged-scripts",
+                "onlyoffice-page": "_extensions/onlyoffice/dist/editor"
+            },
+            "program": "intentic-desktop.exe",
+            "isolated": true
+        }
+    ]
+}

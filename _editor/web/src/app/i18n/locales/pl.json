@@ -8827,6 +8827,19 @@
             "runTheseChecks": "Uruchamiaj te sprawdzenia",
             "whenIsEditOrTurn": "{when} to {edit} albo {turn}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
         },
+        "directoryRuns": {
+            "agentTooOld": "Jego agent jest za stary, by uruchamiać programy: zaktualizuj go tam",
+            "declaredIn": "Zadeklarowane w {path}, więc podróżuje razem z repozytorium.",
+            "declaresNothing": "To repozytorium nie deklaruje niczego do uruchomienia na Twoich komputerach. Umieść plik w",
+            "howItRuns": "Uruchomienie buduje tutaj, przenosi build na komputer i startuje go tam, w terminalu, który możesz obserwować. Agenci uruchamiają te same cele przez devices run.",
+            "isolated": "w Windows Sandbox",
+            "noComputers": "Do tego sandboxa nie jest podłączony żaden komputer.",
+            "offline": "Teraz niepołączony",
+            "runIn": "Uruchom {dir} na swoich komputerach",
+            "runOn": "Uruchom na {device}",
+            "switchOff": "„Uruchamiaj programy wysłane z sandboxa” jest wyłączone na jego karcie",
+            "yourComputers": "Twoje komputery"
+        },
         "directoryPersonas": {
             "addAPersona": "Dodaj personę",
             "addNewOneInstead": "Dodaj zamiast tego nową",
@@ -9184,7 +9197,8 @@
             "checksOn": "Kontrole włączone",
             "checksPaused": "Kontrole wstrzymane",
             "manage": "Zarządzaj",
-            "personas": "{count} persona | {count} persony | {count} person"
+            "personas": "{count} persona | {count} persony | {count} person",
+            "runTargets": "Uruchom na komputerze | {count} rzeczy do uruchomienia na Twoich komputerach | {count} rzeczy do uruchomienia na Twoich komputerach"
         },
         "savePanel": {
             "all": "wszystkie",

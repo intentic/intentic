@@ -23,6 +23,8 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     workspace: workspacePaths(WORKSPACE_ROOT),
     portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
     scanPorts: async () => [],
+    // No tunnel to one of the owner's computers is open, so no port is that computer's own.
+    deviceTunnels: { ports: () => new Set<number>() } as unknown as PortsRoutesDeps["deviceTunnels"],
     // Nothing installed here, so every listener is named from its own command and session alone.
     files: { read: async () => undefined },
     capabilities: { list: async () => [] },
@@ -171,4 +173,22 @@ test("ports.forward refuses a Chromium DevTools port, wherever its process runs 
     expect(await errorCode(client.forward({ port: 41_235 }))).toBe("BAD_REQUEST");
     expect(portForwards.slotOf(41_234)).toBeUndefined();
     expect(portForwards.slotOf(41_235)).toBeUndefined();
+});
+
+// A tunnel to one of the owner's computers listens here on that computer's own port; mirrored back to it, every
+// connection would loop through the computer into itself.
+test("a port a device tunnel holds is never offered for mirroring", async () => {
+    const client = routesClient(
+        portsContract,
+        createPortsRoutes(
+            portsDeps({
+                scanPorts: async () => [
+                    { port: 3000, host: "127.0.0.1", forwardable: true },
+                    { port: 5173, host: "127.0.0.1", forwardable: true },
+                ],
+                deviceTunnels: { ports: () => new Set([5173]) } as unknown as PortsRoutesDeps["deviceTunnels"],
+            }),
+        ),
+    );
+    expect((await client.list()).ports.map((entry) => entry.port)).toEqual([3000]);
 });

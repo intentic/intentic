@@ -552,6 +552,13 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             cwd: required.optional().describe("Working directory. Default: the program's own folder."),
             env: z.record(z.string(), z.string()).optional().describe("Environment variables to set on top of the agent's own."),
             name: required.optional().describe("What to call this run in app_status. Default: the program's name."),
+            isolated: z
+                .boolean()
+                .optional()
+                .describe(
+                    "Windows only: run it inside Windows Sandbox, a throwaway VM that sees the program's folder read-only and nothing else of this machine, and is discarded on app_stop. Needs Windows Pro/Enterprise with Windows Sandbox turned on; one at a time; boots in 10-20s.",
+                ),
+            network: z.boolean().optional().describe("With isolated: whether the VM has a network. Default true."),
         }),
         run: async (request, scopes) => textResult(await startApp(request, scopes, callerSandbox())),
     }),

@@ -7,7 +7,7 @@ import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
-import { StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
+import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
 // client. No `.route()`: the procedure path is the address, not HTTP. Every input is strict (devices.ts says why). `mcp` stays opaque (`z.unknown()`) so a machine
@@ -41,4 +41,9 @@ export const deviceContract = {
     // Only the daemon calls it, for the agent's `devices push`, and only on an agent advertising `programs`; the machine
     // refuses every op unless "Run programs this sandbox sends" is on.
     stageArtifact: oc.input(StageArtifactSchema).output(StageArtifactResultSchema),
+    // A connection to the sandbox side of a `devices reach` tunnel: the machine dials its own 127.0.0.1:<port> and, once
+    // that answered, opens a WebSocket back to /system/hosts/tunnel with the ticket. Answers once the local port took
+    // the connection, or throws (nothing listening there, the switch is off). Advertised with `programs`; the machine
+    // allows it when "Run commands" or "Run programs this sandbox sends" is on, either of which already reaches it.
+    dialLoopback: oc.input(DialLoopbackSchema).output(z.object({ ok: z.literal(true) })),
 };

@@ -76,3 +76,24 @@ export const PushedArtifactSchema = z.object({
     reused: z.boolean(),
 });
 export type PushedArtifact = z.infer<typeof PushedArtifactSchema>;
+
+// A DEVICE'S LOOPBACK PORT, REACHED FROM THE SANDBOX (`devices reach`, hosts/device-tunnels.ts). The sandbox listens on
+// its own 127.0.0.1:<localPort>; each connection asks the device to dial its own 127.0.0.1:<devicePort> and open a
+// WebSocket back to /system/hosts/tunnel carrying the ticket below, and the two are pumped together.
+export const DialLoopbackSchema = z
+    .object({
+        ticket: z.string().regex(/^[0-9a-f]{48}$/),
+        port: z.int().min(1).max(65535),
+    })
+    .strict();
+export type DialLoopback = z.infer<typeof DialLoopbackSchema>;
+
+export const DeviceTunnelSchema = z.object({
+    device: z.string(),
+    devicePort: z.int().min(1).max(65535),
+    localPort: z.int().min(1).max(65535),
+    // What a program in the sandbox opens to reach the device's port.
+    url: z.string(),
+    openedAt: z.string(),
+});
+export type DeviceTunnel = z.infer<typeof DeviceTunnelSchema>;
