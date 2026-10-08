@@ -28,7 +28,6 @@ const labelFor = (group: { label?: string; items: BookPage[] }): string | undefi
 ---
 
 <nav aria-label={`${book.label} navigation`}>
-    <slot name="search" />
     {
         book.sections.map((section) => {
             const pages = section.groups.flatMap((group) => flatten(group.items));

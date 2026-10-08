@@ -58,12 +58,15 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     </button>
                     <DocsSearchField variant="compact" />
                 </div>
-                <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto pb-2 lg:block" id="docs-sidebar" data-rail-scroll>
-                    <DocsSidebar book={book} pageId={pageId}>
-                        <div class="mb-6 hidden lg:block" slot="search">
-                            <DocsSearchField />
-                        </div>
-                    </DocsSidebar>
+                {/* The rail is a fixed-height column: search stays pinned at its head, only the book's rows scroll. */}
+                <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] flex-col lg:flex" id="docs-sidebar">
+                    {/* The full search field is wide-screen only; the compact twin above covers narrow screens. */}
+                    <div class="mb-4 hidden shrink-0 lg:block">
+                        <DocsSearchField />
+                    </div>
+                    <div class="min-h-0 flex-1 overflow-y-auto pt-2 pb-2" id="docs-rail-scroll" data-rail-scroll>
+                        <DocsSidebar book={book} pageId={pageId} />
+                    </div>
                 </div>
             </aside>
 
@@ -137,16 +140,17 @@ const { section, prev, next } = bookNeighbours(book, pageId);
     {/* Keep rail overflow and section-scroll behavior independent of the rendered documentation book. */}
     <script>
         const toggle = document.getElementById("docs-sidebar-toggle");
-        const sidebar = document.getElementById("docs-sidebar");
+        const rail = document.getElementById("docs-sidebar");
+        const sidebar = document.getElementById("docs-rail-scroll");
 
-        if (sidebar) {
+        if (rail && sidebar) {
             const edges = () => {
                 sidebar.toggleAttribute("data-overflow-top", sidebar.scrollTop > 1);
                 sidebar.toggleAttribute("data-overflow-bottom", Math.ceil(sidebar.scrollTop + sidebar.clientHeight) < sidebar.scrollHeight - 1);
             };
 
             toggle?.addEventListener("click", () => {
-                const open = sidebar.classList.toggle("!block");
+                const open = rail.classList.toggle("!flex");
                 toggle.setAttribute("aria-expanded", String(open));
                 if (open) {
                     sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
