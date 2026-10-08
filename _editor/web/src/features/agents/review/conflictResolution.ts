@@ -68,37 +68,37 @@ export const settingsPagesOf = (conflicts: readonly LandConflict[] | undefined):
         ?.map(settingsPageName)
         .join(`, `);
 
-// Per-cause copy shared by the group heading and row mark; `icon` links them so they can't drift. Order below is
-// the report's group order (agent causes first, then the user's):
-// - mark: one word, beside a path and diffstat
-// - title: plural group heading
-// - fix: button-ladder text
-// - row: the row mark's hover card, the cause in two words and what clears it
-export const reasonCopy = (): Record<LandConflictReason, { icon: IconName; mark: string; title: string; fix: string; row: Tip }> => ({
-    diverged: {
-        icon: `sync`,
-        mark: t(`agents.conflictResolution.mark.diverged`),
-        title: t(`agents.conflictResolution.workspaceMovedOnSince`),
-        fix: t(`agents.conflictResolution.fix.diverged`),
-        row: { title: t(`agents.conflictResolution.rowTip.diverged.title`), note: t(`agents.conflictResolution.rowTip.diverged.note`) },
-    },
-    workspace: {
-        icon: `user`,
-        mark: t(`agents.conflictResolution.mark.workspace`),
-        title: t(`agents.conflictResolution.uncommittedEditsTo`),
-        fix: t(`agents.conflictResolution.fix.workspace`),
-        row: { title: t(`agents.conflictResolution.rowTip.workspace.title`), note: t(`agents.conflictResolution.rowTip.workspace.note`) },
-    },
-    binary: {
-        icon: `image`,
-        mark: t(`agents.conflictResolution.mark.binary`),
-        title: t(`agents.conflictResolution.binaryFilesNoAutomatic`),
-        fix: t(`agents.conflictResolution.fix.binary`),
-        row: { title: t(`agents.conflictResolution.rowTip.binary.title`), note: t(`agents.conflictResolution.rowTip.binary.note`) },
-    },
+// Every refused path is a "conflict" to the reader, whatever its cause: one word and one glyph across the bar, the
+// filter and the rows. The cause lives in the row's hover card, two words and what clears it.
+export const CONFLICT_ICON: IconName = `exclamation-triangle`;
+export const reasonCopy = (): Record<LandConflictReason, { row: Tip }> => ({
+    diverged: { row: { title: t(`agents.conflictResolution.rowTip.diverged.title`), note: t(`agents.conflictResolution.rowTip.diverged.note`) } },
+    workspace: { row: { title: t(`agents.conflictResolution.rowTip.workspace.title`), note: t(`agents.conflictResolution.rowTip.workspace.note`) } },
+    binary: { row: { title: t(`agents.conflictResolution.rowTip.binary.title`), note: t(`agents.conflictResolution.rowTip.binary.note`) } },
 });
 
-// Why each path is blocked, addressed to the agent; distinct from REASON_COPY, which speaks to the user.
+// Why these files conflict, in one line: the cause alone when they share one, a count per cause when they don't.
+// `settingsPages` names the Sandbox pages behind the user's half when they wrote all of it.
+export const causeLine = (blockers: readonly Blocker[], settingsPages: string | undefined): string | undefined => {
+    const counts = new Map<LandConflictReason, number>();
+    for (const blocker of blockers) {
+        counts.set(blocker.reason, (counts.get(blocker.reason) ?? 0) + 1);
+    }
+    const said = (reason: LandConflictReason, count: number, alone: boolean): string => {
+        const key = reason === `workspace` && settingsPages !== undefined ? `settings` : reason;
+        return alone
+            ? t(`agents.conflictResolution.cause.${key}`, { pages: settingsPages ?? `` })
+            : t(`agents.conflictResolution.causeCount.${key}`, { pages: settingsPages ?? ``, count }, count);
+    };
+    const reasons = ([`diverged`, `binary`, `workspace`] as const).filter((reason) => counts.has(reason));
+    if (reasons.length === 0) {
+        return undefined;
+    }
+    const alone = reasons.length === 1;
+    return reasons.map((reason) => said(reason, counts.get(reason) ?? 0, alone)).join(` · `);
+};
+
+// Why each path is blocked, addressed to the agent; distinct from reasonCopy, which speaks to the user.
 const REASON_BRIEF: Record<LandConflictReason, string> = {
     diverged: `the main line's committed content moved under you since you branched`,
     binary: `git has no automatic merge for a binary file, so re-create it against the current one or pick a side deliberately`,

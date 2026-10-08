@@ -1,7 +1,8 @@
-<!-- The review's one primary press, in whichever form this reader gets it: Land now, Request land, or the fact that it was asked. -->
+<!-- The review's one primary press, in whichever form this reader gets it: Fix conflicts, Land now, Request land, or the fact that it was asked. -->
 <script setup lang="ts">
 import { Button, type Tip } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { useT } from "@intentic/ui/i18n";
 
 // One body for the desktop header and a phone's Changes screen, so the role split (maintainers land, collaborators
 // ask, the daemon enforcing the floor either way) is decided in one template rather than kept in step across two.
@@ -18,17 +19,39 @@ const { block = false } = defineProps<{
     requestHint: Tip;
     /** A phone's full-width, thumb-high press under the review, rather than the header's small one. */
     block?: boolean;
+    /**
+     * A refused land the agent can clear: the press becomes the fix, since landing again would only be refused again.
+     * `queued` waits for the running turn to end; `working` is the fix turn itself.
+     */
+    fix?: { readonly count: number; readonly state: `ready` | `queued` | `working`; readonly busy: boolean } | undefined;
 }>();
 
-const emit = defineEmits<{ land: []; request: [] }>();
+const emit = defineEmits<{ land: []; request: []; fix: [] }>();
 
 const words = useVocabulary();
+const t = useT();
 </script>
 
 <template>
+    <!-- While it is queued or running the press is a fact, not a second ask; the conflict bar carries its Cancel and Stop. -->
+    <Button
+        v-if="fix !== undefined"
+        :size="block ? undefined : `small`"
+        :tier="fix.state === `ready` ? `accent` : `boring`"
+        :thumb="block"
+        class="shrink-0 whitespace-nowrap"
+        :class="block ? `w-full` : ``"
+        :disabled="fix.state !== `ready` || fix.busy"
+        @click="emit(`fix`)"
+        v-tooltip.bottom="fix.state === `ready` ? t(`agents.agentLandPress.fixHint`) : undefined"
+    >
+        <template v-if="fix.state === `working`"><Icon name="spinner" spin />{{ t(`agents.agentLandPress.fixing`) }}</template>
+        <template v-else-if="fix.state === `queued`"><Icon name="clock" />{{ t(`agents.agentLandPress.fixQueued`) }}</template>
+        <template v-else><Icon name="sparkles" />{{ t(`agents.agentLandPress.fix`, { count: fix.count }, fix.count) }}</template>
+    </Button>
     <!-- Success-toned with the check glyph, matching the board card's own Land now: the same action on the same work reads as such. -->
     <Button
-        v-if="canShip"
+        v-else-if="canShip"
         :size="block ? undefined : `small`"
         tone="success"
         :thumb="block"

@@ -48,24 +48,18 @@
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",
-            "and": " und",
-            "askingAgentToRebase": "Den Agenten um einen Rebase zu bitten, braucht seine Unterhaltung",
-            "conflictStaysExactly": "Der Konflikt bleibt genau so, wie er ist.",
             "couldntReachWorkspacesCopy": "Die Kopie dieses Repos in Ihrem Workspace war nicht erreichbar",
-            "filesCouldntApply": "{count} Datei ließ sich nicht anwenden | {count} Dateien ließen sich nicht anwenden",
-            "finishMergeYourselfIn": "Sie schließen den Merge selbst ab, in Ihrem Workspace.",
-            "holdingBack": ", {count} wird zurückgehalten, die sauber landen würde | , {count} werden zurückgehalten, die alle sauber landen würden",
             "landConflictMarkers": "Mit Konfliktmarkierungen landen",
-            "landingConflictMarkersStill": "Mit Konfliktmarkierungen zu landen, geht von hier aus weiterhin.",
-            "landsOnOwnTurn": "Es landet von selbst, wenn der Zug endet.",
-            "nothingAppliedNothingLost": "Nichts wurde angewendet und nichts ging verloren: die Arbeit des Agenten liegt noch auf seinem Branch.",
             "openChanges": "Änderungen öffnen",
-            "commitThereThenLand": "Committen Sie dort Ihre Änderungen und landen Sie dann erneut: git kann nicht durch nicht committete Arbeit hindurch mergen.",
-            "resolvingAgentBringingBranch": "Wird gelöst: der Agent bringt seinen Branch auf den neuesten Stand",
-            "showFile": "Datei zeigen",
             "watch": "Beobachten",
-            "yourEditsAreThere": "die Datei mit Ihren eigenen Änderungen liegt in diesem Workspace | die {count} Dateien mit Ihren eigenen Änderungen liegen in diesem Workspace",
-            "yourEditsStillNeedYou": "Die Datei mit Ihren eigenen Änderungen braucht noch Sie. | Die {count} Dateien mit Ihren eigenen Änderungen brauchen noch Sie."
+            "filesConflict": "{count} Datei hat einen Konflikt | {count} Dateien haben Konflikte",
+            "nothingLanded": "Noch nichts gelandet.",
+            "show": "Anzeigen",
+            "fixing": "Der Agent behebt sie und landet dann.",
+            "queued": "Die Behebung startet, wenn der aktuelle Zug endet.",
+            "saveSettingsAndLand": "Einstellungen speichern und landen",
+            "commitThenLand": "Committen, dann erneut landen.",
+            "markersHint": "Landet jetzt alles; die Konflikte lösen Sie selbst"
         },
         "agentDetail": {
             "asksOnTheirBoard": "Fragt auf deren Board",
@@ -99,30 +93,21 @@
             "you": "Sie"
         },
         "agentReviewPanel": {
-            "addsDependencies": "Fügt {count} Abhängigkeit hinzu | Fügt {count} Abhängigkeiten hinzu",
-            "addsDependenciesHint": "Landet die Arbeit, kommen sie in Ihr Projekt, und die Sandbox installiert sie in Ihrem Baum.",
             "agentHasntChangedAny": "Dieser Agent hat keine Dateien geändert. Seine Unterhaltung ist in {remoteName}: öffnen Sie sie dort, um etwas zu erbitten, und was immer er schreibt, taucht hier auf.",
             "agentHasntChangedAny2": "Dieser Agent hat keine Dateien geändert. Bitten Sie ihn im Chat um etwas: seine Arbeit taucht hier auf, Datei für Datei, zur Durchsicht, bevor sie landet.",
             "all": "Alle {count}",
             "anythingWritesNextShows": "{absorbedNote} Was er als Nächstes schreibt, taucht hier auf.",
             "awaitingLand": "Wartet aufs Landen",
             "backToFileList": "Zurück zur Dateiliste",
-            "blocked": "blockiert ·",
-            "blocked2": "Blockiert {count}",
             "clickToUnmark": "Klicken zum Aufheben",
             "commitLine": "{author} · {when} · {count} Datei | {author} · {when} · {count} Dateien",
             "committedWorkNotDifference": "Sie haben diese Arbeit committet, deshalb ist sie kein Unterschied mehr gegenüber main, und die Durchsicht oben kann sie nicht auflisten. Hier ist sie weiterhin lesbar, Datei für Datei, genau so, wie der Agent sie geschrieben hat.",
             "couldntReadAgentsChanges": "Die Änderungen dieses Agenten ließen sich nicht lesen",
-            "everythingElseAppliedCarry": "Alles andere wurde angewendet. Diese tragen Konfliktmarkierungen in Ihrem Workspace: lösen Sie sie dort auf, wie bei jedem Merge.",
             "history": "Historie",
             "inHistory": "In der Historie {count}",
-            "landedWithFiles": "Gelandet, {count} Datei noch abzuschließen | Gelandet, {count} Dateien noch abzuschließen",
-            "leftCopiesElsewhere": "Diese Unterhaltung hat {count} Kopie auf einem eigenen Branch zurückgelassen | Diese Unterhaltung hat {count} Kopien auf eigenen Branches zurückgelassen",
-            "manifestAdds": "fügt {names} hinzu",
             "markReviewed": "Als geprüft markieren",
             "markReviewed2": "{label} als geprüft markieren",
             "nextFile": "Nächste Datei",
-            "noBranchAtAll": "gar keinem Branch",
             "notLanded": "nicht gelandet",
             "notLanded2": "Nicht gelandet {count}",
             "openDiffInWorkspace": "Dieses Diff im Workspace-Editor öffnen",
@@ -133,7 +118,16 @@
             "unaccounted": "{count} weitere Datei liegt in Ihrer Historie, ohne dass ein Commit hier sie erklärt: dieser Inhalt hat Ihre Hauptlinie auf anderem Weg erreicht. | {count} weitere Dateien liegen in Ihrer Historie, ohne dass ein Commit hier sie erklärt: dieser Inhalt hat Ihre Hauptlinie auf anderem Weg erreicht.",
             "unlanded": "Nicht gelandet",
             "wholeGroup": "Ganze Gruppe",
-            "yourCommit": "Ihr Commit"
+            "yourCommit": "Ihr Commit",
+            "conflicts": "Konflikte {count}",
+            "conflictsHeading": "Konflikte",
+            "conflict": "Konflikt",
+            "markersLeft": "{count} Datei hat noch Konfliktmarkierungen. | {count} Dateien haben noch Konfliktmarkierungen.",
+            "strandedWork": "Arbeit in {repos} liegt nicht auf dem Branch des Agenten und wird nicht gelandet.",
+            "offBranch": "Nicht auf dem Branch des Agenten",
+            "noBranch": "kein Branch",
+            "askAgent": "Agent fragen",
+            "addsTo": "Fügt {names} zu {manifest} hinzu"
         },
         "agentScratchReport": {
             "byproduct": "ein Log, ein Dump oder eine Sicherung",
@@ -171,7 +165,9 @@
             "keepWarm": "Cache warm halten",
             "keepWarmHint": "Den gecachten Kontext vor dem Ablauf erneut lesen, bis zu {hours} Std.",
             "stopKeepingWarm": "Cache nicht mehr warm halten",
-            "stopKeepingWarmHint": "Warm gehalten bis {time}"
+            "stopKeepingWarmHint": "Warm gehalten bis {time}",
+            "tryLandAgain": "Erneut landen",
+            "landsIfConflictsGone": "Landet, wenn die Konflikte weg sind"
         },
         "agentStatus": {
             "approvalNeeded": "Genehmigung nötig",
@@ -288,22 +284,31 @@
             "somethingPlayful": "Etwas Verspieltes"
         },
         "conflictResolution": {
-            "binaryFilesNoAutomatic": "Binärdateien, für die es keinen automatischen Merge gibt",
-            "uncommittedEditsTo": "Sie haben nicht committete Änderungen an diesen",
-            "workspaceMovedOnSince": "Ihr Workspace hat sich weiterbewegt, seit der Agent abgezweigt ist",
             "rowTip": {
                 "diverged": {
-                    "note": "Agent kann rebasen",
-                    "title": "Workspace geändert"
+                    "note": "Der Agent kann es beheben",
+                    "title": "In Ihrem Workspace geändert"
                 },
                 "workspace": {
-                    "note": "Committen oder stashen",
+                    "note": "Erst committen",
                     "title": "Ihre Änderungen"
                 },
                 "binary": {
                     "note": "Kein Auto-Merge",
                     "title": "Binärdatei"
                 }
+            },
+            "cause": {
+                "diverged": "Sie wurden in Ihrem Workspace geändert, nachdem der Agent begann.",
+                "binary": "Binärdateien lassen sich nicht automatisch zusammenführen.",
+                "workspace": "Sie haben darin nicht committete Änderungen.",
+                "settings": "Einstellungen auf der Seite {pages} sind noch nicht gespeichert."
+            },
+            "causeCount": {
+                "diverged": "{count} in Ihrem Workspace geändert | {count} in Ihrem Workspace geändert",
+                "binary": "{count} binär | {count} binär",
+                "workspace": "{count} mit Ihren Änderungen | {count} mit Ihren Änderungen",
+                "settings": "{count} ungespeicherte Einstellung | {count} ungespeicherte Einstellungen"
             }
         },
         "heldWakeCard": {
@@ -540,12 +545,17 @@
             "stopWatching": "Nicht mehr beobachten",
             "filterByMessages": "Nach Ihren Nachrichten oder ID filtern…",
             "openIn": "Öffnen in",
-            "turnRunning": "Zug läuft",
             "undoable": "Rückgängig machbar",
             "waitAgentTurnTo": "Warten, bis der Agentenzug fertig ist",
             "agentTitle": "Agententitel",
             "sessionName": "Session-Name",
             "sendAgain": "Erneut senden"
+        },
+        "agentLandPress": {
+            "fix": "{count} Konflikt beheben | {count} Konflikte beheben",
+            "fixHint": "Der Agent aktualisiert seinen Branch und landet dann",
+            "fixing": "Wird behoben…",
+            "fixQueued": "Behebung geplant"
         }
     },
     "app": {

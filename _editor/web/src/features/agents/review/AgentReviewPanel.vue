@@ -10,7 +10,6 @@ import {
     ResizeSeam,
     SegmentedControl,
     type Tip,
-    toneTint,
     toneWash,
     ui,
     useDevice,
@@ -22,9 +21,9 @@ import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
-import { stopAgent } from "../fleet/agentActions";
+import { draftStrayAsk, stopAgent } from "../fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../fleet/fleetScope";
-import { type Blocker, reasonCopy } from "./conflictResolution";
+import { CONFLICT_ICON, reasonCopy } from "./conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../workbench/views/documentRegistry";
@@ -61,7 +60,7 @@ import { formatChord, isApplePlatform } from "../../../workbench/commands/keybin
 // - each column (list, diff) carries its own bar instead of one shared strip
 // - the list shows what still differs from main, landed or not, not just the unlanded remainder
 // - files and headings can be ticked as viewed, and headings collapse per repo and per package
-// - a blocked row carries its conflict cause directly, matching the conflict report above
+// - conflicted rows are pinned above every repo, each with the conflict glyph and its cause on hover
 //
 // Keyboard (outside text fields and Monaco): arrows/j/k move, v marks viewed and advances, Shift+V marks a
 // heading's rows and advances past them.
@@ -131,7 +130,7 @@ const outline = useLoadingReveal(
 
 // The list.
 // Narrowing options, each shown only when it would tell the reader something not already visible:
-// - Blocked: what refused, shown first since it's the reason to be here
+// - Conflicts: what refused, shown first since it's the reason to be here
 // - Code/Tests: shown only when the review holds both
 // - Not landed: the Land now remainder, shown only as a proper subset
 // - In history: committed work, a second body of work rather than a narrowing, so it sits last
@@ -145,7 +144,7 @@ const mixedLanding = computed(() => changes.pending.value.length > 0 && changes.
 const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
     ...(changes.count.value > 0 ? [{ label: t(`agents.agentReviewPanel.all`, { count: changes.count.value }), value: `all` as const }] : []),
     ...(changes.blocked.value.length > 0
-        ? [{ label: t(`agents.agentReviewPanel.blocked2`, { count: changes.blocked.value.length }), value: `blocked` as const }]
+        ? [{ label: t(`agents.agentReviewPanel.conflicts`, { count: changes.blocked.value.length }), value: `blocked` as const }]
         : []),
     ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
         ? [
@@ -292,14 +291,29 @@ const bodyAdditions = computed(() => bodyFiles.value.reduce((total, file) => tot
 const bodyDeletions = computed(() => bodyFiles.value.reduce((total, file) => total + (file.change.deletions ?? 0), 0));
 
 interface RepoGroup extends GroupStats {
+    // What folding and the module views key on: the repo, or CONFLICTS for the pinned group.
+    readonly key: string;
+    readonly title: string;
     readonly repo: string;
     readonly files: readonly AgentReviewFile[];
+    readonly conflicts: boolean;
 }
+
+// Conflicted rows are pinned in a group of their own above every repo: they are why the reader is here, and spread
+// through the packages by size they were the hardest rows on the page to find. The Conflicts filter needs no pin, since
+// every row in it is one.
+const CONFLICTS = `\u0000conflicts`;
+const pinned = computed<readonly AgentReviewFile[]>(() =>
+    filter.value === `blocked` || filter.value === `history` ? [] : filtered.value.filter((file) => file.blocked !== undefined),
+);
 
 // Repo groups in the daemon's order, rebuilt from filtered rows so an emptied group loses its heading too.
 const groups = computed<readonly RepoGroup[]>(() => {
     const byRepo = new Map<string, AgentReviewFile[]>();
     for (const file of filtered.value) {
+        if (pinned.value.length > 0 && file.blocked !== undefined) {
+            continue;
+        }
         const bucket = byRepo.get(file.repo);
         if (bucket === undefined) {
             byRepo.set(file.repo, [file]);
@@ -309,11 +323,17 @@ const groups = computed<readonly RepoGroup[]>(() => {
     }
     const built: RepoGroup[] = [];
     for (const [repo, files] of byRepo) {
-        built.push({ repo, files, ...statsOf(files) });
+        built.push({ key: repo, title: repo, repo, files, conflicts: false, ...statsOf(files) });
     }
     // Most-added-first reaches repos too, unlike the workspace's Changes panel, where a repo row is operable (its own
     // sync/discard) and reordering it would be a different kind of surprise.
-    return bySize(built, (group) => group.order);
+    const ranked = bySize(built, (group) => group.order);
+    if (pinned.value.length === 0) {
+        return ranked;
+    }
+    const files = pinned.value;
+    const conflicts: RepoGroup = { key: CONFLICTS, title: t(`agents.agentReviewPanel.conflictsHeading`), repo: ``, files, conflicts: true, ...statsOf(files) };
+    return [conflicts, ...ranked];
 });
 
 // Same grouping preference and rule as the workspace's Changes panel (useChangeGrouping, changeModules), so both
@@ -337,6 +357,12 @@ type RepoView = ModuleView<ReviewBucket>;
 const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
     const views = new Map<string, RepoView>();
     for (const group of groups.value) {
+        // One flat run for the pinned group: its rows come from many packages, and each row names its own.
+        if (group.conflicts) {
+            const rows = bySize(group.files, readingOfRow);
+            views.set(group.key, { buckets: [{ key: ``, name: ``, packaged: false, rows, ...statsOf(rows) }], named: false });
+            continue;
+        }
         const view = moduleView(group.files, (file) => file.change.path, modulesOf(group.repo), group.repo, groupByModule.value);
         const buckets: ReviewBucket[] = [];
         for (const bucket of view.buckets) {
@@ -344,19 +370,19 @@ const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
             const rows = bySize(bucket.rows, readingOfRow);
             buckets.push({ ...bucket, rows, ...statsOf(rows) });
         }
-        views.set(group.repo, { buckets: bySize(buckets, (bucket) => bucket.order), named: view.named });
+        views.set(group.key, { buckets: bySize(buckets, (bucket) => bucket.order), named: view.named });
     }
     return views;
 });
-const viewOf = (repo: string): RepoView => repoViews.value.get(repo) ?? EMPTY_MODULE_VIEW;
+const viewOf = (key: string): RepoView => repoViews.value.get(key) ?? EMPTY_MODULE_VIEW;
 
 // What the keyboard walks: only rows actually on screen, in render order. A collapsed repo or package contributes
 // nothing, since stepping onto a hidden row would silently undo the fold.
 const visibleRows = computed<readonly AgentReviewFile[]>(() =>
     groups.value.flatMap((group) =>
-        collapsed.value.has(group.repo)
+        collapsed.value.has(group.key)
             ? []
-            : viewOf(group.repo).buckets.flatMap((bucket) => (moduleCollapsed(group.repo, bucket.key) ? [] : bucket.rows)),
+            : viewOf(group.key).buckets.flatMap((bucket) => (moduleCollapsed(group.key, bucket.key) ? [] : bucket.rows)),
     ),
 );
 
@@ -378,29 +404,16 @@ const select = (file: AgentReviewFile): void => {
     rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
 };
 
-// Joins the conflict report's paths to their rows, so clicking one finds it instead of matching by eye. Widens
-// the filter to `blocked` (never `all`) and opens both fold levels before scrolling to it.
-const jumpTo = async (blocker: Blocker): Promise<void> => {
-    const file = changes.files.value.find((row) => row.repo === blocker.repo && row.change.path === blocker.path);
-    if (file === undefined) {
-        return;
-    }
-    if (!filtered.value.some((row) => row.key === file.key)) {
-        filter.value = `blocked`;
-    }
-    const expanded = new Set(collapsed.value);
-    expanded.delete(file.repo);
-    collapsed.value = expanded;
-    // Read after the filter above, so the buckets searched are the ones about to be drawn.
-    const bucket = viewOf(file.repo).buckets.find((group) => group.rows.some((row) => row.key === file.key));
-    if (bucket !== undefined) {
-        const opened = new Set(collapsedModules.value);
-        opened.delete(moduleKey(file.repo, bucket.key));
-        collapsedModules.value = opened;
-    }
-    selectedKey.value = file.key;
+// The conflict bar's "Show": narrows the list to the conflicts and opens the first, so the reader lands on one.
+const showConflicts = async (): Promise<void> => {
+    filter.value = `blocked`;
+    collapsed.value = new Set();
+    collapsedModules.value = new Set();
     await nextTick();
-    rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
+    const first = visibleRows.value[0];
+    if (first !== undefined) {
+        select(first);
+    }
 };
 
 // Desktop opens on the first file, since an empty diff pane beside a full list wastes the screen; mobile doesn't,
@@ -458,7 +471,9 @@ const selectedGroup = computed<readonly AgentReviewFile[]>(() => {
     if (file === undefined) {
         return [];
     }
-    return viewOf(file.repo).buckets.find((bucket) => bucket.rows.some((row) => row.key === file.key))?.rows ?? [];
+    // Searched across every group, since a conflicted row sits in the pinned one rather than its repo's.
+    const buckets = groups.value.flatMap((group) => viewOf(group.key).buckets);
+    return buckets.find((bucket) => bucket.rows.some((row) => row.key === file.key))?.rows ?? [];
 });
 
 // Shift+V, the heading tick's keyboard peer: accepts the rest of this group and lands on the next, so a pass over
@@ -587,13 +602,24 @@ const openInWorkspace = (): void => {
 
 // Kit's toolbar icon button, plus this panel's own disabled treatment.
 const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
+// A notice that needs no decision: one line under the bar, no box, so only the bar reads as something to act on.
+const NOTE_LINE = `mx-2 mt-1.5 flex shrink-0 items-center gap-1.5 px-2 text-2xs text-muted`;
 
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
-// Copies on a branch of their own whose commits there did not reach this conversation's branch. Absent `carried` is a
-// sandbox too old to copy them, which never did.
-const strandedCount = computed(() => changes.elsewhere.value.filter((stray) => stray.carried !== true).length);
+// Copies on a branch of their own whose commits there did not reach this conversation's branch: work no land carries.
+// A copy that was carried is not news to the reader (it lands like the rest), so only the stranded ones are said.
+// Absent `carried` is a sandbox too old to copy them, which never did.
+const stranded = computed(() => changes.elsewhere.value.filter((stray) => stray.carried !== true));
+const strandedRepos = computed(() => stranded.value.map((stray) => stray.repo).join(`, `));
+// Where each copy stands, for whoever wants the git of it; the line itself says only what it means.
+const strandedTip = computed(
+    (): Tip => ({
+        title: t(`agents.agentReviewPanel.offBranch`),
+        rows: stranded.value.map((stray) => ({ label: stray.repo, value: stray.branch ?? t(`agents.agentReviewPanel.noBranch`) })),
+    }),
+);
 
 // What landing the work takes on: per manifest that gained any, the dependency names it declares now and did not
 // before, labelled the way the rows are. This is where a new dependency is approved, since a conversation installs
@@ -607,8 +633,6 @@ const addedDependencies = computed(() =>
         })),
     ),
 );
-// Distinct names, so one package two manifests both gained is counted once in the heading.
-const addedDependencyCount = computed(() => new Set(addedDependencies.value.flatMap((manifest) => manifest.added)).size);
 
 // The file list's width is the reviewer's own call (a flat repo vs. a deep monorepo), sized and persisted exactly
 // like the workspace explorer's edge (drag, double-click reset, ResizeSeam). The seam speaks in pointer
@@ -626,49 +650,7 @@ const seamWidth = computed<number>({
             <span class="block break-words text-muted">{{ changes.error.value }}</span>
         </Notice>
 
-        <!-- The rows below are a branch, not a checkout, and only here can that be said. Each turn copies what it
-             committed on a branch of its own onto that branch, so a copy standing elsewhere is news, not trouble, until
-             a copy fails: then the work there is somewhere no land reaches, which a repo with no row could not say. -->
-        <div
-            v-if="changes.elsewhere.value.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border px-2 py-1.5"
-            :class="toneTint(strandedCount > 0 ? `warning` : `info`, `strong`)"
-        >
-            <span class="text-2xs font-medium" :class="strandedCount > 0 ? `text-warning` : `text-info`">
-                {{
-                    strandedCount > 0
-                        ? t(`agents.agentReviewPanel.leftCopiesElsewhere`, { count: strandedCount }, strandedCount)
-                        : t(`agents.agentReviewPanel.worksOnBranchesOfItsOwn`, { count: changes.elsewhere.value.length }, changes.elsewhere.value.length)
-                }}
-            </span>
-            <p class="text-2xs text-muted">
-                {{ strandedCount > 0 ? t(`agents.agentReviewPanel.strayStrandedHint`) : t(`agents.agentReviewPanel.strayCarriedHint`) }}
-            </p>
-            <ul class="flex flex-col gap-0.5">
-                <li v-for="stray in changes.elsewhere.value" :key="stray.repo" class="truncate text-2xs text-subtle">
-                    <span class="font-mono">{{ stray.repo }} → {{ stray.branch ?? t(`agents.agentReviewPanel.noBranchAtAll`) }}</span>
-                    <span v-if="stray.carried !== true" class="text-warning"> · {{ t(`agents.agentReviewPanel.strayNotCarried`) }}</span>
-                    <span v-if="stray.uncommitted === true"> · {{ t(`agents.agentReviewPanel.strayUncommitted`) }}</span>
-                </li>
-            </ul>
-        </div>
-
-        <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
-        <div
-            v-if="resolvingPaths.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border px-2 py-1.5"
-            :class="toneTint(`info`, `strong`)"
-        >
-            <span class="text-2xs font-medium text-info">{{
-                t(`agents.agentReviewPanel.landedWithFiles`, { count: resolvingPaths.length }, resolvingPaths.length)
-            }}</span>
-            <p class="text-2xs text-muted">
-                {{ t(`agents.agentReviewPanel.everythingElseAppliedCarry`) }}
-            </p>
-            <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
-        </div>
-
-        <!-- The conflict report and its action ladder; mounted rather than inlined since it holds its own decision tree. -->
+        <!-- The one decision a refused land leaves, first: what conflicts, why, and what happens next. -->
         <AgentConflictReport
             v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
             class="mx-2 mt-2"
@@ -677,16 +659,45 @@ const seamWidth = computed<number>({
             :writing="writing"
             :busy="changes.actionBusy.value"
             :asked="changes.asked.value"
+            :queued="changes.fixQueued.value"
             :box="remoteName"
-            @resolve="changes.askResolve()"
             @merge="changes.land('merge')"
             @commit="openChanges"
             @save-settings="(paths: readonly string[]) => changes.land(`check`, undefined, false, paths)"
             @stop="stopAgent(agentId, at)"
+            @cancel="changes.cancelFix()"
             @cross="cross"
             @chat="emit('chat')"
-            @select="jumpTo"
+            @show="showConflicts"
         />
+
+        <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
+        <div v-if="resolvingPaths.length > 0" :class="NOTE_LINE">
+            <Icon name="info-circle" class="shrink-0 text-2xs text-info" />
+            <span class="min-w-0 flex-1 truncate" v-tooltip.bottom.overflow="resolvingPaths.join(`, `)">{{
+                t(`agents.agentReviewPanel.markersLeft`, { count: resolvingPaths.length }, resolvingPaths.length)
+            }}</span>
+            <button type="button" class="shrink-0 text-link underline-offset-2 hover:underline" @click="openChanges">
+                {{ t(`agents.agentConflictReport.openChanges`) }}
+            </button>
+        </div>
+
+        <!-- Work no land carries, said as what it means; where each copy stands is the hover's. The ask goes into the
+             agent's composer, not straight to it, so a running turn is never steered by a press made here. -->
+        <div v-if="stranded.length > 0" :class="NOTE_LINE">
+            <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
+            <span class="min-w-0 flex-1" v-tooltip.bottom="strandedTip">{{
+                t(`agents.agentReviewPanel.strandedWork`, { repos: strandedRepos })
+            }}</span>
+            <button
+                v-if="at === undefined"
+                type="button"
+                class="shrink-0 text-link underline-offset-2 hover:underline"
+                @click="draftStrayAsk(agentId, stranded)"
+            >
+                {{ t(`agents.agentReviewPanel.askAgent`) }}
+            </button>
+        </div>
 
         <!-- What no land carries: files that look like scratch, left in the conversation's copy until included or deleted. -->
         <AgentScratchReport
@@ -699,22 +710,12 @@ const seamWidth = computed<number>({
             @delete="changes.deleteScratch"
         />
 
-        <!-- What landing this work takes on, one line per manifest: the approval moment for a new dependency. Quiet, like
-             the scratch report: nothing is wrong, and there is nothing here at all when no manifest gained a name. -->
-        <div
-            v-if="addedDependencies.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-border bg-overlay px-2 py-1.5"
-        >
-            <span class="inline-flex items-center gap-1 text-2xs font-medium text-content">
-                <Icon name="box" class="text-2xs text-subtle" />{{
-                    t(`agents.agentReviewPanel.addsDependencies`, { count: addedDependencyCount }, addedDependencyCount)
-                }}
-            </span>
-            <p class="text-2xs text-muted">{{ t(`agents.agentReviewPanel.addsDependenciesHint`) }}</p>
-            <p v-for="manifest in addedDependencies" :key="manifest.key" class="break-words text-2xs text-muted">
-                <span class="break-all font-mono text-content">{{ manifest.label }}</span>
-                {{ t(`agents.agentReviewPanel.manifestAdds`, { names: manifest.added.join(`, `) }) }}
-            </p>
+        <!-- What landing this work takes on: one quiet line per manifest. Nothing is wrong, so nothing is tinted. -->
+        <div v-for="manifest in addedDependencies" :key="manifest.key" :class="NOTE_LINE">
+            <Icon name="box" class="shrink-0 text-2xs text-subtle" />
+            <span class="min-w-0 flex-1 truncate" v-tooltip.bottom.overflow="manifest.added.join(`, `)">{{
+                t(`agents.agentReviewPanel.addsTo`, { names: manifest.added.join(`, `), manifest: manifest.label })
+            }}</span>
         </div>
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
@@ -754,23 +755,31 @@ const seamWidth = computed<number>({
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
             >
                 <!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
-                <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
-                    <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
-                    <span v-else class="whitespace-nowrap text-2xs text-muted">
-                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
-                    </span>
-                    <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
-                    <span class="flex-1"></span>
-                    <!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->
-                    <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
-                    <!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
-                    <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
-                        <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
-                    </span>
+                <!-- Wraps inside a one-line box: the totals take the line only when they fit beside the filter, and
+                     otherwise drop to a second line the box clips, rather than spilling over the diff's toolbar. Each
+                     group heading keeps its own totals either way. -->
+                <div class="h-8 shrink-0 overflow-hidden border-b border-line max-md:h-12">
+                    <div class="flex flex-wrap items-center gap-x-1.5 px-2 *:h-8 max-md:*:h-12">
+                        <div v-if="filterOptions.length > 1" class="flex max-w-full items-center overflow-x-auto [scrollbar-width:none]">
+                            <SegmentedControl v-model="filter" :options="filterOptions" size="xs" />
+                        </div>
+                        <span v-else class="inline-flex items-center whitespace-nowrap text-2xs text-muted">
+                            <span class="font-medium text-content">{{ bodyFiles.length }}</span>&nbsp;{{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
+                        </span>
+                        <span v-if="changes.fetching.value" class="inline-flex items-center"><Icon name="spinner" class="text-2xs text-muted" spin /></span>
+                        <span class="ml-auto inline-flex shrink-0 items-center gap-1.5">
+                            <!-- Totals for the whole review; the code/tests split is carried by the filter options instead. -->
+                            <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
+                            <!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
+                            <span class="inline-flex items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
+                                <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
+                            </span>
+                        </span>
+                    </div>
                 </div>
 
                 <div class="min-h-0 flex-1 overflow-auto">
-                    <div v-for="group in groups" :key="group.repo">
+                    <div v-for="group in groups" :key="group.key">
                         <!-- Sticky, since scrolling is what takes the repo context away. -->
                         <div
                             class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
@@ -778,13 +787,18 @@ const seamWidth = computed<number>({
                             <button
                                 type="button"
                                 class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
-                                @click="toggleGroup(group.repo)"
+                                @click="toggleGroup(group.key)"
                             >
-                                <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
-                                <span class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ group.repo }}</span>
+                                <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.key) ? 'chevron-right' : 'chevron-down'" />
+                                <Icon v-if="group.conflicts" :name="CONFLICT_ICON" class="shrink-0 text-2xs text-warning" />
+                                <span
+                                    class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide"
+                                    :class="group.conflicts ? `text-warning` : `text-muted`"
+                                    >{{ group.title }}</span
+                                >
                                 <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
                                 <span
-                                    v-if="group.blocked > 0"
+                                    v-if="group.blocked > 0 && !group.conflicts"
                                     class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
                                     :class="toneWash(`warning`)"
                                 >
@@ -794,25 +808,25 @@ const seamWidth = computed<number>({
                                 <ReviewStat :code="group.code" :additions="group.additions" :deletions="group.deletions" />
                             </button>
                             <ReviewGroupCheck
-                                :name="group.repo"
+                                :name="group.title"
                                 :total="group.files.length"
                                 :viewed="groupProgress(group.files)"
                                 @toggle="toggleGroupViewed(group.files)"
                             />
                         </div>
 
-                        <template v-if="!collapsed.has(group.repo)">
-                            <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
+                        <template v-if="!collapsed.has(group.key)">
+                            <template v-for="bucket in viewOf(group.key).buckets" :key="`${group.key}/${bucket.key}`">
                                 <!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
-                                <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
+                                <div v-if="viewOf(group.key).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
                                     <button
                                         type="button"
                                         class="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 pr-1.5 text-left"
-                                        @click="toggleModule(group.repo, bucket.key)"
+                                        @click="toggleModule(group.key, bucket.key)"
                                     >
                                         <Icon
                                             class="shrink-0 text-[0.6rem] text-subtle"
-                                            :name="moduleCollapsed(group.repo, bucket.key) ? 'chevron-right' : 'chevron-down'"
+                                            :name="moduleCollapsed(group.key, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                         />
                                         <!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
                                         <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
@@ -836,7 +850,7 @@ const seamWidth = computed<number>({
                                         @toggle="toggleGroupViewed(bucket.rows)"
                                     />
                                 </div>
-                                <template v-if="!moduleCollapsed(group.repo, bucket.key)">
+                                <template v-if="!moduleCollapsed(group.key, bucket.key)">
                                     <div
                                         v-for="file in bucket.rows"
                                         :key="file.key"
@@ -844,13 +858,9 @@ const seamWidth = computed<number>({
                                         class="group/file flex items-center transition-colors"
                                         :class="[
                                             // Tint only, no edge stripe: the same way the workspace's Changes list marks its picked row.
-                                            file.key === selectedKey
-                                                ? 'bg-primary-600/10'
-                                                : file.blocked !== undefined
-                                                  ? toneTint(`warning`, `soft`, `hover:bg-overlay`)
-                                                  : 'hover:bg-overlay',
+                                            file.key === selectedKey ? 'bg-primary-600/10' : 'hover:bg-overlay',
                                             // Under a header the rows step in, so the module reads as holding them.
-                                            viewOf(group.repo).named ? 'pl-2' : '',
+                                            viewOf(group.key).named ? 'pl-2' : '',
                                         ]"
                                     >
                                         <button
@@ -866,15 +876,15 @@ const seamWidth = computed<number>({
                                                 :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
                                             />
                                             <!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
-                                            <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.repo).named" />
-                                            <!-- Blocked files replace the ordinary unlanded marker. -->
+                                            <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.key).named" />
+                                            <!-- A glyph, not a word: the name is what the reader needs, and the cause is the hover's. -->
                                             <span
                                                 v-if="file.blocked !== undefined"
-                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
-                                                :class="toneWash(`warning`)"
+                                                class="inline-flex shrink-0 items-center text-2xs text-warning"
                                                 v-tooltip.right="reasonCopy()[file.blocked].row"
+                                                :aria-label="t(`agents.agentReviewPanel.conflict`)"
                                             >
-                                                <Icon :name="reasonCopy()[file.blocked].icon" class="text-2xs" />{{ reasonCopy()[file.blocked].mark }}
+                                                <Icon :name="CONFLICT_ICON" class="text-2xs" />
                                             </span>
                                             <!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
                                             <span
@@ -960,8 +970,7 @@ const seamWidth = computed<number>({
                                 :class="toneWash(`warning`)"
                                 v-tooltip.bottom="reasonCopy()[selected.blocked].row"
                             >
-                                <Icon :name="reasonCopy()[selected.blocked].icon" class="text-2xs" />{{ t(`agents.agentReviewPanel.blocked`) }}
-                                {{ reasonCopy()[selected.blocked].mark }}
+                                <Icon :name="CONFLICT_ICON" class="text-2xs" />{{ t(`agents.agentReviewPanel.conflict`) }}
                             </span>
                             <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. The review's one statement of where committed work went; the rest opens under it on hover. -->
                             <AgentHistoryChip

@@ -31,7 +31,7 @@ import {
     type ResolveAsk,
 } from "../fleet/agentActions";
 import { landedAway, turnInFlight } from "../fleet/agentStatus";
-import { blockersOf } from "./conflictResolution";
+import { agentBlockers, blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 
@@ -127,14 +127,18 @@ const NONE: ReadonlySet<string> = new Set();
 
 // Agents whose land conflict the user has handed back to them, from the press until the turn it started is over.
 const askedByAgent = sandboxRef<ReadonlySet<string>>(() => new Set());
-const forgetAsk = (id: string): void => {
-    if (!askedByAgent.value.has(id)) {
+// Agents whose fix was pressed while a turn of theirs ran: asked when that turn ends rather than said into it, since a
+// rebase steered into the middle of other work would derail both. Held in this window, like `askedByAgent`.
+const fixAfterTurn = sandboxRef<ReadonlySet<string>>(() => new Set());
+const without = (set: Ref<ReadonlySet<string>>, id: string): void => {
+    if (!set.value.has(id)) {
         return;
     }
-    const next = new Set(askedByAgent.value);
+    const next = new Set(set.value);
     next.delete(id);
-    askedByAgent.value = next;
+    set.value = next;
 };
+const forgetAsk = (id: string): void => without(askedByAgent, id);
 
 // Empty agentId means no review yet (draft agent, or one the roster hasn't resolved); the query below stays
 // disabled until it does.
@@ -195,6 +199,8 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const pending = computed(() => files.value.filter((file) => !file.change.landed));
     // Rows the refusal names, derived from current rows so a reverted path is never still counted as blocked.
     const blocked = computed(() => files.value.filter((file) => file.blocked !== undefined));
+    // How many of the refused paths a rebase in the agent's own copy can clear: what "Fix conflicts" offers to.
+    const fixable = computed(() => agentBlockers(blockersOf(conflicts.value)).length);
     const additions = computed(() => files.value.reduce((total, file) => total + (file.change.additions ?? 0), 0));
     const deletions = computed(() => files.value.reduce((total, file) => total + (file.change.deletions ?? 0), 0));
     // Splits rows via the contract's isTestPath, so the header can show code vs. test proof separately.
@@ -239,6 +245,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             forgetAsk(agentId.value);
         }
     });
+    const fixQueued = computed(() => fixAfterTurn.value.has(agentId.value));
 
     // True when landedPresence shows landed work missing from the tree (e.g. discarded post-land), so `land` uses
     // `cumulative` rather than an emptied `outstanding`. Not when an agent took it out on purpose (offerReland): a plain
@@ -290,6 +297,28 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             }
         }, t(`agents.useAgentChanges.askResolveFailed`));
 
+    // The header's fix press: asks now, or, while a turn runs, once it has ended.
+    const fixConflicts = (): Promise<void> => {
+        if (!inTurn.value) {
+            return askResolve();
+        }
+        fixAfterTurn.value = new Set(fixAfterTurn.value).add(agentId.value);
+        return Promise.resolve();
+    };
+    const cancelFix = (): void => without(fixAfterTurn, agentId.value);
+    // Re-read when it fires, since a second review of the same agent may already have taken the queued ask.
+    watch(
+        [inTurn, fixQueued],
+        ([live, queued]) => {
+            const id = agentId.value;
+            if (!live && queued && fixAfterTurn.value.has(id)) {
+                without(fixAfterTurn, id);
+                void askResolve();
+            }
+        },
+        { immediate: true },
+    );
+
     const discard = (): Promise<void> =>
         run(async () => {
             await discardAgent(agentId.value, reach.value);
@@ -323,6 +352,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         scratch,
         pending,
         blocked,
+        fixable,
         additions,
         deletions,
         codeStat,
@@ -343,6 +373,9 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         land,
         setAutoLand,
         askResolve,
+        fixConflicts,
+        cancelFix,
+        fixQueued,
         discard,
         includeScratch,
         deleteScratch,

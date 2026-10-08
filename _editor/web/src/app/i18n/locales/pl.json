@@ -62,26 +62,18 @@
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",
-            "and": " i",
-            "askingAgentToRebase": "Poproszenie agenta o rebase wymaga jego rozmowy",
-            "conflictStaysExactly": "Konflikt zostaje dokładnie taki, jaki jest.",
             "couldntReachWorkspacesCopy": "Nie udało się sięgnąć do kopii tego repozytorium w Twojej przestrzeni roboczej",
-            "filesCouldntApply": "Nie udało się zastosować {count} pliku | Nie udało się zastosować {count} plików | Nie udało się zastosować {count} plików",
-            "finishMergeYourselfIn": "Scalenie kończysz sam, w swojej przestrzeni roboczej.",
-            "holdingBack": ", wstrzymując {count}, który scaliłby się czysto | , wstrzymując {count}, które scaliłyby się czysto | , wstrzymując {count}, które scaliłyby się czysto",
             "landConflictMarkers": "Scal ze znacznikami konfliktu",
-            "landingConflictMarkersStill": "Scalenie ze znacznikami konfliktu wciąż jest stąd możliwe.",
-            "landsOnOwnTurn": "Scala się samo, gdy tura się kończy.",
-            "nothingAppliedNothingLost": "Nic nie zostało zastosowane i nic nie przepadło: praca agenta wciąż leży na jego gałęzi.",
             "openChanges": "Otwórz Zmiany",
-            "commitThereThenLand": "Zrób tam commit swoich zmian, potem scal ponownie: git nie przemerguje przez niezacommitowaną pracę.",
-            "resolvingAgentBringingBranch": "Rozwiązywanie: agent aktualizuje swoją gałąź",
-            "savesThenLands": "Zapisuje te ustawienia takie, jakie są, a potem scala pracę agenta.",
-            "saveThemAndLand": "Zapisz je i scal",
-            "showFile": "Pokaż plik",
             "watch": "Obserwuj",
-            "yourEditsAreThere": "plik z Twoimi własnymi zmianami jest w tamtej przestrzeni roboczej | {count} pliki z Twoimi własnymi zmianami są w tamtej przestrzeni roboczej | {count} plików z Twoimi własnymi zmianami jest w tamtej przestrzeni roboczej",
-            "yourEditsStillNeedYou": "Plik z Twoimi własnymi zmianami wciąż Cię potrzebuje. | {count} pliki z Twoimi własnymi zmianami wciąż Cię potrzebują. | {count} plików z Twoimi własnymi zmianami wciąż Cię potrzebuje."
+            "filesConflict": "{count} plik w konflikcie | {count} pliki w konflikcie | {count} plików w konflikcie",
+            "nothingLanded": "Nic jeszcze nie scalono.",
+            "show": "Pokaż",
+            "fixing": "Agent je naprawia, potem scali.",
+            "queued": "Naprawa ruszy po zakończeniu bieżącej tury.",
+            "saveSettingsAndLand": "Zapisz ustawienia i scal",
+            "commitThenLand": "Zrób commit, potem scal ponownie.",
+            "markersHint": "Scala wszystko teraz; konflikty kończysz ręcznie"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} nie ma już tego agenta: mógł zostać odrzucony albo jego id należy do innego sandboxa.",
@@ -120,37 +112,23 @@
             "you": "Ty"
         },
         "agentReviewPanel": {
-            "addsDependencies": "Dodaje {count} zależność | Dodaje {count} zależności | Dodaje {count} zależności",
-            "addsDependenciesHint": "Przeniesienie pracy doda je do Twojego projektu, a sandbox zainstaluje je w Twoim drzewie.",
             "agentHasntChangedAny": "Ten agent nie zmienił żadnych plików. Jego rozmowa jest w {remoteName}: otwórz ją tam, żeby o coś poprosić, a wszystko, co napisze, pokaże się tutaj.",
             "agentHasntChangedAny2": "Ten agent nie zmienił żadnych plików. Poproś go o coś na czacie: jego praca pojawi się tutaj, plik po pliku, do przejrzenia, zanim zostanie scalona.",
             "all": "Wszystkie ({count})",
             "anythingWritesNextShows": "{absorbedNote} Wszystko, co napisze dalej, pojawi się tutaj.",
             "awaitingLand": "Czeka na scalenie",
             "backToFileList": "Wróć do listy plików",
-            "blocked": "zablokowane ·",
-            "blocked2": "Zablokowane {count}",
             "clickToUnmark": "Kliknij, by odznaczyć",
             "code": "Kod {files}",
             "commitLine": "{author} · {when} · {count} plik | {author} · {when} · {count} pliki | {author} · {when} · {count} plików",
             "committedWorkNotDifference": "Zacommitowałeś tę pracę, więc nie jest już różnicą wobec main i przegląd powyżej nie może jej wypisać. Tutaj wciąż da się ją czytać, plik po pliku, dokładnie tak, jak napisał ją agent.",
             "couldntReadAgentsChanges": "Nie udało się odczytać zmian tego agenta",
-            "everythingElseAppliedCarry": "Cała reszta się zastosowała. Te niosą znaczniki konfliktu w Twojej przestrzeni roboczej: rozwiąż je tam, jak przy każdym scaleniu.",
             "history": "historia",
             "in": "W",
             "inHistory": "W historii {count}",
-            "landedWithFiles": "Scalone, {count} plik do dokończenia | Scalone, {count} pliki do dokończenia | Scalone, {count} plików do dokończenia",
-            "leftCopiesElsewhere": "Ta rozmowa zostawiła {count} kopię na własnej gałęzi | Ta rozmowa zostawiła {count} kopie na własnych gałęziach | Ta rozmowa zostawiła {count} kopii na własnych gałęziach",
-            "worksOnBranchesOfItsOwn": "Ta rozmowa pracuje na {count} własnej gałęzi | Ta rozmowa pracuje na {count} własnych gałęziach | Ta rozmowa pracuje na {count} własnych gałęziach",
-            "strayCarriedHint": "Każda tura kopiuje to, co tam zatwierdzi, na własną gałąź tej rozmowy, więc widać to tutaj i Land to przeniesie.",
-            "strayStrandedHint": "Tutaj widać własną gałąź tej rozmowy. Zatwierdzeń z gałęzi oznaczonej niżej nie udało się na nią skopiować, więc Land ich nie przeniesie.",
-            "strayNotCarried": "nieprzeniesione",
-            "strayUncommitted": "niezatwierdzone zmiany, przeniesione dopiero po zatwierdzeniu",
-            "manifestAdds": "dodaje {names}",
             "markReviewed": "Oznacz przejrzane",
             "markReviewed2": "Oznacz {label} jako przejrzane",
             "nextFile": "Następny plik",
-            "noBranchAtAll": "żadnej gałęzi",
             "notLanded": "niescalone",
             "notLanded2": "Niescalone {count}",
             "openDiffInWorkspace": "Otwórz ten diff w edytorze przestrzeni roboczej",
@@ -168,7 +146,16 @@
             "yourHistory": "historii Twojego obszaru roboczego",
             "boxHistory": "historii sandboxa {name}",
             "absorbedNote": "Jedyny plik napisany przez tego agenta jest w {whose}, więc nic z niego nie różni się już od main. | Wszystkie {count} pliki napisane przez tego agenta są w {whose}, więc nic z nich nie różni się już od main. | Wszystkich {count} plików napisanych przez tego agenta jest w {whose}, więc nic z nich nie różni się już od main.",
-            "files": "plik | pliki | plików"
+            "files": "plik | pliki | plików",
+            "conflicts": "Konflikty {count}",
+            "conflictsHeading": "Konflikty",
+            "conflict": "Konflikt",
+            "markersLeft": "{count} plik ma znaczniki konfliktu do dokończenia. | {count} pliki mają znaczniki konfliktu do dokończenia. | {count} plików ma znaczniki konfliktu do dokończenia.",
+            "strandedWork": "Praca w {repos} nie jest na gałęzi agenta, więc nie zostanie scalona.",
+            "offBranch": "Poza gałęzią agenta",
+            "noBranch": "brak gałęzi",
+            "askAgent": "Poproś agenta",
+            "addsTo": "Dodaje {names} do {manifest}"
         },
         "agentScratchReport": {
             "byproduct": "log, zrzut albo kopia zapasowa",
@@ -206,7 +193,9 @@
             "keepWarm": "Utrzymaj pamięć podręczną ciepłą",
             "keepWarmHint": "Odczytuj jej zawartość przed wygaśnięciem, do {hours} h",
             "stopKeepingWarm": "Przestań utrzymywać pamięć podręczną",
-            "stopKeepingWarmHint": "Utrzymywana ciepła do {time}"
+            "stopKeepingWarmHint": "Utrzymywana ciepła do {time}",
+            "tryLandAgain": "Spróbuj scalić ponownie",
+            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły"
         },
         "agentStatus": {
             "approvalNeeded": "Potrzebna zgoda",
@@ -387,18 +376,13 @@
             "somethingPlayful": "Coś żartobliwego"
         },
         "conflictResolution": {
-            "appWroteThese": "Aplikacja zapisała je, gdy zmieniło się tam ustawienie; nikt nie edytował ich ręcznie.",
-            "binaryFilesNoAutomatic": "pliki binarne, których nie da się scalić automatycznie",
-            "changedInSettings": "zmienione na stronie Sandbox {pages}, jeszcze niezapisane",
-            "uncommittedEditsTo": "masz w nich niezacommitowane zmiany",
-            "workspaceMovedOnSince": "Twoja przestrzeń robocza ruszyła do przodu, odkąd agent odbił gałąź",
             "rowTip": {
                 "diverged": {
-                    "note": "Agent może zrobić rebase",
-                    "title": "Workspace się zmienił"
+                    "note": "Agent może to naprawić",
+                    "title": "Zmieniony u Ciebie"
                 },
                 "workspace": {
-                    "note": "Commit lub stash",
+                    "note": "Najpierw commit",
                     "title": "Twoje zmiany"
                 },
                 "binary": {
@@ -406,15 +390,17 @@
                     "title": "Plik binarny"
                 }
             },
-            "mark": {
-                "binary": "binarny",
-                "diverged": "przesunięty",
-                "workspace": "Twój"
+            "cause": {
+                "diverged": "Zmieniły się w Twojej przestrzeni roboczej po starcie agenta.",
+                "binary": "Plików binarnych nie da się scalić automatycznie.",
+                "workspace": "Masz w nich niezacommitowane zmiany.",
+                "settings": "Ustawienia zmienione na stronie {pages} nie są jeszcze zapisane."
             },
-            "fix": {
-                "binary": "Agent może odtworzyć je na podstawie bieżącego pliku albo wybrać jedną ze stron.",
-                "diverged": "Agent może zrobić na nim rebase i sam to scalić.",
-                "workspace": "Tylko Ty możesz to odblokować: git nie scali przez nieprzygotowaną pracę, a kopia agenta jej nie widzi."
+            "causeCount": {
+                "diverged": "{count} zmieniony u Ciebie | {count} zmienione u Ciebie | {count} zmienionych u Ciebie",
+                "binary": "{count} binarny | {count} binarne | {count} binarnych",
+                "workspace": "{count} z Twoimi zmianami | {count} z Twoimi zmianami | {count} z Twoimi zmianami",
+                "settings": "{count} niezapisane ustawienie | {count} niezapisane ustawienia | {count} niezapisanych ustawień"
             }
         },
         "heldWakeCard": {
@@ -666,7 +652,6 @@
             "stopWatching": "Przestań obserwować",
             "filterByMessages": "Filtruj po swoich wiadomościach lub id…",
             "openIn": "Otwórz w",
-            "turnRunning": "Tura trwa",
             "undoable": "Można cofnąć",
             "waitAgentTurnTo": "Poczekaj, aż tura agenta się skończy",
             "agentTitle": "Tytuł agenta",
@@ -763,6 +748,12 @@
         },
         "useAgentsRegistry": {
             "couldntReadArchive": "Nie udało się odczytać archiwum."
+        },
+        "agentLandPress": {
+            "fix": "Napraw {count} konflikt | Napraw {count} konflikty | Napraw {count} konfliktów",
+            "fixHint": "Agent aktualizuje swoją gałąź, potem scala",
+            "fixing": "Naprawia…",
+            "fixQueued": "Naprawa w kolejce"
         }
     },
     "app": {

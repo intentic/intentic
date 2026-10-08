@@ -87,6 +87,32 @@ export const revealConversation = (conversation: Conversation): void => {
     }
 };
 
+// Work an agent left off its own branch (a copy on another branch, or on none) never lands. The ask goes into that
+// agent's composer rather than straight to it: a turn may be running, and the reader decides when it goes.
+export interface StrayCopy {
+    readonly repo: string;
+    readonly branch?: string | undefined;
+    readonly uncommitted?: boolean | undefined;
+}
+export const strayPrompt = (strays: readonly StrayCopy[]): string =>
+    [
+        `Some of your work is not on your own branch, so landing leaves it out:`,
+        ...strays.map(
+            (stray) =>
+                `- \`${stray.repo}\`: ${stray.branch === undefined ? `on no branch (detached HEAD)` : `on branch \`${stray.branch}\``}${stray.uncommitted === true ? `, with uncommitted changes` : ``}`,
+        ),
+        `Commit anything uncommitted there, then bring those commits onto the branch of your own worktree, so the next land carries them.`,
+    ].join(`\n`);
+export const draftStrayAsk = (id: string, strays: readonly StrayCopy[]): void => {
+    const conversation = openConversation(id);
+    if (conversation === undefined) {
+        return;
+    }
+    conversation.draft.value = strayPrompt(strays);
+    summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
+    revealConversation(conversation);
+};
+
 // The open conversation with this id, or none; exported for the one caller that needs it before a conversation exists
 // (sessionSuggestion.ts), so it derives the same id rather than minting a second daemon session.
 export const openConversation = (id: string): Conversation | undefined =>

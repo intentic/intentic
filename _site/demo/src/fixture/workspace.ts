@@ -121,8 +121,15 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
                 { path: `src/db/schema.ts`, status: `modified`, additions: 6, deletions: 5, code: { additions: 5, deletions: 5 }, landed: false },
             ],
             modules: [{ dir: ``, name: `@acme/api` }],
+            // What landing takes on: the review's one quiet line per manifest.
+            addedDependencies: [{ path: `package.json`, added: [`jose`] }],
         },
     ],
+};
+
+// A copy the agent left on no branch, whose work could not be carried onto its own: what no land reaches.
+const ELSEWHERE: Record<string, AgentChanges[`elsewhere`]> = {
+    [CONFLICT_AGENT_ID]: [{ repo: `web`, carried: false, uncommitted: true }],
 };
 
 // `diverged` needs a rebase; `workspace` is the owner's uncommitted edit, which no rebase reaches.
@@ -176,7 +183,8 @@ export const agentChanges = (agentId: string): AgentChanges => {
         }
     }
     // Every row stays listed; nothing here is ever absorbed into the tree's history.
-    return { repos, absorbed: 0, ...(conflicts === undefined ? {} : { conflicts }) };
+    const elsewhere = ELSEWHERE[agentId];
+    return { repos, absorbed: 0, ...(conflicts === undefined ? {} : { conflicts }), ...(elsewhere === undefined ? {} : { elsewhere }) };
 };
 
 // Delta becomes the tree's uncommitted work, attributed to the agent. An agent with a recorded conflict refuses

@@ -27,12 +27,14 @@ const t = useT();
 // The land press in the audience's own word, as the card beside this menu says it.
 const words = useVocabulary();
 
-const { changes, agentId, phone, renameable, sessionName } = defineProps<{
+const { changes, agentId, phone, retryLand = false, renameable, sessionName } = defineProps<{
     agentId: string;
     // AgentDetail's one useAgentChanges instance; a second one here would desync the panel's busy/error state.
     changes: ReturnType<typeof useAgentChanges>;
     // The phone, whose header row dropped Land and the session chip: they lead this menu.
     phone: boolean;
+    // A refused land turned the header's press into the fix, so landing again is offered here instead.
+    retryLand?: boolean;
     // Whether this agent can be renamed at all (a local, named one).
     renameable: boolean;
     // The agent's branch, the session's pasteable name; absent for a draft.
@@ -158,7 +160,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <AgentReactions :agent-id="agentId" :reactions="marked.reactions" :sandbox-id="marked.sandboxId" />
         </div>
         <button
-            v-if="phone && (away === undefined || !away.offerReland) && canShip"
+            v-if="(phone || retryLand) && (away === undefined || !away.offerReland) && canShip"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || changes.pending.value.length === 0"
@@ -166,16 +168,18 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         >
             <Icon name="check" class="mt-0.5 text-xs text-success" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ words.land }}</span>
+                <span class="text-sm text-content md:text-xs">{{ retryLand ? t(`agents.agentSessionMenu.tryLandAgain`) : words.land }}</span>
                 <span class="text-2xs text-subtle">
                     {{
                         writing
                             ? t(`agents.agentSessionMenu.agentStillWritingYoull`)
                             : changes.pending.value.length === 0
                               ? t(`agents.agentSessionMenu.alreadyInWorkspace`)
-                              : streaming
-                                ? t(`agents.agentSessionMenu.appliesWhatAgentWritten`)
-                                : t(`agents.agentSessionMenu.appliesChangeSTo`, { count: changes.pending.value.length })
+                              : retryLand
+                                ? t(`agents.agentSessionMenu.landsIfConflictsGone`)
+                                : streaming
+                                  ? t(`agents.agentSessionMenu.appliesWhatAgentWritten`)
+                                  : t(`agents.agentSessionMenu.appliesChangeSTo`, { count: changes.pending.value.length })
                     }}
                 </span>
             </span>

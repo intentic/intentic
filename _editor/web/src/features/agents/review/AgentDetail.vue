@@ -280,6 +280,17 @@ const { canDrive, canShip } = useRole();
 // under the review on a phone, where the header's width is the title's and the thumb is at the bottom of the screen.
 const landPending = computed(() => reviewable.value && changes.pending.value.length > 0 && (canShip.value || canDrive.value));
 const landOffered = computed(() => !mobile.value && landPending.value);
+// A refused land the agent can clear turns the press into the fix: landing again would only be refused again, so the
+// retry moves to the session menu. Local only, since the ask is a turn in this sandbox's conversation.
+const fixPress = computed(() =>
+    !remote.value && changes.fixable.value > 0
+        ? {
+              count: changes.fixable.value,
+              state: changes.asked.value ? (`working` as const) : changes.fixQueued.value ? (`queued` as const) : (`ready` as const),
+              busy: changes.actionBusy.value,
+          }
+        : undefined,
+);
 // `ready` says "ready to land", which the button beside it says in a stronger voice: the press IS the status, and two
 // controls 60px apart stating one fact is what makes a header read as clutter. Every other status keeps its words —
 // running, failed, conflict are things no button here says.
@@ -508,8 +519,10 @@ const confirmHandOver = async (): Promise<void> => {
                     :requesting="requestingLand"
                     :land-hint="landHint"
                     :request-hint="requestLandHint"
+                    :fix="fixPress"
                     @land="pressLand"
                     @request="requestLand"
+                    @fix="changes.fixConflicts()"
                 />
                 <button
                     v-if="sessionMenuShown"
@@ -585,8 +598,10 @@ const confirmHandOver = async (): Promise<void> => {
                 :requesting="requestingLand"
                 :land-hint="landHint"
                 :request-hint="requestLandHint"
+                :fix="fixPress"
                 @land="pressLand"
                 @request="requestLand"
+                @fix="changes.fixConflicts()"
             />
         </div>
 
@@ -607,6 +622,7 @@ const confirmHandOver = async (): Promise<void> => {
                 :changes="changes"
                 :streaming="streaming"
                 :phone="mobile"
+                :retry-land="fixPress !== undefined"
                 :renameable="localOnly && !unnamed"
                 :session-name="fleetAgent?.branch"
                 @selected="closeMenu"

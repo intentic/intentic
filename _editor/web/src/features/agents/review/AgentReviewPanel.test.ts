@@ -1,11 +1,11 @@
 // jsdom because the subject is the file list: a land conflict used to be a paragraph naming a few paths above
-// rows that all looked alike, forcing the reader to match strings by eye. The fix (a mark per blocked row, a
-// count per heading, a narrowing filter) is entirely in what renders, so only rendering can pin it.
+// rows that all looked alike, forcing the reader to match strings by eye. The fix (conflicted rows pinned above every
+// repo, a glyph per row, a narrowing filter) is entirely in what renders, so only rendering can pin it.
 import "@intentic/testing/dom";
 import type { WorkspaceModule, AgentChanges, AgentHistory } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
-import { reasonCopy } from "./conflictResolution";
+import { CONFLICT_ICON } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
@@ -147,7 +147,19 @@ const packageHeading = (el: HTMLElement, name: string): HTMLElement =>
 const filters = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`button`)]
         .map((button) => button.textContent?.trim() ?? ``)
-        .filter((label) => /^(All|Blocked|Code|Tests|Not landed|In history) \d+$/.test(label));
+        .filter((label) => /^(All|Conflicts|Code|Tests|Not landed|In history) \d+$/.test(label));
+const press = async (el: HTMLElement, label: string): Promise<void> => {
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label)!.click();
+    await nextTick();
+    await nextTick();
+};
+// A repo or pinned group's heading, by the words it starts with.
+const groupHeading = (el: HTMLElement, title: string): HTMLElement =>
+    [...el.querySelectorAll<HTMLElement>(`[class*="group/head"] > button`)].find((button) =>
+        button.textContent?.trim().toLowerCase().startsWith(title.toLowerCase()),
+    )!;
+// The diff's own bar: what the open file is, and what it is marked as.
+const diffBar = (el: HTMLElement): string => el.querySelector(`section > div`)?.textContent ?? ``;
 
 // An empty list is two opposite facts, and the panel must pick the right sentence: committed-away work reads the
 // same as writing nothing, except for `absorbed`.
@@ -211,7 +223,7 @@ it(`shows work the user has committed, under the commit that carries it`, async 
     // Panel opens standing in the committed work; `All 0` isn't offered over nothing left to be all of, so with one
     // body of work there's no filter, just a plain count.
     expect(filters(el)).toEqual([]);
-    expect(el.textContent).toContain(`2 files`);
+    expect(el.textContent?.replace(/\s+/g, ` `)).toContain(`2 files`);
     expect(el.textContent).not.toContain(`hasn't changed any files`);
     // The last-resort sentence is for when commits can't be found; here they were, so it's absent.
     expect(el.textContent).not.toContain(`nothing of it differs from main`);
@@ -288,34 +300,46 @@ it(`says how much of the work no commit here accounts for`, async () => {
     expect(document.body.textContent).toContain(`2 more files are in your history without a commit here accounting for them`);
 });
 
-it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {
+it(`marks each conflicted row with one glyph, and leaves the rest of the review alone`, async () => {
     const el = await mount();
-    // Two causes, two marks, worded from the report's own module, so a row can't say something the report doesn't.
-    expect(rowFor(el, `src/config.ts`).textContent).toContain(reasonCopy().workspace.mark);
-    expect(rowFor(el, `src/config.ts`).querySelector(`[data-icon="${reasonCopy().workspace.icon}"]`)).not.toBeNull();
-    expect(rowFor(el, `assets/logo.png`).textContent).toContain(reasonCopy().binary.mark);
-    expect(rowFor(el, `assets/logo.png`).querySelector(`[data-icon="${reasonCopy().binary.icon}"]`)).not.toBeNull();
-    // Unlanded isn't blocked: an atomic refusal leaves every row unlanded either way.
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().workspace.mark);
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().binary.mark);
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().diverged.mark);
+    // One glyph for every cause: the cause is the hover's, and the width is the name's.
+    for (const path of [`src/config.ts`, `assets/logo.png`]) {
+        expect(rowFor(el, path).querySelector(`[data-icon="${CONFLICT_ICON}"]`)).not.toBeNull();
+        expect(rowFor(el, path).querySelector(`[aria-label="Conflict"]`)).not.toBeNull();
+    }
+    // Unlanded isn't conflicted: an atomic refusal leaves every row unlanded either way.
+    expect(rowFor(el, `src/auth/session.ts`).querySelector(`[data-icon="${CONFLICT_ICON}"]`)).toBeNull();
 });
 
-it(`counts the blockers on the repo heading, so a collapsed group cannot hide one`, async () => {
+// Spread through the packages by size, the conflicted rows were the hardest ones on the page to find.
+it(`pins the conflicted rows above every repo, and opens the first of them`, async () => {
     const el = await mount();
-    const heading = (repo: string): HTMLElement =>
-        [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim().toLowerCase().startsWith(repo))!;
-    const root = heading(`root`);
-    const docs = heading(`docs`);
-    expect(root.querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
-    expect(docs.querySelector(`[data-icon="exclamation-triangle"]`)).toBeNull();
+    expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `session.ts`, `session.test.ts`, `README.md`]);
+    expect(groupHeading(el, `Conflicts`).querySelector(`[data-icon="${CONFLICT_ICON}"]`)).not.toBeNull();
+    // Pinned out of their repo, so its heading has nothing left to warn about.
+    expect(groupHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).toBeNull();
+    expect(diffBar(el)).toContain(`config.ts`);
+    expect(diffBar(el)).toContain(`Conflict`);
+});
+
+// Under the Conflicts filter every row is one, so nothing is pinned and the repo heading counts them instead: a
+// collapsed group cannot hide one.
+it(`counts the conflicts on the repo heading under the Conflicts filter`, async () => {
+    const el = await mount();
+    await press(el, `Conflicts 2`);
+    expect(groupHeading(el, `Conflicts`)).toBeUndefined();
+    groupHeading(el, `root`).click();
+    await nextTick();
+    expect(rowNames(el)).toEqual([]);
+    expect(groupHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
+    expect(groupHeading(el, `root`).textContent).toContain(`2`);
 });
 
 // The regression: the control used to hide entirely unless the unlanded set was a proper subset, so the one
 // state where narrowing thirty files matters most had no control at all.
-it(`offers Blocked first and keeps the control alive when a refusal left nothing landed`, async () => {
+it(`offers Conflicts first and keeps the control alive when a refusal left nothing landed`, async () => {
     const el = await mount();
-    expect(filters(el)).toEqual([`All 5`, `Blocked 2`, `Code 4`, `Tests 1`]);
+    expect(filters(el)).toEqual([`All 5`, `Conflicts 2`, `Code 4`, `Tests 1`]);
 });
 
 // A mark every row wears distinguishes nothing. Until a land has actually split the review, "not landed" is true of
@@ -343,17 +367,18 @@ it(`points at what is still unlanded only once part of the review has landed`, a
         ),
     };
     const mixed = await mount([], split);
-    // The two unlanded rows that aren't blocked; a blocked row wears its cause instead, which is the sharper fact.
+    // The two unlanded rows that aren't conflicted; a conflicted row wears its glyph instead, the sharper fact.
     expect(dots(mixed)).toHaveLength(2);
-    // The open file is one of them, so the diff's own bar carries the same mark its row does.
-    expect(mixed.textContent).toContain(`not landed`);
+    // Opened, one of them carries the same mark onto the diff's own bar.
+    rowFor(mixed, `src/auth/session.ts`).querySelector(`button`)!.click();
+    await nextTick();
+    expect(diffBar(mixed)).toContain(`not landed`);
     expect(filters(mixed)).toContain(`Not landed 4`);
 });
 
-it(`narrows to exactly the blocked files`, async () => {
+it(`narrows to exactly the conflicted files`, async () => {
     const el = await mount();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Blocked 2`)!.click();
-    await nextTick();
+    await press(el, `Conflicts 2`);
     expect(rows(el).map((row) => row.textContent?.match(/config\.ts|logo\.png|session\.ts|README\.md/)?.[0])).toEqual([`config.ts`, `logo.png`]);
 });
 
@@ -372,25 +397,20 @@ it(`groups by the packages of the agent's own tree, not the workspace's`, async 
 // review. Pins what disappears, what must not, and that the keyboard can't walk back into a fold.
 it(`folds one package's rows away and leaves the rest of the review standing`, async () => {
     const el = await mount(MODULES);
-    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`]);
+    expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `session.ts`, `session.test.ts`, `README.md`]);
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
     expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `README.md`]);
     // Same control both ways: a fold with no way back is a file hidden for good.
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
-    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`]);
+    expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `session.ts`, `session.test.ts`, `README.md`]);
 });
 
-it(`keeps a folded package saying how big it is and how much of it refused`, async () => {
+it(`keeps a folded package saying how big it is`, async () => {
     const el = await mount(MODULES);
-    // The bucket of files no package claims: here, both blocked ones.
-    const loose = packageHeading(el, `root`);
-    loose.click();
+    packageHeading(el, `@shop/auth`).click();
     await nextTick();
-    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `README.md`]);
-    expect(packageHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
-    expect(packageHeading(el, `root`).textContent).toContain(`2`);
     // What a folded heading's size means: the reading its rows were drawing (code-only, already counted by the
     // daemon), not a pending recount.
     expect(packageHeading(el, `@shop/auth`).textContent).toContain(`+9`);
@@ -400,20 +420,21 @@ it(`keeps a folded package saying how big it is and how much of it refused`, asy
     toggleShowComments();
     await nextTick();
     expect(packageHeading(el, `@shop/auth`).textContent).toContain(`+20`);
-    expect(packageHeading(el, `root`).textContent).toContain(`+2`);
 });
 
 it(`steps past a folded package instead of landing inside it`, async () => {
     const el = await mount(MODULES);
+    rowFor(el, `src/auth/session.ts`).querySelector(`button`)!.click();
+    await nextTick();
     packageHeading(el, `@shop/auth`).click();
     await nextTick();
     // Folding means "give back the space", not "close the open file": the diff stays on session.ts.
-    expect(el.querySelector(`section > div`)?.textContent).toContain(`session.ts`);
+    expect(diffBar(el)).toContain(`session.ts`);
     window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `j` }));
     await nextTick();
     await nextTick();
-    // The next row down the list, not the folded package's second file.
-    expect(el.querySelector(`section > div`)?.textContent).toContain(`config.ts`);
+    // A row still on screen, not the folded package's second file.
+    expect(diffBar(el)).toContain(`config.ts`);
 });
 
 // Every number a row shows arrives already counted with the list (git/code-counts.ts), so size order is ordering
@@ -421,8 +442,9 @@ it(`steps past a folded package instead of landing inside it`, async () => {
 it(`orders on the code-only reading the rows are showing, and holds it through a click`, async () => {
     largestFirst.value = true;
     const el = await mount();
-    // Git would rank session.ts first; the reading the badges draw puts it below the files it dwarfs.
-    const order = [`session.test.ts`, `config.ts`, `session.ts`, `logo.png`, `README.md`];
+    // Git would rank session.ts first; the reading the badges draw puts it below the file it dwarfs. The conflicts
+    // stay pinned above every repo whatever their size.
+    const order = [`config.ts`, `logo.png`, `session.test.ts`, `session.ts`, `README.md`];
     expect(rowNames(el)).toEqual(order);
     expect(rowFor(el, `src/auth/session.ts`).textContent).toContain(`+1`);
 
@@ -432,15 +454,15 @@ it(`orders on the code-only reading the rows are showing, and holds it through a
     expect(rowFor(el, `src/auth/session.ts`).textContent).toContain(`+1`);
 });
 
-it(`lands a path clicked in the report on its row, and says so in the diff header`, async () => {
+// The bar no longer lists paths; its Show narrows the list to them and opens the first.
+it(`narrows to the conflicts from the bar's Show, and opens one`, async () => {
     const el = await mount();
-    // The report prints the repo-qualified path; the row it names is where the diff header must land.
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `assets/logo.png`)!.click();
+    rowFor(el, `src/auth/session.ts`).querySelector(`button`)!.click();
     await nextTick();
-    await nextTick();
-    const header = el.querySelector(`section > div`)!;
-    expect(header.textContent).toContain(`logo.png`);
-    expect(header.textContent).toContain(reasonCopy().binary.mark);
+    await press(el, `Show`);
+    expect(rowNames(el)).toEqual([`config.ts`, `logo.png`]);
+    expect(diffBar(el)).toContain(`config.ts`);
+    expect(diffBar(el)).toContain(`Conflict`);
 });
 
 // An empty review that answers from refs instead of a daemon: which read state the panel is in is the whole subject
@@ -469,6 +491,10 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         land: jest.fn(),
         setAutoLand: jest.fn(),
         askResolve: jest.fn(),
+        fixConflicts: jest.fn(),
+        cancelFix: jest.fn(),
+        fixQueued: ref(false),
+        fixable: ref(0),
         discard: jest.fn(),
         includeScratch: jest.fn(),
         deleteScratch: jest.fn(),
@@ -536,14 +562,15 @@ it(`keeps an answer on screen while the daemon is asked again`, async () => {
     expect(el.querySelector(`[role="status"]`)).toBeNull();
 });
 
-// The rows this panel lists are read off a BRANCH. When the conversation left its checkout standing somewhere else,
-// they are that branch as it was last left, and everything written since went elsewhere — which no row can show,
-// because a repository whose branch holds nothing produces no row at all. Said here or not at all.
-it(`says when the conversation left a checkout standing on a branch of its own`, async () => {
+// The rows this panel lists are read off a BRANCH. When the conversation left work on a checkout standing somewhere
+// else and could not copy it over, no land reaches it, and no row can show it: a repository whose branch holds nothing
+// produces no row at all. Said here as what it means, the branches left to the hover.
+it(`says when work the conversation left elsewhere won't land, and nothing about copies that were carried`, async () => {
     const review = reading({ fetching: false, loaded: true });
-    (review.elsewhere as unknown as Ref<{ repo: string; branch?: string }[]>).value = [
+    (review.elsewhere as unknown as Ref<{ repo: string; branch?: string; carried?: boolean }[]>).value = [
         { repo: `registry`, branch: `ci/extension-admission` },
         { repo: `intent` },
+        { repo: `site`, branch: `docs/tidy`, carried: true },
     ];
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -555,19 +582,18 @@ it(`says when the conversation left a checkout standing on a branch of its own`,
     app.mount(el);
     await nextTick();
 
-    // Counted, so one stray reads differently from several.
-    expect(el.textContent).toContain(`left 2 copies on branches of their own`);
-    // Each repository beside the branch its copy stands on, since "somewhere else" is not an answer.
-    expect(el.textContent).toContain(`registry → ci/extension-admission`);
-    // Standing on no branch at all has no name to print, and says so rather than printing nothing.
-    expect(el.textContent).toContain(`intent → no branch at all`);
+    expect(el.textContent).toContain(`Work in registry, intent isn't on the agent's branch, so it won't land.`);
+    expect(el.textContent).not.toContain(`site`);
+    expect(el.textContent).toContain(`Ask the agent`);
+    // The git of it is the hover's, not the line's.
+    expect(el.textContent).not.toContain(`ci/extension-admission`);
 });
 
 // Agents install freely in their own copy, so the review is where a person sees what the project takes on: one line
 // per manifest that gained a name, labelled the way the rows are, and nothing at all when none did.
 it(`names the dependencies the work adds, per manifest, and says nothing when it adds none`, async () => {
     const quiet = await mount();
-    expect(quiet.textContent).not.toContain(`dependenc`);
+    expect(quiet.textContent).not.toContain(`Adds `);
 
     app?.unmount();
     app = undefined;
@@ -585,7 +611,6 @@ it(`names the dependencies the work adds, per manifest, and says nothing when it
     };
     const el = await mount([], adding);
 
-    expect(el.textContent).toContain(`Adds 3 dependencies`);
-    expect(el.textContent).toContain(`video/package.json adds @remotion/cli, react, remotion`);
-    expect(el.textContent).toContain(`docs/package.json adds react`);
+    expect(el.textContent).toContain(`Adds @remotion/cli, react, remotion to video/package.json`);
+    expect(el.textContent).toContain(`Adds react to docs/package.json`);
 });

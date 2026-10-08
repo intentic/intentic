@@ -48,24 +48,18 @@
         },
         "agentConflictReport": {
             "agentWriting": "L'agent écrit",
-            "and": " et",
-            "askingAgentToRebase": "Demander à l'agent de rebaser nécessite sa conversation",
-            "conflictStaysExactly": "Le conflit reste exactement tel quel.",
             "couldntReachWorkspacesCopy": "Impossible d'atteindre la copie de ce dépôt dans votre espace de travail",
-            "filesCouldntApply": "{count} fichier n'a pas pu être appliqué | {count} fichiers n'ont pas pu être appliqués",
-            "finishMergeYourselfIn": "Vous terminez la fusion vous-même, dans votre espace de travail.",
-            "holdingBack": ", en retenant {count} qui s'intégrerait proprement | , en retenant {count} qui s'intégreraient tous proprement",
             "landConflictMarkers": "Intégrer avec les marques de conflit",
-            "landingConflictMarkersStill": "Intégrer avec les marques de conflit reste possible d'ici.",
-            "landsOnOwnTurn": "Il s'intègre tout seul à la fin du tour.",
-            "nothingAppliedNothingLost": "Rien n'a été appliqué et rien n'a été perdu : le travail de l'agent est toujours sur sa branche.",
             "openChanges": "Ouvrir Changements",
-            "commitThereThenLand": "Committez-y vos modifications, puis réintégrez : git ne peut pas fusionner à travers du travail non committé.",
-            "resolvingAgentBringingBranch": "Résolution : l'agent met sa branche à jour",
-            "showFile": "Voir le fichier",
             "watch": "Suivre",
-            "yourEditsAreThere": "le fichier avec vos propres modifications est dans cet espace de travail | les {count} fichiers avec vos propres modifications sont dans cet espace de travail",
-            "yourEditsStillNeedYou": "Le fichier avec vos propres modifications a encore besoin de vous. | Les {count} fichiers avec vos propres modifications ont encore besoin de vous."
+            "filesConflict": "{count} fichier en conflit | {count} fichiers en conflit",
+            "nothingLanded": "Rien n'est encore intégré.",
+            "show": "Voir",
+            "fixing": "L'agent les résout, puis intègre.",
+            "queued": "La résolution démarre à la fin du tour en cours.",
+            "saveSettingsAndLand": "Enregistrer les réglages et intégrer",
+            "commitThenLand": "Committez, puis intégrez à nouveau.",
+            "markersHint": "Intègre tout maintenant ; vous finissez les conflits à la main"
         },
         "agentDetail": {
             "asksOnTheirBoard": "Demande sur son tableau",
@@ -99,31 +93,22 @@
             "you": "vous"
         },
         "agentReviewPanel": {
-            "addsDependencies": "Ajoute {count} dépendance | Ajoute {count} dépendances",
-            "addsDependenciesHint": "Intégrer le travail les ajoute à votre projet, et le sandbox les installe dans votre arborescence.",
             "agentHasntChangedAny": "Cet agent n'a modifié aucun fichier. Sa conversation est dans {remoteName} : ouvrez-la là-bas pour lui demander quelque chose, et tout ce qu'il écrit apparaît ici.",
             "agentHasntChangedAny2": "Cet agent n'a modifié aucun fichier. Demandez-lui quelque chose dans le chat : son travail apparaît ici, fichier par fichier, à relire avant qu'il ne s'intègre.",
             "all": "Tous les {count}",
             "anythingWritesNextShows": "{absorbedNote} Tout ce qu'il écrira ensuite apparaîtra ici.",
             "awaitingLand": "Attend l'intégration",
             "backToFileList": "Retour à la liste des fichiers",
-            "blocked": "bloqué ·",
-            "blocked2": "Bloqués {count}",
             "clickToUnmark": "Cliquer pour retirer",
             "commitLine": "{author} · {when} · {count} fichier | {author} · {when} · {count} fichiers",
             "committedWorkNotDifference": "Vous avez committé ce travail : ce n'est donc plus une différence par rapport à main et la revue ci-dessus ne peut pas le lister. Il reste lisible ici, fichier par fichier, exactement tel que l'agent l'a écrit.",
             "couldntReadAgentsChanges": "Impossible de lire les changements de cet agent",
-            "everythingElseAppliedCarry": "Tout le reste s'est appliqué. Ceux-ci portent des marques de conflit dans votre espace de travail : résolvez-les là-bas, comme pour n'importe quelle fusion.",
             "history": "historique",
             "in": "Dans",
             "inHistory": "Dans l'historique {count}",
-            "landedWithFiles": "Intégré, avec {count} fichier à finir | Intégré, avec {count} fichiers à finir",
-            "leftCopiesElsewhere": "Cette conversation a laissé {count} copie sur une branche à elle | Cette conversation a laissé {count} copies sur des branches à elles",
-            "manifestAdds": "ajoute {names}",
             "markReviewed": "Marquer relu",
             "markReviewed2": "Marquer {label} comme relu",
             "nextFile": "Fichier suivant",
-            "noBranchAtAll": "aucune branche",
             "notLanded": "non intégré",
             "notLanded2": "Non intégrés {count}",
             "openDiffInWorkspace": "Ouvrir ce diff dans l'éditeur de l'espace de travail",
@@ -134,7 +119,16 @@
             "unaccounted": "{count} fichier de plus est dans votre historique sans qu'un commit ici en rende compte : ce contenu a atteint votre ligne principale autrement. | {count} fichiers de plus sont dans votre historique sans qu'un commit ici en rende compte : ce contenu a atteint votre ligne principale autrement.",
             "unlanded": "Non intégré",
             "wholeGroup": "Tout le groupe",
-            "yourCommit": "Votre commit"
+            "yourCommit": "Votre commit",
+            "conflicts": "Conflits {count}",
+            "conflictsHeading": "Conflits",
+            "conflict": "Conflit",
+            "markersLeft": "{count} fichier a des marques de conflit à finir. | {count} fichiers ont des marques de conflit à finir.",
+            "strandedWork": "Le travail dans {repos} n'est pas sur la branche de l'agent, il ne sera donc pas intégré.",
+            "offBranch": "Hors de la branche de l'agent",
+            "noBranch": "aucune branche",
+            "askAgent": "Demander à l'agent",
+            "addsTo": "Ajoute {names} à {manifest}"
         },
         "agentScratchReport": {
             "byproduct": "un journal, un vidage ou une sauvegarde",
@@ -172,7 +166,9 @@
             "keepWarm": "Garder le cache chaud",
             "keepWarmHint": "Relire son contexte en cache avant qu'il n'expire, jusqu'à {hours} h",
             "stopKeepingWarm": "Ne plus garder le cache chaud",
-            "stopKeepingWarmHint": "Gardé chaud jusqu'à {time}"
+            "stopKeepingWarmHint": "Gardé chaud jusqu'à {time}",
+            "tryLandAgain": "Réessayer l'intégration",
+            "landsIfConflictsGone": "Intègre si les conflits ont disparu"
         },
         "agentStatus": {
             "approvalNeeded": "Approbation nécessaire",
@@ -287,22 +283,31 @@
             "somethingPlayful": "Quelque chose de ludique"
         },
         "conflictResolution": {
-            "binaryFilesNoAutomatic": "des fichiers binaires, qui n'ont pas de fusion automatique",
-            "uncommittedEditsTo": "vous avez des modifications non committées sur ceux-ci",
-            "workspaceMovedOnSince": "votre espace de travail a avancé depuis que l'agent a créé sa branche",
             "rowTip": {
                 "diverged": {
-                    "note": "L'agent peut rebaser",
-                    "title": "Workspace modifié"
+                    "note": "L'agent peut le résoudre",
+                    "title": "Modifié dans votre workspace"
                 },
                 "workspace": {
-                    "note": "Commit ou stash",
+                    "note": "Committez d'abord",
                     "title": "Vos modifications"
                 },
                 "binary": {
                     "note": "Pas de fusion auto",
                     "title": "Fichier binaire"
                 }
+            },
+            "cause": {
+                "diverged": "Ils ont changé dans votre workspace après le début de l'agent.",
+                "binary": "Les fichiers binaires ne se fusionnent pas automatiquement.",
+                "workspace": "Vous y avez des modifications non commitées.",
+                "settings": "Les réglages modifiés sur la page {pages} ne sont pas encore enregistrés."
+            },
+            "causeCount": {
+                "diverged": "{count} modifié dans votre workspace | {count} modifiés dans votre workspace",
+                "binary": "{count} binaire | {count} binaires",
+                "workspace": "{count} avec vos modifications | {count} avec vos modifications",
+                "settings": "{count} réglage non enregistré | {count} réglages non enregistrés"
             }
         },
         "heldWakeCard": {
@@ -542,12 +547,17 @@
             "stopWatching": "Ne plus suivre",
             "filterByMessages": "Filtrer par vos messages ou un id…",
             "openIn": "Ouvrir dans",
-            "turnRunning": "Tour en cours",
             "undoable": "Annulable",
             "waitAgentTurnTo": "Attendre la fin du tour de l'agent",
             "agentTitle": "Titre de l'agent",
             "sessionName": "Nom de la session",
             "sendAgain": "Renvoyer"
+        },
+        "agentLandPress": {
+            "fix": "Résoudre {count} conflit | Résoudre {count} conflits",
+            "fixHint": "L'agent met sa branche à jour, puis intègre",
+            "fixing": "Résolution…",
+            "fixQueued": "Résolution prévue"
         }
     },
     "app": {

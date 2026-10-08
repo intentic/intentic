@@ -192,3 +192,52 @@ it("drops the ask the moment the press turns out to have started no turn", async
     expect(repaired.asked.value).toBe(false);
     expect(stub.said).toEqual([`Nothing is blocking this any more: it's ready to land.`]);
 });
+
+// A fix pressed while a turn runs used to be a disabled button with the reason in a tooltip. Now it waits: nothing is
+// said into the running turn, and the ask goes the moment that turn ends, unless it was taken back first.
+it("queues a fix pressed mid-turn and asks once the turn ends", async () => {
+    cards.value = new Map([[`queued-1`, { status: `running`, attention: none }]]);
+    const changes = useAgentChanges(ref(`queued-1`));
+    mocked(askAgentToResolve).mockClear();
+    mocked(askAgentToResolve).mockResolvedValue({ kind: `sent` });
+    await nextTick();
+
+    await changes.fixConflicts();
+    expect(changes.fixQueued.value).toBe(true);
+    expect(askAgentToResolve).not.toHaveBeenCalled();
+
+    cards.value = new Map([[`queued-1`, { status: `conflict`, attention: { ...none, conflict: true } }]]);
+    await nextTick();
+    await nextTick();
+    expect(changes.fixQueued.value).toBe(false);
+    expect(askAgentToResolve).toHaveBeenCalledTimes(1);
+});
+
+it("drops a queued fix that was cancelled before the turn ended", async () => {
+    cards.value = new Map([[`queued-2`, { status: `running`, attention: none }]]);
+    const changes = useAgentChanges(ref(`queued-2`));
+    mocked(askAgentToResolve).mockClear();
+    await nextTick();
+
+    await changes.fixConflicts();
+    changes.cancelFix();
+    expect(changes.fixQueued.value).toBe(false);
+
+    cards.value = new Map([[`queued-2`, { status: `conflict`, attention: { ...none, conflict: true } }]]);
+    await nextTick();
+    await nextTick();
+    expect(askAgentToResolve).not.toHaveBeenCalled();
+});
+
+// With no turn running there is nothing to wait for: the press is the ask.
+it("asks at once when no turn is running", async () => {
+    cards.value = new Map([[`queued-3`, { status: `conflict`, attention: { ...none, conflict: true } }]]);
+    const changes = useAgentChanges(ref(`queued-3`));
+    mocked(askAgentToResolve).mockClear();
+    mocked(askAgentToResolve).mockResolvedValue({ kind: `sent` });
+    await nextTick();
+
+    await changes.fixConflicts();
+    expect(changes.fixQueued.value).toBe(false);
+    expect(askAgentToResolve).toHaveBeenCalledTimes(1);
+});

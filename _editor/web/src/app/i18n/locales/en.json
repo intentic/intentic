@@ -62,26 +62,18 @@
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
-            "and": ", and",
-            "askingAgentToRebase": "Asking the agent to rebase needs its conversation",
-            "conflictStaysExactly": "The conflict stays exactly as it is.",
             "couldntReachWorkspacesCopy": "Couldn't reach your workspace's copy of this repo",
-            "filesCouldntApply": "{count} file couldn't be applied | {count} files couldn't be applied",
-            "finishMergeYourselfIn": "You finish the merge yourself, in your workspace.",
-            "holdingBack": ", holding back {count} that would land cleanly | , holding back {count} that would all land cleanly",
             "landConflictMarkers": "Land with conflict markers",
-            "landingConflictMarkersStill": "Landing with conflict markers still works from here.",
-            "landsOnOwnTurn": "It lands on its own when the turn ends.",
-            "nothingAppliedNothingLost": "Nothing was applied and nothing was lost: the agent's work is still on its branch.",
             "openChanges": "Open Changes",
-            "commitThereThenLand": "Commit your edits there, then land again: git cannot merge through uncommitted work.",
-            "resolvingAgentBringingBranch": "Resolving: the agent is bringing its branch up to date",
-            "savesThenLands": "Saves those settings as they are, then lands the agent's work.",
-            "saveThemAndLand": "Save them and land",
-            "showFile": "Show file",
             "watch": "Watch",
-            "yourEditsAreThere": "the file with your own edits is in that workspace | the {count} files with your own edits are in that workspace",
-            "yourEditsStillNeedYou": "The file with your own edits still needs you. | The {count} files with your own edits still need you."
+            "filesConflict": "{count} file conflicts | {count} files conflict",
+            "nothingLanded": "Nothing landed yet.",
+            "show": "Show",
+            "fixing": "The agent is fixing them, then lands.",
+            "queued": "The fix starts when the current turn ends.",
+            "saveSettingsAndLand": "Save settings and land",
+            "commitThenLand": "Commit, then land again.",
+            "markersHint": "Lands everything now; you finish the conflicts by hand"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} doesn't have this agent any more: it may have been discarded, or its id belongs to another sandbox.",
@@ -120,34 +112,20 @@
             "you": "you"
         },
         "agentReviewPanel": {
-            "addsDependencies": "Adds {count} dependency | Adds {count} dependencies",
-            "addsDependenciesHint": "Landing the work adds them to your project, and the sandbox installs them in your tree.",
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
             "agentHasntChangedAny2": "This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it lands.",
             "all": "All {count}",
             "anythingWritesNextShows": "{absorbedNote} Anything it writes next shows up here.",
             "awaitingLand": "Awaiting land",
             "backToFileList": "Back to the file list",
-            "blocked": "blocked ·",
-            "blocked2": "Blocked {count}",
             "clickToUnmark": "Click to unmark",
             "code": "Code {files}",
             "commitLine": "{author} · {when} · {count} file | {author} · {when} · {count} files",
             "committedWorkNotDifference": "You committed this work, so it is not a difference against main any more and the review above cannot list it. It is still readable here, file by file, exactly as the agent wrote it.",
             "couldntReadAgentsChanges": "Couldn't read this agent's changes",
-            "everythingElseAppliedCarry": "Everything else applied. These carry conflict markers in your workspace: resolve them there, as you would any merge.",
             "history": "history",
             "in": "In",
             "inHistory": "In history {count}",
-            "landedWithFiles": "Landed with {count} file to finish | Landed with {count} files to finish",
-            "leftCopiesElsewhere": "This conversation left {count} copy on a branch of its own | This conversation left {count} copies on branches of their own",
-            "worksOnBranchesOfItsOwn": "This conversation works on {count} branch of its own | This conversation works on {count} branches of its own",
-            "strayCarriedHint": "Each turn copies what it commits there onto this conversation's own branch, so it's listed here and Land carries it.",
-            "strayStrandedHint": "What's listed here is this conversation's own branch. Commits on a branch marked below couldn't be copied onto it, so Land won't carry them.",
-            "strayNotCarried": "not carried",
-            "strayUncommitted": "uncommitted changes, not carried until committed",
-            "noBranchAtAll": "no branch at all",
-            "manifestAdds": "adds {names}",
             "markReviewed": "Mark reviewed",
             "markReviewed2": "Mark {label} as reviewed",
             "nextFile": "Next file",
@@ -168,7 +146,16 @@
             "yourHistory": "your workspace's history",
             "boxHistory": "{name}'s history",
             "absorbedNote": "The one file this agent wrote is in {whose}, so nothing of it differs from main any more. | All {count} files this agent wrote are in {whose}, so nothing of it differs from main any more.",
-            "files": "file | files"
+            "files": "file | files",
+            "conflicts": "Conflicts {count}",
+            "conflictsHeading": "Conflicts",
+            "conflict": "Conflict",
+            "markersLeft": "{count} file has conflict markers to finish. | {count} files have conflict markers to finish.",
+            "strandedWork": "Work in {repos} isn't on the agent's branch, so it won't land.",
+            "offBranch": "Off the agent's branch",
+            "noBranch": "no branch",
+            "askAgent": "Ask the agent",
+            "addsTo": "Adds {names} to {manifest}"
         },
         "agentScratchReport": {
             "byproduct": "a log, dump or backup",
@@ -206,7 +193,9 @@
             "keepWarm": "Keep cache warm",
             "keepWarmHint": "Re-read its cached context before it expires, for up to {hours} h",
             "stopKeepingWarm": "Stop keeping cache warm",
-            "stopKeepingWarmHint": "Kept warm until {time}"
+            "stopKeepingWarmHint": "Kept warm until {time}",
+            "tryLandAgain": "Try landing again",
+            "landsIfConflictsGone": "Lands if the conflicts are gone"
         },
         "agentStatus": {
             "approvalNeeded": "Approval needed",
@@ -447,34 +436,31 @@
             "somethingPlayful": "Something playful"
         },
         "conflictResolution": {
-            "appWroteThese": "The app wrote these when a setting changed there; nobody edited them by hand.",
-            "binaryFilesNoAutomatic": "binary files, which have no automatic merge",
-            "changedInSettings": "changed on the Sandbox page {pages}, not saved yet",
-            "uncommittedEditsTo": "you have uncommitted edits to these",
-            "workspaceMovedOnSince": "your workspace moved on since the agent branched",
             "rowTip": {
                 "diverged": {
-                    "note": "Agent can rebase",
-                    "title": "Workspace moved"
+                    "note": "The agent can fix it",
+                    "title": "Changed in your workspace"
                 },
                 "workspace": {
-                    "note": "Commit or stash",
-                    "title": "Your edits"
+                    "note": "Commit them first",
+                    "title": "Your uncommitted edits"
                 },
                 "binary": {
                     "note": "No auto-merge",
                     "title": "Binary file"
                 }
             },
-            "mark": {
-                "binary": "binary",
-                "diverged": "moved",
-                "workspace": "yours"
+            "cause": {
+                "diverged": "They changed in your workspace after the agent started.",
+                "binary": "Binary files can't be merged automatically.",
+                "workspace": "You have uncommitted edits in them.",
+                "settings": "Settings changed on the {pages} page aren't saved yet."
             },
-            "fix": {
-                "binary": "The agent can re-create them against the current file, or pick a side.",
-                "diverged": "The agent can rebase onto it and merge these itself.",
-                "workspace": "Only you can clear this, git cannot merge through unstaged work, and the agent's checkout cannot see it."
+            "causeCount": {
+                "diverged": "{count} changed in your workspace | {count} changed in your workspace",
+                "binary": "{count} binary | {count} binary",
+                "workspace": "{count} has your uncommitted edits | {count} have your uncommitted edits",
+                "settings": "{count} unsaved setting | {count} unsaved settings"
             }
         },
         "heldWakeCard": {
@@ -666,7 +652,6 @@
             "stopWatching": "Stop watching",
             "filterByMessages": "Filter by your messages or id…",
             "openIn": "Open in",
-            "turnRunning": "Turn running",
             "undoable": "Can be undone",
             "waitAgentTurnTo": "Wait for the agent turn to finish",
             "agentTitle": "Agent title",
@@ -763,6 +748,12 @@
         },
         "useAgentsRegistry": {
             "couldntReadArchive": "Couldn't read the archive."
+        },
+        "agentLandPress": {
+            "fix": "Fix {count} conflict | Fix {count} conflicts",
+            "fixHint": "The agent updates its branch, then lands",
+            "fixing": "Fixing…",
+            "fixQueued": "Fix queued"
         }
     },
     "app": {
