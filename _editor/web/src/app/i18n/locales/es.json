@@ -501,7 +501,7 @@
             "stop": "Dejar de mantener caliente"
         },
         "statusBar": {
-            "label": "Estado del tablero",
+            "label": "Barra de estado",
             "close": "Cerrar {title}"
         },
         "cardSeal": {
@@ -3975,10 +3975,10 @@
     },
     "settings": {
         "appearance": {
-            "agents": {
-                "group": "Tablero de agentes",
+            "statusBar": {
+                "group": "Barra de estado",
                 "liveMetrics": "Métricas para geeks",
-                "liveMetricsHint": "CPU y memoria de cada agente y de todo el sandbox, en el tablero de agentes. Solo se mide mientras el tablero está abierto con esto activado."
+                "liveMetricsHint": "CPU, memoria y disco al final de la barra de estado, y la parte de cada agente en su tarjeta. No se mide nada mientras esto esté desactivado."
             },
             "changes": {
                 "diffOpen": "Dónde se abre un diff",
@@ -4636,6 +4636,10 @@
             "account": "Cuenta",
             "switchAccount": "Cambiar de cuenta",
             "new": "Nuevo"
+        },
+        "statusBar": {
+            "portsPublic": "Puerto {port} público | {count} puertos públicos",
+            "vpn": "VPN"
         }
     },
     "terminal": {

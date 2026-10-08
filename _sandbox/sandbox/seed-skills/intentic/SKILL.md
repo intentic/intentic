@@ -237,9 +237,14 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   back into its parent's checkout, as an in-process subagent's edits do, so the family lands once, with the parent.
   **Land** (in plain words, **Accept**) applies a conversation's delta to the main tree; a conflict card names the
   paths. Cards carry titles, reactions and a tint for the kind of work, never tags. With geek metrics
-  on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
+  on (Settings ▸ Appearance), the status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
+- **Status bar** (the foot of the desktop window): what the sandbox is running, not places. The terminal's toggle
+  (Ctrl+`, developers only), then chips that are there only while live: the live app while something answers,
+  the agents' open browsers (amber while one asks for help), the sandbox's desktop while a window is open, a port
+  open to the internet (amber), a connected VPN. Each chip opens its page. Nothing running means no chip: the
+  palette still reaches Browsers, the live app and the desktop.
 - **Pipelines** (`/ext/pipelines`, a rail tile shown once a GitHub or GitLab account is connected, counting the
   branches whose last commit fails): the workspace repositories' CI runs, each run's jobs drawn as a graph,
   with rerun, cancel and Fix. A failing main-line branch shows above the runs with the one fix agent on it and what

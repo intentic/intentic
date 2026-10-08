@@ -7,20 +7,25 @@ import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
 import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./statusBarState";
 
-// THE BOARD'S STATUS BAR: the sandbox's geek metrics at the board's foot, saying at rest how full the box is: only what
-// is read while the agents above it work.
+// THE STATUS BAR: one line at the foot of the window saying what the sandbox is running and how full it is. Its start is
+// the host's: the desktop shell puts its runtime chips there (shell/status-bar/), the terminal first. Its end is the
+// geek metrics, opt-in (Settings ▸ Appearance), whose segment opens their panel above the bar.
 //
-// The segment opens its panel above the bar, in the layout rather than over it, so the board moves up instead of being
-// covered, and nothing but the reader closes it again (its segment, its ×, or Escape inside it). It stays: its figures
-// are few and live, watched while the agents above them work. The reader sets its height on the seam above it, and both
-// are remembered (statusBarState.ts). Opaque, so a skin's backdrop does not show through. Absent while the metrics are
-// off (Settings ▸ Appearance).
+// The panel opens in the layout rather than over it, so the page moves up instead of being covered, and nothing but the
+// reader closes it again (its segment, its ×, or Escape inside it). It stays: its figures are few and live, watched
+// while the agents work. The reader sets its height on the seam above it, and both are remembered (statusBarState.ts).
+// Opaque, so a skin's backdrop does not show through.
+//
+// `persistent` is the desktop shell's: there the bar is always drawn, at one height, so no page jumps when a chip
+// arrives. Without it (the phone's Agents board, which has no shell bar) the bar is the metrics alone and is absent
+// while they are off.
 
 const t = useT();
 
 const props = defineProps<{
-    // Only the board reads them (useLiveMetrics), and only while the reader opted in.
+    // Read only while the reader opted in (useLiveMetrics).
     metrics?: SandboxMetrics | undefined;
+    persistent?: boolean;
 }>();
 
 const uid = useId();
@@ -28,6 +33,7 @@ const panelId = `${uid}-panel-metrics`;
 const headingId = `${uid}-heading-metrics`;
 const segmentId = `${uid}-segment-metrics`;
 
+const drawn = computed(() => props.persistent || props.metrics !== undefined);
 // Left open while the metrics are off, it stays open in memory, so it comes back as it was left.
 const open = computed(() => openPanel.value === `metrics` && props.metrics !== undefined);
 // The height the reader chose, drawn no taller than this window allows; the seam drags only within it too.
@@ -45,8 +51,14 @@ const close = (): void => {
 </script>
 
 <template>
-    <div v-if="metrics !== undefined" role="region" :aria-label="t(`agents.statusBar.label`)" class="flex shrink-0 flex-col border-t border-line bg-canvas text-2xs">
-        <div v-if="open" data-status-panel class="relative flex min-h-0" :style="{ height: `${drawnHeight}px` }">
+    <div
+        v-if="drawn"
+        role="region"
+        :aria-label="t(`agents.statusBar.label`)"
+        class="flex min-w-0 shrink-0 flex-col border-t border-line bg-canvas text-2xs"
+    >
+        <!-- `open` already means metrics; said again here only so the template narrows them for the panel. -->
+        <div v-if="open && metrics !== undefined" data-status-panel class="relative flex min-h-0" :style="{ height: `${drawnHeight}px` }">
             <ResizeSeam
                 v-model="panelHeight"
                 axis="y"
@@ -76,15 +88,18 @@ const close = (): void => {
                 </div>
             </section>
         </div>
-        <div class="flex min-h-7 flex-wrap items-center gap-x-1 gap-y-0.5 px-1.5 py-0.5" :class="open ? `border-t border-line-subtle` : ``">
+        <!-- One line, never two: a chip arriving or a long figure is cut, not wrapped, so the bar keeps its height. -->
+        <div class="flex h-7 min-w-0 items-center gap-1 px-1.5" :class="open ? `border-t border-line-subtle` : ``">
+            <slot name="start" />
             <!-- The metrics sit at the bar's far end. -->
             <button
+                v-if="metrics !== undefined"
                 :id="segmentId"
                 type="button"
                 data-segment="metrics"
                 :aria-expanded="open"
                 :aria-controls="open ? panelId : undefined"
-                class="ml-auto flex h-6 min-w-0 items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
+                class="ml-auto flex h-6 min-w-0 shrink items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
                 :class="open ? `bg-content/8 text-content` : `text-muted hover:bg-content/5 hover:text-content`"
                 @click="toggle"
             >

@@ -104,7 +104,7 @@ flowchart LR
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
-  panel and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
+  panel, terminal and status bar) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
   account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
   way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
@@ -119,6 +119,15 @@ flowchart LR
   corner (`FloatingAction`): New agent on the board, upload in the file tree. The review's Land button sits under the
   Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above
   every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
+- **The rail and the status bar.** The rail holds places a reader goes. What the sandbox is running sits in the
+  status bar at the foot of the window instead (`shell/status-bar/`): the terminal's toggle, always there for a
+  developer, then a chip for each live thing (the live app while something answers, the agents' open browsers, the
+  sandbox's desktop while a window is open on it, a port open to the internet, a connected tunnel), each there only
+  while it is live or its page is in front, so a chip arriving is news and the rail never moves for it. Geek metrics
+  (Settings ▸ Appearance) add CPU, memory and disk at the bar's far end, whose panel and the docked terminal take turns
+  above the bar. _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
+  closed browser still listed, a repo with a panel counted as running), and tightening them would have made the rail
+  move with every agent turn._
 - **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in
   `workbench/side/`) is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
@@ -188,7 +197,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | --- | --- |
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`workbench/window/panelSlots.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
-| status bar | The board's foot: the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`) |
+| status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). On a phone, the metrics alone at the Agents board's foot |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`features/agents/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`features/agents/board/cards/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`features/agents/board/view/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`features/chat/panel/subagent/subagentView.ts`) |
 | quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |

@@ -787,7 +787,7 @@ export const procedures = {
         session: () => ({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: `ada@acme.dev` }),
         presence: () => ({ ok: true }),
         usage: () => ({ accounts: [] }),
-        // Asked only while the board is open with geek metrics on; it drifts per request, so the polling is visible.
+        // Asked only while geek metrics are on (the status bar's gauges); it drifts per request, so the polling is visible.
         metrics: () => demoMetrics(Date.now(), roster.agents),
         // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
         storage: () => demoStorageReport(),
@@ -798,7 +798,7 @@ export const procedures = {
             sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
         }),
         // One still-driven browser session and one already closed, rendered as history, not a broken stream.
-        // Quiet, the agent has put its browser down: the session is history, so the rail has no open one to count.
+        // Quiet, the agent has put its browser down: the session is history, so the status bar has no open one to count.
         browsers: () => ({
             sessions: BROWSER_SESSIONS(Date.now()).map((session) =>
                 demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
@@ -819,8 +819,8 @@ export const procedures = {
             return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
         },
         closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
-        // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no rail tile for it,
-        // and no claim that it is empty.
+        // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no status bar chip
+        // for it, and no claim that it is empty.
         desktop: () => ({ running: false }),
         subagents: () => ({ sessions: deskEdition || demoQuiet() ? [] : inProcessSubagents(STARTED_AT) }),
     },

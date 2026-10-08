@@ -7,10 +7,9 @@ import {
     mergeTargets,
     pickTarget,
     portTargets,
-    previewEvidence,
     previewHealthyCount,
     publicTarget,
-    railTargets,
+    barTargets,
     repoTargets,
     repoTargetId,
 } from "./previewModel";
@@ -153,7 +152,7 @@ describe(`mergeTargets`, () => {
 
     it(`keeps a monorepo's own row when it has no apps`, () => {
         expect(mergeTargets(monorepo, [], [], undefined, undefined).map((target) => target.id)).toEqual([`repo:mono`]);
-        expect(railTargets([panel({ repo: `mono`, monorepo: true, healthy: true })], [], []).map((target) => target.id)).toEqual([`repo:mono`]);
+        expect(barTargets([panel({ repo: `mono`, monorepo: true, healthy: true })], [], []).map((target) => target.id)).toEqual([`repo:mono`]);
     });
 
     it(`replaces it with its apps once it has some: one row per thing, never a vague row beside precise ones`, () => {
@@ -197,17 +196,7 @@ describe(`pickTarget`, () => {
     });
 });
 
-describe(`the rail's half`, () => {
-    it(`has evidence for a runnable repo, a monorepo, a forwarded port or a served page: none for a bare library`, () => {
-        expect(previewEvidence([panel({ hasPanel: false })], [], [])).toBe(false);
-        expect(previewEvidence([panel({})], [], [])).toBe(true);
-        expect(previewEvidence([panel({ hasPanel: false, monorepo: true })], [], [])).toBe(true);
-        expect(previewEvidence([], [port({})], [])).toBe(true);
-        expect(previewEvidence([], [port({ forwarded: false })], [])).toBe(false);
-        expect(previewEvidence([], [], [file({})])).toBe(true);
-        expect(previewEvidence([], [], [file({ blocked: `nope` })])).toBe(false);
-    });
-
+describe(`the status bar's half`, () => {
     it(`counts what is actually answering`, () => {
         expect(
             previewHealthyCount(

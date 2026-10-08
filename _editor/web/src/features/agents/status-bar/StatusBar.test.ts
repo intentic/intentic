@@ -21,7 +21,7 @@ jest.mock("@intentic/ui", async () => {
 jest.mock("../fleet/useAgents", () => ({ useAgents: () => ({ agentById: (_id: string) => undefined }) }));
 jest.mock("../fleet/useAgents-actions", () => ({ openById: () => undefined }));
 
-const { default: BoardStatusBar } = await import("./BoardStatusBar.vue");
+const { default: StatusBar } = await import("./StatusBar.vue");
 const { openPanel, panelHeight } = await import("./statusBarState");
 const { showLiveMetrics } = await import("../metrics/liveMetrics");
 
@@ -30,13 +30,18 @@ const GIB = 2 ** 30;
 let app: App | undefined;
 
 // The bar's memory is the window's (two preferences), so a case that starts with the panel open sets it there.
-const mount = (options: { metrics?: SandboxMetrics; open?: `metrics` } = {}): HTMLElement => {
+const mount = (options: { metrics?: SandboxMetrics; open?: `metrics`; persistent?: boolean; start?: string } = {}): HTMLElement => {
     openPanel.value = options.open;
     panelHeight.value = 240;
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () => h(BoardStatusBar, { metrics: options.metrics }),
+        render: () =>
+            h(
+                StatusBar,
+                { metrics: options.metrics, persistent: options.persistent },
+                options.start === undefined ? {} : { start: () => h(`a`, { "data-chip": `terminal` }, options.start) },
+            ),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -82,8 +87,8 @@ afterEach(() => {
     showLiveMetrics.value = false;
 });
 
-describe(`the board's status bar`, () => {
-    it(`draws nothing while the metrics are off, whatever was left open`, () => {
+describe(`the status bar`, () => {
+    it(`draws nothing while the metrics are off, whatever was left open, unless its host keeps it`, () => {
         const element = mount({ open: `metrics` });
         expect(element.querySelector(`[role="region"]`)).toBeNull();
         expect(element.querySelector(`[data-status-panel]`)).toBeNull();
@@ -91,10 +96,28 @@ describe(`the board's status bar`, () => {
         expect(openPanel.value).toBe(`metrics`);
     });
 
+    // The desktop shell's bar: always there at one height, its start the host's, and no metrics segment while they're off.
+    it(`keeps a persistent bar with its host's start and no metrics segment while they are off`, () => {
+        const element = mount({ persistent: true, start: `Terminal`, open: `metrics` });
+        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Status bar`);
+        expect(wordsOf(element.querySelector(`[data-chip="terminal"]`))).toBe(`Terminal`);
+        expect(element.querySelector(`[data-segment]`)).toBeNull();
+        expect(element.querySelector(`[data-status-panel]`)).toBeNull();
+    });
+
+    it(`draws the host's start before the metrics segment, which sits at the far end`, () => {
+        const element = mount({ persistent: true, start: `Terminal`, metrics: metrics() });
+        const controls = [...element.querySelectorAll<HTMLElement>(`[data-chip], [data-segment]`)].map(
+            (control) => control.dataset[`chip`] ?? control.dataset[`segment`],
+        );
+        expect(controls).toEqual([`terminal`, `metrics`]);
+        expect(segment(element).className).toContain(`ml-auto`);
+    });
+
     // The bar carries the metrics and nothing else: no segment of any check.
     it(`carries the geek metrics and nothing else, and opens their panel above it`, async () => {
         const element = mount({ metrics: metrics() });
-        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Board status`);
+        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Status bar`);
         const segments = [...element.querySelectorAll<HTMLElement>(`[data-segment]`)].map((control) => control.dataset[`segment`]);
         expect(segments).toEqual([`metrics`]);
         expect([...element.querySelectorAll<HTMLElement>(`a, button`)].map((control) => control.dataset[`segment`])).toEqual([`metrics`]);

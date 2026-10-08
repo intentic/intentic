@@ -1,8 +1,8 @@
 import type { PortSummary, PublicFile, PanelSummary, RepoApp, PanelLaunch } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
-// Everything the workspace can show live, as one flat list both the rail tile and the panel build from (so a count can
-// never disagree with what the panel shows). Pure: contract types in, targets out, no app imports.
+// Everything the workspace can show live, as one flat list both the status bar's chip and the panel build from (so a
+// count can never disagree with what the panel shows). Pure: contract types in, targets out, no app imports.
 // - repo: a repository's dev server, from /panels
 // - app: one app inside a monorepo, from the per-repo /apps routes
 // - port: a forwarded port, from /ports
@@ -245,14 +245,11 @@ export const pickTarget = (targets: readonly PreviewTarget[], selectedId: string
     return servers.find((target) => target.healthy) ?? servers.find((target) => target.running) ?? servers[0] ?? targets[0];
 };
 
-// Rail's half: same builders as the panel, minus the apps fan-out, so the tile never promises what the panel can't
-// show. Typed address doesn't count; it's a bookmark, not evidence.
-export const railTargets = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): PreviewTarget[] =>
+// The status bar's half: same builders as the panel, minus the apps fan-out, so the chip never promises what the panel
+// can't show. Typed address doesn't count; it's a bookmark, not evidence.
+export const barTargets = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): PreviewTarget[] =>
     mergeTargets(repoTargets(panels), [], portTargets(ports), publicTarget(publicFiles), undefined);
 
-export const previewEvidence = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): boolean =>
-    railTargets(panels, ports, publicFiles).length > 0;
-
-// How many previewable things are actually answering right now; the tile's neutral count.
+// How many previewable things are actually answering right now: the status bar's count, and whether its chip shows.
 export const previewHealthyCount = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): number =>
-    railTargets(panels, ports, publicFiles).filter((target) => target.healthy && target.kind !== `public`).length;
+    barTargets(panels, ports, publicFiles).filter((target) => target.healthy && target.kind !== `public`).length;

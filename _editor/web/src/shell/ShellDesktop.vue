@@ -3,16 +3,18 @@ import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
-import { useBrowsersQuery } from "../features/browsers/browsersQuery";
-import { useDesktopQuery } from "../features/desktop/desktopQuery";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { useRole } from "../client/sandbox/useRole";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
-import { useTerminalActivity } from "../features/terminal/useTerminalActivity";
+import { useTerminalFloating } from "../features/terminal/terminalFloating";
+import { LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../features/agents/metrics/liveMetrics";
+import StatusBar from "../features/agents/status-bar/StatusBar.vue";
+import { openPanel } from "../features/agents/status-bar/statusBarState";
+import RuntimeChips from "./status-bar/RuntimeChips.vue";
 import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { commandShortcut, registerCommand } from "../workbench/commands/useCommands";
@@ -28,11 +30,9 @@ import {
     railPolicy,
     onRailOnlyByVisit,
     DEVICES_VIEW_ID,
-    DESKTOP_VIEW_ID,
 } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
-import { useAudience } from "../app/useAudience";
 import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
@@ -43,16 +43,12 @@ import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { railFrame } from "./rail/railFrame";
 import { presenceOthers } from "../workbench/presence/usePresence";
 import { usePanels } from "../features/extensions/usePanels";
-import { appTargetId, previewEvidence, previewHealthyCount } from "../features/preview/previewModel";
+import { appTargetId } from "../features/preview/previewModel";
 import { openPreviewOnFirstVisit } from "../features/preview/previewSurface";
-import { usePublicOutbox } from "../features/workspace/push/usePublicOutbox";
 import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
 import { useChanges } from "../features/workspace/changes/useChanges";
 import { pushBadge } from "../features/workspace/push/pushBadge";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
-import { usePorts } from "../features/sandbox/environment/usePorts";
-import { useSandbox } from "../client/sandbox/useSandbox";
-import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { useSyncHealth } from "../features/sandbox/devices/useDevices";
 import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
 import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
@@ -117,11 +113,7 @@ const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
 
 const { panels, settled: panelsSettled } = usePanels();
 const { capabilities, settled: capabilitiesSettled } = useCapabilities();
-// Always-on, loosely polled, so the tile appears mid-turn; the view polls tighter once it's open.
-const { sessions: browsers } = useBrowsersQuery();
-const { reachable } = useSandbox();
-// Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway. Devices, the
-// same: the hub withholds the section below maintainer, where the daemon refuses what it is for.
+// Devices is ship-tier only: the hub withholds the section below maintainer, where the daemon refuses what it is for.
 const { canShip, isGuest } = useRole();
 // Uncommitted changes badge the Workspace tile, so the count is visible from any section.
 const changes = useChanges();
@@ -134,39 +126,8 @@ const { iconRailSize } = useIconRailSize();
 const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
-// The audience's words for the two core tiles that have maker names (Files, See it); Chat and Agents keep theirs.
+// The audience's words for the core tiles that have maker names (Files); Chat and Agents keep theirs.
 const words = useVocabulary();
-const { maker } = useAudience();
-
-// Shown only while a tunnel is connected; an always-present badge would say nothing.
-const { links: vpnLinks } = useLiveLinks(`vpn`);
-const connectedVpns = computed(() => vpnLinks.value.filter((link) => link.state === `connected`));
-const vpnNames = computed(() => connectedVpns.value.map((link) => link.id).join(`, `));
-const vpnLabel = computed(() => `${t(`shell.shellDesktop.vpnConnected`)}: ${vpnNames.value}`);
-const vpnTip = computed(
-    (): Tip => ({
-        title: t(`shell.shellDesktop.vpnConnected`),
-        tone: `ok`,
-        rows: [{ label: t(`shell.shellDesktop.tunnels`, {}, connectedVpns.value.length), value: vpnNames.value }],
-    }),
-);
-
-// Same idea as the VPN badge: visible everywhere, not only on the Ports tab.
-const { forwarded: forwardedPorts } = usePorts();
-const forwardedList = computed(() => forwardedPorts.value.map((entry) => entry.port).join(`, `));
-const forwardedLabel = computed(() => `${t(`shell.shellDesktop.publiclyReachable`)}: ${forwardedList.value}`);
-const forwardedTip = computed(
-    (): Tip => ({
-        title: t(`shell.shellDesktop.publiclyReachable`),
-        tone: `warn`,
-        rows: [{ label: t(`shell.shellDesktop.ports`, {}, forwardedPorts.value.length), value: forwardedList.value }],
-    }),
-);
-// One port needs no number — the tile itself is the news. Two or more do, through the same chip as every
-// other tile rather than a hand-rolled span, so the cap, the tone and the arrival are decided in one place.
-const portsBadge = computed<ViewBadge | undefined>(() =>
-    forwardedPorts.value.length > 1 ? { count: forwardedPorts.value.length, tone: `warning` } : undefined,
-);
 
 // Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
 const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
@@ -197,25 +158,6 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 
 // On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
-
-// THE LIVE APP (features/preview), an iframe onto a dev server, port or public page — not an agent's browser session, so
-// it sits in the runtime cluster beside Browsers and the terminal. On the rail while something is running to show, or
-// while the reader stands on /preview; with nothing to show it is reached from the palette, as a finished browser is.
-const { files: publicFiles } = usePublicOutbox();
-const previewTile = computed<SectionTile | undefined>(() => {
-    const evidence = previewEvidence(panels.value, forwardedPorts.value, publicFiles.value);
-    if (!evidence && !isNavActive(`/preview`)) {
-        return undefined;
-    }
-    const healthy = previewHealthyCount(panels.value, forwardedPorts.value, publicFiles.value);
-    return {
-        id: `preview`,
-        to: `/preview`,
-        label: words.value.preview,
-        icon: `eye`,
-        ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.running`, { healthy }) } } : {}),
-    };
-});
 
 // Opens the seeded starter site on a box's very first landing (previewSurface's once-only flag), waiting
 // for /panels to actually name it rather than a timer. Desktop only: a phone has one surface to give up.
@@ -281,59 +223,17 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
     },
     ...(canShip.value ? [devicesTile.value] : []),
 ]);
-/* The Browsers tile stays visible while the daemon lists an open browser. */
-const browserTile = computed<SectionTile | undefined>(() => {
-    if (browsers.value.length === 0) {
-        return undefined;
-    }
-    const live = browsers.value.filter((session) => session.running).length;
-    const helping = browsers.value.filter((session) => session.help !== undefined).length;
-    return {
-        id: `browsers`,
-        to: `/browsers`,
-        label: t(`shared.browsers`),
-        icon: `desktop`,
-        // Neutral: an open browser is inventory, not a debt; warning only when the agent is waiting on the user.
-        ...(helping > 0
-            ? { badge: { count: helping, tone: `warning` as const, tooltip: t(`shell.shellDesktop.agentNeedsHelp`) } }
-            : live > 0
-              ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.open`, { live }) } }
-              : {}),
-    };
-});
-// THE SANDBOX'S OWN DESKTOP (features/desktop), a live screen like a browser, so it sits in the runtime cluster beside
-// Browsers and the terminal. On the rail while a window is open on it, which is when there is something to watch, and
-// while it is the page in front; an empty desktop is reached from the palette, as a finished browser is. Maintainers
-// only, as the daemon lets nobody else drive it. Neutral count: open windows are inventory, not a debt.
-const { windows: desktopWindows } = useDesktopQuery();
-const desktopTile = computed<SectionTile | undefined>(() => {
-    const open = desktopWindows.value ?? 0;
-    if (!canShip.value || (open === 0 && !isNavActive(`/desktop`))) {
-        return undefined;
-    }
-    const tile: SectionTile = { id: DESKTOP_VIEW_ID, to: `/desktop`, label: t(`shared.desktop`), icon: `screen` };
-    return open === 0 ? tile : { ...tile, badge: { count: open, tone: `neutral`, tooltip: t(`shell.shellDesktop.windowsOpen`, { count: open }, open) } };
-});
 // Everything waiting on a person (docs/architecture/needs.md, the Needs you inbox): what agents asked for, turns parked
-// on an answer, held wakes, extensions and every view's asks, in one count. On the rail only while something is.
+// on an answer, held wakes, extensions and every view's asks, in one count. A signal tile heading the Judge band
+// (registry.ts): on the rail while something waits or the reader pins it, behind More otherwise.
 const { badge: inboxBadge } = useInbox();
-const needsTile = computed<SectionTile | undefined>(() =>
-    inboxBadge.value === undefined
-        ? undefined
-        : {
-              id: `needs`,
-              to: `/needs`,
-              label: t(`needs.inbox.title`),
-              icon: `exclamation-circle`,
-              badge: inboxBadge.value,
-          },
-);
-// Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
-const runtimeTiles = computed<readonly SectionTile[]>(() =>
-    [needsTile.value, browserTile.value, previewTile.value, desktopTile.value]
-        .filter((tile) => tile !== undefined)
-        .filter((tile) => sectionReachable(tile.to)),
-);
+const needsTile = computed<SectionTile>(() => ({
+    id: `needs`,
+    to: `/needs`,
+    label: t(`needs.inbox.title`),
+    icon: `exclamation-circle`,
+    ...(inboxBadge.value === undefined ? {} : { badge: inboxBadge.value }),
+}));
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {
     const { extension, activation } = active;
@@ -352,6 +252,7 @@ const extensionTile = (active: ActiveExtension): SectionTile => {
 const tiles = computed<readonly SectionTile[]>(() =>
     [
         ...fixedTiles.value,
+        needsTile.value,
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo panels open from the Workspace tree instead.
             .filter(({ extension }) => extension.surface === `rail`)
@@ -378,7 +279,7 @@ const moreTiles = computed<readonly SectionTile[]>(() =>
 );
 
 // tileTip, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
-// be pinned. Not used by the runtime cluster below — those tiles can't be pinned at all.
+// be pinned.
 const visitingNote = (tile: SectionTile): string | undefined =>
     onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) }) ? t(`shell.shellDesktop.rightClickKeep`) : undefined;
 const railTileLabel = (tile: SectionTile): string => [tileLabel(tile), visitingNote(tile)].filter((part) => part !== undefined).join(` · `);
@@ -411,8 +312,8 @@ const railTiles = computed<readonly SectionTile[]>(() =>
 // Held tiles are included so band hairlines don't shift position as the run fills in.
 const tileBands = computed(() => railBands(railTiles.value, (tile) => tile.id));
 
-// Alt+Up/Down walks the on the rail nav tiles only (the runtime cluster's length changes under a running
-// turn); wraps, and from a route no tile owns enters at the end the press is heading toward.
+// Alt+Up/Down walks the on the rail nav tiles; wraps, and from a route no tile owns enters at the end the press is
+// heading toward.
 const cycleSection = (delta: number): void => {
     // The on the rail run only; a section behind More is reached by its own command instead.
     const list = railTiles.value;
@@ -592,24 +493,31 @@ watch(
     () => terminal.open.value,
     (open) => open && showSection(),
 );
-// The only affordance for the panel now; the Workspace view's own toggle is gone, since terminals are
-// sandbox-global. Doubles as an indicator: the badge counts live sessions, the tooltip names them.
-const terminalActivity = useTerminalActivity();
-const terminalLabel = computed(() => {
-    const chord = commandShortcut(`terminal.toggle`);
-    const what = [t(`shared.terminal`), terminalActivity.summary.value].filter((part) => part !== undefined).join(`, `);
-    return chord === undefined ? what : `${what} (${chord})`;
-});
-const terminalTip = computed((): Tip => ({
-    title: t(`shared.terminal`),
-    keys: commandShortcut(`terminal.toggle`),
-    rows: [{ label: t(`shared.running`), value: terminalActivity.summary.value ?? `` }],
-}));
-// Live sessions, through the shared chip like the ports tile above; `info` is the resting tone, set here
-// rather than left to default so the two runtime badges state their tone side by side.
-const terminalBadge = computed<ViewBadge | undefined>(() =>
-    terminalActivity.count.value > 0 ? { count: terminalActivity.count.value, tone: `info` } : undefined,
+
+// The geek metrics, read once here for the status bar and handed down to the board's cards (LIVE_METRICS_KEY), so one
+// reading serves both. Off, nothing is measured at all (liveMetrics.ts).
+const liveMetrics = useLiveMetrics();
+provide(LIVE_METRICS_KEY, liveMetrics);
+
+// ONE PANEL ABOVE THE BAR AT A TIME. The docked terminal and the metrics panel both open at the foot of the window, and
+// the two stacked leave the page a sliver: opening either closes the other. A terminal in a window of its own takes no
+// room here. Immediate, so a window reopened with both remembered open comes back with the terminal alone.
+const terminalFloat = useTerminalFloating();
+const terminalDocked = computed(() => terminal.open.value && !terminalFloat.floats.value);
+watch(
+    terminalDocked,
+    (docked) => {
+        if (docked && showLiveMetrics.value && openPanel.value !== undefined) {
+            openPanel.value = undefined;
+        }
+    },
+    { immediate: true },
 );
+watch(openPanel, (panel) => {
+    if (panel !== undefined && showLiveMetrics.value && terminalDocked.value) {
+        terminal.setOpen(false);
+    }
+});
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
 // One destination per place the shell has: every rail section on the rail or not, every sandbox and settings section.
@@ -630,7 +538,7 @@ const wallpapered = useWallpaperedRoute();
             <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work sections, live runtime. -->
+            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: the one hairline marks the real boundary, identity above the sections. What the sandbox is running is the status bar's, not the rail's. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
@@ -765,69 +673,6 @@ const wallpapered = useWallpaperedRoute();
                 </div>
             </AnchoredOverlay>
 
-            <span class="my-1 icon-rail-divider h-px bg-line"></span>
-
-            <!-- Present only while a tunnel is up: while connected, all traffic leaves through someone else's network. -->
-            <RouterLink
-                v-if="connectedVpns.length > 0"
-                to="/capabilities/vpn"
-                class="icon-rail-tile flex items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
-                :aria-label="vpnLabel"
-                v-tooltip.right="vpnTip"
-            >
-                <RailIcon section="vpn" class="icon-rail-glyph" />
-            </RouterLink>
-
-            <!-- Present only while a port is forwarded, since the sandbox is then answering the public internet. -->
-            <RouterLink
-                v-if="forwardedPorts.length > 0"
-                to="/sandbox/ports"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-warning transition-colors hover:bg-overlay"
-                :aria-label="forwardedLabel"
-                v-tooltip.right="forwardedTip"
-            >
-                <RailIcon section="ports" class="icon-rail-glyph" />
-                <ViewBadgeChip :badge="portsBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
-            </RouterLink>
-
-            <!-- Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles. -->
-            <RouterLink
-                v-for="tile in runtimeTiles"
-                :key="tile.to"
-                :to="tile.to"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                :aria-label="tileLabel(tile)"
-                v-tooltip.right="tileTip(tile)"
-            >
-                <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
-                <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
-                <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
-                <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->
-                <TileMark
-                    v-if="tile.badge?.running !== undefined"
-                    name="spinner"
-                    spin
-                    :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
-                />
-            </RouterLink>
-
-            <!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). A maker never asked for a shell. -->
-            <button
-                v-if="canShip && !maker"
-                type="button"
-                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': terminal.open.value }"
-                :tabindex="reachable ? undefined : -1"
-                :aria-disabled="!reachable"
-                :aria-label="terminalLabel"
-                v-tooltip.right="terminalTip"
-                @click="terminal.toggle()"
-            >
-                <RailIcon section="terminal" class="icon-rail-glyph" />
-                <ViewBadgeChip :badge="terminalBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
-            </button>
-
             <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
             <!-- A guest connects nothing: what this box can reach is the operator's decision, and the page says so at
                  the maintainer tier. -->
@@ -868,6 +713,13 @@ const wallpapered = useWallpaperedRoute();
             </SandboxGate>
         </main>
 
+        <!-- The foot of the window, under the section and the side panel: what the sandbox is running, the terminal first,
+             and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
+             what it had going, and the terminal's chip goes inert until it answers. -->
+        <StatusBar persistent :metrics="liveMetrics" style="grid-area: status">
+            <template #start><RuntimeChips /></template>
+        </StatusBar>
+
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
         <ChatQuickBar />
@@ -892,9 +744,12 @@ const wallpapered = useWallpaperedRoute();
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));
-    /* One explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. */
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "rail workspace side";
+    /* Explicit rows, so a stray element landing in an implicit row can't starve 1fr to zero height. The rail runs the
+       full height; the status bar spans the section and the side panel under them. */
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "rail workspace side"
+        "rail status status";
 }
 
 /* The rail's own rules (tiles, glyphs, marks, bands) are the shared stylesheet's, shell/rail/iconRail.css. */

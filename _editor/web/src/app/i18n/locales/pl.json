@@ -621,7 +621,7 @@
             "stop": "Przestań utrzymywać ciepłą"
         },
         "statusBar": {
-            "label": "Stan tablicy",
+            "label": "Pasek stanu",
             "close": "Zamknij {title}"
         },
         "cardSeal": {
@@ -7271,10 +7271,10 @@
     },
     "settings": {
         "appearance": {
-            "agents": {
-                "group": "Tablica agentów",
+            "statusBar": {
+                "group": "Pasek stanu",
                 "liveMetrics": "Metryki dla geeków",
-                "liveMetricsHint": "CPU i pamięć każdego agenta oraz całego sandboxa, na tablicy agentów. Mierzone tylko wtedy, gdy tablica jest otwarta, a ta opcja włączona."
+                "liveMetricsHint": "CPU, pamięć i dysk na końcu paska stanu oraz udział każdego agenta na jego karcie. Gdy ta opcja jest wyłączona, nic nie jest mierzone."
             },
             "changes": {
                 "diffOpen": "Gdzie otwiera się diff",
@@ -8169,6 +8169,10 @@
         },
         "hubWork": {
             "running": "w toku: {count}"
+        },
+        "statusBar": {
+            "portsPublic": "Port {port} publiczny | {count} porty publiczne | {count} portów publicznych",
+            "vpn": "VPN"
         }
     },
     "terminal": {

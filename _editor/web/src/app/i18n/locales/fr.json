@@ -497,7 +497,7 @@
             "stop": "Ne plus garder chaud"
         },
         "statusBar": {
-            "label": "État du tableau",
+            "label": "Barre d'état",
             "close": "Fermer {title}"
         },
         "cardSeal": {
@@ -3955,10 +3955,10 @@
     },
     "settings": {
         "appearance": {
-            "agents": {
-                "group": "Tableau des agents",
+            "statusBar": {
+                "group": "Barre d'état",
                 "liveMetrics": "Métriques pour geeks",
-                "liveMetricsHint": "CPU et mémoire de chaque agent et de tout le sandbox, sur le tableau des agents. Mesuré uniquement quand le tableau est ouvert et l'option activée."
+                "liveMetricsHint": "CPU, mémoire et disque au bout de la barre d'état, et la part de chaque agent sur sa carte. Rien n'est mesuré tant que l'option est désactivée."
             },
             "changes": {
                 "diffOpen": "Où s'ouvre un diff",
@@ -4567,6 +4567,10 @@
             "account": "Compte",
             "switchAccount": "Changer de compte",
             "new": "Nouveau"
+        },
+        "statusBar": {
+            "portsPublic": "Port {port} public | {count} ports publics",
+            "vpn": "VPN"
         }
     },
     "terminal": {

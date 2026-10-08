@@ -13,7 +13,7 @@ import {
     useDevice,
     useNarrow,
 } from "@intentic/ui";
-import { computed, nextTick, provide, ref } from "vue";
+import { computed, inject, nextTick, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
@@ -44,7 +44,7 @@ import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
 import ChildRows from "./cards/ChildRows.vue";
 import { CHILD_ROWS } from "./cards/childRows";
-import BoardStatusBar from "../status-bar/BoardStatusBar.vue";
+import StatusBar from "../status-bar/StatusBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
@@ -72,8 +72,11 @@ const router = useRouter();
 const { mobile, coarse } = useDevice();
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
-// Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
-const liveMetrics = useLiveMetrics();
+// The desktop shell reads the geek metrics for its status bar and hands them down. A phone has no shell bar, so there the
+// board reads its own and draws its own bar at its foot (liveMetrics.ts). Either way the cards take theirs from here.
+const shellMetrics = inject(LIVE_METRICS_KEY, undefined);
+const liveMetrics = shellMetrics ?? useLiveMetrics();
+const ownStatusBar = shellMetrics === undefined;
 provide(LIVE_METRICS_KEY, liveMetrics);
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
@@ -637,9 +640,9 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 </section>
             </div>
         </div>
-        <!-- The board's status bar: the opt-in geek metrics (Settings ▸ Appearance). At the foot, since the header is the
-             board's own; their panel docks above it and stays until the reader closes it. -->
-        <BoardStatusBar :metrics="liveMetrics" />
+        <!-- Where no shell bar carries them (a phone), the opt-in geek metrics (Settings ▸ Appearance) at the board's foot;
+             their panel docks above it and stays until the reader closes it. -->
+        <StatusBar v-if="ownStatusBar" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

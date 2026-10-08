@@ -6,7 +6,7 @@ import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 
-// One shared roster of the agent's browsers for the rail tile and the Browsers view (like terminalsQuery), so they
+// One shared roster of the agent's browsers for the status bar's chip and the Browsers view (like terminalsQuery), so they
 // can't disagree. No pending-claim half like terminals need: the daemon mints an agent browser itself, so this
 // list is the client's first knowledge of it. Nothing polls; the daemon pushes the `browsers` domain on
 // mint/navigate/finish (runtime-watch.ts).
@@ -27,7 +27,7 @@ export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; r
     return { sessions, refetch: () => query.refetch() };
 };
 
-// Drops the row from the shared list the moment the close is issued, like killTerminal, so the rail tile doesn't keep
+// Drops the row from the shared list the moment the close is issued, like killTerminal, so the status bar doesn't keep
 // counting a browser the user just closed. A refused close puts the row straight back; the list is re-read either way.
 export const closeBrowser = async (name: string): Promise<void> => {
     try {

@@ -96,7 +96,7 @@ export const WORKSPACE_VIEW_ID = `workspace`;
 // The Sandbox hub's Devices section, tiled by the shell itself (ShellDesktop.vue) rather than by a view.
 export const DEVICES_VIEW_ID = `devices`;
 // The sandbox's own desktop, watched and taken over by the owner. Not a band's tile: a live surface, drawn by the shell
-// in the rail's runtime cluster beside Browsers and the terminal, while there is a window on it to watch.
+// in the status bar beside Browsers and the terminal (shell/status-bar/), while there is a window on it to watch.
 export const DESKTOP_VIEW_ID = `desktop`;
 
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
@@ -122,8 +122,8 @@ const know = (): RailGroup => ({
 // One table per audience; only the Work band differs. Devices closes the band: the machines this sandbox reaches, a place
 // to go as This computer is in a local window. A signal tile a reader pins to keep: it comes onto the rail by itself
 // while one of the machines is being worked on (its turning mark) or a port is held, which is exactly when it has to be
-// in sight. The live app, Browsers and the sandbox's own Desktop are not in any band: they are live surfaces, so they sit
-// in the runtime cluster beside the terminal.
+// in sight. The live app, Browsers and the sandbox's own Desktop are not in any band: they are live surfaces, not places,
+// so they are chips in the status bar beside the terminal (shell/status-bar/), there while they are live.
 // The Projects tile is on the rail for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
 // read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
 // sits above what it switches. For a maker the file tree stands in for it when the extension is off.

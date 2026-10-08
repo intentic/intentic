@@ -621,7 +621,7 @@
             "stop": "Stop keeping warm"
         },
         "statusBar": {
-            "label": "Board status",
+            "label": "Status bar",
             "close": "Close {title}"
         },
         "cardSeal": {
@@ -7694,10 +7694,10 @@
             "chat": {
                 "showToolCallsHint": "Display individual tool calls in transcript."
             },
-            "agents": {
-                "group": "Agents board",
+            "statusBar": {
+                "group": "Status bar",
                 "liveMetrics": "Geek metrics",
-                "liveMetricsHint": "CPU and memory for each agent and for the whole sandbox, on the Agents board. Measured only while the board is open with this on."
+                "liveMetricsHint": "CPU, memory and disk at the end of the status bar, and each agent's share on its card. Nothing is measured while this is off."
             },
             "explorer": {
                 "colorful": "Colorful",
@@ -8576,6 +8576,10 @@
             "account": "Account",
             "switchAccount": "Switch account",
             "new": "New"
+        },
+        "statusBar": {
+            "portsPublic": "Port {port} public | {count} ports public",
+            "vpn": "VPN"
         }
     },
     "terminal": {

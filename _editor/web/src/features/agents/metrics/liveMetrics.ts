@@ -5,8 +5,9 @@ import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 
-// The Agents board's opt-in CPU and memory readout ("geek metrics"). Off means never asked for: the daemon measures
-// only inside a request, so with the query disabled nothing anywhere is collected, not merely hidden.
+// The sandbox's opt-in CPU, memory and disk readout ("geek metrics"), in the status bar and on the board's cards. Off
+// means never asked for: the daemon measures only inside a request, so with the query disabled nothing anywhere is
+// collected, not merely hidden.
 
 export const showLiveMetrics: Ref<boolean> = definePreference<boolean>({
     key: `ui-agents-live-metrics`,
@@ -18,11 +19,12 @@ export const showLiveMetrics: Ref<boolean> = definePreference<boolean>({
 // cost what one does.
 export const LIVE_METRICS_POLL_MS = 3_000;
 
-// Provided by the board, so a card drawn anywhere else never starts a read of its own.
+// Provided by the desktop shell (and by the board where no shell provides it), so a card never starts a read of its own.
 export const LIVE_METRICS_KEY: InjectionKey<ComputedRef<SandboxMetrics | undefined>> = Symbol(`liveMetrics`);
 
-// Called by the board alone: leaving it drops the only observer, which stops the polling, and a hidden tab is never
-// polled. A refused read (a guest, an older daemon) stops asking until the board is opened again.
+// Called once per window: by the desktop shell for its status bar, or on a phone by the board, whose leaving drops the
+// only observer and stops the polling. A hidden tab is never polled. A refused read (a guest, an older daemon) stops
+// asking until the reader comes back to it.
 export function useLiveMetrics(): ComputedRef<SandboxMetrics | undefined> {
     const { query } = useSandboxQuery({
         ...rpcQuery(`system.metrics`, undefined, { unpersisted: true }),

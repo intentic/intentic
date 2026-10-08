@@ -319,13 +319,14 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- The Agents board's CPU and memory readout; off means the sandbox measures nothing for it, not that it hides it. -->
-        <RowGroup :label="t(`settings.appearance.agents.group`)">
+        <!-- The status bar's CPU, memory and disk gauges, and each card's share; off means the sandbox measures nothing for
+             them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. -->
+        <RowGroup :label="t(`settings.appearance.statusBar.group`)">
             <Row
                 as="label"
                 icon="cpu"
-                :title="t(`settings.appearance.agents.liveMetrics`)"
-                :description="t(`settings.appearance.agents.liveMetricsHint`)"
+                :title="t(`settings.appearance.statusBar.liveMetrics`)"
+                :description="t(`settings.appearance.statusBar.liveMetricsHint`)"
             >
                 <template #control><ToggleSwitch v-model="showLiveMetrics" /></template>
             </Row>

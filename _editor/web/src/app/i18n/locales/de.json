@@ -496,7 +496,7 @@
             "stop": "Nicht mehr warm halten"
         },
         "statusBar": {
-            "label": "Board-Status",
+            "label": "Statusleiste",
             "close": "{title} schließen"
         },
         "cardSeal": {
@@ -3960,10 +3960,10 @@
     },
     "settings": {
         "appearance": {
-            "agents": {
-                "group": "Agenten-Board",
+            "statusBar": {
+                "group": "Statusleiste",
                 "liveMetrics": "Geek-Metriken",
-                "liveMetricsHint": "CPU und Arbeitsspeicher für jeden Agenten und die ganze Sandbox, auf dem Agenten-Board. Gemessen wird nur, solange das Board offen und dies eingeschaltet ist."
+                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Ende der Statusleiste, dazu der Anteil jedes Agenten auf seiner Karte. Solange dies aus ist, wird nichts gemessen."
             },
             "changes": {
                 "diffOpen": "Wo ein Diff aufgeht",
@@ -4613,6 +4613,10 @@
             "account": "Konto",
             "switchAccount": "Konto wechseln",
             "new": "Neu"
+        },
+        "statusBar": {
+            "portsPublic": "Port {port} öffentlich | {count} Ports öffentlich",
+            "vpn": "VPN"
         }
     },
     "terminal": {

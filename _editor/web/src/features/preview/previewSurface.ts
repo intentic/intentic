@@ -48,7 +48,7 @@ export const markPreviewOpened = (): void => {
     opened.value = true;
 };
 
-// Entry point for the palette command and for an extension's "See it" (the rail tile just routes): selects a target
+// Entry point for the palette command and for an extension's "See it" (the status bar's chip just routes): selects a target
 // (or a repo, resolved via pickTarget), opens the panel, and navigates to it.
 export const openPreview = (router: Router, targetId?: string): void => {
     if (targetId !== undefined) {
