@@ -9,8 +9,10 @@ import { jsonFile } from "../store/json-file.js";
 
 // Setup auto-connects the machine that ran the installer, granted only `sandboxes` (no shell, files or screen):
 // consenting to run a sandbox is not consenting to a shell on your own laptop. The card is created once ever; the
-// pairing re-arms every boot since only redemption burns it. Already-seeded ids are remembered on /history so a
-// deleted card is never re-offered.
+// pairing re-arms every boot while that card stands, since only redemption burns it. Already-seeded ids are remembered
+// on /history so a deleted card is never re-offered, and its pairing is never armed again either: redeemed, it would
+// enroll a machine no card grants, which the hosts door refuses forever, after the machine agent already traded its
+// working link for it (one link per sandbox). That is how a recreate cut a WSL distro off its own card (2026-10-08).
 
 // What a setup-connected device may do; spelled out in full as this feature's whole security posture.
 export const SETUP_HOST_SCOPES = {
@@ -71,16 +73,17 @@ export const seedSetupHost = async (
     if (seed.token === "" || !KNOWN_PLATFORMS.has(seed.platform)) {
         return { offered: false, id };
     }
-    // Armed before the card is written: the burn check is what makes this a no-op once the machine has enrolled.
-    if (!(await services.hosts.seedPairing(id, seed.token))) {
-        return { offered: false, id };
-    }
     const seeded = seededCards(services.config.historyRoot);
-    // Offered once; whether the card still exists or was deleted is not this function's concern from here on.
-    if ((await seeded.read()).ids.includes(id)) {
+    const offeredBefore = (await seeded.read()).ids.includes(id);
+    const existing = (await services.capabilities.list()).find((capability) => capability.id === id && capability.kind === "device");
+    // Offered once and since removed (or renamed): the owner's answer, and no pairing for a card that is gone.
+    if (offeredBefore && existing === undefined) {
         return { offered: false, id };
     }
-    const existing = (await services.capabilities.list()).find((capability) => capability.id === id && capability.kind === "device");
+    // Armed before the card is written: the burn check is what makes this a no-op once the machine has enrolled.
+    if (!(await services.hosts.seedPairing(id, seed.token)) || offeredBefore) {
+        return { offered: false, id };
+    }
     if (existing === undefined) {
         const config: DeviceConfig = { platform: seed.platform, ...SETUP_HOST_SCOPES };
         // Drains the handler's progress frames; nothing reads them at boot, though it still writes the pack and grant.

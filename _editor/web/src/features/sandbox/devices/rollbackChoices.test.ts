@@ -27,3 +27,20 @@ it(`offers no choice to an agent that can't take one, or where there is only the
     expect(rollbackChoices(takesTo, { rollbackTargets: kept.rollbackTargets.slice(0, 1) })).toEqual([]);
     expect(rollbackChoices(takesTo, undefined)).toEqual([]);
 });
+
+// Every dev build says 0.0.0: three menu rows reading the same and a `to` of "0.0.0" that `ic` resolves to the first
+// kept build, whichever row was pressed (2026-10-08).
+it(`tells kept builds that share a version apart by their image, and sends the image rather than the version`, () => {
+    const dev = {
+        rollbackTargets: [
+            { image: `intentic-sandbox-rollback-s1:c6cc76cfeece`, version: `0.0.0` },
+            { image: `intentic-sandbox-rollback-s1:f5eb7476ff5c`, version: `0.0.0` },
+            { image: `intentic-sandbox-rollback-s1:aaaaaaaaaaaa`, version: `1.2.0` },
+        ],
+    };
+    expect(rollbackChoices(takesTo, dev)).toEqual([
+        { version: `0.0.0 (c6cc76cfeece)`, to: undefined },
+        { version: `0.0.0 (f5eb7476ff5c)`, to: `intentic-sandbox-rollback-s1:f5eb7476ff5c` },
+        { version: `1.2.0`, to: `1.2.0` },
+    ]);
+});

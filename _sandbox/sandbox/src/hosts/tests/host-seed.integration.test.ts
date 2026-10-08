@@ -8,8 +8,9 @@ import type { Services } from "../../composition.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import { seedSetupHost } from "../host-seed.js";
 
-// A setup card, once deleted, must never reappear on a later boot, even though the seeded pairing itself stays armed
-// until redeemed (so a late-booting machine can still enroll).
+// A setup card, once deleted, must never reappear on a later boot, and nor may its pairing: redeemed, it would enroll a
+// machine no card grants. While the card stands the pairing stays armed until redeemed, so a late-booting machine can
+// still enroll.
 
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
@@ -17,11 +18,12 @@ const seed = { token: "from-the-installer", platform: "linux", label: "ada-lapto
 
 // Services stub covering only what seedSetupHost touches; seedPairing always answers true (the unredeemed-token case),
 // entries stays mutable so a test can delete the card between boots.
-const tempServices = (): { services: Services; entries: Capability[]; historyRoot: string; upserts: string[] } => {
+const tempServices = (): { services: Services; entries: Capability[]; historyRoot: string; upserts: string[]; armed: string[] } => {
     const root = mkdtempSync(join(tmpdir(), "host-seed-work-"));
     const historyRoot = mkdtempSync(join(tmpdir(), "host-seed-history-"));
     const entries: Capability[] = [];
     const upserts: string[] = [];
+    const armed: string[] = [];
     const services = {
         logger: { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined },
         workspace: { root, repos: { intent: join(root, "intent") } },
@@ -34,29 +36,40 @@ const tempServices = (): { services: Services; entries: Capability[]; historyRoo
                 entries.push(capability);
             },
         },
-        hosts: { seedPairing: async () => true, enrolled: async () => false },
+        hosts: {
+            seedPairing: async (id: string) => {
+                armed.push(id);
+                return true;
+            },
+            enrolled: async () => false,
+        },
         hostHub: { online: () => false },
     } as unknown as Services;
-    return { services, entries, historyRoot, upserts };
+    return { services, entries, historyRoot, upserts, armed };
 };
 
 const seededIds = async (historyRoot: string): Promise<string[]> =>
     JSON.parse(await readFile(join(historyRoot, "host-setup-seeded.json"), "utf8")).ids;
 
 test("the setup device's card is written once and never offered again", async () => {
-    const { services, entries, historyRoot, upserts } = tempServices();
+    const { services, entries, historyRoot, upserts, armed } = tempServices();
 
     expect(await seedSetupHost(services, seed)).toEqual({ offered: true, id: "ada-laptop" });
     expect(upserts).toEqual(["ada-laptop"]);
     expect(await seededIds(historyRoot)).toEqual(["ada-laptop"]);
 
+    // While the card stands, every boot re-arms its pairing for a machine that has not enrolled yet.
+    expect(await seedSetupHost(services, seed)).toEqual({ offered: false, id: "ada-laptop" });
+    expect(armed).toEqual(["ada-laptop", "ada-laptop"]);
+
     // Owner deletes the card.
     entries.length = 0;
 
-    // Next boot: the pairing is still armed, but the deleted card is not re-offered.
+    // Next boot: the deleted card is not re-offered, and its pairing is not armed for anyone to redeem.
     expect(await seedSetupHost(services, seed)).toEqual({ offered: false, id: "ada-laptop" });
     expect(upserts).toEqual(["ada-laptop"]);
     expect(entries).toEqual([]);
+    expect(armed).toEqual(["ada-laptop", "ada-laptop"]);
 });
 
 // Simulates a sandbox from before id-tracking existed: the card is already there but never recorded, so this boot must
