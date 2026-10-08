@@ -339,8 +339,6 @@ describe(`rail tiles`, () => {
         expect(onRail({ id: `agents` }, resting)).toBe(true);
         expect(onRail({ id: `workspace` }, resting)).toBe(true);
         expect(onRail({ id: `chat` }, resting)).toBe(true);
-        // Preview's badge is an inventory ("2 running"), not a claim; it holds its tile on the other half of the rule.
-        expect(onRail({ id: `preview` }, resting)).toBe(true);
     });
 
     it(`keeps a quiet queue off the rail, and tiles it the moment it owes the owner something`, () => {
@@ -418,7 +416,7 @@ describe(`rail tiles`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`]);
         // Devices is pinned to keep, and tiles itself while a machine is being worked on.
         expect(railPolicy(`devices`)).toBe(`signal`);
         expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
@@ -507,12 +505,12 @@ describe(`the maker's rail`, () => {
         }
     });
 
-    it(`spends the same four permanent tiles in both tables`, () => {
+    it(`spends the same permanent tiles in both tables`, () => {
         const permanent = railGroupsFor(`maker`)
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`]);
     });
 
     // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the

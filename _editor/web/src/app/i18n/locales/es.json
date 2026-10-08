@@ -2050,7 +2050,7 @@
         "previewArea": {
             "bringBackHere": "Tráela de vuelta aquí",
             "bringBackToFill": "Tráela de vuelta para llenar este hueco, o deja la aplicación junto a tu código en otra pantalla.",
-            "previewInOwnWindow": "Tu vista previa está en su propia ventana"
+            "previewInOwnWindow": "Tu app en vivo está en su propia ventana"
         },
         "previewModel": {
             "port": "Puerto {port}",
@@ -4483,7 +4483,7 @@
         "needs": "Te necesita",
         "other": "Otros",
         "planLimits": "Límites del plan",
-        "preview": "Vista previa",
+        "preview": "App en vivo",
         "removed": "eliminado",
         "review": "Revisión",
         "running": "En marcha",

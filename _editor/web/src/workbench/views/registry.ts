@@ -119,11 +119,11 @@ const know = (): RailGroup => ({
     items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)],
 });
 
-// One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
-// badge, which counts an inventory, not a claim. Devices closes the band: the machines this sandbox reaches, a place to go
-// as This computer is in a local window. A signal tile a reader pins to keep: it comes onto the rail by itself while one
-// of the machines is being worked on (its turning mark) or a port is held, which is exactly when it has to be in sight.
-// The sandbox's own Desktop is not in any band: it is a live screen like a browser, so it sits in the runtime cluster.
+// One table per audience; only the Work band differs. Devices closes the band: the machines this sandbox reaches, a place
+// to go as This computer is in a local window. A signal tile a reader pins to keep: it comes onto the rail by itself
+// while one of the machines is being worked on (its turning mark) or a port is held, which is exactly when it has to be
+// in sight. The live app, Browsers and the sandbox's own Desktop are not in any band: they are live surfaces, so they sit
+// in the runtime cluster beside the terminal.
 // The Projects tile is on the rail for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
 // read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
 // sits above what it switches. For a maker the file tree stands in for it when the extension is off.
@@ -132,7 +132,7 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
         {
             id: `work`,
             label: t(`views.registry.work`),
-            items: [always(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(`preview`), signal(DEVICES_VIEW_ID)],
+            items: [always(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), signal(DEVICES_VIEW_ID)],
         },
         judge(),
         setup(),
@@ -148,7 +148,6 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
                 always(`chat`),
                 always(`agents`),
                 signal(WORKSPACE_VIEW_ID),
-                always(`preview`),
                 signal(DEVICES_VIEW_ID),
             ],
         },

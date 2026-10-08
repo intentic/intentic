@@ -2478,7 +2478,7 @@
             "disarm": "Disarm",
             "endNow": "End now",
             "leftForYou": "The agent left these running for you.",
-            "openInPreview": "Open in Preview",
+            "openInPreview": "Open in Live app",
             "running": "Running · {elapsed}",
             "servedOn": "Left running for you on {ports} · {elapsed}",
             "stopFailed": "That didn't stop.",
@@ -4326,7 +4326,7 @@
         "previewArea": {
             "bringBackHere": "Bring it back here",
             "bringBackToFill": "Bring it back to fill this one, or keep the app beside your code on another screen.",
-            "previewInOwnWindow": "Your preview is in its own window"
+            "previewInOwnWindow": "Your live app is in its own window"
         },
         "previewModel": {
             "port": "Port {port}",
@@ -8345,7 +8345,7 @@
         "other": "Other",
         "personas": "Personas",
         "planLimits": "Plan limits",
-        "preview": "Preview",
+        "preview": "Live app",
         "removed": "removed",
         "review": "Review",
         "running": "Running",

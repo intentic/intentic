@@ -198,10 +198,13 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
 
-/* Preview closes the Work band by showing the running result. */
+// THE LIVE APP (features/preview), an iframe onto a dev server, port or public page — not an agent's browser session, so
+// it sits in the runtime cluster beside Browsers and the terminal. On the rail while something is running to show, or
+// while the reader stands on /preview; with nothing to show it is reached from the palette, as a finished browser is.
 const { files: publicFiles } = usePublicOutbox();
 const previewTile = computed<SectionTile | undefined>(() => {
-    if (!previewEvidence(panels.value, forwardedPorts.value, publicFiles.value)) {
+    const evidence = previewEvidence(panels.value, forwardedPorts.value, publicFiles.value);
+    if (!evidence && !isNavActive(`/preview`)) {
         return undefined;
     }
     const healthy = previewHealthyCount(panels.value, forwardedPorts.value, publicFiles.value);
@@ -245,7 +248,7 @@ const devicesTile = computed<SectionTile>(() => {
     return badge === undefined ? tile : { ...tile, badge };
 });
 
-// The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
+// The always-present tiles; extension tiles are added separately below,
 // one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
 const fixedTiles = computed<readonly SectionTile[]>(() => [
     // Below the Projects tile in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
@@ -276,7 +279,6 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
         icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
-    ...(previewTile.value === undefined ? [] : [previewTile.value]),
     ...(canShip.value ? [devicesTile.value] : []),
 ]);
 /* The Browsers tile stays visible while the daemon lists an open browser. */
@@ -328,7 +330,9 @@ const needsTile = computed<SectionTile | undefined>(() =>
 );
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
 const runtimeTiles = computed<readonly SectionTile[]>(() =>
-    [needsTile.value, browserTile.value, desktopTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
+    [needsTile.value, browserTile.value, previewTile.value, desktopTile.value]
+        .filter((tile) => tile !== undefined)
+        .filter((tile) => sectionReachable(tile.to)),
 );
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {

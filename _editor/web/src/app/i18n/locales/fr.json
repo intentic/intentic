@@ -2042,7 +2042,7 @@
         "previewArea": {
             "bringBackHere": "La ramener ici",
             "bringBackToFill": "Ramenez-la pour remplir cet espace, ou gardez l'application à côté de votre code sur un autre écran.",
-            "previewInOwnWindow": "Votre aperçu est dans sa propre fenêtre"
+            "previewInOwnWindow": "Votre app en direct est dans sa propre fenêtre"
         },
         "previewModel": {
             "publicSite": "Site public"
@@ -4437,7 +4437,7 @@
         "needs": "A besoin de vous",
         "other": "Autre",
         "planLimits": "Limites de l'offre",
-        "preview": "Aperçu",
+        "preview": "App en direct",
         "removed": "supprimé",
         "review": "Revue",
         "running": "En marche",

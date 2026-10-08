@@ -3919,7 +3919,7 @@
         "previewArea": {
             "bringBackHere": "Przywróć tutaj",
             "bringBackToFill": "Przywróć go, żeby wypełnił to miejsce, albo zostaw aplikację obok kodu na drugim ekranie.",
-            "previewInOwnWindow": "Twój podgląd jest w osobnym oknie"
+            "previewInOwnWindow": "Twoja aplikacja na żywo jest w osobnym oknie"
         },
         "previewModel": {
             "port": "Port {port}",
@@ -7938,7 +7938,7 @@
         "other": "Inne",
         "personas": "Persony",
         "planLimits": "Limity planu",
-        "preview": "Podgląd",
+        "preview": "Aplikacja na żywo",
         "removed": "usunięte",
         "review": "Przegląd",
         "running": "Działa",
