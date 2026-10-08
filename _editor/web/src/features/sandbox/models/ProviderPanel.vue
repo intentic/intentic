@@ -12,7 +12,6 @@ import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowG
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
 import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
-import { requirementWords, runsWords } from "../../chat/accounts/providerWords";
 import { translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { accountsOf, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
 import { useChat } from "../../chat/run/useChat";
@@ -84,12 +83,6 @@ const emit = defineEmits<{
 }>();
 
 const spec = computed(() => providerSpec(provider));
-// What it needs and what it runs, beside its name: the two facts a reader compares providers on.
-const caption = computed(() =>
-    spec.value === undefined
-        ? undefined
-        : `${requirementWords(spec.value.access, `name`)} · ${t(`connect.providerTile.runs`, { runs: runsWords(spec.value.access) })}`,
-);
 const signingInHere = computed(() => attempt !== undefined && attempt.phase !== `failed`);
 
 const attemptBlock = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemptBlock`);
@@ -343,7 +336,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
 </script>
 
 <template>
-    <RowGroup :label="providerName" :caption="caption">
+    <RowGroup :label="providerName">
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
         <template v-if="rows.length > 0 && !signingInHere" #actions>
             <Button v-for="way in ways" :key="way.via" size="small" severity="secondary" :label="way.label" :disabled="busy" @click="ask(way.via)">
