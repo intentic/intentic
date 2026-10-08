@@ -69,6 +69,7 @@ fn announce_state(id: &str, state: &str, detail: Option<&str>) {
 /// What a live reading carries besides its sentence, for an app to DRAW rather than read: a bar that fills, and a
 /// row that turns to the person when the wait is on them. Both left out of the marker when unset, so an app from
 /// before them sees exactly the marker it always did and draws the sentence under a spinner, which is right too.
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Live {
     /// The row is waiting on the PERSON (Windows' permission prompt), not on the machine.
@@ -77,6 +78,7 @@ pub struct Live {
     pub percent: Option<u64>,
 }
 
+#[cfg(any(windows, test))]
 fn live_marker(id: &str, state: &str, detail: Option<&str>, live: Live) -> serde_json::Value {
     let mut line = serde_json::json!({ "id": id, "state": state, "detail": detail });
     if live.needs_you {
