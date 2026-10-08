@@ -13,7 +13,7 @@ const HELD: StandingVerdict = {
 };
 
 test(`a push in flight is a glyph, and the count it outranks is not drawn`, () => {
-    expect(pushBadge(true, undefined)).toMatchObject({ mark: `arrow-up-right` });
+    expect(pushBadge(true, undefined)).toMatchObject({ mark: `arrow-up` });
 });
 
 test(`a question owed is the danger mark, wherever the user is`, () => {

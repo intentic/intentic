@@ -1,20 +1,62 @@
 <script setup lang="ts">
-import { isScratch, type GitChange, type GitDiffSide, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract";
-import { Button, ChangeStatusMark, clipboardOf, ContextMenu, Modal, type TipRow, type TooltipValue, ui, useDevice, vAction } from "@intentic/ui";
+import {
+    isScratch,
+    type GitChange,
+    type GitDiffSide,
+    type LandedMessage,
+    type LandedMessageDraft,
+    type RepoChanges,
+    type RepoTarget,
+} from "@intentic/sandbox-contract";
+import {
+    Button,
+    ChangeStatusMark,
+    clipboardOf,
+    ContextMenu,
+    formatElapsed,
+    growTextarea,
+    type IconName,
+    Modal,
+    timeAgo,
+    type Tip,
+    type TipRow,
+    type TooltipValue,
+    ui,
+    useDevice,
+    vAction,
+} from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
-import CommitComposer from "./CommitComposer.vue";
-import ScopeChips from "./ScopeChips.vue";
-import { useCommitScope } from "./useCommitScope";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../explorer/fileType";
+import { useAgents } from "../../agents/fleet/useAgents";
+import { useChat } from "../../chat/run/useChat";
 import { useLayout } from "../../../workbench/window/useLayout";
-import { originHue, originsOf } from "./changeOrigins";
+import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
+import {
+    ALL_SIDES,
+    chipMessageNotice,
+    commitMessageOf,
+    draftReport,
+    draftRunning,
+    type DraftReportRow,
+    landedMessage,
+    originHue,
+    originsOf,
+    summarizeOrigins,
+    YOURS,
+} from "./changeOrigins";
+import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
 import { diffRawUrls } from "./diffRaw";
+import { repoOfPath, turnWrites } from "../files/liveWrites";
+import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
 import { COMMIT_SCOPE, useChanges } from "./useChanges";
+import { usePushFlow } from "../push/usePushFlow";
+import { useRepos } from "../explorer/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "./changeModules";
 import { sideTotal, truncatedOn, truncatedTotal } from "./truncation";
@@ -25,28 +67,32 @@ import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { changeRowMenuItems } from "./changeRowMenu";
 import { useHome } from "../home/useHome";
 import { useNotifications } from "../../../workbench/notifications/notifications";
+import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
-// sides (a path can be on both with different content). Commit records the Staged section, or everything when it is
-// empty (commitScope.ts). On a desktop the commit page beside the list holds the stage chips and the message
-// (CommitPage.vue); `docked` is the phone, with no page beside it, where the chips sit over the list and the composer
-// docks under it. Built for a ~270px sidebar: one primary button per row, icons+tooltips for the rest.
-
-const { docked = false } = defineProps<{ docked?: boolean }>();
+// sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
+// has one selection mechanism (the index), so Commit records it. Built for a ~270px sidebar: one primary button per
+// row, icons+tooltips for the rest.
 
 const t = useT();
 
 const changes = useChanges();
+const words = useVocabulary();
+// The push, started here but owned above this panel, so leaving the view doesn't lose the run or its question.
+const pushFlow = usePushFlow();
+// Ticks while a push is in flight, and while a verdict stands unanswered below — that line counts up too, and a
+// frozen "4m ago" over a failure from an hour back is worse than no clock at all.
+const now = useNow(() => pushFlow.running.value || pushFlow.held.value !== undefined);
 
-// The scope Commit records, shared with the composer (useCommitScope.ts): rows outside it dim, never hide. A repo the
-// daemon couldn't scan (empty lists, `error` set) stays out of every computation below but still renders as its own
-// row, rather than silently disappearing.
-const { scannable, scopeOrigin, originLabel, originProvider, originCard } = useCommitScope();
+// A repo the daemon couldn't scan (empty lists, `error` set) stays out of every computation below but still
+// renders as its own row, rather than silently disappearing.
+const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
 // The open mode rides the gesture: a click previews (replaced by the next look), a double-click keeps the tab.
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
@@ -65,29 +111,217 @@ const toggleGroup = (repo: string): void => {
 
 const changeLabel = (repo: string, change: GitChange): string => (repo === `root` ? change.path : `${repo}/${change.path}`);
 
+// Per row: a colour rail plus a provider chip, since "did an agent touch this" is scanned before it's read.
+// Per panel: a legend that IS the filter, not a grouping — a file two agents landed can't be grouped under one.
+const { fleet } = useAgents();
+// Read here for an origin chip's hover-card prompt, and below for which repos a main-tree turn is writing.
+const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
 
-// Raises the same card the chat tab strip does for a session, on hovering a row's chip.
+// A phone keyboard has no Ctrl, so the shortcut hint moves to the button label instead.
+const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCtrlEnter`)));
+
+const legend = computed(() => summarizeOrigins(scannable.value));
+// Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels,
+// since it names no ask.
+const originFilter = ref<string | undefined>(namedAfter.value);
+// Retires the filter (and its ask) once the named session has no work left in the tree; immediate, since a
+// restored filter has to be checked the moment this panel opens. An empty (still-loading) review retires nothing.
+watch(
+    legend,
+    ({ agents, yours }) => {
+        if (originFilter.value === undefined || (agents.length === 0 && yours === 0)) {
+            return;
+        }
+        const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
+        if (!stillHasWork) {
+            originFilter.value = undefined;
+            nameCommitAfter(undefined);
+        }
+    },
+    { immediate: true },
+);
+
+// Resolves an id via the live fleet card first (repaints on a rename instantly), then the review's own
+// `originAgents`, which survives archiving. An id-shaped fallback still draws a chip rather than reattributing the file
+// to the user.
+const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
+const originOf = (id: string) => changes.originAgents.value[id];
+// Undefined for the id-shaped fallback — readable, but not fit to use as a commit subject.
+const originTitle = (id: string): string | undefined => agentOf(id)?.title ?? originOf(id)?.title;
+const originLabel = (id: string): string => originTitle(id) ?? t(`workspace.reviewPanel.agentId`, { id: id.slice(0, 6) });
+const originProvider = (id: string): string | undefined => agentOf(id)?.provider ?? originOf(id)?.provider;
+
+// Whether a chip's count is a total (session stopped) or an instalment (still running), read from the fleet's
+// own lane machine, not `status` alone: a parked-on-a-question agent has a settled status but sits in Attention.
+const originMark = (id: string) => unfinishedMark(agentOf(id));
+
+// `turns` counts completed turns, so a session already running again is on turn N+1.
+// Stamped when the card opens, not ticked — HoverCard snapshots its content at show(), so a held-open card reads stale
+// on purpose.
+const originNote = (id: string): string | undefined => {
+    const mark = originMark(id);
+    const agent = agentOf(id);
+    if (mark === undefined || agent === undefined) {
+        return undefined;
+    }
+    const turn = agent.turns !== undefined && agent.turns > 0 ? `turn ${agent.turns + 1}` : undefined;
+    const doing = currentAction(agent.activity);
+    const since = agent.startedAt !== undefined ? formatElapsed((Date.now() - agent.startedAt) / 1000) : undefined;
+    return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
+};
+
+// The session's landed-diff subject (drafted at land time), not its title — a title names the ask, the diff says
+// what actually changed. Roster first (live, pushed instantly), then the review, same lookup order as identity above.
+const landedOf = (id: string): LandedMessage | undefined => landedMessage(agentOf(id), originOf(id));
+const originMessage = (id: string): string | undefined => commitMessageOf(landedOf(id));
+
+// One click narrows the list to that session's files and also names the commit after it — two things a user
+// did by hand before. Naming is recorded outside this component (nameCommitAfter), so it's answered even after the
+// panel closes.
+const toggleOrigin = (id: string): void => {
+    originFilter.value = originFilter.value === id ? undefined : id;
+    nameCommitAfter(originFilter.value === YOURS ? undefined : originFilter.value);
+};
+
+// Computed, not read at the click: recomputes as the review updates, so a message drafted seconds after
+// the click still reaches the box without a second click.
+const filterMessage = computed<string | undefined>(() =>
+    originFilter.value === undefined || originFilter.value === YOURS ? undefined : originMessage(originFilter.value),
+);
+followFilledMessage(filterMessage);
+
+// Read off the fleet roster's live draft report, not the review (which would cost a rescan). Distinguishes
+// "nothing was written" from "one is coming", which used to be the same empty box.
+const originDraft = (id: string): LandedMessageDraft | undefined => agentOf(id)?.landedMessageDraft;
+const originDrafting = (id: string): boolean => draftRunning(originDraft(id));
+// The lit chip's own report, for the box's placeholder and the readout line beside Commit.
+const filterDraft = computed<LandedMessageDraft | undefined>(() =>
+    originFilter.value === undefined || originFilter.value === YOURS ? undefined : originDraft(originFilter.value),
+);
+// Ticks only while the lit chip's draft is running, so its in-flight step's elapsed time actually moves.
+const draftClock = useNow(() => draftRunning(filterDraft.value));
+// The step list while a draft runs, and the post-mortem after it fails; a draft that succeeded clears from
+// here, since its message in the box is report enough.
+const filterDraftRows = computed<readonly DraftReportRow[]>(() => {
+    const draft = filterDraft.value;
+    return draft === undefined || draft.outcome === `written` ? [] : draftReport(draft, draftClock.value);
+});
+
+// The draft's newest step, said on the readout line beside Commit rather than as a list above it: the list grew a row
+// per model asked, pushing the button down, then vanished with the message, so the button jumped as it was reached.
+// The whole report rides the line's hover.
+const draftLine = computed<DraftReportRow | undefined>(() => filterDraftRows.value.at(-1));
+const draftTip = computed((): Tip | undefined =>
+    filterDraftRows.value.length === 0
+        ? undefined
+        : {
+              title: filterLabel.value ?? ``,
+              rows: filterDraftRows.value.map((row) => ({
+                  label: row.model ?? row.detail ?? ``,
+                  value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
+                  tone: row.status === `failed` ? `warn` : undefined,
+              })),
+          },
+);
+
+// One glyph and colour per row status, isolated to a narrow column so the reason text stays untinted.
+// A refusal mid-chain isn't an error (the fallback is working); only a draft that ends with nothing is amber.
+const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: boolean; tone: string }> = {
+    reading: { icon: `spinner`, spin: true, tone: `text-subtle` },
+    asking: { icon: `spinner`, spin: true, tone: `text-link` },
+    answered: { icon: `check`, tone: `text-success` },
+    refused: { icon: `times`, tone: `text-subtle` },
+    skipped: { icon: `forward`, tone: `text-subtle` },
+    failed: { icon: `exclamation-triangle`, tone: `text-warning` },
+};
+
+// Both edges of the wait (it started, what became of it) are reported above this panel and outlive it
+// (draftingReceipts.ts) — the wait begins on the /agents board and often outlasts a visit here.
+
+// Raises the same card the chat tab strip does for a session, on hovering a chip (a row's, or the legend's).
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
+// Includes attachments: a screenshot is often the whole of what was asked, and dropping it would misquote the prompt.
+const firstPromptOf = (id: string): { text?: string; attachments?: readonly string[] } | undefined => {
+    const conversation = conversations.value.find((c) => c.conversationId === id);
+    const prompt = conversation?.transcript.messages.value.find((message) => message.role === `user`);
+    return prompt === undefined ? undefined : { text: prompt.text, attachments: prompt.attachments };
+};
 const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
-    hoverCard.value?.show(event, originCard(ids));
+    // Two agents on one file is real but rare, and a single title can't say both, so the card lists them without a
+    // prompt.
+    const prompt = ids.length === 1 ? firstPromptOf(ids[0]!) : undefined;
+    hoverCard.value?.show(
+        event,
+        ids.length === 1
+            ? {
+                  label: t(`workspace.reviewPanel.landedBy`),
+                  title: originLabel(ids[0]!),
+                  note: originNote(ids[0]!),
+                  ...(prompt === undefined ? {} : { messages: [prompt] }),
+              }
+            : { label: t(`workspace.reviewPanel.landedBy`), title: ids.map((id) => originLabel(id)).join(`\n`) },
+    );
 };
 // The name rides the row only once the panel is wide enough to hold it without evicting the path (or on mobile).
 const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 
-// Quiet when the row's only origin is the session this commit is wholly the work of (the message box already names
-// it); a file two agents landed still shows both, since that's information the commit alone doesn't give.
+// An origin chip's spoken name: what a press does, whose files and how many, whether the session is still going, and
+// what the chip says about the commit message. Whole clauses, joined by punctuation, so none is a fragment of another.
+const originChipLabel = (id: string, files: number): string => {
+    const values = { origin: originLabel(id), count: files };
+    const press =
+        originFilter.value === id ? t(`workspace.reviewPanel.clearFilterOn`, values, files) : t(`workspace.reviewPanel.showOnly`, values, files);
+    const mark = originMark(id)?.label.toLowerCase();
+    const note = originDrafting(id)
+        ? t(`workspace.reviewPanel.messageBeingWritten`)
+        : originTitle(id) === undefined
+          ? undefined
+          : t(`workspace.reviewPanel.namesTheCommit`);
+    const head = mark === undefined ? press : `${press}, ${mark}`;
+    return note === undefined ? head : `${head}; ${note}`;
+};
+
+// The lit chip in words, for every sentence naming the filter's scope; undefined means no filter, not "nobody".
+const filterLabel = computed<string | undefined>(() =>
+    originFilter.value === undefined ? undefined : originFilter.value === YOURS ? t(`workspace.reviewPanel.you`) : originLabel(originFilter.value),
+);
+
+// States why the box didn't change after a click: still writing, none written, "you" has none, or the box
+// is the user's own text. Placeholder while empty; a readout line once there's text to sit beside instead.
+const chipNotice = computed<string | undefined>(() =>
+    chipMessageNotice({
+        label: filterLabel.value,
+        yours: originFilter.value === YOURS,
+        message: filterMessage.value,
+        draft: filterDraft.value,
+        boxIsYours: boxIsYours.value,
+    }),
+);
+
+const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
+    if (originFilter.value === undefined) {
+        return true;
+    }
+    const ids = originsOf(repo, change.path);
+    return originFilter.value === YOURS ? ids.length === 0 : ids.includes(originFilter.value);
+};
+
+// Quiet when the row's only origin is the lit chip (already said by the filter); a file two agents landed
+// still shows both, since that's information the filter alone doesn't give.
 const showRowOrigins = (repo: RepoChanges, path: string): boolean => {
     const ids = originsOf(repo, path);
     if (ids.length === 0) {
         return false;
     }
-    return !(ids.length === 1 && ids[0] === scopeOrigin.value);
+    return !(ids.length === 1 && ids[0] === originFilter.value);
 };
 
-// Sides in git's order (conflicts block everything, then staged, then unstaged); an empty section renders nothing.
-// Nothing is filtered: the commit scope dims rows, it never hides them.
+// Sides in git's order (conflicts block everything, then staged, then unstaged); an empty section renders
+// nothing. The origin filter is applied here once, so every row, verb and count downstream inherits it for free.
+// Except on Staged: that side is exactly what Commit records whenever it holds anything, so hiding part of it let a
+// filtered commit take files nobody could see.
 interface SideView {
     readonly side: GitDiffSide;
     readonly label: string;
@@ -102,7 +336,10 @@ const sidesByRepo = computed<ReadonlyMap<string, readonly SideView[]>>(
                     { side: `conflicted` as const, label: t(`workspace.reviewPanel.conflicts`), changes: repo.conflicted },
                     { side: `staged` as const, label: t(`workspace.reviewPanel.staged2`), changes: repo.staged },
                     { side: `unstaged` as const, label: t(`workspace.reviewPanel.unstaged`), changes: repo.unstaged },
-                ].filter((section) => section.changes.length > 0),
+                ].flatMap((section) => {
+                    const shown = section.side === `staged` ? section.changes : section.changes.filter((change) => matchesFilter(repo, change));
+                    return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
+                }),
             ]),
         ),
 );
@@ -116,7 +353,9 @@ const soleSide = (repo: RepoChanges): SideView | undefined => {
     return sides.length === 1 ? sides[0] : undefined;
 };
 
-// Only repos with changes get a row; a clean repo says nothing here (the empty state says it once, for the tree).
+// Only repos with changes get a row; a clean repo says nothing here (the empty state says it once, for the
+// tree). Read through `sidesOf`, so the origin filter also drops repos that agent never touched, unless something
+// there is staged.
 const dirty = computed(() => scannable.value.filter((repo) => sidesOf(repo).length > 0));
 
 // Whether a side's rows group under their package (useChangeGrouping, mirrored in Settings ▸ Appearance) —
@@ -170,8 +409,8 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
 // rows once this view opened. Every ±count here is the code-only reading the daemon computes with the list, final the
 // moment it's drawn.
 
-// Scale for the size rail: the biggest addition among rows shown. A folded repo still counts — folding hides rows, it
-// doesn't rescale everyone else's rail.
+// Scale for the size rail: the biggest addition among rows actually shown, narrowed by the origin filter.
+// A folded repo still counts — folding hides rows, it doesn't rescale everyone else's rail.
 const { readingOf, bySize } = useChangeWeight();
 const readingOfRow = (change: GitChange): ShownStat => readingOf(change.code, change.additions, change.deletions);
 const heaviest = computed(() => {
@@ -269,6 +508,211 @@ const byRepo = (rows: readonly Row[]): RepoTarget[] => {
     return [...grouped].map(([repo, paths]) => ({ repo, paths: [...paths] }));
 };
 
+// The message lives outside component state (commitMessage.ts), since this panel is mounted behind a v-if
+// and must survive a trip to look at the files it describes. Staged repos are the commit target — a commit records the
+// index.
+const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.length > 0).map((repo) => repo.repo));
+
+// Fires only when nothing is staged anywhere but there's work to record (VSCode's stage-all-and-commit, made
+// explicit). What it stages follows the origin filter — the whole repo unfiltered, or just that session's scope — as a
+// daemon-resolved scope, not the rows drawn.
+const stagesFirst = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
+const commitAll = computed(() => stagesFirst.value && originFilter.value === undefined);
+// A scope, not an enumerated list: the daemon resolves which files answer to a side/origin from the repo's own
+// status, so this isn't capped by what the review actually listed (RepoChanges.truncated). Staged is never filtered
+// (sidesByRepo), so its verb moves the whole side it shows.
+const scoped = (repo: string, side?: GitDiffSide): RepoTarget => ({
+    repo,
+    scope: {
+        ...(side !== undefined ? { side } : {}),
+        ...(originFilter.value !== undefined && side !== `staged` ? { origin: originFilter.value } : {}),
+    },
+});
+// Which repos: read off the visible (filtered) rows. What each commits: that session's whole landed scope in
+// the repo, truncated rows included, not just what's drawn.
+const filteredGroups = computed<readonly RepoTarget[]>(() =>
+    scannable.value.filter((repo) => sidesOf(repo).some((section) => section.changes.length > 0)).map((repo) => scoped(repo.repo)),
+);
+// The one shape both `commitRepos` and the AI draft take: an empty target for a whole-repo commit ("Commit
+// all" and plain Commit), a scope for the filtered one.
+const commitGroups = computed<readonly RepoTarget[]>(() => {
+    if (!stagesFirst.value) {
+        return stagedRepos.value.map((repo) => ({ repo }));
+    }
+    return commitAll.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : filteredGroups.value;
+});
+const commitTarget = computed(() => commitGroups.value.map((group) => group.repo));
+const repoIn = (id: string): RepoChanges | undefined => scannable.value.find((repo) => repo.repo === id);
+const truncatedIn = (id: string): number => {
+    const repo = repoIn(id);
+    return repo === undefined ? 0 : truncatedTotal(repo);
+};
+// Distinct paths a repo is showing: a file staged and edited again is two rows over one path.
+const visibleIn = (repo: RepoChanges): number => new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path))).size;
+// Files the filtered shape covers, for the button's label; 0 for every other shape. Counted off the drawn
+// rows, so it's a lower bound wherever the review truncated — `commitCountable` says when to hide the number rather
+// than undercount it.
+const commitFiles = computed(() =>
+    commitGroups.value.reduce((total, group) => {
+        const repo = repoIn(group.repo);
+        return total + (group.scope === undefined ? (group.paths?.length ?? 0) : repo === undefined ? 0 : visibleIn(repo));
+    }, 0),
+);
+const commitCountable = computed(() => !commitGroups.value.some((group) => truncatedIn(group.repo) > 0));
+// Any repo's unresolved conflict blocks the whole button: a commit spans repos sharing one message, and git would
+// refuse mid-batch.
+const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
+// Reads the daemon's own "committing" flag (unioned with this tab's in-flight batch), narrowed to the
+// repos this box would actually commit — a run in a repo the filter excludes isn't this button's concern.
+const committingNow = computed(() => commitTarget.value.filter((repo) => changes.committing.value.includes(repo)));
+const commitRunning = computed(() => committingNow.value.length > 0);
+const commitReady = computed(
+    () =>
+        commitTarget.value.length > 0 &&
+        commitMessage.value.trim().length > 0 &&
+        !blockedByConflicts.value &&
+        !changes.actionBusy.value &&
+        !commitRunning.value,
+);
+// The count rides the label, since a bare "Commit" over a filtered or hidden list wouldn't say what it covers.
+// Dropped wherever the review truncated, in favor of naming the filter — an undercounted figure is a worse promise than
+// none.
+const commitLabel = computed(() =>
+    commitAll.value
+        ? t(`workspace.reviewPanel.commitAll`)
+        : commitFiles.value === 0
+          ? t(`workspace.reviewPanel.commit`)
+          : commitCountable.value
+            ? t(`workspace.reviewPanel.commitFiles`, { count: commitFiles.value }, commitFiles.value)
+            : filterLabel.value === undefined
+              ? t(`workspace.reviewPanel.commitEverythingInFilter`)
+              : t(`workspace.reviewPanel.commitEverythingFrom`, { origin: filterLabel.value }),
+);
+
+// The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
+// runs, since the readout beside it already names the repos being committed.
+const COMMIT_KEYS = formatChord(`Mod+Enter`, isApplePlatform());
+const conflictedCount = computed(() => scannable.value.reduce((total, repo) => total + repo.conflicted.length, 0));
+const commitTip = computed((): Tip | undefined => {
+    const keys = mobile.value ? undefined : COMMIT_KEYS;
+    if (commitRunning.value) {
+        return undefined;
+    }
+    if (blockedByConflicts.value) {
+        return {
+            title: t(`workspace.reviewPanel.conflicts`),
+            tone: `danger`,
+            rows: [{ label: t(`shared.files`), value: conflictedCount.value }],
+            note: t(`workspace.reviewPanel.stageToResolve`),
+        };
+    }
+    if (commitAll.value) {
+        return { title: t(`workspace.reviewPanel.stageAllFirst`), keys, rows: [{ label: t(`shared.changes`), value: changes.count.value }] };
+    }
+    if (commitFiles.value > 0) {
+        return {
+            title: t(`workspace.reviewPanel.filteredCommit`),
+            keys,
+            rows: [
+                { label: t(`workspace.reviewPanel.from`), value: filterLabel.value ?? `` },
+                { label: t(`shared.files`), value: commitCountable.value ? commitFiles.value : `` },
+            ],
+            note: t(`workspace.reviewPanel.nothingElseGoesIn`),
+        };
+    }
+    return { title: t(`workspace.reviewPanel.commit`), keys, note: stagedRepos.value.length > 1 ? t(`workspace.reviewPanel.onePerRepo`) : undefined };
+});
+
+// Sessions this commit would record, and which are still running — scoped exactly like the button. A
+// warning, not a gate: staging part of an unfinished agent's work is ordinary, and `reset --soft` undoes it.
+const commitOrigins = computed(() =>
+    stagesFirst.value && originFilter.value !== undefined
+        ? legend.value.agents.filter((entry) => entry.id === originFilter.value)
+        : summarizeOrigins(
+              scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
+              commitAll.value ? ALL_SIDES : [`staged`],
+          ).agents,
+);
+const unfinished = computed(() => commitOrigins.value.filter((entry) => originMark(entry.id) !== undefined));
+
+// Only matters for a stage-first commit, which reads the live worktree — a plain commit already froze its
+// content at stage time. Only main-tree turns count: an isolated turn reaches this tree through land, which the daemon
+// already serializes against every git write here.
+const repos = useRepos();
+const writingRepos = computed<ReadonlySet<string>>(
+    () =>
+        new Set(
+            conversations.value
+                .filter((conversation) => !conversation.isolated.value && conversation.turn.streaming.value)
+                .flatMap((conversation) =>
+                    [...turnWrites(conversation.conversationId, conversation.turn.turnStartedAt.value)].map((path) =>
+                        repoOfPath(path, repos.repoDirs.value),
+                    ),
+                ),
+        ),
+);
+// Named in the warning; everything else is committable right now, which is why this is scoped per repo, not per
+// workspace.
+const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
+const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
+
+const runCommit = async (target: readonly RepoTarget[]): Promise<void> => {
+    await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
+    // Keeps the message on failure — it's the one thing here the user typed by hand.
+    if (!changes.failures.value.has(COMMIT_SCOPE)) {
+        commitMessage.value = ``;
+        // Ends the naming ask with the commit that fulfilled it, or a message still being drafted would fill the NEXT
+        // commit's box.
+        nameCommitAfter(undefined);
+    }
+};
+// Ctrl+Enter reaches this too, so a silently-ignored chord just gets retried harder; this names which of the
+// three reasons applied instead.
+const commitBlocker = computed<string | undefined>(() => {
+    if (blockedByConflicts.value) {
+        return t(`workspace.reviewPanel.blockedByConflicts`);
+    }
+    // Checked ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason, not a
+    // count about to change.
+    if (commitRunning.value) {
+        return t(`workspace.reviewPanel.stillCommitting`, { repos: committingNow.value.join(`, `) });
+    }
+    if (commitTarget.value.length === 0) {
+        return t(`workspace.reviewPanel.nothingToCommit`);
+    }
+    if (commitMessage.value.trim().length === 0) {
+        return t(`workspace.reviewPanel.writeMessageFirst`);
+    }
+    return changes.actionBusy.value ? t(`workspace.reviewPanel.anotherGitAction`) : undefined;
+});
+// Shown after a rejected Ctrl+Enter; cleared on the next edit, so it never outlives what it described.
+const blockerNotice = ref<string | undefined>(undefined);
+watch([commitMessage, commitBlocker], () => {
+    blockerNotice.value = undefined;
+});
+const doCommit = async (): Promise<void> => {
+    if (!commitReady.value) {
+        blockerNotice.value = commitBlocker.value;
+        return;
+    }
+    await runCommit(commitGroups.value);
+};
+
+// A textarea, not an input, since a message can carry a release-note trailer as a body. Measured via
+// `scrollHeight`, not counted newlines — a single wrapped line is still one line to `split`.
+// Eight lines at this box's font/padding, matching the composer's own ceiling (ChatPane), scaled to the sidebar.
+const MAX_COMMIT_HEIGHT = 142;
+const commitBox = ref<HTMLTextAreaElement | null>(null);
+// This box has its own border (the composer's doesn't), so growTextarea reads it off the element rather than a
+// constant.
+const growCommitBox = (): void => {
+    growTextarea(commitBox.value, MAX_COMMIT_HEIGHT);
+};
+// Watched, not `@input`: most of what fills this box isn't typing (a chip fill, a clear, a sandbox switch).
+// Sidebar width and `chipNotice` are in the list too, since a re-wrap or a longer placeholder both change the needed
+// height.
+watch([commitBox, commitMessage, chipNotice, layout.sidebarWidth], growCommitBox, { flush: `post` });
+
 // `staged` is the one side moving OUT of the index; the other two move in — a conflict's inward move is `git add`,
 // resolving it.
 const movesIntoIndex = (side: GitDiffSide): boolean => side !== `staged`;
@@ -284,15 +728,39 @@ const INDEX_VERB = computed<Record<GitDiffSide, { readonly one: string; readonly
     staged: { one: t(`workspace.reviewPanel.unstage`), all: t(`workspace.reviewPanel.unstageAll`), icon: `minus` },
 }));
 
-// The same verb on hover, and spoken with its repo for a screen reader.
-const sideVerbHint = (side: GitDiffSide): string => INDEX_VERB.value[side].all;
+// The filter a side's verb answers to: none on Staged, which the filter never narrows.
+const sideFilter = (side: GitDiffSide): string | undefined => (side === `staged` ? undefined : filterLabel.value);
+
+// Names whose files it moves, under a filter — the button no longer means "this whole side". Drops the
+// count wherever the daemon truncated, since a fraction is a worse promise than none.
+const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string => {
+    const verb = INDEX_VERB.value[side].all;
+    const origin = sideFilter(side);
+    if (origin === undefined) {
+        return verb;
+    }
+    const count = changesOn(repo, side).length;
+    return truncatedOn(repo, side) > 0
+        ? t(`workspace.reviewPanel.verbEveryFileFrom`, { verb, origin })
+        : t(`workspace.reviewPanel.verbFilesFrom`, { verb, count, origin }, count);
+};
+// The same verb on hover: the bare verb unfiltered, or a card naming whose files it moves and how many.
+const sideVerbTip = (repo: RepoChanges, side: GitDiffSide): TooltipValue =>
+    sideFilter(side) === undefined
+        ? INDEX_VERB.value[side].all
+        : {
+              title: INDEX_VERB.value[side].all,
+              rows: [
+                  { label: t(`workspace.reviewPanel.from`), value: sideFilter(side) ?? `` },
+                  { label: t(`shared.files`), value: truncatedOn(repo, side) > 0 ? `` : changesOn(repo, side).length },
+              ],
+          };
 
 // Row action: moves the acting rows across the index, in the direction their side implies.
 const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
 // Section action: the whole side, sent as a scope rather than the rows drawn — the change that ended staging
 // a truncated repo five hundred files at a time.
-const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> =>
-    changes.stageGroups([{ repo: repo.repo, scope: { side } }], movesIntoIndex(side));
+const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> => changes.stageGroups([scoped(repo.repo, side)], movesIntoIndex(side));
 
 // The row's right-click menu (changeRowMenu.ts). Like the explorer's: right-clicking outside the selection collapses it
 // to that row, inside a multi-selection keeps it, and the verbs then act on the whole selection.
@@ -406,18 +874,45 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
     };
 };
 
-// A repo-wide discard: every uncommitted change in it, sent as the whole repo so it reaches past the panel's
-// truncation budget too.
+// A repo-wide discard's question: everything, or the filtered origin's files (yours, or an agent's), counted unless
+// truncation hides some.
+const discardRepoQuestion = (repo: string, files: number, partial: boolean): string => {
+    const origin = filterLabel.value;
+    if (origin === undefined) {
+        return t(`workspace.reviewPanel.discardEveryChange`, { repo });
+    }
+    if (originFilter.value === YOURS) {
+        return partial
+            ? t(`workspace.reviewPanel.discardEveryFileOfYours`, { repo })
+            : t(`workspace.reviewPanel.discardFilesOfYours`, { count: files, repo }, files);
+    }
+    return partial
+        ? t(`workspace.reviewPanel.discardEveryFileFrom`, { origin, repo })
+        : t(`workspace.reviewPanel.discardFilesFrom`, { count: files, origin, repo }, files);
+};
+
+// Narrows to the filtered origin's files under a filter — the row it hangs off is showing that subset only.
+// Both shapes are scopes now, so the filtered discard also reaches that session's files past the panel's truncation
+// budget.
+// Whether a repo-wide discard has anything to take: a repo the filter shows only for its staged rows has none of the
+// filter's own files.
+const discardable = (repo: RepoChanges): boolean =>
+    originFilter.value === undefined || sidesOf(repo).some((section) => section.changes.some((change) => matchesFilter(repo, change)));
+
 const askDiscardRepo = (repo: RepoChanges): void => {
     // Distinct paths: a path staged and edited again is two rows but one file on disk, and this counts disk effect.
-    const paths = new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path)));
+    // Only the filter's own: the staged rows from other work it leaves on screen are not in the scope this discards.
+    const paths = new Set(
+        sidesOf(repo).flatMap((section) => section.changes.filter((change) => matchesFilter(repo, change)).map((change) => change.path)),
+    );
     const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
+    const partial = truncatedTotal(repo) > 0;
     pendingDiscard.value = {
-        question: t(`workspace.reviewPanel.discardEveryChange`, { repo: repo.repo }),
+        question: discardRepoQuestion(repo.repo, paths.size, partial),
         deletes,
         restores: paths.size - deletes.length,
-        partial: truncatedTotal(repo) > 0,
-        groups: [{ repo: repo.repo }],
+        partial,
+        groups: [originFilter.value === undefined ? { repo: repo.repo } : scoped(repo.repo)],
     };
 };
 
@@ -428,6 +923,172 @@ const confirmDiscard = async (): Promise<void> => {
         await changes.discardGroups(target.groups);
     }
 };
+
+// Shown only for a repo with a remote. `syncable`/`ahead`/`behind`/`unpublished` come from useChanges, so the
+// rail tile and this panel read a repo the same way. No verb reaches a row anymore — see the outgoing block above the
+// list.
+
+// VSCode's post-commit move: the slot just used to Commit becomes the sync the repos need, once the commit
+// box has nothing left to show. Per-row pills remain the granular control for a set whose repos need different things.
+const syncRepos = computed(() => scannable.value.filter((repo) => syncable(repo) && (ahead(repo) > 0 || behind(repo) > 0 || unpublished(repo))));
+const aheadTotal = computed(() => syncRepos.value.reduce((total, repo) => total + ahead(repo), 0));
+const behindTotal = computed(() => syncRepos.value.reduce((total, repo) => total + behind(repo), 0));
+const toPublish = computed(() => syncRepos.value.some((repo) => unpublished(repo)));
+// Mirrors the row pills so the bar can't contradict them: Pull for incoming-only, Push for outgoing-only,
+// Publish for an unpublished branch alone, Sync when a repo carries both. Mixed publish+outgoing reads Push.
+const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() => {
+    if (syncRepos.value.length === 0) {
+        return undefined;
+    }
+    if (behindTotal.value > 0) {
+        return aheadTotal.value > 0 || toPublish.value ? `sync` : `pull`;
+    }
+    if (toPublish.value && aheadTotal.value === 0) {
+        return `publish`;
+    }
+    return `push`;
+});
+// Icons match the pills beside the button (↑ push, ↓ pull), so the two read as one language. Straight arrows, since the
+// diagonal one means "open elsewhere" across the app.
+// The button's hover (`syncTip`) adds what the label can't: which repos, and the replay caveat when pulling.
+// `running` is the word the status line says while the verb is in flight.
+const SYNC_VERB = computed<
+    Record<
+        "push" | "pull" | "sync" | "publish",
+        { readonly label: string; readonly running: string; readonly icon: "arrow-up" | "arrow-down" | "sync" | "cloud-upload" }
+    >
+>(() => ({
+    push: { label: words.value.push, running: words.value.pushing, icon: `arrow-up` },
+    pull: { label: t(`workspace.reviewPanel.pull`), running: t(`workspace.reviewPanel.pulling`), icon: `arrow-down` },
+    sync: { label: words.value.sync, running: words.value.syncing, icon: `sync` },
+    publish: { label: words.value.publish, running: words.value.publishing, icon: `cloud-upload` },
+}));
+const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB.value[syncVerb.value]));
+// Counts plus the repo spread when more than one is in play; a pure publish has nothing to count.
+const syncSummary = computed<string>(() => {
+    const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];
+    const spread = syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repos`, { count: syncRepos.value.length }, syncRepos.value.length) : ``;
+    return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
+});
+const syncRepoSpread = computed(() =>
+    syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repoCount`, { count: syncRepos.value.length }, syncRepos.value.length) : undefined,
+);
+// Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
+// question, which is also why useChanges exports no one-repo push.
+
+// One line, the width this ~270px panel can spend on status.
+const stageLine = computed<string | undefined>(() => {
+    if (pushFlow.running.value) {
+        // The run carries the label it was asked with; the verb that label belongs to says its running word.
+        const verb = pushFlow.pending.value?.verb;
+        const running = Object.values(SYNC_VERB.value).find((entry) => entry.label === verb)?.running ?? SYNC_VERB.value.push.running;
+        return t(`workspace.reviewPanel.runningFor`, { running, elapsed: formatElapsed((now.value - pushFlow.since.value) / 1000) });
+    }
+    const sent = pushFlow.pushed.value;
+    return sent === undefined ? undefined : t(`workspace.reviewPanel.pushedWhat`, { what: sent.what });
+});
+
+// The one fact the line has no room for: what is going out, spelled out on a phone, which has no hover. Undefined once
+// nothing is in flight.
+const stageHint = computed<string | undefined>(() =>
+    pushFlow.running.value
+        ? t(`workspace.reviewPanel.sendingWhat`, { what: pushFlow.pending.value?.what ?? t(`workspace.reviewPanel.yourCommits`) })
+        : undefined,
+);
+
+/* Closing a card hides its question but does not change the verdict. */
+const heldLine = computed<string | undefined>(() => {
+    const held = pushFlow.held.value;
+    return held === undefined ? undefined : `${held.question.title} · ${timeAgo(held.at, { now: now.value })}`;
+});
+
+// The same fact as a card, where there is a pointer to raise it.
+const stageTip = computed((): Tip | undefined =>
+    pushFlow.running.value
+        ? { title: t(`ui.status.sending`), rows: [{ label: t(`workspace.reviewPanel.toRemote`), value: pushFlow.pending.value?.what ?? `` }] }
+        : undefined,
+);
+
+// What the press shows, and what the button beside it does instead.
+const heldTip = computed((): Tip | undefined => {
+    const held = pushFlow.held.value;
+    return held === undefined
+        ? undefined
+        : {
+              title: t(`workspace.reviewPanel.whatHappened`),
+              rows: [{ label: t(`workspace.reviewPanel.command`), value: held.question.command ?? `` }],
+              note: t(`workspace.reviewPanel.retriesWithHooks`, { verb: syncMeta.value?.label ?? words.value.push }),
+          };
+});
+
+// The offer and the run are one control in three states, not stacked rows — the control that was clicked is the
+// control that reports, and the one that keeps reporting after the answer was closed. Also the only place sync is
+// mentioned now; the per-row pills it replaced turned every repo row into a remote dashboard.
+const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
+    stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
+);
+// How much is waiting outlives the press that failed to send it, so the counts stay under a standing verdict — where
+// the width is the verdict's, they earn it only by having something to count; the offer states "no upstream yet" too.
+const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value === `held` && (aheadTotal.value > 0 || behindTotal.value > 0)));
+// Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
+const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
+// Names which repos, since the summary beside the button only counts. The replay caveat rides here too
+// — the one thing about this verb a user can be surprised by, now that the per-row pull pill is gone.
+const syncTip = computed((): Tip => ({
+    title: syncMeta.value?.label ?? words.value.sync,
+    rows: [
+        {
+            label: t(`workspace.reviewPanel.repoLabel`, {}, syncRepos.value.length),
+            value: syncRepos.value.map((repo) => repo.repo).join(`, `),
+        },
+    ],
+    note: behindTotal.value > 0 ? t(`workspace.reviewPanel.rebasesNeverMerges`) : undefined,
+}));
+// Where a pill's commits sit: the one repo by name, or how many.
+const whereRow = (counted: readonly { readonly repo: string }[]): TipRow => ({
+    label: t(`workspace.reviewPanel.repoLabel`, {}, counted.length),
+    value: counted.length === 1 ? counted[0]!.repo : counted.length,
+});
+// What each pill counts; the glyph and number alone don't say which way or where.
+const aheadTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.notPushed`),
+    rows: [{ label: t(`workspace.reviewPanel.commitsLabel`), value: aheadTotal.value }, whereRow(syncRepos.value.filter((repo) => ahead(repo) > 0))],
+}));
+const behindTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.toPull`),
+    rows: [
+        { label: t(`workspace.reviewPanel.commitsLabel`), value: behindTotal.value },
+        whereRow(syncRepos.value.filter((repo) => behind(repo) > 0)),
+    ],
+}));
+// Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
+const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
+const fetchTip = computed((): Tip => ({
+    title: t(`workspace.reviewPanel.fetch`),
+    rows: [{ label: t(`workspace.reviewPanel.repoLabel`, {}, fetchable.value.length), value: fetchable.value.length }],
+}));
+
+// Deliberately no rules of its own: the view header above already draws the one line this column gets. Blocks
+// are told apart by their own padding; a control with its own edge (the field, the button) carries what a rule would
+// have.
+// What a sync sends, named in "Pushed …" and "Sending … to the remote": the commits (or the branch), and across how many
+// repos. A noun phrase, which each language's sentence around it takes whole.
+const syncWhat = (): string => {
+    const commits =
+        aheadTotal.value > 0
+            ? t(`workspace.reviewPanel.commitCount`, { count: aheadTotal.value }, aheadTotal.value)
+            : t(`workspace.reviewPanel.thisBranch`);
+    const spread = syncRepos.value.length;
+    return spread > 1 ? t(`workspace.reviewPanel.whatAcrossRepos`, { what: commits, count: spread }, spread) : commits;
+};
+
+// One click, every repo with remote work: git can't span remotes, so this fans out into one real sync per repo.
+const doSync = (): void =>
+    pushFlow.askSync(
+        syncMeta.value?.label ?? words.value.sync,
+        syncWhat(),
+        syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
+    );
 
 // Hover-revealed but always laid out, so revealing on hover never moves the button out from under the pointer; touch
 // keeps them visible.
@@ -460,19 +1121,22 @@ const moduleRow = (repo: RepoChanges, side: GitDiffSide): boolean =>
     viewOf(repo.repo, side).named && !(sidesSplit(repo) && soleBucket(repo.repo, side) !== undefined);
 
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit spanning repos.
-const failureIn = (key: string) => changes.failures.value.get(key);
+const failureIn = (scope: string) => changes.failures.value.get(scope);
 
 // Failures with no row to land on: a fetch or push that fails in a CLEAN repo, which no longer has a row of
 // its own now that ahead/behind moved to the outgoing block. Surface under the block that fired them, naming their
 // repo.
 const strayFailures = computed<readonly { repo: string; action: string; detail: string }[]>(() =>
     [...changes.failures.value]
-        .filter(([key]) => key !== COMMIT_SCOPE && !dirty.value.some((repo) => repo.repo === key))
+        .filter(([scope]) => scope !== COMMIT_SCOPE && !dirty.value.some((repo) => repo.repo === scope))
         .map(([repo, failure]) => ({ repo, ...failure })),
 );
 
 // A bordered block, not loose coloured text — an error needs a container or it reads as gibberish, not a message.
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
+// The same shape one severity down: a heads-up about something that hasn't gone wrong yet, on an action still
+// available.
+const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5`;
 </script>
 
 <template>
@@ -488,9 +1152,313 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
             </div>
         </div>
 
-        <!-- What Commit records, over the list it dims; the commit page holds the same row on a desktop. -->
-        <div v-if="docked && changes.count.value > 0" class="shrink-0 border-b border-line-subtle px-2 py-1.5 empty:hidden">
-            <ScopeChips compact />
+        <!-- Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. Above the
+             box, since a lit chip decides what Commit stages and what its message says, as well as which rows show. -->
+        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
+            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
+            <button
+                v-for="entry in legend.agents"
+                :key="entry.id"
+                type="button"
+                class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
+                :class="[
+                    originHue(entry.id).chip,
+                    originFilter === entry.id ? 'shrink' : 'shrink-0',
+                    originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
+                ]"
+                @click="toggleOrigin(entry.id)"
+                @mouseenter="showOrigins($event, [entry.id])"
+                @mouseleave="hoverCard?.hide()"
+                :aria-label="originChipLabel(entry.id, entry.files)"
+            >
+                <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
+                <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
+                <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
+                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
+                <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
+                <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
+                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. -->
+                <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
+                <span class="shrink-0 opacity-70">{{ entry.files }}</span>
+                <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
+                <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
+            </button>
+            <button
+                v-if="legend.yours > 0"
+                type="button"
+                class="ui-chip shrink-0 gap-1 transition-opacity"
+                :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
+                @click="toggleOrigin(YOURS)"
+                v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
+            >
+                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
+                <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
+            </button>
+        </div>
+
+        <!-- Commit box next (VSCode's placement). It records the index — staging is the selection. -->
+        <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
+            <!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
+            <textarea
+                ref="commitBox"
+                v-model="commitMessage"
+                rows="1"
+                :placeholder="chipNotice ?? commitPlaceholder"
+                class="ui-field-box ui-field-sm block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
+                @keydown.ctrl.enter="doCommit"
+                @keydown.meta.enter="doCommit"
+            ></textarea>
+            <!-- The commit summary is a readout, not a set of checkboxes. -->
+            <div class="flex items-center gap-1">
+                <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
+                    {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
+                </span>
+                <!-- Where the commit is happening — the one thing the button beside it can't say. -->
+                <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{
+                    t(`workspace.reviewPanel.committingNow`, { repos: committingNow.join(`, `) })
+                }}</span>
+                <!-- Why Ctrl+Enter just refused: takes the readout's place, since it answers the same question the readout does. -->
+                <span
+                    v-else-if="blockerNotice"
+                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning"
+                    v-tooltip.right.overflow="blockerNotice"
+                >
+                    {{ blockerNotice }}
+                </span>
+                <!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
+                <span
+                    v-else-if="boxIsYours && chipNotice"
+                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted"
+                    v-tooltip.right.overflow="chipNotice"
+                >
+                    {{ chipNotice }}
+                </span>
+                <!-- The lit chip's message being written, or why none was: its newest step, the rest on hover. -->
+                <span v-else-if="draftLine" class="flex min-w-0 flex-1 items-center gap-1 whitespace-nowrap text-2xs" v-tooltip.right="draftTip">
+                    <Icon
+                        :name="STEP_MARKS[draftLine.status].icon"
+                        :spin="STEP_MARKS[draftLine.status].spin"
+                        class="shrink-0 text-3xs"
+                        :class="STEP_MARKS[draftLine.status].tone"
+                    />
+                    <span v-if="draftLine.model !== undefined" class="max-w-20 shrink-0 truncate text-content">{{ draftLine.model }}</span>
+                    <span class="min-w-0 truncate" :class="draftLine.status === `failed` ? `text-warning` : `text-subtle`">{{
+                        draftLine.detail
+                    }}</span>
+                    <span v-if="draftLine.elapsed !== undefined" class="shrink-0 tabular-nums text-subtle">{{ draftLine.elapsed }}</span>
+                </span>
+                <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
+                    <template v-if="changes.stagedCount.value > 0"
+                        >{{ changes.stagedCount.value }} {{ t(`workspace.reviewPanel.staged`)
+                        }}<span v-if="stagedRepos.length > 1">{{
+                            t(`workspace.reviewPanel.repos`, { count: stagedRepos.length }, stagedRepos.length)
+                        }}</span></template
+                    >
+                    <template v-else>{{ t(`workspace.reviewPanel.nothingStaged`) }}</template>
+                </span>
+                <!-- The commit action reports progress while stages, hooks, and reads run. -->
+                <Button
+                    size="small"
+                    severity="success"
+                    class="ui-button-thumb shrink-0 whitespace-nowrap"
+                    :disabled="!commitReady"
+                    @click="doCommit"
+                    v-tooltip.right="commitTip"
+                >
+                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{
+                        commitRunning ? t(`workspace.reviewPanel.committing`) : commitLabel
+                    }}
+                </Button>
+            </div>
+            <!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
+            <div v-if="atRisk.length > 0" :class="WARNING">
+                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
+                <div class="min-w-0 flex-1">
+                    <p class="break-words text-2xs text-warning">
+                        {{ t(`workspace.reviewPanel.agentEditing`, { paths: atRisk.join(`, `), action: commitLabel }, atRisk.length) }}
+                    </p>
+                    <Button
+                        v-if="unaffected.length > 0"
+                        size="small"
+                        severity="secondary"
+                        class="mt-1 whitespace-nowrap"
+                        :disabled="!commitReady"
+                        @click="() => runCommit(unaffected)"
+                        v-tooltip.right="t(`workspace.reviewPanel.commitsRepos`, { repos: unaffected.map((group) => group.repo).join(`, `) })"
+                    >
+                        <Icon name="check" class="mr-1 text-2xs" />{{ t(`workspace.reviewPanel.commit`) }}
+                        {{ unaffected.length === 1 ? unaffected[0]!.repo : t(`workspace.reviewPanel.otherRepos`, { count: unaffected.length }) }}
+                    </Button>
+                </div>
+            </div>
+            <!-- This warning reports unfinished work after the index has already been frozen. -->
+            <div v-if="unfinished.length > 0" :class="WARNING">
+                <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-warning" />
+                <p class="min-w-0 flex-1 break-words text-2xs text-warning">
+                    {{
+                        t(
+                            `workspace.reviewPanel.unfinishedOrigins`,
+                            {
+                                origins: unfinished.map((entry) => originLabel(entry.id)).join(`, `),
+                                files: t(
+                                    `workspace.reviewPanel.fileWord`,
+                                    {},
+                                    unfinished.reduce((total, entry) => total + entry.files, 0),
+                                ),
+                            },
+                            unfinished.length,
+                        )
+                    }}
+                </p>
+            </div>
+            <!-- A commit spans every staged repo, so its failure belongs to the box that fired it, message still in the input. -->
+            <div v-if="failureIn(COMMIT_SCOPE)" :class="NOTICE">
+                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+                <div class="min-w-0 flex-1">
+                    <p class="text-2xs font-medium text-danger">{{ failureIn(COMMIT_SCOPE)!.action }}</p>
+                    <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failureIn(COMMIT_SCOPE)!.detail">
+                        {{ failureIn(COMMIT_SCOPE)!.detail }}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                    @click="changes.dismissFailure(COMMIT_SCOPE)"
+                    v-tooltip.right="t(`ui.action.dismiss`)"
+                    :aria-label="t(`workspace.reviewPanel.dismissCommitError`)"
+                >
+                    <Icon name="times" class="text-2xs" />
+                </button>
+            </div>
+        </div>
+
+        <!-- One block, three states, never two: at rest the sync every repo needs, in flight the run in the button's own
+             place, and a closed card's verdict in front of the counts it did not change. -->
+        <div
+            v-if="outgoing !== undefined"
+            class="flex shrink-0 items-center"
+            :class="outgoing === `held` ? `gap-3 px-3 py-3` : `gap-1.5 px-2 py-1.5`"
+            v-tooltip.right="outgoing === `flow` && !mobile ? stageTip : undefined"
+        >
+            <template v-if="outgoing === `flow`">
+                <Icon
+                    :name="pushFlow.running.value ? `spinner` : `check-circle`"
+                    :spin="pushFlow.running.value"
+                    class="shrink-0 text-2xs"
+                    :class="pushFlow.running.value ? `text-link` : `text-success`"
+                />
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
+                    <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
+                </span>
+                <!-- Show terminal controls only when a terminal exists. -->
+                <button
+                    v-if="pushFlow.running.value && pushFlow.terminal.value !== undefined"
+                    type="button"
+                    :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                    @click="pushFlow.showTerminal"
+                    v-tooltip.top="t(`workspace.reviewPanel.watchRun`)"
+                    :aria-label="t(`workspace.reviewPanel.watchRun`)"
+                >
+                    <Icon name="terminal" class="text-2xs" />
+                </button>
+            </template>
+            <template v-else>
+                <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
+                <button
+                    v-if="outgoing === `held`"
+                    type="button"
+                    :class="ui.textAction(`m-0 min-w-0 flex-1 gap-2.5 rounded-md p-1 hover:bg-overlay`)"
+                    :aria-label="heldLine"
+                    v-tooltip.right="heldTip"
+                    @click="pushFlow.reopen"
+                >
+                    <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning" aria-hidden="true">
+                        <Icon name="exclamation-circle" class="text-base" />
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col gap-1">
+                        <span class="text-xs leading-snug font-medium text-content">{{ pushFlow.held.value?.question.title }}</span>
+                        <span class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-2xs leading-snug text-muted">
+                            <span v-if="pushFlow.held.value" class="whitespace-nowrap">{{ timeAgo(pushFlow.held.value.at, { now }) }}</span>
+                            <span v-if="pushFlow.heldStale.value">{{ t(`workspace.reviewPanel.filesChangedSince`) }}</span>
+                        </span>
+                    </span>
+                </button>
+                <!-- The counts belong to the tree, not to the press: a refused push leaves exactly as much waiting to go
+                     out as before it, so the standing verdict is drawn beside them rather than over them. -->
+                <div
+                    v-if="showCounts"
+                    class="flex items-center gap-1.5 truncate"
+                    :class="outgoing === `held` ? `shrink-0` : `min-w-0 flex-1`"
+                    :aria-label="syncSummary"
+                >
+                    <!-- The hint hangs off the pills it explains, not the row, which stretches to the button's edge. -->
+                    <span
+                        v-if="behindTotal > 0"
+                        v-tooltip.bottom="behindTip"
+                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                    >
+                        <Icon name="arrow-down" class="text-2xs text-link" aria-hidden="true" />
+                        {{ behindTotal }}
+                    </span>
+                    <span
+                        v-if="aheadTotal > 0"
+                        v-tooltip.bottom="aheadTip"
+                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                    >
+                        <Icon name="arrow-up" class="text-2xs text-link" aria-hidden="true" />
+                        {{ aheadTotal }}
+                    </span>
+                    <!-- A branch git reports no count for; the offer has the width to say so, the held card doesn't. -->
+                    <span v-if="behindTotal === 0 && aheadTotal === 0" class="truncate text-2xs text-subtle">
+                        {{ t(`workspace.reviewPanel.noUpstreamYet`) }}
+                    </span>
+                    <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
+                </div>
+                <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote.
+                     A cloud, not ↻, which the view header already spends on rescanning the tree. -->
+                <button
+                    v-if="outgoing === `offer`"
+                    type="button"
+                    :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                    :disabled="changes.actionBusy.value"
+                    @click="changes.fetchRepos(fetchable)"
+                    v-tooltip.top="fetchTip"
+                    :aria-label="t(`workspace.reviewPanel.fetchEveryRepo`)"
+                >
+                    <Icon name="cloud-download" class="text-2xs" />
+                </button>
+                <!-- The flow owns the block while running, so Push has no separate disabled state. -->
+                <Button
+                    v-if="syncMeta"
+                    size="small"
+                    :severity="syncSeverity"
+                    class="shrink-0 whitespace-nowrap"
+                    :disabled="changes.actionBusy.value"
+                    v-tooltip.bottom="syncTip"
+                    @click="doSync"
+                >
+                    <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
+                </Button>
+            </template>
+        </div>
+
+        <!-- A fetch or push that failed in a repo the list isn't showing; named by repo since it has no row to sit under. -->
+        <div v-for="failure in strayFailures" :key="failure.repo" :class="[NOTICE, 'mx-2 mt-1 shrink-0']">
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+            <div class="min-w-0 flex-1">
+                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</p>
+                <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</p>
+            </div>
+            <button
+                type="button"
+                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                @click="changes.dismissFailure(failure.repo)"
+                v-tooltip.right="t(`ui.action.dismiss`)"
+                :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
+            >
+                <Icon name="times" class="text-2xs" />
+            </button>
         </div>
 
         <div class="min-h-0 flex-1 overflow-auto py-1">
@@ -511,6 +1479,10 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                  anyone can make: mid-land the tree is being written, and the line above already says so. -->
             <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.noUncommittedChanges`) }}
+            </p>
+            <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
+            <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
+                {{ t(`workspace.reviewPanel.nothingLeftInTree`, { filterLabel }) }}
             </p>
 
             <!-- Unscannable repositories remain visible with Git's reason and no actions. -->
@@ -571,12 +1543,13 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                         :class="[ICON_BUTTON, 'text-muted max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         v-action="() => stageSide(group, soleSide(group)!.side)"
-                        v-tooltip.right="sideVerbHint(soleSide(group)!.side)"
-                        :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(soleSide(group)!.side), repo: group.repo })"
+                        v-tooltip.right="sideVerbTip(group, soleSide(group)!.side)"
+                        :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, soleSide(group)!.side), repo: group.repo })"
                     >
                         <Icon :name="INDEX_VERB[soleSide(group)!.side].icon" class="text-2xs" />
                     </button>
                     <button
+                        v-if="discardable(group)"
                         type="button"
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
@@ -667,8 +1640,8 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                                 :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                                 :disabled="changes.actionBusy.value"
                                 v-action="() => stageSide(group, section.side)"
-                                v-tooltip.right="sideVerbHint(section.side)"
-                                :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(section.side), repo: group.repo })"
+                                v-tooltip.right="sideVerbTip(group, section.side)"
+                                :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, section.side), repo: group.repo })"
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                             </button>
@@ -681,10 +1654,8 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
                                 <!-- Selection uses the primary tint instead of the row hover colour. -->
-                                <!-- A row outside what Commit records is dimmed, never hidden: nothing enters a commit unseen, and
-                                     nothing leaves the list because a scope was picked. Hover lifts it back to full strength. -->
                                 <div
-                                    class="group/file flex items-stretch gap-1 rounded transition-[opacity,background-color]"
+                                    class="group/file flex items-stretch gap-1 rounded transition-colors"
                                     @contextmenu="openRowMenu($event, { repo: group.repo, side: section.side, path: change.path }, change)"
                                     :class="[
                                         isSelected({ repo: group.repo, side: section.side, path: change.path })
@@ -790,27 +1761,6 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
             <!-- Other sandboxes' changes remain a separate read-only ledger. -->
             <OtherSandboxChanges />
         </div>
-
-        <!-- A fetch or push that failed in a repo the list isn't showing; named by repo since it has no row to sit under. -->
-        <div v-for="failure in strayFailures" :key="failure.repo" :class="[NOTICE, 'mx-2 mb-1 shrink-0']">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-            <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</p>
-                <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</p>
-            </div>
-            <button
-                type="button"
-                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
-                @click="changes.dismissFailure(failure.repo)"
-                v-tooltip.right="t(`ui.action.dismiss`)"
-                :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
-            >
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
-
-        <!-- A phone has no page beside the list, so the composer docks under it, the button inside its field. -->
-        <CommitComposer v-if="docked" variant="dock" />
 
         <!-- Tracked and untracked discard outcomes are reported separately. -->
         <Modal

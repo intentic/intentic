@@ -42,6 +42,7 @@ export const ICONS = {
     clock: STATUS_GLYPHS[`clock`],
     clone: ACTION_GLYPHS[`copy`],
     cloud: OBJECT_GLYPHS[`cloud`],
+    "cloud-download": OBJECT_GLYPHS[`cloud-download`],
     "cloud-upload": OBJECT_GLYPHS[`cloud-upload`],
     code: OBJECT_GLYPHS[`code`],
     cog: OBJECT_GLYPHS[`cog`],

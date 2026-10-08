@@ -425,7 +425,7 @@ const onPick = (event: Event): void => {
                 <button
                     type="button"
                     :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
-                    @click="segment === 'changes' ? changes.refreshAll() : refetch()"
+                    @click="segment === 'changes' ? changes.refresh() : refetch()"
                     :aria-label="t(`ui.action.refresh`)"
                     :disabled="
                         segment === 'changes'
@@ -444,7 +444,7 @@ const onPick = (event: Event): void => {
 
             <template v-if="segment === 'changes'">
                 <SavePanel v-if="maker" @open-diff="openDiffNav" />
-                <ReviewPanel v-else docked @open-diff="openDiffNav" />
+                <ReviewPanel v-else @open-diff="openDiffNav" />
             </template>
             <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" />
 

@@ -248,23 +248,6 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
     expect(await errorCode(client.agents.rename({ id: "nope", title: "x" }))).toBe("NOT_FOUND");
 });
 
-test("agents.redraftMessage answers at once for a known conversation, and names an unknown one", async () => {
-    const client = clientFor(
-        createApp(
-            services({
-                async *agent() {
-                    yield { kind: "done" };
-                },
-            }),
-        ),
-    );
-    await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
-    // Nothing of it is waiting in the tree, so the draft it starts withdraws itself rather than writing one.
-    expect(await client.agents.redraftMessage({ id: "conv1" })).toEqual({ ok: true });
-    await waitFor(async () => expect((await client.agents.list()).agents[0]?.landedMessageDraft).toBeUndefined(), SETTLES);
-    expect(await errorCode(client.agents.redraftMessage({ id: "nope" }))).toBe("NOT_FOUND");
-});
-
 // Title is the sanitized first prompt, so a title hit and a prompt hit are one rule; search also covers the archive,
 // not just the live roster.
 test("agents.search matches titles and later lines, across the archive", async () => {
@@ -451,7 +434,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 page: async (agent, window = {}) => transcriptPageOf(codexSearchTranscript(agent.id), window),
                 toolChildren: async (agent, toolId) => toolChildrenOf(codexSearchTranscript(agent.id), toolId),
                 toolCard: async (agent, toolId) => toolCardOf(codexSearchTranscript(agent.id), toolId),
-                lastSaid: async (agent) => codexSearchTranscript(agent.id).findLast((row) => row.role === "assistant")?.text,
+                lastSaid: async (agent) => (codexSearchTranscript(agent.id)).findLast((row) => row.role === "assistant")?.text,
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
                 migrate: async () => {},
@@ -554,11 +537,7 @@ test("a pressed land that breaks is kept on the card, not only answered to the p
     await collect(await client.agent.attach({ conversationId: "conv1" }));
     broken = true;
     expect(await errorCode(client.agents.land({ id: "conv1" }))).toBe("INTERNAL_SERVER_ERROR");
-    expect((await client.agents.get({ id: "conv1" })).landFailure).toEqual({
-        reason: unlinkedMessage(["root"]),
-        code: "unlinked",
-        at: expect.any(Number),
-    });
+    expect((await client.agents.get({ id: "conv1" })).landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
 });
 
 // A forced land only reads; the turn still owns finishing itself (mutex release, ending write), so the card must keep

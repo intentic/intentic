@@ -50,9 +50,7 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
 // - --ignore-errors: one unreadable file doesn't abandon the rest (an agent may be writing while you stage).
 // - advice.addEmbeddedRepo=false: a nested repo is scanned here, not warned about as a gitlink.
 export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<void> => {
-    await withScratchExcluded(scratch, (pathspecArgs) =>
-        git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]),
-    );
+    await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
 };
 
 // Unstages exactly `paths`, worktree untouched; on an unborn HEAD the entry is dropped instead (`rm --cached`).
@@ -119,35 +117,6 @@ export const commitOnly = async (
     }
     await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, "--", ...paths]);
     return true;
-};
-
-// Rewrites the tip commit under `message` (empty keeps its own): the whole index joins it, or, with `paths`, exactly
-// those (staged first, then recorded with `--only`, leaving the rest of the index staged). Refused before anything is
-// touched for a branch with no commit yet, and for a tip a remote-tracking branch already holds: rewriting that needs a
-// force push, which the panel never offers. The original author stays; the committer is `author`.
-export const amendHead = async (
-    dir: string,
-    message: string,
-    author: { readonly name: string; readonly email: string },
-    paths?: readonly string[],
-    git: GitRunner = defaultGit,
-): Promise<void> => {
-    if ((await headSha(dir, git)) === undefined) {
-        throw new Error("there is no commit to amend yet");
-    }
-    const holders = (await git(dir, ["branch", "-r", "--contains", "HEAD"])).stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "" && !line.includes(" -> "));
-    if (holders.length > 0) {
-        throw new Error(`the last commit is already on ${holders[0]}, and amending it would need a force push`);
-    }
-    if (paths !== undefined && paths.length > 0) {
-        await stagePaths(dir, paths, git);
-    }
-    // An empty message keeps the tip's own, the way `--no-edit` spells it.
-    const wording = message === "" ? ["--no-edit"] : ["-m", message];
-    await git(dir, [...identity(author), "commit", "-q", "--amend", ...wording, ...(paths === undefined ? [] : ["--only", "--", ...paths])]);
 };
 
 // Discards uncommitted work: everything, or exactly `paths`; tracked content returns to HEAD, untracked is deleted.

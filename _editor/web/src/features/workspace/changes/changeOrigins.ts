@@ -90,8 +90,7 @@ export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): Lan
     card === undefined ? origin?.landedMessage : card.landedMessage;
 
 // The commit message a landed message makes (landedCommitMessage), or undefined when nothing is written yet.
-export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined =>
-    landed === undefined ? undefined : landedCommitMessage(landed);
+export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => (landed === undefined ? undefined : landedCommitMessage(landed));
 
 // True while a draft has no outcome yet — the state every wait-related surface keys on.
 export const draftRunning = (draft: LandedMessageDraft | undefined): boolean => draft !== undefined && draft.outcome === undefined;
@@ -201,9 +200,8 @@ export interface ChipMessageState {
     readonly boxIsYours: boolean;
 }
 
-// Notice explaining why the box didn't fill, for what the draft line under the box can't say: the "you" scope has no
-// landed sentence by definition, and a box holding the user's own text keeps it. Undefined otherwise, including while
-// a message is being written and when none was: the draft line under the box carries both.
+// Notice explaining why the box didn't fill: ordered by what the user can act on (their own box, then a wait, then
+// absence). Undefined when no chip is lit or the chip's message is already in the box.
 export const chipMessageNotice = (state: ChipMessageState): string | undefined => {
     if (state.label === undefined) {
         return undefined;
@@ -211,8 +209,15 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
     if (state.yours) {
         return t(`workspace.changeOrigins.yourChangesNameIt`);
     }
+    const running = draftRunning(state.draft);
     // Applies whether the message exists yet or is still being written; the box takes neither until cleared.
-    return state.boxIsYours && (state.message !== undefined || draftRunning(state.draft))
-        ? t(`workspace.changeOrigins.keepingYourMessage`, { origin: state.label })
-        : undefined;
+    if (state.boxIsYours && (state.message !== undefined || running)) {
+        return t(`workspace.changeOrigins.keepingYourMessage`, { origin: state.label });
+    }
+    // The wait only; the report row below covers how it's going.
+    if (running) {
+        return t(`workspace.changeOrigins.writingMessageFor`, { origin: state.label });
+    }
+    // No message exists and none is coming; the draft's own report row, if any, explains why.
+    return state.message === undefined ? t(`workspace.changeOrigins.noMessageFor`, { origin: state.label }) : undefined;
 };

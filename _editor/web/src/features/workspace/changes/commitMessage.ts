@@ -74,11 +74,10 @@ export const clearFilledMessage = (): void => {
     filled.value = undefined;
 };
 
-// Keeps the box in step with the commit scope's message as it is drafted, so a sentence that arrives after the pick
-// still lands, and one the scope already has lands on mount (the dock can open on a session nobody clicked). Routes
-// through fillCommitMessage/clearFilledMessage, so typed text is still never overwritten.
-export const followFilledMessage = (source: Ref<string | undefined>, { immediate = false }: { readonly immediate?: boolean } = {}): void => {
-    watch(source, (message) => (message === undefined ? clearFilledMessage() : fillCommitMessage(message)), { immediate });
+// Keeps the box in step with a lit chip's message as it is drafted, so a sentence that arrives after the click
+// still lands. Routes through fillCommitMessage/clearFilledMessage, so typed text is still never overwritten.
+export const followFilledMessage = (source: Ref<string | undefined>): void => {
+    watch(source, (message) => (message === undefined ? clearFilledMessage() : fillCommitMessage(message)));
 };
 
 // Session the commit is named after, kept at module scope so the ask outlives the Changes panel being unmounted.

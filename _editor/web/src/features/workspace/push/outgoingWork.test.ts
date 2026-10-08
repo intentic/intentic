@@ -100,7 +100,7 @@ describe(`what the surfaces say about outgoing work`, () => {
     it(`wears the cloud only when publishing is all there is to do`, () => {
         expect(outgoingMark({ commits: 0, repos: 1, publish: true })).toBe(`cloud-upload`);
         // Both unpublished and ahead; the same push sends it, so it wears the same arrow as any other.
-        expect(outgoingMark({ commits: 2, repos: 1, publish: true })).toBe(`arrow-up-right`);
-        expect(outgoingMark({ commits: 2, repos: 1, publish: false })).toBe(`arrow-up-right`);
+        expect(outgoingMark({ commits: 2, repos: 1, publish: true })).toBe(`arrow-up`);
+        expect(outgoingMark({ commits: 2, repos: 1, publish: false })).toBe(`arrow-up`);
     });
 });

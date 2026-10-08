@@ -43,8 +43,9 @@ export const outgoingWork = (repos: readonly RepoChanges[]): OutgoingWork | unde
 };
 
 // The glyph for outgoing work everywhere it's shown. `cloud-upload` only when publishing is all there is; an
-// unpublished-and-ahead branch is sent by the same push as any other, so it wears the arrow.
-export const outgoingMark = ({ commits }: OutgoingWork): "arrow-up-right" | "cloud-upload" => (commits === 0 ? `cloud-upload` : `arrow-up-right`);
+// unpublished-and-ahead branch is sent by the same push as any other, so it wears the arrow. Straight up, not the
+// diagonal one, which means "open elsewhere" everywhere else in the app.
+export const outgoingMark = ({ commits }: OutgoingWork): "arrow-up" | "cloud-upload" => (commits === 0 ? `cloud-upload` : `arrow-up`);
 
 // The few words every surface says about outgoing work, a hover's or a tile's; a glyph alone can only say something is
 // waiting, and the amount decides whether the user acts now or later.

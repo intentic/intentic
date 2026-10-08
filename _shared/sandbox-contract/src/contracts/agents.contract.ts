@@ -306,18 +306,6 @@ export const agentsContract = {
         .meta({ control: "land" })
         .input(AgentLandSchema)
         .output(LandResultSchema),
-    // The drafting `land` runs on its own, asked again: for a message that came out wrong, or one whose models all
-    // failed. Answers at once; the draft streams on the summary like the first one did.
-    redraftMessage: procedure
-        .route({
-            method: "POST",
-            path: "/agents/{id}/redraft-message",
-            summary: "Write this merge's commit message again",
-            description:
-                "Asks the commit-message models again for the conversation's merged work still waiting to be committed, replacing the sentence it has. Answers at once: the new draft arrives on the conversation's summary, step by step, like the first one, and is withdrawn instead when none of its work is waiting any more. Refused while it is merging, and while a redraft is already running.",
-        })
-        .input(AgentIdSchema)
-        .output(OkSchema),
     // Stamps `AgentSummarySchema.landRequested` with the caller's identity.
     requestLand: procedure
         .route({

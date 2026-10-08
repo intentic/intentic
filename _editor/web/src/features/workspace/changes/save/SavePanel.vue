@@ -137,7 +137,7 @@ const doSave = async (): Promise<void> => {
         return;
     }
     // `true`: staging the whole tree first is what makes one press record everything, index or no index.
-    await changes.commitRepos(actions.dirtyRepos.value, saving.value.message, { stage: true });
+    await changes.commitRepos(actions.dirtyRepos.value, saving.value.message, true);
 };
 
 // Every failure that isn't the save's own, named by the project it happened in.

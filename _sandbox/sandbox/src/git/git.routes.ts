@@ -23,7 +23,7 @@ import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { ActionResult } from "./changes/changes-commits.js";
-import { COMMITTABLE_SIDES, DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
+import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { scratchScopeOf } from "./changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
@@ -146,15 +146,14 @@ export const createGitRoutes = (services: Services) => {
     // failures here throw (unlike the scan): a silent miss would quietly narrow a write.
     const scopeToPaths = async (repo: string, dir: string, scope: GitScope, sides: readonly GitDiffSide[]): Promise<readonly string[]> => {
         const { head, conflicted, staged, unstaged } = await services.git.changedFiles(dir);
-        const origins = scope.origin === undefined && scope.unlanded !== true ? {} : await services.agentOrigins.forRepo(repo, dir, head);
+        const origins = scope.origin === undefined ? {} : await services.agentOrigins.forRepo(repo, dir, head);
         return scopedPaths({ conflicted, staged, unstaged }, sides, scope, origins);
     };
 
     // Stage-all/discard-all use single-command spellings that never enumerate paths; unstage has none (a bare `reset`
     // also clears MERGE_HEAD) so it always resolves to paths. Callers must hold the repo lock.
     // What a stage-everything leaves out of this repo right now (scratch.ts): the scan shows it, the stage honors it.
-    const scratchIn = async (repo: string, dir: string): Promise<ScratchPath[]> =>
-        services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root));
+    const scratchIn = async (repo: string, dir: string): Promise<ScratchPath[]> => services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root));
     // A repo row's `scratch`, read only when something is untracked: a scan runs about once a second while files land.
     const scratchRow = async (repo: string, dir: string, worktree: readonly GitChange[]): Promise<Pick<RepoChanges, "scratch">> => {
         if (!worktree.some((change) => change.status === "added")) {
@@ -175,21 +174,13 @@ export const createGitRoutes = (services: Services) => {
             await services.git.stageAll(dir, scratch);
             return;
         }
-        await services.git.stagePaths(
-            dir,
-            (await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES)).filter((path) => !isScratch(path, scratch)),
-        );
-    };
-    // The paths a `commit --only` records for a stage target: what a stage of it would add, read the same way.
-    const onlyPaths = async (repo: string, dir: string, target: GitTarget): Promise<readonly string[]> => {
-        if (target.paths !== undefined) {
-            return target.paths;
-        }
-        const scratch = await scratchIn(repo, dir);
-        return (await scopeToPaths(repo, dir, target.scope ?? {}, COMMITTABLE_SIDES)).filter((path) => !isScratch(path, scratch));
+        await services.git.stagePaths(dir, (await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES)).filter((path) => !isScratch(path, scratch)));
     };
     const unstageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
-        await services.git.unstagePaths(dir, target.paths ?? (await scopeToPaths(repo, dir, target.scope ?? {}, UNSTAGEABLE_SIDES)));
+        await services.git.unstagePaths(
+            dir,
+            target.paths ?? (await scopeToPaths(repo, dir, target.scope ?? {}, UNSTAGEABLE_SIDES)),
+        );
     };
     const discardTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
         if (target.paths !== undefined) {
@@ -409,13 +400,7 @@ export const createGitRoutes = (services: Services) => {
         }),
         log: i.log.handler(async ({ input }) => {
             // Default page size when none is given: a small repo arrives whole, a large one isn't fully paid for.
-            const { branch, commits, hasMore } = await services.git.commitLog(
-                await repoDir(input.repo),
-                input.limit ?? 300,
-                input.skip ?? 0,
-                undefined,
-                input.line === true,
-            );
+            const { branch, commits, hasMore } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300, input.skip ?? 0);
             return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits, hasMore };
         }),
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
@@ -552,34 +537,22 @@ export const createGitRoutes = (services: Services) => {
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
-        // `stage` (whole repo, scope, or paths) decides what enters the index, and the whole index is recorded, unless
-        // `only` narrows the record to what `stage` named. `amend` rewrites the tip instead of adding one. All of it runs
-        // inside the repo lock so a land can't slip in between. Marked committing before the lock: queued behind a land
-        // still counts as running to the user.
+        // One commit shape: `stage` (whole repo, scope, or paths) decides what enters the index; there is no
+        // path-scoped `commit --only`. `stage` runs inside the repo lock so a land can't slip in between.
+        // Marked committing before the lock: queued behind a land still counts as running to the user.
         commit: i.commit.handler(({ input }) =>
             whileCommitting(input.repo, () =>
                 onRepo(input.repo, async (dir) => {
                     // Carries git's own refusal text back as a CONFLICT, not an opaque 500 with nothing to act on.
                     try {
-                        // Repairs only spellings a conventional parser can't find a header in at all (`!` before the
-                        // scope, no space after `:`); every other rule's verdict reaches the panel unchanged.
-                        const message = parsableMessage(input.message);
-                        // What `only` records: the named paths, or the scope resolved against live status, scratch left
-                        // out as a stage of it would leave it out.
-                        const only = input.only === true && input.stage !== undefined ? await onlyPaths(input.repo, dir, input.stage) : undefined;
-                        if (only === undefined && input.stage !== undefined) {
+                        // Stages first, then always commits the whole index (never a partial commit); one spelling
+                        // avoids a --no-verify path that would skip hooks inconsistently.
+                        if (input.stage !== undefined) {
                             await stageTarget(input.repo, dir, input.stage);
                         }
-                        let committed: boolean;
-                        if (input.amend === true) {
-                            await services.git.amendHead(dir, message, AGENT_GIT_AUTHOR, only);
-                            committed = true;
-                        } else if (only !== undefined) {
-                            committed = await services.git.commitOnly(dir, only, message, AGENT_GIT_AUTHOR);
-                        } else {
-                            committed = await services.git.commitIndex(dir, message, AGENT_GIT_AUTHOR);
-                        }
-                        const sha = committed ? await services.git.fullHead(dir) : undefined;
+                        // Repairs only spellings a conventional parser can't find a header in at all (`!` before the
+                        // scope, no space after `:`); every other rule's verdict reaches the panel unchanged.
+                        const committed = await services.git.commitIndex(dir, parsableMessage(input.message), AGENT_GIT_AUTHOR);
                         invalidateScan();
                         // Re-reads only the just-committed repo, inside the lock, instead of a full rescan: a land
                         // landing between commit and read would describe a tree the commit didn't make. `scanRepo`
@@ -588,10 +561,10 @@ export const createGitRoutes = (services: Services) => {
                         if (changes === undefined) {
                             // Nothing left to show for this repo (the scan's own inclusion rule); the client drops the
                             // row.
-                            return { committed, ...opt("sha", sha) };
+                            return { committed };
                         }
                         const originAgents = identifyOrigins([changes]);
-                        return { committed, ...opt("sha", sha), changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
+                        return { committed, changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
                     } catch (error) {
                         // The index can move even on failure (staging happens before the commit), so the view is stale
                         // regardless.

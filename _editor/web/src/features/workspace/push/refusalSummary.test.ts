@@ -44,9 +44,9 @@ test(`a push the remote refused for its credential names the host to connect, an
         output: `remote: Invalid username or token.\nfatal: Authentication failed for 'https://github.com/x/tabularium.git/'`,
     };
     expect(credentialHostOf(refused)).toBe(`github`);
-    expect(credentialHostOf({ ...refused, reason: `fatal: could not read Username for 'https://gitlab.com': terminal prompts disabled`, output: `` })).toBe(
-        `gitlab`,
-    );
+    expect(
+        credentialHostOf({ ...refused, reason: `fatal: could not read Username for 'https://gitlab.com': terminal prompts disabled`, output: `` }),
+    ).toBe(`gitlab`);
     expect(credentialHostOf(push)).toBeUndefined();
     expect(credentialHostOf({ ...refused, reason: `fatal: Could not read from remote repository.`, output: `` })).toBeUndefined();
     expect(credentialHostOf({ ...refused, reason: `fatal: Authentication failed for 'https://git.example.com/x.git/'`, output: `` })).toBeUndefined();

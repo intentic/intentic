@@ -15,7 +15,7 @@ export const pushBadge = (running: boolean, question: PushQuestion | undefined, 
         return { mark: `exclamation-triangle`, tone: `warning`, tooltip: held.question.title };
     }
     if (running) {
-        return { mark: `arrow-up-right`, tooltip: t(`workspace.pushBadge.sendingCommits`) };
+        return { mark: `arrow-up`, tooltip: t(`workspace.pushBadge.sendingCommits`) };
     }
     return undefined;
 };

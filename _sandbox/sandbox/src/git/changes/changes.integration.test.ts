@@ -18,7 +18,7 @@ import {
     revertCommit,
 } from "./changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes-diff.js";
-import { amendHead, commitIndex, commitOnly, discardPaths, pruneEmptiedDirs, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
+import { commitIndex, commitOnly, discardPaths, pruneEmptiedDirs, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -231,23 +231,6 @@ test("commitLog pages through a history and says whether more is behind it", asy
     expect(second.hasMore).toBe(false);
 
     expect((await commitLog(dir, 4)).hasMore).toBe(false);
-});
-
-// A branch's own line for "where does this branch stand": another branch's newer commits stay out of it.
-test("commitLog follows only HEAD's first-parent line when asked", async () => {
-    const dir = await tempRepo();
-    await sh(dir, "checkout", "-q", "-b", "side");
-    await writeFile(join(dir, "side.txt"), "side\n");
-    await sh(dir, "add", "-A");
-    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "on side");
-    await sh(dir, "checkout", "-q", "-");
-    await writeFile(join(dir, "a.txt"), "main\n");
-    await sh(dir, "add", "-A");
-    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "on main");
-
-    expect((await commitLog(dir, 50)).commits.map((commit) => commit.subject)).toContain("on side");
-    const line = await commitLog(dir, 50, 0, undefined, true);
-    expect(line.commits.map((commit) => commit.subject)).toEqual(["on main", "init"]);
 });
 
 test("commitLog degrades to an empty list on a repo with no commits", async () => {
@@ -993,9 +976,7 @@ test("statusPaths names what changedFiles names in one git run, where changedFil
     expect(runs).toHaveLength(1);
     const { conflicted, staged, unstaged } = await changedFiles(dir, counted);
     expect(runs).toHaveLength(4);
-    const named = [...conflicted, ...staged, ...unstaged].flatMap((change) =>
-        change.from === undefined ? [change.path] : [change.path, change.from],
-    );
+    const named = [...conflicted, ...staged, ...unstaged].flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from]));
     expect(paths.toSorted()).toEqual([...new Set(named)].toSorted());
     expect(paths.toSorted()).toEqual(["fresh.txt", "kept.txt", "new.txt", "old.txt"]);
 });
@@ -1015,61 +996,6 @@ test("commitOnly records exactly the named paths from the worktree, whatever els
     // The owner's staging survives; the committed path reads clean on both sides.
     expect(staged.map((change) => change.path)).toEqual(["mine.txt"]);
     expect(unstaged).toEqual([]);
-});
-
-test("amendHead folds what is staged into the last commit under the new message, keeping one commit", async () => {
-    const dir = await tempRepo();
-    const before = await sh(dir, "rev-list", "--count", "HEAD");
-    await writeFile(join(dir, "late.txt"), "forgot this\n");
-    await sh(dir, "add", "late.txt");
-
-    await amendHead(dir, "feat: init, with the late file", author);
-
-    expect(await sh(dir, "rev-list", "--count", "HEAD")).toBe(before);
-    expect(await sh(dir, "log", "-1", "--format=%s")).toBe("feat: init, with the late file");
-    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("late.txt");
-    // The original author stays; only the committer is the one amending.
-    expect(await sh(dir, "log", "-1", "--format=%an|%cn")).toBe("t|intentic");
-});
-
-test("amendHead with an empty message keeps the last commit's own", async () => {
-    const dir = await tempRepo();
-    await writeFile(join(dir, "late.txt"), "forgot this\n");
-    await sh(dir, "add", "late.txt");
-    await amendHead(dir, "", author);
-    expect(await sh(dir, "log", "-1", "--format=%s")).toBe("init");
-    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("late.txt");
-});
-
-test("amendHead with paths records only those, leaving the rest of the index staged", async () => {
-    const dir = await tempRepo();
-    await writeFile(join(dir, "landed.txt"), "the agent's\n");
-    await writeFile(join(dir, "mine.txt"), "the owner's\n");
-    await sh(dir, "add", "mine.txt");
-
-    await amendHead(dir, "init and the landed file", author, ["landed.txt"]);
-
-    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("landed.txt");
-    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("mine.txt");
-    expect((await changedFiles(dir)).staged.map((change) => change.path)).toEqual(["mine.txt"]);
-});
-
-test("amendHead refuses a commit a remote branch already holds, and touches nothing", async () => {
-    const dir = await tempRepo();
-    const remote = await mkdtemp(join(tmpdir(), "intentic-remote-"));
-    tempDirs.push(remote);
-    await sh(remote, "init", "-q", "--bare");
-    await sh(dir, "remote", "add", "origin", remote);
-    await sh(dir, "push", "-q", "origin", "HEAD");
-    await sh(dir, "fetch", "-q", "origin");
-    const head = await sh(dir, "rev-parse", "HEAD");
-    await writeFile(join(dir, "late.txt"), "late\n");
-    await sh(dir, "add", "late.txt");
-
-    await expect(amendHead(dir, "rewritten", author)).rejects.toThrow(/force push/);
-
-    expect(await sh(dir, "rev-parse", "HEAD")).toBe(head);
-    expect((await changedFiles(dir)).staged.map((change) => change.path)).toEqual(["late.txt"]);
 });
 
 test("commitOnly carries a deletion, and is a no-op false when the paths already match HEAD", async () => {

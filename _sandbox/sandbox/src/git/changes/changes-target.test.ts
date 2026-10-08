@@ -1,6 +1,6 @@
 import type { GitChange } from "@intentic/sandbox-contract";
 import { chunkPaths } from "./changes-index.js";
-import { COMMITTABLE_SIDES, DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes-target.js";
+import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes-target.js";
 
 const change = (path: string, extra: Partial<GitChange> = {}): GitChange => ({ path, status: "modified", ...extra });
 
@@ -38,16 +38,6 @@ test("an origin scope keeps only what that conversation landed, either leg of a 
     expect(scopedPaths(sides, DISCARDABLE_SIDES, { side: "unstaged", origin: "agent-b" }, origins)).toEqual(["new.ts"]);
     // No matching attribution resolves to nothing, not a fallback to everyone's work.
     expect(scopedPaths(sides, STAGEABLE_SIDES, { origin: "agent-a" })).toEqual([]);
-});
-
-test("an unlanded scope keeps only what no conversation claims, a rename claimed through either leg excluded", () => {
-    const origins = { "edited.ts": ["agent-a"], "old.ts": ["agent-b"] };
-    expect(scopedPaths(sides, COMMITTABLE_SIDES, { unlanded: true }, origins)).toEqual(["staged.ts", "new.ts"]);
-    // A named origin wins over the flag, never both read as an intersection of opposites.
-    expect(scopedPaths(sides, COMMITTABLE_SIDES, { origin: "agent-a", unlanded: true }, origins)).toEqual(["edited.ts"]);
-    // With no attribution read at all, everything is unlanded.
-    expect(scopedPaths(sides, COMMITTABLE_SIDES, { unlanded: true })).toEqual(["staged.ts", "moved.ts", "old.ts", "edited.ts", "new.ts"]);
-    expect(isWholeRepo({ unlanded: true })).toBe(false);
 });
 
 test("a path listed on two sides at once resolves to one entry", () => {

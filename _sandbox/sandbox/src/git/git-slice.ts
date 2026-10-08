@@ -43,7 +43,7 @@ import {
     revertCommit,
 } from "./changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes/changes-diff.js";
-import { amendHead, commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
+import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
 import { type ScratchScope, scratchOf } from "./changes/scratch.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
 import { type CommitScope, collectRepoDiff, type RepoDiff } from "./ops/commit-message.js";
@@ -92,8 +92,6 @@ export interface GitSlice {
             author: { readonly name: string; readonly email: string },
             git?: GitRunner,
         ) => Promise<boolean>;
-        // Rewrites the tip commit; refused for one a remote already holds (changes-index.ts).
-        readonly amendHead: (dir: string, message: string, author: { name: string; email: string }, paths?: readonly string[]) => Promise<void>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
         // Branches and the remote; remote verbs return an ActionResult since 'no remote' is an outcome, not an error.
         readonly listBranches: (dir: string) => Promise<GitBranch[]>;
@@ -120,13 +118,7 @@ export interface GitSlice {
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
         // Git-history graph, read-only: one repo's commit log across all refs, lazy per-commit detail on request.
-        readonly commitLog: (
-            dir: string,
-            limit: number,
-            skip?: number,
-            git?: GitRunner,
-            line?: boolean,
-        ) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
+        readonly commitLog: (dir: string, limit: number, skip?: number) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
         // What one repo contributes to an AI commit message: recent subjects, file list, and the diff to be recorded.
         readonly collectRepoDiff: (repo: string, dir: string, scope: CommitScope) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
@@ -186,7 +178,6 @@ export const createGitSlice = (): GitSlice => ({
         unstagePaths,
         commitIndex,
         commitOnly,
-        amendHead,
         discardPaths,
         listBranches,
         listRemoteBranches,

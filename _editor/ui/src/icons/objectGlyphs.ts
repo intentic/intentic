@@ -6,6 +6,8 @@ export const OBJECT_GLYPHS = {
     boxes: { outline: `m12 2 10 5-10 5L2 7Z M2 12l10 5 10-5 M2 17l10 5 10-5` },
     camera: { outline: `M3 7h4l2-3h6l2 3h4v13H3Z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z` },
     cloud: { outline: `M6 19a4 4 0 0 1-1-8 6 6 0 0 1 12-2 5 5 0 0 1 0 10Z` },
+    // Fetch: the remote's commits coming down, without touching the tree.
+    "cloud-download": { outline: `M5 18a4 4 0 0 1 0-8 7 7 0 0 1 12-2 5 5 0 0 1 0 10 M12 12v10 M8 18l4 4 4-4` },
     "cloud-upload": { outline: `M5 18a4 4 0 0 1 0-8 7 7 0 0 1 12-2 5 5 0 0 1 0 10 M12 22V12 M8 16l4-4 4 4` },
     code: { outline: `m7 6-5 6 5 6 M17 6l5 6-5 6 M14 3l-4 18` },
     cog: { outline: `M12 2l3 4h4v4l3 2-3 2v4h-4l-3 4-3-4H5v-4l-3-2 3-2V6h4Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z` },

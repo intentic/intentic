@@ -9,8 +9,6 @@ export interface GitFakeOverrides {
     readonly git?: Partial<GitSlice["git"]> | undefined;
 }
 
-export const CLEAN_HEAD = "c0ffee".padEnd(40, "0");
-
 // A clean repo on `main` with nothing staged, stashed, ahead or behind, and every write succeeding. The routes reach a
 // dozen of these, the rest stay unstubbed. A module constant, since each fake spreads it into an object of its own.
 const cleanRepo = {
@@ -28,9 +26,6 @@ const cleanRepo = {
     // The real one: a settings page commits its own write (seams/settings-versions.ts), and the suites that check it do
     // so on a repo of their own; best-effort, so a suite with no repo only logs that its write stays uncommitted.
     commitOnly,
-    amendHead: async () => {},
-    // The tip a just-recorded commit reports; a suite about which commit it is passes its own.
-    fullHead: async () => CLEAN_HEAD,
     discardPaths: async () => {},
     deleteTag: async () => {},
     pushTag: async () => ({ ok: true as const }),
