@@ -18,6 +18,7 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
@@ -116,11 +117,15 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
-// The persona a link named (SandboxHub's `open`) lands open once the list holds it, and only once.
+// The open persona lives in the address (`?open=<id>`, SandboxHub's `open`), so a reload or a shared link lands on it.
+// A named persona opens once the list holds it, once per naming: a refetch must not reopen one the reader just closed.
 let landedOn: string | undefined;
 watch(
     [() => props.open, personas],
-    ([asked]) => {
+    ([asked], previous) => {
+        if (asked !== previous?.[0]) {
+            landedOn = undefined;
+        }
         const persona = personas.value.find((candidate) => candidate.id === asked);
         if (persona === undefined || landedOn === asked) {
             return;
@@ -131,6 +136,18 @@ watch(
         }
     },
     { immediate: true },
+);
+
+// And back: opening, closing or renaming one rewrites the address. Replaced, not pushed: picking a tile is not a visit.
+const route = useRoute();
+const router = useRouter();
+watch(
+    () => draft.value?.original,
+    (id) => {
+        if (id !== props.open) {
+            void router.replace({ query: { ...route.query, open: id } });
+        }
+    },
 );
 
 // A name, and nothing else: the persona is written with the schema's own defaults (stored as absent, so the file says

@@ -7,6 +7,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
+import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 (() => {
@@ -100,6 +101,7 @@ const { default: SandboxPersonas } = await import("./SandboxPersonas.vue");
 const account = (id: string, platform: string): BrowserAccount => ({ id, platform, site: platform, logo: undefined, icon: `globe` });
 
 let app: App | undefined;
+let router: Router;
 // Icon is registered app-wide in the real app; a stand-in keeps this off the whole UI plugin.
 const mount = (props: { open?: string } = {}): HTMLElement => {
     const el = document.createElement(`div`);
@@ -110,6 +112,9 @@ const mount = (props: { open?: string } = {}): HTMLElement => {
     // wears one.
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
+    // The open persona is written to the address, so the page needs a router to write it to.
+    router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/`, component: { render: () => null } }] });
+    app.use(router);
     app.mount(el);
     return el;
 };
@@ -218,6 +223,13 @@ it(`marks a persona whose every account is signed out`, async () => {
     const el = mount();
     await openPersona(el, `work`);
     expect(text(el)).toContain(`Not signed in`);
+});
+
+it(`writes the open persona to the address, so a reload lands on it`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    await openPersona(el, `work`);
+    await waitFor(() => expect(router.currentRoute.value.query[`open`]).toBe(`work`));
 });
 
 it(`does not mark a persona that can reach at least one signed-in account`, async () => {

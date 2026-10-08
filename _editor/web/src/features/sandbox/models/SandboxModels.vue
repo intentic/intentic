@@ -122,7 +122,22 @@ const stopFetching = (): void => {
 };
 
 // THE GRID AND WHICH TILE IS OPEN.
-const selected = ref<TileKey | undefined>(undefined);
+// The open tile lives in the address (`?open=<tile>`), so a reload or a shared link lands on it again.
+const tileNamed = (value: unknown): TileKey | undefined => MODEL_TILES.find((tile) => tile === value);
+const remembered = tileNamed(route.query[`open`]);
+const selected = ref<TileKey | undefined>(remembered);
+// Query writes run one after another, each spreading the address the previous one left: two replaces issued in one tick
+// (the arrival dropping `?provider=`, the tile it opened) would otherwise each spread the stale query and undo the other.
+let writing: Promise<unknown> = Promise.resolve();
+const patchQuery = (patch: Record<string, string | undefined>): void => {
+    writing = writing.then(() => router.replace({ query: { ...route.query, ...patch } })).catch(() => undefined);
+};
+// Replaced, not pushed: picking a tile is not a visit.
+watch(selected, (tile) => {
+    if (tile !== tileNamed(route.query[`open`])) {
+        patchQuery({ open: tile });
+    }
+});
 const panelId = useId();
 const select = (tile: TileKey): void => {
     selected.value = selected.value === tile ? undefined : tile;
@@ -171,7 +186,7 @@ const settleArrival = (): void => {
             void connect(asked);
         }
         // Acted on once: a reload or a step back to this address must not start the sign-in a second time.
-        void router.replace({ query: { ...route.query, provider: undefined } });
+        patchQuery({ provider: undefined });
         arrived = true;
         return;
     }
@@ -179,6 +194,10 @@ const settleArrival = (): void => {
         return;
     }
     arrived = true;
+    // A tile the address remembers is the reader's own pick, and outranks the page's guess.
+    if (remembered !== undefined) {
+        return;
+    }
     selected.value = arrivalTile({
         live: live.value?.provider,
         failed: signInFailure.value?.provider,
