@@ -47,31 +47,33 @@ const LINE = {
 <template>
     <button
         type="button"
-        class="ui-row-select group relative flex w-[4.75rem] shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-2"
+        class="ui-row-select group flex w-[5.25rem] shrink-0 flex-col items-center gap-2.5 rounded-xl px-2 py-3"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
         @click="emit(`select`)"
     >
-        <!-- The price, where it is nothing: a corner label rather than the tile's line, so it outlives the first account. -->
-        <span
-            v-if="isFreeTile(tile)"
-            class="absolute left-1.5 top-1.5 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
-            >{{ t(`connect.connect.free`) }}</span
-        >
-        <span
-            v-if="count !== undefined"
-            class="absolute right-1.5 top-1.5 text-[0.65rem] font-medium leading-4 tabular-nums text-subtle"
-            :aria-label="
-                tile === LOCAL_TILE
-                    ? t(`connect.providerGrid.models`, { count }, count)
-                    : t(`connect.modelSources.accounts`, { count }, count)
-            "
-            >{{ count }}</span
-        >
+        <!-- Corner labels live above the mark so they never sit on it. -->
+        <div v-if="isFreeTile(tile) || count !== undefined" class="relative h-5 w-full shrink-0">
+            <span
+                v-if="isFreeTile(tile)"
+                class="absolute left-0 top-0 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
+                >{{ t(`connect.connect.free`) }}</span
+            >
+            <span
+                v-if="count !== undefined"
+                class="absolute right-0 top-0 text-[0.65rem] font-medium leading-4 tabular-nums text-subtle"
+                :aria-label="
+                    tile === LOCAL_TILE
+                        ? t(`connect.providerGrid.models`, { count }, count)
+                        : t(`connect.modelSources.accounts`, { count }, count)
+                "
+                >{{ count }}</span
+            >
+        </div>
         <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
         <span
-            class="relative flex shrink-0 items-center justify-center text-3xl"
+            class="relative flex shrink-0 items-center justify-center px-1.5 py-1 text-3xl"
             :class="selected ? `text-content` : `text-muted group-hover:text-content`"
         >
             <Icon v-if="tile === LOCAL_TILE" name="cpu" />
