@@ -506,6 +506,8 @@ test("a fully reverted delta lands as a no-op: landedTip advances, no phantom co
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
     expect(result.landed).toBe(true);
+    // Nothing reached the tree, so nothing may be announced as landed; `advanced` is what keeps the tip on the books.
+    expect(result).toMatchObject({ changed: false, advanced: true });
     expect(result.conflicts).toBeUndefined();
     expect(await sh(work, "status", "--porcelain")).toBe("");
     expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));

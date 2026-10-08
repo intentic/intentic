@@ -256,6 +256,11 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
         yield* recordLand(deps, hooks, turn, finished, books, landed);
         return;
     }
+    // A tip that moved with nothing written (a net-zero delta: an edit and its revert) is kept on the books but never
+    // announced: "Changes landed" over an empty tree is a land the owner then cannot find.
+    if (landed.advanced === true) {
+        await deps.agents.recordLanded(id, landed);
+    }
     // Nothing new to land, but earlier output already counts: it stays landed rather than dropping to idle.
     books.outcome = landed.diff.files > 0 ? "landed" : books.outcome;
 }
@@ -279,7 +284,7 @@ export const settleLandBooks = async (
             ),
         );
         reportLockfileFailures(deps.logger, conversationId, measured);
-        if (measured.changed) {
+        if (measured.changed || measured.advanced === true) {
             await deps.agents.recordLanded(conversationId, measured);
         }
         // Read this time: what an earlier check could not read (a passing index.lock) no longer stands on the card.

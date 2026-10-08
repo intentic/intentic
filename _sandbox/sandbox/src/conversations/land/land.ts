@@ -34,6 +34,9 @@ export interface LandOutcome extends LandResult {
     readonly adjudicated: boolean;
     // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
     readonly lockfileFailures?: readonly LockfileFailure[];
+    // A landed tip moved with nothing written: a net-zero delta (an edit and its revert). The books must keep it or a
+    // later land re-reports the delta, but `changed` stays false: nothing reached a tree, so nothing is announced.
+    readonly advanced?: true;
 }
 
 export interface LockfileFailure {
@@ -462,6 +465,8 @@ interface RepoPlanning {
     // A `measure` land deliberately left an outstanding delta on the branch.
     readonly held?: true;
     readonly changed: boolean;
+    // The landed tip moves though nothing is written (LandOutcome.advanced).
+    readonly advanced?: true;
     readonly diff: LandOutcome["diff"];
 }
 
@@ -587,7 +592,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
     const patchPath = join(run.patchDir, `${repo.replaceAll("/", "_")}.patch`);
     if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
         // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
-        return { plan: { next: { repo, base, landedTip: tip } }, changed: true, diff };
+        return { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff };
     }
     const judged = run.mode === "measure" ? await measureRepo(run, composed, target, patchPath) : await judgeRepo(run, composed, target, patchPath);
     return { ...judged, changed: true, diff };
@@ -661,6 +666,8 @@ export const landAgent = async (
                     diff.deletions += planning.diff.deletions;
                 }
                 const changed = plannings.some((planning) => planning.changed);
+                // Only where nothing else moved: a land that also wrote is plainly `changed`, and records its tips anyway.
+                const advanced = !changed && plannings.some((planning) => planning.advanced === true) ? { advanced: true as const } : {};
                 const held = plannings.some((planning) => planning.held === true);
                 const conflicts = plannings.flatMap((planning) => (planning.conflict === undefined ? [] : [planning.conflict]));
                 // A refusal returns the original repo records, so a later land still applies the whole composed change.
@@ -677,7 +684,7 @@ export const landAgent = async (
                 if (written.conflicts.length > 0) {
                     return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
                 }
-                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...resolving, ...(held ? { held: true } : {}), ...target };
+                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

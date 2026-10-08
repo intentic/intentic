@@ -225,6 +225,9 @@ async function* landIntoParent(
         throw cause;
     });
     reportLockfileFailures(deps.logger, conversationId, landed);
+    if (landed.advanced === true) {
+        await deps.agents.recordLanded(conversationId, landed);
+    }
     if (landed.changed) {
         await deps.agents.recordLanded(conversationId, landed);
         yield landedFrame(landed, undefined);
