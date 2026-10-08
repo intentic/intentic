@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Notice } from "@intentic/ui";
+import { Button, Notice, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import {
     dismissPushError,
@@ -62,6 +62,9 @@ const silentLine = computed(() =>
           ),
 );
 
+// ReviewPanel's leading-glyph slot: 10px, so a chevron here sits in the same column as the repo rows' above.
+const LEAD = `flex w-2.5 shrink-0 items-center justify-center`;
+
 // Absent when there's nothing outstanding, rather than showing a permanent all-clear row.
 const show = computed(() => hasOtherSandboxes.value && (rows.value.length > 0 || silent.value.length > 0));
 
@@ -103,18 +106,21 @@ const detail = (row: LedgerRow): string => {
             :aria-expanded="open"
             @click="open = !open"
         >
-            <Icon :name="open ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-[0.6rem] text-subtle" />
-            <Icon name="server" class="shrink-0 text-2xs text-subtle" />
-            <span class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{
+            <!-- The Changes list's own grid (ReviewPanel's LEAD): the chevron in the repo chevrons' column, the server
+                 glyph on the repo names' column, so this heading reads as one more block of that list. -->
+            <span :class="LEAD"><Icon :name="open ? 'chevron-down' : 'chevron-right'" class="text-2xs text-subtle" /></span>
+            <span :class="LEAD"><Icon name="server" class="text-2xs text-subtle" /></span>
+            <span class="min-w-0 flex-1 truncate text-2xs font-medium uppercase tracking-wide text-muted">{{
                 t(`workspace.otherSandboxChanges.inOtherSandboxes`)
             }}</span>
             <span v-if="summary" class="shrink-0 text-2xs text-warning">{{ summary }}</span>
         </button>
 
         <!-- Name the boxes so a summary cannot be mistaken for a complete list. -->
-        <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-4 pr-1 text-2xs text-subtle">
+        <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-5 pr-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1 truncate">{{ silentLine }}</span>
-            <button type="button" class="shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
+            <!-- Pulled out by its own padding, so the word ends on the gutter Commit and the row glyphs end on. -->
+            <button type="button" class="-mr-1 shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
                 {{ t(`ui.action.retry`) }}
             </button>
         </p>
@@ -124,14 +130,14 @@ const detail = (row: LedgerRow): string => {
                 v-if="pushRowError !== undefined"
                 tone="danger"
                 size="xs"
-                class="mt-1"
+                class="mx-1 mt-1"
                 :dismiss-label="t(`ui.action.dismiss`)"
                 @dismiss="dismissPushError()"
             >
                 {{ pushRowError }}
             </Notice>
 
-            <div v-for="row in rows" :key="ledgerKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
+            <div v-for="row in rows" :key="ledgerKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-5 pr-1">
                 <div class="min-w-0 flex-1">
                     <!-- Box names lead repository names so the machine context is clear. -->
                     <p class="min-w-0 truncate text-2xs text-content">
@@ -157,7 +163,7 @@ const detail = (row: LedgerRow): string => {
                 <!-- Unsupported actions remain on the owning machine. -->
                 <button
                     type="button"
-                    class="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton({ size: `xs`, tone: `subtle` }, `shrink-0`)"
                     :aria-label="t(`workspace.otherSandboxChanges.open`, { sandboxName: row.sandboxName })"
                     v-tooltip.top="t(`workspace.otherSandboxChanges.open`, { sandboxName: row.sandboxName })"
                     @click="openWorkspaceIn(row.sandboxId)"

@@ -408,6 +408,19 @@ const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.va
 // A 270px sidebar has no room for labelled secondary buttons; only the primary action spends width on a word.
 const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 
+// The panel's one indent grid, 8px gutter and 16px per rank. Every leading glyph (chevron, spinner, module box, status
+// letter) sits in this 10px slot, centred whatever the glyph's own width, and the label follows at the row's 6px gap.
+// So each rank's slot starts exactly where its parent's label does, and the spinner beside Commit shares the
+// chevrons' column instead of hanging 1px off it.
+const LEAD = `flex w-2.5 shrink-0 items-center justify-center`;
+// The trailing glyphs (stage verb, discard) are one size on every row, so their columns run straight down from the
+// repo row through a side header to each file. A row missing one keeps its place with GLYPH_GAP.
+const rowGlyph = (tone: `muted` | `subtle` = `muted`, ...classes: string[]): string =>
+    ui.iconButton({ size: mobile.value ? `lg` : `xs`, tone }, `shrink-0 disabled:opacity-40`, ...classes);
+const GLYPH_GAP = `w-5 shrink-0 max-md:w-8`;
+// Discard sits a touch further off on touch, so it can't be hit for the unconfirmed Stage beside it.
+const DISCARD_GAP = `max-md:ml-2`;
+
 // Opens the row's own diff (side included in the key, so a partially staged file gets two tabs, not one
 // replacing the other). Opens on the click, not the fetched answer: the row already has everything the tab needs to
 // render.
@@ -1062,14 +1075,14 @@ const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, se
 const showRepoCount = (repo: RepoChanges): boolean =>
     repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || truncatedTotal(repo) > 0);
 
-// Each rank that is actually DRAWN (repo, side, module, file) gets one 8px step; a rank that isn't drawn costs
-// nothing, so a shallow list (one repo, one side, no grouping) stays shallow instead of indenting for headings that
-// aren't there.
-const ROW_INDENT: readonly string[] = [`pl-2`, `pl-4`, `pl-6`];
+// Each rank that is actually DRAWN (side, module) pushes the rows below it one 16px step (see LEAD); a rank that isn't
+// drawn costs nothing, so a shallow list (one repo, one side, no grouping) stays shallow instead of indenting for
+// headings that aren't there. Measured from the repo block's 4px inset, so rank 0 lands on the repo name's column (24px).
+const RANK_INDENT: readonly string[] = [`pl-5`, `pl-9`, `pl-13`];
 const rowIndent = (repo: RepoChanges, side: GitDiffSide): string =>
-    ROW_INDENT[(sidesSplit(repo) ? 1 : 0) + (moduleRow(repo, side) ? 1 : 0)] ?? `pl-6`;
+    RANK_INDENT[(sidesSplit(repo) ? 1 : 0) + (moduleRow(repo, side) ? 1 : 0)] ?? `pl-13`;
 // The module heading sits one step above its rows, on whichever step the side header left free.
-const moduleIndent = (repo: RepoChanges): string => (sidesSplit(repo) ? `pl-4` : `pl-2`);
+const moduleIndent = (repo: RepoChanges): string => (sidesSplit(repo) ? `pl-9` : `pl-5`);
 
 // The same fold as `soleSide`, one level down: a section whose rows are all in one module states it on the
 // section's own row instead of a heading over a single row. Only where there's a section row to fold into.
@@ -1141,18 +1154,24 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     {{ chipNotice }}
                 </span>
                 <!-- The lit chip's message being written, or why none was: its newest step, the rest on hover. -->
-                <span v-else-if="draftLine" class="flex min-w-0 flex-1 items-center gap-1 whitespace-nowrap text-2xs" v-tooltip.right="draftTip">
-                    <Icon
-                        :name="STEP_MARKS[draftLine.status].icon"
-                        :spin="STEP_MARKS[draftLine.status].spin"
-                        class="shrink-0 text-3xs"
-                        :class="STEP_MARKS[draftLine.status].tone"
-                    />
-                    <span v-if="draftLine.model !== undefined" class="max-w-20 shrink-0 truncate text-content">{{ draftLine.model }}</span>
-                    <span class="min-w-0 truncate" :class="draftLine.status === `failed` ? `text-warning` : `text-subtle`">{{
-                        draftLine.detail
-                    }}</span>
-                    <span v-if="draftLine.elapsed !== undefined" class="shrink-0 tabular-nums text-subtle">{{ draftLine.elapsed }}</span>
+                <span v-else-if="draftLine" class="flex min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap text-2xs" v-tooltip.right="draftTip">
+                    <!-- In the chevrons' column, so the model's name starts on the repo names' line below it. -->
+                    <span :class="LEAD">
+                        <Icon
+                            :name="STEP_MARKS[draftLine.status].icon"
+                            :spin="STEP_MARKS[draftLine.status].spin"
+                            class="text-2xs"
+                            :class="STEP_MARKS[draftLine.status].tone"
+                        />
+                    </span>
+                    <!-- One phrase, so its words keep a word space between them rather than the glyph's gap. -->
+                    <span class="flex min-w-0 items-center gap-1">
+                        <span v-if="draftLine.model !== undefined" class="max-w-20 shrink-0 truncate text-content">{{ draftLine.model }}</span>
+                        <span class="min-w-0 truncate" :class="draftLine.status === `failed` ? `text-warning` : `text-subtle`">{{
+                            draftLine.detail
+                        }}</span>
+                        <span v-if="draftLine.elapsed !== undefined" class="shrink-0 tabular-nums text-subtle">{{ draftLine.elapsed }}</span>
+                    </span>
                 </span>
                 <!-- At rest the row's only word is the button's: it carries its own count. -->
                 <span v-else class="flex-1"></span>
@@ -1235,12 +1254,14 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             v-tooltip.right="outgoing === `flow` && !mobile ? stageTip : undefined"
         >
             <template v-if="outgoing === `flow`">
-                <Icon
-                    :name="pushFlow.running.value ? `spinner` : `check-circle`"
-                    :spin="pushFlow.running.value"
-                    class="shrink-0 text-2xs"
-                    :class="pushFlow.running.value ? `text-link` : `text-success`"
-                />
+                <span :class="LEAD">
+                    <Icon
+                        :name="pushFlow.running.value ? `spinner` : `check-circle`"
+                        :spin="pushFlow.running.value"
+                        class="text-2xs"
+                        :class="pushFlow.running.value ? `text-link` : `text-success`"
+                    />
+                </span>
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
                     <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
@@ -1340,7 +1361,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
              one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
-        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
+        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <button
                 v-for="entry in legend.agents"
@@ -1389,22 +1410,22 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <!-- Where the incoming rows will appear, so it reads as "on their way here" rather than as a notice about
                  somewhere else. Above the list, not only in its place: a second land arrives while the first's rows are
                  already listed. -->
-            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-3 py-2 text-2xs text-link">
-                <Icon name="spinner" spin class="shrink-0 text-3xs" />
+            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-2 py-2 text-2xs text-link">
+                <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>
                 <!-- A title long enough to truncate is the common case in a 270px sidebar, so the whole line is owed
                      on hover; the verb leads so what survives the cut is the part that answers "where is my work". -->
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
-            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-2 py-2 text-2xs text-subtle">
                 {{ t(`workspace.words.loadingChanges`) }}
             </p>
             <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
                  anyone can make: mid-land the tree is being written, and the line above already says so. -->
-            <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
+            <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-2 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.noUncommittedChanges`) }}
             </p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
-            <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
+            <p v-else-if="dirty.length === 0 && filterLabel" class="px-2 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.nothingLeftInTree`, { filterLabel }) }}
             </p>
 
@@ -1412,10 +1433,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <div v-for="group in unscannable" :key="group.repo" class="mt-1 px-1 first:mt-0">
                 <!-- The warning icon occupies the chevron slot so rows stay aligned. -->
                 <div class="flex min-w-0 items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1">
-                    <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
+                    <span :class="LEAD"><Icon name="exclamation-triangle" class="text-2xs text-danger" /></span>
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
                 </div>
-                <Notice tone="danger" size="sm" class="mb-1.5">
+                <Notice tone="danger" size="sm" class="mx-1 mb-1.5">
                     <span class="block font-medium">{{ t(`workspace.reviewPanel.couldntReadRepo`) }}</span>
                     <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</span>
                 </Notice>
@@ -1436,7 +1457,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         @click="toggleGroup(group.repo)"
                     >
                         <!-- The chevron is the repository row's only leading icon. -->
-                        <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
+                        <span :class="LEAD">
+                            <Icon class="text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
+                        </span>
                         <!-- Both names truncate together, the branch three times as fast — it's the annotation, the repo is the heading. -->
                         <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{ group.repo }}</span>
                         <span v-if="group.branch !== undefined" class="flex min-w-0 max-w-24 shrink-3 items-center gap-0.5 text-2xs text-subtle">
@@ -1461,7 +1484,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     <button
                         v-if="soleSide(group)"
                         type="button"
-                        :class="[ICON_BUTTON, 'text-muted max-md:h-8 max-md:w-8']"
+                        :class="rowGlyph()"
                         :disabled="changes.actionBusy.value"
                         v-action="() => stageSide(group, soleSide(group)!.side)"
                         v-tooltip.right="sideVerbTip(group, soleSide(group)!.side)"
@@ -1469,10 +1492,12 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     >
                         <Icon :name="INDEX_VERB[soleSide(group)!.side].icon" class="text-2xs" />
                     </button>
+                    <!-- Two sides carry their verbs on their own headers; the column stays, so the count ends where a side's label would. -->
+                    <span v-else :class="GLYPH_GAP" aria-hidden="true"></span>
                     <button
                         v-if="discardable(group)"
                         type="button"
-                        :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
+                        :class="rowGlyph(`muted`, ROW_ACTION, DISCARD_GAP)"
                         :disabled="changes.actionBusy.value"
                         @click="askDiscardRepo(group)"
                         v-tooltip.top="t(`workspace.reviewPanel.discardAll`)"
@@ -1480,6 +1505,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     >
                         <Icon name="trash" class="text-2xs" />
                     </button>
+                    <span v-else :class="[GLYPH_GAP, DISCARD_GAP]" aria-hidden="true"></span>
                 </div>
 
                 <!-- A failed fetch/pull/push/discard/stage for this repo, under the row that caused it, in git's own words. -->
@@ -1487,7 +1513,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     v-if="failureIn(group.repo)"
                     tone="danger"
                     size="sm"
-                    class="mb-1.5 mt-0.5"
+                    class="mx-1 mb-1.5 mt-0.5"
                     :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
                     @dismiss="changes.dismissFailure(group.repo)"
                 >
@@ -1498,7 +1524,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 </Notice>
 
                 <!-- Conflicts come from operations left by an external terminal. -->
-                <Notice v-if="group.operation" tone="warning" size="sm" class="mb-1.5 mt-0.5">
+                <Notice v-if="group.operation" tone="warning" size="sm" class="mx-1 mb-1.5 mt-0.5">
                     <span class="block font-medium">{{ t(`workspace.reviewPanel.inProgress`, { operation: group.operation }) }}</span>
                     <span class="block text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</span>
                     <template #actions>
@@ -1521,9 +1547,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <!-- Untracked paths shaped like scratch: every stage-everything leaves them out, so Commit all does too. -->
                 <div
                     v-if="group.scratch !== undefined"
-                    class="mb-1.5 mt-0.5 flex items-start gap-1.5 rounded-md border border-border bg-overlay px-2 py-1.5"
+                    class="mx-1 mb-1.5 mt-0.5 flex items-start gap-1.5 rounded-md border border-border bg-overlay px-2 py-1.5"
                 >
-                    <Icon name="filter" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                    <span :class="LEAD" class="h-4"><Icon name="filter" class="text-2xs text-subtle" /></span>
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-content">
                             {{ t(`workspace.reviewPanel.scratchLeftOut`, { count: group.scratch.length }, group.scratch.length) }}
@@ -1534,10 +1560,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 </div>
 
                 <!-- No empty-repo guard needed here — `dirty` is the list, and a repo with no rows isn't in it. -->
-                <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-1">
+                <div v-if="!collapsed.has(group.repo)" class="pb-1">
                     <!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
-                        <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-2 pt-1">
+                        <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-5 pr-1 pt-1">
                             <span
                                 class="shrink-0 text-2xs font-medium uppercase tracking-wide"
                                 :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
@@ -1555,7 +1581,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                             <!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
                             <button
                                 type="button"
-                                :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                                :class="rowGlyph()"
                                 :disabled="changes.actionBusy.value"
                                 v-action="() => stageSide(group, section.side)"
                                 v-tooltip.right="sideVerbTip(group, section.side)"
@@ -1563,6 +1589,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                             </button>
+                            <span :class="[GLYPH_GAP, DISCARD_GAP]" aria-hidden="true"></span>
                         </div>
 
                         <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
@@ -1573,26 +1600,25 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
                                 <!-- Selection uses the primary tint instead of the row hover colour. -->
                                 <div
-                                    class="group/file flex items-stretch gap-1 rounded transition-colors"
+                                    class="group/file flex items-stretch gap-1 rounded pr-1 transition-colors"
                                     @contextmenu="openRowMenu($event, { repo: group.repo, side: section.side, path: change.path }, change)"
                                     :class="[
                                         isSelected({ repo: group.repo, side: section.side, path: change.path })
                                             ? 'bg-primary-500/15 hover:bg-primary-500/25'
                                             : 'ui-row-select',
-                                        // One 8px step per rank that is actually drawn above this row, so a
-                                        // filename never pays indent for a heading that isn't there.
-                                        rowIndent(group, section.side),
                                     ]"
                                 >
                                     <!-- No indent guide or origin rail down the left: the status mark sits under its heading's first letter, and
                                          the origin chips below carry which agent touched the file. -->
                                     <button
                                         type="button"
-                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-2 text-left max-md:min-h-11"
+                                        class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left max-md:min-h-11"
+                                        :class="rowIndent(group, section.side)"
                                         @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
                                         @dblclick="openDiff(group.repo, section.side, change, 'keep')"
                                     >
-                                        <ChangeStatusMark :status="change.status" />
+                                        <!-- One step under its heading: the letter's slot starts where the heading's label does. -->
+                                        <span :class="LEAD"><ChangeStatusMark :status="change.status" /></span>
                                         <!-- How a changed file is named, shared with the agent review's own rows — see ChangeRowName. -->
                                         <ChangeRowName
                                             :path="change.path"
@@ -1635,7 +1661,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                                     <!-- Index verbs stay quieter than file names so repeated rows read as texture. -->
                                     <button
                                         type="button"
-                                        :class="ui.iconButton({ size: mobile ? `lg` : `xs`, tone: `subtle` }, `self-center`)"
+                                        :class="rowGlyph(`subtle`, `self-center`)"
                                         :disabled="changes.actionBusy.value"
                                         v-action="() => stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
@@ -1647,10 +1673,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                                     <button
                                         type="button"
                                         :class="
-                                            ui.iconButton(
-                                                { size: mobile ? `lg` : `xs` },
-                                                `self-center opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100`,
-                                                `max-md:ml-2 max-md:opacity-100`,
+                                            rowGlyph(
+                                                `muted`,
+                                                `self-center opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100`,
+                                                DISCARD_GAP,
                                             )
                                         "
                                         :disabled="changes.actionBusy.value"
@@ -1665,7 +1691,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         </template>
                     </template>
                     <!-- The daemon's per-repo cap, said plainly so the list doesn't read as complete when it isn't. -->
-                    <p v-if="truncatedTotal(group) > 0" class="py-1 pl-4 text-2xs text-subtle">
+                    <p v-if="truncatedTotal(group) > 0" class="py-1 pl-5 pr-2 text-2xs text-subtle">
                         {{
                             t(`workspace.reviewPanel.moreShowingFirstStage`, {
                                 group: truncatedTotal(group),
