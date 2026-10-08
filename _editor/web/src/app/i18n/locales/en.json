@@ -5370,6 +5370,8 @@
             "noContainerOrFolder": "No container or folder",
             "nothingHere": "Nothing here",
             "nothingOnDeviceDeleted": "Nothing on that device is deleted and its agent stays installed, but letting it back in means running a fresh pairing command there.",
+            "notOnAccount": "Not on your account",
+            "notOnAccountTip": "Your account doesn't list this sandbox: it was deleted, or it belongs to another account. Remove it from its ⋯ menu to drop this computer's pairing with it.",
             "otherPortsStayMirrored": "Other ports stay mirrored",
             "pairingAgainMeansRunning": "Pairing it again means running a fresh command on that device.",
             "partialRun": "Partial run",

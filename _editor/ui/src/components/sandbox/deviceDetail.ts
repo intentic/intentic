@@ -33,6 +33,9 @@ export interface DeviceConflictRow {
 
 export interface DeviceFolderRow {
     sandboxId: string;
+    // The account's name for the sandbox this folder pairs with, when the caller knows it. The machine has only the
+    // folder, named once at setup, so without this a pairing whose container runs elsewhere is titled by that folder.
+    name?: string | undefined;
     mode: `sync` | `mirror`;
     localDir?: string | undefined;
     // Whether ports are put on localhost; absent means on. An empty port list can mean this, or that
@@ -172,7 +175,8 @@ const twinKey = (port: DevicePortRow): string => `${port.port}:${port.state}:${p
 // where a container and a folder are being joined into one row.
 export const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
 
-// Most-human-first: a recorded display name, then the synced folder's own leaf, then the raw id. The
+// Most-human-first: a recorded display name (the container's, else the pairing's), then the synced folder's own leaf,
+// then the raw id. The
 // exact id survives as `subtitle` rather than being replaced, since it's the string somebody actually types.
 const leafOf = (dir: string | undefined): string | undefined => {
     const trimmed = (dir ?? ``).replace(/[/\\]+$/, ``);
@@ -186,7 +190,7 @@ const titled = (
     sandbox: DeviceSandboxRow | undefined,
     folder: DeviceFolderRow | undefined,
 ): Pick<DeviceSandboxGroup, `title` | `subtitle`> => {
-    const title = sandbox?.name ?? leafOf(folder?.localDir) ?? exact;
+    const title = sandbox?.name ?? folder?.name ?? leafOf(folder?.localDir) ?? exact;
     return { title, ...(title === exact ? {} : { subtitle: exact }) };
 };
 

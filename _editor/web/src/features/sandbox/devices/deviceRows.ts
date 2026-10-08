@@ -221,11 +221,8 @@ export const slugOfDaemonUrl = (daemonUrl: string | null | undefined): string | 
     return new URL(daemonUrl).hostname.split(`.`)[0] || undefined;
 };
 
-// The account's own name for every container a machine lists, matched by slug. Docker knows only the container, so
-// without this a row is titled by its synced folder (named once, at setup, and never again) or by its bare slug.
-// The account's name wins over one the machine recorded, since a rename lands there first; a container this account
-// cannot see keeps whatever it had. Devices with nothing to rename are returned as they came.
-export const withSandboxNames = (devices: readonly Device[], account: readonly { name: string; daemonUrl: string | null }[]): Device[] => {
+// Slug to the account's name for it, for every account sandbox that has an address and a name.
+const accountNames = (account: readonly { name: string; daemonUrl: string | null }[]): Map<string, string> => {
     const names = new Map<string, string>();
     for (const sandbox of account) {
         const slug = slugOfDaemonUrl(sandbox.daemonUrl);
@@ -233,18 +230,71 @@ export const withSandboxNames = (devices: readonly Device[], account: readonly {
             names.set(slug, sandbox.name);
         }
     }
-    return devices.map((device) =>
-        device.sandboxes?.some((sandbox) => names.has(sandbox.slug) && names.get(sandbox.slug) !== sandbox.name) === true
-            ? {
-                  ...device,
-                  sandboxes: device.sandboxes.map((sandbox) => {
-                      const name = names.get(sandbox.slug);
-                      return name === undefined ? sandbox : { ...sandbox, name };
-                  }),
-              }
-            : device,
-    );
+    return names;
 };
+
+// Whether the account's name differs from the one a row carries now, so a device with nothing to rename is kept as is.
+const renames = (current: string | undefined, wanted: string | undefined): boolean => wanted !== undefined && wanted !== current;
+
+// The account's own name for every sandbox a machine lists, matched by slug: each container, and each folder pairing.
+// Docker knows only the container and the sync agent only the folder, so without this a row is titled by its synced
+// folder (named once, at setup, and never again) or by its bare slug. A pairing needs its own name because its
+// sandbox may run somewhere else entirely (hosted, or on another computer), leaving no container here to carry one.
+// The account's name wins over one the machine recorded, since a rename lands there first; a sandbox this account
+// cannot see keeps whatever it had. Devices with nothing to rename are returned as they came.
+export const withSandboxNames = (devices: readonly Device[], account: readonly { name: string; daemonUrl: string | null }[]): Device[] => {
+    const names = accountNames(account);
+    const nameOf = (sandboxId: string): string | undefined => {
+        for (const [slug, name] of names) {
+            if (isSameSandbox(sandboxId, slug)) {
+                return name;
+            }
+        }
+        return undefined;
+    };
+    return devices.map((device) => {
+        const sandboxes = device.sandboxes?.some((sandbox) => renames(sandbox.name, names.get(sandbox.slug))) === true;
+        const pairings = device.report?.pairings.some((pairing) => renames(pairing.name, nameOf(pairing.sandboxId))) === true;
+        if (!sandboxes && !pairings) {
+            return device;
+        }
+        return {
+            ...device,
+            ...(sandboxes && device.sandboxes !== undefined
+                ? {
+                      sandboxes: device.sandboxes.map((sandbox) => {
+                          const name = names.get(sandbox.slug);
+                          return name === undefined ? sandbox : { ...sandbox, name };
+                      }),
+                  }
+                : {}),
+            ...(pairings && device.report !== undefined
+                ? {
+                      report: {
+                          ...device.report,
+                          pairings: device.report.pairings.map((pairing) => {
+                              const name = nameOf(pairing.sandboxId);
+                              return name === undefined ? pairing : { ...pairing, name };
+                          }),
+                      },
+                  }
+                : {}),
+        };
+    });
+};
+
+// A FOLDER PAIRING TO A SANDBOX THE SIGNED-IN ACCOUNT DOES NOT LIST, with no container of it on this machine: a sandbox
+// that was deleted, or is someone else's. Its folder name is all it can be called, and the machine holds the pairing
+// until it is removed from the row's ⋯ menu, which on such a row takes the pairing alone. Said only once the account's
+// list has arrived: an empty list is a reading not yet made, never "none of these".
+export const notOnAccount = (group: DeviceSandboxGroup, account: readonly { daemonUrl: string | null }[]): boolean =>
+    group.folder !== undefined &&
+    group.sandbox === undefined &&
+    account.length > 0 &&
+    !account.some((sandbox) => {
+        const slug = slugOfDaemonUrl(sandbox.daemonUrl);
+        return slug !== undefined && isSameSandbox(group.sandboxId, slug);
+    });
 
 export const machineRows = (devices: readonly Device[], latest: string | undefined, readAt: number): MachineRow[] =>
     sortMachines(

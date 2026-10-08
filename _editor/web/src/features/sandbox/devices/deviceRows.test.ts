@@ -20,10 +20,12 @@ import {
     machineRows,
     machineState,
     managerOf,
+    notOnAccount,
     removableHere,
     rowMatches,
     rowRemoval,
     showFilter,
+    withSandboxNames,
 } from "./deviceRows";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
 import { manageBlock } from "./deviceFacts";
@@ -762,4 +764,46 @@ test(`names no machine for a missing, empty or repeated param`, () => {
     expect(selectedKey(null)).toBeUndefined();
     // `?device=a&device=b` names no single machine, so it selects none rather than the first.
     expect(selectedKey([`a`, `b`])).toBeUndefined();
+});
+
+// the account's names
+
+// rog as it was found (2026-10-08): its Windows side paired with sandboxes hosted elsewhere and with ones since deleted,
+// each folder named after the sandbox's name at setup ("workspace"), and one container of its own.
+const ACCOUNT = [
+    { name: `horus`, daemonUrl: `https://sandbox-1ea6479e2362.sbx.intentic.dev` },
+    { name: `phaser`, daemonUrl: `https://sandbox-574ea8038415.sbx.intentic.dev` },
+    { name: `registry-gate`, daemonUrl: `https://sandbox-40ebeea77f90.radarsu.com` },
+];
+const rog = (): Device =>
+    device({
+        report: report({
+            pairings: [
+                { sandboxId: `sandbox-574ea8038415-sbx-intentic-dev`, mode: `sync`, localDir: `C:\\Users\\radar\\intentic\\workspace-574ea8038415` },
+                { sandboxId: `sandbox-19e65c187fa6-sbx-intentic-dev`, mode: `sync`, localDir: `C:\\Users\\radar\\intentic\\workspace-2-19e65c187fa6` },
+            ],
+        }),
+        sandboxes: [{ slug: `sandbox-40ebeea77f90`, container: `intentic-sandbox-sandbox-40ebeea77f90`, running: true, image: `sandbox` }],
+    });
+const titles = (devices: readonly Device[]): string[] => machineRows(devices, undefined, NOW)[0]!.groups.map((group) => group.title);
+
+test(`titles a pairing whose sandbox runs elsewhere by the account's name, not by its folder`, () => {
+    expect(titles([rog()])).toEqual([`workspace-574ea8038415`, `workspace-2-19e65c187fa6`, `sandbox-40ebeea77f90`]);
+    expect(titles(withSandboxNames([rog()], ACCOUNT))).toEqual([`phaser`, `workspace-2-19e65c187fa6`, `registry-gate`]);
+});
+
+test(`returns a device with nothing to rename as it came`, () => {
+    const lone = device();
+    expect(withSandboxNames([lone], ACCOUNT)[0]).toBe(lone);
+    const named = withSandboxNames([rog()], ACCOUNT);
+    expect(withSandboxNames(named, ACCOUNT)[0]).toBe(named[0]);
+});
+
+test(`says a pairing is not on the account only once the account has been read, and never of a container`, () => {
+    const groups = machineRows(withSandboxNames([rog()], ACCOUNT), undefined, NOW)[0]!.groups;
+    expect(groups.map((group) => notOnAccount(group, ACCOUNT))).toEqual([false, true, false]);
+    expect(groups.map((group) => notOnAccount(group, []))).toEqual([false, false, false]);
+    // A container the account cannot see is not a pairing to drop: removing it there would remove the sandbox.
+    const stranger = machineRows([rog()], undefined, NOW)[0]!.groups[2]!;
+    expect(notOnAccount(stranger, [{ daemonUrl: `https://sandbox-aaaaaaaaaaaa.sbx.intentic.dev` }])).toBe(false);
 });

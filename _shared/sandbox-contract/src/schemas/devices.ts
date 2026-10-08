@@ -388,6 +388,9 @@ export const clearableOnDevice = (conflict: DeviceConflict): boolean =>
 // One paired sandbox as the local agent holds it; `localDir` is which folder on that device holds this sandbox's /work.
 export const DevicePairingSchema = z.object({
     sandboxId: z.string(),
+    // The account's name for the sandbox, stamped by the editor that reads the report (withSandboxNames), as a
+    // container's `name` is. A machine never sends one: all it knows is the folder, named once at setup.
+    name: z.string().optional(),
     mode: z.enum(["sync", "mirror"]),
     // Set only for mode "sync", and only for the sandbox being reported to.
     localDir: z.string().optional(),

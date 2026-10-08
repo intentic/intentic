@@ -47,6 +47,7 @@ import {
     manageable,
     managerOf,
     manySided,
+    notOnAccount,
     pausable,
     removableHere,
     selfGroup,
@@ -397,6 +398,15 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             size="xs"
                             :label="t(`sandbox.devicePage.thisSandbox`)"
                             v-tooltip.top="t(`sandbox.words.youreHere`)"
+                            class="-my-0.5 shrink-0"
+                        />
+                        <!-- Why a row is titled by a folder rather than a name: its sandbox is gone, or another account's. -->
+                        <StatusBadge
+                            v-else-if="notOnAccount(group, account)"
+                            variant="neutral"
+                            size="xs"
+                            :label="t(`sandbox.devicePage.notOnAccount`)"
+                            v-tooltip.top="t(`sandbox.devicePage.notOnAccountTip`)"
                             class="-my-0.5 shrink-0"
                         />
                     </template>

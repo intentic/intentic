@@ -2676,6 +2676,8 @@
             "noContainerOrFolder": "Sin contenedor ni carpeta",
             "nothingHere": "Nada aquí",
             "nothingOnDeviceDeleted": "En ese dispositivo no se elimina nada y su agente sigue instalado, pero dejarlo entrar de nuevo implica ejecutar allí un comando de emparejamiento nuevo.",
+            "notOnAccount": "No está en tu cuenta",
+            "notOnAccountTip": "Tu cuenta no incluye este sandbox: se eliminó o pertenece a otra cuenta. Quítalo desde su menú ⋯ para deshacer el emparejamiento de este ordenador con él.",
             "otherPortsStayMirrored": "Los demás puertos siguen replicados",
             "pairingAgainMeansRunning": "Volver a emparejarlo implica ejecutar un comando nuevo en ese dispositivo.",
             "partialRun": "Ejecución parcial",

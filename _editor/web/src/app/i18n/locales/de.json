@@ -2666,6 +2666,8 @@
             "noContainerOrFolder": "Kein Container, kein Ordner",
             "nothingHere": "Nichts hier",
             "nothingOnDeviceDeleted": "Auf diesem Gerät wird nichts gelöscht, und sein Agent bleibt installiert, aber es wieder hereinzulassen heißt, dort einen frischen Kopplungsbefehl auszuführen.",
+            "notOnAccount": "Nicht in deinem Konto",
+            "notOnAccountTip": "Dein Konto führt diese Sandbox nicht: Sie wurde gelöscht oder gehört zu einem anderen Konto. Entferne sie über ihr ⋯-Menü, um die Kopplung dieses Computers mit ihr aufzuheben.",
             "otherPortsStayMirrored": "Andere Ports bleiben gespiegelt",
             "pairingAgainMeansRunning": "Es erneut zu koppeln heißt, auf diesem Gerät einen frischen Befehl auszuführen.",
             "partialRun": "Teilweiser Lauf",

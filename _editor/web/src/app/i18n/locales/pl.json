@@ -4985,6 +4985,8 @@
             "noContainerOrFolder": "Brak kontenera i folderu",
             "nothingHere": "Nic tu nie ma",
             "nothingOnDeviceDeleted": "Na tamtym urządzeniu nic nie zostaje usunięte, a jego agent pozostaje zainstalowany, ale wpuszczenie go z powrotem oznacza uruchomienie tam świeżego polecenia parowania.",
+            "notOnAccount": "Nie ma go na Twoim koncie",
+            "notOnAccountTip": "Twoje konto nie zawiera tego sandboxa: został usunięty albo należy do innego konta. Usuń go z jego menu ⋯, aby ten komputer przestał być z nim sparowany.",
             "otherPortsStayMirrored": "Inne porty dalej odbijane",
             "pairingAgainMeansRunning": "Ponowne sparowanie oznacza uruchomienie świeżego polecenia na tamtym urządzeniu.",
             "partialRun": "Częściowe uruchomienie",
