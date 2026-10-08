@@ -3,6 +3,7 @@ import type { PipelineJob } from "@intentic/sandbox-contract";
 import { DagGraph, Icon, toneTint, toneWash, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { jobLabel, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
+import { CARD_MAX_WIDTH, columnWidths, estimateText, type MeasureText } from "./cardWidth";
 import { formatDuration, STATUS_TONE, type StatusTone } from "../statusVisual";
 import { t } from "../i18n.js";
 
@@ -41,20 +42,63 @@ const pin = (id: string): void => {
 const dag = computed(() => pipelineDag(stages, focus.value));
 
 // Costs multiply across columns and stacked rows, so these stay tighter than a text card's padding; a list of jobs
-// doesn't need a paragraph's air.
-const NODE_WIDTH = 192;
+// doesn't need a paragraph's air. A card's width is its column's content (see cardWidth), at most CARD_MAX_WIDTH.
 const JOB_ROW_HEIGHT = 28;
 // Split over the card's two ends, so a single-job card isn't text jammed against its border.
 const CARD_PADDING_Y = 12;
-// Layout spacing: between columns and between stacked cards; the band-height calc below counts both in too.
-const RANK_SEP = 72;
+// Layout spacing: between columns and between stacked cards; the band-height calc below counts both in too. The column
+// gutter only has to hold an elbow's two turns, each half the gutter from a card, so it stays narrow: on a long run it
+// is paid once per column.
+const RANK_SEP = 40;
 const NODE_SEP = 24;
 
 // A card is its rows: dagre is told this per node rather than being handed one size for all of them.
 const cardHeight = (cluster: PipelineJobCluster): number => cluster.jobs.length * JOB_ROW_HEIGHT + CARD_PADDING_Y;
 
+const root = ref<HTMLElement>();
+const containerWidth = ref<number>(0);
+let resizeObserver: ResizeObserver | undefined;
+
+// Measures with a hidden probe wearing the rows' own classes, so weight, size and tabular figures are whatever the
+// stylesheet says rather than a copy of it; remembered per string, and redone once webfonts land, since a fallback face
+// measures a different width.
+const PROBE_CLASS: Record<Parameters<MeasureText>[1], string> = {
+    label: `text-2xs font-medium leading-tight`,
+    meta: `text-3xs tabular-nums`,
+    badge: `text-3xs font-semibold`,
+};
+const fontsLoaded = ref(0);
+const measure = computed<MeasureText>(() => {
+    void fontsLoaded.value;
+    const element = root.value;
+    if (element === undefined) {
+        return estimateText;
+    }
+    const probe = document.createElement(`span`);
+    probe.className = `pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap`;
+    const known = new Map<string, number>();
+    return (text, size) => {
+        const key = `${size}:${text}`;
+        const cached = known.get(key);
+        if (cached !== undefined) {
+            return cached;
+        }
+        probe.className = `pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${PROBE_CLASS[size]}`;
+        probe.textContent = text;
+        element.append(probe);
+        const width = probe.getBoundingClientRect().width;
+        probe.remove();
+        known.set(key, width);
+        return width;
+    };
+});
+
+// Recomputed when a hover rebuilds the dag, to the same widths, so the layout signature holds and nothing reflows.
+const widths = computed(() => columnWidths(dag.value.nodes, recurring, measure.value));
+const widthOf = (nodeId: string): number => widths.value.get(stageOfNode(nodeId)) ?? CARD_MAX_WIDTH;
+
 const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
-    dag.value.nodes.map((node) => ({ ...node, width: NODE_WIDTH, height: cardHeight(node.data) })),
+    dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node.data) })),
 );
 
 // Inline band height matches the diagram's rendered height at its fitted zoom, plus padding; never excess whitespace
@@ -62,11 +106,10 @@ const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
 const PAD_X = 0.04;
 const PAD_Y_PX = 16;
 
-const root = ref<HTMLElement>();
-const containerWidth = ref<number>(0);
-let resizeObserver: ResizeObserver | undefined;
-
 onMounted(() => {
+    void document.fonts?.ready.then(() => {
+        fontsLoaded.value += 1;
+    });
     if (root.value) {
         containerWidth.value = root.value.clientWidth;
         if (typeof ResizeObserver !== `undefined`) {
@@ -95,8 +138,8 @@ const bandHeight = computed(() => {
     if (contentHeight === 0) {
         return 72;
     }
-    const columnCount = Math.max(...columns.keys(), -1) + 1;
-    const contentWidth = columnCount * NODE_WIDTH + Math.max(0, columnCount - 1) * RANK_SEP;
+    const columnCount = columns.size;
+    const contentWidth = [...widths.value.values()].reduce((sum, width) => sum + width, 0) + Math.max(0, columnCount - 1) * RANK_SEP;
 
     const availableWidth = Math.max(100, (containerWidth.value || 1000) * (1 - 2 * PAD_X));
     const fitZoom = contentWidth > 0 ? Math.min(1, availableWidth / contentWidth) : 1;
@@ -150,7 +193,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             v-model="pinnedCard"
             :nodes="sizedNodes"
             :edges="dag.edges"
-            :node-width="NODE_WIDTH"
+            :node-width="CARD_MAX_WIDTH"
             :node-height="JOB_ROW_HEIGHT + CARD_PADDING_Y"
             :rank-sep="RANK_SEP"
             :node-sep="NODE_SEP"
@@ -185,7 +228,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             :class="toneOf(member.job).text"
                         />
                         <!-- Stage names lead the row; duration has its own metadata slot. -->
-                        <!-- One size below body text: at the larger size, most names in a 184px card truncated to ellipsis. -->
+                        <!-- One size below body text: at the larger size, most names in a widest card truncated to ellipsis. -->
                         <!-- The name alone is the link, so the rest of the row keeps the click that traces this job through the run. -->
                         <a
                             v-if="member.job.webUrl"
