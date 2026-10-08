@@ -370,6 +370,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         let shielded: { readonly prompt: string; readonly append: string | undefined; readonly masking: boolean } | undefined;
         if (shield !== undefined) {
             // The hooks are how the shield reads this runtime at all: without them it would read nothing past the prompt.
+            // allow(silent-catch): hooks that cannot be read are hooks that do not cover the turn, which is refused just below with why.
             const covered = deps.hooks.ready() && (await deps.hooks.covers().catch(() => false));
             const refusal = covered
                 ? await shieldedStart(shield, request, anchor, words, [...images, ...others])
@@ -501,6 +502,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                     // Sent on the same agent and in the same mode, so a plan still ends in a plan; it has no steering of
                     // its own, since admission already closed. Masked again while the shield reads the turn.
                     const typed = handedBack.join("\n\n");
+                    // allow(silent-catch): a mask that fails sends nothing, and the turn says so on the next line.
                     const followUpPrompt = shield === undefined ? typed : await shield.mask(typed, "prompt").catch(() => undefined);
                     if (followUpPrompt === undefined) {
                         yield { kind: "error", message: "The privacy shield could not mask the messages sent during this turn, so they were not sent." };

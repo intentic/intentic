@@ -1,5 +1,5 @@
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { MAIN_MOUNT } from "../conversations/worktrees/isolation.js";
+import { MAIN_MOUNT } from "./worktree-paths.js";
 import { AGENT_HOME } from "./agent-domain.js";
 import {
     buildAgentDomainView, parseSameHostMounts, resolveGitPointer, sameHostAliases, validateAgentOverlayDirectories,

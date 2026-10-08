@@ -64,7 +64,7 @@ const tabSubject = (tab: WorkspaceTab): Tip => {
     if (tab.kind === `diff`) {
         return { title: t(`views.vocabulary.diff`), rows: [{ label: t(`workspace.fileTabs.file`), value: tab.label }] };
     }
-    return { title: t(`shared.preview`), rows: [{ label: t(`workspace.fileTabs.path`), value: tab.path }] };
+    return { title: t(`workspace.fileTabs.preview`), rows: [{ label: t(`workspace.fileTabs.path`), value: tab.path }] };
 };
 // The hover: a kept file tab's whole path, else the card. A preview tab's names the double-click gesture that keeps
 // it, since italic alone doesn't say how.

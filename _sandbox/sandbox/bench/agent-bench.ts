@@ -6,7 +6,9 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "../src/agent/run/agent.js";
 import { sumUsage, type UsageFrame } from "../src/agent/run/turn/turn-usage.js";
 import { parkedCards } from "../src/conversations/actor/parked-cards.js";
+import type { AgentExecutionLease } from "../src/workload/agent-execution.js";
 import { memoryFleet } from "../src/testing.js";
+import { rootExecution } from "../src/workload/agent-execution.testing.js";
 import { type BenchTask, taskFor } from "./agent-tasks.js";
 
 // A/B benchmark: does delegating tedious work to a subagent beat one agent doing it all? Same
@@ -129,9 +131,13 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
     let error: string | undefined;
     const toolsByName: Record<string, number> = {};
     const frames: AgentEvent[] = [];
+    let lease: AgentExecutionLease | undefined;
     try {
         const prepared = await task.prepare(dir);
+        // The bench runs as the daemon's root-mode turn does: no execution domain, the task's directory as the view.
+        lease = rootExecution({ localCwd: dir });
         const request: HarnessRequest = {
+            execution: lease.context,
             spec: {
                 prompt: prepared.prompt,
                 cwd: dir,
@@ -194,6 +200,7 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
         };
     } finally {
         clearTimeout(timer);
+        lease?.release();
         if (!options.keep) {
             await rm(dir, { recursive: true, force: true });
         }

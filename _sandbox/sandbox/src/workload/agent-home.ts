@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { errnoCode } from "@intentic/base/errors";
 import { withManagedInclude } from "@intentic/base/ssh-config";
-import { SESSION_STATE } from "../sessions/session-store.js";
 import { statePath } from "../state-paths.js";
 import { AGENT_HOME } from "./agent-domain.js";
+import { SESSION_STATE } from "./worktree-paths.js";
 
 // THE AGENT'S HOME, made ready by the daemon before each domain starts. It lives on the history volume (agent-home), so
 // what the agent keeps there outlives a recreate, and the domain sees it at AGENT_HOME through its idmapped view. What

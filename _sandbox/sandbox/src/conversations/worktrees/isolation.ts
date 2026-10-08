@@ -11,7 +11,7 @@ import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
-import { SHARED_STATE } from "../../workload/worktree-paths.js";
+import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
 import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
 import { type NamespaceEntryReference, registerMountEntry } from "../../workload/namespace-entry.js";
 import { type NamespaceHolder, namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
@@ -24,21 +24,11 @@ import { signalGroup } from "../../workload/process-group.js";
 
 const execFileAsync = promisify(execFile);
 
-// Stable path to the real workspace root inside the namespace, for a turn that genuinely needs the shared tree.
-// Unmounted again for a fenced turn: it is the whole workspace, which is what that turn's checkout was cut down from.
-export const MAIN_MOUNT = "/mnt/intentic-main";
+export { MAIN_MOUNT, PACKAGE_STORE } from "../../workload/worktree-paths.js";
 
 // Reference repos cloned only to be read against; workspace content, not repo content, so a worktree needs it mounted
 // back in or hits ENOENT. Read-only by contract: a bind ignores `ro`, so the remount is a second step.
 const SHELF = "refs";
-
-// pnpm's package store, which pnpm keeps at the top of the mount a project sits on: `/work/.pnpm-store` for every
-// project in the tree. Inside a namespace that path is the worktree's own, so each conversation's first install would
-// download everything again into a store of its own. Bound back from the main tree: the store is content-addressed and
-// pnpm shares one between concurrent installs by design, and the path an overlaid `node_modules` names in its
-// `.modules.yaml` stays the one pnpm finds. The tree is private; the cache is not. Conditional like the shelf: a
-// workspace nobody ran pnpm in has none, and the worktree keeps its own then.
-export const PACKAGE_STORE = ".pnpm-store";
 
 // Deps and build output a checkout can't carry (MIRRORED_DIRS); caches excluded, a stale tsbuildinfo would falsely
 // agree with the mirror. Each name is a live overlay's lowerdir: empty it, never replace it.

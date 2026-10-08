@@ -5,14 +5,12 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { statePath, stateRelPath } from "../state-paths.js";
 import { conversationUnit } from "../store/conversation-units.js";
+import { SESSION_STATE } from "../workload/worktree-paths.js";
 
 // One conversation's own store, in its unit outside the workspace, so no other conversation's namespace holds it.
 export const sessionsDir = (historyRoot: string, id: string): string => join(conversationUnit(historyRoot, id), "sessions");
 
-// Per-conversation state to symlink onto the workspace; settings and skills stay container-local on purpose.
-// Exported because a fenced conversation's own store has to hold the same names before its turn starts: the symlinks
-// are made once, at boot, against the shared path, and a namespace binds a different directory under them.
-export const SESSION_STATE = ["projects", "plans", "backups", "tasks", "sessions", "session-env", "shell-snapshots", "todos"];
+export { SESSION_STATE } from "../workload/worktree-paths.js";
 
 // Effectively "never": the CLI's sweep would now delete real transcripts (0 is rejected by the CLI).
 const RETENTION_DAYS = 3650;

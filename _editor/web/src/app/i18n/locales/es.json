@@ -5678,6 +5678,7 @@
             "health": "Salud del código",
             "management": "Panel de gestión",
             "path": "Ruta",
+            "preview": "Vista previa",
             "repo": "Repo"
         },
         "outgoingWork": {

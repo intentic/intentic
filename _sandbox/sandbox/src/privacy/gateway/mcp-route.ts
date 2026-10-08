@@ -223,6 +223,7 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
                     try {
                         return toJson(JSON.parse(event.data));
                     } catch {
+                        // allow(silent-catch): an event whose data is not JSON is masked below as plain text.
                         return undefined;
                     }
                 })();

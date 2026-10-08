@@ -9939,6 +9939,7 @@
             "health": "Codebase health",
             "management": "Management panel",
             "path": "Path",
+            "preview": "Preview",
             "repo": "Repo"
         },
         "outgoingWork": {

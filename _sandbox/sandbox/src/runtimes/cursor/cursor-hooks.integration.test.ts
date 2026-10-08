@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
@@ -71,7 +72,7 @@ test("a registered turn's denial reaches Cursor as a deny, with the reason in bo
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: denying("Deleting files needs your approval."), push: () => {} });
 
-    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: WORKSPACE_ROOT })).toEqual({
         permission: "deny",
         agent_message: "Deleting files needs your approval.",
         user_message: "Deleting files needs your approval.",
@@ -301,11 +302,11 @@ test("retiring an older registration preserves the replacement turn's gate", asy
     const retire = hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
     const retireReplacement = hooks.register({ conversationId: "agent-1", gate: denying("Replacement gate"), push: () => {} });
     retire();
-    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: WORKSPACE_ROOT })).toEqual({
         permission: "deny", agent_message: "Replacement gate", user_message: "Replacement gate",
     });
     retireReplacement();
-    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({ permission: "allow" });
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: WORKSPACE_ROOT })).toEqual({ permission: "allow" });
 });
 
 // THE PRIVACY SHIELD'S HOOKS, end to end through the generated script: a stand-in shield that finds a fixed word, so
@@ -317,7 +318,7 @@ const standInShield = (calls: string[] = []): CursorHookShield => ({
         calls.push(`read ${path} ${image === undefined ? "text" : `image:${image.length}`}`);
         return content?.includes(SECRET) === true ? `${path} holds personal data.` : undefined;
     },
-    tool: async ({ tool, input, existing }) => {
+    toolCall: async ({ tool, input, existing }) => {
         calls.push(`tool ${tool}${existing === undefined ? "" : " existing"}`);
         if (tool === "Grep") {
             return { refuse: "Grep is off." };
@@ -430,7 +431,7 @@ describe("the privacy shield's hooks", () => {
         };
         hooks.register({ conversationId: "agent-1", gate: recording, push: () => {}, shield: standInShield() });
         const wrapped = shieldedCommand(join(dir, "intentic-command-guard.mjs"), "agent-1", "rm -rf build");
-        await askGate(dir, { command: wrapped, conversation_id: "agent-1", cwd: "/work" });
+        await askGate(dir, { command: wrapped, conversation_id: "agent-1", cwd: WORKSPACE_ROOT });
         expect(consulted).toEqual(["rm -rf build"]);
     });
 

@@ -7028,7 +7028,7 @@
             "checkNote": "Tylko odczyt: jeszcze nic się nie zmienia",
             "swapLabel": "Restart na nowym obrazie",
             "swapNote": "Sandbox znika na około minutę",
-            "layersOf": "{done} z {total} warstw"
+            "layersOf": "{done} z {total} warstwy | {done} z {total} warstw | {done} z {total} warstw"
         },
         "deviceUpdateProgress": {
             "updating": "Aktualizowanie {name}",
@@ -9532,6 +9532,7 @@
             "health": "Kondycja kodu",
             "management": "Panel zarządzania",
             "path": "Ścieżka",
+            "preview": "Podgląd",
             "repo": "Repozytorium"
         },
         "outgoingWork": {

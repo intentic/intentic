@@ -13,6 +13,24 @@ export interface WorktreeMapping {
     readonly mirrors: readonly string[];
 }
 
+// Stable path to the real workspace root inside the namespace, for a turn that genuinely needs the shared tree.
+// Unmounted again for a fenced turn: it is the whole workspace, which is what that turn's checkout was cut down from.
+export const MAIN_MOUNT = "/mnt/intentic-main";
+
+// pnpm's package store, which pnpm keeps at the top of the mount a project sits on: `/work/.pnpm-store` for every
+// project in the tree. Inside a namespace that path is the worktree's own, so each conversation's first install would
+// download everything again into a store of its own. Bound back from the main tree: the store is content-addressed and
+// pnpm shares one between concurrent installs by design, and the path an overlaid `node_modules` names in its
+// `.modules.yaml` stays the one pnpm finds. The tree is private; the cache is not. Conditional like the shelf: a
+// workspace nobody ran pnpm in has none, and the worktree keeps its own then.
+export const PACKAGE_STORE = ".pnpm-store";
+
+// Per-conversation runtime state the session store symlinks onto the workspace (sessions/session-store.ts); settings and
+// skills stay container-local on purpose. Here, not in the store, because a fenced conversation's own store
+// (turn-sandbox.ts) and the agent's HOME (agent-home.ts) need the same names before a turn starts: the symlinks are made
+// once, at boot, against the shared path, and a namespace binds a different directory under them.
+export const SESSION_STATE = ["projects", "plans", "backups", "tasks", "sessions", "session-env", "shell-snapshots", "todos"];
+
 // State subtrees kept shared, not per-worktree; root-relative, no trailing slash. Sorted shallowest-first so a parent
 // mounted after a child could never shadow it.
 export const SHARED_STATE = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, "")).toSorted(

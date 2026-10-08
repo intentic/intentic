@@ -53,28 +53,28 @@ describe("a tool call on its way", () => {
     test("is refused for the tools that read past the shield, while it masks", async () => {
         const shield = cursorHookShield(await shieldFor());
         for (const tool of ["Grep", "List", "Fetch", "ReadLints", "ComputerUse"]) {
-            const verdict = await shield.tool({ tool, input: {}, existing: undefined });
+            const verdict = await shield.toolCall({ tool, input: {}, existing: undefined });
             expect("refuse" in verdict && verdict.refuse).toContain(`The ${tool} tool reads past the privacy shield`);
         }
-        expect(await cursorHookShield(await shieldFor("watch")).tool({ tool: "Grep", input: {}, existing: undefined })).toEqual({ input: undefined });
+        expect(await cursorHookShield(await shieldFor("watch")).toolCall({ tool: "Grep", input: {}, existing: undefined })).toEqual({ input: undefined });
     });
 
     test("has its tokens read back, and goes untouched when it holds none", async () => {
         const turn = await shieldFor();
         await turn.mask(`PESEL ${NUMBER}`, "shell");
         const shield = cursorHookShield(turn);
-        expect(await shield.tool({ tool: "Shell", input: { command: `grep ${TOKEN} clients.csv`, cwd: "/work" }, existing: undefined })).toEqual({
+        expect(await shield.toolCall({ tool: "Shell", input: { command: `grep ${TOKEN} clients.csv`, cwd: "/work" }, existing: undefined })).toEqual({
             input: { command: `grep ${NUMBER} clients.csv`, cwd: "/work" },
         });
-        expect(await shield.tool({ tool: "Shell", input: { command: "ls" }, existing: undefined })).toEqual({ input: undefined });
+        expect(await shield.toolCall({ tool: "Shell", input: { command: "ls" }, existing: undefined })).toEqual({ input: undefined });
     });
 
     // Its result would echo the lines it replaced, values and all.
     test("is refused as a whole-file write over a file holding personal data, and goes over one holding none", async () => {
         const shield = cursorHookShield(await shieldFor());
-        const refused = await shield.tool({ tool: "Write", input: { file_path: "clients.csv", content: "x" }, existing: `pesel: ${NUMBER}` });
+        const refused = await shield.toolCall({ tool: "Write", input: { file_path: "clients.csv", content: "x" }, existing: `pesel: ${NUMBER}` });
         expect("refuse" in refused && refused.refuse).toContain("clients.csv holds personal data");
-        expect(await shield.tool({ tool: "Write", input: { file_path: "a.ts", content: "x" }, existing: "export {};" })).toEqual({ input: undefined });
+        expect(await shield.toolCall({ tool: "Write", input: { file_path: "a.ts", content: "x" }, existing: "export {};" })).toEqual({ input: undefined });
     });
 });
 

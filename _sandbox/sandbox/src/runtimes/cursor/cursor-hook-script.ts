@@ -165,6 +165,7 @@ export const gateScript = (socketPath: string): string =>
         `    const command = Buffer.from(process.argv[4] ?? "", "base64").toString("utf8");`,
         `    // bash first, as every agent writes its commands for it; the owner's own shell only where there is no bash.`,
         `    const shell = ["/bin/bash", "/usr/bin/bash", process.env.SHELL, "/bin/sh"].find((path) => typeof path === "string" && path !== "" && existsSync(path)) ?? "/bin/sh";`,
+        // allow(process-tiers): the script runs outside the daemon, as Cursor's own child, where no runCheck or spawnAs exists.
         `    const child = spawn(shell, ["-c", "exec 2>&1\\n" + command], { stdio: ["inherit", "pipe", "inherit"] });`,
         `    const decoder = new StringDecoder("utf8");`,
         `    let held = "";`,

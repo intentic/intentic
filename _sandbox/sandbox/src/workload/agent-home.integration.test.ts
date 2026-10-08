@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SESSION_STATE } from "../sessions/session-store.js";
+import { SESSION_STATE } from "./worktree-paths.js";
 import { agentSshConf, parseGitConfigList, provisionAgentHome, renderAgentGitconfig, RESTORE_MOUNT_POINTS } from "./agent-home.js";
 
 // Real temp trees: a HOME as the agent can leave it, and a host dir the daemon's ssh aliases live in. Owner is this

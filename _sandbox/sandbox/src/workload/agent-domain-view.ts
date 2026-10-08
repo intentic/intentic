@@ -1,9 +1,9 @@
 import { chmod, chown, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { posix as path } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { MAIN_MOUNT, PACKAGE_STORE, gitPointersIn, type IsolationPlan } from "../conversations/worktrees/isolation.js";
+import type { IsolationPlan } from "../conversations/worktrees/isolation.js";
 import { AGENT_GID, AGENT_HOME, AGENT_UID, type AgentDomainView } from "./agent-domain.js";
-import { SHARED_STATE } from "./worktree-paths.js";
+import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "./worktree-paths.js";
 
 const STAGE = "/run/intentic-view";
 const LEASE = "/run/intentic-domain";
@@ -80,6 +80,9 @@ export interface AgentDomainViewOptions {
     readonly controlPaths?: readonly string[];
     // Explicit, daemon-selected children only. Git directories are restored separately, read-only and NOT idmapped.
     readonly agentHistory?: readonly string[];
+    // Every directory under a checkout holding a `.git` entry, root-relative ("" is the root): the bounded walk the
+    // daemon's own discovery makes (isolation.ts gitPointersIn), handed in by the layer that owns it.
+    readonly gitPointersIn: (root: string) => Promise<string[]>;
 }
 export interface PreparedDomainView extends AgentDomainView { readonly cleanup: () => Promise<void> }
 
@@ -421,7 +424,7 @@ const compileView = (input: PreparedAgentDomainView): ViewProgram => {
             // Read-only IN PLACE, never by stacking a copy first: a mount stacked over "/" is not where this script's
             // own lookups start, so everything it mounted after that landed beneath the copy, and every entrant (setns
             // lands on the topmost root) saw the copy with not one bind or mask in it. Found live on omen, 2026-10-08.
-            for (const target of shallow(["/", ...input.readOnlyMounts]).reverse()) {
+            for (const target of shallow(["/", ...input.readOnlyMounts]).toReversed()) {
                 if (under(target, "/run") || under(target, LEASE_STAGE)) { continue; }
                 lines.push(readOnly(target));
             }
@@ -466,7 +469,7 @@ const compileView = (input: PreparedAgentDomainView): ViewProgram => {
             }
             for (const mask of effectiveMasks.toSorted((a, b) => a.path.length - b.path.length)) { lines.push(...maskLines(mask, restores)); }
             lines.push(...homeRestoreLines(restores));
-            for (const alias of input.historyAliases.filter((alias) => alias.kind === "directory" && !writable.some((entry) => entry.target === alias.target))) { lines.push(readOnly(alias.target)); }
+            for (const alias of input.historyAliases.filter((candidate) => candidate.kind === "directory" && !writable.some((entry) => entry.target === candidate.target))) { lines.push(readOnly(alias.target)); }
             lines.push(
                 "mkdir -p /run/user/0 /run/agent/cache /run/intentic/ssh /run/intentic-domain",
                 `chown ${String(AGENT_UID)}:${String(AGENT_GID)} /run/user/0 /run/agent /run/agent/cache`,
@@ -541,8 +544,8 @@ const discoverGit = async (repository: string, roots: readonly string[], history
     const checkDir = async (value: string): Promise<void> => {
         if (!allowed(value)) { fail(`Git directory outside trusted backing roots: ${value}`); }
         await directory(value);
-        const entry = await lstat(value);
-        if (entry.uid !== 0 || (entry.mode & 0o022) !== 0) { fail(`agent-writable Git directory: ${value}`); }
+        const info = await lstat(value);
+        if (info.uid !== 0 || (info.mode & 0o022) !== 0) { fail(`agent-writable Git directory: ${value}`); }
         for (const name of ["config", "config.worktree"]) { if (await exists(path.join(value, name))) { await trustedFile(path.join(value, name)); } }
         const hooks = path.join(value, "hooks");
         if (await exists(hooks)) {
@@ -575,7 +578,7 @@ const discoverGit = async (repository: string, roots: readonly string[], history
 // store on every turn and refused the turn once it ran past its budget. A `.git` deeper than the daemon looks is one
 // the daemon never runs git in. A repository the agent makes after its domain is built is NOT covered here: its
 // metadata is the agent's to write, and the daemon's root git reading it is open (agent-domain-rollout.ts).
-const viewGitPointers = async (root: string, skipped: readonly string[]): Promise<string[]> =>
+const viewGitPointers = async (gitPointersIn: AgentDomainViewOptions["gitPointersIn"], root: string, skipped: readonly string[]): Promise<string[]> =>
     (await gitPointersIn(root)).filter((rel) => !skipped.some((skip) => under(path.join(root, rel), skip)));
 
 // The run directory's /tmp: sticky and world-writable like any /tmp, root-owned on disk (the agent's own through the map).
@@ -669,7 +672,7 @@ export const prepareAgentDomainView = async (options: AgentDomainViewOptions): P
     const git: AgentGitMetadata[] = [];
     const gitAliases: ViewAlias[] = [];
     for (const root of unique([plan.root, plan.worktree])) {
-        const pointers = await viewGitPointers(root, [
+        const pointers = await viewGitPointers(options.gitPointersIn, root, [
             ...PRIVATE_STATE.map((rel) => path.join(root, rel)), ...plan.mirrors.map((rel) => path.join(root, rel)), path.join(root, "refs"),
             ...(under(auth, root) ? [auth] : []),
             ...(root === plan.worktree && root !== plan.root ? SHARED_STATE.map((rel) => path.join(root, rel)) : []),

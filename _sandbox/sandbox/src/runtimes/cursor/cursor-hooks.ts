@@ -26,7 +26,7 @@ export interface CursorHookShield {
     readonly read: (file: { readonly path: string; readonly content: string | undefined; readonly image: Buffer | undefined }) => Promise<string | undefined>;
     // A tool call before it runs: refused with a sentence, run with its input changed (tokens read back to their
     // values), or run as it is. A shell command's wrapping is the service's, which alone knows the script it runs.
-    readonly tool: (call: {
+    readonly toolCall: (call: {
         readonly tool: string;
         readonly input: Record<string, unknown>;
         // What a whole-file write would replace, read where its path means what Cursor meant.
@@ -225,7 +225,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         if (turn === undefined || tool === undefined || !isRecord(payload.tool_input)) {
             return {};
         }
-        const verdict = await turn.shield.tool({
+        const verdict = await turn.shield.toolCall({
             tool,
             input: payload.tool_input,
             existing: typeof payload.existing_content === "string" ? payload.existing_content : undefined,
@@ -384,6 +384,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                 const installed = JSON.parse(await readFile(enterpriseHooksPath(), "utf8")) as { hooks?: Record<string, { command?: unknown }[] | undefined> };
                 return SHIELD_HOOKS.every((hook) => (installed.hooks?.[hook] ?? []).some((entry) => typeof entry.command === "string" && entry.command.includes(scriptPath)));
             } catch {
+                // allow(silent-catch): an absent or unreadable hooks file installs none of the shield's hooks, which is the answer.
                 return false;
             }
         },

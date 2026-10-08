@@ -5645,6 +5645,7 @@
             "health": "Codebase-Zustand",
             "management": "Verwaltungspanel",
             "path": "Pfad",
+            "preview": "Vorschau",
             "repo": "Repo"
         },
         "outgoingWork": {

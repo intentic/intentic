@@ -70,7 +70,7 @@ export const refusals = {
         `${path} shows personal data (${kindsSaid(kinds)}) this model provider is not trusted with, so the privacy shield did not let it be opened.`,
     unreadablePicture: (path: string): string =>
         `${path} is a picture the privacy shield could not read on this machine to check it for personal data, so it was not opened.`,
-    tool: (tool: string): string =>
+    offTool: (tool: string): string =>
         `The ${tool} tool reads past the privacy shield, so it is off while the shield masks this conversation. Use the shell instead (rg, ls, find, curl): its output reaches you with personal data as tokens.`,
     write: (path: string): string =>
         `${path} holds personal data, and writing it whole would hand back the lines it replaces as they are. Change it with the shell instead (sed -i, a heredoc): personal data reaches you there as tokens, and tokens you write are turned back into the real values.`,
@@ -131,10 +131,10 @@ export const cursorHookShield = (shield: TurnShield): CursorHookShield => ({
         const kinds = await shield.refuses(content, "read", "a file read was refused: it holds personal data");
         return kinds.length === 0 ? undefined : refusals.read(path, kinds);
     },
-    tool: async ({ tool, input, existing }) => {
+    toolCall: async ({ tool, input, existing }) => {
         if (await shield.masking()) {
             if (REFUSED_TOOLS.has(tool)) {
-                return { refuse: refusals.tool(tool) };
+                return { refuse: refusals.offTool(tool) };
             }
             if (tool === "Write" && existing !== undefined && existing !== "") {
                 const path = typeof input["file_path"] === "string" ? input["file_path"] : "This file";
@@ -173,6 +173,7 @@ const ruleFilesUnder = async (root: string): Promise<string[]> => {
             return;
         }
         visited += 1;
+        // allow(silent-catch): a folder that cannot be listed holds no rule Cursor could load from it either.
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
         for (const entry of entries) {
             if (entry.isFile() && RULE_FILES.has(entry.name)) {
@@ -183,6 +184,7 @@ const ruleFilesUnder = async (root: string): Promise<string[]> => {
         }
     };
     const listed = async (dir: string): Promise<void> => {
+        // allow(silent-catch): a rules folder that is absent or unreadable lists none.
         const entries = await readdir(dir, { withFileTypes: true, recursive: true }).catch(() => []);
         for (const entry of entries) {
             if (entry.isFile() && /\.(md|mdc)$/u.test(entry.name)) {
@@ -201,10 +203,12 @@ export const instructionRefusal = async (shield: TurnShield, root: string, label
     const holding: string[] = [];
     const kinds = new Set<PersonalDataClass>();
     for (const file of await ruleFilesUnder(root)) {
+        // allow(silent-catch): a file that cannot be read measures as empty and is skipped, as Cursor could not load it.
         const size = await stat(file).then((info) => info.size).catch(() => 0);
         if (size === 0 || size > MAX_RULE_BYTES) {
             continue;
         }
+        // allow(silent-catch): read as empty, as above: nothing Cursor could load from it.
         const text = await readFile(file, "utf8").catch(() => "");
         const found = await shield.refuses(text, "instructions", `the turn was refused: ${relative(root, file)}, which ${label} loads itself, holds personal data`);
         if (found.length > 0) {

@@ -89,7 +89,7 @@ describe(`ChatLeftRunning`, () => {
         expect(text).toContain(`The agent left these running for you.`);
         expect(text).toContain(`Left running for you on :5173 · 1m 5s`);
 
-        labelled(element, `Open in Preview`)?.click();
+        labelled(element, `Open in Live app`)?.click();
         expect(previewed).toHaveBeenCalledWith(expect.anything(), `port:5173`);
 
         labelled(element, `Stop`)?.click();
@@ -111,7 +111,7 @@ describe(`ChatLeftRunning`, () => {
         const element = mount();
         expect(element.textContent).toContain(`Stopping…`);
         expect(labelled(element, `Stop`)).toBeUndefined();
-        expect(labelled(element, `Open in Preview`)).toBeUndefined();
+        expect(labelled(element, `Open in Live app`)).toBeUndefined();
     });
 
     it(`says why a stop was refused, under the card`, async () => {

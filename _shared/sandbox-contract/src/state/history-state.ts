@@ -109,6 +109,25 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // this machine's volumes, so a moved sandbox measures its own.
     { path: "storage-scan.json", portability: "derived" },
 
+    /* ---- the unprivileged agent's execution domain (the daemon's workload/agent-domain-view.ts) ---- */
+
+    // The agent's own HOME and the per-runtime homes beside it: what the agent keeps outlives a recreate, which includes
+    // any login a command-line tool it ran saved there. `secret` for that, since the daemon cannot tell one from the rest.
+    {
+        path: "agent-home/",
+        portability: "secret",
+        note: "Sign the agent's own command-line tools in again where it used them.",
+    },
+    {
+        path: "agent-homes/",
+        portability: "secret",
+        note: "Sign the agent's own command-line tools in again where it used them.",
+    },
+    // Container storage a domain's runtime filled, pulled again on demand.
+    { path: "agent-containers/", portability: "derived" },
+    // Each domain view's staging directory (`agent-domain-` and a random suffix), removed when its domain ends.
+    { path: "agent-domain-", portability: "derived" },
+
     /* ---- credentials ---- */
 
     // The ssh alias dir ~/.ssh/intentic-hosts symlinks to: per-host config, each key's public half, password files, and a

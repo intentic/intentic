@@ -9,7 +9,7 @@ import { openPaneDoor } from "../../terminal/pane-door.js";
 import { startAgentDomain } from "../../workload/agent-domain.js";
 import { AGENT_RUN, prepareAgentDomainView } from "../../workload/agent-domain-view.js";
 import { daemonGitConfig, provisionAgentHome } from "../../workload/agent-home.js";
-import type { IsolationAnchor, IsolationPlan } from "./isolation.js";
+import { gitPointersIn, type IsolationAnchor, type IsolationPlan } from "./isolation.js";
 
 // A TURN'S PLACE IN THE UNPRIVILEGED AGENT DOMAIN. What startAnchor is for a root-mode turn: one call that hands back an
 // anchor every runtime and pane joins, here a domain (workload/agent-domain.ts) over its view (agent-domain-view.ts), with
@@ -75,6 +75,7 @@ export const startDomainAnchor = async (options: DomainAnchorOptions): Promise<I
             authRoot: options.authRoot,
             run: run.dir,
             door: door.socket,
+            gitPointersIn,
             ...opt("sshSocket", options.sshSocket),
         });
         const anchor = await startAgentDomain({ ...prepared, cleanup: async () => release(prepared.cleanup) });
