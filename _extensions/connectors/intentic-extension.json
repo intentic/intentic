@@ -1007,6 +1007,59 @@
                 }
             },
             {
+                "id": "turbo-cache",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Turbo cache",
+                    "logo": "turborepo",
+                    "description": "The Turborepo cache your CI reads: replay what it built, hand it what you checked.",
+                    "category": "code",
+                    "hint": "A remote cache speaking turbo's /v8/artifacts API, such as the intentic repo's _tools/turbo-cache server, which keeps a sandbox's uploads to task logs."
+                },
+                "fields": [
+                    {
+                        "key": "url",
+                        "label": "Cache URL",
+                        "placeholder": "https://turbo-cache.example.com"
+                    },
+                    {
+                        "key": "team",
+                        "label": "Team",
+                        "placeholder": "intentic",
+                        "optional": true
+                    },
+                    {
+                        "key": "token",
+                        "label": "Token",
+                        "secret": true
+                    }
+                ],
+                "env": {
+                    "TURBO_CACHE_URL": "${url}",
+                    "TURBO_CACHE_TEAM": "${team}",
+                    "TURBO_CACHE_TOKEN": "${token}"
+                },
+                "hosts": ["${url}"],
+                "skill": "skills/turbo-cache/SKILL.md",
+                "probe": {
+                    "url": "${url}/v8/artifacts/status",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    }
+                },
+                "broker": {
+                    "routes": [
+                        {
+                            "upstream": "${url}",
+                            "env": "TURBO_CACHE_URL",
+                            "headers": {
+                                "authorization": "Bearer ${token}"
+                            }
+                        }
+                    ]
+                }
+            },
+            {
                 "id": "fly",
                 "kind": "cli",
                 "catalog": {

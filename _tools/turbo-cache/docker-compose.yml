@@ -1,19 +1,37 @@
-# The turbo remote cache on the fleet host: one container, local disk, one shared token. Every job on the six runner
-# processes already shares /ci-cache/turbo through a bind mount; this is what lets a machine OUTSIDE that mount (a
-# second runner host, a sandbox reading with TURBO_REMOTE_CACHE_READ_ONLY=1) replay the same artifacts. README.md
-# says how to point turbo at it.
+# The fleet's turbo cache as sandboxes reach it (README.md): the server over the runners' own /ci-cache/turbo, which it
+# only reads, plus /ci-cache/turbo-sandbox, the one directory it writes; and a Cloudflare tunnel publishing it, so a
+# sandbox anywhere, a hosted one included, reaches it by name. Nothing listens on the host but loopback.
+#
+#   TURBO_CACHE_TOKEN=<token> TUNNEL_TOKEN=<tunnel token> docker compose up -d
+#
+# The tunnel's public hostname routes to http://turbo-cache:3000, the service name on this compose network.
 services:
   turbo-cache:
-    image: ducktors/turborepo-remote-cache:2.14.1@sha256:8aa1c158d885757149fa953e92c0c8da544cf4a1e9a19b7feb684e59cf7b4bb0
+    # The base ci-base and the sandbox image pin (_tools/ci-base/Dockerfile): Node 24 with zstd in zlib, nothing else.
+    image: node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
     restart: unless-stopped
+    command: ["node", "/srv/turbo-cache/server.mjs"]
     environment:
-      # The one token every reader and writer presents; the same value goes into the repository secret TURBO_TOKEN.
-      TURBO_TOKEN: ${TURBO_TOKEN:?set TURBO_TOKEN to the shared token}
-      STORAGE_PROVIDER: local
-      STORAGE_PATH: /cache
+      TURBO_CACHE_TOKEN: ${TURBO_CACHE_TOKEN:?set TURBO_CACHE_TOKEN to the token the sandboxes' card holds}
+      TURBO_CACHE_READ_DIRS: /cache/ci
+      TURBO_CACHE_WRITE_DIR: /cache/sandbox
       PORT: "3000"
     volumes:
-      # Beside the runners' own cache so both sit on the same disk; the server prunes nothing, `find -mtime` does.
-      - /ci-cache/turbo-remote:/cache
+      # The server's own files, and only them: it imports nothing outside this directory.
+      - ./:/srv/turbo-cache:ro
+      # Read-only: the runners' cache is theirs, and CI's import step is the only way anything reaches it.
+      - /ci-cache/turbo:/cache/ci:ro
+      - /ci-cache/turbo-sandbox:/cache/sandbox
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN to the tunnel's token}
+    depends_on:
+      - turbo-cache

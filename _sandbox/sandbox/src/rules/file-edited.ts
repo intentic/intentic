@@ -112,12 +112,15 @@ export const fileEditedReviewer = (
 // class it would keep the daemon's own rank and outlive a turn's runtime under the OOM killer. In a process group of its
 // own, so the ceiling kills the tsc or vitest the line started along with its shell; killing the shell alone left them
 // running, holding the output pipe and with it the edit's answer.
+// `env` is laid over the daemon's own environment: a `turn` check gets the turn's shell variables through it
+// (harness-hooks.ts), so a check reaches what the turn's connector cards connect, as the turn's own commands do.
 export const spawnEditCommand =
-    (cwd: string): EditCommandRunner =>
+    (cwd: string, env?: Readonly<Record<string, string>>): EditCommandRunner =>
     async (command, timeoutMs) => {
         const ran = await runCheck({
             argv: shellArgv(command, "bash"),
             cwd,
+            env: { ...process.env, ...env },
             timeoutMs,
             workload: { class: "command" },
             kind: "edit-rule",

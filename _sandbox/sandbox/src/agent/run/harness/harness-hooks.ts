@@ -112,8 +112,10 @@ const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: reado
         turnChecks: {
             rules,
             change: () => turnChangeOf(deps, conversationId, named),
+            // With the turn's shell variables, its connector cards' among them: a turn check stands where the turn's last
+            // command stood, so what the turn could reach, its check can (the shared turbo cache's warmer needs its card).
             run: (command, timeoutMs, repo) =>
-                spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
+                spawnEditCommand(repoCwd(context.localCwd, repo), context.cliEnv)(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
             // A firing date on the settings list, as an edit check's; a feed row per turn would be noise.
             onFired: (rule) => stampFiring(deps, rule),
             logger: deps.logger.child({ conversationId }),

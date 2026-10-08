@@ -29,8 +29,10 @@ env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   PNPM_STORE: /ci-cache/pnpm-store
   TURBO_CACHE_DIR: /ci-cache/turbo
-  # The fleet's turbo remote cache (_tools/turbo-cache), when the repository names one: TURBO_API and TURBO_TEAM
-  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone.
+  # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
+  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
+  # them at _tools/turbo-cache's server: it also serves what sandboxes wrote, which CI may take only through that
+  # directory's import.mjs, the step that checks each entry against CI's own dry run.
   TURBO_API: ${{ vars.TURBO_API }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

@@ -44,6 +44,7 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | each runner's `_temp`, including the job's `$HOME` | the janitor, while that runner is idle |
 | `actions-work-N/.pnpm-store` | the janitor, above 6 GB |
 | `/ci-cache/turbo` | age sweep in the `pnpm-setup` action; the janitor above 10 GB |
+| `/ci-cache/turbo-sandbox` | the [turbo-cache](../../_tools/turbo-cache) server's own 14-day sweep; the janitor above 15 GB |
 | `/ci-cache/*-target` | the janitor, above 20 GB or after 14 days without a build |
 | `/ci-cache/onboarding-docker` | the janitor, above 30 GB |
 | `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |

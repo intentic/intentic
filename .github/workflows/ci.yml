@@ -77,8 +77,10 @@ env:
   # action; this variable is deliberately named so it cannot be mistaken for one pnpm reads on its own.
   PNPM_STORE: /ci-cache/pnpm-store
   TURBO_CACHE_DIR: /ci-cache/turbo
-  # The fleet's turbo remote cache (_tools/turbo-cache), when the repository names one: TURBO_API and TURBO_TEAM
-  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone.
+  # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
+  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
+  # them at _tools/turbo-cache's server: it also serves what sandboxes wrote, which CI may take only through that
+  # directory's import.mjs, the step that checks each entry against CI's own dry run.
   TURBO_API: ${{ vars.TURBO_API }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -347,15 +349,16 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         shell: bash
         run: bash _tools/scripts/verify/lint-workflows.sh
-      # THE CHECKS' OWN SUITES, and the scripts': the node:test files under _tools/checks and _tools/scripts, which
-      # pin what each check refuses (a template-joined route, an extension's manifest, an editor import cycle) and
-      # what verify, the fixers and the release scripts decide. They are plumbing rather than workspace packages, so
-      # `turbo run test` never reaches them; `pnpm verify` runs the same command by hand
-      # (_tools/scripts/verify/verify.mjs). Node's own runner with node's builtins, git and bash: no node_modules,
-      # under two seconds. The globs are quoted for node to expand: the shell reads `**` as `*` and would skip the
-      # suites at the top of _tools/checks.
+      # THE CHECKS' OWN SUITES, and the scripts': the node:test files under _tools/checks, _tools/scripts and
+      # _tools/turbo-cache, which pin what each check refuses (a template-joined route, an extension's manifest, an editor
+      # import cycle), what verify, the fixers and the release scripts decide, and what a sandbox may put in the fleet's
+      # turbo cache. They are plumbing rather than workspace packages, so `turbo run test` never reaches them; `pnpm
+      # verify` runs the same command by hand (_tools/scripts/verify/verify.mjs). Node's own runner with node's builtins,
+      # git, tar and bash: no node_modules, a few seconds (turbo-cache's turbo.test.mjs drives the real turbo where a
+      # workspace kept an install, and stands down where none is). The globs are quoted for node to expand: the shell
+      # reads `**` as `*` and would skip the suites at the top of _tools/checks.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs"
+        run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs" "_tools/turbo-cache/**/*.test.mjs"
 
   # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked, then the push check.
   # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said: on the
@@ -442,6 +445,17 @@ jobs:
       - id: declarations
         if: steps.base.outputs.sha != ''
         run: node _tools/scripts/build/emit-declarations.mjs
+      # WHAT A SANDBOX ALREADY TYPECHECKED ON THIS TREE (_tools/turbo-cache/README.md). An agent's turn sends its typecheck
+      # passes to the fleet's turbo-cache server, which keeps them apart in /ci-cache/turbo-sandbox; this copies into
+      # /ci-cache/turbo only the entries whose hash this job's own dry run gives to an output-less task, re-written as that
+      # task's log alone, so nothing a sandbox wrote can become a build output. The arguments are the step below's, minus
+      # the flags that do not move a hash. Never fails the job: an import that cannot run leaves the typecheck its work.
+      - name: Import sandbox typecheck results
+        if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
+        shell: bash
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: node _tools/turbo-cache/import.mjs -- run typecheck "--filter=[$BASE...HEAD]" --only
       # Through the environment, quoted: the filter is one argument. The task count is sized to the free memory the
       # way the root `typecheck` script sizes it, since this box is shared with five other jobs.
       - name: Typecheck the packages the push changed

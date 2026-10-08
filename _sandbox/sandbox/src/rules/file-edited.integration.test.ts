@@ -46,6 +46,13 @@ describe.skipIf(!linux.runs)(linux.title("the ceiling ends the whole line"), () 
         expect(await spawnEditCommand(scratch())("echo clean", 10_000)).toEqual({ status: "passed", output: "clean\n" });
         expect(await spawnEditCommand(scratch())("echo 'no-unused-vars' >&2; exit 1", 10_000)).toEqual({ status: "failed", output: "no-unused-vars\n" });
     });
+
+    // A turn check is handed the turn's shell variables (harness-hooks.ts): laid over the daemon's, never in place of them.
+    test("variables it is handed are laid over the daemon's own environment", async () => {
+        const run = await spawnEditCommand(scratch(), { TURN_CARD_PROBE: "from the card" })('printf "%s|%s" "$TURN_CARD_PROBE" "${PATH:+path}"', 10_000);
+        expect(run).toEqual({ status: "passed", output: "from the card|path" });
+        expect(await spawnEditCommand(scratch())('printf "%s" "${TURN_CARD_PROBE:-unset}"', 10_000)).toEqual({ status: "passed", output: "unset" });
+    });
 });
 
 // Children inherit this process's rank and a class never lowers one, so only a class above it can be seen to land.

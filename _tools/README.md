@@ -9,7 +9,8 @@ flowchart LR
     harnesses["Harnesses<br/>e2e · onboarding · desktop-smoke"] --> product["The built product<br/>app, daemon, installers"]
     standins["Stand-in hosts<br/>dind-host · localhost-https"] --> harnesses
     gates["Gates<br/>checks · oxlint · perf · scripts/verify"] --> checkout["The checkout<br/>each edit, land, push, CI"]
-    images["CI images<br/>ci-base · ci-desktop · turbo-cache"] --> gates
+    images["CI images<br/>ci-base · ci-desktop"] --> gates
+    cache["Shared turbo cache<br/>turbo-cache"] --> gates
 ```
 
 `_tools/` holds what every part needs, so any part may depend on it, `_shared/` included. A `_tools/` member that
@@ -42,4 +43,4 @@ itself depends on a package outside `_shared/` and `_tools/` loses that standing
 | [selfhost](selfhost) | Compose files to self-host the platform |
 | [testing](testing) | The `suites` test runner and the fakes every package's tests share |
 | [tsconfig](tsconfig) | Base TypeScript configs every package extends |
-| [turbo-cache](turbo-cache) | Compose file for the fleet's turbo remote cache |
+| [turbo-cache](turbo-cache) | The fleet's turbo cache as sandboxes reach it: their typecheck passes in, CI's results out |
