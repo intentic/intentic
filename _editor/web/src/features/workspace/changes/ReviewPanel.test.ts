@@ -207,6 +207,9 @@ it(`stages a session's work when its chip is lit, and unstages it when the chip 
     expect(buttonNamed(el, `Commit all`)).toBeUndefined();
 
     await answer(unstagedTree(true));
+    // The staged count rides on the press itself; there's no "N staged" readout beside it any more.
+    expect(buttonNamed(el, `Commit`)?.textContent?.replace(/\s+/g, ` `).trim()).toBe(`Commit 1`);
+    expect(el.textContent).not.toMatch(/\d+ staged/);
     buttonNamed(el, `Fix sandbox turn cleanup`)?.click();
     await settle();
     expect(unstage).toHaveBeenCalledWith({ repo: `root`, scope: { side: `staged`, origin: `a1` } });

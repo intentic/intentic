@@ -566,7 +566,7 @@ const commitReady = computed(
         !changes.actionBusy.value &&
         !commitRunning.value,
 );
-// The Staged list beside the button already says what a plain Commit covers; only the stage-first press needs a word.
+// A plain Commit carries its staged count beside the label; the stage-first press says "all" instead.
 const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
@@ -589,7 +589,15 @@ const commitTip = computed((): Tip | undefined => {
     if (stagesFirst.value) {
         return { title: t(`workspace.reviewPanel.stageAllFirst`), keys, rows: [{ label: t(`shared.changes`), value: changes.count.value }] };
     }
-    return { title: t(`workspace.reviewPanel.commit`), keys, note: stagedRepos.value.length > 1 ? t(`workspace.reviewPanel.onePerRepo`) : undefined };
+    const spread = stagedRepos.value.length > 1;
+    return {
+        title: spread
+            ? `${t(`workspace.reviewPanel.commit`)} ${t(`workspace.reviewPanel.repos`, { count: stagedRepos.value.length }, stagedRepos.value.length)}`
+            : t(`workspace.reviewPanel.commit`),
+        keys,
+        rows: [{ label: t(`shared.files`), value: changes.stagedCount.value }],
+        note: spread ? t(`workspace.reviewPanel.onePerRepo`) : undefined,
+    };
 });
 
 // Sessions this commit would record, and which are still running — scoped exactly like the button. A
@@ -1171,15 +1179,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     }}</span>
                     <span v-if="draftLine.elapsed !== undefined" class="shrink-0 tabular-nums text-subtle">{{ draftLine.elapsed }}</span>
                 </span>
-                <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
-                    <template v-if="changes.stagedCount.value > 0"
-                        >{{ changes.stagedCount.value }} {{ t(`workspace.reviewPanel.staged`)
-                        }}<span v-if="stagedRepos.length > 1">{{
-                            t(`workspace.reviewPanel.repos`, { count: stagedRepos.length }, stagedRepos.length)
-                        }}</span></template
-                    >
-                    <template v-else>{{ t(`workspace.reviewPanel.nothingStaged`) }}</template>
-                </span>
+                <!-- At rest the row's only word is the button's: it carries its own count. -->
+                <span v-else class="flex-1"></span>
                 <!-- The commit action reports progress while stages, hooks, and reads run. -->
                 <Button
                     size="small"
@@ -1192,6 +1193,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{
                         commitRunning ? t(`workspace.reviewPanel.committing`) : commitLabel
                     }}
+                    <!-- What a plain Commit records, said on the press itself rather than in a readout beside it. -->
+                    <span v-if="!commitRunning && !stagesFirst && changes.stagedCount.value > 0" class="tabular-nums opacity-70">{{ changes.stagedCount.value }}</span>
                 </Button>
             </div>
             <!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
