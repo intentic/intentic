@@ -1,4 +1,5 @@
 import type { Mock } from "bun:test";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { Social } from "../../conversations/registry/agents-store.js";
@@ -22,7 +23,7 @@ jest.mock("./role-model.js", () => ({
 const { cleanSessionTitle, nameAgentTitle: nameAgentTitleInExecution, splitTitleAction } = await import("./title-namer.js");
 
 const nameAgentTitle = (services: Services, conversationId: string, prompt: string): Promise<void> =>
-    withAgentExecution(services.agentExecution, { localCwd: "/work" }, (execution) =>
+    withAgentExecution(services.agentExecution, { localCwd: WORKSPACE_ROOT }, (execution) =>
         nameAgentTitleInExecution(services, execution, conversationId, prompt),
     );
 
@@ -169,7 +170,7 @@ test("passes the caller's live execution context unchanged to the title model", 
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     const services = servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle);
     const admission = await services.agentExecution.admit();
-    const lease = services.agentExecution.acquire(admission, { localCwd: "/work" });
+    const lease = services.agentExecution.acquire(admission, { localCwd: WORKSPACE_ROOT });
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
     try {
         await nameAgentTitleInExecution(services, lease.context, "c1", "fix the auth tests");

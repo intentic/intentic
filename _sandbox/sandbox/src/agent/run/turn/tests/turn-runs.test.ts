@@ -3,7 +3,7 @@ import type { AgentDomainPolicy, AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../../composition.js";
-import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/agent-domain-rollout.js";
+import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/domain/agent-domain-rollout.js";
 import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
 import { streamAgent } from "../../stream-agent.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";

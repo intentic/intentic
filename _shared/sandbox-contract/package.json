@@ -140,14 +140,14 @@
             }
         },
         "./listener-protocol": {
-            "types": "./dist/protocol/listener-protocol.d.ts",
+            "types": "./dist/protocol/doors/listener-protocol.d.ts",
             "import": {
-                "@intentic/src": "./src/protocol/listener-protocol.ts",
-                "default": "./dist/protocol/listener-protocol.js"
+                "@intentic/src": "./src/protocol/doors/listener-protocol.ts",
+                "default": "./dist/protocol/doors/listener-protocol.js"
             },
             "require": {
-                "@intentic/src": "./src/protocol/listener-protocol.ts",
-                "default": "./dist/protocol/listener-protocol.js"
+                "@intentic/src": "./src/protocol/doors/listener-protocol.ts",
+                "default": "./dist/protocol/doors/listener-protocol.js"
             }
         },
         "./extension-protocol": {
@@ -294,14 +294,14 @@
             }
         },
         "./webext-links": {
-            "types": "./dist/protocol/webext-links.d.ts",
+            "types": "./dist/protocol/doors/webext-links.d.ts",
             "import": {
-                "@intentic/src": "./src/protocol/webext-links.ts",
-                "default": "./dist/protocol/webext-links.js"
+                "@intentic/src": "./src/protocol/doors/webext-links.ts",
+                "default": "./dist/protocol/doors/webext-links.js"
             },
             "require": {
-                "@intentic/src": "./src/protocol/webext-links.ts",
-                "default": "./dist/protocol/webext-links.js"
+                "@intentic/src": "./src/protocol/doors/webext-links.ts",
+                "default": "./dist/protocol/doors/webext-links.js"
             }
         }
     },

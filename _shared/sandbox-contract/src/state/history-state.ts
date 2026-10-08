@@ -109,7 +109,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // this machine's volumes, so a moved sandbox measures its own.
     { path: "storage-scan.json", portability: "derived" },
 
-    /* ---- the unprivileged agent's execution domain (the daemon's workload/agent-domain-view.ts) ---- */
+    /* ---- the unprivileged agent's execution domain (the daemon's workload/domain/agent-domain-view.ts) ---- */
 
     // The agent's own HOME and the per-runtime homes beside it: what the agent keeps outlives a recreate, which includes
     // any login a command-line tool it ran saved there. `secret` for that, since the daemon cannot tell one from the rest.

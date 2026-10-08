@@ -414,6 +414,7 @@ export const othersHolding = (holding: ReadonlyMap<number, string>, sandboxId: s
     new Map([...holding].filter(([, holder]) => holder !== sandboxId));
 
 // Stamps the end of a pass; a failed write must not stop mirroring, so it silently under-claims.
+// allow(silent-catch): a heartbeat that could not be written reads as stale, which `intentic-machine status` already reports.
 const beat = async (): Promise<void> => await writeFileAtomic(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
 
 // Persists one pairing's ports, leaving every other pairing's alone: avoids clobbering a concurrent `setup`'s
@@ -1057,6 +1058,7 @@ const passGone = async (context: PassContext, pairing: Pairing): Promise<"pass" 
     if (step === "retire") {
         const { mutagen, tracking, say } = context;
         await guard(say, `${pairing.sandboxId}: retiring its pairing`, async () => {
+            // The day it went gone, as a UTC date: the same bucket gone-watch.ts names when it schedules the retirement.
             await retireSandbox(pairing.sandboxId, say, `gone since ${new Date(pairing.goneSince ?? Date.now()).toISOString().slice(0, 10)}`, {
                 mutagen,
             });
@@ -1203,11 +1205,14 @@ const watchGeneration = async (log: Log): Promise<"done" | "stalled"> => {
         if (outcome === "stalled") {
             abandon.abort();
             // Whatever the abandoned loop does when its stuck step returns is its own; it stops at its next check.
+            // allow(silent-catch): the abandoned loop was aborted on purpose, and the restart below is logged in its place.
             loop.catch(() => undefined);
             log(
                 `sync watcher: no progress for ${WATCHER_STALL_MS / 60_000} minutes (it was at: ${generation.step}); restarting it. Its heartbeat had gone stale, which \`intentic-machine status\` reports.`,
             );
-            await generation.stopTransports?.().catch(() => undefined);
+            await generation
+                .stopTransports?.()
+                .catch((error: unknown) => log(`sync watcher: could not stop the stalled watcher's tunnels (${errorMessage(error)})`));
         }
         return outcome;
     } finally {

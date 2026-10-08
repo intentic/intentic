@@ -184,7 +184,8 @@
         "updateReadyBadge": "aktualizacja jest gotowa",
         "machineBadge": "konfiguracja sandboxa tego komputera",
         "keptBy": "Obsługiwany przez {place}",
-        "keptByNote": "Jego aktualizacje, kopie zapasowe i restarty działają tam. Uruchamianie, zatrzymywanie i restart nadal działają stąd.",
+        "keptByNote": "Start, stop i restart stąd",
+        "keptByTitle": "Utrzymanie działa tam",
         "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy."
     },
     "machineSandbox": {

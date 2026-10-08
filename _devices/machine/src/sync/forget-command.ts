@@ -6,7 +6,7 @@ import { buildCommand, type CommandContext } from "@stricli/core";
 import { z } from "zod";
 import { agentInDistro } from "../environments/crossing.js";
 import { heldDistros } from "../environments/machine.js";
-import { WINDOWS_SIDE } from "../wsl.js";
+import { WINDOWS_SIDE } from "../environments/wsl.js";
 import { readState } from "./config.js";
 import { ensureMutagen } from "./mutagen.js";
 import { answer } from "./project/project-commands.js";
@@ -94,6 +94,7 @@ export const forgetSandbox = async (
     const ids = sandboxesNamed((await readState()).pairings, name);
     // Mutagen only where something here is to be forgotten: resolving it downloads it when absent. One that cannot be had
     // is no reason to keep the pairing; the watcher's orphan sweep ends its sessions once Mutagen answers.
+    // allow(silent-catch): no Mutagen means its sessions are left to that sweep, and the pairing is forgotten regardless.
     const mutagen = ids.length === 0 ? undefined : await resolve().catch(() => undefined);
     const retired: Retired[] = [];
     for (const sandboxId of ids) {

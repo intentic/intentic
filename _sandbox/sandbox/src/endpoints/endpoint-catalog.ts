@@ -59,10 +59,12 @@ const servedProps = async (config: EndpointConfig, fetchImpl: typeof fetch): Pro
     const response = await fetchImpl(`${unversionedBase(config.baseUrl)}/props`, {
         headers: endpointHeaders(config),
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+        // allow(silent-catch): /props is llama-server's alone; a server without it, or one that does not answer in time, just says nothing extra.
     }).catch(() => undefined);
     if (response === undefined || !response.ok) {
         return {};
     }
+    // allow(silent-catch): a body that is not JSON fails both schemas below, which reads as no window and no tool answer.
     const body: unknown = await response.json().catch(() => undefined);
     const window = WindowPropsSchema.safeParse(body);
     const caps = CapsPropsSchema.safeParse(body);
@@ -93,7 +95,9 @@ const nativeJson = async (config: EndpointConfig, path: string, fetchImpl: typeo
     const response = await fetchImpl(`${unversionedBase(config.baseUrl)}${path}`, {
         headers: endpointHeaders(config),
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+        // allow(silent-catch): these native routes are Ollama's and LM Studio's only; any other server, or a slow one, simply has no loaded windows to add.
     }).catch(() => undefined);
+    // allow(silent-catch): a body that is not JSON fails the caller's schema, the same "nothing loaded" as a missing route.
     return response?.ok === true ? await response.json().catch(() => undefined) : undefined;
 };
 
@@ -157,6 +161,7 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
         fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
             headers: endpointHeaders(config),
             signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+            // allow(silent-catch): a server that cannot be reached discovers nothing, and the catalog falls back to the persisted list (see the top of this file).
         }).catch(() => undefined),
         servedProps(config, fetchImpl),
         loadedWindows(config, fetchImpl),
@@ -164,6 +169,7 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
     if (response === undefined || !response.ok) {
         return [];
     }
+    // allow(silent-catch): a body that is not JSON fails the schema like any malformed list, which falls back to the persisted one.
     const parsed = ModelsResponseSchema.safeParse(await response.json().catch(() => undefined));
     if (!parsed.success) {
         return [];

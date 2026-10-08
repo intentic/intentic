@@ -1,5 +1,6 @@
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { MAIN_MOUNT } from "./worktree-paths.js";
+import { MAIN_MOUNT } from "../worktree-paths.js";
 import { AGENT_HOME } from "./agent-domain.js";
 import {
     buildAgentDomainView, parseSameHostMounts, resolveGitPointer, sameHostAliases, validateAgentOverlayDirectories,
@@ -8,36 +9,36 @@ import {
 
 // Pure builder mode: no filesystem, Git subprocess, namespaces, mounts, or dependence on this host's capabilities.
 const fixture = (): PreparedAgentDomainView => {
-    const historyRoot = "/history";
-    const root = "/work";
-    const worktree = "/history/worktrees/c1";
+    const historyRoot = HISTORY_ROOT;
+    const root = WORKSPACE_ROOT;
+    const worktree = `${HISTORY_ROOT}/worktrees/c1`;
     const metadata = (repository: string, gitdir: string, commonDir: string): AgentGitMetadata => ({
         repository, pointer: { path: `${repository}/.git`, kind: "file" }, gitdir, commonDir,
     });
     return {
-        plan: { root, worktree, overlays: "/history/overlays/c1", mirrors: ["node_modules", "apps/web/node_modules"], fence: undefined },
-        historyRoot, scratch: "/history/agent-domain-abc", homeSource: "/history/agent-home", run: "/history/agent-run/c1", door: "/run/intentic/doors/d1.sock", restores: [],
+        plan: { root, worktree, overlays: `${HISTORY_ROOT}/overlays/c1`, mirrors: ["node_modules", "apps/web/node_modules"], fence: undefined },
+        historyRoot, scratch: `${HISTORY_ROOT}/agent-domain-abc`, homeSource: `${HISTORY_ROOT}/agent-home`, run: `${HISTORY_ROOT}/agent-run/c1`, door: "/run/intentic/doors/d1.sock", restores: [],
         mainAliases: ["/backup/work"], worktreeAliases: [worktree, "/turn-alias"],
         historyAliases: [
             { source: historyRoot, target: historyRoot, kind: "directory" },
             { source: historyRoot, target: "/archive/history", kind: "directory" },
         ],
-        historyPaths: ["/history/agent-homes", "/history/agent-containers", "/history/agent-run/c1"],
-        shared: [".intentic/local", ".intentic/records"], shelf: true, packageStore: true,
+        historyPaths: [`${HISTORY_ROOT}/agent-homes`, `${HISTORY_ROOT}/agent-containers`, `${HISTORY_ROOT}/agent-run/c1`],
+        shared: [`${STATE_DIR}/local`, `${STATE_DIR}/records`], shelf: true, packageStore: true,
         masks: [
             { path: "/work/.intentic/secrets/auth", kind: "directory" },
             { path: "/srv/credential-vault", kind: "directory" },
             { path: "/root", kind: "directory" },
         ],
         git: [
-            metadata(root, "/history/gits/root", "/history/gits/root"),
-            metadata(`${root}/apps/web`, "/history/gits/web", "/history/gits/web"),
-            metadata(worktree, "/history/gits/root/worktrees/c1", "/history/gits/root"),
-            metadata(`${worktree}/apps/web`, "/history/gits/web/worktrees/c1", "/history/gits/web"),
+            metadata(root, `${HISTORY_ROOT}/gits/root`, `${HISTORY_ROOT}/gits/root`),
+            metadata(`${root}/apps/web`, `${HISTORY_ROOT}/gits/web`, `${HISTORY_ROOT}/gits/web`),
+            metadata(worktree, `${HISTORY_ROOT}/gits/root/worktrees/c1`, `${HISTORY_ROOT}/gits/root`),
+            metadata(`${worktree}/apps/web`, `${HISTORY_ROOT}/gits/web/worktrees/c1`, `${HISTORY_ROOT}/gits/web`),
         ],
         gitAliases: [],
         endpoints: ["/run/intentic/agent.token", "/run/intentic/room.sock", "/run/intentic/ssh/c-c1.boot.sock"],
-        readOnlyMounts: ["/", "/usr", "/opt/sandbox", "/work", "/history", "/run"],
+        readOnlyMounts: ["/", "/usr", "/opt/sandbox", WORKSPACE_ROOT, HISTORY_ROOT, "/run"],
     };
 };
 const USERNS = "/proc/432/ns/user";
@@ -47,9 +48,9 @@ const pinTree = (target: string): string => `mount --rbind -- ${shellQuote(targe
 const ro = (target: string): string => `mount -o remount,bind,ro -- ${shellQuote(target)}`;
 const idmappedTargets = (lines: readonly string[]): string[] => lines.filter((line) => line.startsWith("mount --bind -o ")).map((line) => line.split(" ").at(-1)!);
 const staged = (lines: readonly string[], source: string): string => {
-    const line = lines.find((entry) => entry.startsWith(plainBind(source, "/history/agent-domain-abc/sources/").slice(0, -1)));
+    const line = lines.find((entry) => entry.startsWith(plainBind(source, `${HISTORY_ROOT}/agent-domain-abc/sources/`).slice(0, -1)));
     if (line === undefined) { throw new Error(`Missing stage for ${  source}`); }
-    return line.split(" ").at(-1)!.replace("/history/agent-domain-abc", "/run/intentic-view");
+    return line.split(" ").at(-1)!.replace(`${HISTORY_ROOT}/agent-domain-abc`, "/run/intentic-view");
 };
 const upper = (): AgentOverlayDirectory => ({ path: "/history/overlays/c1/node_modules/upper", uid: 1500, gid: 1500, device: 8, inode: 20, kind: "directory" });
 const work = (): AgentOverlayDirectory => ({ path: "/history/overlays/c1/node_modules/work", uid: 1500, gid: 1500, device: 8, inode: 21, kind: "directory" });
@@ -116,7 +117,7 @@ it("builds a main-tree domain too, with one writable root and protected Git meta
 });
 
 it("restores only the daemon-selected session history child, not the parent or another conversation", () => {
-    const lines = linesOf({ ...fixture(), historyPaths: ["/history/sessions/c1", "/history/agent-run/c1"] });
+    const lines = linesOf({ ...fixture(), historyPaths: [`${HISTORY_ROOT}/sessions/c1`, `${HISTORY_ROOT}/agent-run/c1`] });
     expect(idmappedTargets(lines).filter((target) => target.includes("/sessions/"))).toEqual([
         "/history/sessions/c1", "/archive/history/sessions/c1",
     ]);
@@ -234,7 +235,7 @@ it("uses an idmapped lower but plain on-disk-1500 upper/work binds, never idmaps
 
 it("pins every nested repository ancestor and protects all pointers and entire backing metadata trees read-only", () => {
     const lines = linesOf();
-    const pins = [pinTree("/work/apps"), pinTree("/work/apps/web")];
+    const pins = [pinTree(`${WORKSPACE_ROOT}/apps`), pinTree(`${WORKSPACE_ROOT}/apps/web`)];
     expect(lines.filter((line) => pins.includes(line) || line.endsWith(" /work/apps/web/.git"))).toEqual([
         ...pins, plainBind(staged(lines, "/history/worktrees/c1/apps/web/.git"), "/work/apps/web/.git"), ro("/work/apps/web/.git"),
     ]);
@@ -258,24 +259,24 @@ it("pins every nested repository ancestor and protects all pointers and entire b
 
 it("also protects individually bind-aliased Git config files, rather than relying on a read-only common dir elsewhere", () => {
     const input = fixture();
-    const lines = linesOf({ ...input, gitAliases: [{ source: "/history/gits/root/config", target: "/git-config-alias", kind: "file" }] });
+    const lines = linesOf({ ...input, gitAliases: [{ source: `${HISTORY_ROOT}/gits/root/config`, target: "/git-config-alias", kind: "file" }] });
     expect(lines.filter((line) => line.endsWith(" /git-config-alias"))).toEqual([
         plainBind(staged(lines, "/history/gits/root/config"), "/git-config-alias"), ro("/git-config-alias"),
     ]);
 });
 
 it("rejects absolute-path normalization, mirror traversal and kernel overlay-option delimiters", () => {
-    for (const rel of ["../escape", "apps/../../escape", "/node_modules", "apps//node_modules", "apps/./node_modules", "node_modules/", "a,b", "a:b", "a\nnode_modules", ".git/hooks", ".intentic/secrets", "refs", ".pnpm-store"]) {
+    for (const rel of ["../escape", "apps/../../escape", "/node_modules", "apps//node_modules", "apps/./node_modules", "node_modules/", "a,b", "a:b", "a\nnode_modules", ".git/hooks", `${STATE_DIR}/secrets`, "refs", ".pnpm-store"]) {
         expect(() => buildAgentDomainView({ ...fixture(), plan: { ...fixture().plan, mirrors: [rel] } })).toThrow();
     }
-    for (const overlays of ["/history/overlays/a,b", "/history/overlays/a:b", "/history/../overlays", "relative", "/work/overlays", "/history/worktrees/c1/overlays", "/mnt/intentic-domain-lease/overlays"]) {
+    for (const overlays of [`${HISTORY_ROOT}/overlays/a,b`, `${HISTORY_ROOT}/overlays/a:b`, `${HISTORY_ROOT}/../overlays`, "relative", `${WORKSPACE_ROOT}/overlays`, `${HISTORY_ROOT}/worktrees/c1/overlays`, "/mnt/intentic-domain-lease/overlays"]) {
         expect(() => buildAgentDomainView({ ...fixture(), plan: { ...fixture().plan, overlays } })).toThrow();
     }
     expect(() => buildAgentDomainView({ ...fixture(), scratch: "/history/agent-domain-abc/" })).toThrow("absolute clean path");
 });
 
 it("rejects auth/alias/mask conflicts, fenced plans, daemon history and hidden init leases instead of degrading", () => {
-    for (const mask of ["/", "/work", "/history/agent-home", "/history/gits/root", "/run/intentic", "/mnt/intentic-domain-lease", "/run/intentic-domain"]) {
+    for (const mask of ["/", WORKSPACE_ROOT, `${HISTORY_ROOT}/agent-home`, `${HISTORY_ROOT}/gits/root`, "/run/intentic", "/mnt/intentic-domain-lease", "/run/intentic-domain"]) {
         expect(() => buildAgentDomainView({ ...fixture(), masks: [{ path: mask, kind: "directory" }] })).toThrow();
     }
     expect(() => buildAgentDomainView({ ...fixture(), historyPaths: ["/history/logs"] })).toThrow("not an agent-accessible history child");
@@ -327,10 +328,10 @@ it("parses Git pointers without executing Git and rejects missing, multiline and
 it("uses same-host mount identity to enumerate complete and descendant aliases, including separately mounted secrets", () => {
     const mounts = [
         { device: "0:1", root: "/", target: "/" },
-        { device: "8:1", root: "/workspace", target: "/work" },
+        { device: "8:1", root: "/workspace", target: WORKSPACE_ROOT },
         { device: "8:1", root: "/workspace", target: "/backup/work" },
         { device: "8:1", root: "/workspace/.intentic/secrets/keys", target: "/leaked-keys" },
-        { device: "8:2", root: "/vault", target: "/work/.intentic/secrets/external" },
+        { device: "8:2", root: "/vault", target: `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/external` },
         { device: "8:2", root: "/vault", target: "/external-vault-alias" },
     ];
     expect(sameHostAliases("/work/.intentic/secrets", mounts, true)).toEqual([

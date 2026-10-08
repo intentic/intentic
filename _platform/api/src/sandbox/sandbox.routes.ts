@@ -44,7 +44,7 @@ import {
     kickHostedCleanup,
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
-import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/hosted-plan.js";
+import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/plan/hosted-plan.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import {

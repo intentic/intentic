@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import { z } from "zod";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import { applySubscription, hostedPlanEnabled } from "./hosted-plan.js";
 import { type StripeGateway, stripeGateway, subscriptionIdOfEvent, verifyStripeSignature } from "./hosted-plan-stripe.js";
 

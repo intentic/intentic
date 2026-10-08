@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ActivityStatusSchema } from "../schemas/activity.js";
-import { rawRouteUrl } from "./raw/raw-routes.js";
+import { ActivityStatusSchema } from "../../schemas/activity.js";
+import { rawRouteUrl } from "../raw/raw-routes.js";
 
 // Wire between the daemon and an extension's realtime-listener gateway (ext-discord, ext-slack, ext-telegram,
 // ext-whatsapp, ext-imap, ext-google-workspace): the four /listeners/:provider routes (state, dispatch, failure,

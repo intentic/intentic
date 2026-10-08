@@ -1,4 +1,4 @@
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -968,7 +968,7 @@ test("a question for a secret is refused without a card, because a card's answer
 });
 
 test("an anchored turn's app-server is born in the turn's mount namespace", async () => {
-    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/c1/work`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
     const { runner, calls } = fakeCodexRunner([]);
 
     await collect(createTestAgent(runner), {
@@ -980,7 +980,7 @@ test("an anchored turn's app-server is born in the turn's mount namespace", asyn
 });
 
 test("Codex's local descriptors preserve the same namespace capability across planning and execution", async () => {
-    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/c1/work`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
     const namespace = registerMountEntry(62003);
     const anchor = { pid: namespace.pid, cwd: WORKSPACE_ROOT, plan, namespace, dispose: () => {} };
     const { runner, calls } = fakeCodexRunner([{ type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } }], []);
@@ -1001,7 +1001,7 @@ test("Codex's local descriptors preserve the same namespace capability across pl
 });
 
 test("an isolated turn the container could not anchor carries no namespace and runs cwd'd as before", async () => {
-    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/c1/work`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
     const { runner, calls } = fakeCodexRunner([]);
 
     await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, cwd: plan.worktree, isolation: { plan } } });

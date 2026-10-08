@@ -14,10 +14,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { claimPidFile } from "@intentic/local-agent";
 import { rollAudit } from "../device/audit.js";
 import type { UpkeepContext, UpkeepEntry } from "./entry.js";
-import { trashStamp } from "./files.js";
+import { trashStamp } from "./trash.js";
 import { readUpkeepSummary, reconcile, runUpkeep } from "./reconcile.js";
 import { RETENTION_ENTRIES } from "./retention.js";
 import { linkWatchEntry, RETIRED_ENTRIES } from "./retired.js";
@@ -38,7 +39,7 @@ let made = 0;
 const home = (): { readonly context: UpkeepContext; readonly lines: string[] } => {
     made += 1;
     const dir = join(root, `home-${made}`);
-    const base = join(dir, ".intentic", "machine");
+    const base = join(dir, STATE_DIR, "machine");
     mkdirSync(base, { recursive: true });
     const lines: string[] = [];
     return {
@@ -63,10 +64,10 @@ const write = (path: string, text = "x"): void => {
 test("the retired agents' folders, their links on PATH and the set-aside sync.json go to the trash; a link pointing elsewhere stays", async () => {
     const { context } = home();
     const { home: dir, base } = context;
-    write(join(dir, ".intentic", "sync", "bin", "intentic-sync"));
-    write(join(dir, ".intentic", "host", "intentic-host"));
+    write(join(dir, STATE_DIR, "sync", "bin", "intentic-sync"));
+    write(join(dir, STATE_DIR, "host", "intentic-host"));
     mkdirSync(join(dir, ".local", "bin"), { recursive: true });
-    symlinkSync(join(dir, ".intentic", "sync", "bin", "intentic-sync"), join(dir, ".local", "bin", "intentic-sync"));
+    symlinkSync(join(dir, STATE_DIR, "sync", "bin", "intentic-sync"), join(dir, ".local", "bin", "intentic-sync"));
     symlinkSync("/usr/bin/true", join(dir, ".local", "bin", "intentic-host"));
     write(join(base, "sync.json.bak-loopback"), "{}");
     const generations = [entry(RETIRED_ENTRIES, "retired-generations")];
@@ -79,7 +80,7 @@ test("the retired agents' folders, their links on PATH and the set-aside sync.js
         ["/.local/bin/intentic-sync", "would-fix"],
         ["/.intentic/machine/sync.json.bak-loopback", "would-fix"],
     ]);
-    expect(existsSync(join(dir, ".intentic", "sync"))).toBe(true);
+    expect(existsSync(join(dir, STATE_DIR, "sync"))).toBe(true);
 
     const fixed = await reconcile(generations, context, { fix: true });
     expect(fixed.every((item) => item.outcome === "fixed")).toBe(true);
@@ -98,7 +99,7 @@ test("the retired agents' folders, their links on PATH and the set-aside sync.js
 
 test("a retired folder a program still runs from is left, with the pid, until it stops", async () => {
     const { context } = home();
-    const bin = join(context.home, ".intentic", "host", "bin");
+    const bin = join(context.home, STATE_DIR, "host", "bin");
     mkdirSync(bin, { recursive: true });
     copyFileSync("/bin/sleep", join(bin, "intentic-host"));
     const child = spawn(join(bin, "intentic-host"), ["30"], { stdio: "ignore" });
@@ -110,7 +111,7 @@ test("a retired folder a program still runs from is left, with the pid, until it
                 id: "retired-generations",
                 kind: "retired-files",
                 action: "trash",
-                what: join(context.home, ".intentic", "host"),
+                what: join(context.home, STATE_DIR, "host"),
                 outcome: "skipped",
                 why: `a program from it is running (pid ${child.pid}); it is moved once that has stopped`,
             },

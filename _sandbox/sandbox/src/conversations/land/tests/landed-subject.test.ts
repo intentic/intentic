@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { LandedMessageDraft } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
@@ -44,7 +45,7 @@ const noteDraft = (draft: LandedMessageDraft | undefined): void => {
 const servicesWith = (said?: string, execution: AgentExecutionService = rootExecutionService(), origins: Record<string, string[]> = { "a.ts": ["c1"] }): Services =>
     unstubbed<Services>("services", {
         agentExecution: execution,
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => isolatedAgent([{ repo: "root", base: "a".repeat(40) }]),
             setLandedMessageDraft: (_id, draft) => noteDraft(draft),
@@ -54,7 +55,7 @@ const servicesWith = (said?: string, execution: AgentExecutionService = rootExec
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             lastSaid: async () => said,
         }),
-        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { mainDir: () => "/work" }),
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { mainDir: () => WORKSPACE_ROOT }),
         agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => origins }),
         git: unstubbed<Services["git"]>("git", {
             collectRepoDiff: async () => ({ repo: "root", subjects: [], summary: "a.ts | 2 +-", blocks: [] }),

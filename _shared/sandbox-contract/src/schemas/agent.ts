@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CONVERSATION_ID } from "../ids/conversation-ids.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
-import { AgentPlacementSchema } from "../protocol/runner-protocol.js";
+import { AgentPlacementSchema } from "../protocol/doors/runner-protocol.js";
 import { MENTION_LIMIT } from "../text/mentions.js";
 import { entryId } from "./internal.js";
 // Agent runtimes the daemon can serve: native providers have dedicated adapters, `endpoint/<id>` names an installed

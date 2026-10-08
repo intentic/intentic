@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type Area, type ModelOffer, modelPinKey, type Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
@@ -75,7 +76,7 @@ const AREAS: readonly Area[] = [
 const services = (over: { guidance?: string; cards?: readonly Persona[]; execution?: AgentExecutionService } = {}): Services =>
     unstubbed<Services>("services", {
         agentExecution: over.execution ?? rootExecutionService(),
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [...(over.cards ?? CARDS)] }),
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [...AREAS] }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", {

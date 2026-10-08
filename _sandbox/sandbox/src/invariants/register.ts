@@ -12,6 +12,7 @@ import { checks as needsChecks, owner as needsOwner } from "../needs/invariant.j
 import { checks as netdiskChecks, type NetdiskInvariantDeps, owner as netdiskOwner } from "../netdisk/invariant.js";
 import { checks as offloadChecks, owner as offloadOwner } from "../offload/invariant.js";
 import { checks as peerChecks, owner as peerOwner, type PeerRegistryDeps } from "../peers/invariant.js";
+import { checks as phoneChecks, owner as phoneOwner } from "../phones/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
 import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from "../areas/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
@@ -54,6 +55,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(runnerOwner, runnerChecks());
     registry.register(needsOwner, needsChecks());
     registry.register(offloadOwner, offloadChecks());
+    registry.register(phoneOwner, phoneChecks());
     registry.register(engineOwner, engineChecks());
     registry.register(derivedOwner, derivedChecks());
     registry.register(fenceOwner, fenceChecks());

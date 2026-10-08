@@ -4,8 +4,8 @@ import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { STANDING_RETENTION_MS, standingSubjectHash } from "./sandbox/hosted/abuse/carried-standing.js";
 import { destroyQueuedApps, lockHostedSandbox, queueHostedTeardown } from "./sandbox/hosted/hosted-cleanup.js";
-import { eraseStripeCustomer, queueStripeErasure } from "./sandbox/hosted/hosted-plan.js";
-import type { StripeGateway } from "./sandbox/hosted/hosted-plan-stripe.js";
+import { eraseStripeCustomer, queueStripeErasure } from "./sandbox/hosted/plan/hosted-plan.js";
+import type { StripeGateway } from "./sandbox/hosted/plan/hosted-plan-stripe.js";
 import { accountHoursOf, usageMonth } from "./sandbox/hosted/hosted-usage.js";
 
 /* THE ONE WAY AN ACCOUNT IS ERASED, before its user row goes: the owner's own deletion (Better Auth's `beforeDelete`,

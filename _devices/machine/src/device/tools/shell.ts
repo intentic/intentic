@@ -6,7 +6,7 @@ import { sleep } from "@intentic/base/async";
 import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
-import { thisSide } from "../../wsl.js";
+import { thisSide } from "../../environments/wsl.js";
 import { forgetCommand, recordCommand } from "./command-ledger.js";
 
 // Running a command on somebody's device. The shell isn't negotiable per call: Windows gets PowerShell,

@@ -176,6 +176,7 @@ export const dismissRows = async (rows: readonly Element[]): Promise<void> => {
         ),
     );
     // A run cancelled under it (its row removed early, the view unmounting) counts as gone.
+    // allow(silent-catch): `finished` only rejects with the AbortError of a cancelled animation, which is the "gone" above.
     await Promise.all(runs.map((run) => run.finished.catch(() => undefined)));
 };
 

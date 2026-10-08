@@ -26,10 +26,12 @@ const ModelListSchema = z.object({ data: z.array(z.object({ id: z.string().min(1
 const sameServer = (left: string, right: string): boolean => versionedBase(left).toLowerCase() === versionedBase(right).toLowerCase();
 
 const probe = async (baseUrl: string, fetchImpl: typeof fetch): Promise<readonly string[] | undefined> => {
+    // allow(silent-catch): a refused or timed-out port is the usual answer here, a known port with no server behind it, which the scan leaves out.
     const response = await fetchImpl(`${baseUrl}/models`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }).catch(() => undefined);
     if (response === undefined || !response.ok) {
         return undefined;
     }
+    // allow(silent-catch): something on that port that does not answer JSON is not a model server, the same as a list the schema refuses.
     const parsed = ModelListSchema.safeParse(await response.json().catch(() => undefined));
     return parsed.success ? parsed.data.data.map((model) => model.id) : undefined;
 };

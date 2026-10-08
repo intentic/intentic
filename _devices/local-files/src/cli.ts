@@ -94,8 +94,8 @@ const OFFICE_CLOSE_MS = 3_000;
 const boundedClose = (closing: Promise<void>, limit: number): Promise<void> =>
     new Promise((resolve) => {
         const timer = setTimeout(resolve, limit);
-        // allow(silent-catch): this process is exiting either way, and a close that failed has nothing left to report to.
         void closing
+            // allow(silent-catch): this process is exiting either way, and a close that failed has nothing left to report to.
             .catch(() => undefined)
             .finally(() => {
                 clearTimeout(timer);

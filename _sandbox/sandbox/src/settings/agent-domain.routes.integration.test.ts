@@ -3,7 +3,7 @@ import { call } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { createSettingsRoutes } from "./settings.routes.js";
-import { AGENT_DOMAIN_NOT_READY } from "../workload/agent-domain-rollout.js";
+import { AGENT_DOMAIN_NOT_READY } from "../workload/domain/agent-domain-rollout.js";
 
 const context = (headers: Record<string, string> = {}): OrpcContext => ({
     headers: new Headers(headers), method: "POST", url: "/settings/agent-domain",

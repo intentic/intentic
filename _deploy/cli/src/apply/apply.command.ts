@@ -132,10 +132,10 @@ export const apply = buildCommand<ApplyFlags>({
             );
         }
         const hostMoves = previous !== undefined ? detectHostMoves({ version: 1, resources: previous.resources }, graph) : [];
-        const since = new Date().toISOString().slice(0, 10);
+        const sinceUtcDay = new Date().toISOString().slice(0, 10);
         const retiredHosts = mergeRetiredHosts(
             previous?.retiredHosts ?? [],
-            hostMoves.map((move) => ({ id: move.id, address: move.oldAddress, node: move.oldNode, since })),
+            hostMoves.map((move) => ({ id: move.id, address: move.oldAddress, node: move.oldNode, since: sinceUtcDay })),
             full,
         );
         // Readiness probes host-internal urls via SSH per host node; the composite probe tries each until one succeeds.

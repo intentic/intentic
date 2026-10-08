@@ -2,10 +2,10 @@ import { lstat, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { detachedStamp } from "../seams/workload-stamp.js";
-import { type NamespaceEntryReference, forgetNamespaceEntry, registerAgentDomainEntry } from "./namespace-entry.js";
-import { spawnAs } from "./workload-class.js";
-import { namespaceHolderReady } from "./namespace-holder.js";
+import { detachedStamp } from "../../seams/workload-stamp.js";
+import { type NamespaceEntryReference, forgetNamespaceEntry, registerAgentDomainEntry } from "../namespace-entry.js";
+import { spawnAs } from "../workload-class.js";
+import { namespaceHolderReady } from "../namespace-holder.js";
 
 export const AGENT_UID = 1500;
 export const AGENT_GID = 1500;

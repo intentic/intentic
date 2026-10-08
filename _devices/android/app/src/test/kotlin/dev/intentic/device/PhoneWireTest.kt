@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
-/** The same cases as _shared/sandbox-contract/src/protocol/phone-protocol.test.ts, on the app's side of the code. */
+/** The same cases as _shared/sandbox-contract/src/protocol/doors/phone-protocol.test.ts, on the app's side of the code. */
 class PhoneWireTest {
     private fun code(url: String, token: String): String {
         val json = JSONObject().put("url", url).put("token", token).toString()

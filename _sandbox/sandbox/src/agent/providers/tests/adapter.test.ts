@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { armPlan } from "../adapter.js";
 import type { AgentRequest, TurnSpec } from "../agent-request.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
@@ -24,7 +25,7 @@ const requestIn = (execution: AgentExecutionContext, spec: TurnSpec = { prompt: 
 const loop = () => jest.fn<(request: AgentRequest) => AsyncGenerator<AgentEvent>>(async function* () { yield { kind: "done" }; });
 
 test("armPlan replaces words and model but retains the exact admitted execution capability", async () => {
-    const lease = rootExecution({ localCwd: "/work/project" });
+    const lease = rootExecution({ localCwd: `${WORKSPACE_ROOT}/project` });
     const original = requestIn(lease.context);
     const runtime = loop();
     const plan = armPlan(runtime, original, "account-1");
@@ -47,15 +48,15 @@ test("armPlan replaces words and model but retains the exact admitted execution 
 
 test.each(["cwd", "removed isolation", "plan", "anchor"] as const)("armPlan refuses replacement %s before calling the loop", async (changed) => {
     const namespace = registerMountEntry(62101);
-    const isolationPlan = await noIsolation("/work/project").planFor("/work/project-tree", undefined);
-    const anchor = { pid: namespace.pid, cwd: "/work/project", plan: isolationPlan, namespace, dispose: () => {} };
+    const isolationPlan = await noIsolation(`${WORKSPACE_ROOT}/project`).planFor(`${WORKSPACE_ROOT}/project-tree`, undefined);
+    const anchor = { pid: namespace.pid, cwd: `${WORKSPACE_ROOT}/project`, plan: isolationPlan, namespace, dispose: () => {} };
     const isolation = { plan: isolationPlan, anchor };
-    const lease = rootExecution({ localCwd: "/work/project-tree", isolation });
+    const lease = rootExecution({ localCwd: `${WORKSPACE_ROOT}/project-tree`, isolation });
     const original = requestIn(lease.context, { prompt: "edit the parser", cwd: lease.context.cwd, isolation });
     const runtime = loop();
     const armed = armPlan(runtime, original);
     const replacement: TurnSpec = changed === "cwd"
-        ? { ...original.spec, cwd: "/work/elsewhere" }
+        ? { ...original.spec, cwd: `${WORKSPACE_ROOT}/elsewhere` }
         : changed === "removed isolation"
             ? { prompt: original.spec.prompt, cwd: original.spec.cwd }
             : { ...original.spec, isolation: changed === "plan" ? { ...isolation, plan: { ...isolationPlan } } : { ...isolation, anchor: { ...anchor } } };
@@ -70,7 +71,7 @@ test.each(["cwd", "removed isolation", "plan", "anchor"] as const)("armPlan refu
 });
 
 test("armPlan refuses a context released after planning before calling the loop", () => {
-    const lease = rootExecution({ localCwd: "/work/project" });
+    const lease = rootExecution({ localCwd: `${WORKSPACE_ROOT}/project` });
     const original = requestIn(lease.context);
     const runtime = loop();
     const armed = armPlan(runtime, original);
@@ -81,7 +82,7 @@ test("armPlan refuses a context released after planning before calling the loop"
 });
 
 test("armPlan refuses a reconstructed execution capability with matching descriptive fields", () => {
-    const lease = rootExecution({ localCwd: "/work/project" });
+    const lease = rootExecution({ localCwd: `${WORKSPACE_ROOT}/project` });
     const forged = { ...lease.context };
     const original = requestIn(forged);
     const runtime = loop();

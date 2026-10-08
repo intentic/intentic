@@ -7,8 +7,8 @@ import { errnoCode } from "@intentic/base/errors";
 import { AGENT_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
 import { isNoTmuxTarget } from "./tmux-server.js";
-import { AGENT_GID } from "../workload/agent-domain.js";
-import { DOOR_DIR } from "../workload/agent-domain-view.js";
+import { AGENT_GID } from "../workload/domain/agent-domain.js";
+import { DOOR_DIR } from "../workload/domain/agent-domain-view.js";
 import { agentPaneLine, type NamespaceEntryReference } from "../workload/namespace-entry.js";
 
 // A DOMAIN'S BASH PANES, OPENED BY THE DAEMON. An agent in the unprivileged domain cannot reach the root tmux server, and
@@ -124,6 +124,7 @@ export const openPaneDoor = async (deps: PaneDoorDeps): Promise<PaneDoor> => {
             for (const [dead, windowId, paneId] of listing.split("\n").map((row) => row.split(" "))) {
                 if (dead === "1" && windowId !== undefined && paneId !== undefined && opened.has(paneId)) {
                     opened.delete(paneId);
+                    // allow(silent-catch): a window already gone is what this prune wanted, and the next prune asks again for any left.
                     await tmux(["kill-window", "-t", windowId]).catch(() => undefined);
                 }
             }
@@ -193,12 +194,15 @@ export const openPaneDoor = async (deps: PaneDoorDeps): Promise<PaneDoor> => {
         try {
             const leader = (await tmux(["display-message", "-p", "-t", pane, "#{pane_pid}"])).trim();
             if (/^\d+$/u.test(leader)) {
+                // allow(silent-catch): a leader that already exited has no /proc entry, and so no session left to end.
                 const children = (await readFile(`/proc/${leader}/task/${leader}/children`, "utf8").catch(() => "")).trim().split(/\s+/u).filter(Boolean);
                 for (const child of children) {
+                    // allow(silent-catch): pkill exits non-zero when the session has already ended, which is what this asks for.
                     await forkedExec("pkill", ["-TERM", "-s", child], { timeout: 5_000 }).catch(() => undefined);
                 }
             }
         } finally {
+            // allow(silent-catch): a window already gone (its command ended and tmux-run pruned it) is the killed this answers.
             await tmux(["kill-window", "-t", pane]).catch(() => undefined);
             opened.delete(pane);
         }
@@ -273,7 +277,12 @@ export const openPaneDoor = async (deps: PaneDoorDeps): Promise<PaneDoor> => {
             await new Promise<void>((resolve) => {
                 server.close(() => resolve());
             });
-            await unlink(socket).catch(() => undefined);
+            // server.close() unlinks a unix socket itself, so one already gone is the usual case; anything else is worth a line.
+            await unlink(socket).catch((error: unknown) => {
+                if (errnoCode(error) !== "ENOENT") {
+                    deps.logger.warn({ err: error, socket }, "pane door: its socket could not be removed");
+                }
+            });
         },
     };
 };

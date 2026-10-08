@@ -29,7 +29,7 @@ import { runMirrorWatch } from "./sync/mirror.js";
 import { startUpkeep } from "./upkeep/reconcile.js";
 import { MACHINE_VERSION } from "./version.js";
 import { startWatchdog } from "./watchdog.js";
-import { WINDOWS_SIDE } from "./wsl.js";
+import { WINDOWS_SIDE } from "./environments/wsl.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
 

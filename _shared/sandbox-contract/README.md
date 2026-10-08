@@ -23,7 +23,7 @@ flowchart LR
   client), so no route is spelled a second time.
 - Four contracts run the other way. `deviceContract`, `webextContract`, `phoneContract` and `runnerContract` are served
   by a user's machine, the browser extension, the phone app and a runner over the socket each one opens, with the
-  daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/phone-protocol.ts`), since its far end is
+  daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/doors/phone-protocol.ts`), since its far end is
   a Kotlin app; `golden/phone-wire.json` holds example frames that both ends test against.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder

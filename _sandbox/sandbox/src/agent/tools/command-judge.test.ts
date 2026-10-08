@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { readRoleAnswer, UnusableAnswerError } from "../models/role-answer.js";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -83,7 +84,7 @@ test("passes the caller's authentic execution to the judge and preserves a domai
     const service = rootExecutionService();
     const services = unstubbed<Services>("services", { agentExecution: service });
     const admission = await service.admit();
-    const lease = service.acquire(admission, { localCwd: "/work" });
+    const lease = service.acquire(admission, { localCwd: WORKSPACE_ROOT });
     const input = JUDGE_INPUT;
     const signal = new AbortController().signal;
     asked.mockResolvedValue({ value: { verdict: { decision: "allow", sentence: "Searches source files." }, recognised: true } });
@@ -118,7 +119,7 @@ test.each(["returned", "rejected", "refused"])("independent host judge closes it
     });
     const services = unstubbed<Services>("services", {
         agentExecution: service,
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     });
     const failure = outcome === "refused" ? new AgentDomainRefusedError("host judge context was released") : new Error("host judge unavailable");
     if (outcome === "returned") {
@@ -161,7 +162,7 @@ test("an unplaced unprivileged host judge refuses before asking a model and clos
     const close = jest.spyOn(service, "close");
     const services = unstubbed<Services>("services", {
         agentExecution: service,
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     });
     await expect(judgeIndependentCommand(services, JUDGE_INPUT, new AbortController().signal)).rejects.toBeInstanceOf(AgentDomainRefusedError);
     expect(admit).toHaveBeenCalledTimes(1);

@@ -30,7 +30,7 @@ export interface FateSeams {
     readonly say: Log;
 }
 
-const day = (at: number): string => new Date(at).toISOString().slice(0, 10);
+const utcDay = (at: number): string => new Date(at).toISOString().slice(0, 10);
 
 // A pause of the watcher's own, for a reason it names and lifts itself; a pairing already paused (by a person, a swap,
 // the unreachable hour, or another of these) is left as it is and carries no marker, so nothing here ever resumes a
@@ -81,7 +81,7 @@ export const sandboxSaidGone = async (seams: FateSeams, sandboxId: string, by: G
     await seams.releaseForwards(first.sandboxId);
     const folders = pairings.flatMap((pairing) => (pairing.localDir === undefined ? [] : [pairing.localDir]));
     seams.say(
-        `${first.sandboxId}: ${by === "edge" ? "the platform says this sandbox no longer exists" : "this machine's ic no longer holds this sandbox, in its listing or in its trash"}. Paused its file sync, took its ports off localhost, and stopped dialling and reporting to it; it is asked again every hour. Unless it answers, its pairing is retired on ${day(retiresAt(now))}${folders.length === 0 ? "" : `, keeping ${folders.join(", ")} and ${folders.length === 1 ? "its" : "their"} restore points`}.`,
+        `${first.sandboxId}: ${by === "edge" ? "the platform says this sandbox no longer exists" : "this machine's ic no longer holds this sandbox, in its listing or in its trash"}. Paused its file sync, took its ports off localhost, and stopped dialling and reporting to it; it is asked again every hour. Unless it answers, its pairing is retired on ${utcDay(retiresAt(now))}${folders.length === 0 ? "" : `, keeping ${folders.join(", ")} and ${folders.length === 1 ? "its" : "their"} restore points`}.`,
     );
 };
 

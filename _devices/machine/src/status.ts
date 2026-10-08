@@ -10,7 +10,7 @@ import { runLogPath } from "./config.js";
 import { heldDistros } from "./environments/machine.js";
 import { readResidentPid } from "./resident.js";
 import { readResident } from "./supervision.js";
-import { registeredDistro } from "./wsl.js";
+import { registeredDistro } from "./environments/wsl.js";
 import { pairingKey, readState } from "./sync/config.js";
 import { existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
 import { deviceReport, pairedMutagen } from "./sync/report.js";

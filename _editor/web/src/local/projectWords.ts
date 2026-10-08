@@ -1,7 +1,7 @@
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { LocalProjectCaution, LocalProjectRefusal } from "../app/environments/localHost";
-import type { HouseStage } from "./agentHouse";
+import type { HouseStage } from "./house/agentHouse";
 import { formatCount } from "@intentic/ui/format";
 
 // WHAT A FOLDER'S SANDBOX DIALOG AND THE HOUSE ON ITS CARD SAY, in the reader's language: the app answers with kinds

@@ -2,7 +2,7 @@ import { PhoneResponseSchema } from "@intentic/sandbox-contract";
 import type { ClientContext, ClientLink, ClientOptions } from "@orpc/client";
 
 // The phone door's client link: the same typed client every peer door drives (`createORPCClient`), over plain JSON-RPC
-// 2.0 instead of oRPC's own WebSocket framing (protocol/phone-protocol.ts in the contract says why). A procedure's
+// 2.0 instead of oRPC's own WebSocket framing (protocol/doors/phone-protocol.ts in the contract says why). A procedure's
 // path is the method, its input the params; the phone answers each id once. Only the daemon asks, so a frame from the
 // phone that answers no outstanding id is dropped, never treated as a request.
 
@@ -88,6 +88,7 @@ export class PhoneJsonRpcLink<Context extends ClientContext = ClientContext> imp
         try {
             raw = JSON.parse(textOf(data));
         } catch {
+            // allow(silent-catch): a frame that is not JSON answers no pending call, the same as one the schema below refuses; that call times out and says so.
             return;
         }
         const parsed = PhoneResponseSchema.safeParse(raw);

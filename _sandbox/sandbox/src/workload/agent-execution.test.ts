@@ -1,6 +1,7 @@
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
 import type { FencedPlacement, IsolationPlan } from "../conversations/worktrees/isolation.js";
-import { AGENT_DOMAIN_NOT_READY } from "./agent-domain-rollout.js";
+import { AGENT_DOMAIN_NOT_READY } from "./domain/agent-domain-rollout.js";
 import {
     AgentDomainRefusedError, agentExecutionScope, agentInvocation, assertAgentExecution, createAgentExecutionService,
     type AgentExecutionContext,
@@ -14,12 +15,12 @@ import {
 // Pure coordination only: fake PIDs identify real registry objects, never processes or kernel namespaces.
 // The local rollout override permits entrant construction, not a live launch or production policy activation.
 const unprivilegedExecutionService = () => createAgentExecutionService(async () => ({ agentDomain: "unprivileged" }), () => {});
-const VIEW = "/work/project";
-const LOCAL = "/history/worktrees/project";
+const VIEW = `${WORKSPACE_ROOT}/project`;
+const LOCAL = `${HISTORY_ROOT}/worktrees/project`;
 const COMMAND = "node";
 const ARGS = ["--", "an argument"];
 const DOMAIN: AgentDomainEntry = { userNamespace: "/proc/62300/ns/user", home: "/home/agent" };
-const FENCE: FencedPlacement = { folders: ["apps/web"], hidden: [], sessions: "/history/sessions/project", gitPointers: [""] };
+const FENCE: FencedPlacement = { folders: ["apps/web"], hidden: [], sessions: `${HISTORY_ROOT}/sessions/project`, gitPointers: [""] };
 
 const references: NamespaceEntryReference[] = [];
 const tracked = (reference: NamespaceEntryReference): NamespaceEntryReference => {
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 const anchored = (pid: number, namespace?: NamespaceEntryReference, fence?: FencedPlacement) => {
-    const plan: IsolationPlan = { root: VIEW, worktree: LOCAL, mirrors: [], overlays: "/history/overlays/project", fence };
+    const plan: IsolationPlan = { root: VIEW, worktree: LOCAL, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/project`, fence };
     const dispose = jest.fn(() => { if (namespace !== undefined) { forgetNamespaceEntry(namespace); } });
     const anchor = { pid, cwd: VIEW, plan, ...(namespace === undefined ? {} : { namespace }), dispose };
     return { anchor, dispose, placement: { localCwd: LOCAL, isolation: { plan, anchor } } };
@@ -308,7 +309,7 @@ test("root PID reuse requires a fresh issued generation without reviving domain 
     } finally { lease.release(); root.close(rootAdmission); unprivileged.close(domainAdmission); }
 });
 
-const uncleanCwds = ["", "work/project", "/work/./project", "/work/other/../project", "/work//project", `${VIEW}\u0000`, `${VIEW}\n`, `${VIEW}\u007f`];
+const uncleanCwds = ["", "work/project", `${WORKSPACE_ROOT}/./project`, `${WORKSPACE_ROOT}/other/../project`, `${WORKSPACE_ROOT}//project`,`${VIEW}\u0000`, `${VIEW}\n`, `${VIEW}\u007f`];
 test.each(uncleanCwds)("acquisition rejects an unclean local cwd %j", async (localCwd) => {
     const service = rootExecutionService();
     const admission = await service.admit();
@@ -322,7 +323,7 @@ test.each(["local", "anchor"] as const)("anchored acquisition still validates it
     const namespace = tracked(registerMountEntry(62213));
     const fixture = anchored(namespace.pid, namespace);
     if (kind === "local") { fixture.placement.localCwd = "relative/worktree"; }
-    else { fixture.anchor.cwd = "/work/../project"; }
+    else { fixture.anchor.cwd = `${WORKSPACE_ROOT}/../project`; }
     try {
         expectRefused(() => service.acquire(admission, fixture.placement), CLEAN_CWD_REFUSED);
         expect(fixture.dispose).not.toHaveBeenCalled();
@@ -337,7 +338,7 @@ test("direct invocation permits the admitted root and descendants, not parents o
         for (const cwd of [VIEW, `${VIEW}/src`, `${VIEW}/src/nested`]) {
             expect(agentInvocation(lease.context, COMMAND, ARGS, cwd)).toEqual({ command: COMMAND, args: ARGS, cwd });
         }
-        for (const cwd of ["/work", "/", "/work/project-other", "/history/worktrees/project"]) {
+        for (const cwd of [WORKSPACE_ROOT, "/", `${WORKSPACE_ROOT}/project-other`, `${HISTORY_ROOT}/worktrees/project`]) {
             expectRefused(() => agentInvocation(lease.context, COMMAND, ARGS, cwd), "Agent execution cwd does not belong to the admitted view.");
         }
         for (const cwd of uncleanCwds) { expectRefused(() => agentInvocation(lease.context, COMMAND, ARGS, cwd), CLEAN_CWD_REFUSED); }
@@ -355,7 +356,7 @@ test("domain cwd containment uses the admitted namespace view, never the daemon 
         expect(agentInvocation(lease.context, COMMAND, ARGS)).toEqual(domainInvocation(namespace.pid));
         expect(agentInvocation(lease.context, COMMAND, ARGS, `${VIEW}/src`)).toEqual(domainInvocation(namespace.pid, `${VIEW}/src`));
         expectRefused(() => agentInvocation(lease.context, COMMAND, ARGS, LOCAL), "Agent execution cwd does not belong to the admitted view.");
-        expectRefused(() => agentInvocation(lease.context, COMMAND, ARGS, "/work/project-other"), "Agent execution cwd does not belong to the admitted view.");
+        expectRefused(() => agentInvocation(lease.context, COMMAND, ARGS, `${WORKSPACE_ROOT}/project-other`),"Agent execution cwd does not belong to the admitted view.");
     } finally { lease.release(); service.close(admission); }
 });
 

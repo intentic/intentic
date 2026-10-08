@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { autostart, type AutostartSpec, type Log } from "@intentic/local-agent";
 import { peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
 import { machineLauncher } from "../supervision.js";
 import type { Finding, UpkeepContext, UpkeepEntry } from "./entry.js";
-import { exists, isInside, linkTarget, moveToTrash, processesFrom } from "./files.js";
+import { exists, isInside, linkTarget, moveToTrash, processesFrom } from "./trash.js";
 
 /* WHAT THE AGENTS BEFORE THIS ONE LEFT. Until 2026-08-29 a device ran `intentic-host` (the device half) and
    `intentic-sync` with its mirror watcher (the sync half) as agents of their own, each with a login entry, a folder of
@@ -64,7 +65,7 @@ export const retiredPaths = (
     home: string,
     base: string,
 ): { readonly dirs: readonly string[]; readonly links: readonly string[]; readonly files: readonly string[] } => ({
-    dirs: [join(home, ".intentic", "host"), join(home, ".intentic", "sync")],
+    dirs: [join(home, STATE_DIR, "host"), join(home, STATE_DIR, "sync")],
     links: [join(home, ".local", "bin", "intentic-host"), join(home, ".local", "bin", "intentic-sync")],
     files: [join(base, "sync.json.bak-loopback")],
 });

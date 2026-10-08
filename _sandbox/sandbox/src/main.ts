@@ -45,8 +45,8 @@ import { type RunnerModeEnv, runnerModeRequested, startRunnerMode } from "./runn
 import { appPanelKey } from "./workspace/layout/app-previews.js";
 import { join } from "node:path";
 import { authRootOf } from "./state-paths.js";
-import { agentDomainPolicyDocument, fileAgentDomainPolicy } from "./workload/agent-domain-policy.js";
-import { requireAgentDomainRollout } from "./workload/agent-domain-rollout.js";
+import { agentDomainPolicyDocument, fileAgentDomainPolicy } from "./workload/domain/agent-domain-policy.js";
+import { requireAgentDomainRollout } from "./workload/domain/agent-domain-rollout.js";
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. It settles the process,
 // builds the services once, and then calls each phase of boot in the one order that is behavior: listeners come up

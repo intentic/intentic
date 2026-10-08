@@ -15,7 +15,7 @@ import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } fro
 import { settingsDocument } from "./settings-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
-import { requireAgentDomainRollout } from "../workload/agent-domain-rollout.js";
+import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.

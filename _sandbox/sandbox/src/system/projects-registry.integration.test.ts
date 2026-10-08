@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
 import { attachedProjects, attachedProjectsDocument, registerProject, reportedProjects } from "./projects-registry.js";
 
@@ -53,7 +54,7 @@ test("each folder is registered once, in the order they attached, and a second r
 });
 
 // A name the daemon keeps for itself, or one that is not a single path segment, would be joined onto the workspace root.
-test.each(["public", "AGENTS.md", "../etc", "a/b", ".intentic", ""])("%j is never registered", async (name) => {
+test.each(["public", "AGENTS.md", "../etc", "a/b", STATE_DIR, ""])("%j is never registered", async (name) => {
     const root = await historyRoot();
 
     expect(await registerProject(root, name)).toBe(false);
@@ -80,16 +81,16 @@ test("a report names the folders it syncs into /work/<name>, once each, and noth
             report([
                 // The projects host's own pairing: no folder, only the token its folders sync under.
                 { sandboxId, mode: "sync", projectsHost: true },
-                { sandboxId, mode: "sync", localDir: "/home/ada/blog", remoteDir: "/work/blog", deliver: "auto" },
-                { sandboxId, mode: "sync", localDir: "/home/ada/api", remoteDir: "/work/api" },
+                { sandboxId, mode: "sync", localDir: "/home/ada/blog", remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "auto" },
+                { sandboxId, mode: "sync", localDir: "/home/ada/api", remoteDir: `${WORKSPACE_ROOT}/api` },
                 // Reported twice (a re-attach mid-report) is still one folder.
-                { sandboxId, mode: "sync", localDir: "/home/ada/blog", remoteDir: "/work/blog" },
+                { sandboxId, mode: "sync", localDir: "/home/ada/blog", remoteDir: `${WORKSPACE_ROOT}/blog` },
                 // A pairing of /work itself, a ports-only one, and a folder no project may take name none.
                 { sandboxId, mode: "sync", localDir: "/home/ada/intentic/abc" },
-                { sandboxId, mode: "sync", localDir: "/home/ada/whole", remoteDir: "/work" },
-                { sandboxId, mode: "mirror", remoteDir: "/work/ports" },
-                { sandboxId, mode: "sync", localDir: "/home/ada/x", remoteDir: "/work/public" },
-                { sandboxId, mode: "sync", localDir: "/home/ada/y", remoteDir: "/work/a/b" },
+                { sandboxId, mode: "sync", localDir: "/home/ada/whole", remoteDir: WORKSPACE_ROOT },
+                { sandboxId, mode: "mirror", remoteDir: `${WORKSPACE_ROOT}/ports` },
+                { sandboxId, mode: "sync", localDir: "/home/ada/x", remoteDir: `${WORKSPACE_ROOT}/public` },
+                { sandboxId, mode: "sync", localDir: "/home/ada/y", remoteDir: `${WORKSPACE_ROOT}/a/b` },
             ]),
         ),
     ).toEqual(["blog", "api"]);

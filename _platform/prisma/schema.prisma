@@ -735,7 +735,7 @@ model DesktopHandoff {
 
 // One row per user who ever completed a plan checkout. `status` is Stripe's subscription status verbatim
 // ("active", "past_due", "canceled", …) — a bare string, not an enum, so Stripe growing a status is a webhook
-// update, not a migration. On the plan = active/trialing (api sandbox/hosted/hosted-plan.ts owns that rule).
+// update, not a migration. On the plan = active/trialing (api sandbox/hosted/plan/hosted-plan.ts owns that rule).
 model HostedPlan {
     id                   String   @id @default(cuid())
     userId               String   @unique

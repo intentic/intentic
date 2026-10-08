@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { decodePng, downscale, encodePng, fitSize, type Frame, FrameLog, type Point, toDesktop, toImage } from "@intentic/desktop-automation";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS, type DeviceScopes } from "@intentic/sandbox-contract";
@@ -362,6 +362,7 @@ const dump = async ({ run, device }: Phone): Promise<AndroidHierarchy> => {
     const file = "/sdcard/window_dump.xml";
     const written = await run(["-s", device.serial, "shell", `uiautomator dump ${file}`], DUMP_MS);
     const read = await run(["-s", device.serial, "exec-out", "cat", file], QUICK_MS);
+    // allow(silent-catch): a dump file left on the phone is overwritten by the next dump; the answer was already read above.
     await run(["-s", device.serial, "shell", `rm -f ${file}`], QUICK_MS).catch(() => undefined);
     const xml = read.stdout.toString("utf8");
     try {
@@ -376,6 +377,7 @@ const dump = async ({ run, device }: Phone): Promise<AndroidHierarchy> => {
 // The frame a listing places its elements in: the newest screenshot when it is of the screen as it is turned now,
 // else a screenshot-sized frame of the screen, which is what the next screenshot will be.
 const listingFrame = async (phone: Phone, hierarchy: AndroidHierarchy): Promise<Frame> => {
+    // allow(silent-catch): a `wm size` that fails leaves the size unknown, which falls back to the latest screenshot or the elements' extent below.
     const natural = parseWmSize(await shellOn(phone, "wm size").catch(() => ""));
     const size = natural === undefined ? undefined : rotated(natural, hierarchy.rotation);
     const latest = phone.view.frames.latest();
@@ -647,7 +649,7 @@ const install = async (
             `"${input.path}" is not an .apk: adb install takes an APK file (an .aab has to be turned into one first, with bundletool).`,
         );
     }
-    if ((await stat(real).catch(() => undefined))?.isFile() !== true) {
+    if ((await stat(real).catch(undefinedIfMissing))?.isFile() !== true) {
         throw new AndroidError(`There is no file "${input.path}" on this computer.`);
     }
     const { run, device } = await phoneOf(context, input.serial);
@@ -686,6 +688,7 @@ const assertLogFilters = ({ package: app, tag }: LogcatInput): void => {
 
 // The process an app runs as, which is how logcat narrows to it.
 const pidOf = async (phone: Phone, app: string): Promise<string> => {
+    // allow(silent-catch): pidof exits non-zero when nothing runs under that name, which is the "not running" answered just below.
     const pid = (await shellOn(phone, `pidof ${app}`).catch(() => ""))
         .trim()
         .split(/\s+/)
@@ -753,6 +756,7 @@ const describeDevice = async (run: AdbRunner, device: AndroidDevice): Promise<Li
     }
     const props = await run(["-s", device.serial, "shell", "getprop ro.build.version.release; getprop ro.build.version.sdk; wm size"], QUICK_MS)
         .then((output) => (output.code === 0 ? output.stdout.toString("utf8") : ""))
+        // allow(silent-catch): a listing still names a device whose properties cannot be read; its version and screen read as unknown.
         .catch(() => "");
     const [release = "", sdk = ""] = props.split(/\r?\n/).map((line) => line.trim());
     const screen = parseWmSize(props);

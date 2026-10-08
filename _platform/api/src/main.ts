@@ -12,7 +12,7 @@ import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
-import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
+import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";

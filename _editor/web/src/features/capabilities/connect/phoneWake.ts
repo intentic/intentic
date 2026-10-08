@@ -44,6 +44,7 @@ export const registerPhoneWake = async (
         method: `POST`,
         headers: { "content-type": `application/json` },
         body: JSON.stringify(registrationOf(token, grant)),
+        // allow(silent-catch): a sandbox that cannot be reached leaves the phone as unwakeable as one that refused, which `failed` tells the caller.
     }).catch(() => undefined);
     return response?.ok === true ? `ready` : `failed`;
 };

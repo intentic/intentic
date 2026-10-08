@@ -1,6 +1,6 @@
 import { AgentDomainPolicySchema, type AgentDomainPolicy } from "@intentic/sandbox-contract";
-import { defineDocument } from "../store/evolution/documents.js";
-import { openDocument } from "../store/open-document.js";
+import { defineDocument } from "../../store/evolution/documents.js";
+import { openDocument } from "../../store/open-document.js";
 
 // An execution boundary is the owner's decision, not part of the workspace every turn may edit.
 export const agentDomainPolicyDocument = defineDocument({

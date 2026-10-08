@@ -149,7 +149,7 @@ test.each(["forged", "released", "stale"] as const)(
 test("unplaced session stores and process-capable probes stay closed to issued unprivileged contexts", async () => {
     const execution = await domainExecution(64302);
     const unavailable = unstubbed<RuntimeDeps>("unplaced stores must not be consulted", {});
-    // Claude Code's store is placed: the domain's HOME links the shared store the daemon reads (workload/agent-home.ts).
+    // Claude Code's store is placed: the domain's HOME links the shared store the daemon reads (workload/domain/agent-home.ts).
     const exists = jest.fn(async () => true);
     const shared = unstubbed<RuntimeDeps>("services", { sessions: unstubbed<RuntimeDeps["sessions"]>("sessions", { exists }) });
     try {
@@ -176,7 +176,7 @@ test("unplaced session stores and process-capable probes stay closed to issued u
 });
 
 test("Cursor rechecks the execution lease after SDK resolution and before local session listing", async () => {
-    const execution = rootExecution({ localCwd: "/work/probe-view" });
+    const execution = rootExecution({ localCwd: `${WORKSPACE_ROOT}/probe-view` });
     cursorSdk.mockImplementationOnce(async () => {
         execution.release();
         return { Agent: { list: cursorList } };
@@ -192,7 +192,7 @@ test("Cursor rechecks the execution lease after SDK resolution and before local 
 });
 
 test("root session probes use the issued view cwd rather than a shared workspace default", async () => {
-    const execution = rootExecution({ localCwd: "/work/probe-view" });
+    const execution = rootExecution({ localCwd: `${WORKSPACE_ROOT}/probe-view` });
     const exists = jest.fn(async () => true);
     const sessionExists = jest.fn(async () => true);
     const stores = unstubbed<RuntimeDeps>("services", {

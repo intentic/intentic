@@ -6,7 +6,7 @@ import type { Config } from "../config.js";
 import { stopMachine } from "../sandbox/hosted/fly/fly.js";
 import { eraseAccount } from "../account-erase.js";
 import { hostedEnabled } from "../sandbox/hosted/hosted.js";
-import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
+import type { StripeGateway } from "../sandbox/hosted/plan/hosted-plan-stripe.js";
 import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/abuse/hosted-standing.js";
 
 // Admin mutations, gated by routes (requireAdmin, the ADMIN_MUTATIONS switch, typed confirmation). Each action reuses

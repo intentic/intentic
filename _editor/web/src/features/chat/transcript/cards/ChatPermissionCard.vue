@@ -136,12 +136,8 @@ const allowItems = computed<MenuItem[]>(() => [
                 <button
                     v-if="card.program"
                     type="button"
-                    class="mt-px inline-flex max-w-[min(18rem,100%)] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs transition-colors focus-visible:ring-2 focus-visible:ring-primary-500/25 focus-visible:outline-none"
-                    :class="
-                        commandOpen
-                            ? `border-line-strong bg-content/8 text-content`
-                            : `border-line text-muted hover:border-line-strong hover:text-content`
-                    "
+                    class="ui-chip mt-px max-w-[min(18rem,100%)] shrink-0"
+                    :class="commandOpen && `ui-chip-on`"
                     :aria-expanded="commandOpen"
                     :aria-label="commandOpen ? t(`chat.chatMessageView.hideCommand`) : t(`chat.chatMessageView.showCommand`)"
                     data-command-pill

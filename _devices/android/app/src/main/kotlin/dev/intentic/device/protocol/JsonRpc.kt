@@ -24,7 +24,7 @@ interface PhoneHandler {
 }
 
 /**
- * Plain JSON-RPC 2.0 over the socket, after the hello frame (_shared/sandbox-contract/src/protocol/phone-protocol.ts).
+ * Plain JSON-RPC 2.0 over the socket, after the hello frame (_shared/sandbox-contract/src/protocol/doors/phone-protocol.ts).
  * The sandbox sends requests and the phone only answers: a frame that carries no method answers nothing we asked, and
  * a request without an id is a notification, so neither is replied to.
  */

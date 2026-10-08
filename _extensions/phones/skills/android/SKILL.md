@@ -1,6 +1,6 @@
 ---
 name: android
-description: Work on "${id}", the user's OWN Android phone, through the Intentic Device app on it: see its screen, use the apps they allow, read the folders they picked and the notifications they share. Use when the user says "my phone", names this phone, or the task needs something only the phone has (an app with no web version, a code sent by text or notification, a photo or a file on it).
+description: Use "${id}", the user's OWN Android phone, through the Intentic Device app: its screen, allowed apps, picked folders and shared notifications. Use when the user says "my phone", names this phone, or needs something only the phone has (an app with no web version, a texted code, a photo or file on it).
 ---
 
 ${tools}

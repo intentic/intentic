@@ -5,7 +5,7 @@ import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
 import { pushRelayRoutes } from "./push-relay/push-relay.routes.js";
-import { hostedPlanRoutes } from "./sandbox/hosted/hosted-plan.orpc.js";
+import { hostedPlanRoutes } from "./sandbox/hosted/plan/hosted-plan.orpc.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
 import { tokenRoutes } from "./tokens/tokens.routes.js";
 import type { OrpcContext } from "./context.js";

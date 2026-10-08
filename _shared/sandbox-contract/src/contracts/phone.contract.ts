@@ -5,7 +5,7 @@ import { OkSchema } from "../schemas/shared.js";
 
 // What a connected phone can be asked, over the socket its app opened; the phone answers, the daemon asks, inverted
 // as every peer door is, since a phone cannot be dialled. Carried as JSON-RPC rather than oRPC frames
-// (protocol/phone-protocol.ts says why); each key here is a JSON-RPC method name.
+// (protocol/doors/phone-protocol.ts says why); each key here is a JSON-RPC method name.
 // `mcp` stays one opaque procedure so the app can gain a tool without a matching daemon release.
 export const phoneContract = {
     // Refetched on connect and each card read: the person changes the app's access in Android's settings, not here.

@@ -4,7 +4,7 @@ import type { ORPCError } from "@orpc/server";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
-import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
+import type { StripeGateway } from "../sandbox/hosted/plan/hosted-plan-stripe.js";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";

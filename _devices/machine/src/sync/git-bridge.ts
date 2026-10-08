@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { HISTORY_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { isProjectPairing, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
@@ -199,7 +199,7 @@ const NEVER_A_BRIDGED_REPO: ReadonlySet<string> = new Set([
     ".venv",
     "venv",
     ".pnpm-store",
-    ".intentic",
+    STATE_DIR,
     "refs",
 ]);
 
@@ -261,6 +261,7 @@ export const unbridgeRepos = async (exec: BridgeExec, fs: UnbridgeFs, alias: str
 
 export const realUnbridgeFs: UnbridgeFs = {
     subdirs: async (dir) => {
+        // allow(silent-catch): this walk only looks for bridged repos to undo; a folder that vanished or cannot be listed holds none it can reach.
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
         return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
     },

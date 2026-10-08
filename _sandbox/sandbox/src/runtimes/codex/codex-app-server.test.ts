@@ -636,7 +636,7 @@ test("stdio entry uses the issued namespace reference and refuses stale or recon
     const process = fakeCodexProcess();
     const spawn = jest.fn(() => process.child);
     const connector = stdioConnector(async () => "/usr/local/bin/codex", spawn);
-    const descriptor = { pid: reference.pid, cwd: "/work/project", namespace: reference };
+    const descriptor = { pid: reference.pid, cwd: `${WORKSPACE_ROOT}/project`, namespace: reference };
     try {
         const connection = await connector({ ...turn(), namespace: descriptor, spawnDepth: 2 });
         try {

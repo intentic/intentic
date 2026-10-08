@@ -1,8 +1,9 @@
 // The site's ornaments and the app's provider marks, read from the modules that own them, for every README picture.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 
-export const REPO = join(import.meta.dirname, "../../../..");
+export const REPO = repoRoot(import.meta.url);
 export const FONTS = join(REPO, "_editor/web/public/fonts");
 export const PLATES = join(REPO, "_site/site/src/assets/plate");
 

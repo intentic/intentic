@@ -5,7 +5,7 @@ import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
 import { walletEnabled } from "../wallet/wallet-custody.js";
 import { hostedEnabled } from "../sandbox/hosted/hosted.js";
-import { hostedPlanEnabled } from "../sandbox/hosted/hosted-plan.js";
+import { hostedPlanEnabled } from "../sandbox/hosted/plan/hosted-plan.js";
 import { DAY_MS } from "../durations.js";
 
 // Counts only, no rows, computed fresh on every read: query cost stays flat as tables grow, and nothing here caches a

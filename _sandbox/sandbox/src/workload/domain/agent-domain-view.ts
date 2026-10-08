@@ -1,14 +1,15 @@
 import { chmod, chown, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { posix as path } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import type { IsolationPlan } from "../conversations/worktrees/isolation.js";
+import type { IsolationPlan } from "../../conversations/worktrees/isolation.js";
 import { AGENT_GID, AGENT_HOME, AGENT_UID, type AgentDomainView } from "./agent-domain.js";
-import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "./worktree-paths.js";
+import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../worktree-paths.js";
 
 const STAGE = "/run/intentic-view";
 const LEASE = "/run/intentic-domain";
 const LEASE_STAGE = "/mnt/intentic-domain-lease";
-const PRIVATE_STATE = [".intentic/secrets", ".intentic/identity"];
+const PRIVATE_STATE = [`${STATE_DIR}/secrets`, `${STATE_DIR}/identity`];
 // The daemon endpoints every domain gets, shared with it through their group (AGENT_GID), never their owner. The pane
 // door is not among them: it is the domain's own, in its run directory (domain-anchor.ts).
 const RUN_FILES = ["agent.token", "room.sock"];
@@ -653,7 +654,7 @@ export const prepareAgentDomainView = async (options: AgentDomainViewOptions): P
     }
     await ensureRunTmp(run);
     for (const root of unique([plan.root, plan.worktree])) {
-        if (!await exists(path.join(root, ".intentic"))) { await makeDirectory(path.join(root, ".intentic")); }
+        if (!await exists(path.join(root, STATE_DIR))) { await makeDirectory(path.join(root, STATE_DIR)); }
         for (const rel of PRIVATE_STATE) {
             if (!await exists(path.join(root, rel))) { await makeDirectory(path.join(root, rel)); }
             await directory(path.join(root, rel));

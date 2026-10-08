@@ -2,6 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentPaneLine, forgetNamespaceEntry, registerAgentDomainEntry, registerMountEntry, type NamespaceEntryReference } from "../workload/namespace-entry.js";
 import { openPaneDoor, PANE_EPITAPH, type PaneDoor } from "./pane-door.js";
 
@@ -41,7 +42,7 @@ const ask = async (socket: string, method: "GET" | "POST", path: string, form?: 
         req.end(body);
     });
 
-const OPEN = { session: "agent-abc12345", name: "build", cwd: "/work/apps/web", runner: "/history/agent-run/c-c1/tmp/intentic-run-x/runner" };
+const OPEN = { session: "agent-abc12345", name: "build", cwd: `${WORKSPACE_ROOT}/apps/web`, runner: `${HISTORY_ROOT}/agent-run/c-c1/tmp/intentic-run-x/runner` };
 
 let dir: string;
 let domain: NamespaceEntryReference;
@@ -124,7 +125,7 @@ test("refuses names and paths that are not the hook's: another prefix, a relativ
         { session: "agent-abc12345; kill-server" },
         { name: "Build Me" },
         { cwd: "work" },
-        { cwd: "/work/../root" },
+        { cwd: `${WORKSPACE_ROOT}/../root` },
         { cwd: "/work\n/root" },
         { runner: "/tmp/x/script" },
     ]) {

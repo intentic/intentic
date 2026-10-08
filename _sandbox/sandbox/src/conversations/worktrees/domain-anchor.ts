@@ -6,13 +6,13 @@ import type { Logger } from "pino";
 import { hostsDir } from "../../capabilities/ssh-hosts.js";
 import { opt } from "../../opt.js";
 import { openPaneDoor } from "../../terminal/pane-door.js";
-import { startAgentDomain } from "../../workload/agent-domain.js";
-import { AGENT_RUN, prepareAgentDomainView } from "../../workload/agent-domain-view.js";
-import { daemonGitConfig, provisionAgentHome } from "../../workload/agent-home.js";
+import { startAgentDomain } from "../../workload/domain/agent-domain.js";
+import { AGENT_RUN, prepareAgentDomainView } from "../../workload/domain/agent-domain-view.js";
+import { daemonGitConfig, provisionAgentHome } from "../../workload/domain/agent-home.js";
 import { gitPointersIn, type IsolationAnchor, type IsolationPlan } from "./isolation.js";
 
 // A TURN'S PLACE IN THE UNPRIVILEGED AGENT DOMAIN. What startAnchor is for a root-mode turn: one call that hands back an
-// anchor every runtime and pane joins, here a domain (workload/agent-domain.ts) over its view (agent-domain-view.ts), with
+// anchor every runtime and pane joins, here a domain (workload/domain/agent-domain.ts) over its view (agent-domain-view.ts), with
 // the pane door its Bash panes are opened through (terminal/pane-door.ts) and the run directory it shares with the daemon.
 // An isolated turn's plan makes /work its worktree; a main-tree turn's plan is the workspace itself, so every turn of a
 // sandbox in unprivileged mode runs inside a domain, whichever placement its conversation has.

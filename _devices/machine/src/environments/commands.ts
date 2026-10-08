@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import type { Log } from "@intentic/local-agent";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { ensureResident } from "../resident.js";
-import { listDistros, WINDOWS_SIDE } from "../wsl.js";
+import { listDistros, WINDOWS_SIDE } from "./wsl.js";
 import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
 
 // The commands that act on the PC as a whole rather than on this one environment of it.

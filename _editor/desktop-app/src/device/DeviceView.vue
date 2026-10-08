@@ -440,7 +440,7 @@ onUnmounted(() => {
                             <p
                                 v-if="keptByOf(group.sandbox?.slug)"
                                 class="flex items-start gap-1.5 text-2xs text-subtle"
-                                v-tooltip.top="t(`desktop.device.keptByNote`)"
+                                v-tooltip.top="{ title: t(`desktop.device.keptByTitle`), note: t(`desktop.device.keptByNote`) }"
                             >
                                 <Icon name="server" class="mt-0.5 shrink-0" />
                                 <span>{{ t(`desktop.device.keptBy`, { place: keptByOf(group.sandbox?.slug) }) }}</span>

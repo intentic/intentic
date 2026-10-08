@@ -6,7 +6,7 @@ import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY, type De
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
-import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
+import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../environments/wsl.js";
 import { machineId } from "../../machine-id.js";
 import { deviceFeatures, icOutOfDate } from "./ic-binary.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";

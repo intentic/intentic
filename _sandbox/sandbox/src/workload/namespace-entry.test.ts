@@ -1,5 +1,5 @@
 import { agentEntrant, forgetAgentDomainEntry, forgetNamespaceEntry, forgetSandboxEntry, nsenterArgv, nsenterPrefix, registerAgentDomainEntry, registerMountEntry, registerSandboxEntry } from "./namespace-entry.js";
-import { agentUsernsArgv } from "./agent-domain.js";
+import { agentUsernsArgv } from "./domain/agent-domain.js";
 
 const domain = { userNamespace: "/proc/412/ns/user", home: "/home/agent" };
 

@@ -1,7 +1,8 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SESSION_STATE } from "./worktree-paths.js";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { SESSION_STATE } from "../worktree-paths.js";
 import { agentSshConf, parseGitConfigList, provisionAgentHome, renderAgentGitconfig, RESTORE_MOUNT_POINTS } from "./agent-home.js";
 
 // Real temp trees: a HOME as the agent can leave it, and a host dir the daemon's ssh aliases live in. Owner is this
@@ -13,7 +14,7 @@ let hosts: string;
 let outside: string;
 const owner = process.getuid?.() ?? 0;
 const provision = (gitconfig: [string, string][] = []): void =>
-    provisionAgentHome({ home, workspaceRoot: "/work", gitconfig, sshHosts: hosts, owner });
+    provisionAgentHome({ home, workspaceRoot: WORKSPACE_ROOT, gitconfig, sshHosts: hosts, owner });
 
 beforeEach(async () => {
     base = await mkdtemp(join(tmpdir(), "agent-home-"));
@@ -77,7 +78,7 @@ test("replaces a real directory where a store link belongs, keeps the agent's ow
 });
 
 test("refuses a HOME that is not its expected owner's", () => {
-    expect(() => provisionAgentHome({ home, workspaceRoot: "/work", gitconfig: [], sshHosts: hosts, owner: owner + 1 })).toThrow("agent HOME is not root's own on disk");
+    expect(() => provisionAgentHome({ home, workspaceRoot: WORKSPACE_ROOT, gitconfig: [], sshHosts: hosts, owner: owner + 1 })).toThrow("agent HOME is not root's own on disk");
 });
 
 test("the git config keeps identity, rewrites and drivers, drops credentials, includes and ssh commands, and quotes values", () => {

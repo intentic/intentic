@@ -344,12 +344,16 @@ it(`reports a finished rebuild with how long it took`, async () => {
 // called a healthy build lost, with its log still growing on screen.
 it(`keeps following a build that runs for hours while its log keeps growing`, async () => {
     const slug = nextSlug();
-    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`3`, `#10 [builder 6/9] RUN cargo install cargo-xwin`));
     await useDevRebuild(slug).start(`host-1`);
 
-    // A second past the ninety-five minutes: a timer due exactly at a window's edge is left for the next advance.
+    // A second past the ninety-five minutes: a timer due exactly at a window's edge is left for the next advance. The
+    // follow is module state and outlives any card, so the hours pass with none drawn: a card re-rendering every second
+    // of them is thousands of renders, which on a loaded CI runner outran the unit budget. Drawn once they are up, the
+    // card reads the same run.
     await settleUi(95 * 60_000 + 1_000);
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    await settleUi();
 
     expect(el.textContent).toContain(`Building the image`);
     expect(el.textContent).toContain(`layer 6 of 9`);

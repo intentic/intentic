@@ -9,7 +9,7 @@ import { sweepHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import { kickHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { sweepHostedStanding } from "./sandbox/hosted/abuse/carried-standing.js";
-import { sweepStripeErasures } from "./sandbox/hosted/hosted-plan.js";
+import { sweepStripeErasures } from "./sandbox/hosted/plan/hosted-plan.js";
 import { sweepSandboxTrash } from "./sandbox/sandbox-trash.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";

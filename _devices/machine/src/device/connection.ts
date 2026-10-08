@@ -148,6 +148,7 @@ export const connect = (
                 await forget(config.sandboxUrl).catch((error: unknown) => linkLog(`could not drop the link (${String(error)})`));
                 return false;
             }
+            // allow(silent-catch): the sleep only rejects with the AbortError of `signal`, which the loop and the return read as signal.aborted.
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             await sleep(GONE_RECHECK_MS, undefined, { signal }).catch(() => undefined);
         }
@@ -161,9 +162,9 @@ export const connect = (
             return;
         }
         goneSince = now();
-        const until = new Date(goneSince + GONE_RETIRE_MS).toISOString().slice(0, 10);
+        const untilUtcDay = new Date(goneSince + GONE_RETIRE_MS).toISOString().slice(0, 10);
         linkLog(
-            `the platform says this sandbox no longer exists, so this link stops dialling it after ${attempts - 1} failed attempts. It is asked again every hour, and forgotten on ${until} unless it answers; connecting again from the sandbox restores it before then.`,
+            `the platform says this sandbox no longer exists, so this link stops dialling it after ${attempts - 1} failed attempts. It is asked again every hour, and forgotten on ${untilUtcDay} unless it answers; connecting again from the sandbox restores it before then.`,
         );
         await goneStore.mark(config, goneSince).catch((error: unknown) => linkLog(`could not record that it is gone (${errorMessage(error)})`));
     };

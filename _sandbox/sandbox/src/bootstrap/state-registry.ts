@@ -95,7 +95,7 @@ import { usageLedgerDocument } from "../usage/usage-store.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
 import { webchatOutboxDocument } from "../webchat/webchat-outbox.js";
 import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from "../workflows/workflows-store.js";
-import { agentDomainPolicyDocument } from "../workload/agent-domain-policy.js";
+import { agentDomainPolicyDocument } from "../workload/domain/agent-domain-policy.js";
 import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 

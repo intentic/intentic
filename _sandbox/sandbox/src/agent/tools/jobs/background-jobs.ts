@@ -182,7 +182,7 @@ const endInPlace = (job: BackgroundJob, status: string, output?: string): void =
         writeRunFile(job.dir, `${STATUS_FILE}.part`, `${status}\n`);
         renameRunFile(job.dir, `${STATUS_FILE}.part`, STATUS_FILE);
     } catch {
-        // A dir that cannot be written is one the tmp sweep already took.
+        // allow(silent-catch): a dir that cannot be written is one the tmp sweep already took, with nobody left to read the end.
     }
 };
 
@@ -333,7 +333,7 @@ const persist = (record: JobRecord): void => {
         );
         renameRunFile(dir, `${JOB_FILE}.tmp`, JOB_FILE);
     } catch {
-        // Only a restart under the job would miss what this write carried.
+        // allow(silent-catch): the record lives on in memory; only a restart under the job would miss what this write carried.
     }
 };
 
@@ -348,6 +348,7 @@ export const openBackgroundJob = (
         // Made before the pane, since a watch on a dir that does not exist yet reads as broken.
         mkdirSync(dir, { recursive: true, mode: 0o700 });
     } catch {
+        // allow(silent-catch): a dir that cannot be made leaves the command an ordinary one, as the doc above promises; it still runs.
         return undefined;
     }
     return fileJob(seed, { ...spec, id, dir, startedAt: Date.now() }, false);
@@ -441,6 +442,7 @@ const recordOf = (dir: string): JobRecord | undefined => {
             overran: overran === true,
         };
     } catch {
+        // allow(silent-catch): an entry whose file is unreadable or torn is not a job this can adopt, and a bad entry must not fail a boot.
         return undefined;
     }
 };
@@ -500,6 +502,7 @@ export const keptJobDirs = (root: string = tmpdir()): readonly string[] => {
             .map((entry) => join(root, entry.name))
             .filter((dir) => recordOf(dir)?.fate === "handed" && !existsSync(join(dir, STATUS_FILE)));
     } catch {
+        // allow(silent-catch): a tmp that cannot be listed holds no job dir the sweeps could spare, and this runs at boot, where it must not throw.
         return [];
     }
 };
@@ -789,6 +792,7 @@ const tailOf = async (job: BackgroundJob, name: string, bytes: number): Promise<
     try {
         return readRunFile(job.dir, name, bytes).text;
     } catch {
+        // allow(silent-catch): a capture not yet written, already swept or refused as a link has nothing this may show, which the report reads as empty.
         return "";
     }
 };

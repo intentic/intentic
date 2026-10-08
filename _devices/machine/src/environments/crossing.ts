@@ -1,5 +1,5 @@
 import { wslPathOf } from "@intentic/sandbox-contract";
-import type { Side } from "../wsl.js";
+import type { Side } from "./wsl.js";
 
 // How a command crosses to the other environment of the same PC, as argv built here rather than a string quoted for
 // the first shell: `wsl.exe --exec sh -lc <script>` into a distro, PowerShell through interop out of one.

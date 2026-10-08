@@ -304,7 +304,7 @@ flowchart LR
   the folder's name and path, what its first copy carries, anything to beware of (another sync service, a network
   drive, a large first copy) and how far this computer's sandbox is, or why it cannot have one (a disk, a home folder, a
   system folder, one inside or around a folder that already has a sandbox), each by kind for the page to word. Its
-  picture is the folder's copy carried into the agent's house (`local/AgentHouse.vue`). "Work on this in this computer's
+  picture is the folder's copy carried into the agent's house (`local/house/AgentHouse.vue`). "Work on this in this computer's
   sandbox" is `project_attach`: the folder is put in line for this computer's own sandbox under its name in `/work`
   (sandbox-contract's `projectDirNameFor`, numbered past a name another folder there has), and the press is answered at
   once, whatever the sandbox is doing; nobody signed in is sent to sign in by the same press.

@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { DAY_MS } from "../../durations.js";
-import { compedEmail, isOnPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
+import { compedEmail, isOnPlan, paidSlotsOf, slotHolders } from "./plan/hosted-plan.js";
 import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { carriedFreeMinutes, carriedStandingOf, GOOGLE_SUBJECT_SELECT } from "./abuse/carried-standing.js";

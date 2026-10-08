@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Loop } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
@@ -33,9 +34,9 @@ const loop = (checks: Loop["checks"] = [{ kind: "judge", rubric: "The suite pass
 const services = (execution: AgentExecutionService = rootExecutionService()): Services =>
     unstubbed<Services>("services", {
         agentExecution: execution,
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     });
-const params = () => ({ iteration: 1, cwd: "/work/private-loop", report: "Fixed the failure; the focused test passed.", signal: new AbortController().signal });
+const params = () => ({ iteration: 1, cwd: `${WORKSPACE_ROOT}/private-loop`, report: "Fixed the failure; the focused test passed.", signal: new AbortController().signal });
 
 beforeEach(() => {
     ask.mockReset();

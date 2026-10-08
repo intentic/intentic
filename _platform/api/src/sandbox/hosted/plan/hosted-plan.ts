@@ -1,7 +1,7 @@
 import { FREE_TIER, type HostedTier, type HostedTierId, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
 import type { Prisma, PrismaClient, StripeErasure } from "@intentic/prisma";
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import { StripeError, type StripeGateway, stripeGateway, type StripePrice, type StripeSubscription } from "./hosted-plan-stripe.js";
 
 // The one thing this platform sells: a Stripe subscription for a bigger machine than the free rung, never collected,

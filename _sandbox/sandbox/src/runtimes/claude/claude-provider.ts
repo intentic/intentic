@@ -67,7 +67,7 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
         return accounts.length > 0 ? healthReady() : healthUnavailable("Connect your Claude subscription in Sandbox ▸ Agent.");
     },
     holdsSession: async (services, sessionId, execution) => {
-        // A daemon-side read of the shared store. A domain's HOME links that same store (workload/agent-home.ts), so the
+        // A daemon-side read of the shared store. A domain's HOME links that same store (workload/domain/agent-home.ts), so the
         // answer holds for a turn in either mode; the context still has to be a live one.
         assertAgentExecutionContext(execution);
         return services.sessions.exists(execution.cwd, sessionId);

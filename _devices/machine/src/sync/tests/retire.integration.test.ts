@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { BridgeExec, UnbridgeFs } from "../git-bridge.js";
 
 // (2026-10-05) What a gone sandbox leaves on this machine, and the one rule for taking it away: everything this agent made
@@ -102,7 +103,7 @@ describe("sandboxesNamed", () => {
                         transport: "docker",
                         container: "intentic-sandbox-my-blog",
                         project: true,
-                        remoteDir: "/work/blog",
+                        remoteDir: `${WORKSPACE_ROOT}/blog`,
                     } as never,
                 ],
                 "my-blog",
@@ -318,7 +319,7 @@ describe("a docker pairing whose container went away", () => {
         mode: "sync" as const,
         syncToken: "ist_blog",
         localDir: join(home, "code", "blog"),
-        remoteDir: "/work/blog",
+        remoteDir: `${WORKSPACE_ROOT}/blog`,
         project: true as const,
         transport: "docker" as const,
         container: CONTAINER,

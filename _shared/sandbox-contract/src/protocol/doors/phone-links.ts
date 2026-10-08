@@ -44,6 +44,7 @@ export const parsePhonePairingCode = (input: string): { readonly url: string; re
         }
         return { url: decoded.url, token: decoded.token };
     } catch {
+        // allow(silent-catch): atob and JSON.parse only throw on a code that is not base64 or not JSON, which is no pairing code, the same as the checks above.
         return undefined;
     }
 };

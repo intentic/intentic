@@ -17,7 +17,7 @@ import {
 } from "./sandbox/hosted/abuse/carried-standing.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf, liftHostedSuspension } from "./sandbox/hosted/abuse/hosted-standing.js";
 import { reconcileHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
-import { StripeError, type StripeGateway } from "./sandbox/hosted/hosted-plan-stripe.js";
+import { StripeError, type StripeGateway } from "./sandbox/hosted/plan/hosted-plan-stripe.js";
 import { accountHoursOf } from "./sandbox/hosted/hosted-usage.js";
 import { fakeAccountStore, fakeHostedAppLock, testIngressConfig } from "./testing.js";
 

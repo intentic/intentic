@@ -5,7 +5,7 @@ import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@inte
 import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
-import { wslEnvironment } from "../wsl.js";
+import { wslEnvironment } from "../environments/wsl.js";
 import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, readState, type SyncState } from "./config.js";
 import { backupSessionName, ensureMutagen, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 

@@ -76,7 +76,10 @@ export const recordBoot = (
             return undefined;
         }
         // Read before the boot's resume pass spends the ask.
-        const restartAskedAt = await options.restartAskedAt?.().catch(() => undefined);
+        const restartAskedAt = await options.restartAskedAt?.().catch((error: unknown) => {
+            logger.warn({ err: error }, "boot: whether a restart was asked for could not be read, so this boot reads as unasked");
+            return undefined;
+        });
         const file = openDocument(bootHistoryDocument, join(historyRoot, bootHistoryDocument.path), { fallback: () => ({ boots: [] }) });
         let earlier: readonly number[] = [];
         try {

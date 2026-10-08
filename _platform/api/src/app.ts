@@ -29,7 +29,7 @@ import { LOG_TAIL_BYTES, REPORT_HEADERS } from "./sandbox/hosted/build/hosted-bu
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
-import { hostedPlanHttpRoutes } from "./sandbox/hosted/hosted-plan.routes.js";
+import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.js";
 import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";

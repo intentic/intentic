@@ -82,7 +82,7 @@ export { historyContract } from "./contracts/history.contract.js";
 export { deviceContract } from "./contracts/device.contract.js";
 // Same inversion, spoken over a browser extension's socket, with the extension implementing it.
 export { webextContract } from "./contracts/webext.contract.js";
-// Same inversion, spoken over a phone app's socket as JSON-RPC (protocol/phone-protocol.ts), with the app implementing it.
+// Same inversion, spoken over a phone app's socket as JSON-RPC (protocol/doors/phone-protocol.ts), with the app implementing it.
 export { phoneContract } from "./contracts/phone.contract.js";
 // Same inversion again: spoken over a runner's WebSocket, with the runner implementing it.
 export { runnerContract } from "./contracts/runner.contract.js";
@@ -168,13 +168,13 @@ export * from "./policy/capability-secrets.js";
 export * from "./policy/secret-hosts.js";
 export * from "./ids/conversation-ids.js";
 export * from "./text/documents.js";
-export * from "./protocol/host-protocol.js";
-export * from "./protocol/webext-protocol.js";
-export * from "./protocol/webext-links.js";
-export * from "./protocol/phone-protocol.js";
-export * from "./protocol/phone-links.js";
-export * from "./protocol/runner-protocol.js";
-export * from "./protocol/listener-protocol.js";
+export * from "./protocol/doors/host-protocol.js";
+export * from "./protocol/doors/webext-protocol.js";
+export * from "./protocol/doors/webext-links.js";
+export * from "./protocol/doors/phone-protocol.js";
+export * from "./protocol/doors/phone-links.js";
+export * from "./protocol/doors/runner-protocol.js";
+export * from "./protocol/doors/listener-protocol.js";
 export * from "./protocol/container-requirements.js";
 export * from "./ids/hostnames.js";
 export { SANDBOX_ID } from "./ids/sandbox-id.js";

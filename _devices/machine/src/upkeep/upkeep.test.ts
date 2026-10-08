@@ -2,7 +2,7 @@ import { windowsRunDeleteArgs } from "@intentic/local-agent";
 import type { UpkeepItem } from "./reconcile.js";
 import { reportOf, summaryLine } from "./reconcile.js";
 import { itemLine } from "./doctor.js";
-import { isInside, trashedAt, trashStamp } from "./files.js";
+import { isInside, trashedAt, trashStamp } from "./trash.js";
 import { loginEntryFinding, mutagenRunDecision, runValueData } from "./login.js";
 import { MANIFEST } from "./manifest.js";
 import { expiredTrash, isShimPart, TRASH_KEEP_MS } from "./retention.js";

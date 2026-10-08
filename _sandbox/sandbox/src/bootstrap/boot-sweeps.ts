@@ -165,6 +165,7 @@ export const startBootSweeps = (phase: BootPhase): void => {
     shutdown.push(() => services.turnMounts.closeAll());
     // The shared `opencode serve` and the Cursor runtime processes are this daemon's children too, and outlived a clean
     // stop before 2026-10-05 (the next boot's generation sweep is the backstop for an unclean one).
+    // allow(silent-catch): this runs as the daemon exits; a server that would not stop is left to that generation sweep.
     shutdown.push(() => void services.openCode.stop().catch(() => undefined));
     shutdown.push(stopCursorRuntimes);
 };

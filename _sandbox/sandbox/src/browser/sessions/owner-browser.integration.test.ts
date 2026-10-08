@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { ensureDisplay, releaseDisplay } from "../cast/display.js";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { isOwnerWindow, launchOwnerBrowser, OWNER_WINDOW_FLAG, type OwnerBrowser } from "./owner-browser.js";
@@ -112,7 +113,7 @@ test.skipIf(!installed)("a window a crashed daemon left behind does not hold the
 }, 90_000);
 
 test("only the marked browser process on that profile counts as an owner's window", () => {
-    const profile = "/work/.intentic/local/browser/x";
+    const profile = `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/x`;
     const browser = [OWNER_WINDOW_FLAG, "--no-sandbox", `--user-data-dir=${profile}`, "about:blank"];
     expect(isOwnerWindow(browser, profile)).toBe(true);
     // A renderer of that browser, the agent's own browser on the same profile, and a window on another profile.

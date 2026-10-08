@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { LOG_ROTATE_BYTES, type Log, ROTATE_LOG_SH } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
-import { listDistros } from "../wsl.js";
+import { listDistros } from "./wsl.js";
 import { MACHINE_ID_ENV, machineId } from "../machine-id.js";
 import { crossEnv, NO_AGENT_EXIT } from "./crossing.js";
 import { SUPERVISOR_ENV, WINDOWS_SUPERVISOR } from "./machine.js";

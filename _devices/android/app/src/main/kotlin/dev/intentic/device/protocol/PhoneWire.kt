@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.util.Base64
 
 /**
- * The phone door's wire, as the sandbox defines it (_shared/sandbox-contract/src/protocol/phone-protocol.ts and
+ * The phone door's wire, as the sandbox defines it (_shared/sandbox-contract/src/protocol/doors/phone-protocol.ts and
  * phone-links.ts). Everything here is plain Kotlin over org.json, so it runs in a JVM unit test.
  */
 object PhoneWire {

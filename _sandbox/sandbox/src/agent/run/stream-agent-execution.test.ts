@@ -4,7 +4,7 @@ import type { Services } from "../../composition.js";
 import * as turnEnvironment from "../../capabilities/turn-env.js";
 import * as repoSync from "../../workspace/layout/sync-repos.js";
 import * as turnPlanning from "./turn/turn-plan.js";
-import { AGENT_DOMAIN_NOT_READY } from "../../workload/agent-domain-rollout.js";
+import { AGENT_DOMAIN_NOT_READY } from "../../workload/domain/agent-domain-rollout.js";
 import {
     AgentDomainRefusedError,
     agentInvocation,
@@ -112,7 +112,7 @@ const fixture = (options: FixtureOptions = {}) => {
         },
     });
     const issuer = createAgentExecutionService(policy.get, options.rollout);
-    const execution: AgentExecutionService = {
+    const executionService: AgentExecutionService = {
         admit: async () => {
             lifecycle.push("admit");
             const admission = await issuer.admit();
@@ -146,7 +146,7 @@ const fixture = (options: FixtureOptions = {}) => {
     });
     const services = unstubbed<Services>("services", {
         agentDomainPolicy: policy,
-        agentExecution: execution,
+        agentExecution: executionService,
         // planFor stays unstubbed: a domain is never built here, so reaching it is a failure that names itself.
         turnIsolation: unstubbed<Services["turnIsolation"]>("turnIsolation", {
             available: async () => {

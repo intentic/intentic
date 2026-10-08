@@ -1,7 +1,7 @@
 import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
 import { isAbsolute, normalize, relative, sep } from "node:path";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
-import { requireAgentDomainRollout } from "./agent-domain-rollout.js";
+import { requireAgentDomainRollout } from "./domain/agent-domain-rollout.js";
 import { agentEntrant, namespaceTargetOf, nsenterArgv, type NamespaceEntryReference, type NamespaceEntrant } from "./namespace-entry.js";
 
 // Daemon-local handles, never request/wire shapes. Public fields describe the view; only the private registries below

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { livePidRecord } from "@intentic/local-agent";
 import { AUDIT_ROLL_BYTES, rollAudit } from "../device/audit.js";
 import type { Finding, UpkeepEntry } from "./entry.js";
-import { trashDirOf, trashedAt } from "./files.js";
+import { trashDirOf, trashedAt } from "./trash.js";
 
 /* WHAT THIS AGENT KEEPS, AND FOR HOW LONG. Every store says its retention where it is kept (rule 5 of the 2026-10
    self-healing audit), and this is the one clock that enforces it on a device. */

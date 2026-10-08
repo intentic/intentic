@@ -1,11 +1,11 @@
 import { type AgentDomainPolicy, AgentDomainPolicySchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import type { Services } from "../composition.js";
-import { collect } from "../harness/route-client.testing.js";
-import type { TurnInput } from "../seams/turn-starter.js";
-import { streamAgent } from "../agent/run/stream-agent.js";
+import type { Services } from "../../composition.js";
+import { collect } from "../../harness/route-client.testing.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
+import { streamAgent } from "../../agent/run/stream-agent.js";
 import { AGENT_DOMAIN_NOT_READY, requireAgentDomainRollout } from "./agent-domain-rollout.js";
-import { createAgentExecutionService } from "./agent-execution.js";
+import { createAgentExecutionService } from "../agent-execution.js";
 
 // No real processes: only the protected reader and its real coordinator are usable; other services throw if reached.
 const policyServices = (get: () => Promise<AgentDomainPolicy>): Services => unstubbed<Services>("services", {

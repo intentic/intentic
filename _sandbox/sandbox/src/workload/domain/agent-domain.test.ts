@@ -1,11 +1,12 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import { type AgentDomainDependencies, type AgentDomainView, domainMountArgv, startAgentDomain } from "./agent-domain.js";
-import { agentEntrant, forgetAgentDomainEntry, isAgentDomainEntry, nsenterArgv, registerAgentDomainEntry } from "./namespace-entry.js";
+import { agentEntrant, forgetAgentDomainEntry, isAgentDomainEntry, nsenterArgv, registerAgentDomainEntry } from "../namespace-entry.js";
 
 const view: AgentDomainView = {
-    cwd: "/work", home: "/home/agent", scratch: "/history/domain-anchors",
+    cwd: WORKSPACE_ROOT, home: "/home/agent", scratch: `${HISTORY_ROOT}/domain-anchors`,
     script: (user) => `mount --bind -o X-mount.idmap=${user} /source /work`,
 };
 
@@ -28,7 +29,7 @@ const fixture = (options: { readonly failedMount?: boolean; readonly children?: 
     const anchorPid = nextPid++;
     const deps: AgentDomainDependencies = {
         lease: async () => ({
-            directory: "/history/domain-anchors/anchor-1",
+            directory: `${HISTORY_ROOT}/domain-anchors/anchor-1`,
             release: async () => { calls.push("release"); },
             remove: async () => { calls.push("remove"); },
         }),
@@ -67,7 +68,7 @@ const fixture = (options: { readonly failedMount?: boolean; readonly children?: 
 };
 
 test("mount/PID setup is separate from the userns and preserves a root-only lease outside masked history", () => {
-    const args = domainMountArgv(view, "/proc/41/ns/user", "/history/domain-anchors/anchor-1");
+    const args = domainMountArgv(view, "/proc/41/ns/user", `${HISTORY_ROOT}/domain-anchors/anchor-1`);
     expect(args.slice(0, 5)).toEqual(["--mount", "--propagation", "private", "sh", "-c"]);
     expect(args[5]).toBe([
         "set -eu",
@@ -155,7 +156,7 @@ test("user holder loss during child discovery cannot return a dead domain", asyn
     expect(isAgentDomainEntry(f.anchorPid)).toBe(false);
 });
 
-test.each([[], [10, 11], [-1], [NaN], [1.5]].map((children) => [children] as const))("ambiguous or invalid child pids fail closed: %j", async (children) => {
+test.each([[], [10, 11], [-1], [Number.NaN], [1.5]].map((children) => [children] as const))("ambiguous or invalid child pids fail closed: %j", async (children) => {
     const f = fixture({ children });
     await expect(startAgentDomain(view, f.deps)).rejects.toThrow("exactly one PID namespace anchor");
     expect(f.calls).toEqual([

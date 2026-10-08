@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { OkSchema } from "../schemas/shared.js";
-import { PhoneFactsSchema, PhoneScopesSchema } from "../schemas/phone.js";
+import { OkSchema } from "../../schemas/shared.js";
+import { PhoneFactsSchema, PhoneScopesSchema } from "../../schemas/phone.js";
 import { PHONE_ERROR, PhoneHelloSchema, PhoneRequestSchema, PhoneResponseSchema } from "./phone-protocol.js";
 import { parsePhonePairingCode, phoneConnectUrl, phoneEnrollUrl, phonePairingCode, phonePairingLink } from "./phone-links.js";
 

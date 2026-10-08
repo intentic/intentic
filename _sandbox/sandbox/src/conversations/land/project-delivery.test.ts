@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DevicePairing } from "@intentic/sandbox-contract";
 import { ownNames, pairingIsOurs, writablePath } from "./project-delivery.js";
 
@@ -12,7 +13,7 @@ const pairing = (overrides: Partial<DevicePairing> = {}): DevicePairing => ({
     sandboxId: OURS,
     mode: "sync",
     localDir: "/home/ada/my-app",
-    remoteDir: "/work/my-app",
+    remoteDir: `${WORKSPACE_ROOT}/my-app`,
     deliver: "auto",
     ...overrides,
 });

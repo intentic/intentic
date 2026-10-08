@@ -35,6 +35,7 @@ const parseAccount = (raw: string): ServiceAccount | undefined => {
             ? (parsed as ServiceAccount)
             : undefined;
     } catch {
+        // allow(silent-catch): JSON.parse's only failure here is a key that is not JSON, as unusable as one missing its fields; the caller reports both as no service account.
         return undefined;
     }
 };

@@ -320,8 +320,9 @@
             {
                 // The default list is just `expect`, so a suite that asserts through a shared helper reads as
                 // assertion-free. `expectOrpcCode(promise, code)` is how every _platform/api route test states
-                // its expectation, and eight suites were being reported for using it.
-                "assertFunctionNames": ["expect", "expectTypeOf", "assert", "expectOrpcCode"]
+                // its expectation, and eight suites were being reported for using it. `expectRefused(action, message)`
+                // is the same for the daemon's agent-execution suite.
+                "assertFunctionNames": ["expect", "expectTypeOf", "assert", "expectOrpcCode", "expectRefused"]
             }
         ],
         "no-sequences": "error",

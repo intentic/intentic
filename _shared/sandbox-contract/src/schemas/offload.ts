@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RunnerCommandFrameSchema, RunnerCommandSchema } from "../protocol/runner-protocol.js";
+import { RunnerCommandFrameSchema, RunnerCommandSchema } from "../protocol/doors/runner-protocol.js";
 
 // OFFLOADED WORK, as the in-sandbox `offload-run` command and the editor see it (settings `offload`): a heavy line this
 // sandbox hands a runner on one of the owner's machines instead of running it itself.

@@ -406,7 +406,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             variant="neutral"
                             size="xs"
                             :label="t(`sandbox.devicePage.notOnAccount`)"
-                            v-tooltip.top="t(`sandbox.devicePage.notOnAccountTip`)"
+                            v-tooltip.top="{ title: t(`sandbox.devicePage.notOnAccountTitle`), note: t(`sandbox.devicePage.notOnAccountTip`) }"
                             class="-my-0.5 shrink-0"
                         />
                     </template>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NeedsActionSchema } from "../policy/needs-action.js";
+import { NeedsActionSchema } from "../../policy/needs-action.js";
 
 // The runner link's edges: the /system/runners/connect handshake, boot env, and turn placement (procedures live in
 // contracts/runner.contract.ts). A runner is a sandbox image in runner mode, no browser owner or tunnel, that dials its

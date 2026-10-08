@@ -17,7 +17,7 @@ import type { Auth } from "../auth.js";
 import { configSchema, type Config } from "../config.js";
 import { testIngressConfig } from "../testing.js";
 import { sandboxHostname } from "../sandbox/reachability.js";
-import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
+import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/plan/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
 import { standingSubjectHash } from "../sandbox/hosted/abuse/carried-standing.js";
 import { DAY_MS } from "../durations.js";

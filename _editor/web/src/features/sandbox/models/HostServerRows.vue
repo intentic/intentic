@@ -60,9 +60,11 @@ const use = async (server: HostModelServer): Promise<void> => {
 
 <template>
     <div>
+        <!-- Drawn inside LocalModelsPanel's <RowGroup>, which this template cannot see: its tier, said here. -->
         <ConnectionRow
             v-for="server in offered"
             :key="server.baseUrl"
+            density="compact"
             :title="t(`connect.hostServers.title`, { server: server.label })"
             state="missing"
             :note="t(`connect.hostServers.running`)"

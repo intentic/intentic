@@ -85,15 +85,15 @@ flowchart LR
   (`conversations/worktrees/isolation.ts`). Cursor's SDK agent, which ran inside the daemon, moves for such a turn into
   a runtime process born there (`runtimes/cursor/cursor-host.ts`, `cursor-agent-runtime.ts`); its custom tools, hook
   gate and frames stay in the daemon, reached over the process's IPC channel.
-- The unprivileged agent domain (`agentDomain`, `workload/agent-domain-policy.ts`) is a setting kept in the auth root,
+- The unprivileged agent domain (`agentDomain`, `workload/domain/agent-domain-policy.ts`) is a setting kept in the auth root,
   not in the workspace settings, and only the owner may change it. It defaults to `root`, and this build still refuses
-  `unprivileged` everywhere it is read (`workload/agent-domain-rollout.ts` lists what is missing). When it is on, each
+  `unprivileged` everywhere it is read (`workload/domain/agent-domain-rollout.ts` lists what is missing). When it is on, each
   turn runs inside a domain the daemon builds (`conversations/worktrees/domain-anchor.ts`): a user namespace whose root
   is uid 1500 on disk, with no capability outside it, plus mount and PID namespaces the daemon owns. The workspace is
   shown to it through idmapped binds, so files it writes stay root-owned on disk. Secrets, `/root`, the daemon's
-  sockets and every repository's git metadata are hidden or read-only (`workload/agent-domain-view.ts`). The agent's
+  sockets and every repository's git metadata are hidden or read-only (`workload/domain/agent-domain-view.ts`). The agent's
   HOME is `/home/agent`, kept on the history volume and refreshed by the daemon before each domain starts
-  (`workload/agent-home.ts`). Only Claude Code runs there so far, and a fenced conversation is refused.
+  (`workload/domain/agent-home.ts`). Only Claude Code runs there so far, and a fenced conversation is refused.
 - A domain's Bash panes cannot use the root tmux server, so `bin/tmux-run` asks the domain's own pane door instead
   (`terminal/pane-door.ts`), and the daemon opens the window. The pane enters the domain in two steps, so its command
   still leads its own session and the session-based process lookups keep working (`workload/namespace-entry.ts`

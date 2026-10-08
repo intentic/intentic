@@ -1,4 +1,4 @@
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { IsolationPlan } from "../conversations/worktrees/isolation.js";
 import { createAgentExecutionService, type AgentExecutionLease } from "../workload/agent-execution.js";
 import { forgetNamespaceEntry, registerAgentDomainEntry } from "../workload/namespace-entry.js";
@@ -15,9 +15,9 @@ export const domainExecution = async (pid: number): Promise<AgentExecutionLease 
     const retire = (): void => forgetNamespaceEntry(namespace);
     const plan: IsolationPlan = {
         root: WORKSPACE_ROOT,
-        worktree: "/history/test-runtime",
+        worktree: `${HISTORY_ROOT}/test-runtime`,
         mirrors: [],
-        overlays: "/history/test-overlays",
+        overlays: `${HISTORY_ROOT}/test-overlays`,
         fence: undefined,
     };
     try {

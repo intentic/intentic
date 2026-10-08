@@ -39,7 +39,7 @@ import {
 import { withHostedAppLock } from "./hosted-app-lock.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
-import { hostedSlotUse } from "./hosted-plan.js";
+import { hostedSlotUse } from "./plan/hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { ENV_PROJECT_DIR, hostedProjectOf, projectOfEnv } from "./hosted-project.js";
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";

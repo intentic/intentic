@@ -2,7 +2,7 @@ import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
-import { RunnerCommandFrameSchema, RunnerCommandSchema, RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/runner-protocol.js";
+import { RunnerCommandFrameSchema, RunnerCommandSchema, RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/doors/runner-protocol.js";
 import { EditorContextSchema } from "../schemas/agent.js";
 import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";

@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
-import { onHostedPlan } from "./hosted-plan.js";
+import { onHostedPlan } from "./plan/hosted-plan.js";
 import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
 import { DAY_MS } from "../../durations.js";

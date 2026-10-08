@@ -4,8 +4,8 @@
 // Nothing here may import that barrel, or the saving is silently undone — `pnpm --filter @intentic/webext build`
 // checks the bundle against the ceiling in _devices/webext/scripts/size-budget.mjs.
 export { webextContract } from "../contracts/webext.contract.js";
-export * from "../protocol/webext-links.js";
-export * from "../protocol/webext-protocol.js";
+export * from "../protocol/doors/webext-links.js";
+export * from "../protocol/doors/webext-protocol.js";
 export * from "../schemas/webext.js";
 export * from "../schemas/loopback-catch.js";
 export * from "../schemas/peer-enrollment.js";

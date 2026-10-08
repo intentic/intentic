@@ -9,7 +9,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { localHost, type LocalMachineAction } from "../app/environments/localHost";
-import AgentHouse from "./AgentHouse.vue";
+import AgentHouse from "./house/AgentHouse.vue";
 import type { MachineCardAction } from "./machineCard";
 import { useLocalProject } from "./useLocalProject";
 

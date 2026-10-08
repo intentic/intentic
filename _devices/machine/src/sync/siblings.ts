@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
 import { heldDistros, windowsRoot } from "../environments/machine.js";
-import { registeredDistro, WINDOWS_SIDE } from "../wsl.js";
+import { registeredDistro, WINDOWS_SIDE } from "../environments/wsl.js";
 
 // THE OTHER ENVIRONMENTS OF THIS PC, AS FOLDER SYNC SEES THEM (2026-10-05). Each environment keeps its own `sync.json`,
 // so the rule "one folder, one sync" (folders.ts) was only ever checked within one: the Windows side could pair
@@ -67,6 +67,7 @@ const distroFolders = async (distro: string): Promise<SiblingFolder[] | undefine
         timeout: READ_TIMEOUT_MS,
         windowsHide: true,
         env: { ...process.env, WSL_UTF8: "1" },
+        // allow(silent-catch): a distro that would not start or answer in time is reported as unread, which readSiblings names to the caller.
     }).catch(() => undefined);
     if (answer === undefined) {
         return undefined;

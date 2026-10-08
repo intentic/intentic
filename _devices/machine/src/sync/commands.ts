@@ -18,7 +18,7 @@ import { z } from "zod";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
-import { wslEnvironment } from "../wsl.js";
+import { wslEnvironment } from "../environments/wsl.js";
 import { ensureResident, readResidentBuild, readResidentPid } from "../resident.js";
 import { MACHINE_VERSION } from "../version.js";
 import { machineLauncher } from "../supervision.js";

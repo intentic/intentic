@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFolderSandbox, LocalMachineSandbox } from "../app/environments/localHost";
-import { HOUSE_STAGES, type HouseStage, stageOfPhase } from "./agentHouse";
+import { HOUSE_STAGES, type HouseStage, stageOfPhase } from "./house/agentHouse";
 import { stageHeadline } from "./projectWords";
 
 // WHAT A LOCAL WINDOW SAYS ABOUT THIS COMPUTER'S SANDBOX AND ITS FOLDER: the card in the window's corner

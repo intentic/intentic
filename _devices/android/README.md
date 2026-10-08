@@ -17,7 +17,7 @@ flowchart LR
   a pasted code. It shows which sandbox it will join and waits for the person to confirm. Only then does it redeem the
   one-time pairing at `/system/phones/enroll`. The durable token is sealed with an AES-GCM key held in the Android
   Keystore (`SecretBox`, `KeystoreKey`). One pairing at a time.
-- **The wire** is the contract's phone door (`_shared/sandbox-contract/src/protocol/phone-protocol.ts`): a hello frame,
+- **The wire** is the contract's phone door (`_shared/sandbox-contract/src/protocol/doors/phone-protocol.ts`): a hello frame,
   then JSON-RPC 2.0 with the sandbox asking and the app answering `describe`, `setScopes`, `ping` and `mcp`. The unit
   tests read `_shared/sandbox-contract/golden/phone-wire.json`, the same examples the daemon's link is tested against.
   `describe`, MCP `initialize`, `ping` and `tools/list` are answered whatever is paused or switched off, since the

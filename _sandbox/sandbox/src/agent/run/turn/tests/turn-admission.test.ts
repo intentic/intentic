@@ -8,7 +8,7 @@ import type { QueuedItem } from "../../../../conversations/actor/conversation-qu
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import { transcriptPageOf } from "../../../../sessions/agent-transcript.js";
 import { beginTurn, notedFleet } from "../../../../testing.js";
-import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/agent-domain-rollout.js";
+import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/domain/agent-domain-rollout.js";
 import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
 import { streamAgent } from "../../stream-agent.js";
 import { receiptOf } from "../message-receipts.js";

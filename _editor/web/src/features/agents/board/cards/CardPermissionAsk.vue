@@ -89,7 +89,7 @@ watch(
             <p class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs leading-snug text-content" data-permission-ask>
                 <Icon name="shield" class="shrink-0 text-2xs text-primary-500" /><span
                     class="truncate"
-                    :class="program !== undefined && `underline decoration-subtle decoration-dotted underline-offset-[3px]`"
+                    :class="program !== undefined && `underline decoration-subtle decoration-dotted underline-offset-3`"
                     >{{ line }}</span
                 >
             </p>

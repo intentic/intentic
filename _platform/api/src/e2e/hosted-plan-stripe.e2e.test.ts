@@ -1,6 +1,6 @@
 import { e2eTier } from "@intentic/testing/e2e";
 import { waitFor } from "@intentic/testing/bun";
-import { type StripeClientConfig, type StripeGateway, stripeGateway, subscriptionIdOfEvent } from "../sandbox/hosted/hosted-plan-stripe.js";
+import { type StripeClientConfig, type StripeGateway, stripeGateway, subscriptionIdOfEvent } from "../sandbox/hosted/plan/hosted-plan-stripe.js";
 import { DAY_MS } from "../durations.js";
 
 // The one test that hits real Stripe: API refusals, fields moved under an API version, a missing portal config.

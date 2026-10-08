@@ -8,7 +8,7 @@ import { linkEmail, sendMail } from "../../../mail.js";
 import { type MachineSample, queryMachineMetric } from "../fly/fly-metrics.js";
 import { stopMachine } from "../fly/fly.js";
 import { hostedEnabled } from "../hosted.js";
-import { onHostedPlan } from "../hosted-plan.js";
+import { onHostedPlan } from "../plan/hosted-plan.js";
 import { closeHostedStretch } from "../hosted-usage.js";
 import { carriedStandingOf, carriedStrikesSince, GOOGLE_SUBJECT_SELECT } from "./carried-standing.js";
 import { suspendHosted } from "./hosted-standing.js";

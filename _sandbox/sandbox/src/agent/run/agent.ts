@@ -33,7 +33,7 @@ import { join, normalize, relative, sep } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
 import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
-import { PANE_DOOR_PATH } from "../../workload/agent-domain-view.js";
+import { PANE_DOOR_PATH } from "../../workload/domain/agent-domain-view.js";
 import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
 import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";

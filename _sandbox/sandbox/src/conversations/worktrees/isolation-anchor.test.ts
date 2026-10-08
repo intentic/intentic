@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { ANCHOR_READY, type IsolationPlan, startMountAnchor } from "./isolation.js";
 import { forgetNamespaceEntry, namespaceTargetOf, nsenterArgv, registerSandboxEntry } from "../../workload/namespace-entry.js";
 
-const plan: IsolationPlan = { root: "/work", worktree: "/history/worktrees/abc", mirrors: [], overlays: "/history/overlays/abc", fence: undefined };
+const plan: IsolationPlan = { root: WORKSPACE_ROOT, worktree: `${HISTORY_ROOT}/worktrees/abc`, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
 let nextPid = 62_000;
 const fixture = () => {
     const calls: string[] = [];

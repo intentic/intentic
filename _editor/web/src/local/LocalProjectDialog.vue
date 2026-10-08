@@ -7,7 +7,7 @@ import { Button, Icon, InfoHint, Modal, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { localFace } from "../app/environments/local";
-import AgentHouse from "./AgentHouse.vue";
+import AgentHouse from "./house/AgentHouse.vue";
 import { cautionSentence, copyWeight, refusalSentence } from "./projectWords";
 import { useLocalProject } from "./useLocalProject";
 

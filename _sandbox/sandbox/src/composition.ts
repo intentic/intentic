@@ -79,7 +79,7 @@ import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
 import { heldCardWake } from "./agent/run/turn/held-card-wake.js";
 import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
 import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument } from "./settings/settings-store.js";
-import { agentDomainPolicyDocument, fileAgentDomainPolicy, type AgentDomainPolicyStore } from "./workload/agent-domain-policy.js";
+import { agentDomainPolicyDocument, fileAgentDomainPolicy, type AgentDomainPolicyStore } from "./workload/domain/agent-domain-policy.js";
 import { createAgentExecutionService, type AgentExecutionService } from "./workload/agent-execution.js";
 import { forgetRunDir } from "./conversations/worktrees/domain-anchor.js";
 import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from "./rules/rule-firings.js";

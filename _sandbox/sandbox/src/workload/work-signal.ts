@@ -66,7 +66,11 @@ export const startWorkSignal = ({ working, events, logger, boot, path = WORK_SIG
     let failing = false;
     let chain: Promise<void> = Promise.resolve();
     // Read once: a boot's facts never change after it.
-    const booted = boot?.().catch(() => undefined) ?? Promise.resolve(undefined);
+    const booted =
+        boot?.().catch((error: unknown) => {
+            logger.warn({ err: error }, "the work signal could not read this boot's facts, so it carries none");
+            return undefined;
+        }) ?? Promise.resolve(undefined);
     const write = async (): Promise<void> => {
         const liveTurns = working();
         const at = now();

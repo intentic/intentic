@@ -1,7 +1,7 @@
 import type { RouteMeta } from "../route-meta.js";
 import { fillRoutePath, type RoutePathParams } from "./route-path.js";
 import type { ContractRoute } from "../routes.js";
-import { runnerTranslatorPath } from "../runner-protocol.js";
+import { runnerTranslatorPath } from "../doors/runner-protocol.js";
 
 // Every route the daemon serves outside oRPC (streamed bytes, WebSocket upgrades, doors checking their own credential),
 // keyed `METHOD /path` in the order the daemon registers them: among overlapping ones the first registered answers.

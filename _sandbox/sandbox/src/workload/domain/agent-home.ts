@@ -1,13 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, writeSync } from "node:fs";
-import { execFile } from "node:child_process";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { errnoCode } from "@intentic/base/errors";
+import { exec } from "@intentic/base/git";
 import { withManagedInclude } from "@intentic/base/ssh-config";
-import { statePath } from "../state-paths.js";
+import { statePath } from "../../state-paths.js";
 import { AGENT_HOME } from "./agent-domain.js";
-import { SESSION_STATE } from "./worktree-paths.js";
+import { SESSION_STATE } from "../worktree-paths.js";
 
 // THE AGENT'S HOME, made ready by the daemon before each domain starts. It lives on the history volume (agent-home), so
 // what the agent keeps there outlives a recreate, and the domain sees it at AGENT_HOME through its idmapped view. What
@@ -25,8 +24,6 @@ import { SESSION_STATE } from "./worktree-paths.js";
 // is written beside its name and renamed over it (a rename replaces a link, it never writes through one), and whatever
 // stands where the daemon needs a directory or a link and is something else is taken away first. A process an earlier
 // domain left running cannot swap a directory under it mid-way, for the same reason.
-
-const execFileAsync = promisify(execFile);
 
 // The directories under the agent's HOME the view binds read-only from the daemon's (agent-domain-view.ts HOME_RESTORES).
 export const RESTORE_MOUNT_POINTS = [".claude/skills", ".cache/ms-playwright"] as const;
@@ -190,7 +187,7 @@ export const renderAgentGitconfig = (entries: readonly (readonly [string, string
 // The daemon's own global git config, as git reads it (includes resolved), or nothing when it has none.
 export const daemonGitConfig = async (): Promise<[string, string][]> => {
     try {
-        const { stdout } = await execFileAsync("git", ["config", "--global", "--list", "-z"], { timeout: 10_000, encoding: "utf8" });
+        const { stdout } = await exec("git", ["config", "--global", "--list", "-z"], { timeout: 10_000, encoding: "utf8" });
         return parseGitConfigList(stdout);
     } catch {
         // allow(silent-catch): git exits 1 for a missing global config, which gives a domain nothing to copy.
