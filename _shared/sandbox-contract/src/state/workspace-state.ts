@@ -769,6 +769,17 @@ export const isReviewableLockedPath = (relPath: string): boolean => {
     return isLockedWorkspacePath(rel) && VERSIONED_STATE_PATHS.some((path) => (path.endsWith("/") ? rel.startsWith(path) : rel === path));
 };
 
+// Machine state the root repo never tracks: everything under the workspace's own `.intentic/` but the `versioned`
+// entries history.ts carves back out of the wholesale exclusion. A write here moves no git status, no landing and no
+// review, so a reaction that exists to re-read git can pass over a batch made only of these. The daemon rewrites
+// some of them every few seconds under load (the privacy ledger, extension usage, browser screenshots), and each
+// one used to rescan every repo. Root-level only, like the exclusion it mirrors: a repo's own nested `.intentic` is
+// its project's content. Accepts either slash.
+export const isUnversionedStatePath = (relPath: string): boolean => {
+    const rel = relPath.replaceAll("\\", "/").replace(/^\.\//, "");
+    return rel.startsWith(`${STATE_DIR}/`) && !VERSIONED_STATE_PATHS.some((path) => (path.endsWith("/") ? rel.startsWith(path) : rel === path));
+};
+
 // Every path this table declares, as a type; the daemon joins paths only through `statePath`
 // (workspace/state-paths.ts), which accepts one of these and nothing else, so renaming a store's file is a compile
 // error everywhere it's named rather than a view that silently stops refreshing.

@@ -1,6 +1,6 @@
 import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { fileBoundQueryKeys, isUnversionedStatePath, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { adoptProjectScope } from "../../../app/projectScope";
 import { contributedFileBindings } from "../../../workbench/workspace-events/fileBindings";
 import { emitFilesChanged } from "../../../workbench/workspace-events/fileEvents";
@@ -126,8 +126,10 @@ const applyWorkspaceChanged = (event: Extract<SystemEvent, { kind: `workspaceCha
     // Skipped during a streaming turn to avoid hammering `git status` on every write; useChanges covers it at
     // stream-end. An unnamed batch is exempt: it is the daemon saying it cannot name what moved (a truncated burst, a
     // reconnect, a check whose build rewrote tracked files under a dir the watcher prunes), and the review has no other
-    // way to hear it — skipping one leaves whatever was read mid-write standing as the answer.
-    if (event.paths.length === 0 || !useChat().streaming.value) {
+    // way to hear it — skipping one leaves whatever was read mid-write standing as the answer. A batch made only of
+    // machine state git never tracks (the daemon's privacy ledger and usage records, rewritten every few seconds under
+    // load) moves nothing a review reads, and each one used to rescan every repo.
+    if (event.paths.length === 0 || (!useChat().streaming.value && event.paths.some((path) => !isUnversionedStatePath(path)))) {
         refreshChanges();
     }
 };

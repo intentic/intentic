@@ -108,6 +108,19 @@ it(`re-reads the review on an unnamed batch mid-turn, and still not on a named o
     expect(reaches(rpcKey(`git.changes`))).toBe(true);
 });
 
+// Under load the daemon rewrites its own state every few seconds (the privacy ledger, extension usage, browser
+// screenshots), all of it under the `.intentic` git never tracks. Each one used to cost a `git status` and a per-row
+// diff over every repo, for a review none of them can move; one tracked path in the same batch still re-reads it.
+it(`leaves the review alone for a batch of untracked machine state, and not for a tracked path beside it`, () => {
+    const churn = [`.intentic/local/privacy-log.json`, `.intentic/records/extension-usage.json`];
+
+    applySystemEvent({ kind: `workspaceChanged`, paths: churn }, SANDBOX);
+    expect(reaches(rpcKey(`git.changes`))).toBe(false);
+
+    applySystemEvent({ kind: `workspaceChanged`, paths: [...churn, `.intentic/config/settings.json`] }, SANDBOX);
+    expect(reaches(rpcKey(`git.changes`))).toBe(true);
+});
+
 // A land writes the tree file by file and moves refs as it goes, so it fires this signal repeatedly against a patch
 // that is only half applied. Each pass is a full `git status` + per-row diff over every repo, competing for the very
 // git subprocesses the land is queued on — the scan is thrown away, and it makes the land it interrupted slower.

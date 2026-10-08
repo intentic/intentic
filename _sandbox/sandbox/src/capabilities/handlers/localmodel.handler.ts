@@ -352,7 +352,8 @@ const cpuTicksOf = async (pid: number): Promise<number | undefined> =>
         .then((stat) => parseProcStat(stat)?.cpuTicks)
         .catch(() => undefined);
 
-// Kept across sweeps: when each server's CPU time last moved. Cleared for a server that stops, by advanceIdle.
+// Kept across sweeps: when each server's CPU time last moved faster than its own housekeeping (advanceIdle's busy
+// floor). Cleared for a server that stops, by advanceIdle.
 let idleSamples: ReadonlyMap<string, IdleSample> = new Map();
 
 // Stops a served model that has done no work for `idleMs`. The weights and the KV cache are the largest resident

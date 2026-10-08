@@ -7,7 +7,18 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { requires } from "@intentic/testing/requires";
-import { defaultGit, forkedExec, gitSpawnStats, observeGitCommands, politeGit, setRunnerEnv, settleIndex } from "./runner.js";
+import {
+    defaultGit,
+    forkedExec,
+    gitRunCallers,
+    gitSpawnStats,
+    observeGitCommands,
+    politeGit,
+    setRunnerEnv,
+    settleIndex,
+    UNLABELLED_GIT_CALLER,
+    withGitCaller,
+} from "./runner.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
 // contention.
@@ -264,4 +275,22 @@ test("setRunnerEnv reaches every command the runner starts, under a call's own e
     } finally {
         setRunnerEnv({});
     }
+});
+
+// The count by subcommand says how much git runs; a profile needs why, so each run is filed under the innermost
+// labelled operation around it, across awaits, and one outside any label is still counted rather than lost.
+test("each git run is counted under the operation that asked for it", async () => {
+    const dir = await tempRepo();
+    const before = gitRunCallers();
+    const delta = (caller: string): number => (gitRunCallers()[caller] ?? 0) - (before[caller] ?? 0);
+    await withGitCaller("probe.outer", async () => {
+        await defaultGit(dir, ["rev-parse", "--git-dir"]);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        await withGitCaller("probe.inner", () => defaultGit(dir, ["status", "--porcelain"]));
+        await defaultGit(dir, ["rev-parse", "--git-dir"]);
+    });
+    await defaultGit(dir, ["rev-parse", "--git-dir"]);
+    expect(delta("probe.outer")).toBe(2);
+    expect(delta("probe.inner")).toBe(1);
+    expect(delta(UNLABELLED_GIT_CALLER)).toBeGreaterThanOrEqual(1);
 });

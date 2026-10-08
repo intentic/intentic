@@ -2,6 +2,7 @@ import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFo
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
+import { withGitCaller } from "@intentic/base/git";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
@@ -96,6 +97,10 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
 // route serves it.
 const policyOf = (c: Context<AppEnv>): RouteMeta => sandboxRouteFor(c.req.method, c.req.path)?.meta ?? {};
 
+// The label a request's git runs are counted under: the contract route it matched, never the raw path, whose ids would
+// split one route into thousands of callers.
+export const gitCallerOfRequest = (method: string, path: string): string => `http ${sandboxRouteFor(method, path)?.name ?? "unrouted"}`;
+
 // The path the router will actually match: oRPC normalizes a trailing slash before dispatch, so a grant that matches a
 // path itself must check the same normalized path. A root path stays `/`, repeated slashes collapse.
 const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
@@ -147,7 +152,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const from = process.hrtime.bigint();
         // The browser's own id for this call, echoed onto the served line so a report matches a log line by id.
         const requestId = c.req.header(REQUEST_ID_HEADER);
-        await (requestId === undefined ? next() : logContext.run({ requestId }, next));
+        // Git the request runs is counted under its route (gitRunCallers); a span inside it names a narrower caller.
+        const serve = (): Promise<void> => withGitCaller(gitCallerOfRequest(c.req.method, c.req.path), next);
+        await (requestId === undefined ? serve() : logContext.run({ requestId }, serve));
         services.perf.record("http.request", Number(process.hrtime.bigint() - from) / 1e6, {
             method: c.req.method,
             path: c.req.path,

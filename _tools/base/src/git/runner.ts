@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { type ChildProcess, execFile, fork } from "node:child_process";
 import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
@@ -332,6 +333,18 @@ const runsBySubcommand = new Map<string, number>();
 
 export const gitRunCounts = (): Readonly<Record<string, number>> => Object.fromEntries(runsBySubcommand);
 
+// Which operation each git run served: the innermost `withGitCaller` around it, carried across awaits. The count by
+// subcommand says how much git the daemon spends; this says why, which a profile otherwise has to infer.
+const callerScope = new AsyncLocalStorage<string>();
+const runsByCaller = new Map<string, number>();
+// A run no labelled span encloses: a timer, a watcher reaction, anything not yet named.
+export const UNLABELLED_GIT_CALLER = "unlabelled";
+
+export const withGitCaller = <T>(caller: string, run: () => T): T => callerScope.run(caller, run);
+
+// Cumulative since boot, by caller; a rate is the difference between two samples, as for gitRunCounts.
+export const gitRunCallers = (): Readonly<Record<string, number>> => Object.fromEntries(runsByCaller);
+
 interface RunnerShape {
     readonly bulk: boolean;
     readonly globals: readonly string[];
@@ -349,6 +362,8 @@ const gitRunnerVia =
         runningIn.set(dir, (runningIn.get(dir) ?? 0) + 1);
         const subcommand = subcommandOf(args) ?? "?";
         runsBySubcommand.set(subcommand, (runsBySubcommand.get(subcommand) ?? 0) + 1);
+        const caller = callerScope.getStore() ?? UNLABELLED_GIT_CALLER;
+        runsByCaller.set(caller, (runsByCaller.get(caller) ?? 0) + 1);
         try {
             return await runGit(argv, bulk, globals, dir, args, env);
         } finally {

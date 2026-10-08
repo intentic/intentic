@@ -5,6 +5,7 @@ import {
     isLockedWorkspacePath,
     isReportedManifest,
     isReviewableLockedPath,
+    isUnversionedStatePath,
     LOCKED_STATE_ENTRIES,
     lockedWorkspaceEntry,
     PLAN_DOCUMENTS_DIR,
@@ -29,7 +30,13 @@ const AUTOMATIONS: readonly FileContribution[] = [
 
 describe(`staleQueryKeys`, () => {
     it(`maps a manifest write to the queries it makes stale`, () => {
-        expect(staleQueryKeys([`.intentic/config/capabilities.json`], [])).toEqual([`capabilities`, `extensions`, `environment`, `panels`, `manifests`]);
+        expect(staleQueryKeys([`.intentic/config/capabilities.json`], [])).toEqual([
+            `capabilities`,
+            `extensions`,
+            `environment`,
+            `panels`,
+            `manifests`,
+        ]);
     });
 
     it(`refreshes the unreadable-manifest notice for the four files a person hand-edits`, () => {
@@ -296,6 +303,40 @@ describe(`isReviewableLockedPath`, () => {
         for (const path of VERSIONED_STATE_PATHS) {
             expect([path, isReviewableLockedPath(path) && !isLockedWorkspacePath(path)]).toEqual([path, false]);
         }
+    });
+});
+
+// What lets a git-reading reaction skip a batch: the daemon's own churn under `.intentic` must not rescan every repo,
+// while a tracked config file still has to.
+describe(`isUnversionedStatePath`, () => {
+    it(`holds the machine state the daemon rewrites constantly`, () => {
+        expect(isUnversionedStatePath(`.intentic/local/privacy-log.json`)).toBe(true);
+        expect(isUnversionedStatePath(`.intentic/local/.privacy-log.json.55.3275.tmp`)).toBe(true);
+        expect(isUnversionedStatePath(`.intentic/records/extension-usage.json`)).toBe(true);
+        expect(isUnversionedStatePath(`.intentic/records/artifacts/browser/page.png`)).toBe(true);
+        // An unversioned file beside versioned ones in config is still invisible to git.
+        expect(isUnversionedStatePath(`.intentic/config/docs/index.json`)).toBe(true);
+    });
+
+    it(`lets every versioned entry through, files and directories alike`, () => {
+        for (const path of VERSIONED_STATE_PATHS) {
+            const inside = path.endsWith(`/`) ? `${path}nested/file.json` : path;
+            expect([inside, isUnversionedStatePath(inside)]).toEqual([inside, false]);
+        }
+    });
+
+    it(`never claims a path outside the workspace's own state dir`, () => {
+        expect(isUnversionedStatePath(`intentic/_sandbox/sandbox/src/main.ts`)).toBe(false);
+        expect(isUnversionedStatePath(`README.md`)).toBe(false);
+        // A repo's nested state dir is its project's content, which git does track.
+        expect(isUnversionedStatePath(`myrepo/.intentic/local/privacy-log.json`)).toBe(false);
+        expect(isUnversionedStatePath(`.intentic`)).toBe(false);
+    });
+
+    it(`reads a platform path and a dot-relative one the same as a posix one`, () => {
+        expect(isUnversionedStatePath(`.intentic\\local\\privacy-log.json`)).toBe(true);
+        expect(isUnversionedStatePath(`./.intentic/local/privacy-log.json`)).toBe(true);
+        expect(isUnversionedStatePath(`./.intentic/config/capabilities.json`)).toBe(false);
     });
 });
 

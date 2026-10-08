@@ -1,4 +1,5 @@
 import { loadavg } from "node:os";
+import { withGitCaller } from "@intentic/base/git";
 import type { Logger } from "pino";
 
 // Per-op timing the stall detector can't give: not just that the loop stalled, but what it was doing.
@@ -155,7 +156,8 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
     const track = async <T>(op: string, fields: PerfFields, run: () => Promise<T>): Promise<T> => {
         const from = process.hrtime.bigint();
         try {
-            const result = await run();
+            // Every git the span runs is counted under its name (gitRunCallers), so a profile reads why git ran.
+            const result = await withGitCaller(op, run);
             record(op, elapsedMs(from), fields);
             return result;
         } catch (error) {

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --max-semi-space-size=1 --optimize-for-size
 import { rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { StringDecoder } from "node:string_decoder";
@@ -7,6 +7,12 @@ import type { Terminal as TerminalType } from "@xterm/headless";
 // Pane output (piped by log-files.ts's pipe-pane hooks) is a live terminal stream, not text: redraws and cursor moves
 // would concatenate into garbage if escapes were merely stripped. One process per pane replays it through a headless VT
 // emulator and persists the rendered screen.
+//
+// The shebang's V8 flags exist because there is one of these per open pane: a dozen at a time with seven sessions
+// running, 186 MB between them, most of it young-generation headroom a renderer of a 10k-line screen never needs.
+// Replaying 20 MB of coloured output (measured 2026-10-08) peaked at 191 MB resident with Node's defaults and 84 MB
+// with these, rendering about 60% slower (1.0 s to 1.7 s): a log file a few hundred milliseconds behind costs nobody
+// anything, while the memory is held for the life of the pane.
 
 // @xterm/headless is CommonJS; ESM named-export detection fails, so it loads via require, typed via import.
 const { Terminal } = createRequire(import.meta.url)("@xterm/headless") as typeof import("@xterm/headless");

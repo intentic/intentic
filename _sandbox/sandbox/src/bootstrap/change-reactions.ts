@@ -10,6 +10,7 @@ import { onListenerStatusMoved } from "../extensions/listener/listener-status.js
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { batchMatters, gitMatters, iqMatters } from "../workspace/watch/batch-relevance.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -30,7 +31,13 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
     // Built once, not per change batch.
     const extensionSource = extensionSourceOf(services.workspace.root);
     shutdown.push(startWorkspaceWatch(services.workspace.root, logger));
-    shutdown.push(subscribeWorkspaceChanges(() => services.iq.markDirty()));
+    shutdown.push(
+        subscribeWorkspaceChanges((paths) => {
+            if (batchMatters(paths, iqMatters)) {
+                services.iq.markDirty();
+            }
+        }),
+    );
     shutdown.push(subscribeWorkspaceChanges(services.workspaceTreeChanged));
     shutdown.push(subscribeUnwatchedWrites(() => services.workspaceTreeChanged([])));
     // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
@@ -59,7 +66,15 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
     // checkouts' files (a landed path discarded, a blocking edit cleared).
     shutdown.push(
         services.agents.watchStandings((changed) => {
-            const stops = [subscribeRefChanges(changed), subscribeWorkspaceChanges(changed), subscribeUnwatchedWrites(changed)];
+            const stops = [
+                subscribeRefChanges(changed),
+                subscribeWorkspaceChanges((paths) => {
+                    if (batchMatters(paths, gitMatters)) {
+                        changed();
+                    }
+                }),
+                subscribeUnwatchedWrites(changed),
+            ];
             return () => {
                 for (const stop of stops) {
                     stop();

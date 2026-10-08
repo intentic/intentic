@@ -210,6 +210,14 @@ fi
 # went from 268 ms at 4 threads to 112 ms at 64). Children inherit it, which costs them idle threads and nothing else.
 export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
 
+# MALLOC_ARENA_MAX: glibc gives each thread that mallocs an arena of its own, up to eight per core, and what is freed
+# inside one seldom goes back to the system, so the pool above multiplies it. Measured with seven sessions running
+# (2026-10-08): the daemon held 17 arenas, 341 MB resident, and the iq engine 50, 218 MB, most of it pushed to swap.
+# The JavaScript heap is V8's and untouched by this; what shares the arenas is native work on the pool threads (zlib,
+# sqlite, onnxruntime). A Node process gzipping on 32 pool threads held 415 MB at two arenas against 450 MB at the
+# default, in the same time within noise. Children inherit it, the same as the pool.
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
+
 # netd owns every port and the tunnel, and supervises the daemon behind it: a daemon crash is restarted while the
 # browser's sockets stay open, and the daemon's own exit 0 (a stop, an idle machine) or 78 still ends the container.
 # exec, so netd takes this shell's place and the container's stop signal reaches it, which hands Node its graceful

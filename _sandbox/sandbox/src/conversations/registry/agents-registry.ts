@@ -18,6 +18,7 @@ import {
     type UnfinishedWork,
     type SessionOwner,
 } from "@intentic/sandbox-contract";
+import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { routingFor } from "../../agent/providers/accounts/routing.js";
@@ -939,7 +940,8 @@ export const createFleet = (
     let following: Promise<boolean> | undefined;
     const reprobe = (): Promise<boolean> => {
         if (probing === undefined) {
-            probing = probeFleet().finally(() => {
+            // Named for the git it runs: a standings probe reads every live agent's branch against main.
+            probing = withGitCaller("agents.standings", probeFleet).finally(() => {
                 probing = undefined;
             });
             return probing;

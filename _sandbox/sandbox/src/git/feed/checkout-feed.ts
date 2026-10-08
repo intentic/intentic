@@ -13,8 +13,12 @@ export interface CheckoutFeed {
 }
 
 // Checkouts watched at once: the workspace's repositories and the conversations working now; the least recently
-// read is let go past it, each watch pinning a checkout's directories in the kernel.
-const MAX_WATCHED = 48;
+// read is let go past it, each watch pinning a checkout's directories in the kernel. Sized from what one busy evening
+// asks for (2026-10-08): seven conversations of eleven checkouts each, the workspace's own eleven and four installed
+// extensions came to 92, and at the old 48 every read evicted another, so nearly every status went to git (49
+// checkouts in 15 s, some read six times) while netd re-walked trees it had just let go. A checkout here averaged
+// about 300 directory watches, so this ceiling holds under 50k of the kernel's 524k per-user default.
+export const MAX_WATCHED = 160;
 
 // A kept reading older than this is taken again whatever the count says: the bound on how long a change the feed
 // could not see (a filesystem inotify is blind to) stays unread.

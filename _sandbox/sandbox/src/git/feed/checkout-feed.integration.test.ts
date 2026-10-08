@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import type { FromNode } from "@intentic/sandbox-contract/netd-wire";
 import { defaultGit, type GitRunner, observeGitCommands } from "@intentic/base/git";
 import { statusPaths } from "../changes/changes.js";
-import { type CheckoutFeed, netdCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
+import { type CheckoutFeed, MAX_WATCHED, netdCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
 
 // The daemon's half of the change feed against a stand-in netd: which checkouts it names, how its questions batch,
 // and that a status read is taken once per generation and never handed out to be changed under the next reader.
@@ -91,7 +91,7 @@ test("a directory that is no checkout is never named and never asked about", asy
 
 test("lets the least recently read checkout go once more are watched than the kernel should hold", async () => {
     const parent = await tempDir();
-    const dirs = await Promise.all(Array.from({ length: 49 }, (_, index) => checkoutIn(parent, `c${String(index)}`)));
+    const dirs = await Promise.all(Array.from({ length: MAX_WATCHED + 1 }, (_, index) => checkoutIn(parent, `c${String(index)}`)));
     const netd = standIn(new Map());
     const feed = netdCheckoutFeed(netd.link);
     for (const dir of dirs) {
@@ -133,7 +133,11 @@ test("a runner of the caller's own, a failed read and a checkout nothing counts 
     await readOnFeed("kind", "/repo", own, read);
     expect(reads).toBe(2);
 
-    await expect(readOnFeed("fails", "/repo", defaultGit, async () => { throw new Error("no"); })).rejects.toThrow("no");
+    await expect(
+        readOnFeed("fails", "/repo", defaultGit, async () => {
+            throw new Error("no");
+        }),
+    ).rejects.toThrow("no");
     expect(await readOnFeed("fails", "/repo", defaultGit, async () => "read")).toBe("read");
 
     await readOnFeed("kind", "/elsewhere", defaultGit, read);
