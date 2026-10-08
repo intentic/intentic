@@ -1120,54 +1120,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
-        <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
-             narrows the list to it (toggleOrigin). Above the box, since a lit chip fills the index Commit records and
-             names the message. Disabled while a git action runs, like every other index verb here. -->
-        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
-            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
-            <button
-                v-for="entry in legend.agents"
-                :key="entry.id"
-                type="button"
-                class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
-                :class="[
-                    originHue(entry.id).chip,
-                    originFilter === entry.id ? 'shrink' : 'shrink-0',
-                    originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
-                ]"
-                :disabled="changes.actionBusy.value"
-                @click="toggleOrigin(entry.id)"
-                @mouseenter="showOrigins($event, [entry.id])"
-                @mouseleave="hoverCard?.hide()"
-                :aria-label="originChipLabel(entry.id, entry.files)"
-            >
-                <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
-                <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
-                <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
-                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
-                <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
-                <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
-                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. -->
-                <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
-                <span class="shrink-0 opacity-70">{{ entry.files }}</span>
-                <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
-                <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
-            </button>
-            <button
-                v-if="legend.yours > 0"
-                type="button"
-                class="ui-chip shrink-0 gap-1 transition-opacity"
-                :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
-                :disabled="changes.actionBusy.value"
-                @click="toggleOrigin(YOURS)"
-                v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
-            >
-                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
-                <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
-            </button>
-        </div>
-
-        <!-- Commit box next (VSCode's placement). It records the index — staging is the selection. -->
+        <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
             <!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
             <textarea
@@ -1429,6 +1382,53 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
             >
                 <Icon name="times" class="text-2xs" />
+            </button>
+        </div>
+
+        <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
+             narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
+             one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
+        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
+            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
+            <button
+                v-for="entry in legend.agents"
+                :key="entry.id"
+                type="button"
+                class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
+                :class="[
+                    originHue(entry.id).chip,
+                    originFilter === entry.id ? 'shrink' : 'shrink-0',
+                    originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
+                ]"
+                :disabled="changes.actionBusy.value"
+                @click="toggleOrigin(entry.id)"
+                @mouseenter="showOrigins($event, [entry.id])"
+                @mouseleave="hoverCard?.hide()"
+                :aria-label="originChipLabel(entry.id, entry.files)"
+            >
+                <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
+                <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
+                <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
+                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
+                <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
+                <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
+                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. -->
+                <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
+                <span class="shrink-0 opacity-70">{{ entry.files }}</span>
+                <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
+                <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
+            </button>
+            <button
+                v-if="legend.yours > 0"
+                type="button"
+                class="ui-chip shrink-0 gap-1 transition-opacity"
+                :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
+                :disabled="changes.actionBusy.value"
+                @click="toggleOrigin(YOURS)"
+                v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
+            >
+                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
+                <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>
 
