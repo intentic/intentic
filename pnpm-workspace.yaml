@@ -348,7 +348,7 @@ catalog:
   marked: 18.1.0
   # fileq's audio/video deriver: duration, codec facts and tags without decoding a frame.
   music-metadata: 11.16.1
-  # The Opus decoder for received Discord voice (the gateway decodes packets to PCM for whisper; it never sends
+  # The Opus decoder for received Discord voice (the gateway decodes packets to PCM for transcription; it never sends
   # audio, so nothing here encodes). napi-rs: the platform binding ships as a prebuilt optional dependency, one
   # per target and sixteen of them — including musl, which the binding it replaced had no prebuild for — and
   # there is no install script, so nothing is compiled or unpacked on install. That is the whole reason it is
@@ -385,6 +385,10 @@ catalog:
   # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
   # so the two share one copy without an override.
   sharp: 0.35.5
+  # The daemon's local speech-to-text (src/speech): k2-fsa's prebuilt N-API addon over its own ONNX Runtime,
+  # loaded only in the speech worker process. The per-platform binaries (linux-x64, linux-arm64) arrive as its
+  # optionalDependencies, so each natively built image half installs its own; no install script runs.
+  sherpa-onnx-node: 1.13.8
   shiki: 4.5.0
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
   smol-toml: 1.9.0

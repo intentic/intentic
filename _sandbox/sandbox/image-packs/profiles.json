@@ -1,6 +1,6 @@
 {
     "profiles": {
         "core": [],
-        "standard": ["docker", "browser", "codex", "opencode", "translator", "semantic", "messaging", "whisper", "llamacpp", "python"]
+        "standard": ["docker", "browser", "codex", "opencode", "translator", "semantic", "messaging", "speech", "llamacpp", "python"]
     }
 }

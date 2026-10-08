@@ -1,39 +1,25 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { pathExists } from "@intentic/base/fs";
-import { storeWhisperModel, whisperCliMissing } from "@intentic/base/whisper";
-import { STATE_DIR, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
-import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { OpusEncoder } from "mediaplex";
-import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING } from "./audio.js";
+import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient, visibleChannel } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import type { DiscordConnectorConfig } from "./client.js";
 
 // On-demand voice transcription living in this gateway process, so a session outlives any single agent turn. Captures
-// per-speaker audio and transcribes each utterance locally with whisper.cpp as it ends (1s silence), dispatching a
-// voice_utterance event each time so automations can react mid-call. A module singleton: one session per sandbox.
+// per-speaker audio and hands each utterance, as it ends (1s silence), to the sandbox's own speech engine (the daemon's
+// POST /speech/transcribe: Parakeet for the European languages, Whisper for the rest, both on this machine),
+// dispatching a voice_utterance event each time so automations can react mid-call. A module singleton: one session per
+// sandbox. The language comes from connector config; unset or `auto`, the engine detects it.
 
-// Whisper model, downloaded on first use into the workspace volume, kept out of the image. Size and language come from
-// connector config; voiceLanguage=en selects the English-specialized ggml-*.en variant instead of the multilingual one.
-const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfig): Promise<string> => {
-    const model = config.voiceModel ?? "medium";
-    const file = config.voiceLanguage === "en" && model !== "large-v3-turbo" ? `ggml-${model}.en.bin` : `ggml-${model}.bin`;
-    const path = join(ctx.workspaceRoot, STATE_DIR, "local", "cache", "whisper", file);
-    if (await pathExists(path)) {
-        return path;
-    }
-    ctx.log.info({ model: file }, "downloading whisper model (first voice session)");
-    // HF's CAS bridge 403s anonymous plain-HTTP fetches, downloadFile speaks the Xet protocol instead.
-    const blob = await downloadFile({ repo: WHISPER_MODEL_REPO, path: file });
-    if (blob === null) {
-        throw new Error(`whisper model download failed: ${WHISPER_MODEL_REPO} has no ${file}`);
-    }
-    await storeWhisperModel(path, blob);
-    return path;
+// The configured language, or none for the engine to detect: `auto` is how the setting has always spelled that.
+const voiceLanguageOf = (config: DiscordConnectorConfig): string | undefined => {
+    const language = config.voiceLanguage?.trim();
+    return language === undefined || language === "" || language === "auto" ? undefined : language;
 };
 
 interface VoiceSession {
@@ -168,10 +154,6 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     if (session !== undefined) {
         return `Already in #${session.channel.name}: run \`discord-voice leave\` first.`;
     }
-    if (await whisperCliMissing()) {
-        return WHISPER_MISSING;
-    }
-    const modelPath = await ensureWhisperModel(ctx, config);
     let client: Client;
     try {
         client = await ensureDiscordClient(config.botToken, "voice");
@@ -233,7 +215,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
         client,
         channel,
         connection,
-        transcriber: createTranscriber(modelPath, config.voiceLanguage ?? "auto", startedAt, onLine, (error) =>
+        transcriber: createTranscriber(ctx.daemon.transcribe, voiceLanguageOf(config), startedAt, onLine, (error) =>
             ctx.log.error({ err: error }, "utterance transcription failed"),
         ),
         startedAt,

@@ -8,7 +8,7 @@ flowchart LR
     base -->|"when · fuzzy"| web["Web app<br/>and extension host"]
     base -->|"outside-text · plain-text · lifecycle"| daemon["Sandbox daemon<br/>fileq · webq"]
     base -->|"fuzzy · sqlite · stopwords"| iq["iq engine<br/>and session recall"]
-    base -->|"fs · sqlite · worker-calls · whisper"| node["Node tiers<br/>daemon, devices, Discord"]
+    base -->|"fs · sqlite · worker-calls"| node["Node tiers<br/>daemon, devices, Discord"]
     base -->|"async · errors · format · dag"| rest["Every tier<br/>devices, deploy, extensions"]
     base -->|"held"| daemon
     base -->|"git"| gitusers["Sandbox daemon<br/>and deploy CLI"]
@@ -17,7 +17,7 @@ flowchart LR
 - One implementation per rule that more than one tier applies: two copies of a condition, a size label or a
   quick-open ranking disagree on screen. Anything only one surface renders belongs next to that surface.
 - Subpath exports only, with no index, so a browser bundle pulls nothing it does not use. `outside-text` uses Web
-  Crypto, so it does not tie a caller to Node; `fs`, `sqlite`, `worker-calls`, `whisper`, `web-stream`, `ws-tcp-pump`, `acme` and `git` are Node's.
+  Crypto, so it does not tie a caller to Node; `fs`, `sqlite`, `worker-calls`, `web-stream`, `ws-tcp-pump`, `acme` and `git` are Node's.
 - `when.ts` is a closed grammar with no arithmetic, calls or property access, because its strings arrive from
   installed extensions.
 - `outside-text.ts` wraps chat, pages and tool results in `<untrusted-content>` tags whose close carries a fresh id,
@@ -60,8 +60,6 @@ flowchart LR
   groups writes with `immediateTransaction`, which takes the write lock at BEGIN and joins a transaction already open.
 - `workers/worker-calls.ts` is a call-and-answer channel to a worker thread, spawned on first call and again after a
   crash, and `workerPool` spreads independent calls over a few of them.
-- `node/whisper.ts` runs whisper-cli the one way the daemon's speech route and Discord voice share, and stores a
-  downloaded model so a partial one never reads as present. Reading what whisper prints stays in the contract.
 
 - `acme/acme.ts` orders a certificate over DNS-01 and tells the CA to look only once the zone's own nameservers serve the
   challenge (`authoritative-dns.ts`), since an early look fails the authorization for good. When that never shows —

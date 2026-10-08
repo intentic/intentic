@@ -37,7 +37,7 @@ Then confirm it landed: `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "$DI
 ## Voice (listen & transcribe)
 Use the `discord-voice` command-line tool (on your PATH): not curl. It drives the long-lived gateway that holds
 the call across turns:
-- `discord-voice join <channelId>`: join a voice channel and transcribe the conversation per speaker (local whisper).
+- `discord-voice join <channelId>`: join a voice channel and transcribe the conversation per speaker (on this machine).
 - `discord-voice leave`: leave now and finalize the transcript.
 - `discord-voice status`, current session: channel, duration, participants, utterances, live transcript path.
 The transcript under `.intentic/records/artifacts/voice/` updates live after every utterance: read it mid-call to follow
@@ -46,9 +46,8 @@ the call ends (everyone leaves, or `discord-voice leave`) a `voice_transcript` e
 transcript: those wakes are where you turn it into notes/action items. Voice channel ids come from the channel
 list command (`type: 2` = voice).
 
-Voice needs whisper.cpp, which was added to this sandbox's environment automatically when Discord was
-connected. If `discord-voice join` reports whisper-cli missing, the sandbox just hasn't been rebuilt yet: ask
-the owner to run the rebuild command on the Sandbox page's Environment card. Don't propose an overlay for this
-yourself.
+Transcription runs on this sandbox's own speech engine and needs nothing installed. The language is the card's
+"Voice language" setting; left empty, it is detected per utterance. The first call on a sandbox whose image does not
+carry the speech model fetches it (a few hundred MB) before the first line appears.
 
 Notes: IDs come from the list commands above. If a read returns empty content, the Message Content intent isn't enabled (see Setup step 4).

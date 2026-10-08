@@ -27,6 +27,9 @@ export interface DaemonClient<TConfig> {
     // Reports never reject: a connector fires them and moves on, so a report the daemon did not take is logged here.
     readonly failure: (detail: string) => Promise<void>;
     readonly status: (snapshot: ListenerStatus) => Promise<void>;
+    // One utterance (a 16 kHz mono s16le WAV) to its words through the sandbox's own speech engine, empty when it held
+    // none. Waits out the model's first fetch rather than refusing; the manifest must declare POST /speech/transcribe.
+    readonly transcribe: (wav: Uint8Array, language: string | undefined) => Promise<string>;
 }
 
 export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor, log: Logger): DaemonClient<TConfig> => {
@@ -88,6 +91,20 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
             drain(true);
         },
         failure: (detail) => report("failure", { detail }, { detail }),
+        transcribe: async (wav, language) => {
+            const query = new URLSearchParams({ wait: "1", ...(language === undefined ? {} : { lang: language }) });
+            const res = await daemon.request(`/speech/transcribe?${query}`, {
+                method: "POST",
+                headers: { "content-type": "audio/wav" },
+                body: new Blob([new Uint8Array(wav)], { type: "audio/wav" }),
+            });
+            if (!res.ok) {
+                const detail = await res.text().catch(() => "");
+                throw new Error(`/speech/transcribe returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
+            }
+            const { text } = (await res.json()) as { text?: unknown };
+            return typeof text === "string" ? text : "";
+        },
         status: (snapshot) => report("status", snapshot, {}),
     };
 };

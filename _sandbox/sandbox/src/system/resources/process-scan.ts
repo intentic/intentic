@@ -161,7 +161,8 @@ const isToolchain = (value: string): boolean => TOOLCHAIN.some((pattern) => patt
 const CONTAINER_CGROUP = /[/]docker[/]/u;
 const CONTAINER = /(^|[ /])(dockerd|containerd|docker-proxy|docker-init|runc)([ /-]|$)/u;
 
-const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama)([ /.-]|$)/u;
+// The daemon's own speech process (speech/speech-worker.ts) is one too: a gigabyte of weights while it is loaded.
+const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama|speech-worker)([ /.-]|$)/u;
 
 const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;
 const LANGUAGE_SERVER =

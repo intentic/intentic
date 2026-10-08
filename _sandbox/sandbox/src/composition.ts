@@ -266,7 +266,7 @@ export interface Services
     readonly reaper: ResourceReaper;
     // Which conversations are published as shareable pages; the index only, pages live in the workspace outbox.
     readonly shares: ShareStore;
-    // Composer's voice input: whisper.cpp over browser WAV, with a serialized queue and first-use model download.
+    // Dictation, heard on this machine: the composer's microphone and Discord's calls (speech/transcribe.ts).
     readonly speech: Speech;
     // What a panel's preview hostname actually serves; the panels list only advertises a URL where it answers.
     readonly panelUpstreamOf: PanelUpstreamResolver;

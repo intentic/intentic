@@ -248,17 +248,6 @@
                 "default": "./dist/workers/worker-calls.js"
             }
         },
-        "./whisper": {
-            "types": "./dist/node/whisper.d.ts",
-            "import": {
-                "@intentic/src": "./src/node/whisper.ts",
-                "default": "./dist/node/whisper.js"
-            },
-            "require": {
-                "@intentic/src": "./src/node/whisper.ts",
-                "default": "./dist/node/whisper.js"
-            }
-        },
         "./git": {
             "types": "./dist/git/index.d.ts",
             "import": {

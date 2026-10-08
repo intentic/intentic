@@ -33,7 +33,7 @@ test("decode returns one 20ms 48kHz stereo PCM frame as a Buffer", () => {
     expect(pcm.length).toBe(FRAME_BYTES);
 });
 
-test("decoded frames survive the whisper downmix at the sample rate voice.ts assumes", () => {
+test("decoded frames survive the transcription downmix at the sample rate voice.ts assumes", () => {
     const decoder = new OpusEncoder(48_000, 2);
     const source = packet();
     const pcm = Buffer.concat([decoder.decode(source), decoder.decode(source)]);

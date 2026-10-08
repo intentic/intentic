@@ -20,7 +20,7 @@
     "_sandbox/sandbox/src/fences/tmux-fence.ts": 2,
     "_sandbox/sandbox/src/git/changes/blob-reader.ts": 1,
     "_sandbox/sandbox/src/guard/plugin-modules.ts": 1,
-    "_sandbox/sandbox/src/harness/e2e-harness.ts": 5,
+    "_sandbox/sandbox/src/harness/e2e-harness.ts": 4,
     "_sandbox/sandbox/src/intentic/intentic-runner.ts": 1,
     "_sandbox/sandbox/src/netdisk/smb.ts": 1,
     "_sandbox/sandbox/src/runners/runner-command.ts": 3,

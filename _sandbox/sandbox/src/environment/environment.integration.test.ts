@@ -9,7 +9,6 @@ import { environmentSourcesOf } from "../environment-composers.js";
 import { environmentSourcesFake } from "../testing.js";
 import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
-import { packFragment } from "../image/packs.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import { hasOfficialBase } from "@intentic/sandbox-contract";
@@ -233,18 +232,12 @@ test("compose takes every contributed fragment from the environment sources port
 });
 
 test("compose dedupes identical fragments and orders distinct ones canonically", async () => {
-    // Discord names the whisper pack instead of carrying one; rides only when the base doesn't bake it.
-    const whisper = await packFragment("whisper");
+    // Discord composes nothing: its voice is heard by the daemon's own speech engine, not a tool of its own.
     const services = stubServices("", [vpn("office"), discord, vpn("home-lab")]);
     await composeEnvironment(services);
     const approved = (await services.files.read(approvedPath(services)))!;
     expect(approved.split("wireguard-tools").length - 1).toBe(1);
-    if (whisper === undefined) {
-        expect(approved).not.toContain("whisper-cli");
-    } else {
-        expect(approved).toContain(whisper);
-        expect(approved.indexOf("# vpn capability")).toBeLessThan(approved.indexOf(whisper));
-    }
+    expect(approved).not.toContain("whisper");
 
     const reordered = stubServices("", [discord, vpn("office")]);
     await composeEnvironment(reordered);
@@ -519,7 +512,9 @@ const FFMPEG =
 test("a proposed tool is filed as its own draft, approved alone into the custom section, and the others stay pending", async () => {
     const services = stubServices();
     expect(await proposeDraft(services, "ffmpeg", `${FFMPEG}\n`)).toEqual({ file: "ffmpeg.Dockerfile" });
-    expect(await proposeDraft(services, "Rust Toolchain", "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y\nENV PATH=/root/.cargo/bin:$PATH")).toEqual({
+    expect(
+        await proposeDraft(services, "Rust Toolchain", "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y\nENV PATH=/root/.cargo/bin:$PATH"),
+    ).toEqual({
         file: "rust-toolchain.Dockerfile",
     });
     const approved = await approveDraft(services, "ffmpeg");
@@ -587,7 +582,9 @@ test("a draft is RUN and ENV lines only, and approving a tool with no draft says
     expect(await proposeDraft(services, "evil", "FROM alpine\nRUN true")).toEqual({
         problem: "the steps may not contain FROM (the sandbox owns the base image) or an intentic:runtime line",
     });
-    expect(await proposeDraft(services, "copy", "COPY . /app")).toEqual({ problem: 'only RUN and ENV lines may be proposed, and "COPY . /app" is neither' });
+    expect(await proposeDraft(services, "copy", "COPY . /app")).toEqual({
+        problem: 'only RUN and ENV lines may be proposed, and "COPY . /app" is neither',
+    });
     expect(await proposeDraft(services, "!!!", "RUN true")).toEqual({ problem: '"!!!" cannot name a draft: use letters, digits and dashes' });
     expect(await approveDraft(services, "ghost")).toEqual({ problem: "no draft is waiting for ghost" });
 });
@@ -595,12 +592,18 @@ test("a draft is RUN and ENV lines only, and approving a tool with no draft says
 test("a proposed apt install carries both cache mounts and leaves the lists alone, while an older draft stays approvable", async () => {
     const services = stubServices();
     // Refused where the agent can fix it in one edit, not discovered by the owner as a rebuild that downloads it all again.
-    expect(await proposeDraft(services, "ffmpeg", "RUN apt-get update && apt-get install -y ffmpeg")).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
+    expect(await proposeDraft(services, "ffmpeg", "RUN apt-get update && apt-get install -y ffmpeg")).toEqual({
+        problem: expect.stringContaining("must mount both apt caches"),
+    });
     const halfMounted = "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n    apt install -y ffmpeg";
     expect(await proposeDraft(services, "ffmpeg", halfMounted)).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
-    expect(await proposeDraft(services, "ffmpeg", `${FFMPEG} \\\n    && rm -rf /var/lib/apt/lists/*`)).toEqual({ problem: expect.stringContaining("leave /var/lib/apt/lists alone") });
+    expect(await proposeDraft(services, "ffmpeg", `${FFMPEG} \\\n    && rm -rf /var/lib/apt/lists/*`)).toEqual({
+        problem: expect.stringContaining("leave /var/lib/apt/lists alone"),
+    });
     // A mount on one RUN does not vouch for an install on the next.
-    expect(await proposeDraft(services, "two", `${FFMPEG}\nRUN apt-get install -y sox`)).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
+    expect(await proposeDraft(services, "two", `${FFMPEG}\nRUN apt-get install -y sox`)).toEqual({
+        problem: expect.stringContaining("must mount both apt caches"),
+    });
     // What installs nothing with apt owes no mounts.
     expect(await proposeDraft(services, "rust", "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y")).toEqual({ file: "rust.Dockerfile" });
     // A draft filed before the rule (by hand, or by an older daemon) is still the owner's to approve.
@@ -716,7 +719,10 @@ test("removing a tool the daemon drafted from runtime installs declines it, so t
 
 test("a tool removed from inside an imported draft carrying several does not come back with it", async () => {
     const services = stubServices();
-    await services.files.write(join(draftsDir(services), "workspace.Dockerfile"), "# ---- zcode ----\nRUN install zcode\n\n# ---- sox ----\nRUN install sox\n");
+    await services.files.write(
+        join(draftsDir(services), "workspace.Dockerfile"),
+        "# ---- zcode ----\nRUN install zcode\n\n# ---- sox ----\nRUN install sox\n",
+    );
     expect((await readEnvironment(services)).proposal?.content).toBe("# ---- zcode ----\nRUN install zcode\n\n# ---- sox ----\nRUN install sox\n");
     expect(await removeFromEnvironment(services, "zcode")).toBeUndefined();
     expect((await readEnvironment(services)).proposal?.content).toBe("# ---- sox ----\nRUN install sox\n");

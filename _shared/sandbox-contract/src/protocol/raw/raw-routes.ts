@@ -16,7 +16,11 @@ export const RAW_ROUTES = {
     "GET /diff/raw": { lane: "bulk" },
     // Arming the dictation model is a read any tier makes; dictating is writing a message, the collaborator's grant.
     "GET /speech/status": { guest: true },
+    "POST /speech/prepare": { guest: true },
     "POST /speech/transcribe": { floor: "collaborator", guest: true },
+    // The live phrase stream (schemas/speech.ts): a WebSocket, so the query ticket, floored at the collaborator in the
+    // handler like the transcribe it streams.
+    "GET /speech/stream": { auth: "door" },
     // The bytes behind the workspace reads; each applies the caller's fence itself.
     "GET /workspace/raw": { guest: true, lane: "bulk" },
     // No door, unlike media: the page fetches a thumbnail itself, so the request carries the header.

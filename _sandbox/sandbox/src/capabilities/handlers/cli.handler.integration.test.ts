@@ -73,7 +73,7 @@ const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     }
 };
 
-test("apply writes the connector's SKILL.md; discord voice pends only when the gateway reports whisper missing", async () => {
+test("apply writes the connector's SKILL.md, and discord reads active: its voice needs no rebuild", async () => {
     const { ctx, root } = tempCtx();
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "inactive" });
 
@@ -85,11 +85,11 @@ test("apply writes the connector's SKILL.md; discord voice pends only when the g
     expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=1117248");
     expect(skill).toContain("discord-voice");
     expect(skill).not.toContain("FROM ghcr.io");
-    // No gateway status yet: whisper state is unknown, so it reads active, not pending.
+    // Voice transcribes through the daemon's own speech engine, which every image carries: a gateway's status changes
+    // nothing about whether the capability is usable.
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "active" });
-    // Gateway reports whisper missing via POST /listeners/discord/status.
-    setListenerStatus("discord", { connections: [], whisperReady: false }, Date.now());
-    expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "pending", detail: "voice needs a rebuild (whisper)" });
+    setListenerStatus("discord", { connections: [] }, Date.now());
+    expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "active" });
 });
 
 const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };

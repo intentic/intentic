@@ -1,6 +1,6 @@
 # llama.cpp's llama-server for the local-model capability — one pinned build serving an OpenAI-compatible /v1
 # for one GGUF file (capabilities/handlers/localmodel.ts starts it per entry; the weights are NOT here, they
-# download into the workspace cache on add, the whisper-pack precedent). CPU build only: a GPU model is a server on
+# download into the workspace cache on add). CPU build only: a GPU model is a server on
 # the host (Ollama, LM Studio), reached as a model endpoint. A CUDA variant built here once took 19 minutes of a
 # rebuild and broke whenever the base image moved (2026-10-07), so there is none.
 # In the `standard` profile so adding a local model on the published image never asks for a rebuild.

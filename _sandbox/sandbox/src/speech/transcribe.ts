@@ -1,47 +1,46 @@
 import { availableParallelism } from "node:os";
-import { serialLock } from "@intentic/base/async";
-import { pathExists } from "@intentic/base/fs";
-import { runWhisper, storeWhisperModel, type WhisperExec, whisperCliMissing } from "@intentic/base/whisper";
-import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
-import { downloadFile } from "@huggingface/hub";
+import { createRequire } from "node:module";
+import { rm } from "node:fs/promises";
+import { errorMessage } from "@intentic/base/errors";
+import { type SpeechEngine, speechEngineFor, speechLanguage, type SpeechStatus } from "@intentic/sandbox-contract";
 import { statePath } from "../state-paths.js";
+import { createModelStore, type FetchLike, type ModelStore } from "./model-store.js";
+import { createSpeechProcess, type SpeechProcess } from "./speech-engine.js";
+import type { RecognizerSpec } from "./speech-recognizers.js";
+import { BAKED_SPEECH_MODELS_DIR, modelBytes, SPEECH_MODELS } from "./speech-models.js";
+import { wavSamples } from "./wav.js";
 
-// whisper.cpp over WAV utterances the browser segments, run as Discord voice runs it; an image without the `whisper` pack reports unprovisioned.
+// The sandbox's dictation: a phrase of audio in, its words out, heard on this machine. Parakeet hears the 25 European
+// languages it knows and is baked into the standard image; Whisper hears the rest and is fetched the first time one is
+// asked for. Serves the composer (speech.routes.ts, its HTTP door and its live stream) and Discord's voice calls.
 
-// One multilingual model for every request, since language arrives per-utterance from the browser's locale.
-const MODEL_FILE = "ggml-large-v3-turbo.bin";
+// Two cores of however many the box has, at most four: a phrase takes a fraction of a second at that, and the agents
+// the person is talking to share the machine.
+const THREADS = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
 
-// Capped at 8 regardless of core count; transcription shares the box with the requesting agent.
-const THREADS = Math.max(1, Math.min(8, availableParallelism()));
-
-// Covers the longest legal utterance (1 min at 16kHz mono s16le) with headroom; refuses anything longer.
+// The longest utterance the WAV door takes: a minute at 16 kHz mono s16le, with headroom for the header.
 export const MAX_UTTERANCE_WAV_BYTES = 2 * 1024 * 1024;
 
-// whisper-cli takes a bare two-letter code and silently defaults to `en`; the primary subtag is extracted, and anything
-// unusable becomes explicit `auto` rather than an accidental English.
-export const whisperLanguage = (locale: string | undefined): string => {
-    const primary = (locale ?? "").trim().toLowerCase().split("-")[0] ?? "";
-    return /^[a-z]{2,3}$/.test(primary) ? primary : "auto";
-};
-
-export type ModelState = "absent" | "downloading" | "ready";
-
-export interface SpeechStatus {
-    readonly provisioned: boolean;
-    readonly model: ModelState;
-}
-
 export interface Speech {
-/** Where voice stands on this sandbox; asking while the model is absent starts fetching it, so the polling itself is what prepares it. */
-    readonly status: () => Promise<SpeechStatus>;
-    /** One utterance's WAV to text; empty string when whisper heard only silence or noise. */
+    /** Where voice stands for this locale. Asking while its model is absent starts fetching it, so an older composer's poll still prepares it. */
+    readonly status: (locale: string | undefined) => Promise<SpeechStatus>;
+    /** Fetch the locale's model if it is missing and load it into memory, in the background; answers the status now. */
+    readonly prepare: (locale: string | undefined) => Promise<SpeechStatus>;
+    /** One WAV utterance to its text; empty when it held no words. Refuses while the model is not on disk yet. */
     readonly transcribe: (wav: Buffer, locale: string | undefined) => Promise<string>;
+    /** One phrase of 16 kHz mono samples to its text, waiting for the model however long it takes to arrive. */
+    readonly hear: (samples: Float32Array, locale: string | undefined) => Promise<string>;
+    /** Whether a running guess at this locale's unfinished phrase is worth making, now: its model guesses cheaply and is idle. */
+    readonly guessable: (locale: string | undefined) => boolean;
+    /** Told whenever a status could have moved: a fetch's progress, a model loaded or let go. */
+    readonly subscribe: (listener: () => void) => () => void;
+    readonly close: () => void;
 }
 
-// Refusals the route answers with a status of their own; anything else is a plain 500.
+// Refusals the routes answer with a status of their own; anything else is a plain 500.
 export class SpeechUnprovisionedError extends Error {
     constructor() {
-        super("whisper-cli is not in this sandbox image: a one-time rebuild adds it");
+        super(`speech recognition has no runtime for ${process.platform}-${process.arch} in this sandbox`);
     }
 }
 export class SpeechModelNotReadyError extends Error {
@@ -50,71 +49,175 @@ export class SpeechModelNotReadyError extends Error {
     }
 }
 
+// What Whisper is known to write over silence and noise it was trained on subtitles of: the words of a video's last
+// frame, which no dictated phrase is. Matched whole, case and punctuation aside.
+const WHISPER_PHANTOMS = new Set([
+    "thank you",
+    "thanks for watching",
+    "thank you for watching",
+    "thank you very much",
+    "subtitles by the amaraorg community",
+    "dziękuję za oglądanie",
+    "dziękuje za oglądanie",
+    "untertitel im auftrag des zdf für funk 2017",
+    "sous-titres réalisés par la communauté damaraorg",
+    "продолжение следует",
+    "ご視聴ありがとうございました",
+    "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+]);
+
+const phantomKey = (text: string): string =>
+    text
+        .toLowerCase()
+        .replaceAll(/[.,!?;:"'„”«»…。、！？]/gu, "")
+        .replaceAll(/\s+/gu, " ")
+        .trim();
+
+// The words as a message would carry them: Whisper's bracketed narration of non-speech (`[BLANK_AUDIO]`, `(music)`) and
+// its phantom sign-offs are not something the person said.
+export const spokenText = (engine: SpeechEngine, raw: string): string => {
+    const text = raw.replaceAll(/\s+/gu, " ").trim();
+    if (engine !== "whisper") {
+        return text;
+    }
+    const words = text.replaceAll(/[[(][^\])]*[\])]/gu, "").trim();
+    return words === "" || WHISPER_PHANTOMS.has(phantomKey(words)) ? "" : words;
+};
+
+// Whether sherpa-onnx ships a binary for this machine; only a new image could change the answer.
+const runtimePresent = (): boolean => {
+    try {
+        const require = createRequire(import.meta.url);
+        createRequire(require.resolve("sherpa-onnx-node")).resolve(`sherpa-onnx-${process.platform}-${process.arch}/package.json`);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 export interface SpeechDeps {
     readonly workspaceRoot: string;
     readonly log: (message: string) => void;
-    readonly exec?: WhisperExec;
-    // Injectable for tests; defaults to HF's downloadFile, since plain HTTP fetches get 403'd by the CAS bridge.
-    readonly fetchModel?: (file: string) => Promise<Blob | null>;
+    // Injectable for tests: where the image bakes models, how files are fetched, the speech process, the runtime check.
+    readonly bakedDir?: string;
+    readonly fetch?: FetchLike;
+    readonly process?: (onChange: () => void) => SpeechProcess;
+    readonly provisioned?: () => boolean;
 }
 
-export const createSpeech = ({ workspaceRoot, log, exec, fetchModel }: SpeechDeps): Speech => {
-    // Under cache/, since the model is content-re-downloadable, like anything else the `derived` cache promises.
-    const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
-    const download = fetchModel ?? ((file: string) => downloadFile({ repo: WHISPER_MODEL_REPO, path: file }));
+export const createSpeech = ({
+    workspaceRoot,
+    log,
+    bakedDir = BAKED_SPEECH_MODELS_DIR,
+    fetch,
+    process: makeProcess,
+    provisioned,
+}: SpeechDeps): Speech => {
+    const listeners = new Set<() => void>();
+    const changed = (): void => {
+        for (const listener of listeners) {
+            listener();
+        }
+    };
+    // Under cache/, since a model is content that downloads again, like anything else the `derived` cache promises.
+    const store: ModelStore = createModelStore({
+        bakedDir,
+        cacheDir: statePath(workspaceRoot, ".intentic/local/cache/", "speech"),
+        log,
+        onChange: changed,
+        ...(fetch === undefined ? {} : { fetch }),
+    });
+    const speechProcess = makeProcess?.(changed) ?? createSpeechProcess({ log, onChange: changed });
 
-    // Cached per process: the binary only arrives via an image rebuild, which restarts the daemon anyway.
-    let provisioned: Promise<boolean> | undefined;
-    const isProvisioned = (): Promise<boolean> => (provisioned ??= whisperCliMissing(exec).then((missing) => !missing));
+    // whisper.cpp's model from before this engine: 1.6 GB per sandbox nothing reads any more.
+    void rm(statePath(workspaceRoot, ".intentic/local/cache/", "whisper"), { recursive: true, force: true }).catch((error: unknown) =>
+        log(`could not remove the retired whisper.cpp models: ${errorMessage(error)}`),
+    );
 
-    // One download regardless of callers; shares Discord voice's download directory, so either fetch serves both.
-    let downloading: Promise<void> | undefined;
-    const modelReady = (): Promise<boolean> => pathExists(modelPath);
-    const ensureModel = (): Promise<void> =>
-        (downloading ??= (async () => {
-            if (await modelReady()) {
-                return;
-            }
-            log(`downloading ${MODEL_FILE} (first voice use)`);
-            const blob = await download(MODEL_FILE);
-            if (blob === null) {
-                throw new Error(`speech model download failed: ${WHISPER_MODEL_REPO} has no ${MODEL_FILE}`);
-            }
-            // Staged, never grown in place: readiness is an existence check, which a partial model would pass.
-            await storeWhisperModel(modelPath, blob);
-        })()).catch((error) => {
-            // A failed download must not poison every later attempt; clearing the latch lets the next ask retry.
-            downloading = undefined;
-            throw error;
-        });
+    let present: boolean | undefined;
+    const isProvisioned = (): boolean => (present ??= (provisioned ?? runtimePresent)());
 
-    // One whisper-cli run at a time: transcription is CPU-bound and the sandbox is small; utterances queue.
-    const serialize = serialLock();
+    const specFor = (engine: SpeechEngine, dir: string, locale: string | undefined): RecognizerSpec => {
+        const language = engine === "whisper" ? speechLanguage(locale) : undefined;
+        return { engine, dir, threads: THREADS, ...(language === undefined ? {} : { language }) };
+    };
+
+    const statusOf = async (engine: SpeechEngine): Promise<SpeechStatus> => {
+        if (!isProvisioned()) {
+            return { provisioned: false, model: "absent", engine };
+        }
+        const model = await store.state(SPEECH_MODELS[engine]);
+        switch (model.state) {
+            case "ready":
+                return { provisioned: true, model: "ready", engine, loaded: speechProcess.loaded(engine) };
+            case "downloading":
+                return { provisioned: true, model: "downloading", engine, received: model.received, total: model.total };
+            case "failed":
+                return { provisioned: true, model: "failed", engine, error: model.error };
+            default:
+                return { provisioned: true, model: "absent", engine };
+        }
+    };
+
+    // Fetches in the background, reported through status and `subscribe`; a failure is the status's to tell.
+    const fetchInBackground = (engine: SpeechEngine): Promise<string | undefined> => store.ensure(SPEECH_MODELS[engine]).catch(() => undefined);
+
+    const hear = async (samples: Float32Array, locale: string | undefined): Promise<string> => {
+        if (!isProvisioned()) {
+            throw new SpeechUnprovisionedError();
+        }
+        const engine = speechEngineFor(locale);
+        const dir = await store.ensure(SPEECH_MODELS[engine]);
+        return spokenText(engine, await speechProcess.decode(specFor(engine, dir, locale), samples));
+    };
 
     return {
-        status: async () => {
-            if (!(await isProvisioned())) {
-                return { provisioned: false, model: "absent" };
+        status: async (locale) => {
+            const engine = speechEngineFor(locale);
+            const status = await statusOf(engine);
+            if (status.provisioned && status.model === "absent") {
+                void fetchInBackground(engine);
+                return { ...status, model: "downloading", received: 0, total: modelBytes(SPEECH_MODELS[engine]) };
             }
-            if (await modelReady()) {
-                return { provisioned: true, model: "ready" };
+            return status;
+        },
+        prepare: async (locale) => {
+            const engine = speechEngineFor(locale);
+            if (isProvisioned()) {
+                void (async () => {
+                    const dir = await fetchInBackground(engine);
+                    if (dir === undefined) {
+                        return;
+                    }
+                    try {
+                        await speechProcess.load(specFor(engine, dir, locale));
+                    } catch (error) {
+                        log(`loading the ${engine} speech model failed: ${errorMessage(error)}`);
+                    }
+                })();
             }
-            // Fires the download and answers immediately; the poll that asked is the poll that will see "ready".
-            ensureModel().catch((error) => log(`speech model download failed: ${String(error)}`));
-            return { provisioned: true, model: "downloading" };
+            return statusOf(engine);
         },
         transcribe: async (wav, locale) => {
-            if (!(await isProvisioned())) {
+            if (!isProvisioned()) {
                 throw new SpeechUnprovisionedError();
             }
-            // Browser only records after status says "ready"; an absent model here is a race, answered as such.
-            if (!(await modelReady())) {
+            const engine = speechEngineFor(locale);
+            if ((await store.state(SPEECH_MODELS[engine])).state !== "ready") {
+                void fetchInBackground(engine);
                 throw new SpeechModelNotReadyError();
             }
-            return serialize(
-                async () =>
-                    cleanTranscription(await runWhisper(wav, { model: modelPath, language: whisperLanguage(locale), threads: THREADS, exec })) ?? "",
-            );
+            return hear(wavSamples(wav), locale);
         },
+        hear,
+        guessable: (locale) => {
+            const engine = speechEngineFor(locale);
+            return SPEECH_MODELS[engine].partials && speechProcess.loaded(engine) && !speechProcess.busy();
+        },
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        close: () => speechProcess.close(),
     };
 };

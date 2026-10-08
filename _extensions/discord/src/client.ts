@@ -4,7 +4,6 @@ import { type Channel, Client, DiscordAPIError, GatewayIntentBits, Partials } fr
 export interface DiscordConnectorConfig {
     readonly provider: string;
     readonly botToken: string;
-    readonly voiceModel?: string;
     readonly voiceLanguage?: string;
 }
 

@@ -1,5 +1,4 @@
-import type { WhisperExec } from "@intentic/base/whisper";
-import { createTranscriber, to16kMonoPcm, wavOf, WHISPER_MISSING } from "./audio.js";
+import { createTranscriber, type Transcribe, to16kMonoPcm, wavOf } from "./audio.js";
 
 // 48kHz stereo s16le frames of a constant sample value.
 const stereoFrames = (frames: number, value: number): Buffer => {
@@ -9,11 +8,6 @@ const stereoFrames = (frames: number, value: number): Buffer => {
     }
     return buffer;
 };
-
-test("the missing-whisper answer routes the agent to the owner-run rebuild, not to proposing an overlay itself", () => {
-    expect(WHISPER_MISSING).toContain("Environment card");
-    expect(WHISPER_MISSING).toContain("rebuild");
-});
 
 test("to16kMonoPcm downmixes stereo and decimates 3:1", () => {
     const pcm = to16kMonoPcm(stereoFrames(6, 1000));
@@ -36,40 +30,39 @@ test("wavOf emits a valid 16kHz mono s16le RIFF header", () => {
     expect(wav.readUInt32LE(40)).toBe(data.length);
 });
 
-test("the transcriber serializes whisper runs, drops blanks, reports lines live, and returns them in speech order", async () => {
-    const outputs = ["second utterance", "[BLANK_AUDIO]", "first utterance"];
+test("the transcriber hears one utterance at a time, drops blanks, reports lines live, and returns them in speech order", async () => {
+    const outputs = ["second utterance", "  ", "first utterance"];
     let active = 0;
     let maxActive = 0;
-    const exec: WhisperExec = async (command, args) => {
-        expect(command).toBe("whisper-cli");
-        expect(args.slice(0, 2)).toEqual(["-m", "/model.bin"]);
-        // whisper-cli defaults to -l en: the language must always be passed explicitly.
-        expect(args.slice(4, 6)).toEqual(["-l", "pl"]);
+    const transcribe: Transcribe = async (wav, language) => {
+        // The daemon reads a 16 kHz mono WAV, in the connector's configured language.
+        expect(wav.toString("ascii", 0, 4)).toBe("RIFF");
+        expect(wav.readUInt32LE(24)).toBe(16_000);
+        expect(language).toBe("pl");
         active += 1;
         maxActive = Math.max(maxActive, active);
         await new Promise((resolve) => setTimeout(resolve, 10));
         active -= 1;
-        return { stdout: outputs.shift() as string };
+        return outputs.shift() as string;
     };
     const startedAt = 1_000_000;
     const errors: unknown[] = [];
     const onLineCalls: { sorted: string[]; newLine: string }[] = [];
     const transcriber = createTranscriber(
-        "/model.bin",
+        transcribe,
         "pl",
         startedAt,
         async (sorted, newLine) => {
             onLineCalls.push({ sorted: sorted.map(({ line }) => line), newLine });
         },
         (error) => errors.push(error),
-        exec,
     );
     // Pushed out of speech order (utterance ends don't arrive chronologically): flush sorts by start.
     transcriber.push("bob", startedAt + 65_000, stereoFrames(6, 1));
     transcriber.push("alice", startedAt + 30_000, stereoFrames(6, 1));
     transcriber.push("alice", startedAt + 5_000, stereoFrames(6, 1));
     const lines = await transcriber.flush();
-    expect(maxActive).toBe(1); // one whisper-cli at a time
+    expect(maxActive).toBe(1); // one utterance at a time
     expect(errors).toEqual([]);
     expect(lines.map(({ line }) => line)).toEqual(["[00:05] alice: first utterance", "[01:05] bob: second utterance"]);
     expect(transcriber.transcribed()).toBe(2);

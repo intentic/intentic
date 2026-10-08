@@ -1,176 +1,192 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { waitFor } from "@intentic/testing/bun";
-import type { WhisperExec } from "@intentic/base/whisper";
-import { createSpeech, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
+import type { SpeechEngine } from "@intentic/sandbox-contract";
+import type { FetchLike } from "./model-store.js";
+import type { SpeechProcess } from "./speech-engine.js";
+import type { RecognizerSpec } from "./speech-recognizers.js";
+import { SPEECH_MODELS } from "./speech-models.js";
+import { createSpeech, type SpeechDeps, SpeechModelNotReadyError, SpeechUnprovisionedError, spokenText } from "./transcribe.js";
 
-// Speech engine over its two injected seams (exec, model fetch); the same shape the Discord voice transcriber pins its
-// whisper conventions with (_extensions/discord/src/audio.test.ts).
+/* The dictation facade over its seams: a fake speech process standing in for the models, a fake Hugging Face, and a
+   real disk. What it pins is the routing (which model hears which locale), where a model is looked for, how its
+   readiness is told, and what of a model's output counts as words. */
 
-const enoent: WhisperExec = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
-
-// A workspace root, with or without the model already on disk.
-const rootWith = (model: boolean): string => {
-    const root = mkdtempSync(join(tmpdir(), "speech-test-"));
-    if (model) {
-        mkdirSync(join(root, STATE_DIR, "local", "cache", "whisper"), { recursive: true });
-        writeFileSync(join(root, STATE_DIR, "local", "cache", "whisper", "ggml-large-v3-turbo.bin"), "model bytes");
-    }
-    return root;
-};
-
-const noFetch = (): Promise<Blob | null> => Promise.reject(new Error("must not download"));
-
-// Model bytes arrive under the test's control, mirroring the real download: the fetch resolves quickly, then the stream
-// flows for minutes. A Blob handing over all its bytes at once can't show what the browser sees during that window.
-const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: () => void } => {
-    let controller: ReadableStreamDefaultController<Uint8Array>;
-    const stream = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) });
-    return {
-        blob: { stream: () => stream } as unknown as Blob,
-        push: (bytes) => controller.enqueue(new Uint8Array(bytes)),
-        finish: () => controller.close(),
-    };
-};
-
-// What's on disk in the model's directory, by name: the staged download and the finished model are told apart the same
-// way the engine's existence check does.
-const modelDir = (root: string): string => join(root, STATE_DIR, "local", "cache", "whisper");
-const bytesOnDisk = (root: string, name: string): number => {
-    const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-large-v3-turbo.bin" : entry.endsWith(".part")));
-    return found.reduce((total, entry) => total + statSync(join(modelDir(root), entry)).size, 0);
-};
-
-test("whisperLanguage extracts the primary subtag and falls back to auto-detection", () => {
-    expect(whisperLanguage("en-US")).toBe("en");
-    expect(whisperLanguage("pl")).toBe("pl");
-    expect(whisperLanguage("zh-Hans-CN")).toBe("zh");
-    // Anything whisper-cli would choke on becomes `auto`, never an accidental English default.
-    expect(whisperLanguage(undefined)).toBe("auto");
-    expect(whisperLanguage("")).toBe("auto");
-    expect(whisperLanguage("x!")).toBe("auto");
-});
-
-test("an image without whisper-cli reads unprovisioned and refuses to transcribe", async () => {
-    const speech = createSpeech({ workspaceRoot: rootWith(true), log: () => {}, exec: enoent, fetchModel: noFetch });
-    expect(await speech.status()).toEqual({ provisioned: false, model: "absent" });
-    await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechUnprovisionedError);
-});
-
-test("a status poll on an absent model starts ONE download and reports ready once it lands", async () => {
-    let fetches = 0;
-    let release: (blob: Blob | null) => void = () => {};
-    const gate = new Promise<Blob | null>((resolve) => (release = resolve));
-    // The download is entered only after the engine's own `stat` of the absent model resolves, and that stat and the
-    // next poll's identical one complete in whichever order the fs threadpool hands back: a busy box returns the second
-    // poll first often enough that reading `fetches` off it saw 0. Each poll decides whether to fetch synchronously,
-    // before it returns, so once both polls have returned AND the first fetch has been entered the count cannot move
-    // again — which is the moment the "one download, not one per poll" claim is answerable.
-    let entered: () => void = () => {};
-    const firstFetch = new Promise<void>((resolve) => (entered = resolve));
-    const speech = createSpeech({
-        workspaceRoot: rootWith(false),
-        log: () => {},
-        exec: () => Promise.resolve({ stdout: "usage: whisper-cli" }),
-        fetchModel: () => {
-            fetches += 1;
-            entered();
-            return gate;
+// A process that "hears" whatever its test says, and records what it was asked with.
+const fakeProcess = (heard: (spec: RecognizerSpec, samples: Float32Array) => string = () => "words") => {
+    const asked: { readonly kind: "load" | "decode"; readonly spec: RecognizerSpec }[] = [];
+    const inMemory = new Set<SpeechEngine>();
+    const make = (onChange: () => void): SpeechProcess => ({
+        load: async (spec) => {
+            asked.push({ kind: "load", spec });
+            inMemory.add(spec.engine);
+            onChange();
         },
+        decode: async (spec, samples) => {
+            asked.push({ kind: "decode", spec });
+            inMemory.add(spec.engine);
+            return heard(spec, samples);
+        },
+        loaded: (engine) => inMemory.has(engine),
+        busy: () => false,
+        close: () => inMemory.clear(),
     });
-    // The latch keeps concurrent polls to one download, not one per poll.
-    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
-    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
-    // Bounded by the suite's hang detector, not by a wait of its own: an engine that never downloads has no moment to
-    // count at, and that is the failure, not a slow one.
-    await firstFetch;
-    expect(fetches).toBe(1);
-    // Transcribing mid-download is answered as "wait," not held open for minutes.
-    await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
-    release(new Blob(["model bytes"]));
-    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
+    return { asked, make };
+};
+
+// A baked image directory holding the named engines' files, at their pinned sizes (the store checks only size there).
+const bakedWith = (...engines: SpeechEngine[]): string => {
+    const dir = mkdtempSync(join(tmpdir(), "speech-baked-"));
+    for (const engine of engines) {
+        mkdirSync(join(dir, engine), { recursive: true });
+        for (const file of SPEECH_MODELS[engine].files) {
+            writeFileSync(join(dir, engine, file.path), Buffer.alloc(file.size));
+        }
+    }
+    return dir;
+};
+
+const noFetch: FetchLike = () => Promise.reject(new Error("must not download"));
+
+const speechWith = (overrides: Partial<SpeechDeps> & { readonly process: NonNullable<SpeechDeps["process"]> }) =>
+    createSpeech({
+        workspaceRoot: mkdtempSync(join(tmpdir(), "speech-root-")),
+        log: () => {},
+        bakedDir: bakedWith("parakeet"),
+        fetch: noFetch,
+        provisioned: () => true,
+        ...overrides,
+    });
+
+// A minimal 16 kHz mono s16le WAV of `samples` silent samples.
+const wav = (samples: number): Buffer => {
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0);
+    header.writeUInt32LE(36 + samples * 2, 4);
+    header.write("WAVE", 8);
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(16_000, 24);
+    header.writeUInt32LE(32_000, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write("data", 36);
+    header.writeUInt32LE(samples * 2, 40);
+    return Buffer.concat([header, Buffer.alloc(samples * 2)]);
+};
+
+test("Parakeet hears its 25 languages and anything unreadable; Whisper hears the rest, held to the asked language", async () => {
+    const fake = fakeProcess();
+    const speech = speechWith({ process: fake.make, bakedDir: bakedWith("parakeet", "whisper") });
+    for (const locale of ["pl-PL", "en-US", "de", "uk-UA", undefined, "", "*"]) {
+        await speech.hear(new Float32Array(16), locale);
+    }
+    await speech.hear(new Float32Array(16), "ja-JP");
+    await speech.hear(new Float32Array(16), "zh-Hans-CN");
+    expect(fake.asked.map(({ spec }) => [spec.engine, spec.language])).toEqual([
+        ...Array.from({ length: 7 }, () => ["parakeet", undefined]),
+        ["whisper", "ja"],
+        ["whisper", "zh"],
+    ]);
+    // Each from its own baked directory, on a bounded share of the cores.
+    expect(fake.asked[0]?.spec.dir.endsWith("/parakeet")).toBe(true);
+    expect(fake.asked[7]?.spec.dir.endsWith("/whisper")).toBe(true);
+    expect(fake.asked.every(({ spec }) => spec.threads >= 1 && spec.threads <= 4)).toBe(true);
 });
 
-test("a model still streaming in never reads ready: it takes its place only once whole", async () => {
-    const root = rootWith(false);
-    const { blob, push, finish } = streamingModel();
-    const speech = createSpeech({
+test("a baked model is ready at once, and loaded only once something asked for it", async () => {
+    const fake = fakeProcess();
+    const speech = speechWith({ process: fake.make });
+    expect(await speech.status("pl-PL")).toEqual({ provisioned: true, model: "ready", engine: "parakeet", loaded: false });
+    expect(await speech.prepare("pl-PL")).toMatchObject({ model: "ready", engine: "parakeet" });
+    await waitFor(() => expect(fake.asked).toEqual([{ kind: "load", spec: expect.objectContaining({ engine: "parakeet" }) }]));
+    expect(await speech.status("pl-PL")).toMatchObject({ model: "ready", loaded: true });
+});
+
+test("an absent model starts fetching on the first status, tells its progress, and the transcribe door says wait meanwhile", async () => {
+    const tokens = Buffer.from("t");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // Whisper is not baked: its files come from a Hugging Face that holds the answer until the test lets it go, and
+    // answers bytes the digest check will refuse, which is fine here: the test is about the waiting.
+    const fetchHeld: FetchLike = async () => {
+        await gate;
+        return new Response(tokens, { status: 200 });
+    };
+    const fake = fakeProcess();
+    const speech = speechWith({ process: fake.make, fetch: fetchHeld });
+    const changes: number[] = [];
+    speech.subscribe(() => changes.push(Date.now()));
+    expect(await speech.status("ja")).toMatchObject({ model: "downloading", engine: "whisper", received: 0, total: expect.any(Number) });
+    await waitFor(async () => expect(await speech.status("ja")).toMatchObject({ model: "downloading", received: 0 }));
+    await expect(speech.transcribe(wav(160), "ja")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
+    release();
+    await waitFor(async () => expect((await speech.status("ja")).model).toBe("failed"));
+    expect((await speech.status("ja")).error).toContain("arrived corrupt");
+    expect(changes.length).toBeGreaterThan(0);
+    // A failed fetch is not re-armed by every poll: retrying is the person's call (prepare), not a loop.
+    expect((await speech.status("ja")).model).toBe("failed");
+});
+
+test("the WAV door reads the utterance's samples and answers the model's words", async () => {
+    let heardSamples = 0;
+    const fake = fakeProcess((_spec, samples) => {
+        heardSamples = samples.length;
+        return "  dzień   dobry ";
+    });
+    const speech = speechWith({ process: fake.make });
+    expect(await speech.transcribe(wav(1600), "pl")).toBe("dzień dobry");
+    expect(heardSamples).toBe(1600);
+});
+
+test("a machine sherpa-onnx ships no binary for is unprovisioned, said on status and refused on transcribe", async () => {
+    const fake = fakeProcess();
+    const speech = speechWith({ process: fake.make, provisioned: () => false });
+    expect(await speech.status("en")).toEqual({ provisioned: false, model: "absent", engine: "parakeet" });
+    await expect(speech.transcribe(wav(16), "en")).rejects.toBeInstanceOf(SpeechUnprovisionedError);
+    expect(fake.asked).toEqual([]);
+});
+
+test("whisper.cpp's retired model directory is cleared away", async () => {
+    const root = mkdtempSync(join(tmpdir(), "speech-root-"));
+    const old = join(root, STATE_DIR, "local", "cache", "whisper");
+    mkdirSync(old, { recursive: true });
+    writeFileSync(join(old, "ggml-large-v3-turbo.bin"), "old model");
+    createSpeech({
         workspaceRoot: root,
         log: () => {},
-        exec: () => Promise.resolve({ stdout: "usage: whisper-cli" }),
-        fetchModel: () => Promise.resolve(blob),
+        bakedDir: bakedWith("parakeet"),
+        fetch: noFetch,
+        provisioned: () => true,
+        process: fakeProcess().make,
     });
-    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
-
-    // Grown in place, the file would exist from the download's first byte and read as ready, letting the browser record
-    // against a half-written model it can only report as "try again".
-    push(4096);
-    await waitFor(() => expect(bytesOnDisk(root, "staged")).toBeGreaterThan(0));
-    expect(bytesOnDisk(root, "model")).toBe(0);
-    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
-    await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
-
-    finish();
-    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
-    expect(bytesOnDisk(root, "model")).toBe(4096);
-    expect(bytesOnDisk(root, "staged")).toBe(0);
+    await waitFor(() => expect(existsSync(old)).toBe(false));
 });
 
-test("a failed download does not poison later polls: the next status retries it", async () => {
-    let fetches = 0;
-    const speech = createSpeech({
-        workspaceRoot: rootWith(false),
-        log: () => {},
-        exec: () => Promise.resolve({ stdout: "usage: whisper-cli" }),
-        fetchModel: () => {
-            fetches += 1;
-            return fetches === 1 ? Promise.reject(new Error("network down")) : Promise.resolve(new Blob(["model bytes"]));
-        },
-    });
-    expect((await speech.status()).model).toBe("downloading");
-    await waitFor(() => expect(fetches).toBe(1));
-    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
-    expect(fetches).toBe(2);
+test("words are what the model wrote, less Whisper's narration of silence and its phantom sign-offs", () => {
+    expect(spokenText("parakeet", "  Dodaj   test. ")).toBe("Dodaj test.");
+    // Parakeet writes no narration, so a bracket from it is something the person said.
+    expect(spokenText("parakeet", "[uwaga]")).toBe("[uwaga]");
+    expect(spokenText("whisper", "[BLANK_AUDIO]")).toBe("");
+    expect(spokenText("whisper", " (music) ")).toBe("");
+    expect(spokenText("whisper", "Dziękuje za oglądanie.")).toBe("");
+    expect(spokenText("whisper", "Thanks for watching!")).toBe("");
+    expect(spokenText("whisper", "(music) Hello there")).toBe("Hello there");
+    expect(spokenText("whisper", "Thanks for watching the build, it passed")).toBe("Thanks for watching the build, it passed");
 });
 
-test("transcribe serializes whisper runs, passes the language explicitly, and answers silence as empty text", async () => {
-    // Outputs are keyed by each utterance's own bytes, not call order, since which of two ready calls enters the queue
-    // first is the scheduler's call and flips under load. This also pins that each caller gets its own utterance's
-    // text, not whichever run finished in its place.
-    const outputs: Record<string, string> = { RIFF1: "first words", RIFF2: "[BLANK_AUDIO]" };
-    const wavPaths: string[] = [];
-    const wavBytes: string[] = [];
-    let active = 0;
-    let maxActive = 0;
-    const exec: WhisperExec = async (command, args) => {
-        if (args[0] === "--help") {
-            return { stdout: "usage: whisper-cli" };
-        }
-        expect(command).toBe("whisper-cli");
-        // whisper-cli defaults to `-l en`; the language must always be passed explicitly.
-        expect(args).toContain("-l");
-        expect(args[args.indexOf("-l") + 1]).toBe("pl");
-        const wavPath = args[args.indexOf("-f") + 1];
-        if (wavPath === undefined) {
-            throw new Error("whisper-cli was not given an utterance path");
-        }
-        wavPaths.push(wavPath);
-        const spoken = readFileSync(wavPath, "utf8");
-        wavBytes.push(spoken);
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        active -= 1;
-        return { stdout: outputs[spoken] as string };
-    };
-    const speech = createSpeech({ workspaceRoot: rootWith(true), log: () => {}, exec, fetchModel: noFetch });
-    const [first, second] = await Promise.all([speech.transcribe(Buffer.from("RIFF1"), "pl-PL"), speech.transcribe(Buffer.from("RIFF2"), "pl-PL")]);
-    expect(maxActive).toBe(1);
-    expect(first).toBe("first words");
-    expect(second).toBe(""); // Noise-only output is "nothing said," not an error.
-    expect(wavBytes.toSorted()).toEqual(["RIFF1", "RIFF2"]);
-    expect(new Set(wavPaths.map(dirname)).size).toBe(2);
-    expect(wavPaths.every((path) => !existsSync(dirname(path)))).toBe(true);
+test("the pinned model files are the ones the recognizer config names", () => {
+    const names = (engine: SpeechEngine) => SPEECH_MODELS[engine].files.map((file) => file.path).toSorted();
+    expect(names("parakeet")).toEqual(["decoder.int8.onnx", "encoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"]);
+    expect(names("whisper")).toEqual(["turbo-decoder.int8.onnx", "turbo-encoder.int8.onnx", "turbo-tokens.txt"]);
+    for (const model of Object.values(SPEECH_MODELS)) {
+        expect(model.revision).toMatch(/^[0-9a-f]{40}$/u);
+        expect(model.files.every((file) => /^[0-9a-f]{64}$/u.test(file.sha256))).toBe(true);
+    }
+    expect(createHash("sha256").update("").digest("hex")).not.toBe(SPEECH_MODELS.parakeet.files[0]?.sha256);
 });

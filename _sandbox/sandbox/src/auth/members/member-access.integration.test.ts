@@ -16,7 +16,15 @@ const appAs = (role: MemberRole): Hono<AppEnv> =>
             auth: { authorize: async () => proven(`member@example.com`, role), authorizeOwner: rejectForbidden },
             // Admission is the whole question here, but a row that reaches its handler runs it: stubbed so the dictation
             // row answers instead of reporting an unstubbed service.
-            speech: { transcribe: async () => `spoken`, status: async () => ({ provisioned: true, model: `ready` }) },
+            speech: {
+                transcribe: async () => `spoken`,
+                hear: async () => `spoken`,
+                status: async () => ({ provisioned: true, model: `ready` }),
+                prepare: async () => ({ provisioned: true, model: `ready` }),
+                guessable: () => false,
+                subscribe: () => () => {},
+                close: () => {},
+            },
         }),
     );
 

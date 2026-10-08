@@ -8,6 +8,9 @@
     "engines": {
         "intentic": "^2.0.0"
     },
+    "permissions": {
+        "daemon": ["POST /speech/transcribe"]
+    },
     "contributes": {
         "listener": {
             "provider": "discord",
@@ -62,7 +65,7 @@
                     "logo": "discord",
                     "description": "Read and post in your Discord server.",
                     "category": "communication",
-                    "hint": "Voice transcription runs a local whisper model: bigger is more accurate, slower on CPU.",
+                    "hint": "Voice calls are transcribed on this sandbox, by the same speech engine as the composer's microphone.",
                     "guide": {
                         "url": "https://discord.com/developers/applications",
                         "linkLabel": "Open the Discord developer portal",
@@ -82,33 +85,6 @@
                         "secret": true
                     },
                     {
-                        "key": "voiceModel",
-                        "label": "Voice model",
-                        "default": "medium",
-                        "options": [
-                            {
-                                "value": "tiny",
-                                "label": "Tiny"
-                            },
-                            {
-                                "value": "base",
-                                "label": "Base"
-                            },
-                            {
-                                "value": "small",
-                                "label": "Small"
-                            },
-                            {
-                                "value": "medium",
-                                "label": "Medium"
-                            },
-                            {
-                                "value": "large-v3-turbo",
-                                "label": "Large"
-                            }
-                        ]
-                    },
-                    {
                         "key": "voiceLanguage",
                         "label": "Voice language",
                         "placeholder": "auto",
@@ -119,7 +95,6 @@
                     "DISCORD_BOT_TOKEN": "${botToken}"
                 },
                 "skill": "skills/discord/SKILL.md",
-                "pack": "whisper",
                 "broker": {
                     "routes": [
                         {

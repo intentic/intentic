@@ -47,10 +47,9 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 # connected machines, with sshpass -f for the password-auth ones. iproute2 gives `ip`/`ss` diagnostics.
 # Heavy or privilege-coupled capability tools (WireGuard) are NOT baked here — each capability carries a
 # Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable (see
-# capabilities/capability.ts `fragment`), applied by an owner-run rebuild. whisper.cpp graduated out of that
-# set into the `whisper` feature pack (composer voice input needs it on every standard image); Discord's
-# connector NAMES that pack rather than shipping its own copy of the build, so a standard image composes
-# nothing for it (see the pack's own header).
+# capabilities/capability.ts `fragment`), applied by an owner-run rebuild. Speech-to-text is not one of them:
+# its runtime is the daemon's own dependency (sherpa-onnx-node), and the standard image's `speech` pack bakes
+# the model, so the composer's microphone and Discord's voice calls need nothing composed.
 # python3 + make + g++ are the node-gyp toolchain: a runtime `pnpm install` (ensure-intent.ts, scaffold
 # inject-template.ts, or a dev in /work) compiles any native dep that ships no prebuild for this platform.
 # Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
@@ -115,8 +114,7 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # and git turns that challenge into a username prompt that a build with no tty cannot answer — `could not read
 # Username for 'https://github.com'`, which is what took the `images` job down. The ref advertisement answers
 # 200 first, so the clone looks alive right up to the failure. Nothing here wanted the history anyway; --depth=1
-# said so, and neither directory is a repo the sandbox updates (omz's own updater is disabled below). Whisper's
-# pack fragment carries the same note for the same reason.
+# said so, and neither directory is a repo the sandbox updates (omz's own updater is disabled below).
 #
 # THE HISTORY LIVES ON THE VOLUME, NOT IN THE CONTAINER. zsh-autosuggestions' default strategy is `history`: it
 # can only ghost-suggest what is in $HISTFILE, and oh-my-zsh leaves that at ~/.zsh_history — inside /root, the

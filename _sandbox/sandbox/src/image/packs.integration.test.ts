@@ -24,7 +24,7 @@ test("profiles name real packs, and placement/overlayability inference matches e
     for (const profile of Object.values(profiles)) {
         expect(profile, "no profile may bake the cursor pack: its licence grants no redistribution").not.toContain("cursor");
     }
-    for (const name of ["semantic", "messaging"]) {
+    for (const name of ["semantic", "messaging", "speech"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
         expect(byName.get(name)?.postTrees, `${name} must splice below the tree COPYs`).toBe(true);
     }

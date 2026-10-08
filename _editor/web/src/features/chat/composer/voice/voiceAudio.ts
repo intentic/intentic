@@ -1,4 +1,4 @@
-// Pure audio half of composer voice input: resampling, WAV framing, and the silence segmenter that turns a mic
+// Pure audio half of composer voice input: resampling, PCM and WAV framing, and the silence segmenter that turns a mic
 // stream into discrete utterances. No DOM, no refs; runs under the node test environment as plain functions. Wire
 // format is 16kHz mono s16le throughout, normalized here at the earliest point.
 
@@ -22,8 +22,20 @@ export const resampleTo16k = (samples: Float32Array, inputRate: number): Float32
     return out;
 };
 
-// Minimal RIFF/WAVE framing of 16kHz mono samples as s16le, exactly what whisper-cli expects. Floats clamp to
+// 16kHz mono samples as s16le, the live stream's binary frames (schemas/speech.ts in the contract). Floats clamp to
 // [-1, 1] first to avoid integer wraparound from a hot microphone.
+export const pcm16Of = (samples: Float32Array): ArrayBuffer => {
+    const bytes = new ArrayBuffer(samples.length * 2);
+    const view = new DataView(bytes);
+    for (let i = 0; i < samples.length; i += 1) {
+        const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
+        view.setInt16(i * 2, Math.round(clamped * 32_767), true);
+    }
+    return bytes;
+};
+
+// Minimal RIFF/WAVE framing of 16kHz mono samples as s16le, what the daemon's POST /speech/transcribe reads, for a
+// daemon older than the live stream.
 export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
     const bytes = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(bytes);
@@ -58,7 +70,9 @@ export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
 // - Pre-roll: a short ring buffered while idle keeps the first syllable from being cut off.
 // - Minimum speech: sub-blip segments (a cough, a key click) are dropped rather than sent.
 // - Trailing-silence trim: the pause that closed the segment is trimmed off before sending.
-// - Hard cap: matches the daemon's MAX_UTTERANCE_WAV_BYTES; a monologue is cut and sent rather than grown unbounded.
+// - Hard cap: matches the daemon's MAX_SPEECH_SAMPLES; a monologue is cut and sent rather than grown unbounded.
+// - Streamed as it goes: `begin` hands over the pre-roll as the segment opens and `audio` each frame after, so the
+//   daemon can guess at a phrase still being spoken; `end` hands over the whole phrase, trimmed, and `drop` a blip.
 export interface SegmenterTuning {
     readonly startThreshold: number;
     readonly sustainThreshold: number;
@@ -86,6 +100,18 @@ export interface Segmenter {
     readonly discard: () => void;
 }
 
+/** What a segment's life looks like from outside, as it happens. Only `end` is required. */
+export interface SegmentEvents {
+    /** A segment opened: the pre-roll and the frame that opened it. */
+    readonly begin?: (opening: Float32Array) => void;
+    /** One more frame of the open segment. */
+    readonly audio?: (frame: Float32Array) => void;
+    /** The segment closed as speech: all of it, its closing pause trimmed, so the first `samples.length` are kept. */
+    readonly end: (samples: Float32Array) => void;
+    /** The segment closed as a blip, or was discarded mid-speech: not a message. */
+    readonly drop?: () => void;
+}
+
 const rmsOf = (frame: Float32Array): number => {
     let sum = 0;
     for (let i = 0; i < frame.length; i += 1) {
@@ -105,7 +131,8 @@ const concat = (frames: readonly Float32Array[]): Float32Array => {
     return out;
 };
 
-export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tuning: Partial<SegmenterTuning> = {}): Segmenter => {
+export const createSegmenter = (listener: SegmentEvents | ((samples: Float32Array) => void), tuning: Partial<SegmenterTuning> = {}): Segmenter => {
+    const events: SegmentEvents = typeof listener === `function` ? { end: listener } : listener;
     const config = { ...SEGMENTER_DEFAULTS, ...tuning };
     const msOf = (samples: number): number => (samples / TARGET_RATE) * 1000;
 
@@ -132,7 +159,9 @@ export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tu
         const voiced = voicedMs;
         reset();
         if (voiced >= config.minSpeechMs) {
-            onUtterance(samples);
+            events.end(samples);
+        } else {
+            events.drop?.();
         }
     };
 
@@ -147,6 +176,7 @@ export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tu
                 if (level >= config.startThreshold) {
                     speaking = true;
                     voicedMs = frameMs;
+                    events.begin?.(concat(frames));
                 } else {
                     while (frames.length > 1 && framesMs - msOf(frames[0]?.length ?? 0) >= config.prerollMs) {
                         framesMs -= msOf(frames.shift()?.length ?? 0);
@@ -156,6 +186,7 @@ export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tu
             }
             frames.push(frame);
             framesMs += frameMs;
+            events.audio?.(frame);
             if (level >= config.sustainThreshold) {
                 silenceTailMs = 0;
                 voicedMs += frameMs;
@@ -167,6 +198,11 @@ export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tu
             }
             return level;
         },
-        discard: reset,
+        discard: () => {
+            if (speaking) {
+                events.drop?.();
+            }
+            reset();
+        },
     };
 };

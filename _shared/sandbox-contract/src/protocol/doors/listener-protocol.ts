@@ -9,7 +9,9 @@ import { rawRouteUrl } from "../raw/raw-routes.js";
 // The path of one of the four listener routes for a provider, built from RAW_ROUTES so the gateway and the daemon
 // cannot spell it two ways.
 export const listenerRouteUrl = (route: "state" | "dispatch" | "failure" | "status", provider: string): string =>
-    route === "state" ? rawRouteUrl("GET /listeners/{provider}/state", { provider }) : rawRouteUrl(`POST /listeners/{provider}/${route}`, { provider });
+    route === "state"
+        ? rawRouteUrl("GET /listeners/{provider}/state", { provider })
+        : rawRouteUrl(`POST /listeners/{provider}/${route}`, { provider });
 
 // The reconcile feed GET /listeners/<provider>/state answers: the enabled automations listening to this provider and
 // the connectors the asking extension contributes, each with its whole config, secrets included, since the gateway
@@ -86,10 +88,9 @@ export const ListenerPairingSchema = z.object({
 export type ListenerPairing = z.infer<typeof ListenerPairingSchema>;
 
 // Push-based status: a gateway POSTs its connection/voice snapshot to /listeners/<provider>/status, since the daemon
-// holds no provider connection to probe itself. Extends ActivityStatus with whisper's voice-pending flag and each
-// unpaired capability's pairing ceremony by id.
+// holds no provider connection to probe itself. Extends ActivityStatus with each unpaired capability's pairing ceremony
+// by id.
 export const ListenerStatusSchema = ActivityStatusSchema.extend({
-    whisperReady: z.boolean().optional(),
     pairing: z.record(z.string(), ListenerPairingSchema).optional(),
 });
 export type ListenerStatus = z.infer<typeof ListenerStatusSchema>;

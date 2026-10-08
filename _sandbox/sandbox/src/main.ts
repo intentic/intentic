@@ -168,6 +168,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         .start()
         .catch((error: unknown) => logger.warn({ err: error }, "ssh agent: could not start; ssh keys are unusable until restart"));
     shutdown.push(() => services.sshAgent.stop());
+    // The speech process holds a model's gigabyte; it would exit with the daemon's IPC anyway, this just says so first.
+    shutdown.push(() => services.speech.close());
     // Pool machine preparing its volume for a future owner (prewarm.ts); nothing below branches on it except the very
     // end. Container-only: a guest or local folder has no volume to prepare.
     const prewarm = config.sandbox.prewarm && role.container;

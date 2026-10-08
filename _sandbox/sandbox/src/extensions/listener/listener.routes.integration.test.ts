@@ -156,7 +156,6 @@ test("status ingests the gateway snapshot for the activity probe to read, and re
     const snapshot = {
         connections: [{ capabilityId: "discord", provider: "discord", gateway: "ready" }],
         voice: { channelId: "c1", channelName: "General", startedAt: 1, participants: ["alice"] },
-        whisperReady: true,
     };
     expect((await postJson(app, "/listeners/discord/status", snapshot)).status).toBe(200);
     expect(listenerStatus("discord", Date.now())).toMatchObject(snapshot);

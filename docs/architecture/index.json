@@ -3372,7 +3372,7 @@
         },
         {
           "path": "_extensions/discord/src/audio.ts",
-          "what": "PCM resampling, WAV framing and the serialized whisper queue."
+          "what": "PCM resampling, WAV framing and the serialized transcription queue."
         },
         {
           "path": "_extensions/discord/src/cli.ts",

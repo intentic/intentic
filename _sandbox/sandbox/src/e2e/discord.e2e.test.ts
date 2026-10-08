@@ -1,25 +1,24 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { downloadFile } from "@huggingface/hub";
-import { hasOfficialBase, sandboxContract } from "@intentic/sandbox-contract";
+import { sandboxContract } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { StartedTestContainer } from "testcontainers";
-import { daemonUrl, dockerBuild, dockerRmi, dockerRun, startSandboxContainer, until } from "../harness/e2e-harness.js";
+import { daemonUrl, startSandboxContainer, until } from "../harness/e2e-harness.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-// Tier-3 real Discord + Whisper e2e: a real message from a harness bot reaches the gateway and its automation's wake
-// queues for approval; whisper is proven by building the composed overlay and running whisper-cli on real speech.
+// Tier-3 real Discord + voice e2e: a real message from a harness bot reaches the gateway and its automation's wake
+// queues for approval; voice transcription is proven by the sandbox's own speech engine hearing real speech through
+// the door the gateway's voice session uses.
 // DISCORD_E2E_BOT_TOKEN: the daemon's capability bot, in the test server with MESSAGE CONTENT intent enabled.
 // DISCORD_E2E_SENDER_TOKEN: the harness bot posting the trigger; same server and channel.
 // DISCORD_E2E_CHANNEL_ID: a text channel both bots can read and write.
-// Voice-channel capture is manual (discord-voice join); this suite covers the binary and model only.
-const tier = e2eTier("discord + whisper end-to-end (real gateway, real binary)", {
+// Voice-channel capture is manual (discord-voice join); this suite covers the engine and model only.
+const tier = e2eTier("discord + voice end-to-end (real gateway, real speech engine)", {
     enabledBy: "INTENTIC_E2E",
     secrets: ["DISCORD_E2E_BOT_TOKEN", "DISCORD_E2E_SENDER_TOKEN", "DISCORD_E2E_CHANNEL_ID"],
 });
@@ -33,8 +32,8 @@ const CLAUDE_CREDS = {
         : {}),
 };
 
-// Whisper model (~75MB) and sample audio, cached across runs from the same v1.9.4 tag the overlay builds.
-const CACHE_DIR = join(homedir(), ".cache", "intentic-e2e", "whisper");
+// A sample of real speech, cached across runs.
+const CACHE_DIR = join(homedir(), ".cache", "intentic-e2e", "speech");
 const SAMPLE_URL = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.4/samples/jfk.wav";
 
 const ensureCached = async (file: string, fetchBlob: () => Promise<Blob>): Promise<string> => {
@@ -68,18 +67,16 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     let container: StartedTestContainer;
     let base: string;
     let client: ContractRouterClient<typeof sandboxContract>;
-    const overlayTag = `intentic-e2e-whisper:${randomBytes(4).toString("hex")}`;
-    let overlayBuilt = false;
 
     beforeAll(async () => {
         container = await startSandboxContainer(CLAUDE_CREDS);
         base = daemonUrl(container);
         client = createORPCClient(new OpenAPILink(sandboxContract, { url: base }));
-        // The discord capability: gateway bot token plus voice knobs; its fragment composes whisper.cpp in.
+        // The discord capability: gateway bot token plus its voice language.
         for await (const line of await client.capabilities.add({
             id: "discord",
             kind: "cli",
-            config: { provider: "discord", botToken: tier.secrets.DISCORD_E2E_BOT_TOKEN, voiceModel: "tiny", voiceLanguage: "en" },
+            config: { provider: "discord", botToken: tier.secrets.DISCORD_E2E_BOT_TOKEN, voiceLanguage: "en" },
         })) {
             void line;
         }
@@ -90,9 +87,6 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await client?.automations.remove({ id: "e2e-agent" }).catch(() => {});
         await client?.capabilities.remove({ id: "discord" }).catch(() => {});
         await container?.stop().catch(() => {});
-        if (overlayBuilt) {
-            await dockerRmi(overlayTag);
-        }
     }, 120_000);
 
     it("a real channel message reaches the listener automation and is held for approval", async () => {
@@ -129,25 +123,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await client.automations.remove({ id: "e2e-discord" });
     }, 240_000);
 
-    it("the composed whisper overlay builds and its whisper-cli transcribes real speech with the tiny.en model", async () => {
-        const environment = (await (await fetch(`${base}/environment`)).json()) as { approved?: { content: string; hash: string } };
-        expect(environment.approved).toEqual(expect.any(Object));
-        const approved = environment.approved as { content: string; hash: string };
-        expect(hasOfficialBase(approved.content)).toBe(true);
-        expect(approved.content).toContain("whisper-cli");
-        expect(approved.hash).toBe(sha256Hex(approved.content));
-
-        // Outside-executor role: builds the overlay from source (cached by docker) and runs the real binary on speech.
-        overlayBuilt = true;
-        await dockerBuild(approved.content, overlayTag);
-        // HF's CAS bridge 403s anonymous plain HTTP; downloadFile speaks Xet instead.
-        const model = await ensureCached("ggml-tiny.en.bin", async () => {
-            const blob = await downloadFile({ repo: "ggerganov/whisper.cpp", path: "ggml-tiny.en.bin" });
-            if (blob === null) {
-                throw new Error("ggerganov/whisper.cpp has no ggml-tiny.en.bin");
-            }
-            return blob;
-        });
+    it("the sandbox's own speech engine hears real speech through the door the voice session uses", async () => {
         const sample = await ensureCached("jfk.wav", async () => {
             const response = await fetch(SAMPLE_URL);
             if (!response.ok) {
@@ -155,15 +131,15 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             }
             return response.blob();
         });
-        const output = await dockerRun(
-            overlayTag,
-            [
-                { host: model, container: "/fx/ggml-tiny.en.bin" },
-                { host: sample, container: "/fx/jfk.wav" },
-            ],
-            ["whisper-cli", "-m", "/fx/ggml-tiny.en.bin", "-f", "/fx/jfk.wav", "-l", "en", "--no-timestamps", "--no-prints"],
-        );
-        expect(output.toLowerCase()).toContain("fellow americans");
+        // wait=1, as the gateway asks: an image that does not bake the model fetches it first rather than refusing.
+        const response = await fetch(`${base}/speech/transcribe?lang=en&wait=1`, {
+            method: "POST",
+            headers: { "content-type": "audio/wav" },
+            body: await readFile(sample),
+        });
+        expect(response.status).toBe(200);
+        const { text } = (await response.json()) as { text: string };
+        expect(text.toLowerCase()).toContain("fellow americans");
     }, 1_800_000);
 
     it.skipIf(Object.keys(CLAUDE_CREDS).length === 0)(

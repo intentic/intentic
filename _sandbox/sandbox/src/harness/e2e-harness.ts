@@ -87,18 +87,6 @@ export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
         build.stdin.end(dockerfile);
     });
 
-// `docker run --rm` with bind mounts, combined output; exercises the whisper overlay without the daemon.
-export const dockerRun = (tag: string, mounts: { host: string; container: string }[], command: string[]): Promise<string> =>
-    new Promise((resolve, reject) => {
-        const args = ["run", "--rm", ...mounts.flatMap((mount) => ["-v", `${mount.host}:${mount.container}:ro`]), tag, ...command];
-        const run = spawn("docker", args);
-        let output = "";
-        run.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
-        run.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
-        run.on("error", reject);
-        run.on("close", (code) => (code === 0 ? resolve(output) : reject(new Error(`docker run exited ${code}:\n${output.slice(-4000)}`))));
-    });
-
 export const dockerRmi = (tag: string): Promise<void> =>
     new Promise((resolve) => {
         spawn("docker", ["rmi", "-f", tag]).on("close", () => resolve());

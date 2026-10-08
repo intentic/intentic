@@ -1,5 +1,4 @@
 import { errorMessage } from "@intentic/base/errors";
-import { whisperCliMissing } from "@intentic/base/whisper";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import { type Client, REST } from "discord.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
@@ -37,12 +36,6 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
             return [...tokens].map((token) => restLookup(restOf(token)));
         };
 
-        // whisper presence can't change without an image rebuild (which restarts this process), so probe once.
-        let whisperReady = false;
-        void whisperCliMissing().then((missing) => {
-            whisperReady = !missing;
-        });
-
         const hooks: GatewayHooks<DiscordConnectorConfig, Client> = {
             desired: (entries) => {
                 connectors = entries;
@@ -71,7 +64,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
             phase: (connector) => discordGatewayState(connector.config.botToken),
             statusExtras: () => {
                 const voice = activeVoiceSession();
-                return { ...(voice !== undefined ? { voice } : {}), whisperReady };
+                return voice !== undefined ? { voice } : {};
             },
             // Daemon's outbound door (a conversation's reply between turns, an approved post): posts through whichever
             // bot can see the channel.

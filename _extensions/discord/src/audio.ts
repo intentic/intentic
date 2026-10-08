@@ -1,17 +1,8 @@
-import { runWhisper, type WhisperExec } from "@intentic/base/whisper";
-import { cleanTranscription } from "@intentic/sandbox-contract";
-
-// PCM downsampling, WAV framing, whisper-cli transcription, and a serialized transcriber queue for the voice session;
-// pure of Discord and the daemon, so it unit-tests in isolation.
+// PCM downsampling, WAV framing, and a serialized transcriber queue for the voice session; pure of Discord, and handed
+// its transcription (the daemon's speech engine, through the gateway's daemon client) so it unit-tests in isolation.
 
 // Dropped below this: sub-quarter-second blips feed only hallucinations (192,000 B/s at 48kHz stereo).
 export const MIN_UTTERANCE_BYTES = 48_000;
-
-// Shown when whisper isn't installed; routes the agent to the pending rebuild instead of a doomed retry loop.
-export const WHISPER_MISSING =
-    "whisper-cli isn't installed in this sandbox yet. It's part of the environment overlay that was composed when " +
-    "Discord was connected: the sandbox needs a one-time rebuild. Ask the owner to run the rebuild command shown on " +
-    "the Sandbox page's Environment card, and don't retry joining voice (or propose an overlay) until it has landed.";
 
 // 48kHz stereo to 16kHz mono: averages each group of 6 samples into one. Naive decimation, no low-pass; fine for
 // speech, swap in a real resampler if quality suffers.
@@ -28,7 +19,7 @@ export const to16kMonoPcm = (stereo48k: Buffer): Buffer => {
     return out;
 };
 
-// Minimal RIFF/WAVE header for 16kHz mono s16le, what whisper-cli expects.
+// Minimal RIFF/WAVE header for 16kHz mono s16le, what the daemon's /speech/transcribe reads.
 export const wavOf = (pcm16kMono: Buffer): Buffer => {
     const header = Buffer.alloc(44);
     header.write("RIFF", 0);
@@ -59,15 +50,17 @@ export interface Transcriber {
     readonly transcribed: () => number;
 }
 
-// One whisper-cli run at a time: transcription is CPU-bound and the sandbox is small, so utterances queue. `onLine`
-// runs inside that queue after each line; its failures land in `onError` too.
+// One utterance's 16 kHz mono WAV to its words, empty when it held none.
+export type Transcribe = (wav: Buffer, language: string | undefined) => Promise<string>;
+
+// One utterance at a time, in the order they ended: the transcript is rewritten after each, so a later one must not
+// overtake an earlier. `onLine` runs inside that queue after each line; its failures land in `onError` too.
 export const createTranscriber = (
-    modelPath: string,
-    language: string,
+    transcribe: Transcribe,
+    language: string | undefined,
     startedAt: number,
     onLine: (sorted: { at: number; line: string }[], newLine: string) => Promise<void>,
     onError: (error: unknown) => void,
-    exec?: WhisperExec,
 ): Transcriber => {
     const lines: { at: number; line: string }[] = [];
     let queue: Promise<void> = Promise.resolve();
@@ -75,8 +68,8 @@ export const createTranscriber = (
         push: (speaker, atMs, pcm) => {
             queue = queue
                 .then(async () => {
-                    const text = cleanTranscription(await runWhisper(wavOf(to16kMonoPcm(pcm)), { model: modelPath, language, exec }));
-                    if (text !== undefined) {
+                    const text = (await transcribe(wavOf(to16kMonoPcm(pcm)), language)).trim();
+                    if (text !== "") {
                         const line = `[${elapsedLabel(atMs - startedAt)}] ${speaker}: ${text}`;
                         lines.push({ at: atMs, line });
                         await onLine(

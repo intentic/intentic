@@ -124,7 +124,7 @@ Other package managers take the same treatment where they have a cache directory
 `/root/.cargo/registry` for cargo, `/root/.npm` for npm, `/root/.cache/pip` for pip.
 
 6. **Don't hand-write a fragment for a tool the sandbox already packs.** If the thing you need is one of the
-   feature packs (a browser, whisper, llama.cpp, a Docker engine), enabling its capability composes it for
+   feature packs (a browser, llama.cpp, a Docker engine), enabling its capability composes it for
    you — and on an image that already bakes it, composes nothing at all and needs no rebuild. A copied
    fragment is a second pin that drifts from the pack's, and on a standard image it builds the same binary a
    second time.

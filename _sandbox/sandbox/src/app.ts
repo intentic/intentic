@@ -22,7 +22,7 @@ import { createCapabilityAskRoutes } from "./capabilities/offers/ask.routes.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./app-env.js";
 import { createDiffRawRoute } from "./git/changes/diff-raw.js";
-import { createSpeechRoute } from "./speech/speech.routes.js";
+import { createSpeechRoute, createSpeechStreamRoute } from "./speech/speech.routes.js";
 import { createEnrollRoute } from "./inventory/enroll.routes.js";
 import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
@@ -329,6 +329,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Watch the browser the agent drives: the same screencast wire, attached to a live browser-* session.
     serve("GET /system/browser-view", createBrowserViewRoute(services));
     serve("GET /system/desktop-view", createDesktopViewRoute(services));
+    // The composer's live dictation: phrases in as they are spoken, running guesses and finals back.
+    serve("GET /speech/stream", createSpeechStreamRoute(services));
 
     // Deploy-target enrollment (connect token) and the automation fire (own token).
     serve("POST /enroll", createEnrollRoute(services));

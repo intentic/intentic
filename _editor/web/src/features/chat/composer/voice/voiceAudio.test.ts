@@ -1,4 +1,4 @@
-import { createSegmenter, resampleTo16k, TARGET_RATE, wavOf16k } from "./voiceAudio";
+import { createSegmenter, pcm16Of, resampleTo16k, TARGET_RATE, wavOf16k } from "./voiceAudio";
 
 // A frame of constant-amplitude 16kHz samples: RMS of a constant signal IS the amplitude, so the segmenter's
 // thresholds can be exercised with plain numbers.
@@ -35,6 +35,14 @@ describe(`wavOf16k`, () => {
     });
 });
 
+describe(`pcm16Of`, () => {
+    it(`frames samples as bare s16le, clamped like the WAV`, () => {
+        const pcm = new DataView(pcm16Of(new Float32Array([0.5, 2, -2])));
+        expect(pcm.byteLength).toBe(6);
+        expect([pcm.getInt16(0, true), pcm.getInt16(2, true), pcm.getInt16(4, true)]).toEqual([16_384, 32_767, -32_767]);
+    });
+});
+
 describe(`createSegmenter`, () => {
     it(`reports the frame's level and never opens a segment on room tone`, () => {
         const utterances: Float32Array[] = [];
@@ -63,7 +71,7 @@ describe(`createSegmenter`, () => {
         expect((utterances[0]?.length ?? 0) / TARGET_RATE).toBeCloseTo(1.05, 2);
     });
 
-    it(`drops a blip shorter than real speech instead of feeding whisper a cough`, () => {
+    it(`drops a blip shorter than real speech instead of feeding the model a cough`, () => {
         const utterances: Float32Array[] = [];
         const segmenter = createSegmenter((samples) => utterances.push(samples));
         segmenter.push(frame(100, 0.1));
@@ -94,5 +102,47 @@ describe(`createSegmenter`, () => {
             segmenter.push(frame(100, 0.001));
         }
         expect(utterances).toEqual([]);
+    });
+
+    it(`streams a segment as it is spoken: the pre-roll as it opens, each frame after, then the trimmed whole`, () => {
+        const said: string[] = [];
+        let ended: Float32Array | undefined;
+        const segmenter = createSegmenter({
+            begin: (opening) => said.push(`begin ${opening.length / TARGET_RATE}s`),
+            audio: () => said.push(`audio`),
+            end: (samples) => {
+                ended = samples;
+                said.push(`end`);
+            },
+            drop: () => said.push(`drop`),
+        });
+        for (let i = 0; i < 4; i += 1) {
+            segmenter.push(frame(100, 0.001));
+        }
+        for (let i = 0; i < 5; i += 1) {
+            segmenter.push(frame(100, 0.1));
+        }
+        for (let i = 0; i < 15; i += 1) {
+            segmenter.push(frame(100, 0.001));
+        }
+        // 300 ms of pre-roll plus the opening frame, then the other 4 voiced frames and 15 quiet ones until the pause.
+        expect(said[0]).toBe(`begin 0.4s`);
+        expect(said.filter((event) => event === `audio`)).toHaveLength(19);
+        expect(said.at(-1)).toBe(`end`);
+        expect((ended?.length ?? 0) / TARGET_RATE).toBeCloseTo(1.05, 2);
+    });
+
+    it(`says a blip and a segment discarded mid-speech are dropped, never ended`, () => {
+        const said: string[] = [];
+        const segmenter = createSegmenter({ begin: () => said.push(`begin`), end: () => said.push(`end`), drop: () => said.push(`drop`) });
+        segmenter.push(frame(100, 0.1));
+        for (let i = 0; i < 16; i += 1) {
+            segmenter.push(frame(100, 0.001));
+        }
+        segmenter.push(frame(100, 0.1));
+        segmenter.discard();
+        // Discarding while idle drops nothing: there is no segment.
+        segmenter.discard();
+        expect(said).toEqual([`begin`, `drop`, `begin`, `drop`]);
     });
 });

@@ -76,7 +76,7 @@ export interface GatewayHooks<TConfig, THandle> {
     readonly slotIdOf?: (connector: ConnectorEntry<TConfig>) => string;
     // Overrides the derived phase (discord probes its client pool; whatsapp stays "connecting" while pairing).
     readonly phase?: (connector: ConnectorEntry<TConfig>, view: SlotView<THandle>) => ListenerGatewayPhase;
-    // Per-gateway extras riding the status snapshot (discord: voice + whisper presence; whatsapp: pairing codes).
+    // Per-gateway extras riding the status snapshot (discord: the live voice session; whatsapp: pairing codes).
     readonly statusExtras?: () => Omit<ListenerStatus, "connections">;
     // Delivers a message into a channel between turns; channelId is the provider's own listener-reported id.
     readonly deliver?: (channelId: string, text: string) => Promise<Delivered | void>;

@@ -170,16 +170,16 @@ export const cliHandler: CapabilityHandler = {
         if (connector !== undefined && (await extensionRuntimeAbsent(connector.extension))) {
             return { state: "pending", detail: RUNTIME_ABSENT_DETAIL };
         }
-        if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig), ctx.sshKeys))) {
+        if (
+            cliConfig["git"] === "on" &&
+            CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined &&
+            !(await gitAccessWired(gitHostOf(cliConfig), ctx.sshKeys))
+        ) {
             return { state: "pending", detail: "git access needs a re-add" };
         }
         // npm's ~/.npmrc line is container-local too; missing here means the boot restore couldn't rewrite it.
         if (cliConfig.provider === "npm" && !(await npmAuthWired())) {
             return { state: "pending", detail: "npm auth needs a re-add" };
-        }
-        // Voice needs whisper.cpp from the overlay fragment; the gateway reports it via /listeners/discord/status.
-        if (cliConfig.provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
-            return { state: "pending", detail: "voice needs a rebuild (whisper)" };
         }
         // whatsapp's config is just a phone number anyone can type; only the gateway knows whether one ever linked.
         if (cliConfig.provider === "whatsapp") {

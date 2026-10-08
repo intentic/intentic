@@ -111,4 +111,11 @@ if [ ! -f "$out/.iq-models-complete" ]; then
     node _search/iq-engine/scripts/fetch-model.mjs "$out/iq-models"
     touch "$out/.iq-models-complete"
 fi
+
+# The baked dictation model (~640 MiB, image-packs/speech.Dockerfile), fetched at the revision and digests the
+# daemon pins. The script skips a file already there at its digest, so a reused trees context fetches nothing.
+if [ ! -f "$out/.speech-models-complete" ]; then
+    node _sandbox/sandbox/scripts/fetch-speech-models.mjs "$out/speech-models" parakeet
+    touch "$out/.speech-models-complete"
+fi
 echo "image trees ready in $out/"
