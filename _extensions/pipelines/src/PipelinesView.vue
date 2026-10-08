@@ -270,8 +270,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
 </script>
 
 <template>
-    <!-- `scroll="page"`: this body is a report read top-down once, not a document paired with an index worth preserving position in. -->
-    <SplitView :title="t(`pipelinesView.pipelines`)" scroll="page" :scroll-key="scopeRepo">
+    <!-- `scroll="page"`: this body is a report read top-down once, not a document paired with an index worth preserving position in.
+         `width="full"`: a run's stages run sideways, so the page takes the whole screen as the agents board does. -->
+    <SplitView :title="t(`pipelinesView.pipelines`)" scroll="page" :scroll-key="scopeRepo" width="full">
         <!-- Pipeline totals belong in the information slot, not the action group. -->
         <template #info>
             <!-- `min-w-0 flex-1`: the tally is what gives here. -->

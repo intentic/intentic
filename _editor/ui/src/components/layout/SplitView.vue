@@ -12,6 +12,7 @@ const {
     detailOpen = false,
     scroll = `panes`,
     scrollKey = undefined,
+    width = `wide`,
 } = defineProps<{
     title: string;
     description?: string;
@@ -25,13 +26,13 @@ const {
     scroll?: `panes` | `page`;
     // Identifies what's shown in `page` mode, so a subject change resets scroll instead of landing mid-page.
     scrollKey?: unknown;
+    // The page-width cap. `wide` suits a document beside an index; `full` is for a body that runs sideways (a
+    // pipeline's stages), which spends the whole screen the way the agents board does.
+    width?: `wide` | `full`;
 }>();
 
 // One width for all five screens, not a per-caller scale; 16rem fits the longest label, the rest truncate.
 const RAIL = `w-64`;
-
-// One page-width cap for all five screens: without it, a clamped body's reading measure leaves the pane empty.
-const PAGE_WIDTH = `wide`;
 
 // Below this width the body can't fit its rows beside the rail; measured on the split's row, not the page.
 const FOLD_AT_REM = 44;
@@ -65,7 +66,7 @@ const railClass = computed(() => {
 <template>
     <!-- The head does not scroll: the title and anything pinned under it stay put while you read. With panes that
          scroll, the page is the full height its container gives it, and nothing past it: no column of its own to fill. -->
-    <Page :width="PAGE_WIDTH" class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
+    <Page :width="width" class="flex flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : ``">
         <PageHeader :title="title" :description="description">
             <template v-if="$slots[`info`]" #info><slot name="info" /></template>
             <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
