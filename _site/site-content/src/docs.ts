@@ -196,6 +196,21 @@ export const docsBook: Book = {
                                     "Browse the gallery, read what an extension may touch before you approve it, install it pinned to an exact commit, and stay in control of every update.",
                                 datePublished: "2026-08-11",
                             },
+                            children: [
+                                {
+                                    // Linked from Sandbox → Extensions → Discover; the listing step for a workspace
+                                    // extension, without sending installers through the developer book.
+                                    id: "extensions/publish",
+                                    title: "Publish an extension",
+                                    blurb: "One repo topic; a nightly job opens the listing pull request",
+                                    meta: {
+                                        title: "Publish an extension · intentic docs",
+                                        description:
+                                            "List an extension in the official gallery: add the intentic-extension topic on your repository and a nightly job opens the registry pull request. No account, upload or cut.",
+                                        datePublished: "2026-08-11",
+                                    },
+                                },
+                            ],
                         },
                         {
                             id: "your-machine",

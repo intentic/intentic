@@ -1,0 +1,71 @@
+---
+import DocsLayout from "../../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../../components/docs/DocsRelated.astro";
+
+/* THE LISTING STEP from the installer's book: what Sandbox → Extensions → Discover links to. */
+---
+
+<DocsLayout
+    pageId="extensions/publish"
+    heading="Publish an extension"
+    lead="Your extension stays in your repository. Listing it is a pointer to one commit in the official registry, opened as a pull request — not an upload, an account, or a build service."
+>
+    <h2>What publishing is</h2>
+    <p>
+        intentic does not host extension code. A registry entry is your repository name and a full 40-character commit sha. When someone installs
+        from the gallery or from <strong>Sandbox → Extensions → Discover</strong>, their sandbox clones that commit from your git host directly; nothing
+        passes through intentic's servers.
+    </p>
+    <p>
+        Publishing and installing are free: no cut, no metering, no telemetry on extension use. Delisting removes only the pointer; your repo is
+        unchanged.
+    </p>
+
+    <h2>Getting into the official gallery</h2>
+    <p>Two entrances converge on one pull request against the <a href="/extensions/">official registry</a>. There is nowhere to sign up.</p>
+    <ol>
+        <li>
+            <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your public GitHub repository, with an{" "}
+            <code>intentic-extension.json</code> at its root (or at the path your manifest lives). A nightly job resolves your latest commit,
+            checks the manifest and shipped bundle at that sha, and <strong>opens the pull request for you</strong>. That is the whole submission
+            process when the extension lives at the repo root on GitHub.
+        </li>
+        <li>
+            <strong>Or open the pull request yourself.</strong> Required when the extension lives in a subdirectory, or when the source is on
+            GitLab, Codeberg or Bitbucket rather than GitHub topic discovery — the same checks run on the exact source in that pull request.
+        </li>
+    </ol>
+    <p>
+        Two independent automated reviewers read that source before merge: Trivy (dependencies, committed secrets, deployment configuration) and an
+        intentic agent that inspects every executable surface without running author code. A finding or an unjudged audit keeps the pull request
+        unmergeable. After merge, the extension appears in the gallery and in-app browse, installable in one click at the pinned sha.
+    </p>
+
+    <h2>Without the gallery</h2>
+    <p>
+        A registry is for discovery, not a gate. Anyone with your repo URL and a commit sha can install from{" "}
+        <strong>Capabilities → Add → Extension</strong> or by pasting the URL on <strong>Sandbox → Extensions</strong>. A company can also point
+        Discover at its own git repo that holds a <code>.claude-plugin/marketplace.json</code> — the same mechanism the app uses for alternate
+        registries.
+    </p>
+    <p>
+        A workspace extension under <code>.intentic/config/workspace-extensions/</code> runs without publishing at all; publishing is the step that
+        makes the same code installable in other people's sandboxes at a pinned commit.
+    </p>
+
+    <h2>What installers see</h2>
+    <p>
+        The install dialog is your manifest rendered as plain English: one line per declared contribution, with the exact daemon routes spelled
+        out underneath, at the commit they approve. The narrowest honest manifest makes for a short dialog; a broad declaration is long whether or
+        not the code uses every route. <a href="/docs/extensions/">Install &amp; manage extensions</a> is the whole experience from their side.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/extensions/", title: "Install & manage extensions", why: "discover, approve, update and turn extensions off once listed." },
+            { href: "/developers/publish/", title: "Publish & registries", why: "registry file format, source shapes, publisher slugs and the full diagram." },
+            { href: "/developers/build/", title: "Build an extension", why: "author the manifest and bundle this page assumes you already have." },
+            { href: "/developers/verify/", title: "Verification & trust", why: "what listed, verified and blocked each claim on a card." },
+        ]}
+    />
+</DocsLayout>
