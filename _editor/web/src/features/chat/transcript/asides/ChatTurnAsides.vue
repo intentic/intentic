@@ -42,6 +42,11 @@ const toggle = (): void => {
     found.value = false;
     override.value = shown.value === undefined ? `all` : null;
 };
+// A thought that opened itself shows the thought alone; its run's band stays under it, the way on to the calls.
+const showAll = (): void => {
+    found.value = false;
+    override.value = `all`;
+};
 const onFound = (): void => {
     found.value = true;
     override.value = `all`;
@@ -144,6 +149,22 @@ const tip = computed((): TooltipValue => {
             @beforematch="onFound"
         >
             <pre class="px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic">{{ thought }}</pre>
+        </div>
+        <!-- A thought open by itself is not the whole row: the run it led to keeps its band under the thought, so the
+             same mark never stands for "everything" and hides the calls behind a second press. -->
+        <div v-if="calls !== undefined && shown === `thought`" class="chat-spine-material">
+            <button
+                type="button"
+                class="chat-spine-wash"
+                :class="{
+                    'chat-spine-wash-failed': (run?.failed ?? 0) > 0,
+                    'chat-spine-wash-live': live,
+                }"
+                :aria-expanded="false"
+                :aria-label="label"
+                v-tooltip.top="tip"
+                @click="showAll"
+            />
         </div>
         <!-- The calls are not text worth the page's weight: absent until pressed, and faded in where they land. -->
         <Transition name="chat-mark-reveal">

@@ -208,6 +208,19 @@ describe(`ChatTurnAsides thought on the node`, () => {
         expect(shownText(settled)).not.toContain(thinking);
     });
 
+    it(`keeps the run's band under a thought that opened itself, and opens the calls from it`, async () => {
+        const element = mount({ thinking, tools: [read(`a.ts`), read(`b.ts`)], live: true });
+        expect(shownText(element)).toContain(thinking);
+        const band = wash(element);
+        expect(band).not.toBeNull();
+        expect(band?.getAttribute(`aria-label`)).toBe(`Show thinking and 2 steps`);
+        band?.click();
+        await settle();
+        expect(element.textContent).toContain(`a.ts`);
+        expect(shownText(element)).toContain(thinking);
+        expect(wash(element)).toBeNull();
+    });
+
     it(`keeps a shut thought in the page for find-in-page, and opens it when a match lands inside`, async () => {
         const element = mount({ thinking, tools: [read(`a.ts`)] });
         const shut = element.querySelector(`[hidden="until-found"]`)!;
