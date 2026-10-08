@@ -7,7 +7,15 @@ import type { UsageStore } from "./usage-store.js";
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
 
-const SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.search, arm: (turn) => turn.iqSearchArm, cohort: (turn) => turn.iqSearchCohort };
+// Cohort hashes that name one treatment under two spellings, read as the earlier one. `afccafc52ce9` is what
+// fcf9970ffa's hash of `af7b1874e40c`'s words came out as once the lean line left the hash input (2026-10-06): the nudge and
+// the full search line are byte-identical, and the lean line went to both arms alike, so splitting them only halved
+// the sample.
+const SAME_IQ_TEACHING: Readonly<Record<string, string>> = { afccafc52ce9: "af7b1874e40c" };
+const iqCohortOf = (turn: UsageTurn): string | undefined =>
+    turn.iqSearchCohort === undefined ? undefined : (SAME_IQ_TEACHING[turn.iqSearchCohort] ?? turn.iqSearchCohort);
+
+const SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.search, arm: (turn) => turn.iqSearchArm, cohort: iqCohortOf };
 
 // Cohorted by comparison rather than by revision (the map is recomputed on every send): the compact-vs-full rows are read
 // apart from the map-or-none rows before them, whose arm meant something else.

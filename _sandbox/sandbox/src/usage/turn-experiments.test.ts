@@ -79,6 +79,19 @@ test("iq search results do not mix instruction revisions into one unnamed experi
     expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
 });
 
+test("a re-spelled iq cohort hash is read together with the revision it re-spells", async () => {
+    const rows = [
+        turn({ at: 1, conversationId: "older-on", iqSearchArm: true, iqSearchCohort: "9fca5b085548", searchCalls: 50 }),
+        turn({ at: 2, conversationId: "sep-on", iqSearchArm: true, iqSearchCohort: "af7b1874e40c", searchCalls: 2 }),
+        turn({ at: 2, conversationId: "sep-off", iqSearchArm: false, iqSearchCohort: "af7b1874e40c", searchCalls: 6 }),
+        turn({ at: 3, conversationId: "oct-on", iqSearchArm: true, iqSearchCohort: "afccafc52ce9", searchCalls: 4 }),
+        turn({ at: 3, conversationId: "oct-off", iqSearchArm: false, iqSearchCohort: "afccafc52ce9", searchCalls: 8 }),
+    ];
+    const { search } = await readTurnExperiments(storeOf(rows), {});
+    expect(search?.cohort).toBe("af7b1874e40c");
+    expect(search?.metrics[0]).toMatchObject({ on: { turns: 2, mean: 3 }, off: { turns: 2, mean: 7 } });
+});
+
 test("a long iq-search conversation contributes one sample rather than manufacturing independent turns", async () => {
     const arms = [
         ...Array.from({ length: 20 }, () => turn({ conversationId: "one-long-chat", iqSearchArm: true, searchCalls: 2 })),
