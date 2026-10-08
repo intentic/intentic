@@ -5925,7 +5925,6 @@
             "daysLeftToRestore": "został {count} dzień | zostało {count} dni",
             "nothingToRestore": "Nic do przywrócenia",
             "reading": "Odczytywanie usuniętych sandboxów",
-            "keptForDays": "Przechowywane przez {count} dzień od usunięcia | Przechowywane przez {count} dni od usunięcia",
             "paletteTitle": "Ostatnio usunięte sandboxy"
         },
         "sandboxDevices": {

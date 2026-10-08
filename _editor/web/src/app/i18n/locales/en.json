@@ -6300,7 +6300,6 @@
             "daysLeftToRestore": "{count} day left | {count} days left",
             "nothingToRestore": "Nothing to restore",
             "reading": "Reading deleted sandboxes",
-            "keptForDays": "Kept for {count} day after you delete them | Kept for {count} days after you delete them",
             "paletteTitle": "Recently deleted sandboxes"
         },
         "sandboxDevices": {

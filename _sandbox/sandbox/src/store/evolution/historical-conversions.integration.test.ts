@@ -161,9 +161,12 @@ test("an automation that named a model gets a one-rung ladder; its runs and webh
     expect(stored[1]).not.toHaveProperty("models");
     expect(await json(join(roots.workspace, stateRelPath(".intentic/secrets/doors.json")))).toEqual({ automation: { nightly: "tok-123" } });
     const listed = await fileAutomationsStore(manifest, join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"))).list();
-    // Named no model: nothing can choose one for it, so it stays for its owner, skipped by the store rather than
-    // sinking the others.
-    expect(listed.map(({ id, models }) => ({ id, models }))).toEqual([{ id: "nightly", models: [{ provider: "codex", model: "gpt-5" }] }]);
+    // Named no model: nothing chooses one for it. It stays listed for its owner with no ladder, and the scheduler
+    // refuses to fire it, saying so, until one is picked (scheduler.ts `wakeModel`).
+    expect(listed.map(({ id, models }) => ({ id, models }))).toEqual([
+        { id: "nightly", models: [{ provider: "codex", model: "gpt-5" }] },
+        { id: "unnamed", models: undefined },
+    ]);
 });
 
 test("a release gate's token moves out of the tracked design into the door store", async () => {

@@ -46,6 +46,11 @@ for (const path of configs) {
             if (/\b(outDir|publicDir|cacheDir|emptyOutDir|dir)\s*:/.test(line) || match[1].includes("${")) {
                 continue;
             }
+            // A package's compiled dist/ is a build product no checkout holds until a build writes it (this check runs
+            // before one), so a config that reads one has to handle its absence anyway; it is not an alias to repoint.
+            if (/(^|\/)dist\//.test(match[1])) {
+                continue;
+            }
             checked++;
             const target = resolve(base, match[1]);
             if (!existsSync(target)) {

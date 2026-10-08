@@ -3400,7 +3400,6 @@
             "daysLeftToRestore": "noch {count} Tag | noch {count} Tage",
             "nothingToRestore": "Nichts wiederherzustellen",
             "reading": "Gelöschte Sandboxes werden gelesen",
-            "keptForDays": "Nach dem Löschen {count} Tag aufbewahrt | Nach dem Löschen {count} Tage aufbewahrt",
             "paletteTitle": "Kürzlich gelöschte Sandboxes"
         },
         "sandboxDevices": {

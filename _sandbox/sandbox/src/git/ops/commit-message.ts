@@ -236,8 +236,8 @@ const noteRules = (wantsNote: boolean, removedSurfaces: readonly string[]): stri
     ];
 };
 
-// One flat message, not a system/user pair: the one-shot sends no system prompt (claude/claude-one-shot.ts), so
-// instructions, examples and material are ordered in one text.
+// One flat message, not a system/user pair: a helper's system prompt is the fixed one every sealed request shares
+// (agent/run/sealed/sealed-request.ts), so instructions, examples and material are ordered in one text.
 export const commitMessagePrompt = (
     diffs: readonly RepoDiff[],
     wantsNote = false,

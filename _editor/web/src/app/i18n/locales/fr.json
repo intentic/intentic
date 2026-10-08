@@ -3402,7 +3402,6 @@
             "daysLeftToRestore": "{count} jour restant | {count} jours restants",
             "nothingToRestore": "Rien à restaurer",
             "reading": "Lecture des sandboxes supprimés",
-            "keptForDays": "Conservés {count} jour après leur suppression | Conservés {count} jours après leur suppression",
             "paletteTitle": "Sandboxes supprimés récemment"
         },
         "sandboxDevices": {

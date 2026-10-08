@@ -38,7 +38,8 @@ const CONTRACT_IMPORTERS = ["_deploy/providers/src/host/workspace.ts", "_editor/
 const CODE_CARRIERS: readonly (readonly [string, RegExp])[] = [
     ["_site/site/public/scripts/connect.sh", /sandbox connect "\$@" -- "\$SETUP_CODE"/],
     ["_site/site/public/scripts/connect.ps1", /\$IcArgs \+= '--'/],
-    ["_devices/machine/src/device/tools/sandboxes.ts", /"connect", "-y", "--"/],
+    // A reconnect's `--replace` sits between `-y` and the marker; what matters is that the marker comes before the code.
+    ["_devices/machine/src/device/tools/sandboxes.ts", /"connect", "-y",[^\n]*"--", setupCode/],
 ];
 // The minting half: base62, so no code ever starts with the hyphen the carriers above defend against.
 const CODE_MINTER = "_platform/api/src/sandbox/mint-sandbox.ts";

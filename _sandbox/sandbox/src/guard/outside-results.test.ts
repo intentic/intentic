@@ -193,7 +193,8 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
 
     test("every server the daemon mounts is reserved, and every reserved name is mounted", () => {
         const discovered = new Set([
-            ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
+            // The turn's block, not a sealed request's empty `mcpServers: {}` written above it.
+            ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{(?!\})[\s\S]*?\n\s{8}\}/),
             ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
             constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),

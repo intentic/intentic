@@ -26,8 +26,9 @@ const withCommas = (value: number): string =>
 // How many characters of prompt a one-shot helper may spend on a model that declared a window (role-model.ts).
 //
 // The arithmetic is not the turn's below, and deliberately: a helper carries no tools, no session and no transcript
-// (claude-one-shot.ts sends `allowedTools: []`, `settingSources: []`, `maxTurns: 1`), so the harness floor that makes
-// turns fail simply is not there. The whole window minus room to answer is genuinely the helper's to spend.
+// (a sealed request, agent/run/sealed/sealed-request.ts, is planned with `tools: {}` and no conversation), so the
+// harness floor that makes turns fail simply is not there. The whole window minus room to answer is genuinely the
+// helper's to spend.
 //
 // Infinity where the window is unknown, so a caller can size against it arithmetically without branching, and so an
 // unknown window never makes a helper send less than it would have.

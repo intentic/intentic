@@ -8,7 +8,7 @@
         "build": "node scripts/sync-extensions.mjs && vite build",
         "sync": "node scripts/sync-extensions.mjs",
         "smoke": "node scripts/smoke-daemon.ts",
-        "typecheck": "node --max-old-space-size=4096 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.json"
+        "typecheck": "node --max-old-space-size=6144 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.json"
     },
     "dependencies": {
         "@intentic/api-contract": "workspace:*",

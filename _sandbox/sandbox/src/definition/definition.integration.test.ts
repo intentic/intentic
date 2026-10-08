@@ -505,12 +505,13 @@ test("an old webhook token in the automations never arrives, while every other k
     await cleanup();
 });
 
-// An entry this build cannot read would be written back as it stands, still enabled, for a later build to fire.
+// An entry this build cannot read would be written back as it stands, still enabled, for a later build to fire. A
+// trigger of a kind no build has shipped is one: an entry naming no model no longer is, since a ladder is optional now.
 test("an automations file holding an entry this build cannot read refuses the workspace", async () => {
     const remote = await publishedWorkspace(async (work) => {
         await writeFile(
             join(work, automationsDocument.path),
-            JSON.stringify([{ id: "unpinned", trigger: { kind: "schedule", cron: "0 9 * * *" }, prompt: "sweep the inbox", enabled: true }]),
+            JSON.stringify([{ id: "later", trigger: { kind: "a-later-build", every: "dawn" }, prompt: "sweep the inbox", enabled: true }]),
         );
     });
     const target = await makeRoots();

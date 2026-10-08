@@ -8,10 +8,10 @@ import { REPLAY_ENV } from "./index.js";
 
 const connectSource = readFileSync(join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/connect.rs"), "utf8");
 
-// The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its nul_frame call, including
-// the ones rustfmt breaks over several lines.
+// The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its `fresh` list (the first one in
+// the file; the test module's own come after it), including the ones rustfmt breaks over several lines.
 const rustKeys = (): Set<string> => {
-    const block = /nul_frame\(&\[([\s\S]*?)\]\)/.exec(connectSource)?.[1] ?? "";
+    const block = /let fresh: &\[\(&str, &str\)\] = &\[([\s\S]*?)\];/.exec(connectSource)?.[1] ?? "";
     return new Set([...block.matchAll(/\(\s*"([A-Z_]+)"/g)].map((match) => match[1] ?? ""));
 };
 
