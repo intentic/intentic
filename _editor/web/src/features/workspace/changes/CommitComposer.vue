@@ -19,6 +19,7 @@ import { chipMessageNotice, draftReport, draftRunning, type DraftReportRow, summ
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter } from "./commitMessage";
 import { draftLine, type DraftLine } from "./commitScope";
 import { COMMIT_SCOPE, useChanges } from "./useChanges";
+import { useCommitReceipt } from "./useCommitReceipt";
 import { useCommitScope } from "./useCommitScope";
 
 // What Commit records, the message that names it, and the verbs that send it: the commit page's middle on a desktop
@@ -36,8 +37,7 @@ const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
 const { say } = useNotifications();
-const { scannable, legend, originLabel, originMark, originDraft, originMessage, scope, scopeOrigin, scopeLabel, resetScope, plan, covered } =
-    useCommitScope();
+const { scannable, legend, originLabel, originMark, originDraft, originMessage, scope, scopeOrigin, plan, covered } = useCommitScope();
 
 // A phone keyboard has no Ctrl, so the shortcut hint moves to the button label instead.
 const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCtrlEnter`)));
@@ -96,8 +96,8 @@ const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: bool
 // text. Placeholder while empty; the draft line says the rest once there's text.
 const chipNotice = computed<string | undefined>(() =>
     chipMessageNotice({
-        label: scope.value.kind === `origin` || scope.value.kind === `yours` ? scopeLabel(scope.value) : undefined,
-        yours: scope.value.kind === `yours`,
+        label: scopeOrigin.value === undefined ? undefined : originLabel(scopeOrigin.value),
+        yours: false,
         message: scopeMessage.value,
         draft: scopeDraft.value,
         boxIsYours: boxIsYours.value,
@@ -131,12 +131,7 @@ const scopeDetail = computed<string>(() => {
     const count = complete
         ? t(`workspace.reviewPanel.fileCount`, { count: files }, files)
         : t(`workspace.reviewPanel.fileCountAtLeast`, { count: files }, files);
-    const how =
-        scope.value.kind === `staged`
-            ? undefined
-            : plan.value.only && changes.stagedCount.value > 0
-              ? t(`workspace.reviewPanel.leavesStagedAlone`)
-              : t(`workspace.reviewPanel.stagesThemForYou`);
+    const how = scope.value.kind === `staged` ? undefined : t(`workspace.reviewPanel.stagesThemForYou`);
     // The page's button already says how many files; beside it only the index note is news.
     if (page.value && files > 0) {
         return how ?? ``;
@@ -164,27 +159,19 @@ const commitTip = computed((): Tip | undefined => {
     return {
         title: t(`workspace.reviewPanel.commit`),
         keys,
-        rows: [{ label: scopeLabel(scope.value), value: covered.value.complete ? covered.value.files : `` }],
-        note: plan.value.only
-            ? t(`workspace.reviewPanel.nothingElseGoesIn`)
-            : commitGroups.value.length > 1
-              ? t(`workspace.reviewPanel.onePerRepo`)
-              : undefined,
+        rows: [
+            {
+                label: scope.value.kind === `staged` ? t(`workspace.reviewPanel.scopeStaged`) : t(`workspace.reviewPanel.scopeEverything`),
+                value: covered.value.complete ? covered.value.files : ``,
+            },
+        ],
+        note: commitGroups.value.length > 1 ? t(`workspace.reviewPanel.onePerRepo`) : undefined,
     };
 });
 
 // Sessions this commit would record, and which are still running — scoped exactly like the button. A
 // warning, not a gate: committing part of an unfinished agent's work is ordinary, and Undo takes it back.
-const commitOrigins = computed(() => {
-    const current = scope.value;
-    if (current.kind === `origin`) {
-        return legend.value.agents.filter((entry) => entry.id === current.id);
-    }
-    if (current.kind === `staged`) {
-        return summarizeOrigins(scannable.value, [`staged`]).agents;
-    }
-    return current.kind === `yours` ? [] : legend.value.agents;
-});
+const commitOrigins = computed(() => (scope.value.kind === `staged` ? summarizeOrigins(scannable.value, [`staged`]).agents : legend.value.agents));
 const unfinished = computed(() => commitOrigins.value.filter((entry) => originMark(entry.id) !== undefined));
 
 // Only matters for a stage-first commit, which reads the live worktree — a plain commit already froze its
@@ -224,7 +211,6 @@ const runCommit = async (target: readonly RepoTarget[], verb: CommitVerb = `comm
         // Ends the naming ask with the commit that fulfilled it, or a message still being drafted would fill the NEXT
         // commit's box.
         nameCommitAfter(undefined);
-        resetScope();
     }
     if (verb === `commitPush` && recorded.length > 0) {
         outgoingState.doSync(recorded.map((commit) => commit.repo));
@@ -305,42 +291,7 @@ const commitMenuItems = computed<MenuItem[]>(() => [
     },
 ]);
 
-// The receipt of the last commit this tab recorded, with the way back: a soft reset, so its files return staged and
-// its message returns to the box. Offered only while no remote holds it, since walking a pushed commit back would
-// need a force push to follow.
-// A repo the scan no longer lists is clean with nothing to sync: still undoable when it had no remote, already held by
-// its remote when it did.
-const receipt = computed(() => changes.lastCommit.value);
-const receiptUndoable = computed(() => {
-    const commits = receipt.value?.commits ?? [];
-    return (
-        commits.length > 0 &&
-        commits.every((commit) => {
-            const repo = scannable.value.find((entry) => entry.repo === commit.repo);
-            return repo === undefined ? !commit.remote : !syncable(repo) || unpublished(repo) || ahead(repo) > 0;
-        })
-    );
-});
-const receiptLine = computed<string | undefined>(() => {
-    const held = receipt.value;
-    if (held === undefined) {
-        return undefined;
-    }
-    const sha = held.commits.length === 1 ? held.commits[0]!.sha.slice(0, 7) : undefined;
-    const verb = held.amend ? t(`workspace.reviewPanel.amendedAs`, { sha: sha ?? `` }) : t(`workspace.reviewPanel.committedAs`, { sha: sha ?? `` });
-    return sha === undefined ? t(`workspace.reviewPanel.committedInRepos`, { count: held.commits.length }, held.commits.length) : verb;
-});
-const undoReceipt = async (): Promise<void> => {
-    const held = receipt.value;
-    if (held === undefined) {
-        return;
-    }
-    await changes.undoCommit(held);
-    // The words come back too, unless the box already holds new ones.
-    if (!changes.failures.value.has(COMMIT_SCOPE) && commitMessage.value.trim().length === 0 && !held.amend) {
-        commitMessage.value = held.message;
-    }
-};
+const { receipt, receiptUndoable, receiptLine, undoReceipt } = useCommitReceipt();
 
 // A textarea, not an input, since a message can carry a release-note trailer as a body. Measured via
 // `scrollHeight`, not counted newlines — a single wrapped line is still one line to `split`.
@@ -595,10 +546,12 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                 </div>
             </div>
 
-            <!-- The page's action row: Commit with its other verbs, the remote's verb, and what the press does. -->
+            <!-- The page's action row: Commit with its other verbs, and what the press does. The remote's verb sits in each
+                 repo's line under it instead (RepoHistory.vue), where it says where the commits go. -->
             <div v-if="page" class="flex min-w-0 flex-wrap items-center gap-2">
                 <span class="inline-flex shrink-0" data-commit-split>
                     <Button
+                        size="small"
                         severity="success"
                         class="!rounded-r-none whitespace-nowrap"
                         :disabled="!commitReady"
@@ -609,28 +562,18 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                         <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{ commitLabel }}
                     </Button>
                     <Button
+                        size="small"
                         severity="success"
-                        class="!rounded-l-none !border-l !border-l-black/20 !px-2"
+                        class="!rounded-l-none !border-l !border-l-black/20 !px-1.5"
                         :disabled="commitRunning || changes.actionBusy.value"
                         :aria-label="t(`workspace.reviewPanel.moreCommitActions`)"
                         aria-haspopup="menu"
                         @click="commitMenu?.show($event)"
                         data-commit-more
                     >
-                        <Icon name="chevron-down" class="text-xs" />
+                        <Icon name="chevron-down" class="text-2xs" />
                     </Button>
                 </span>
-                <Button
-                    v-if="showSync"
-                    severity="secondary"
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="changes.actionBusy.value"
-                    v-tooltip.top="syncTip"
-                    @click="outgoingState.doSync()"
-                    data-sync
-                >
-                    <Icon :name="syncMeta!.icon" />{{ syncLabel }}
-                </Button>
                 <span v-if="actionNote" class="min-w-0 flex-1 truncate text-xs" :class="actionNote.tone" v-tooltip.top.overflow="actionNote.text">{{
                     actionNote.text
                 }}</span>
@@ -702,46 +645,6 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                 </button>
             </div>
         </template>
-
-        <!-- The page with nothing left to record still offers the remote's verb. -->
-        <div v-else-if="page && showSync" class="flex min-w-0 items-center gap-2">
-            <Button
-                severity="secondary"
-                class="shrink-0 whitespace-nowrap"
-                :disabled="changes.actionBusy.value"
-                v-tooltip.top="syncTip"
-                @click="outgoingState.doSync()"
-                data-sync
-            >
-                <Icon :name="syncMeta!.icon" />{{ syncLabel }}
-            </Button>
-            <span v-if="syncSummary" class="min-w-0 flex-1 truncate text-xs text-subtle">{{ syncSummary }}</span>
-        </div>
-
-        <!-- The page's receipt, under the buttons that made it. -->
-        <div v-if="page && receiptLine !== undefined" class="flex min-w-0 items-center gap-1.5 text-xs" data-commit-receipt>
-            <Icon name="check" class="shrink-0 text-success" />
-            <span class="min-w-0 truncate text-muted" v-tooltip.top="receipt?.message">{{ receiptLine }}</span>
-            <button
-                v-if="receiptUndoable"
-                type="button"
-                :class="ui.textAction(`shrink-0 text-link hover:underline`)"
-                :disabled="changes.actionBusy.value"
-                v-tooltip.top="{ title: t(`workspace.reviewPanel.undoCommit`), note: t(`workspace.reviewPanel.undoCommitNote`) }"
-                @click="undoReceipt"
-                data-commit-undo
-            >
-                {{ t(`workspace.reviewPanel.undo`) }}
-            </button>
-            <button
-                type="button"
-                class="shrink-0 rounded p-0.5 text-subtle transition-colors hover:text-content"
-                @click="changes.dismissReceipt"
-                :aria-label="t(`ui.action.dismiss`)"
-            >
-                <Icon name="times" class="text-3xs" />
-            </button>
-        </div>
 
         <!-- A push's run and a closed card's verdict, below everything they follow from. -->
         <div v-if="outgoing === `flow`" class="flex min-w-0 items-center gap-1.5" v-tooltip.right="!mobile ? stageTip : undefined">

@@ -4,47 +4,53 @@ import { ref } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import { originHue } from "./changeOrigins";
-import { sameScope, type CommitScope } from "./commitScope";
-import { useCommitScope } from "./useCommitScope";
+import { useChanges } from "./useChanges";
+import { chipState, type ScopeChip, useCommitScope } from "./useCommitScope";
 
-// What Commit records, picked in one click: a chip per session with work here, your own edits, git's index, and
-// everything (useCommitScope.ts). `compact` is the phone's row over the list, where a session's chip shows its name
-// only once picked; the commit page has the room to name every one.
+// Stage in one click: a chip per session with work here, your own edits, and all of it (useCommitScope.ts). A click
+// stages the chip's files, the same move as a row's +, and a second takes them back out; several can be in at once,
+// and the Staged section of the list is what Commit records. `compact` is the phone's row over the list, where a
+// session's chip shows its name only once its files are in.
 
 const { compact = false } = defineProps<{ compact?: boolean }>();
 
 const t = useT();
-const { scope, scopeChips, toggleScope, scopeLabel, originLabel, originProvider, originMark, originDrafting, originCard } = useCommitScope();
+const changes = useChanges();
+const { scopeChips, toggleChip, chipLabel, originProvider, originMark, originDrafting, originCard } = useCommitScope();
 
-const on = (target: CommitScope): boolean => sameScope(target, scope.value);
-const named = (target: CommitScope): boolean => target.kind !== `origin` || !compact || on(target);
-
-const chipText = (target: CommitScope): string => {
-    switch (target.kind) {
+const named = (chip: ScopeChip): boolean => chip.kind !== `origin` || !compact || chipState(chip) !== `off`;
+const chipText = (chip: ScopeChip): string => {
+    switch (chip.kind) {
         case `origin`:
-            return originLabel(target.id);
+            return chipLabel(chip);
         case `yours`:
             return t(`workspace.reviewPanel.chipYou`);
-        case `staged`:
-            return t(`workspace.reviewPanel.chipStaged`);
-        case `everything`:
+        case `all`:
             return t(`workspace.reviewPanel.chipAll`);
     }
 };
+// How much of it is in: the whole count, or "in/of" while only part of it is.
+const countText = (chip: ScopeChip): string => (chipState(chip) === `mixed` ? `${chip.staged}/${chip.files}` : `${chip.files}`);
 
-// A session keeps its hue whether picked or not, so its chip and its rows' badges read as one colour; the picked one
-// gets an edge, the rest step back. Git's own selections take the kit's plain chip and its lit state.
-const chipClass = (target: CommitScope): string => {
-    if (target.kind === `origin`) {
-        return [originHue(target.id).chip, on(target) ? `border-current/40` : `opacity-60 hover:opacity-100`].join(` `);
+// A plain chip until its files are in. Then a session's chip takes its hue, so it reads as one colour with its rows'
+// badges, and the rest take the kit's lit state; one partly in gets a dashed edge.
+const chipClass = (chip: ScopeChip): string => {
+    const state = chipState(chip);
+    if (state === `off`) {
+        return ``;
     }
-    return on(target) ? `ui-chip-on` : ``;
+    const lit = chip.kind === `origin` ? `${originHue(chip.id!).chip} border-current/50` : `ui-chip-on`;
+    return state === `mixed` ? `${lit} border-dashed` : lit;
+};
+const chipTip = (chip: ScopeChip): string => {
+    const values = { scope: chipLabel(chip), files: t(`workspace.reviewPanel.fileCount`, { count: chip.files }, chip.files) };
+    return chipState(chip) === `on` ? t(`workspace.reviewPanel.unstageChip`, values) : t(`workspace.reviewPanel.stageChip`, values);
 };
 
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
-const showCard = (event: MouseEvent, target: CommitScope): void => {
-    if (target.kind === `origin`) {
-        hoverCard.value?.show(event, originCard([target.id]));
+const showCard = (event: MouseEvent, chip: ScopeChip): void => {
+    if (chip.kind === `origin`) {
+        hoverCard.value?.show(event, { ...originCard([chip.id!]), note: chipTip(chip) });
     }
 };
 </script>
@@ -55,41 +61,36 @@ const showCard = (event: MouseEvent, target: CommitScope): void => {
         class="flex min-w-0 items-center gap-1"
         :class="compact ? `flex-nowrap` : `flex-wrap gap-y-1.5`"
         role="group"
-        :aria-label="t(`workspace.reviewPanel.changeScope`, { scope: scopeLabel(scope) })"
+        :aria-label="t(`workspace.reviewPanel.stageLabel`)"
         data-commit-scope
     >
-        <span v-if="compact" class="mr-0.5 shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
+        <span class="mr-0.5 shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.stageLabel`) }}</span>
         <template v-for="chip in scopeChips" :key="chip.key">
             <span v-if="chip.divided" class="mx-0.5 h-3.5 w-px shrink-0 bg-line" aria-hidden="true"></span>
             <button
                 type="button"
                 class="ui-chip gap-1"
-                :class="[chipClass(chip.scope), named(chip.scope) && chip.scope.kind === `origin` ? `min-w-0 shrink` : `shrink-0`]"
-                :aria-pressed="on(chip.scope)"
-                :aria-label="
-                    t(`workspace.reviewPanel.scopeChipLabel`, {
-                        scope: scopeLabel(chip.scope),
-                        files: t(`workspace.reviewPanel.fileCount`, { count: chip.files }, chip.files),
-                    })
-                "
-                @click="toggleScope(chip.scope)"
-                @mouseenter="showCard($event, chip.scope)"
+                :class="[chipClass(chip), named(chip) && chip.kind === `origin` ? `min-w-0 shrink` : `shrink-0`]"
+                :aria-pressed="chipState(chip) === `mixed` ? `mixed` : chipState(chip) === `on`"
+                :aria-label="chipTip(chip)"
+                :disabled="changes.actionBusy.value"
+                v-tooltip.top="chip.kind === `origin` ? undefined : chipTip(chip)"
+                @click="toggleChip(chip)"
+                @mouseenter="showCard($event, chip)"
                 @mouseleave="hoverCard?.hide()"
                 data-scope-chip
             >
-                <template v-if="chip.scope.kind === `origin`">
+                <template v-if="chip.kind === `origin`">
                     <!-- A dot before the logo: the session hasn't finished, so its count is an instalment, not a total. -->
-                    <span v-if="originMark(chip.scope.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(chip.scope.id)!.dot"></span>
+                    <span v-if="originMark(chip.id!)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(chip.id!)!.dot"></span>
                     <!-- The same slot, spent on a different wait: its commit message still being written. -->
-                    <span
-                        v-else-if="originDrafting(chip.scope.id)"
-                        class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current opacity-60"
-                    ></span>
-                    <ProviderLogo v-if="originProvider(chip.scope.id)" :provider="originProvider(chip.scope.id)!" class="shrink-0 text-2xs" />
+                    <span v-else-if="originDrafting(chip.id!)" class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current opacity-60"></span>
+                    <ProviderLogo v-if="originProvider(chip.id!)" :provider="originProvider(chip.id!)!" class="shrink-0 text-2xs" />
                     <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 </template>
-                <span v-if="named(chip.scope)" class="min-w-0 truncate">{{ chipText(chip.scope) }}</span>
-                <span class="shrink-0 tabular-nums opacity-70">{{ chip.files }}</span>
+                <Icon v-else-if="chipState(chip) === `on`" name="check" class="shrink-0 text-3xs" />
+                <span v-if="named(chip)" class="min-w-0 truncate">{{ chipText(chip) }}</span>
+                <span class="shrink-0 tabular-nums opacity-70">{{ countText(chip) }}</span>
             </button>
         </template>
         <HoverCard ref="hoverCard" />

@@ -409,7 +409,13 @@ export const createGitRoutes = (services: Services) => {
         }),
         log: i.log.handler(async ({ input }) => {
             // Default page size when none is given: a small repo arrives whole, a large one isn't fully paid for.
-            const { branch, commits, hasMore } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300, input.skip ?? 0);
+            const { branch, commits, hasMore } = await services.git.commitLog(
+                await repoDir(input.repo),
+                input.limit ?? 300,
+                input.skip ?? 0,
+                undefined,
+                input.line === true,
+            );
             return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits, hasMore };
         }),
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),

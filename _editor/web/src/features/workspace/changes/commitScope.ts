@@ -1,60 +1,16 @@
 import { isScratch, type GitDiffSide, type LandedMessageDraft, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
-import { originsOf, type OriginSummary } from "./changeOrigins";
+import { originsOf } from "./changeOrigins";
 import { truncatedTotal } from "./truncation";
 
-// What the commit box records, named in the dock right above the message it goes with. Rows outside the scope stay
-// listed and only dim, so nothing can enter a commit unseen.
-// - staged: the index exactly as it stands, git's own selection.
-// - everything: every change, staged first (scratch stays out, as every stage-everything leaves it out).
-// - origin: one conversation's landed files, recorded alone with `commit --only`, so anything else already staged stays
-//   staged and out of this commit.
-// - yours: the files no conversation landed, recorded the same way.
-export type CommitScope =
-    { readonly kind: `staged` } | { readonly kind: `everything` } | { readonly kind: `origin`; readonly id: string } | { readonly kind: `yours` };
+// What Commit records, git's way: the index when something is staged, else everything (staged first, scratch left out,
+// as every stage-everything leaves it out). What gets staged is picked in the list (a row's +) or by the scope chips
+// (useCommitScope.ts), so the Staged section is always the whole answer.
+export type CommitScope = { readonly kind: `staged` } | { readonly kind: `everything` };
 
-export const sameScope = (a: CommitScope, b: CommitScope): boolean =>
-    a.kind === b.kind && (a.kind !== `origin` || (b.kind === `origin` && a.id === b.id));
+export const commitScopeFor = (staged: number): CommitScope => (staged > 0 ? { kind: `staged` } : { kind: `everything` });
 
-// The scope a box opens on when nobody picked one: a conversation the commit was asked to be named after, then git's
-// own selection when something is staged, then the one conversation whose work is all that is here, then everything.
-export const defaultScope = (state: {
-    readonly namedAfter: string | undefined;
-    readonly staged: number;
-    readonly legend: { readonly agents: readonly OriginSummary[]; readonly yours: number };
-}): CommitScope => {
-    const { namedAfter, staged, legend } = state;
-    if (namedAfter !== undefined && legend.agents.some((entry) => entry.id === namedAfter)) {
-        return { kind: `origin`, id: namedAfter };
-    }
-    if (staged > 0) {
-        return { kind: `staged` };
-    }
-    const [only] = legend.agents;
-    if (only !== undefined && legend.agents.length === 1 && legend.yours === 0) {
-        return { kind: `origin`, id: only.id };
-    }
-    return { kind: `everything` };
-};
-
-// A picked scope that has nothing left to record falls back to the default, rather than holding an empty box.
-export const scopeStillHolds = (
-    scope: CommitScope,
-    state: { readonly staged: number; readonly legend: { readonly agents: readonly OriginSummary[]; readonly yours: number } },
-): boolean => {
-    switch (scope.kind) {
-        case `staged`:
-            return state.staged > 0;
-        case `everything`:
-            return true;
-        case `origin`:
-            return state.legend.agents.some((entry) => entry.id === scope.id);
-        case `yours`:
-            return state.legend.yours > 0;
-    }
-};
-
-// Whether a row is part of what Commit records. A conflict is never dimmed: it blocks every scope until resolved.
+// Whether a row is part of what Commit records. A conflict always counts: it blocks the commit until resolved.
 export const inScope = (scope: CommitScope, repo: RepoChanges, side: GitDiffSide, path: string): boolean => {
     if (side === `conflicted`) {
         return true;
@@ -62,19 +18,10 @@ export const inScope = (scope: CommitScope, repo: RepoChanges, side: GitDiffSide
     if (scope.kind === `staged`) {
         return side === `staged`;
     }
-    if (isScratch(path, repo.scratch ?? [])) {
-        return false;
-    }
-    if (scope.kind === `everything`) {
-        return true;
-    }
-    const ids = originsOf(repo, path);
-    return scope.kind === `origin` ? ids.includes(scope.id) : ids.length === 0;
+    return !isScratch(path, repo.scratch ?? []);
 };
 
-// One commit per repo the scope reaches, as the daemon is asked for it. `stage` and `only` are the commit call's own
-// flags: a session's or your own files are named as a scope the daemon resolves, so a truncated list still commits all
-// of them.
+// One commit per repo the scope reaches, as the daemon is asked for it; `stage` is the commit call's own flag.
 export interface ScopeCommit {
     readonly groups: readonly RepoTarget[];
     readonly stage: boolean;
@@ -95,22 +42,16 @@ export const pathsInScope = (scope: CommitScope, repo: RepoChanges): ReadonlySet
 };
 
 export const scopeCommit = (scope: CommitScope, repos: readonly RepoChanges[]): ScopeCommit => {
-    // A repo enters when it lists something in scope, or truncated rows it can't attribute (the daemon decides those).
-    const reached = repos.filter((repo) => pathsInScope(scope, repo).size > 0 || (scope.kind !== `staged` && truncatedTotal(repo) > 0));
-    switch (scope.kind) {
-        case `staged`:
-            return {
-                groups: repos.filter((repo) => repo.staged.length > 0 || (repo.truncated?.staged ?? 0) > 0).map((repo) => ({ repo: repo.repo })),
-                stage: false,
-                only: false,
-            };
-        case `everything`:
-            return { groups: reached.map((repo) => ({ repo: repo.repo })), stage: true, only: false };
-        case `origin`:
-            return { groups: reached.map((repo) => ({ repo: repo.repo, scope: { origin: scope.id } })), stage: true, only: true };
-        case `yours`:
-            return { groups: reached.map((repo) => ({ repo: repo.repo, scope: { unlanded: true } })), stage: true, only: true };
+    if (scope.kind === `staged`) {
+        return {
+            groups: repos.filter((repo) => repo.staged.length > 0 || (repo.truncated?.staged ?? 0) > 0).map((repo) => ({ repo: repo.repo })),
+            stage: false,
+            only: false,
+        };
     }
+    // A repo enters when it lists something, or truncated rows the daemon will decide on.
+    const reached = repos.filter((repo) => pathsInScope(scope, repo).size > 0 || truncatedTotal(repo) > 0);
+    return { groups: reached.map((repo) => ({ repo: repo.repo })), stage: true, only: false };
 };
 
 // Files the scope covers among the listed rows, and whether that is the whole of it (no repo it reaches truncated).
@@ -121,6 +62,22 @@ export const scopeFiles = (scope: CommitScope, repos: readonly RepoChanges[]): {
         files: counted.reduce((total, repo) => total + pathsInScope(scope, repo).size, 0),
         complete: !counted.some((repo) => truncatedTotal(repo) > 0),
     };
+};
+
+// The one session a commit of `scope` is wholly the work of, for the message box to take its drafted sentence: every
+// staged file landed by it, or, with nothing staged, the only session here with no edits of anyone else's beside it.
+export const namingOrigin = (scope: CommitScope, repos: readonly RepoChanges[]): string | undefined => {
+    let candidates: Set<string> | undefined;
+    for (const repo of repos) {
+        for (const path of pathsInScope(scope, repo)) {
+            const ids = originsOf(repo, path);
+            candidates = new Set(candidates === undefined ? ids : ids.filter((id) => candidates!.has(id)));
+            if (candidates.size === 0) {
+                return undefined;
+            }
+        }
+    }
+    return candidates?.size === 1 ? [...candidates][0] : undefined;
 };
 
 // The one line under the message box that says how its drafted message is going. Same height in every state, so the

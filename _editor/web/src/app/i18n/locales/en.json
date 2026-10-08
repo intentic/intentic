@@ -9532,7 +9532,6 @@
             "landedBy": "Landed by",
             "moreFilesPendingHere": "More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.",
             "moreShowingFirstStage": "…and {group} more: showing the first {group2}. Stage all, commit and discard cover every file here, listed or not.",
-            "nothingElseGoesIn": "Nothing else goes in",
             "notPushed": "Not pushed",
             "noUncommittedChanges": "No uncommitted changes.",
             "noUpstreamYet": "no upstream yet",
@@ -9586,11 +9585,9 @@
             "toPushCount": "{count} to push | {count} to push",
             "scopeStaged": "What's staged",
             "scopeEverything": "Everything",
-            "changeScope": "What to commit: {scope}",
             "fileCount": "{count} file | {count} files",
             "fileCountAtLeast": "at least {count} file | at least {count} files",
             "stagesThemForYou": "stages them for you",
-            "leavesStagedAlone": "other staged files stay out",
             "writingMessage": "Writing message…",
             "draftedMessage": "Drafted message",
             "draftedBy": "Drafted by {model}",
@@ -9613,13 +9610,13 @@
             "undo": "Undo",
             "undoCommit": "Undo this commit",
             "undoCommitNote": "Its files come back staged and its message returns to the box. Nothing on disk changes.",
-            "from": "From",
             "chipYou": "You",
-            "chipStaged": "Staged",
             "chipAll": "All",
-            "scopeChipLabel": "Commit {scope}: {files}",
             "commitFiles": "Commit {count} file | Commit {count} files",
-            "commitFilesAtLeast": "Commit at least {count} file | Commit at least {count} files"
+            "commitFilesAtLeast": "Commit at least {count} file | Commit at least {count} files",
+            "stageLabel": "Stage",
+            "stageChip": "Stage {scope}: {files}",
+            "unstageChip": "Unstage {scope}: {files}"
         },
         "rowActions": {
             "changedSinceOn": "Changed since switched on",
@@ -10031,12 +10028,9 @@
             "tooLargeSized": "This file is {size}, too large to preview here."
         },
         "commitPage": {
-            "commit": "Commit",
-            "commitTo": "Commit to {repo}",
-            "commitToRepos": "Commit to {count} repo | Commit to {count} repos",
-            "goesIn": "Goes in",
-            "lastCommits": "Last commits",
-            "diffsOpenHere": "A file picked in {changes} opens its diff as a tab here; Commit above the tabs brings this page back."
+            "diffsOpenHere": "A file picked in {changes} opens its diff as a tab here; Commit above the tabs brings this page back.",
+            "uncommitted": "Uncommitted",
+            "verbTo": "{action} to {target}"
         }
     }
 }

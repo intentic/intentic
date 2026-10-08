@@ -9107,7 +9107,6 @@
             "landedBy": "Scalone przez",
             "moreFilesPendingHere": "Oczekuje tu więcej plików, niż wypisuje panel, a to obejmuje je wszystkie. Liczby poniżej liczą tylko te wypisane.",
             "moreShowingFirstStage": "…i {group} więcej: pokazujemy pierwsze {group2}. Dodanie wszystkiego do indeksu, commit i odrzucenie obejmują każdy plik tutaj, wypisany czy nie.",
-            "nothingElseGoesIn": "Nic więcej nie wchodzi",
             "notPushed": "Niewypchnięte",
             "noUncommittedChanges": "Brak niezacommitowanych zmian.",
             "noUpstreamYet": "jeszcze bez gałęzi nadrzędnej",
@@ -9161,11 +9160,9 @@
             "toPushCount": "{count} do wypchnięcia | {count} do wypchnięcia | {count} do wypchnięcia",
             "scopeStaged": "To, co przygotowane",
             "scopeEverything": "Wszystko",
-            "changeScope": "Co zatwierdzić: {scope}",
             "fileCount": "{count} plik | {count} pliki | {count} plików",
             "fileCountAtLeast": "co najmniej {count} plik | co najmniej {count} pliki | co najmniej {count} plików",
             "stagesThemForYou": "przygotuje je za Ciebie",
-            "leavesStagedAlone": "inne przygotowane pliki zostają poza nim",
             "writingMessage": "Piszę opis…",
             "draftedMessage": "Opis napisany",
             "draftedBy": "Napisał {model}",
@@ -9188,13 +9185,13 @@
             "undo": "Cofnij",
             "undoCommit": "Cofnij ten commit",
             "undoCommitNote": "Jego pliki wracają jako przygotowane, a opis wraca do pola. Nic na dysku się nie zmienia.",
-            "from": "Od",
             "chipYou": "Ty",
-            "chipStaged": "Przygotowane",
             "chipAll": "Wszystko",
-            "scopeChipLabel": "Zatwierdź {scope}: {files}",
             "commitFiles": "Zatwierdź {count} plik | Zatwierdź {count} pliki | Zatwierdź {count} plików",
-            "commitFilesAtLeast": "Zatwierdź co najmniej {count} plik | Zatwierdź co najmniej {count} pliki | Zatwierdź co najmniej {count} plików"
+            "commitFilesAtLeast": "Zatwierdź co najmniej {count} plik | Zatwierdź co najmniej {count} pliki | Zatwierdź co najmniej {count} plików",
+            "stageLabel": "Przygotuj",
+            "stageChip": "Przygotuj {scope}: {files}",
+            "unstageChip": "Wycofaj {scope}: {files}"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",
@@ -9624,12 +9621,9 @@
             "tooLargeSized": "Ten plik ma {size}, to za dużo na podgląd tutaj."
         },
         "commitPage": {
-            "commit": "Zatwierdź",
-            "commitTo": "Zatwierdź w {repo}",
-            "commitToRepos": "Zatwierdź w {count} repozytorium | Zatwierdź w {count} repozytoriach | Zatwierdź w {count} repozytoriach",
-            "goesIn": "Wchodzi",
-            "lastCommits": "Ostatnie commity",
-            "diffsOpenHere": "Plik wybrany w {changes} otwiera tu swój diff jako kartę; Zatwierdź nad kartami wraca do tej strony."
+            "diffsOpenHere": "Plik wybrany w {changes} otwiera tu swój diff jako kartę; Zatwierdź nad kartami wraca do tej strony.",
+            "uncommitted": "Niezatwierdzone",
+            "verbTo": "{action} do {target}"
         }
     },
     "needs": {

@@ -21,12 +21,18 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const held: ((response: GitChanges) => void)[] = [];
 const changes = jest.fn(() => new Promise<GitChanges>((resolve) => held.push(resolve)));
 const commit = jest.fn(async (_input: unknown) => ({ committed: true, sha: `abc1234`.padEnd(40, `0`) }));
-// The commit page's recent commits; nothing here reads them.
+// The commit page's history graph; nothing here reads it.
 const log = jest.fn(async (input: { repo: string }) => ({ repo: input.repo, commits: [], hasMore: false }));
+// What a stage chip sends, and its way back out.
+const stage = jest.fn(async (_input: unknown) => ({ ok: true as const }));
+const unstage = jest.fn(async (_input: unknown) => ({ ok: true as const }));
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, commit, log } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({
+    ...realSandboxRpc,
+    sandboxRpc: fakeSandboxRpc({ git: { changes, commit, log, stage, unstage } }),
+}));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 const { default: CommitPage } = await import("./CommitPage.vue");
@@ -64,8 +70,6 @@ const answer = async (response: GitChanges): Promise<void> => {
     await settle();
 };
 
-// The chip lit for what Commit records.
-const pickedChip = (el: HTMLElement): Element | null => el.querySelector(`[data-scope-chip][aria-pressed="true"]`);
 const chipNamed = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll<HTMLButtonElement>(`[data-scope-chip]`)].find((chip) => chip.textContent?.includes(text));
 
@@ -77,6 +81,8 @@ afterEach(() => {
     held.length = 0;
     registry.value = [];
     commit.mockClear();
+    stage.mockClear();
+    unstage.mockClear();
     nameCommitAfter(undefined);
     commitMessage.value = ``;
 });
@@ -181,39 +187,61 @@ const mixedTree = (): GitChanges => ({
 const rowOf = (el: HTMLElement, name: string): HTMLElement | undefined =>
     [...el.querySelectorAll<HTMLElement>(`.group\\/file`)].find((row) => row.textContent?.includes(name));
 
-// The bug this layout closed: with a session picked, Commit used to record whatever was staged, while the filter hid
-// the staged rows and the box held that session's sentence. A session's commit now records its files alone, and every
-// row stays on screen, the ones it leaves out dimmed.
-it(`commits one conversation's files alone, leaving a hand-staged file staged and on screen`, async () => {
+// A session's chip is the row's + for every file it landed, named by scope so files past a truncated list go in too.
+// Commit then records the index, the hand-staged file with them, as git would.
+it(`stages a session's files in one click, and Commit records the index`, async () => {
     registry.value = [landed(`a1`, `intentic CI`, `Fix sandbox turn cleanup`)];
-    nameCommitAfter(`a1`);
     const el = await mount({ page: true });
     await answer(mixedTree());
 
-    expect(pickedChip(el)?.textContent).toContain(`intentic CI`);
-    expect(rowOf(el, `mine.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(true);
-    expect(rowOf(el, `turn-sandbox.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(false);
-    // The button counts what it records, and the line beside it says what the press does to the index on the way.
-    expect(el.querySelector(`[data-commit]`)?.textContent).toContain(`Commit 2 files`);
-    expect(el.textContent).toContain(`other staged files stay out`);
-    // The drafted sentence reached the box without a second click.
-    expect(el.querySelector<HTMLTextAreaElement>(`[data-commit-message]`)?.value).toBe(`Fix sandbox turn cleanup`);
+    chipNamed(el, `intentic CI`)?.click();
+    await settle();
+    expect(stage).toHaveBeenCalledWith({ repo: `root`, scope: { origin: `a1`, side: `unstaged` } });
 
+    // The daemon's next answer has them in.
+    const tree = mixedTree();
+    await answer({ repos: tree.repos.map((repo) => ({ ...repo, staged: [...repo.staged, ...repo.unstaged], unstaged: [] })) });
+    expect(chipNamed(el, `intentic CI`)?.getAttribute(`aria-pressed`)).toBe(`true`);
+    expect(el.querySelector(`[data-commit]`)?.textContent).toContain(`Commit 3 files`);
+
+    commitMessage.value = `chore: both`;
+    await nextTick();
     el.querySelector<HTMLButtonElement>(`[data-commit]`)?.click();
     await settle();
-    expect(commit).toHaveBeenCalledWith({ repo: `root`, message: `Fix sandbox turn cleanup`, stage: { scope: { origin: `a1` } }, only: true });
+    expect(commit).toHaveBeenCalledWith({ repo: `root`, message: `chore: both` });
 });
 
-// With nothing named, a staged index is git's own selection and wins; the session's rows dim instead.
-it(`opens on what is staged when something is, recording the index as it stands`, async () => {
+// A second click on a chip whose files are all in takes them back out, the row's −.
+it(`unstages a session's files when its chip is clicked again`, async () => {
     registry.value = [landed(`a1`, `intentic CI`)];
+    const el = await mount({ page: true });
+    const tree = mixedTree();
+    await answer({ repos: tree.repos.map((repo) => ({ ...repo, staged: repo.unstaged, unstaged: [] })) });
+
+    chipNamed(el, `intentic CI`)?.click();
+    await settle();
+    expect(unstage).toHaveBeenCalledWith({ repo: `root`, scope: { origin: `a1`, side: `staged` } });
+    expect(stage).not.toHaveBeenCalled();
+});
+
+// When the index holds one session's work alone, the box takes the sentence it drafted.
+it(`names the commit after the one session whose files are all that's staged`, async () => {
+    registry.value = [landed(`a1`, `intentic CI`, `Fix sandbox turn cleanup`)];
+    const el = await mount({ page: true });
+    const tree = mixedTree();
+    await answer({ repos: tree.repos.map((repo) => ({ ...repo, staged: repo.unstaged, unstaged: repo.staged })) });
+
+    expect(el.querySelector<HTMLTextAreaElement>(`[data-commit-message]`)?.value).toBe(`Fix sandbox turn cleanup`);
+    expect(el.querySelector(`[data-commit]`)?.textContent).toContain(`Commit 2 files`);
+});
+
+// With the owner's own file staged too, the commit is nobody's alone, so no session's sentence goes in the box.
+it(`records the index as it stands, naming nobody when it mixes work`, async () => {
+    registry.value = [landed(`a1`, `intentic CI`, `Fix sandbox turn cleanup`)];
     const el = await mount();
     await answer(mixedTree());
 
-    expect(pickedChip(el)?.textContent).toContain(`Staged`);
-    expect(rowOf(el, `mine.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(false);
-    expect(rowOf(el, `turn-sandbox.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(true);
-
+    expect(el.querySelector<HTMLTextAreaElement>(`[data-commit-message]`)?.value).toBe(``);
     commitMessage.value = `chore: mine`;
     await nextTick();
     el.querySelector<HTMLButtonElement>(`[data-commit]`)?.click();
@@ -221,8 +249,8 @@ it(`opens on what is staged when something is, recording the index as it stands`
     expect(commit).toHaveBeenCalledWith({ repo: `root`, message: `chore: mine` });
 });
 
-// The screenshot's case: one session's work is all that's here, so the dock opens on it, and the draft's progress sits
-// on one line inside the field rather than a growing list above the button.
+// The screenshot's case: one session's work is all that's here, so the box waits on its draft, whose progress sits on
+// one line inside the field rather than a growing list above the button.
 it(`opens on the one conversation whose work is all that is here, its draft on one line`, async () => {
     registry.value = [
         {
@@ -247,7 +275,6 @@ it(`opens on the one conversation whose work is all that is here, its draft on o
     const tree = mixedTree();
     await answer({ repos: tree.repos.map((repo) => ({ ...repo, staged: [] })) });
 
-    expect(pickedChip(el)?.textContent).toContain(`intentic CI`);
     const line = el.querySelector(`[data-draft-line]`);
     expect(line?.textContent).toContain(`Writing message…`);
     expect(line?.textContent).toContain(`1 failed`);
@@ -288,22 +315,4 @@ it(`offers Undo for a commit that left a local repo clean`, async () => {
 it(`offers no Undo once a remote holds the commit`, async () => {
     const el = await committedClean({ remote: `origin`, branch: `main`, upstream: `origin/main`, ahead: 0, behind: 0 });
     expect(el.querySelector(`[data-commit-undo]`)).toBeNull();
-});
-
-// One click picks what to commit, and a second on the same chip lets go of it, back to what the box opened on.
-it(`picks a session in one click and lets go of it on the next`, async () => {
-    registry.value = [landed(`a1`, `intentic CI`, `Fix sandbox turn cleanup`)];
-    const el = await mount({ page: true });
-    await answer(mixedTree());
-    expect(pickedChip(el)?.textContent).toContain(`Staged`);
-
-    chipNamed(el, `intentic CI`)?.click();
-    await nextTick();
-    expect(pickedChip(el)?.textContent).toContain(`intentic CI`);
-    expect(rowOf(el, `mine.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(true);
-
-    chipNamed(el, `intentic CI`)?.click();
-    await nextTick();
-    expect(pickedChip(el)?.textContent).toContain(`Staged`);
-    expect(rowOf(el, `mine.ts`)?.hasAttribute(`data-out-of-scope`)).toBe(false);
 });

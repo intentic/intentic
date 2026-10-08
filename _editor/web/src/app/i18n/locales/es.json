@@ -5372,7 +5372,6 @@
             "landedBy": "Integrado por",
             "moreFilesPendingHere": "Aquí hay más archivos pendientes de los que el panel lista, y esto los cubre todos. Las cifras de abajo cuentan solo los listados.",
             "moreShowingFirstStage": "…y {group} más: se muestran los {group2} primeros. Preparar todo, hacer commit y descartar cubren todos los archivos de aquí, listados o no.",
-            "nothingElseGoesIn": "No entra nada más",
             "notPushed": "Sin enviar",
             "noUncommittedChanges": "No hay cambios sin commit.",
             "noUpstreamYet": "todavía sin upstream",
@@ -5400,10 +5399,8 @@
             "verbCommits": "{verb} {count} commit | {verb} {count} commits",
             "scopeStaged": "Lo preparado",
             "scopeEverything": "Todo",
-            "changeScope": "Qué confirmar: {scope}",
             "fileCount": "{count} archivo | {count} archivos",
             "stagesThemForYou": "los prepara por ti",
-            "leavesStagedAlone": "los demás archivos preparados quedan fuera",
             "writingMessage": "Escribiendo el mensaje…",
             "draftedBy": "Escrito por {model}",
             "noDraftWritten": "No se escribió ningún mensaje",
@@ -5412,11 +5409,12 @@
             "amendLast": "Corregir el último commit",
             "undo": "Deshacer",
             "undoCommit": "Deshacer este commit",
-            "from": "De",
             "chipYou": "Tú",
-            "chipStaged": "Preparado",
             "chipAll": "Todo",
-            "commitFiles": "Confirmar {count} archivo | Confirmar {count} archivos"
+            "commitFiles": "Confirmar {count} archivo | Confirmar {count} archivos",
+            "stageLabel": "Preparar",
+            "stageChip": "Preparar {scope}: {files}",
+            "unstageChip": "Quitar {scope}: {files}"
         },
         "rowActions": {
             "changedSinceOn": "Cambiados desde que se activaron",
@@ -5703,10 +5701,8 @@
             "closingTabsDiscardsUnsaved": "Cerrar estas pestañas descarta sus ediciones sin guardar. Esto no se puede deshacer."
         },
         "commitPage": {
-            "commit": "Confirmar",
-            "commitTo": "Confirmar en {repo}",
-            "goesIn": "Entra",
-            "lastCommits": "Últimos commits"
+            "uncommitted": "Sin confirmar",
+            "verbTo": "{action} a {target}"
         }
     },
     "needs": {

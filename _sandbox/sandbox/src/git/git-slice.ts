@@ -120,7 +120,13 @@ export interface GitSlice {
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
         // Git-history graph, read-only: one repo's commit log across all refs, lazy per-commit detail on request.
-        readonly commitLog: (dir: string, limit: number, skip?: number) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
+        readonly commitLog: (
+            dir: string,
+            limit: number,
+            skip?: number,
+            git?: GitRunner,
+            line?: boolean,
+        ) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
         // What one repo contributes to an AI commit message: recent subjects, file list, and the diff to be recorded.
         readonly collectRepoDiff: (repo: string, dir: string, scope: CommitScope) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;

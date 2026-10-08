@@ -1116,9 +1116,9 @@ const includeTip = computed((): Tip => ({
                             <Icon name="th-large" class="text-sm" />
                         </button>
                     </template>
-                    <template #home>
-                        <CommitPage v-if="commitHome" />
-                        <HomeView v-else />
+                    <!-- Filled only while the Changes list is open; otherwise the pane draws its own home. -->
+                    <template v-if="commitHome" #home>
+                        <CommitPage />
                     </template>
                     <template #status>
                         <div class="flex shrink-0 items-center gap-2 px-2">

@@ -93,20 +93,28 @@ export const dropCommit = async (dir: string, sha: string, author: Author, git: 
 // Asks for one more commit than the page returns and drops it, so `hasMore` is answered truthfully, not guessed.
 const RS = "\x1e";
 const US = "\x1f";
+// `line`: HEAD's own first-parent line instead of every branch (`--all`), for a view of where this branch stands.
 export const commitLog = async (
     dir: string,
     limit: number,
     skip = 0,
     git: GitRunner = defaultGit,
+    line = false,
 ): Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }> => {
     const format = `${RS}%H${US}%h${US}%P${US}%an${US}%ae${US}%at${US}%D${US}%s${US}%b`;
     // Branch and log run concurrently; an unborn HEAD makes `git log` exit non-zero, an empty graph, not an error.
     // --decorate is required: git only loads ref decorations for a TTY, and the daemon runs git piped (non-TTY).
     const [branchOut, logOut] = await Promise.all([
         git(dir, ["branch", "--show-current"]),
-        git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit + 1}`, `--skip=${skip}`, `--pretty=format:${format}`]).catch(
-            () => undefined,
-        ),
+        git(dir, [
+            "log",
+            ...(line ? ["--first-parent", "HEAD"] : ["--all"]),
+            "--decorate",
+            "--topo-order",
+            `--max-count=${limit + 1}`,
+            `--skip=${skip}`,
+            `--pretty=format:${format}`,
+        ]).catch(() => undefined),
     ]);
     const branch = branchOut.stdout.trim();
     if (logOut === undefined) {

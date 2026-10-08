@@ -50,6 +50,13 @@ export const GitLogQuerySchema = RepoParamSchema.extend({
         .describe(
             "How many newer commits to step over, which is how you page further back. Paged rather than read whole, because a large repository's history is tens of thousands of rows.",
         ),
+    // Query strings carry booleans as text, so only the literal "true" turns it on.
+    line: z
+        .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
+        .optional()
+        .describe(
+            "Only the current branch's own line: the commits HEAD reaches through first parents, newest first, without every other branch beside it. Leave it out for the whole graph.",
+        ),
 });
 // Every real git repo under /work, as root-relative dir ids; "root" is the /work repo itself, implicit as an id.
 export const GitReposSchema = z.object({

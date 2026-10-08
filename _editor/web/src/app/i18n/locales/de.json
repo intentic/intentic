@@ -5342,7 +5342,6 @@
             "landedBy": "Gelandet von",
             "moreFilesPendingHere": "Hier stehen mehr Dateien aus, als das Panel auflistet, und das hier deckt sie alle ab. Die Zahlen unten zählen nur die aufgelisteten.",
             "moreShowingFirstStage": "…und {group} weitere: die ersten {group2} werden gezeigt. Alles stagen, committen und verwerfen decken jede Datei hier ab, gelistet oder nicht.",
-            "nothingElseGoesIn": "Sonst kommt nichts hinein",
             "notPushed": "Nicht gepusht",
             "noUncommittedChanges": "Keine nicht committeten Änderungen.",
             "noUpstreamYet": "noch kein Upstream",
@@ -5370,10 +5369,8 @@
             "verbCommits": "{verb}: {count} Commit | {verb}: {count} Commits",
             "scopeStaged": "Vorgemerktes",
             "scopeEverything": "Alles",
-            "changeScope": "Was committen: {scope}",
             "fileCount": "{count} Datei | {count} Dateien",
             "stagesThemForYou": "merkt sie für dich vor",
-            "leavesStagedAlone": "andere vorgemerkte Dateien bleiben außen vor",
             "writingMessage": "Nachricht wird geschrieben…",
             "draftedBy": "Geschrieben von {model}",
             "noDraftWritten": "Keine Nachricht geschrieben",
@@ -5382,11 +5379,12 @@
             "amendLast": "Letzten Commit ändern",
             "undo": "Rückgängig",
             "undoCommit": "Diesen Commit rückgängig machen",
-            "from": "Von",
             "chipYou": "Du",
-            "chipStaged": "Vorgemerkt",
             "chipAll": "Alle",
-            "commitFiles": "{count} Datei committen | {count} Dateien committen"
+            "commitFiles": "{count} Datei committen | {count} Dateien committen",
+            "stageLabel": "Vormerken",
+            "stageChip": "{scope} vormerken: {files}",
+            "unstageChip": "{scope} nicht mehr vormerken: {files}"
         },
         "rowActions": {
             "changedSinceOn": "Seit Aktivierung geändert",
@@ -5669,10 +5667,8 @@
             "closingTabsDiscardsUnsaved": "Diese Tabs zu schließen verwirft ihre ungesicherten Änderungen. Das lässt sich nicht rückgängig machen."
         },
         "commitPage": {
-            "commit": "Committen",
-            "commitTo": "In {repo} committen",
-            "goesIn": "Kommt hinein",
-            "lastCommits": "Letzte Commits"
+            "uncommitted": "Nicht committet",
+            "verbTo": "{action} nach {target}"
         }
     },
     "needs": {

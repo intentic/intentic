@@ -32,11 +32,10 @@ import { useHome } from "../home/useHome";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
-// sides (a path can be on both with different content). What Commit records is a scope (commitScope.ts): a session's
-// landed files, your own edits, git's index as staged, or everything; rows outside it dim and stay listed. On a
-// desktop the commit page beside the list picks the scope and holds the message (CommitPage.vue); `docked` is the
-// phone, with no page beside it, where the scope chips sit over the list and the composer docks under it. Built for a
-// ~270px sidebar: one primary button per row, icons+tooltips for the rest.
+// sides (a path can be on both with different content). Commit records the Staged section, or everything when it is
+// empty (commitScope.ts). On a desktop the commit page beside the list holds the stage chips and the message
+// (CommitPage.vue); `docked` is the phone, with no page beside it, where the chips sit over the list and the composer
+// docks under it. Built for a ~270px sidebar: one primary button per row, icons+tooltips for the rest.
 
 const { docked = false } = defineProps<{ docked?: boolean }>();
 
@@ -47,7 +46,7 @@ const changes = useChanges();
 // The scope Commit records, shared with the composer (useCommitScope.ts): rows outside it dim, never hide. A repo the
 // daemon couldn't scan (empty lists, `error` set) stays out of every computation below but still renders as its own
 // row, rather than silently disappearing.
-const { scannable, scopeOrigin, originLabel, originProvider, originCard, rowInScope } = useCommitScope();
+const { scannable, scopeOrigin, originLabel, originProvider, originCard } = useCommitScope();
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
 // The open mode rides the gesture: a click previews (replaced by the next look), a double-click keeps the tab.
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
@@ -77,8 +76,8 @@ const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
 // The name rides the row only once the panel is wide enough to hold it without evicting the path (or on mobile).
 const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 
-// Quiet when the row's only origin is the scope's own session (the dock already says so); a file two agents landed
-// still shows both, since that's information the scope alone doesn't give.
+// Quiet when the row's only origin is the session this commit is wholly the work of (the message box already names
+// it); a file two agents landed still shows both, since that's information the commit alone doesn't give.
 const showRowOrigins = (repo: RepoChanges, path: string): boolean => {
     const ids = originsOf(repo, path);
     if (ids.length === 0) {
@@ -694,9 +693,7 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                                         // One 8px step per rank that is actually drawn above this row, so a
                                         // filename never pays indent for a heading that isn't there.
                                         rowIndent(group, section.side),
-                                        !rowInScope(group, section.side, change.path) && 'opacity-45 hover:opacity-100 focus-within:opacity-100',
                                     ]"
-                                    :data-out-of-scope="rowInScope(group, section.side, change.path) ? undefined : ``"
                                 >
                                     <!-- No indent guide or origin rail down the left: the status mark sits under its heading's first letter, and
                                          the origin chips below carry which agent touched the file. -->

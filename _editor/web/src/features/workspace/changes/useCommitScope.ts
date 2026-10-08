@@ -1,32 +1,34 @@
-import type { GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges } from "@intentic/sandbox-contract";
-import { sandboxRef } from "@intentic/extension-api";
+import { isScratch, type GitDiffSide, type LandedMessage, type LandedMessageDraft, type RepoChanges } from "@intentic/sandbox-contract";
 import { formatElapsed } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
 import { useChat } from "../../chat/run/useChat";
-import { commitMessageOf, draftRunning, landedMessage, summarizeOrigins } from "./changeOrigins";
+import { commitMessageOf, draftRunning, landedMessage, originsOf, summarizeOrigins } from "./changeOrigins";
 import { nameCommitAfter, namedAfter } from "./commitMessage";
-import { type CommitScope, defaultScope, inScope, sameScope, scopeCommit, scopeFiles, scopeStillHolds } from "./commitScope";
+import { type CommitScope, commitScopeFor, inScope, namingOrigin, scopeCommit, scopeFiles } from "./commitScope";
+import { truncatedTotal } from "./truncation";
 import { useChanges } from "./useChanges";
 
-// What Commit records (commitScope.ts), shared by everything that shows it: the Changes list dims the rows outside it,
-// and the composer (the commit page on a desktop, the list's own dock on a phone) records it. The pick lives here
-// rather than in a component, so the list and the page can never disagree about it.
+// What Commit records and what to stage for it, shared by everything that shows it: the Changes list, the scope chips,
+// and the composer (the commit page on a desktop, the list's own dock on a phone). Commit records the index, or
+// everything when nothing is staged (commitScope.ts); a chip stages a session's files, your own, or all of them, the
+// same move as a row's +, and takes them back out when they are all in already.
 
-// Picked from the chips, or else undefined for the default: the session the commit was asked to be named after, git's
-// own selection when something is staged, the one session whose work is all that's here, or everything.
-const picked = sandboxRef<CommitScope | undefined>(() => (namedAfter.value === undefined ? undefined : { kind: `origin`, id: namedAfter.value }));
-
-// One chip of the scope row: a choice of what to commit, with how many files it holds.
+// One chip: a set of files to stage in one click, and how much of it the index already holds.
 export interface ScopeChip {
     readonly key: string;
-    readonly scope: CommitScope;
+    // A session's id, `yours` for the files no session landed, or `all`.
+    readonly kind: `origin` | `yours` | `all`;
+    readonly id?: string;
     readonly files: number;
-    // Drawn with a divider before it: the first of git's own selections after the sessions.
+    readonly staged: number;
+    // Drawn with a divider before it: All, after the sessions and your own edits.
     readonly divided: boolean;
 }
+export type ChipState = `on` | `mixed` | `off`;
+export const chipState = (chip: ScopeChip): ChipState => (chip.staged === 0 ? `off` : chip.staged >= chip.files ? `on` : `mixed`);
 
 // Hover content for a session (HoverCard.show's argument), shaped here so every chip and row raises the same card.
 export interface OriginCard {
@@ -106,108 +108,97 @@ export const useCommitScope = () => {
         };
     };
 
-    // An ask that arrives while the panel is open (the board's "Commit this") picks its session the same way.
-    watch(namedAfter, (id) => {
-        if (id !== undefined) {
-            picked.value = { kind: `origin`, id };
-        }
-    });
-    const scope = computed<CommitScope>(
-        () => picked.value ?? defaultScope({ namedAfter: namedAfter.value, staged: changes.stagedCount.value, legend: legend.value }),
-    );
-    // A pick with nothing left to record falls back to the default (and ends a naming ask with it); an empty,
-    // still-loading review retires nothing.
+    const scope = computed<CommitScope>(() => commitScopeFor(changes.stagedCount.value));
+    // The one session this commit is wholly the work of, whose drafted sentence the box takes (commitScope.ts).
+    const scopeOrigin = computed<string | undefined>(() => namingOrigin(scope.value, scannable.value));
+    // The box's naming follows it, so a sentence leaves the box when the commit stops being that session's alone.
     watch(
-        [legend, changes.stagedCount, picked],
-        () => {
-            const held = picked.value;
-            if (held === undefined || !changes.loaded.value || changes.count.value === 0) {
-                return;
-            }
-            if (!scopeStillHolds(held, { staged: changes.stagedCount.value, legend: legend.value })) {
-                picked.value = undefined;
-                if (held.kind === `origin` && namedAfter.value === held.id) {
-                    nameCommitAfter(undefined);
-                }
+        scopeOrigin,
+        (id) => {
+            if (changes.loaded.value && id !== namedAfter.value) {
+                nameCommitAfter(id);
             }
         },
         { immediate: true },
     );
-    const pickScope = (next: CommitScope): void => {
-        picked.value = next;
-        // Naming follows the pick, and leaving a session's scope withdraws its sentence from the box.
-        nameCommitAfter(next.kind === `origin` ? next.id : undefined);
-    };
-    // Back to the default, as a finished commit leaves it.
-    const resetScope = (): void => {
-        picked.value = undefined;
-    };
-    // One click picks a chip. Clicking the picked session (or your own edits) again lets go of it, back to whatever
-    // the box would open on, or to everything when that is the same session.
-    const toggleScope = (target: CommitScope): void => {
-        if (!sameScope(target, scope.value)) {
-            pickScope(target);
-            return;
-        }
-        if (target.kind === `staged` || target.kind === `everything`) {
-            return;
-        }
-        const fallback = defaultScope({ namedAfter: undefined, staged: changes.stagedCount.value, legend: legend.value });
-        if (sameScope(fallback, target)) {
-            pickScope({ kind: `everything` });
-            return;
-        }
-        picked.value = undefined;
-        nameCommitAfter(undefined);
-    };
-    const scopeOrigin = computed<string | undefined>(() => (scope.value.kind === `origin` ? scope.value.id : undefined));
 
-    // The scope in words, for a chip's label and every sentence naming it.
-    const scopeLabel = (target: CommitScope): string => {
-        switch (target.kind) {
-            case `staged`:
-                return t(`workspace.reviewPanel.scopeStaged`);
-            case `everything`:
-                return t(`workspace.reviewPanel.scopeEverything`);
-            case `origin`:
-                return originLabel(target.id);
-            case `yours`:
-                return t(`workspace.savePanel.ownEdits`);
+    // The files each chip stands for, among the rows listed: a conflict is never staged from here (git add would mark it
+    // resolved), and scratch stays out, as every stage-everything leaves it out.
+    const chipPaths = (repo: RepoChanges, kind: ScopeChip[`kind`], id: string | undefined): { all: Set<string>; staged: Set<string> } => {
+        const all = new Set<string>();
+        const staged = new Set<string>();
+        const conflicted = new Set(repo.conflicted.map((change) => change.path));
+        const belongs = (path: string): boolean => {
+            if (conflicted.has(path) || isScratch(path, repo.scratch ?? [])) {
+                return false;
+            }
+            const ids = originsOf(repo, path);
+            return kind === `all` || (kind === `yours` ? ids.length === 0 : ids.includes(id!));
+        };
+        for (const change of repo.unstaged) {
+            if (belongs(change.path)) {
+                all.add(change.path);
+            }
         }
+        for (const change of repo.staged) {
+            if (belongs(change.path)) {
+                all.add(change.path);
+                staged.add(change.path);
+            }
+        }
+        // A path with more on the unstaged side isn't wholly in.
+        for (const change of repo.unstaged) {
+            staged.delete(change.path);
+        }
+        return { all, staged };
     };
-
-    // Every choice worth a chip: each session with work here, your own edits (only beside some session's, since with
-    // none they are the same files as everything), git's index when it holds something, and everything. A row of one
-    // is no choice, so the row is drawn only from two.
+    const chipOf = (kind: ScopeChip[`kind`], id: string | undefined, divided: boolean): ScopeChip => {
+        let files = 0;
+        let staged = 0;
+        for (const repo of scannable.value) {
+            const paths = chipPaths(repo, kind, id);
+            files += paths.all.size;
+            staged += paths.staged.size;
+        }
+        return { key: id === undefined ? kind : `${kind}:${id}`, kind, ...(id === undefined ? {} : { id }), files, staged, divided };
+    };
+    // A chip per session with work here, your own edits beside them (alone they are the same files as All), and All.
+    // A row of one is no choice, so it is drawn only from two.
     const scopeChips = computed<readonly ScopeChip[]>(() => {
-        const byOrigin: ScopeChip[] = [
-            ...legend.value.agents.map((entry) => ({
-                key: `origin:${entry.id}`,
-                scope: { kind: `origin`, id: entry.id } as const,
-                files: entry.files,
-                divided: false,
-            })),
-            ...(legend.value.agents.length > 0 && legend.value.yours > 0
-                ? [{ key: `yours`, scope: { kind: `yours` } as const, files: legend.value.yours, divided: false }]
-                : []),
-        ];
-        const ofGit: ScopeChip[] = [
-            ...(changes.stagedCount.value > 0
-                ? [{ key: `staged`, scope: { kind: `staged` } as const, files: changes.stagedCount.value, divided: false }]
-                : []),
-            { key: `everything`, scope: { kind: `everything` }, files: changes.count.value, divided: false },
-        ];
-        const [first, ...rest] = ofGit;
-        return [...byOrigin, { ...first!, divided: byOrigin.length > 0 }, ...rest];
+        const sessions = legend.value.agents.map((entry) => chipOf(`origin`, entry.id, false));
+        const yours = sessions.length > 0 && legend.value.yours > 0 ? [chipOf(`yours`, undefined, false)] : [];
+        const chips = [...sessions, ...yours].filter((chip) => chip.files > 0);
+        return [...chips, chipOf(`all`, undefined, chips.length > 0)];
     });
 
-    // Whether a row is part of what Commit records; one outside it is drawn dimmed.
-    const rowInScope = (repo: RepoChanges, side: GitDiffSide, path: string): boolean => inScope(scope.value, repo, side, path);
+    // One click: stage the chip's files, or take them back out when the index already holds them all. Named by scope
+    // rather than path, so files past a truncated list go in too; a conflict never does.
+    const toggleChip = (chip: ScopeChip): Promise<void> => {
+        const into = chipState(chip) !== `on`;
+        const side = into ? (`unstaged` as const) : (`staged` as const);
+        const scopeOf = chip.kind === `origin` ? { origin: chip.id! } : chip.kind === `yours` ? { unlanded: true } : {};
+        const groups = scannable.value
+            .filter((repo) => {
+                const paths = chipPaths(repo, chip.kind, chip.id);
+                return into ? paths.all.size > paths.staged.size || truncatedTotal(repo) > 0 : paths.staged.size > 0;
+            })
+            .map((repo) => ({ repo: repo.repo, scope: { ...scopeOf, side } }));
+        return changes.stageGroups(groups, into);
+    };
 
-    // What the press records, repo by repo, resolved by the daemon from the scope rather than the rows drawn, so a
-    // truncated review still commits all of it (commitScope.ts).
+    // The chip in words: a session's title, your own edits, or everything.
+    const chipLabel = (chip: ScopeChip): string =>
+        chip.kind === `origin`
+            ? originLabel(chip.id!)
+            : chip.kind === `yours`
+              ? t(`workspace.savePanel.ownEdits`)
+              : t(`workspace.reviewPanel.scopeEverything`);
+
+    // What the press records, repo by repo (commitScope.ts).
     const plan = computed(() => scopeCommit(scope.value, scannable.value));
     const covered = computed(() => scopeFiles(scope.value, scannable.value));
+    // Whether a row is part of what Commit records.
+    const rowInScope = (repo: RepoChanges, side: GitDiffSide, path: string): boolean => inScope(scope.value, repo, side, path);
 
     return {
         scannable,
@@ -221,12 +212,10 @@ export const useCommitScope = () => {
         originMessage,
         originCard,
         scope,
-        pickScope,
-        resetScope,
-        toggleScope,
         scopeOrigin,
-        scopeLabel,
         scopeChips,
+        toggleChip,
+        chipLabel,
         rowInScope,
         plan,
         covered,

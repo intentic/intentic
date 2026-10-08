@@ -233,6 +233,23 @@ test("commitLog pages through a history and says whether more is behind it", asy
     expect((await commitLog(dir, 4)).hasMore).toBe(false);
 });
 
+// A branch's own line for "where does this branch stand": another branch's newer commits stay out of it.
+test("commitLog follows only HEAD's first-parent line when asked", async () => {
+    const dir = await tempRepo();
+    await sh(dir, "checkout", "-q", "-b", "side");
+    await writeFile(join(dir, "side.txt"), "side\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "on side");
+    await sh(dir, "checkout", "-q", "-");
+    await writeFile(join(dir, "a.txt"), "main\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "on main");
+
+    expect((await commitLog(dir, 50)).commits.map((commit) => commit.subject)).toContain("on side");
+    const line = await commitLog(dir, 50, 0, undefined, true);
+    expect(line.commits.map((commit) => commit.subject)).toEqual(["on main", "init"]);
+});
+
 test("commitLog degrades to an empty list on a repo with no commits", async () => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
     tempDirs.push(dir);

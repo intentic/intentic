@@ -5292,7 +5292,6 @@
             "landedBy": "Intégré par",
             "moreFilesPendingHere": "Il y a ici plus de fichiers en attente que le panneau n'en liste, et ceci les couvre tous. Les chiffres ci-dessous ne comptent que ceux qui sont listés.",
             "moreShowingFirstStage": "…et {group} de plus : les {group2} premiers sont affichés. Tout indexer, committer et jeter couvrent chaque fichier d'ici, listé ou non.",
-            "nothingElseGoesIn": "Rien d'autre n'entre",
             "notPushed": "Non poussés",
             "noUncommittedChanges": "Aucun changement non committé.",
             "noUpstreamYet": "pas encore d'amont",
@@ -5320,10 +5319,8 @@
             "verbCommits": "{verb} {count} commit | {verb} {count} commits",
             "scopeStaged": "Ce qui est indexé",
             "scopeEverything": "Tout",
-            "changeScope": "Quoi valider : {scope}",
             "fileCount": "{count} fichier | {count} fichiers",
             "stagesThemForYou": "les indexe pour vous",
-            "leavesStagedAlone": "les autres fichiers indexés restent à l'écart",
             "writingMessage": "Rédaction du message…",
             "draftedBy": "Rédigé par {model}",
             "noDraftWritten": "Aucun message rédigé",
@@ -5332,11 +5329,12 @@
             "amendLast": "Modifier le dernier commit",
             "undo": "Annuler",
             "undoCommit": "Annuler ce commit",
-            "from": "De",
             "chipYou": "Vous",
-            "chipStaged": "Indexé",
             "chipAll": "Tout",
-            "commitFiles": "Valider {count} fichier | Valider {count} fichiers"
+            "commitFiles": "Valider {count} fichier | Valider {count} fichiers",
+            "stageLabel": "Indexer",
+            "stageChip": "Indexer {scope} : {files}",
+            "unstageChip": "Désindexer {scope} : {files}"
         },
         "rowActions": {
             "changedSinceOn": "Modifiés depuis l'activation",
@@ -5621,10 +5619,8 @@
             "closingTabsDiscardsUnsaved": "Fermer ces onglets jette leurs modifications non enregistrées. C'est irréversible."
         },
         "commitPage": {
-            "commit": "Valider",
-            "commitTo": "Valider dans {repo}",
-            "goesIn": "Ce qui entre",
-            "lastCommits": "Derniers commits"
+            "uncommitted": "Non validé",
+            "verbTo": "{action} vers {target}"
         }
     },
     "needs": {
