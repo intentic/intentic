@@ -945,6 +945,33 @@ fn is_hostname(hostname: &str) -> bool {
         })
 }
 
+/// Ask the platform for a setup code for the row `sandbox_id`, with the workspace's session the webview of `window`
+/// holds: this computer's own sandbox (machine_sandbox.rs), and a setup whose code ran out (commands.rs
+/// `setup_fresh_code`). [`minted_code`] reads the answer.
+pub(crate) async fn mint_code(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    sandbox_id: &str,
+    profile: Option<&str>,
+) -> Result<Answered, String> {
+    crate::account::platform_post(
+        app,
+        window,
+        "/rpc/sandbox/setup-code",
+        &mint_ask(sandbox_id, profile),
+    )
+    .await
+}
+
+/// What a mint asks for: the sandbox, and the profile its setup page's reader arrived with when there was one (the
+/// web's own mint sends it the same way, useCommandLane.ts). Pure.
+pub(crate) fn mint_ask(sandbox_id: &str, profile: Option<&str>) -> serde_json::Value {
+    match profile {
+        Some(profile) => serde_json::json!({ "sandboxId": sandbox_id, "profile": profile }),
+        None => serde_json::json!({ "sandboxId": sandbox_id }),
+    }
+}
+
 pub(crate) fn minted_code(answered: Answered) -> Minted {
     match answered {
         Answered::SignedOut => Minted::SignedOut,
@@ -1339,6 +1366,19 @@ fn run_project_sync(app: &AppHandle, args: SyncArgs, folder: PathBuf) {
 
 #[cfg(test)]
 mod tests {
+    /// A code the app mints asks for what the web's own mint asked for: the sandbox, and the profile when there is one.
+    #[test]
+    fn a_mint_asks_for_the_profile_its_setup_came_with() {
+        assert_eq!(
+            mint_ask("sbx_7", None),
+            serde_json::json!({ "sandboxId": "sbx_7" })
+        );
+        assert_eq!(
+            mint_ask("sbx_7", Some("desk")),
+            serde_json::json!({ "sandboxId": "sbx_7", "profile": "desk" })
+        );
+    }
+
     use super::*;
     use serde::Deserialize;
 

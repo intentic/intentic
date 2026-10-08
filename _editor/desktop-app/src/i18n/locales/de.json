@@ -34,6 +34,7 @@
         "seeAllDevices": "Alle Ihre Geräte ansehen",
         "settingUp": "Wird eingerichtet:",
         "setupCodeRanOut": "Ihr Einrichtungscode ist abgelaufen, während dieses Gerät weg war. Alles, wofür der Neustart war, ist bereits erledigt; es braucht nur einen neuen Code, um weiterzumachen.",
+        "setupCodeRanOutHere": "Ihr Einrichtungscode ist abgelaufen, bevor dieses Gerät ihn verwenden konnte, und ein neuer ließ sich von hier aus nicht holen. Nichts bisher Erledigte geht verloren; es braucht nur einen neuen Code, um weiterzumachen.",
         "showLog": "Protokoll anzeigen",
         "startDocker": "Docker starten",
         "startingOnDevice": "Wird auf diesem Gerät gestartet…",

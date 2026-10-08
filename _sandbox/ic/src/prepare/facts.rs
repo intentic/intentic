@@ -50,12 +50,10 @@ if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
   if ($LASTEXITCODE -eq 0) { $wslVersion = $v }
 }
 
-$pending = $false
-foreach ($key in @(
-  'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
-  'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')) {
-  if (Test-Path $key) { $pending = $true }
-}
+# Two keys, and which one is set matters: Component Based Servicing is a Windows feature turned on or off and
+# waiting for the restart (what turning WSL2 on leaves behind); Windows Update's is its own updates.
+$servicing = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+$pending = $servicing -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
 
 # WHERE DOCKER DESKTOP IS: the shared discovery (intentic_docker_host::desktop_app::LOCATE), which leaves $dd and $ddVer.
 %LOCATE_DOCKER_DESKTOP%
@@ -109,6 +107,7 @@ if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace 
   wslStatus = $wslStatus
   wslVersion = $wslVersion
   rebootPending = $pending
+  servicingRebootPending = [bool]$servicing
   elevated = $admin
   winget = [bool](Get-Command winget.exe)
   dockerDesktopPath = $dd

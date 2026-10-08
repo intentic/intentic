@@ -86,6 +86,18 @@ const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => 
     harness.fail(`one setup link raised ${asked} confirmations`, `External links are being handled more than once.`);
 };
 
+// The ic CLI beside the app as intentic-ic.exe (tauri.conf.json `externalBin`), which every script the app runs copies
+// into place as ic.exe rather than downloading the same release from GitHub (commands.rs INTENTIC_IC_PATH).
+// verify-desktop-bundle.sh finds it in the archive; this checks the install put it on disk.
+const assertCarriesIc = (harness: Harness, installLocation: string): void => {
+    const ic = join(installLocation, `intentic-ic.exe`);
+    if (existsSync(ic)) {
+        harness.pass(`the ic CLI installed beside the app: ${ic}`);
+    } else {
+        harness.fail(`no intentic-ic.exe beside the app after install`, `Every setup this install runs would download ic from GitHub again.`);
+    }
+};
+
 export const runInstallTier = async (harness: Harness, options: InstallTierOptions): Promise<void> => {
     if (!existsSync(options.installer)) {
         harness.fail(`the installer is not at ${options.installer}`);
@@ -156,6 +168,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         } else {
             harness.fail(`the bundled scripts are not on disk after install: ${missing.join(`, `)}`);
         }
+        assertCarriesIc(harness, installed.installLocation);
 
         // 3. scheme registration, before first launch
         harness.section(`scheme registration, before first launch`);

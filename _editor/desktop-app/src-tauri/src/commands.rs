@@ -58,13 +58,44 @@ pub fn ic_url(version: &str) -> Option<String> {
 /// of nothing, most of them Windows PowerShell 5.1 redrawing its progress bar. "Or a newer one" since 2026-10-05: the
 /// shims used to require exactly this pin, and the machine agent moves `ic` up by itself, so an app left in the tray
 /// for days put an older `ic` back on every Start, Stop or Restart. The pin is a floor, never a ceiling.
+///
+/// `INTENTIC_IC_PATH` names the `ic` the installer put beside this app as `intentic-ic` (tauri.conf.json `externalBin`;
+/// never `ic`, which the deb would put on every PATH as /usr/bin/ic), so a shim that has to install `ic` copies that
+/// file to ~/.intentic/ic/bin rather than downloading the same release from GitHub, and a first setup no longer needs
+/// github.com before anything else has worked. Only when the file is there; and a shim copies it only
+/// when it answers `--version` with exactly the pinned `IC_VERSION`, so a build that pins nothing (`0.0.0`, `tauri
+/// dev`) or carries a stand-in (stage-desktop-ic.sh's placeholder) still downloads.
 pub(crate) fn app_env(version: &str) -> Vec<(String, String)> {
+    app_env_with(version, bundled_ic())
+}
+
+/// [`app_env`] with the bundled `ic` given rather than looked for, so the tests decide whether there is one.
+fn app_env_with(version: &str, ic: Option<std::path::PathBuf>) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> = vec![("INTENTIC_NO_PROMPT".into(), "1".into())];
     if let Some(url) = ic_url(version) {
         env.push(("IC_URL".into(), url));
         env.push(("IC_VERSION".into(), version.to_string()));
     }
+    if let Some(ic) = ic {
+        env.push(("INTENTIC_IC_PATH".into(), ic.to_string_lossy().into_owned()));
+    }
     env
+}
+
+/// The `ic` beside this app's own executable, `intentic-ic[.exe]` where every installer puts it, when it is there.
+pub(crate) fn bundled_ic() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    bundled_ic_beside(&exe)
+}
+
+fn bundled_ic_beside(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    let name = if cfg!(windows) {
+        "intentic-ic.exe"
+    } else {
+        "intentic-ic"
+    };
+    let path = exe.parent()?.join(name);
+    path.is_file().then_some(path)
 }
 
 #[tauri::command]
@@ -233,7 +264,7 @@ impl SetupContext {
 }
 
 /// The image a setup here runs: `INTENTIC_SANDBOX_IMAGE` in a build pointed at a local one, else `ic`'s own default.
-fn setup_image() -> String {
+pub(crate) fn setup_image() -> String {
     std::env::var("INTENTIC_SANDBOX_IMAGE")
         .ok()
         .filter(|image| !image.is_empty())
@@ -356,13 +387,19 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     let project = args.clone();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // The sandbox image, fetched ahead while the setup installs Docker (prefetch.rs); left running however it ends.
+        crate::prefetch::begin_for_setup(&handle, install);
         // This computer's own sandbox going up drives the same docker: a setup handed over meanwhile waits its turn
         // (machine_sandbox.rs waits for this one the same way).
         while scripts::is_running(crate::machine_sandbox::RUN) {
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
         let run = setup_script(&args, &SetupContext::of(&handle, install));
-        scripts::run(&handle, "setup", run)
+        let ran = scripts::run(&handle, "setup", run);
+        // However it ended (done, failed, stopped, or stopped to ask for another restart, which writes the entry
+        // again), the next sign-in has nothing to start this app for any more (resume.rs).
+        crate::resume::settle(&handle);
+        ran
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -410,33 +447,123 @@ pub fn sign_out_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> 
 #[serde(rename_all = "camelCase")]
 pub struct ResumableSetup {
     pub args: SetupArgs,
-    /// How long ago it was parked. The window decides what to do with that — a setup code lives 30 minutes,
-    /// and this is the only thing on either side of a restart that knows how much of that is left.
+    /// How long ago it was parked.
     pub aged_seconds: u64,
+    /// How old its code is: a setup code lives 30 minutes, and this is the only thing on either side of a restart
+    /// that knows how much of that is left. The window decides what to do with it (a fresh code, past ~20 minutes).
+    pub code_age_seconds: u64,
     /// Which way the session ended for it, so the card can tell a sign-out that did not take from a first
     /// ask.
     pub how: SessionEnd,
 }
 
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0)
+}
+
+/// How old a parked setup's code is: since it was minted, or, for a setup parked by a version that did not keep that,
+/// since the park, the least it can be. Saturating, because a clock that moved backwards over the restart (they do)
+/// must read as "just now" rather than as an age of eighteen quintillion seconds.
+pub fn code_age(minted_at: Option<u64>, saved_at: u64, now: u64) -> u64 {
+    now.saturating_sub(minted_at.unwrap_or(saved_at))
+}
+
 #[tauri::command]
 pub fn resumable_setup(state: State<'_, AppState>) -> Option<ResumableSetup> {
     let parked = state.parked_setup()?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|since| since.as_secs())
-        .unwrap_or(0);
+    let now = unix_now();
     Some(ResumableSetup {
+        code_age_seconds: code_age(parked.args.minted_at, parked.saved_at, now),
         args: parked.args,
-        // Saturating, because a clock that moved backwards over the restart (they do) must read as "just
-        // now" rather than as an age of eighteen quintillion seconds.
         aged_seconds: now.saturating_sub(parked.saved_at),
         how: parked.how,
     })
 }
 
+/// Given up on (the reader backed out, or its code ran out): the file goes, and with it the entry that would start this
+/// app at the next sign-in for it (resume.rs).
 #[tauri::command]
-pub fn forget_resumable_setup(state: State<'_, AppState>) {
-    state.clear_parked_setup();
+pub async fn forget_resumable_setup(app: AppHandle) {
+    app.state::<AppState>().clear_parked_setup();
+    let _ = tauri::async_runtime::spawn_blocking(move || crate::resume::settle(&app)).await;
+}
+
+/* A FRESH CODE FOR THE SAME SANDBOX (2026-10-08).
+ *
+ * A code lives thirty minutes from its minting (the platform's setup-code.ts), and a Windows setup with two restarts in
+ * it can take longer than that: it came back to a code the claim refused, and "Try again" ran the same dead code again.
+ * The app mints one itself, with the workspace's session, as it does for this computer's own sandbox
+ * (machine_sandbox.rs). */
+
+/// What asking for a fresh code came back with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum FreshCode {
+    /// The same setup, on the code the platform hands out for its sandbox now.
+    Code { args: Box<SetupArgs> },
+    /// Nobody is signed in here to ask with: the workspace's setup page is the way to a code.
+    SignedOut,
+    /// The platform said no (a sandbox gone, or not this account's), or the setup names no sandbox to ask for.
+    Refused { reason: String },
+    /// No answer at all: the network, as in the first seconds after a sign-in. Worth asking again.
+    Unreached { reason: String },
+}
+
+/// The setup on what the platform minted. The platform hands back the code it already holds while that one lives
+/// (setup-code.ts `heldCodeFor`), so the same code keeps the age it had; only a new one starts its thirty minutes now.
+pub(crate) fn renewed(args: &SetupArgs, minted: crate::project::Minted, now: u64) -> FreshCode {
+    match minted {
+        crate::project::Minted::Code { code, .. } => FreshCode::Code {
+            args: Box::new(SetupArgs {
+                minted_at: if code == args.code {
+                    args.minted_at
+                } else {
+                    Some(now)
+                },
+                code,
+                ..args.clone()
+            }),
+        },
+        crate::project::Minted::SignedOut => FreshCode::SignedOut,
+        crate::project::Minted::Refused(reason) => FreshCode::Refused { reason },
+    }
+}
+
+/// A fresh code for the sandbox `args` is for, asked of the platform with the session the calling window's webview
+/// holds (every window shares the workspace's, account.rs).
+#[tauri::command]
+pub async fn setup_fresh_code(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    args: SetupArgs,
+) -> FreshCode {
+    let Some(sandbox_id) = args
+        .sandbox_id
+        .clone()
+        .filter(|id| crate::setup_link::is_sandbox_id(id))
+    else {
+        return FreshCode::Refused {
+            reason: "this setup names no sandbox to ask a code for".to_string(),
+        };
+    };
+    // A link pointed at another platform (local development only) is that platform's to give a code for.
+    let platform = app.state::<AppState>().platform_url();
+    if args
+        .platform_url
+        .as_deref()
+        .is_some_and(|url| url.trim_end_matches('/') != platform.trim_end_matches('/'))
+    {
+        return FreshCode::Refused {
+            reason: "this setup's code is another platform's".to_string(),
+        };
+    }
+    match crate::project::mint_code(&app, &window, &sandbox_id, args.profile.as_deref()).await {
+        Ok(answered) => renewed(&args, crate::project::minted_code(answered), unix_now()),
+        Err(reason) => FreshCode::Unreached { reason },
+    }
 }
 
 #[cfg(windows)]
@@ -444,30 +571,11 @@ pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    let exe = std::env::current_exe()
-        .map_err(|error| format!("could not work out where this app lives: {error}"))?;
-    // Quoted inside the value: the path contains spaces on every ordinary install, and RunOnce hands its
-    // value to the shell as a command line.
-    let command = format!("\"{}\"", exe.display());
-    let registered = std::process::Command::new("reg.exe")
-        .args([
-            "add",
-            r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce",
-            "/v",
-            "IntenticResumeSetup",
-            "/t",
-            "REG_SZ",
-            "/d",
-            &command,
-            "/f",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
     // A failed registration is NOT a reason to refuse the restart: the setup is already on disk, and the user
     // opening the app themselves afterwards finds it there. Losing the automatic half is much better than
     // leaving somebody on a screen whose only button did nothing.
-    if !registered.map(|status| status.success()).unwrap_or(false) {
-        eprintln!("intentic: could not register the after-restart resume; the setup is saved and will resume when this app is next opened.");
+    if let Err(error) = crate::resume::register() {
+        eprintln!("intentic: could not register the after-restart resume ({error}); the setup is saved and will resume when this app is next opened.");
     }
     // `/l` signs the session out and `/r` takes the machine down; both end with a sign-in, which is the only
     // event either of these requirements is actually waiting for. See [`session_end_args`] for why the restart
@@ -491,8 +599,8 @@ pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
 // closes running programs without warning: a reader's unsaved document in another program was closed unasked, and so
 // was this app with its webview mid-write. A user reported Intentic dead after exactly such a restart (2026-10-08).
 // With `/t 0` Windows ends the session the way its own Restart button does: programs are asked, one with unsaved work
-// can hold the restart, and Windows says so on screen. The setup is parked and RunOnce is set before this runs, so a
-// restart the reader puts off resumes whenever it does happen. `/l` takes no timeout and is never forced.
+// can hold the restart, and Windows says so on screen. The setup is parked and the Run entry written before this runs
+// (resume.rs), so a restart the reader puts off resumes whenever it does happen. `/l` takes no timeout and is never forced.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn session_end_args(how: SessionEnd) -> (Vec<&'static str>, &'static str) {
     match how {
@@ -1146,6 +1254,8 @@ mod tests {
             platform_url: None,
             project: None,
             slug: None,
+            minted_at: None,
+            profile: None,
         }
     }
 
@@ -1270,6 +1380,76 @@ mod tests {
         assert_eq!(
             env_of(&setup_script(&setup_args("c"), &dev), "IC_VERSION"),
             None
+        );
+    }
+
+    /// One variable of an [`app_env`], as [`env_of`] reads one off a run.
+    fn var<'a>(env: &'a [(String, String)], key: &str) -> Option<&'a str> {
+        env.iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /* THE `ic` THE INSTALLER PUT BESIDE THE APP IS WHAT A SHIM INSTALLS, when it is there and is this release's. */
+    #[test]
+    fn every_script_is_pointed_at_the_ic_this_install_carries() {
+        let dir = std::env::temp_dir().join(format!("intentic-bundled-ic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join(if cfg!(windows) {
+            "intentic-desktop.exe"
+        } else {
+            "intentic-desktop"
+        });
+        let ic = dir.join(if cfg!(windows) {
+            "intentic-ic.exe"
+        } else {
+            "intentic-ic"
+        });
+        // No file beside the app, or a folder by that name: nothing to name, and the shims download as before.
+        assert_eq!(bundled_ic_beside(&exe), None);
+        // Nor a plain `ic` there: the bundled one is never called that, so whatever is is not this install's.
+        std::fs::write(dir.join(if cfg!(windows) { "ic.exe" } else { "ic" }), b"ic").unwrap();
+        assert_eq!(bundled_ic_beside(&exe), None);
+        std::fs::create_dir_all(&ic).unwrap();
+        assert_eq!(bundled_ic_beside(&exe), None);
+        std::fs::remove_dir(&ic).unwrap();
+        std::fs::write(&ic, b"ic").unwrap();
+        let found = bundled_ic_beside(&exe);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(found.as_deref(), Some(ic.as_path()));
+
+        let env = app_env_with(RELEASE, found);
+        assert_eq!(var(&env, "INTENTIC_IC_PATH"), ic.to_str());
+        // The pin the shim holds the copy to: it copies only an `ic` that answers exactly this release, and the
+        // download stays pinned to the same one for when it does not.
+        assert_eq!(var(&env, "IC_VERSION"), Some(RELEASE));
+        assert_eq!(
+            var(&env, "IC_URL"),
+            Some("https://github.com/intentic/intentic/releases/download/v1.2.3")
+        );
+    }
+
+    #[test]
+    fn an_install_without_its_ic_still_downloads_this_release() {
+        let env = app_env_with(RELEASE, None);
+        assert_eq!(var(&env, "INTENTIC_IC_PATH"), None);
+        assert_eq!(var(&env, "IC_VERSION"), Some(RELEASE));
+        assert_eq!(var(&env, "INTENTIC_NO_PROMPT"), Some("1"));
+        // A build that is not a release names its file all the same, and pins nothing for a shim to match it against:
+        // the shims copy only a pinned `ic`, so `tauri dev` and a 0.0.0 installer download exactly as they did.
+        let dev = app_env_with(
+            "0.0.0",
+            Some(std::path::PathBuf::from("/opt/Intentic/intentic-ic")),
+        );
+        assert_eq!(
+            var(&dev, "INTENTIC_IC_PATH"),
+            Some("/opt/Intentic/intentic-ic")
+        );
+        assert_eq!(var(&dev, "IC_VERSION"), None);
+        // What the app passes is whatever is beside it right now, and the same for every flow.
+        assert_eq!(
+            var(&app_env(RELEASE), "INTENTIC_IC_PATH").map(std::path::PathBuf::from),
+            bundled_ic()
         );
     }
 
@@ -1806,6 +1986,94 @@ mod tests {
                 .iter()
                 .any(|(name, _)| *name == "workspace_open"),
             "workspace_open builds the workspace window and has to stay async"
+        );
+    }
+
+    /* A CODE'S AGE, across however many restarts it was parked over. */
+    #[test]
+    fn a_parked_codes_age_runs_from_its_minting_not_from_the_last_park() {
+        // Minted at 1000, parked again at 2500 after a second restart, resumed at 2800: 30 minutes old, not 5.
+        assert_eq!(code_age(Some(1_000), 2_500, 2_800), 1_800);
+        // A file from before the minting was kept: the park is the least it can be.
+        assert_eq!(code_age(None, 2_500, 2_800), 300);
+        // A clock that went backwards over the restart reads as just now.
+        assert_eq!(code_age(Some(3_000), 2_500, 2_800), 0);
+    }
+
+    #[test]
+    fn a_fresh_code_carries_the_same_setup_and_starts_its_own_thirty_minutes() {
+        let args = SetupArgs {
+            sandbox_id: Some("cm-sandbox".into()),
+            name: Some("work".into()),
+            minted_at: Some(1_000),
+            profile: None,
+            ..setup_args("dead")
+        };
+        let minted = |code: &str| crate::project::Minted::Code {
+            code: code.into(),
+            slug: None,
+            hostname: None,
+        };
+        assert_eq!(
+            renewed(&args, minted("fresh"), 3_000),
+            FreshCode::Code {
+                args: Box::new(SetupArgs {
+                    code: "fresh".into(),
+                    minted_at: Some(3_000),
+                    ..args.clone()
+                })
+            }
+        );
+        // The profile the setup came with rides the fresh code too: the platform seeds the sandbox from it.
+        let desk = SetupArgs {
+            profile: Some("desk".into()),
+            ..args.clone()
+        };
+        let FreshCode::Code { args: renewed_desk } = renewed(&desk, minted("fresh"), 3_000) else {
+            panic!("a code")
+        };
+        assert_eq!(renewed_desk.profile.as_deref(), Some("desk"));
+        // The platform hands back the code it still holds while that one lives: same code, same age.
+        assert_eq!(
+            renewed(&args, minted("dead"), 3_000),
+            FreshCode::Code {
+                args: Box::new(args.clone())
+            }
+        );
+        assert_eq!(
+            renewed(&args, crate::project::Minted::SignedOut, 3_000),
+            FreshCode::SignedOut
+        );
+        assert_eq!(
+            renewed(&args, crate::project::Minted::Refused("gone".into()), 3_000),
+            FreshCode::Refused {
+                reason: "gone".into()
+            }
+        );
+    }
+
+    #[test]
+    fn the_window_reads_a_fresh_code_by_its_kind() {
+        let code = FreshCode::Code {
+            args: Box::new(SetupArgs {
+                minted_at: Some(3_000),
+                ..setup_args("fresh")
+            }),
+        };
+        let wire = serde_json::to_value(&code).unwrap();
+        assert_eq!(wire["kind"], "code");
+        assert_eq!(wire["args"]["code"], "fresh");
+        assert_eq!(wire["args"]["mintedAt"], 3_000);
+        assert_eq!(
+            serde_json::to_value(FreshCode::SignedOut).unwrap(),
+            serde_json::json!({ "kind": "signedOut" })
+        );
+        assert_eq!(
+            serde_json::to_value(FreshCode::Unreached {
+                reason: "offline".into()
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "unreached", "reason": "offline" })
         );
     }
 }

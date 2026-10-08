@@ -34,6 +34,7 @@
         "seeAllDevices": "See all your devices",
         "settingUp": "Setting up",
         "setupCodeRanOut": "Your setup code ran out while this device was away. Everything the restart was for is already done; it just needs a fresh code to carry on.",
+        "setupCodeRanOutHere": "Your setup code ran out before this device could use it, and a fresh one couldn't be fetched from here. Nothing done so far is lost; it just needs a fresh code to carry on.",
         "showLog": "Show the log",
         "startDocker": "Start Docker",
         "startingOnDevice": "Starting on this device…",

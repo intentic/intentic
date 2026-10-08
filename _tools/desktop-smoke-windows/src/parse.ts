@@ -78,6 +78,18 @@ export const installedApp = (entries: readonly UninstallEntry[], displayName: st
     };
 };
 
+/**
+ * What the installer puts beside the app that is not the app: the uninstaller, and every tauri.conf.json `externalBin`
+ * (the intentic-files sidecar, the ic CLI as intentic-ic). Named rather than left to the listing's order: NTFS happens
+ * to list `intentic-desktop.exe` first today, and a sidecar renamed to sort ahead of it would have the tier launch it as
+ * the app.
+ */
+const NOT_THE_APP = [/^uninstall/i, /^intentic-files\.exe$/i, /^intentic-ic\.exe$/i];
+
+/** The app's own executable among the files of its install folder, by name; undefined when there is none. */
+export const appExecutableName = (names: readonly string[]): string | undefined =>
+    names.find((name) => name.toLowerCase().endsWith(`.exe`) && !NOT_THE_APP.some((pattern) => pattern.test(name)));
+
 /** Strips one layer of surrounding double quotes, which is how Windows stores a path that may contain spaces. */
 const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
 

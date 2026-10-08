@@ -429,6 +429,11 @@ export interface DesktopSetupArgs {
      */
     project?: string;
     platformUrl?: string;
+    /**
+     * The profile this page's reader arrived with (useProfile.ts), which the code was minted with. The app keeps it so
+     * a code it mints later for the same setup (one that ran out across a restart) asks for the same profile.
+     */
+    profile?: string;
 }
 
 // No `mode` on this link: the script learns its reachability target by redeeming the code, so naming the mode here
@@ -449,6 +454,7 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     // Never both: the app would sync the folder it picked into the project AND a made-up one into /work.
     carry(`syncDir`, args.project === undefined || args.project === `` ? args.syncDir : undefined);
     carry(`project`, args.project);
+    carry(`profile`, args.profile);
     if (args.platformUrl !== undefined) {
         params.set(`platform`, args.platformUrl);
     }

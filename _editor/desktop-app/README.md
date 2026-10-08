@@ -122,7 +122,13 @@ flowchart LR
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
   local installer. Each run is told this build's own release (`IC_URL`, `IC_VERSION`), and a shim fetches `ic` only
   when the installed one is older than that: the pin is a floor, compared as a version (major.minor.patch, a pre-release
-  below its release), never a ceiling.
+  below its release), never a ceiling. The installer carries that release's `ic` beside the app as `intentic-ic` /
+  `intentic-ic.exe` (the second `externalBin`; never `ic`, which the deb and rpm would put on every PATH as
+  `/usr/bin/ic`, ahead of the `ic` the machine agent keeps current), each run is told where (`INTENTIC_IC_PATH`,
+  `commands.rs` `app_env`), and a shim that has to install `ic` copies that file to `~/.intentic/ic/bin/ic` instead
+  of downloading it, when it answers `--version` with
+  exactly the pinned release; otherwise it downloads as before, so installing `ic` does not need github.com. A build
+  that pins nothing (`0.0.0`) always downloads.
 
   A run's child writes its two streams to two files beside its transcript (`~/.intentic/logs/desktop-<run>-<stamp>.out`
   and `.err`, `scripts.rs` `Spool`), which the app reads back as they grow for the window and the transcript
@@ -135,6 +141,24 @@ flowchart LR
   Restart. A run's child used to write to a pipe the app held: a Quit mid-run broke it, and `ic`, which prints with
   `println!`, panicked on the broken pipe half way through a recreate or a removal; now it finishes, and its files are the
   record of the rest, which its transcript names. The transcripts used to be kept for good._
+- **A Windows setup across restarts.** A setup that needs Windows to end the session (exit 4) is parked in
+  `resume-setup.json` with the time its code was minted (the link's arrival, since a link does not say), and the
+  `HKCU\…\CurrentVersion\Run` value `IntenticResumeSetup` starts the app at the next sign-in with `--resume-setup`
+  (`src-tauri/src/resume.rs`). Windows keeps a Run value until the app takes it away: when that setup's run ends,
+  however it ends, when the setup is given up, and at any launch that finds nothing parked. So a launch that crashed
+  gets another, and a finished setup never starts the app again. A resumed setup whose code is older than 20 minutes
+  runs on a fresh code the app mints itself with the workspace's session (`setup_fresh_code`, as for this computer's
+  own sandbox), and so does a run whose claim the platform refused as invalid or expired. The card says the code ran
+  out, with the way to a fresh one, only when none can be had. A run with consent on a Windows machine whose Docker is
+  not listening yet also starts `ic image prefetch` (`src-tauri/src/prefetch.rs`): the `ic` beside the app, else
+  `~/.intentic/ic/bin/ic.exe`, with no window, one at a time, logging to `~/.intentic/logs/prefetch-<stamp>.log`, and
+  left running when the setup ends. The sandbox image downloads while Docker is installed, and `ic sandbox connect`
+  loads it instead of pulling. This device reports each step's and each requirement's time
+  (`desktop_install_step`, `desktop_install_requirement`, `src/device/installTelemetry.ts`) and a failed run's last
+  error line, scrubbed of the home folder, the account, addresses and the code (`desktop_install_finished.reason`).
+
+  _(2026-10-08) The entry was a RunOnce value, which Windows deletes before the launch it makes, and a resumed setup
+  never got a new code: two restarts outlast a code's thirty minutes, and "Try again" ran the dead one again._
 - **What runs is `ic`'s to say.** This device's list is `ic sandbox list --json` from the installed `ic` (the shim's
   `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
   `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
@@ -513,6 +537,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
+- [src-tauri/src/resume.rs](src-tauri/src/resume.rs) and [src-tauri/src/prefetch.rs](src-tauri/src/prefetch.rs) — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.
@@ -527,6 +552,20 @@ Linux builds need the WebKitGTK development packages (`libwebkit2gtk-4.1-dev`, `
 `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`), plus `xdg-utils` and `file` for the AppImage.
 [build-desktop.sh](../../_tools/scripts/desktop/build-desktop.sh) installs the full list on Debian and builds the
 release artifacts.
+
+Every installer carries two programs beside the app, both `externalBin` in `tauri.conf.json` and staged per target
+triple into `src-tauri/binaries/` (gitignored), which every cargo command against the crate needs, a check or a
+bundle:
+
+- `intentic-files`, the local windows' file server, compiled with bun by
+  [stage-local-files.sh](../../_tools/scripts/desktop/stage-local-files.sh) (`pnpm stage:local`).
+- `intentic-ic`, the `ic` CLI every script the app runs installs (as `ic`, in `~/.intentic/ic/bin`), staged by
+  [stage-desktop-ic.sh](../../_tools/scripts/desktop/stage-desktop-ic.sh) (`pnpm stage:ic`). A release stages the
+  binaries `build-ic.sh --version <v>` made for the GitHub Release (release.yml's `ic-build` job hands them to both
+  desktop builds) and refuses any other version. Any other bundle reuses a fresh build in `_sandbox/ic/dist-bin` or
+  runs `build-ic.sh` itself, and fails when it cannot. `test:rust`, `lint:rust` and `dev` stage a debug cargo build
+  for this host, or a placeholder the script warns about when there is none, since `cargo clippy` and `cargo test`
+  only need the file to exist.
 
 ### Which Linux runs it
 

@@ -187,6 +187,22 @@ flowchart LR
   writing one, so a flag change ships with the image.
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
   target; `ic runner up` starts a runner container for a parent sandbox.
+- On Windows, `prepare` installs Docker Desktop for the account alone (`install --user`): no permission prompt, no
+  `docker-users` group and no sign-out, which Docker Desktop on WSL2 no longer needs (per-user installs since 4.72, no
+  group check since 4.65). The group is only granted for an all-users Docker Desktop older than 4.65, or when the engine
+  itself refuses the account. The 600 MB download starts at consent, beside turning WSL2 on, and resumes after a
+  restart. When turning WSL2 on needs a restart, the run still downloads and installs Docker Desktop before stopping for
+  it, so a fresh PC restarts once; a restart is asked for only when Windows is still waiting to finish a feature, and
+  a restart Windows Update wants does not hold up a PC whose WSL2 already works (2026-10-08).
+- `ic image prefetch` downloads the sandbox image's layers over HTTPS into `~/.intentic/image-cache/` before Docker
+  exists, resumable and locked against a second fetcher, printing `intentic-prefetch: {json}` readings. The desktop app
+  starts it while Docker is being set up. `ic sandbox connect`, at its pull, finishes that cache (waiting for a prefetch
+  still running) and loads it with `docker load`, then deletes it; with no cache, or one it cannot use, it pulls as
+  before (2026-10-08). A PC that already has Docker Desktop skips the prefetch (Docker pulls it there), a cache is
+  dropped once Docker has the image by any route, and one untouched for two weeks is swept. Measured on a fresh
+  Windows 11 VM at about 50 MB/s: the 1.8 GB finished before the restart; loading it took 237 s where a pull took 192 s,
+  since `docker load` takes the archive in before it unpacks while a pull overlaps the two, so the prefetch pays off on
+  links slow enough that the download outlasts the unpacking. See [src/image_cache.rs](src/image_cache.rs).
 
 ## Key files
 
@@ -201,6 +217,8 @@ flowchart LR
   container (the restart ask, the update markers, the boot failure, the boot marker, the work signal) to the daemon's
   own path and shape: its `golden/host-files.json` and the contract's `golden/update-*.json`.
 - [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
+- [src/image_cache.rs](src/image_cache.rs) — `ic image prefetch` and the cache `connect` loads; [src/fetch.rs](src/fetch.rs)
+  is the resumable download both it and the Docker Desktop installer use.
 
 ## Commands
 

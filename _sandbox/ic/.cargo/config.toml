@@ -1,0 +1,4 @@
+# The Windows binary links the C runtime in rather than importing VCRUNTIME140.dll, which a fresh Windows does not
+# have: the same flag build-ic.sh passes for the release build, here for a build run from this folder.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

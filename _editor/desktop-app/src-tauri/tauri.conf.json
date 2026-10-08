@@ -44,7 +44,7 @@
                 "installerHooks": "./installer-hooks.nsh"
             }
         },
-        "externalBin": ["binaries/intentic-files"],
+        "externalBin": ["binaries/intentic-files", "binaries/intentic-ic"],
         "fileAssociations": [
             {
                 "ext": ["docx", "doc", "odt", "rtf"],

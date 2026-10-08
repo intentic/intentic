@@ -20,6 +20,9 @@ export interface SetupArgs {
     project?: string;
     // The slug its container is named by, where the app knew it before the run (a setup it made itself).
     slug?: string;
+    // When its code was minted, in Unix seconds, as near as the app knows (setup_link.rs `minted_at`): carried as it is,
+    // so a setup parked across a restart keeps it.
+    mintedAt?: number;
 }
 
 export interface RecreateArgs {
@@ -125,6 +128,11 @@ export const EXIT_NEEDS_RESTART = 4;
 export const expectedStop = (code: number | null): boolean => code === EXIT_NEEDS_CONSENT || code === EXIT_NEEDS_RESTART;
 
 const COMMAND_FAILURE = /^Command failed,\s+(.+)$/;
+// ic's own sentence for a claim the platform refused as unknown or past its thirty minutes (its platform.rs).
+const CLAIM_EXPIRED = /\bsetup code is invalid or expired\b/i;
+
+/** Whether a run's lines say the platform refused its setup code at the claim as invalid or expired. */
+export const claimExpired = (lines: readonly string[]): boolean => lines.some((line) => CLAIM_EXPIRED.test(line));
 
 /** A command's terminal error, only when stderr explicitly says the command failed. */
 export const parseCommandFailure = (event: RunEvent): string | undefined => {
@@ -587,13 +595,33 @@ export const resumableSetup = (): Promise<ResumableSetup | null> => invoke(`resu
 /** Forget it, taken when the user backs out, or when its code has expired. */
 export const forgetResumableSetup = (): Promise<void> => invoke(`forget_resumable_setup`);
 
+/** What asking the platform for a fresh code for a setup came back with (commands.rs `FreshCode`). */
+export type FreshCode =
+    | { readonly kind: `code`; readonly args: SetupArgs }
+    | { readonly kind: `signedOut` }
+    | { readonly kind: `refused` | `unreached`; readonly reason: string };
+// The same setup on a code the platform mints now for its sandbox, with the workspace's session: never a rejection, every
+// ending is a kind (a stand-in that knows none answers nothing).
+export const freshSetupCode = (args: SetupArgs): Promise<FreshCode | null> => invoke(`setup_fresh_code`, { args });
+
+/** How a prefetch of the sandbox image ended (prefetch.rs `Ended`). */
+export interface ImagePrefetch {
+    readonly outcome: `ready` | `elsewhere` | `failed`;
+    readonly seconds: number;
+    readonly bytes: number;
+}
+export const onPrefetch = (handler: (ended: ImagePrefetch) => void): Promise<UnlistenFn> =>
+    listen<ImagePrefetch>(`desktop://prefetch`, (event) => handler(event.payload));
+
 /** Which way Windows was asked to end the session for a setup (commands.rs `SessionEnd`). */
 export type SessionEnd = `restart` | `signout`;
 
 export interface ResumableSetup {
     readonly args: SetupArgs;
-    /** Seconds since it was saved. Setup codes last 30 minutes, and a restart can eat most of that. */
+    /** Seconds since it was saved. */
     readonly agedSeconds: number;
+    /** Seconds since its code was minted, across every park: setup codes last 30 minutes, and restarts eat most of that. */
+    readonly codeAgeSeconds: number;
     /** How the session ended for it. */
     readonly how: SessionEnd;
 }

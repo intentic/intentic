@@ -36,7 +36,9 @@ mod checks;
 mod cloudflare;
 mod contract;
 mod docker;
+mod fetch;
 mod health;
+mod image_cache;
 mod logfile;
 #[cfg(unix)]
 mod machine;
@@ -90,6 +92,34 @@ enum Command {
     /// Docker on this machine — what it needs, and getting it there
     #[command(subcommand)]
     Docker(DockerCommand),
+    /// The sandbox image, ahead of Docker
+    #[command(subcommand)]
+    Image(ImageCommand),
+}
+
+#[derive(Subcommand)]
+enum ImageCommand {
+    /// Download the sandbox image's layers into a cache before Docker is installed or running, resuming whatever an
+    /// earlier run left; `ic sandbox connect` loads that cache instead of pulling
+    Prefetch {
+        /// The image to fetch (default: SANDBOX_IMAGE, else ghcr.io/intentic/sandbox:stable)
+        #[arg(long)]
+        image: Option<String>,
+    },
+    /// Load what `prefetch` fetched into Docker now, finishing it first (`ic sandbox connect` does this itself at its pull)
+    Load {
+        /// The image to load (default: SANDBOX_IMAGE, else ghcr.io/intentic/sandbox:stable)
+        #[arg(long)]
+        image: Option<String>,
+    },
+}
+
+/// The image an `ic image` command means: the one named, else SANDBOX_IMAGE, else the published default.
+fn image_or_default(image: Option<String>) -> String {
+    image
+        .or_else(|| std::env::var("SANDBOX_IMAGE").ok())
+        .filter(|image| !image.is_empty())
+        .unwrap_or_else(|| image_cache::DEFAULT_IMAGE.to_string())
 }
 
 #[derive(Subcommand)]
@@ -815,6 +845,12 @@ fn main() {
             RunnerCommand::List => runner::list(),
             RunnerCommand::Remove { name, yes } => runner::remove(name, yes),
         },
+        Command::Image(ImageCommand::Prefetch { image }) => {
+            image_cache::prefetch(&image_or_default(image))
+        }
+        Command::Image(ImageCommand::Load { image }) => {
+            image_cache::load_now(&image_or_default(image))
+        }
         Command::Docker(DockerCommand::Prepare { yes, dry_run }) => prepare::run(prepare::Args {
             // The desktop app has no terminal to answer a question on, so its consent arrives as the same
             // environment variable connect.sh has always used for a headless install.

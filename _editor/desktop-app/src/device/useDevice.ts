@@ -9,6 +9,7 @@ import {
     onPendingRecreate,
     onPendingSetup,
     onPendingSync,
+    onPrefetch,
     onRun,
     onUpdate,
     updateInstall,
@@ -137,6 +138,8 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
               onPendingRecreate(() => void sandboxes.drainRecreate()),
               onPendingSync(() => void sync.drainSync()),
               onPendingFix(() => void fixing.drainFix()),
+              // The sandbox image fetched ahead of a setup (prefetch.rs) has ended: heard by every window, told once.
+              onPrefetch((ended) => track(`desktop_image_prefetch`, { ...ended })),
           ]
         : [];
     await Promise.all([...listening, ...parked]);

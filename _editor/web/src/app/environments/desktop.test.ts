@@ -52,6 +52,8 @@ test("the setup link carries a project in place of a sync folder, and a blank on
         [`name`, `My App`],
         [`project`, `My-App`],
     ]);
+    expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7`, profile: `desk` })).searchParams.get(`profile`)).toBe(`desk`);
+    expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7` })).searchParams.has(`profile`)).toBe(false);
     const blank = new URL(desktopSetupLink({ code: `abc`, project: ``, syncDir: `~/intentic/work-7` }));
     expect([...blank.searchParams]).toEqual([
         [`code`, `abc`],

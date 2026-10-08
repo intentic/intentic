@@ -31,8 +31,9 @@ pub struct Settings {
     pub platform_url: Option<String>,
 }
 
-/// The two ways a Windows session ends on a requirement's behalf. Both come back to the same place — RunOnce
-/// fires at the next sign-in either way — so what differs is how far the machine goes down in between, and
+/// The two ways a Windows session ends on a requirement's behalf. Both come back to the same place — the Run entry
+/// starts this app at the next sign-in either way (resume.rs) — so what differs is how far the machine goes down in
+/// between, and
 /// which of the two a resumed setup should remember: a sign-out that did not refresh a login token is
 /// answered by a restart, and only the resumed run can know it is the second attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -737,11 +738,15 @@ mod tests {
             platform_url: None,
             project: None,
             slug: None,
+            minted_at: Some(1_790_000_000),
+            profile: None,
         };
         state_in(&dir).park_setup(&args, SessionEnd::SignOut);
         let parked = state_in(&dir).parked_setup().expect("parked");
         assert_eq!(parked.how, SessionEnd::SignOut);
         assert_eq!(parked.args.code, "abc");
+        // When the code was minted outlives the park: the next restart's resume measures the code, not the park.
+        assert_eq!(parked.args.minted_at, Some(1_790_000_000));
 
         // A file written before `how` existed still resumes, as the restart every setup was parked across then.
         std::fs::write(
@@ -752,6 +757,7 @@ mod tests {
         let older = state_in(&dir).parked_setup().expect("older file parses");
         assert_eq!(older.how, SessionEnd::Restart);
         assert_eq!(older.args.code, "old");
+        assert_eq!(older.args.minted_at, None);
         assert!(!dir.join("resume-setup.json.unreadable").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

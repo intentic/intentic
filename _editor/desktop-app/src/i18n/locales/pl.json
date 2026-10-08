@@ -34,6 +34,7 @@
         "seeAllDevices": "Zobacz wszystkie swoje urządzenia",
         "settingUp": "Trwa konfiguracja:",
         "setupCodeRanOut": "Twój kod instalacyjny wygasł, kiedy tego urządzenia nie było. Wszystko, po co był restart, jest już zrobione; potrzebny jest tylko nowy kod, żeby iść dalej.",
+        "setupCodeRanOutHere": "Twój kod instalacyjny wygasł, zanim to urządzenie zdążyło go użyć, a nowego nie dało się stąd pobrać. Nic z tego, co już zrobione, nie przepada; potrzebny jest tylko nowy kod, żeby iść dalej.",
         "showLog": "Pokaż dziennik",
         "startDocker": "Uruchom Dockera",
         "startingOnDevice": "Uruchamianie na tym urządzeniu…",

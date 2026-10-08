@@ -2,8 +2,6 @@
 // are asserted on every runner.
 #![cfg_attr(not(windows), allow(dead_code))]
 
-#[cfg(windows)]
-use std::io::{Read, Write};
 use std::time::Duration;
 #[cfg(windows)]
 use std::time::Instant;
@@ -31,6 +29,8 @@ pub enum Done {
 pub enum Trouble {
     /// The administrator prompt was dismissed.
     Cancelled,
+    /// The administrator prompt closed itself, twice, with nobody answering it.
+    Unanswered,
     Failed(String),
 }
 
@@ -50,6 +50,9 @@ const DAEMON_TIMEOUT: Duration = Duration::from_secs(300);
 fn from_exit(output: &shell::Output, what: &str, on_success: Done) -> Fixed {
     if output.code == shell::CANCELLED {
         return Err(Trouble::Cancelled);
+    }
+    if output.code == shell::UNANSWERED {
+        return Err(Trouble::Unanswered);
     }
     if output.ok {
         return Ok(on_success);
@@ -98,11 +101,33 @@ exit 1\n";
 #[cfg(windows)]
 pub fn enable_wsl_features() -> Fixed {
     let mut watch = super::elevated_watch("Turning on WSL2", || None);
-    from_exit(
+    let done = from_exit(
         &shell::run_elevated_watched(ENABLE_WSL, &mut watch),
         "turning on WSL2",
         Done::AfterRestart,
-    )
+    )?;
+    // A restart is what turning a Windows feature ON needs. A PC whose features were already on (Hyper-V's machine
+    // platform, an older WSL) only had WSL itself installed by that, and asking it to restart anyway was a restart
+    // for nothing: so the machine is asked, and only a feature Windows is still waiting to finish means one.
+    Ok(if done == Done::AfterRestart && wsl_works_now() {
+        crate::ui::note("WSL2 is working already; no restart is needed for it.");
+        Done::Now
+    } else {
+        done
+    })
+}
+
+/// Whether WSL2 runs right now, with no Windows feature left waiting for a restart: the examination's own reading.
+#[cfg(windows)]
+fn wsl_works_now() -> bool {
+    super::facts::probe()
+        .map(|facts| restart_unneeded(&facts))
+        .unwrap_or(false)
+}
+
+/// [`wsl_works_now`]'s verdict on a reading. Pure, so the rule is tested where the probe cannot run.
+pub fn restart_unneeded(facts: &super::plan::Facts) -> bool {
+    super::plan::wsl_ready(facts) && !facts.servicing_reboot_pending
 }
 
 /// The kernel and the default version, for a machine whose features are already on. Neither needs a restart:
@@ -134,18 +159,24 @@ pub fn update_wsl_kernel() -> Fixed {
 // What winget's manifest hash vouched for, Docker's Authenticode signature vouches for instead: checked by the
 // elevated script before it runs anything, because that is the side about to act on the file.
 
-/// The elevated half: the signature, then the installer. `%PATH%` is the downloaded file. `install` (not the bare
-/// exe) is the unattended entry point; --accept-license is what the interactive installer's first screen asks, and
-/// --backend=wsl-2 stops it choosing Hyper-V on a Pro machine, which would then need a different set of features
-/// than the ones we just turned on.
+/// The signature, then the installer, as this user. `%PATH%` is the downloaded file. `install` (not the bare exe) is the
+/// unattended entry point; `--user` installs for this account alone under `%LOCALAPPDATA%\Programs\DockerDesktop`,
+/// which needs no administrator, installs no privileged service and adds nobody to `docker-users` (Docker Desktop on
+/// WSL2 needs neither: per-user installs since 4.72, no group check since 4.65); --accept-license is what the
+/// interactive installer's first screen asks; and --backend=wsl-2 is the only backend a per-user install has, said
+/// anyway.
+///
+/// This used to run elevated, as an all-users install: a permission prompt here, a second one to grant `docker-users`,
+/// and the sign-out (or, with the restart Docker's installer left pending, the second restart) the group then needed.
+/// The output is piped so PowerShell waits for the installer, which is a windowed program.
 const RUN_DOCKER_INSTALLER: &str = "\
 $installer = '%PATH%'\n\
 $sig = Get-AuthenticodeSignature -FilePath $installer\n\
 $signer = ''\n\
 if ($sig.SignerCertificate) { $signer = $sig.SignerCertificate.Subject }\n\
-Add-Content -Path $Log -Value (\"signature: \" + $sig.Status + \" \" + $signer)\n\
+Write-Output (\"signature: \" + $sig.Status + \" \" + $signer)\n\
 if (($sig.Status -ne 'Valid') -or ($signer -notmatch '(^|, )O=Docker Inc(,|$)')) { exit %UNSIGNED% }\n\
-& $installer install --quiet --accept-license --backend=wsl-2 *>> $Log\n\
+& $installer install --user --quiet --accept-license --backend=wsl-2 2>&1 | ForEach-Object { [string]$_ }\n\
 exit $LASTEXITCODE\n";
 
 /// [`RUN_DOCKER_INSTALLER`]'s exit when the file is not Docker's. Far from anything an installer returns.
@@ -157,108 +188,131 @@ fn run_docker_installer_script(installer: &str) -> String {
         .replace("%UNSIGNED%", &UNSIGNED.to_string())
 }
 
-#[cfg(windows)]
-pub fn install_docker_desktop(_facts: &Facts) -> Fixed {
-    let installer = std::env::temp_dir().join("Docker Desktop Installer.exe");
-    if let Err(problem) = download(INSTALLER_URL, &installer) {
-        return Err(Trouble::Failed(problem));
-    }
-    super::progress("downloaded; Windows will now ask for permission to install it");
-    let script = run_docker_installer_script(&installer.to_string_lossy());
-    let started = std::time::SystemTime::now();
-    let mut watch = super::elevated_watch("Installing Docker Desktop", move || {
-        docker_install_stage(started)
-    });
-    let output = shell::run_elevated_watched(&script, &mut watch);
-    let _ = std::fs::remove_file(&installer);
-    if output.code == UNSIGNED {
-        return Err(Trouble::Failed(
-            "The downloaded Docker Desktop installer is not signed by Docker, so it was not run. Try again; if this keeps happening, something on this network is changing downloads.".to_string(),
-        ));
-    }
-    from_exit(&output, "installing Docker Desktop", Done::Now)
+/// Where the installer is downloaded to: a folder of its own in this account's temp folder, kept across runs, so a
+/// download that a restart (or a closed window) cut short is resumed rather than started over.
+pub fn installer_path() -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join("intentic-docker")
+        .join("Docker Desktop Installer.exe")
 }
 
-/// Where Docker's installer says it is, from its own log, once that log is this run's: the file there before
-/// this run started is the LAST install's, and its "Installation succeeded" would be a lie told about this one.
+/* 600 MB is the longest wait before the restart, and the desktop app draws it from these readings. */
+/// Download Docker Desktop's installer, telling `row` (the requirement it is for) how it goes each second. Runs on a
+/// thread of its own beside turning WSL2 on (mod.rs), which is why the row is named rather than taken from what the
+/// flow is working on.
 #[cfg(windows)]
-fn docker_install_stage(since: std::time::SystemTime) -> Option<String> {
-    let path = std::path::Path::new(super::watch::DOCKER_INSTALL_LOG);
-    let modified = std::fs::metadata(path)
-        .and_then(|meta| meta.modified())
-        .ok()?;
-    if modified < since {
-        return None;
-    }
-    let bytes = std::fs::read(path).ok()?;
-    super::watch::docker_stage(&String::from_utf8_lossy(&bytes))
-}
-
-/* 600 MB is the longest wait in this whole flow, and the desktop app draws it from these readings. */
-#[cfg(windows)]
-fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
-    let agent = ureq::Agent::config_builder()
-        // No global timeout: this is a 600 MB body on whatever connection the user has. The read timeout is
-        // what catches a dead transfer, and a global one would just cap slow connections at "failed".
-        .timeout_global(None)
-        .timeout_connect(Some(Duration::from_secs(30)))
-        .build()
-        .new_agent();
-    super::live("Connecting to docker.com...", super::Live::default());
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|error| format!("Docker Desktop could not be downloaded from {url} ({error}). Check this PC's internet connection, then try again."))?;
-    let total: u64 = response
-        .headers()
-        .get("content-length")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
-    let temporary = into.with_extension("part");
-    let mut file = std::fs::File::create(&temporary)
-        .map_err(|error| format!("could not write to {}: {error}", temporary.display()))?;
-    let mut reader = response.into_body().into_reader();
-    let mut buffer = vec![0u8; 256 * 1024];
-    let mut written: u64 = 0;
+pub fn download_installer(into: &std::path::Path, row: &'static str) -> Result<(), String> {
+    super::live_for(row, "Connecting to docker.com...", super::Live::default());
     let started = Instant::now();
-    // The row is told every second; the log only every tenth of the way, which is a trail rather than a stream.
-    let mut told = Instant::now();
+    let mut resumed_from: Option<u64> = None;
+    let mut told = Instant::now() - Duration::from_secs(5);
     let mut logged_tenth: u64 = 0;
-    loop {
-        let read = reader
-            .read(&mut buffer)
-            .map_err(|error| format!("The Docker Desktop download stopped early ({error}). Check this PC's internet connection, then try again."))?;
-        if read == 0 {
-            break;
-        }
-        file.write_all(&buffer[..read])
-            .map_err(|error| format!("could not write the installer to disk: {error}"))?;
-        written += read as u64;
-        if told.elapsed() >= Duration::from_secs(1) {
+    let mut last = (0, 0);
+    crate::fetch::resumable(
+        &crate::fetch::agent(),
+        INSTALLER_URL,
+        &[],
+        into,
+        false,
+        &mut |have, total| {
+            last = (have, total);
+            let from = *resumed_from.get_or_insert(have);
+            if told.elapsed() < Duration::from_secs(1) {
+                return;
+            }
             told = Instant::now();
-            let reading = super::watch::download(written, total, started.elapsed());
-            super::live(
+            let reading = super::watch::download_resumed(have, total, started.elapsed(), from);
+            super::live_for(
+                row,
                 &reading,
                 super::Live {
                     needs_you: false,
-                    percent: super::watch::percent(written, total),
+                    percent: super::watch::percent(have, total),
                 },
             );
-            let tenth = (written * 10).checked_div(total).unwrap_or(0);
+            // The row is told every second; the log only every tenth of the way, which is a trail rather than a stream.
+            let tenth = (have * 10).checked_div(total).unwrap_or(0);
             if tenth > logged_tenth {
                 logged_tenth = tenth;
                 crate::ui::note(&reading);
             }
-        }
-    }
-    drop(file);
-    crate::ui::note(&super::watch::download(written, total, started.elapsed()));
-    // Rename only once it is whole: a half-downloaded installer that Windows agrees to run is worse than no
-    // installer at all. The same download-then-rename the shims use for this binary.
-    std::fs::rename(&temporary, into)
-        .map_err(|error| format!("could not finish writing {}: {error}", into.display()))?;
+        },
+    )
+    .map_err(|error| {
+        format!("Docker Desktop could not be downloaded ({error}). Check this PC's internet connection, then try again: the download continues from where it stopped.")
+    })?;
+    crate::ui::note(&super::watch::download_resumed(
+        last.0,
+        last.1,
+        started.elapsed(),
+        resumed_from.unwrap_or(0),
+    ));
     Ok(())
+}
+
+/// Install Docker Desktop for this account: the download (already running on its own thread when `download` is
+/// given, else done here), then Docker's installer, watched, with no permission prompt.
+#[cfg(windows)]
+pub fn install_docker_desktop(
+    download: Option<std::thread::JoinHandle<Result<(), String>>>,
+) -> Fixed {
+    let installer = installer_path();
+    let downloaded = match download {
+        Some(running) => running.join().unwrap_or_else(|_| {
+            Err("the Docker Desktop download stopped unexpectedly.".to_string())
+        }),
+        None => download_installer(&installer, "docker-desktop"),
+    };
+    downloaded.map_err(Trouble::Failed)?;
+    super::progress("downloaded; installing it for this account (no permission prompt)");
+    let script = run_docker_installer_script(&installer.to_string_lossy());
+    let started = std::time::SystemTime::now();
+    let mut last_stage: Option<String> = None;
+    let output = shell::run_watched(&script, &mut |elapsed| {
+        let now = docker_install_stage(started);
+        if now.is_some() && now != last_stage {
+            if let Some(said) = &now {
+                crate::ui::note(&format!("Installing Docker Desktop: {said}"));
+            }
+            last_stage = now.clone();
+        }
+        super::live(
+            &super::watch::working("Installing Docker Desktop", now.as_deref(), elapsed),
+            super::Live::default(),
+        );
+    });
+    if output.code == UNSIGNED {
+        let _ = std::fs::remove_file(&installer);
+        return Err(Trouble::Failed(
+            "The downloaded Docker Desktop installer is not signed by Docker, so it was not run. Try again; if this keeps happening, something on this network is changing downloads.".to_string(),
+        ));
+    }
+    let done = from_exit(&output, "installing Docker Desktop", Done::Now);
+    if done.is_ok() {
+        let _ = std::fs::remove_file(&installer);
+    }
+    done
+}
+
+/// Where Docker's installer says it is, from its own log, once that log is this run's: a file written before this run
+/// started is the LAST install's, and its "Installation succeeded" would be a lie told about this one. A per-user
+/// install and an all-users one log to different places, so every place is asked and the newest answers.
+#[cfg(windows)]
+fn docker_install_stage(since: std::time::SystemTime) -> Option<String> {
+    let (_, path) = super::watch::docker_install_logs(
+        std::env::var("LOCALAPPDATA").ok().as_deref(),
+        std::env::var("ProgramData").ok().as_deref(),
+    )
+    .into_iter()
+    .filter_map(|path| {
+        let modified = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .ok()?;
+        (modified >= since).then_some((modified, path))
+    })
+    .max_by_key(|(modified, _)| *modified)?;
+    let bytes = std::fs::read(&path).ok()?;
+    super::watch::docker_stage(&String::from_utf8_lossy(&bytes))
 }
 
 /// Docker's own program folder onto THIS process's PATH; a later `ic` process adopts it itself (main.rs).

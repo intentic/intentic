@@ -74,6 +74,8 @@ function Add-IntenticPath {
 # Downloaded on every run that pins no release, so re-running a card's command upgrades an existing install;
 # a run pinned to a release (IC_VERSION) that finds it or a newer one installed skips it, and only a failed download falls back
 # to what's installed. IC_BIN overrides for local dev.
+# A pinned run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is
+# exactly the release asked for: the same binary, without the download.
 $Ic = $env:IC_BIN
 if (-not $Ic) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -103,27 +105,52 @@ if (-not $Ic) {
         Add-IntenticPath -Folder $IcDir -Command 'ic'
     } else {
         Write-Host 'intentic: fetching the ic CLI...'
-        # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
-        # five-megabyte download take several seconds instead of a fraction of one.
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
-            Move-Item -Force "$IcDest.tmp" $IcDest
+        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside
+        # it (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that
+        # release is the very binary the download would fetch, minus the network: a PC that cannot reach github.com
+        # still gets its ic. Anything else - no pin, no file, another version, a copy that fails - leaves the download
+        # below to run as it always has, and that download is all the irm|iex one-liner ever does.
+        $IcCopied = $false
+        if ($env:INTENTIC_IC_PATH -and $env:IC_VERSION -and (Test-Path -LiteralPath $env:INTENTIC_IC_PATH -PathType Leaf)) {
+            $IcCarried = ''
+            try { $IcCarried = (& $env:INTENTIC_IC_PATH --version | Out-String).Trim() } catch { $IcCarried = '' }
+            if ($IcCarried -eq ('ic ' + ($env:IC_VERSION -replace '^v', ''))) {
+                try {
+                    Copy-Item -LiteralPath $env:INTENTIC_IC_PATH -Destination "$IcDest.tmp" -Force -ErrorAction Stop
+                    Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
+                    $IcCopied = $true
+                } catch {
+                    Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        if ($IcCopied) {
+            Write-Host "note: installed $IcCarried from the copy the desktop app carries - not downloading it."
             $Ic = $IcDest
             Add-IntenticPath -Folder $IcDir -Command 'ic'
-        } catch {
-            Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
-            if (Test-Path $IcDest) {
-                Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+        } else {
+            # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+            # five-megabyte download take several seconds instead of a fraction of one.
+            $ProgressPreference = 'SilentlyContinue'
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+                Move-Item -Force "$IcDest.tmp" $IcDest
                 $Ic = $IcDest
-            } else {
-                $installed = Get-Command ic -ErrorAction SilentlyContinue
-                if ($installed) {
-                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
-                    $Ic = $installed.Source
+                Add-IntenticPath -Folder $IcDir -Command 'ic'
+            } catch {
+                Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+                if (Test-Path $IcDest) {
+                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+                    $Ic = $IcDest
                 } else {
-                    Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
-                    exit 1
+                    $installed = Get-Command ic -ErrorAction SilentlyContinue
+                    if ($installed) {
+                        Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                        $Ic = $installed.Source
+                    } else {
+                        Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                        exit 1
+                    }
                 }
             }
         }

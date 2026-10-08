@@ -48,7 +48,7 @@ pub enum RunEvent {
 pub const RUN_EVENT: &str = "desktop://run";
 
 /// `~/.intentic/logs`, where every run's transcript goes, beside `ic`'s own logs.
-fn logs_dir() -> Option<PathBuf> {
+pub(crate) fn logs_dir() -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok()
@@ -127,11 +127,26 @@ pub fn prune_logs() {
     for name in prune_selection(&files, KEPT_RUNS) {
         let _ = std::fs::remove_file(dir.join(name));
     }
+    let names: Vec<String> = files.into_iter().map(|(name, _)| name).collect();
+    for name in prefetch_logs_to_prune(&names, KEPT_RUNS) {
+        let _ = std::fs::remove_file(dir.join(name));
+    }
+}
+
+/// The image prefetch's logs (prefetch.rs, `prefetch-<stamp>.log`) past the newest `keep`: one per setup that started
+/// one, kept as many as the setups' own. The stamp sorts by time, so the name is the order. Pure.
+pub fn prefetch_logs_to_prune(names: &[String], keep: usize) -> Vec<String> {
+    let mut logs: Vec<&String> = names
+        .iter()
+        .filter(|name| name.starts_with("prefetch-") && name.ends_with(".log"))
+        .collect();
+    logs.sort_by(|a, b| b.cmp(a));
+    logs.into_iter().skip(keep).cloned().collect()
 }
 
 /// `YYYYmmdd-HHMMSS`, UTC, for a log filename — the same spelling `ic` uses, so the two sets of logs in the
 /// directory sort together. Derived here rather than pulled in as a dependency for one filename.
-fn stamp() -> String {
+pub(crate) fn stamp() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|since| since.as_secs())
@@ -1756,6 +1771,21 @@ mod tests {
             ]
         );
         assert!(prune_selection(&files, KEPT_RUNS).is_empty());
+        let names: Vec<String> = [
+            "prefetch-20261008-101500.log",
+            "prefetch-20261009-090000.log",
+            "prefetch-20261007-120000.log",
+            "desktop-setup-20261001-000000.log",
+            "prefetch-notes.txt",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        assert_eq!(
+            prefetch_logs_to_prune(&names, 2),
+            vec!["prefetch-20261007-120000.log".to_string()],
+            "the oldest prefetch log goes, and nothing that is not one"
+        );
+        assert!(prefetch_logs_to_prune(&names, KEPT_RUNS).is_empty());
         assert_eq!(prune_selection(&files, 0).len(), 6);
     }
 

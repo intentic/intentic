@@ -8,6 +8,7 @@ import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
 import { environment } from "../../../app/environments/environment";
 import { scriptSource } from "../../../app/environments/scriptCommand";
+import { arrivingProfile } from "../../../app/useProfile";
 import type { SetupProject } from "../setupArrival";
 import type { ComposeArgs } from "../setupCompose";
 import { installCommand, platformUrlOf, uninstallCommand, webOriginOf } from "./installCommand";
@@ -153,6 +154,7 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, project
                 ...(token === undefined ? {} : { cfToken: token }),
                 syncDir: syncRides.value ? syncDir.value : undefined,
                 project: project?.dirName,
+                profile: arrivingProfile(),
                 ...(platformUrl === undefined ? {} : { platformUrl }),
             }),
         );

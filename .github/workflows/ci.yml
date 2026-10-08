@@ -1183,11 +1183,16 @@ jobs:
       - id: stage-files
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: bash _tools/scripts/desktop/stage-local-files.sh
+      # The ic CLI, the app's second `externalBin`, for the same reason. Nothing here bundles, so this is a debug cargo
+      # build of _sandbox/ic, or a placeholder the script says it staged (stage-desktop-ic.sh).
+      - id: stage-ic
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: bash _tools/scripts/desktop/stage-desktop-ic.sh
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
-      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' }}
+      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' && steps.stage-ic.outcome == 'success' }}
         run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
-      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' }}
+      - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' && steps.stage-ic.outcome == 'success' }}
         run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
       # "Open with Intentic" in Windows 11's own context menu (_editor/desktop-app/explorer-menu): a DLL that is ALL
       # `#[cfg(windows)]`, so the Windows target is the only one that compiles any of it, and clippy runs there.
@@ -1458,8 +1463,11 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
+      # ic FIRST: the installer carries it beside the app (tauri.conf.json `externalBin`), and build-desktop.sh stages
+      # the fresh binary this leaves in _sandbox/ic/dist-bin rather than cross-building a second one. The same file is
+      # what the Windows tier hands the shim through IC_BIN below.
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
       # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
       # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
       # installer arrives under `_editor/desktop-app/dist-bin/` instead of at the top level the Windows tier

@@ -104,7 +104,12 @@ for target in "$@"; do
   cargo clean --manifest-path "$MANIFEST" --release --target "$triple" -p ic
   case "$runner" in
     zigbuild) cargo zigbuild --manifest-path "$MANIFEST" --release --target "$triple" ;;
-    xwin) cargo xwin build --manifest-path "$MANIFEST" --release --target "$triple" ;;
+    # The C runtime linked in, not imported: a fresh Windows has no VCRUNTIME140.dll (it arrives with the Visual C++
+    # Redistributable, which some other program has usually installed, and on a clean PC nothing has). Imported, the
+    # binary every setup's first step runs died there with STATUS_DLL_NOT_FOUND (0xC0000135) before printing a word
+    # (2026-10-08, a fresh Windows 11 26H2 VM). The desktop app was never affected: tauri-build links it statically.
+    xwin) CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="${CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS:-} -C target-feature=+crt-static" \
+      cargo xwin build --manifest-path "$MANIFEST" --release --target "$triple" ;;
   esac
   src="$TARGET_DIR/${triple}/release/ic"
   [ -f "$src" ] || src="${src}.exe"

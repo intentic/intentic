@@ -1834,7 +1834,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
 
 /// Hand a setup to This device, which runs it on arrival (src/device/useDevice.ts says why), in the main window, in
 /// the frame the workspace that asked for it was occupying: the same handover every other screen of this app makes.
-fn park_setup(app: &AppHandle, args: SetupArgs) {
+/// A link does not say when its code was minted, so its arrival stands in for that (`SetupArgs::minted_at`).
+fn park_setup(app: &AppHandle, mut args: SetupArgs) {
+    args.minted_at = args.minted_at.or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|since| since.as_secs())
+    });
     *app.state::<crate::state::AppState>()
         .pending
         .lock()

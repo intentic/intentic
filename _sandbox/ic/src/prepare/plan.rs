@@ -53,6 +53,10 @@ pub struct Facts {
     pub wsl_version: String,
     /// Windows has staged a servicing operation that only a restart completes.
     pub reboot_pending: bool,
+    /// The narrower half of [`Self::reboot_pending`]: Component Based Servicing (turning a Windows feature on or off)
+    /// is waiting for the restart, as opposed to Windows Update alone. What turning WSL2's features on leaves behind,
+    /// and so the one that says whether the features just turned on are working yet.
+    pub servicing_reboot_pending: bool,
     pub elevated: bool,
     /// The Windows package manager. Absent on Windows Server and on plenty of Windows 10 installs — the
     /// hole the reported failure fell through.
@@ -259,8 +263,42 @@ fn virtualization_ok(facts: &Facts) -> Option<bool> {
 }
 
 /// Everything Docker Desktop's WSL2 backend needs from WSL itself.
-fn wsl_ready(facts: &Facts) -> bool {
+pub fn wsl_ready(facts: &Facts) -> bool {
     facts.service_vmcompute && wsl_functioning(facts)
+}
+
+/// WSL2's Windows features themselves are off — the one fix in this flow that only a restart finishes, and so the only
+/// one a restart Windows is already waiting for has to come before (see `requirements`).
+fn wsl_features_off(facts: &Facts) -> bool {
+    !wsl_functioning(facts) && (!facts.service_wsl || !facts.service_vmcompute)
+}
+
+/// The first Docker Desktop that stopped checking `docker-users` when it starts on WSL2 (4.65, March 2026). Docker's
+/// engine pipe admits whoever launched Docker Desktop, so on WSL2 the group only ever mattered to that check.
+const GROUP_CHECK_DROPPED: (u32, u32) = (4, 65);
+
+/// Whether the installed Docker Desktop turns away an account outside `docker-users` by itself: an all-users install
+/// older than 4.65. A per-user install (under `AppData\Local`) never had the check, a newer one dropped it, and one
+/// whose version could not be read is not predicted at all: if it does refuse, its refusal (`docker_denied`) is the
+/// verdict, and that still grants the group.
+fn docker_checks_group(facts: &Facts) -> bool {
+    if facts.docker_desktop_path.is_empty()
+        || facts
+            .docker_desktop_path
+            .to_ascii_lowercase()
+            .contains("\\appdata\\local\\")
+    {
+        return false;
+    }
+    let mut parts = facts
+        .docker_desktop_version
+        .trim()
+        .split('.')
+        .map(|part| part.parse::<u32>().ok());
+    match (parts.next().flatten(), parts.next().flatten()) {
+        (Some(major), Some(minor)) => (major, minor) < GROUP_CHECK_DROPPED,
+        _ => false,
+    }
 }
 
 /// The account, as prose: the name Windows knows it by, or "this account" when even that could not be read.
@@ -393,8 +431,11 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
 
     // ---- a restart Windows is already waiting for ----
     // Enabling optional features on top of a staged servicing operation is how a machine ends up with a
-    // half-installed WSL and a `wsl --install` that reports success and changes nothing.
-    if facts.reboot_pending {
+    // half-installed WSL and a `wsl --install` that reports success and changes nothing. That is the only thing here
+    // a pending restart gets in the way of: a PC whose WSL2 already works installs and runs Docker with Windows
+    // Update's restart still pending, and asking for it first cost such a PC a restart it did not need (and a PC that
+    // also needed the features, a second one after it).
+    if facts.reboot_pending && wsl_features_off(facts) {
         found.push(restart_requirement());
         found.extend(disk(facts));
         return found;
@@ -403,7 +444,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     // ---- WSL2, which is what Docker's Linux engine actually runs in ----
     // Working WSL outranks the service names, for the same reason as above: the services are how we GUESS the
     // features are on, and a machine that just answered `wsl --status` has told us directly.
-    if !wsl_functioning(facts) && (!facts.service_wsl || !facts.service_vmcompute) {
+    if wsl_features_off(facts) {
         let missing = match (facts.service_wsl, facts.service_vmcompute) {
             (false, false) => {
                 "the two Windows features it needs (Windows Subsystem for Linux and Virtual Machine Platform) are switched off"
@@ -430,8 +471,9 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
 
     // ---- Docker itself ----
     if facts.docker_desktop_path.is_empty() && !facts.docker_cli {
-        // One route, with or without the Windows package manager: see fix.rs, where it is the one that can be watched.
-        let how = "We will download it from docker.com (about 600 MB) and install it. Windows asks for permission once, when the download is done.";
+        // One route, with or without the Windows package manager: see fix.rs, where it is the one that can be watched,
+        // and where it is installed for this account alone, which needs no administrator.
+        let how = "We will download it from docker.com (about 600 MB) and install it for this account. No permission prompt is needed.";
         found.push(req(
             "docker-desktop",
             "Docker Desktop",
@@ -453,11 +495,16 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     /* PERMISSION: Docker's own verdict outranks every prediction of it. */
     // An engine that answered has already admitted this account, whatever the login token says about groups;
     // one that refused with "access is denied" is running and has not. Only when the engine is not there to
-    // ask is the group's roster consulted, and then only to grant a membership that is plainly missing —
-    // never to send somebody to sign out on the strength of a token that Docker has not yet been asked about.
+    // ask, and only for a Docker Desktop that checks the group itself (`docker_checks_group`), is the group's
+    // roster consulted, and then only to grant a membership that is plainly missing — never to send somebody to
+    // sign out on the strength of a token that Docker has not yet been asked about. Granting it ahead of need was
+    // a permission prompt and a sign-out on every fresh PC, for a check today's Docker Desktop no longer makes.
     let refused = facts.docker_denied;
-    let predicted =
-        !facts.docker_daemon && !refused && !facts.in_docker_users && !facts.in_docker_users_group;
+    let predicted = !facts.docker_daemon
+        && !refused
+        && !facts.in_docker_users
+        && !facts.in_docker_users_group
+        && docker_checks_group(facts);
     if !facts.elevated && (refused || predicted) {
         found.push(if facts.in_docker_users_group {
             sign_out_requirement(facts)
@@ -614,6 +661,12 @@ pub fn advisories(facts: &Facts) -> Vec<String> {
     if facts.build == 0 {
         notes.push("could not read this PC's Windows version.".to_string());
     }
+    if facts.reboot_pending && !wsl_features_off(facts) {
+        notes.push(
+            "Windows is waiting to restart for its own updates; Docker does not need that restart, so the setup carries on."
+                .to_string(),
+        );
+    }
     notes
 }
 
@@ -679,6 +732,7 @@ mod tests {
             wsl_status: "Default Version: 2".to_string(),
             wsl_version: "WSL version: 2.2.4.0".to_string(),
             reboot_pending: false,
+            servicing_reboot_pending: false,
             elevated: false,
             winget: true,
             docker_desktop_path: "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"
@@ -773,8 +827,8 @@ mod tests {
             .expect("reported");
         assert!(desktop.remedy.contains("docker.com"), "{}", desktop.remedy);
         assert!(
-            desktop.remedy.contains("when the download is done"),
-            "the prompt comes after the wait, and the row has to say so before it starts: {}",
+            desktop.remedy.contains("No permission prompt"),
+            "a per-user install asks Windows for nothing, and the row has to say so before it starts: {}",
             desktop.remedy
         );
     }
@@ -986,19 +1040,55 @@ mod tests {
         );
     }
 
-    /* A PENDING RESTART COMES FIRST. */
+    /* A PENDING RESTART COMES FIRST — when there are features to turn on, and only then. */
     #[test]
     fn a_pending_restart_is_dealt_with_before_features_are_touched() {
         let facts = Facts {
             reboot_pending: true,
-            service_wsl: false,
-            service_vmcompute: false,
-            ..healthy()
+            ..bare()
         };
         let found = requirements(&facts);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, "pending-restart");
         assert_eq!(found[0].action, Action::Restart);
+    }
+
+    /// Windows Update's restart is not Docker's: a PC whose WSL2 already works carries on, and is told why.
+    #[test]
+    fn a_pending_restart_does_not_hold_up_a_pc_whose_wsl_already_works() {
+        let facts = Facts {
+            reboot_pending: true,
+            docker_desktop_path: String::new(),
+            docker_desktop_version: String::new(),
+            docker_cli: false,
+            docker_daemon: false,
+            docker_server_os: None,
+            ..healthy()
+        };
+        assert_eq!(ids(&facts), vec!["docker-desktop", "docker-running"]);
+        assert!(
+            advisories(&facts)
+                .iter()
+                .any(|note| note.contains("Docker does not need that restart")),
+            "{:?}",
+            advisories(&facts)
+        );
+        assert!(
+            checklist(&facts)
+                .iter()
+                .all(|row| row.state != RowState::Unjudged),
+            "nothing blocked, so nothing is left unjudged"
+        );
+        // Features that are only half there (services present, WSL not answering) are still features to turn on.
+        assert_eq!(
+            ids(&Facts {
+                reboot_pending: true,
+                service_vmcompute: false,
+                wsl_status_ok: false,
+                ..healthy()
+            }),
+            vec!["pending-restart"]
+        );
     }
 
     #[test]
@@ -1119,6 +1209,41 @@ mod tests {
             !ids(&admin).contains(&"docker-users"),
             "an administrator reaches the engine regardless of the group"
         );
+    }
+
+    /// The group is predicted only for a Docker Desktop that checks it when it starts: an all-users install older than
+    /// 4.65. Everything else is left to Docker's own answer, which still grants the group when it refuses.
+    #[test]
+    fn the_group_is_predicted_only_for_a_docker_desktop_that_checks_it() {
+        let outside = |path: &str, version: &str| Facts {
+            in_docker_users: false,
+            in_docker_users_group: false,
+            elevated: false,
+            docker_desktop_path: path.to_string(),
+            docker_desktop_version: version.to_string(),
+            ..stopped()
+        };
+        let all_users = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
+        let per_user =
+            "C:\\Users\\radar\\AppData\\Local\\Programs\\DockerDesktop\\Docker Desktop.exe";
+        assert!(ids(&outside(all_users, "4.64.1")).contains(&"docker-users"));
+        assert!(ids(&outside(all_users, "4.34.0")).contains(&"docker-users"));
+        for (path, version) in [
+            (all_users, "4.65.0"),
+            (all_users, "4.94.0"),
+            (all_users, "5.0.0"),
+            (all_users, ""),
+            (all_users, "unknown"),
+            (per_user, "4.64.0"),
+            (per_user, "4.94.0"),
+            ("", ""),
+        ] {
+            assert_eq!(
+                ids(&outside(path, version)),
+                vec!["docker-running"],
+                "{path} {version}"
+            );
+        }
     }
 
     /* THE ENGINE'S OWN ANSWER OUTRANKS THE TOKEN — the fix for a sign-out that was asked for and changed nothing. */
@@ -1336,13 +1461,8 @@ mod tests {
         };
         assert_eq!(
             ids(&facts),
-            vec![
-                "wsl-features",
-                "docker-desktop",
-                "docker-users",
-                "docker-running",
-            ],
-            "WSL2 before Docker, Docker before the group, the group before waiting on the engine"
+            vec!["wsl-features", "docker-desktop", "docker-running"],
+            "WSL2 before Docker, Docker before waiting on the engine - and no group: the Docker Desktop installed here is per-user and today's, which checks none"
         );
         assert!(
             requirements(&facts).iter().all(|r| r.action.ours()),

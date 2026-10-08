@@ -37,7 +37,8 @@ Line by line, for a reader with no screen:
 
 - `intentic: [<phase>] <sentence>` on stdout is a step. The desktop app moves its checklist cursor on these.
 - `intentic: <text>` is narration under the running step; an indented line is a progress reading.
-- `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase.
+- `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase. Two rows can be `running` at once: the Docker Desktop download moves its own row while WSL2 is being turned on.
+- `intentic-prefetch: {"state","done","total"}` comes from `ic image prefetch`, about every two seconds: `state` is `fetching`, `ready`, `elsewhere` (another prefetch holds the cache), `skipped` (Docker Desktop is installed and nothing was half-fetched, so Docker pulls it) or `failed`; `done` and `total` are bytes.
 - Warnings go to stderr with the `intentic: ` prefix. A stopped run ends with `error: <message>` on stderr.
 
 ## Verdict words

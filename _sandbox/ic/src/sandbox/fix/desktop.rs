@@ -88,6 +88,10 @@ fn trouble(trouble: crate::prepare::fix::Trouble) -> String {
             "Windows asked for permission and the prompt was closed, so nothing was changed."
                 .to_string()
         }
+        crate::prepare::fix::Trouble::Unanswered => {
+            "Windows' permission prompt closed itself twice without an answer, so nothing was changed. Try again, and choose Yes when Windows asks."
+                .to_string()
+        }
         crate::prepare::fix::Trouble::Failed(why) => why,
     }
 }

@@ -253,9 +253,9 @@ onUnmounted(() => {
                     </Button>
                 </header>
 
-                <!-- The code this window came back to is older than the platform will accept: not a dead end, one click. -->
+                <!-- The code is older than the platform will accept, and the app could not mint a fresh one itself: not a dead end, one click. -->
                 <Notice v-if="expired" tone="warning" class="items-center text-xs">
-                    <span class="flex-1">{{ t(`desktop.app.setupCodeRanOut`) }}</span>
+                    <span class="flex-1">{{ resumedHow ? t(`desktop.app.setupCodeRanOut`) : t(`desktop.app.setupCodeRanOutHere`) }}</span>
                     <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
                 </Notice>
                 <!-- `=== false`, not `!`: unknown is a real third state here, not yet a warning. -->

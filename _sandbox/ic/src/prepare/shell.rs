@@ -132,6 +132,21 @@ pub enum Elevation {
     Running(std::time::Duration),
 }
 
+/// What [`run_elevated_watched`] reports when Windows' permission prompt closed ITSELF: nobody answered it. Windows' own
+/// ERROR_TIMEOUT, reused the way [`CANCELLED`] reuses ERROR_CANCELLED.
+#[cfg(windows)]
+pub const UNANSWERED: i32 = 1460;
+
+/// How long Windows leaves its permission prompt up before closing it by itself (two minutes; a fresh Windows 11 26H2
+/// VM measured 2:04 from asking to the close), less a margin, so a No given in the last seconds is still a No.
+const PROMPT_LIFETIME: std::time::Duration = std::time::Duration::from_secs(110);
+
+/// Whether an elevated run that came back cancelled was a prompt nobody answered rather than a No: Windows reports both
+/// as ERROR_CANCELLED, and only the clock tells them apart. A prompt answered Yes is neither. Pure.
+pub fn unanswered(code: i32, granted: bool, waited: std::time::Duration) -> bool {
+    code == 1223 && !granted && waited >= PROMPT_LIFETIME
+}
+
 /// How often the waiting side looks, and so how often [`run_elevated_watched`]'s `tick` is called.
 #[cfg(windows)]
 const WATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
@@ -140,8 +155,23 @@ const WATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
 // The elevated child's first act is to create a file beside its transcript; that file existing is the prompt
 // having been answered. A file of its own rather than a line in the transcript: Windows PowerShell's `>>` writes
 // UTF-16, and two writers with two encodings in one file is how a transcript stops being readable.
+// A prompt that closed itself unanswered is asked ONCE more: the person was making coffee, or the prompt opened behind
+// another window (the reported setup's had Brother's crash dialog in front of it), and a second prompt is the chance
+// they did not get, where stopping on "nothing was changed" read as if they had said No.
 #[cfg(windows)]
 pub fn run_elevated_watched(script: &str, tick: &mut dyn FnMut(Elevation)) -> Output {
+    let output = run_elevated_once(script, tick);
+    if output.code != UNANSWERED {
+        return output;
+    }
+    crate::ui::note(
+        "Windows' permission prompt closed itself after two minutes without an answer; asking once more.",
+    );
+    run_elevated_once(script, tick)
+}
+
+#[cfg(windows)]
+fn run_elevated_once(script: &str, tick: &mut dyn FnMut(Elevation)) -> Output {
     use std::time::Instant;
     let log = std::env::temp_dir().join(format!("intentic-elevated-{}.log", std::process::id()));
     let granted = log.with_extension("granted");
@@ -189,9 +219,36 @@ pub fn run_elevated_watched(script: &str, tick: &mut dyn FnMut(Elevation)) -> Ou
     if let Ok(transcript) = std::fs::read_to_string(&log) {
         output.stdout = strip_clixml(&transcript);
     }
+    let granted_at_all = running_since.is_some() || granted.exists();
+    if unanswered(output.code, granted_at_all, asked.elapsed()) {
+        output.code = UNANSWERED;
+    }
     let _ = std::fs::remove_file(&log);
     let _ = std::fs::remove_file(&granted);
     output
+}
+
+/// Run a script as this user, with `tick(elapsed)` called once a second until it ends: a long unelevated job (Docker's
+/// per-user installer) that a row has to show as moving.
+#[cfg(windows)]
+pub fn run_watched(script: &str, tick: &mut dyn FnMut(std::time::Duration)) -> Output {
+    use std::time::Instant;
+    let script = script.to_string();
+    let worker = std::thread::spawn(move || run(&script));
+    let started = Instant::now();
+    while !worker.is_finished() {
+        tick(started.elapsed());
+        let next = Instant::now() + WATCH_EVERY;
+        while Instant::now() < next && !worker.is_finished() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    worker.join().unwrap_or_else(|_| Output {
+        ok: false,
+        code: -1,
+        stdout: String::new(),
+        stderr: "the run stopped unexpectedly".to_string(),
+    })
 }
 
 /// The PowerShell variable an elevated script appends its output to — `wsl.exe --install *>> $Log`. Named
@@ -247,6 +304,32 @@ The specified local group already exists.\n\
     }
 
     /* What makes the noise above impossible in the first place. */
+    /* A PROMPT NOBODY SAW IS NOT A NO — the 2:04 a fresh VM measured before Windows closed one by itself. */
+    #[test]
+    fn a_prompt_that_timed_out_is_told_from_one_that_was_refused() {
+        use std::time::Duration;
+        assert!(
+            unanswered(1223, false, Duration::from_secs(124)),
+            "the measured close"
+        );
+        assert!(
+            !unanswered(1223, false, Duration::from_secs(20)),
+            "a quick No is a No"
+        );
+        assert!(
+            !unanswered(1223, true, Duration::from_secs(300)),
+            "a Yes that later failed is neither"
+        );
+        assert!(
+            !unanswered(0, false, Duration::from_secs(300)),
+            "a success is a success"
+        );
+        assert!(
+            !unanswered(1, false, Duration::from_secs(300)),
+            "a failure is a failure"
+        );
+    }
+
     #[test]
     fn every_script_runs_with_the_progress_stream_switched_off() {
         assert!(PREAMBLE.contains("$ProgressPreference = 'SilentlyContinue'"));

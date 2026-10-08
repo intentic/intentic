@@ -7,7 +7,8 @@
 # of the publish job — so a failure in any of them means this command never runs:
 #   windows-build   the NSIS installer (executed on a real Windows machine by windows-verify before publish)
 #   linux-build     the Linux bundles (installed + launched on a bare Debian there, before they were uploaded),
-#                   plus the cross-compiled machine agent + host CLI (intentic-machine, ic)
+#                   plus the cross-compiled machine agent + host CLI (intentic-machine, and ic as ic-build made it:
+#                   the same bytes both installers carry beside the app)
 #   sandbox-arm64 / images-amd64   the container images, under version tags release-images.sh later stitches
 # Building serially here is what this replaces: ~11 minutes of installers + binaries inside the one job that
 # holds the release lock, after everything was already verified. Staging the SAME bytes the verifiers approved

@@ -65,6 +65,9 @@ export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 bash "$ROOT/_tools/scripts/desktop/stage-desktop-scripts.sh"
 echo "==> building the app's own pages"
 pnpm --filter @intentic/desktop-app build
+# The ic CLI both AppImages carry beside the app, once: the drill is about the app replacing itself, and which ic
+# rides along says nothing about that, so the two passes share one unstamped build (stage-desktop-ic.sh --bundle).
+bash "$ROOT/_tools/scripts/desktop/stage-desktop-ic.sh" --bundle
 
 # linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates
 # RELR relocations. Both are build-desktop.sh's, and needed here for the same container-shaped reasons.

@@ -198,6 +198,24 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     else
         INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" "$(rustc -vV | sed -n 's/^host: //p')" x86_64-pc-windows-msvc
     fi
+    # The ic CLI the installers put beside the app (tauri.conf.json's second `externalBin`), for exactly the targets
+    # this run bundles. A release stages the very binaries it attaches for the shims to download, which build-ic.sh
+    # already wrote into _sandbox/ic/dist-bin at this version (release.yml's ic-build artifact) and which this never
+    # rebuilds; any other build reuses a fresh one there or builds it. stage-desktop-ic.sh has the rules.
+    ic_mode=(--bundle)
+    if [ "$VERSION" != "0.0.0" ]; then
+        ic_mode=(--release "$VERSION")
+    fi
+    ic_triples=()
+    if [ "$WINDOWS_ONLY" -eq 0 ]; then
+        ic_triples+=("$(rustc -vV | sed -n 's/^host: //p')")
+    fi
+    if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
+        ic_triples+=(x86_64-pc-windows-msvc)
+    fi
+    if [ "${#ic_triples[@]}" -gt 0 ]; then
+        bash "$ROOT/_tools/scripts/desktop/stage-desktop-ic.sh" "${ic_mode[@]}" "${ic_triples[@]}"
+    fi
     # The app's own pages, once. tauri.conf.json's beforeBuildCommand would build them per `tauri build` invocation, and
     # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
     # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and

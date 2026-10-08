@@ -41,6 +41,7 @@ const COMMANDS: &[&str] = &[
     "sign_out_for_setup",
     "resumable_setup",
     "forget_resumable_setup",
+    "setup_fresh_code",
     "sandbox_list",
     "sandbox_power",
     "sandbox_recreate",

@@ -3,7 +3,7 @@
 #
 #   verify-desktop-bundle.sh [<dist-bin dir>]        # default: _editor/desktop-app/dist-bin
 #
-# Three regression classes, all invisible to `tauri build` (which succeeds happily either way) and all of which
+# Four regression classes, all invisible to `tauri build` (which succeeds happily either way) and all of which
 # reach a user as "the app installed and then could not do the thing":
 #
 #   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles by GLOB, over the directory stage-desktop-scripts.sh
@@ -26,6 +26,11 @@
 #      deb's `libc6 (>= x.y)` in tauri.conf.json, which is also what makes apt and dnf refuse an unsupported
 #      system. glibc-floor.mjs fails any ELF in the Linux payloads (the AppImage's vendored libraries included)
 #      that imports a newer version, and a .deb or .rpm whose own metadata does not carry the floor.
+#
+#   4. THE ic CLI DID NOT SHIP BESIDE THE APP, as intentic-ic[.exe] and never as a bare `ic` (the deb would put that on
+#      every PATH as /usr/bin/ic). tauri.conf.json's second `externalBin`, staged per target by stage-desktop-ic.sh. The app points every script it runs at that file (INTENTIC_IC_PATH), and a shim installs it
+#      from there instead of downloading the same release from GitHub. An installer without it still works, and
+#      quietly needs github.com again before a first setup can start, which is the whole of what it is there to stop.
 #
 # This is deliberately the cheap tier: it is pure archive inspection, runs in seconds, needs no display, no
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
@@ -143,6 +148,30 @@ compare_desktop_entry() {
     fi
 }
 
+# The ic CLI, beside the app as intentic-ic. Looked for beside the other sidecar, intentic-files, because the bundlers put every
+# `externalBin` in the one folder they put the app's own binary in (/usr/bin, the AppDir's usr/bin, $INSTDIR), and a
+# hardcoded path per bundler is the next thing to break when one moves.
+check_ic() {
+    local label="$1" root="$2" ic="$3" sidecar="$4" found dir where
+    found="$(find "$root" -type f -name "$sidecar" -print -quit)"
+    if [ -z "$found" ]; then
+        fail "$label: no $sidecar in the payload, so no app folder to look for $ic in"
+        return
+    fi
+    dir="$(dirname "$found")"
+    where="${dir#"$root"}"
+    where="${where#/}"
+    if [ ! -f "$dir/$ic" ]; then
+        fail "$label: $ic did not ship beside the app (${where:-.}) — every setup would download it from GitHub again"
+    elif [ "${ic%.exe}" = "$ic" ] && [ ! -x "$dir/$ic" ]; then
+        fail "$label: $ic shipped without its executable bit (${where:-.}/$ic)"
+    elif [ -e "$dir/${ic#intentic-}" ]; then
+        fail "$label: a bare ${ic#intentic-} ships beside the app (${where:-.}) — on Linux that is on every PATH, ahead of the ic the machine agent keeps current"
+    else
+        echo "  ✓ $label: $ic beside the app (${where:-.})"
+    fi
+}
+
 # The floor, over one extracted Linux payload and, for a package, over the metadata the bundler wrote into it.
 check_glibc_floor() {
     need objdump "the Linux binaries' glibc symbol versions"
@@ -159,6 +188,7 @@ check_deb() {
     dpkg-deb --fsys-tarfile "$deb" | tar -x -C "$out"
     compare_scripts "deb" "$out"
     compare_desktop_entry "deb" "$out"
+    check_ic "deb" "$out" intentic-ic intentic-files
     check_glibc_floor "deb" "$out" "$deb"
     checked=$((checked + 1))
 }
@@ -174,6 +204,7 @@ check_rpm() {
     rpm2archive -n <"$rpm" | tar -x -C "$out"
     compare_scripts "rpm" "$out"
     compare_desktop_entry "rpm" "$out"
+    check_ic "rpm" "$out" intentic-ic intentic-files
     check_glibc_floor "rpm" "$out" "$rpm"
     checked=$((checked + 1))
 }
@@ -189,6 +220,7 @@ check_appimage() {
     # app registers the scheme itself at startup (lib.rs). The entry is still asserted: it is what a desktop
     # integrator (appimaged, Gear Lever) would install, and the runtime registration is the fallback, not the plan.
     compare_desktop_entry "appimage" "$out"
+    check_ic "appimage" "$out" intentic-ic intentic-files
     check_glibc_floor "appimage" "$out"
     checked=$((checked + 1))
 }
@@ -202,6 +234,7 @@ check_nsis() {
     # runner exists, never executed before a user runs it.
     7z x -o"$out" -y "$exe" >/dev/null
     compare_scripts "nsis" "$out"
+    check_ic "nsis" "$out" intentic-ic.exe intentic-files.exe
     # "Open with Intentic" in Windows 11's own menu: the DLL beside the app (tauri.windows.conf.json), which the
     # installer's hooks hand to regsvr32. Missing, every install falls back to the classic entry and says nothing.
     if [ -z "$(find "$out" -maxdepth 2 -type f -name intentic_explorer_menu.dll -print -quit)" ]; then

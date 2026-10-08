@@ -22,6 +22,8 @@ $ddCandidates = @()
 foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
   if ($base) { $ddCandidates += (Join-Path $base 'Docker\Docker\Docker Desktop.exe') }
 }
+# A per-user install (Docker Desktop 4.72+, the installer's default since 4.83, and what Intentic's setup installs).
+if ($env:LOCALAPPDATA) { $ddCandidates += (Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\Docker Desktop.exe') }
 foreach ($key in @('HKLM:\SOFTWARE\Docker Inc.\Docker\1.0', 'HKCU:\SOFTWARE\Docker Inc.\Docker\1.0')) {
   $app = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).AppPath
   if ($app) { $ddCandidates += (Join-Path $app 'Docker Desktop.exe') }
@@ -89,6 +91,9 @@ pub fn default_installs(
     let local_programs = local_app_data
         .filter(|base| !base.is_empty())
         .map(|base| format!("{}\\Programs", base.trim_end_matches('\\')));
+    let per_user = local_programs
+        .as_ref()
+        .map(|programs| format!("{programs}\\DockerDesktop\\{EXE}"));
     [
         program_files.map(str::to_string),
         program_files_x86.map(str::to_string),
@@ -99,6 +104,7 @@ pub fn default_installs(
     .flatten()
     .filter(|base| !base.is_empty())
     .map(|base| format!("{}\\Docker\\Docker\\{EXE}", base.trim_end_matches('\\')))
+    .chain(per_user)
     .collect()
 }
 
@@ -204,7 +210,12 @@ mod tests {
                 r"C:\Program Files (x86)\Docker\Docker\Docker Desktop.exe",
                 r"C:\Users\radar\AppData\Local\Docker\Docker\Docker Desktop.exe",
                 r"C:\Users\radar\AppData\Local\Programs\Docker\Docker\Docker Desktop.exe",
+                r"C:\Users\radar\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe",
             ]
+        );
+        assert!(
+            LOCATE.contains(r"Programs\DockerDesktop\Docker Desktop.exe"),
+            "the probe must find the per-user install the cheap half finds"
         );
         // Every one of them is also in the probe's own list, so the cheap half can never find what the probe misses.
         for base in [
@@ -224,6 +235,7 @@ mod tests {
             vec![
                 r"D:\Local\Docker\Docker\Docker Desktop.exe",
                 r"D:\Local\Programs\Docker\Docker\Docker Desktop.exe",
+                r"D:\Local\Programs\DockerDesktop\Docker Desktop.exe",
             ]
         );
         assert_eq!(default_installs(None, None, None), Vec::<String>::new());

@@ -493,8 +493,10 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
+      # ic first, so the installer carries this same binary beside the app (build-desktop.sh stages it from dist-bin
+      # rather than cross-building another), as in ci.yml's desktop-windows-build.
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
+      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
       # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
       # the paths' common ancestor, and the tiers below ask for these two by name.
       - run: |

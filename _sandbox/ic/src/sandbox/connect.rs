@@ -360,8 +360,25 @@ fn connect(
             "pulling-image",
             &format!("using the sandbox image already on this machine ({sandbox_image})."),
         );
+        // Anything fetched ahead for it is a second copy nothing will read.
+        crate::image_cache::discard(&sandbox_image);
     } else {
-        ensure_image(&sandbox_image, &log)?;
+        // An image fetched ahead of Docker (`ic image prefetch`, which the desktop app starts while Docker is still being
+        // installed) is finished and loaded here instead of pulled; without one, or if it cannot be used, the pull.
+        match crate::image_cache::load_if_cached(&sandbox_image, &log) {
+            crate::image_cache::Cached::Loaded => step(
+                "pulling-image",
+                &format!("loaded the sandbox image downloaded ahead of time ({sandbox_image})."),
+            ),
+            crate::image_cache::Cached::Nothing => ensure_image(&sandbox_image, &log)?,
+            crate::image_cache::Cached::Failed(why) => {
+                crate::ui::warn(&format!(
+                    "the sandbox image downloaded ahead of time could not be used ({why}); pulling it instead."
+                ));
+                ensure_image(&sandbox_image, &log)?;
+                crate::image_cache::discard(&sandbox_image);
+            }
+        }
     }
 
     /* The address is the platform's answer, not something this flow provisions: the box enables against the hub itself and serves its own share. */

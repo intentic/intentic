@@ -14,6 +14,8 @@
 #
 # The binary is downloaded on EVERY run, so the fix is always the latest one, whatever `ic` this machine had;
 # only a failed download falls back to what's installed. IC_BIN overrides for local dev (a checkout's own build).
+# A run the desktop app pins to its release copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one
+# is exactly the release asked for.
 # POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL — no `pipefail`). Piped, stdin is this script,
 # so ic asks its questions on the controlling terminal (/dev/tty), never on stdin.
 set -eu
@@ -127,9 +129,20 @@ if [ -z "$IC" ]; then
         echo "note: $ic_seen is installed (this run asks for ic ${IC_VERSION} or newer) — not downloading it."
     else
         echo "intentic: fetching the ic CLI…"
+        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside it
+        # (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that release
+        # is the very binary the download would fetch, minus the network: a machine that cannot reach github.com still
+        # gets its ic. Anything else — no pin, no file, another version, a copy that fails — leaves the download to run
+        # as it always has, and that download is all the curl|sh one-liner ever does.
+        ic_carried() {
+            [ -n "${INTENTIC_IC_PATH:-}" ] && [ -n "${IC_VERSION:-}" ] && [ -f "$INTENTIC_IC_PATH" ] &&
+                [ "$("$INTENTIC_IC_PATH" --version 2>/dev/null || true)" = "ic ${IC_VERSION#v}" ] &&
+                cp "$INTENTIC_IC_PATH" "${dest}.tmp" &&
+                echo "note: installed ic ${IC_VERSION#v} from the copy the desktop app carries — not downloading it."
+        }
         # Download beside the target and rename into place: overwriting a running executable fails outright
         # ("Text file busy"), and a half-downloaded binary must never be what runs.
-        if curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
+        if ic_carried || curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
             chmod +x "${dest}.tmp"
             mv -f "${dest}.tmp" "$dest"
             IC="$dest"

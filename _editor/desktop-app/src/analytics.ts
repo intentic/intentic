@@ -26,7 +26,9 @@ export const initAnalytics = (info: DesktopInfo): void => {
 };
 
 // Fire-and-forget event, silent on failure, no-op until initAnalytics has run. Only outcomes, durations and step
-// labels — never a sandbox name, setup code, path, token or line of script output.
+// labels — never a sandbox name, setup code, path, token or line of script output, but for one: a failed install's
+// `reason`, its last error line, with the home folder, the account, addresses and the code taken out first
+// (device/installTelemetry.ts `scrubReason`).
 export const track = (event: string, properties?: Record<string, unknown>): void => {
     void send(event, properties);
 };

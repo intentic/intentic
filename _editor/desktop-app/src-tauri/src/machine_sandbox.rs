@@ -1226,12 +1226,8 @@ fn create(app: &AppHandle, consent: bool) {
         }
     };
 
-    let minted = tauri::async_runtime::block_on(crate::account::platform_post(
-        app,
-        &window,
-        "/rpc/sandbox/setup-code",
-        &serde_json::json!({ "sandboxId": sandbox_id }),
-    ));
+    let minted =
+        tauri::async_runtime::block_on(crate::project::mint_code(app, &window, &sandbox_id, None));
     // A row this record made earlier that the platform no longer has (deleted from another device, or the account's
     // sandbox list cleaned up) refuses every new code the same way; a Try again could never get past it, so the record
     // says the sandbox is gone and the card offers a new one.
@@ -1275,6 +1271,8 @@ fn create(app: &AppHandle, consent: bool) {
         platform_url: None,
         project: None,
         slug: slug.clone(),
+        minted_at: Some(now()),
+        profile: None,
     };
     let mut script =
         crate::commands::setup_script(&args, &crate::commands::SetupContext::of(app, consent));
@@ -1291,6 +1289,8 @@ fn create(app: &AppHandle, consent: bool) {
         let lock = lock.clone();
         Box::new(move |child: &crate::scripts::Spawned| take_lock(&lock, child))
     };
+    // The sandbox image, fetched ahead while this setup installs Docker (prefetch.rs), as a handed-over setup does.
+    crate::prefetch::begin_for_setup(app, consent);
     let ended = crate::scripts::run_heard(app, RUN, script, Some(heard), Some(spawned));
     if let Some(lock) = &lock {
         let _ = std::fs::remove_file(lock);

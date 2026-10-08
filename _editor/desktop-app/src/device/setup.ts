@@ -3,8 +3,10 @@ import { useCopied } from "@intentic/ui/clipboard";
 import { t } from "@intentic/ui/i18n";
 import { track, trackBeforeExit } from "../analytics";
 import {
+    claimExpired,
     expectedStop,
     forgetResumableSetup,
+    freshSetupCode,
     parseCommandFailure,
     parseStep,
     readMarker,
@@ -23,13 +25,28 @@ import {
     type RunEvent,
     type RunMarker,
     type SessionEnd,
+    type FreshCode,
     type SetupArgs,
     type SetupReport,
     type SetupWaitingFor,
 } from "../desktop";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "../setupPlan";
+import {
+    endRequirements,
+    failureLine,
+    foldRequirement,
+    homeOf,
+    openStep,
+    runEnding,
+    scrubReason,
+    stepLeft,
+    type RequirementClocks,
+    type RequirementTime,
+    type StepOutcome,
+    type StepTime,
+} from "./installTelemetry";
 import { dockerReady, info } from "./machine";
-import { activeRun, eventsOf, running, runOutcome, start } from "./runs";
+import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs";
 
 // A SANDBOX'S SETUP ON THIS MACHINE, handed over from the workspace's /setup page (`intentic://setup`, parked by the
 // app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
@@ -38,8 +55,20 @@ import { activeRun, eventsOf, running, runOutcome, start } from "./runs";
 // This computer's own sandbox, which folders attach to, is not one of these: the app makes it by itself
 // (machineSandbox.ts, the app's machine_sandbox.rs), whichever window is open.
 
-// Setup codes last 30 minutes; 25 leaves room for the restart and the setup itself to finish.
+// Setup codes last 30 minutes (the platform's setup-code.ts). A setup resumed on one older than 20 asks for a fresh one
+// first, since its claim is still minutes of Docker ahead of it; one that cannot be had (signed out, offline, refused)
+// leaves the old code to run while it has 5 minutes left, and the card saying it ran out past that.
+const RENEW_AFTER_SECONDS = 20 * 60;
 const RESUME_WINDOW_SECONDS = 25 * 60;
+// A park this old is not resumed at all, however fresh a code could be: the restart it waited for was cancelled or
+// refused, and whatever the reader did since (the sandbox set up elsewhere, on a hosted machine, or given up on) is not
+// for this app to overrule by installing Docker unasked and claiming the sandbox again. The longest real restart round
+// trip measured was under two hours (PostHog, 2026-10-08).
+const PARK_LIMIT_SECONDS = 6 * 60 * 60;
+// An unanswered ask for a code is asked again this many times in all, this far apart: the first seconds after a sign-in
+// often have no network yet.
+const RENEW_ATTEMPTS = 3;
+const RENEW_PAUSE_MS = 5_000;
 // How long a command that said it failed may keep its setup alive before the setup is stopped for it.
 const COMMAND_FAILURE_GRACE_MS = 2_000;
 
@@ -160,6 +189,39 @@ const floorFor = (args: SetupArgs): number => {
     return floor;
 };
 
+/* WHERE THE TIME GOES (installTelemetry.ts): every step the plan's cursor leaves, every requirement row that finishes,
+   and at the run's end the step and rows it ended under. One event per step actually entered. */
+
+// What each of this attempt's events says about the run it belongs to, fixed at its start.
+let attemptFacts: { resumed: boolean; dockerReady: boolean | null } = { resumed: false, dockerReady: null };
+// This attempt's requirement rows that are running, by id.
+let clocks: RequirementClocks = {};
+// When the run's exit was heard: what the step and rows still open at the end are timed to, rather than to the moment
+// its command returned, which comes after the app's own bookkeeping for a finished setup.
+let exitHeardAt: number | undefined;
+
+const reportStep = (time: StepTime, outcome: StepOutcome): void => {
+    track(`desktop_install_step`, { ...time, outcome, ...attemptFacts });
+};
+
+const reportRequirement = (time: RequirementTime): void => {
+    track(`desktop_install_requirement`, { ...time, resumed: attemptFacts.resumed });
+};
+
+// The run ended: the step it ended on, and every row still running, ended the way it did.
+const reportEnding = (ok: boolean): void => {
+    const at = exitHeardAt ?? Date.now();
+    const ending = runEnding({ ok, code: setupExit.value, stopped: stopping.value });
+    const last = progress.value === undefined ? undefined : openStep(progress.value, at);
+    if (last !== undefined) {
+        reportStep(last, ending);
+    }
+    for (const row of endRequirements(clocks, ending, at)) {
+        reportRequirement(row);
+    }
+    clocks = {};
+};
+
 // A fresh attempt: the previous list stays on screen through a re-run rather than being cleared, so items the reader
 // just agreed to don't vanish while the installer re-examines the machine. Its first new requirement replaces it.
 const beginAttempt = (args: SetupArgs, startedAt: number): void => {
@@ -173,18 +235,30 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
     expired.value = false;
     progress.value = startProgress(planFor(args), startedAt, floorFor(args));
     now.value = startedAt;
+    // Unknown stays unknown (the probe may not have answered yet), as desktop_install_started reports it.
+    attemptFacts = { resumed: resuming.value, dockerReady: dockerReady.value ?? null };
+    clocks = {};
+    exitHeardAt = undefined;
 };
 
 /**
  * What started a run, for the funnel: the app on a link's arrival or after a restart, or which of the reader's presses
- * (the requirements card's go-ahead or its "Check again", a stopped run's "Try again"). A run that stops on a question
- * and a reader who presses again look the same from the outcome alone.
+ * (the requirements card's go-ahead or its "Check again", a stopped run's "Try again"), or the app again on a fresh code
+ * after the platform refused the last one at the claim. A run that stops on a question and a reader who presses again
+ * look the same from the outcome alone.
  */
-export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry`;
+export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry` | `renewed`;
+
+/** A fresh code is being asked for: up to a minute and a half with no run active. */
+const renewing = ref(false);
+/** What a reader's own press starts, as against what the app starts by itself. */
+const READER_PRESSES: ReadonlySet<InstallTrigger> = new Set([`consent`, `recheck`, `retry`]);
 
 export const runSetup = async (trigger: InstallTrigger = `retry`): Promise<void> => {
     const args = pending.value;
-    if (args === undefined || running.value) {
+    // While a fresh code is being asked for, no run is active yet, and a reader's press would run the setup on the old
+    // code ahead of it: the press waits for the renewal's own run instead.
+    if (args === undefined || running.value || (renewing.value && READER_PRESSES.has(trigger))) {
         return;
     }
     const startedAt = Date.now();
@@ -216,9 +290,21 @@ const requirementFacts = (): Record<string, unknown> => {
     };
 };
 
-// What the funnel hears of a finished run: its outcome, and the requirements it stopped on.
-const reportFinished = (ok: boolean, startedAt: number): void => {
-    track(`desktop_install_finished`, { ...runOutcome(`setup`, ok, startedAt), ...requirementFacts() });
+// Why a run failed, in its own words: the requirement row that failed and what it said, else the run's last error line;
+// scrubbed of the home folder, the account, any address and the code (installTelemetry.ts `scrubReason`).
+const reasonOf = (args: SetupArgs): string | undefined => {
+    const failed = Object.values(requirementState.value).findLast((row) => row.state === `failed` && row.detail !== undefined);
+    const said = failed?.detail ?? failureLine(eventsOf(`setup`));
+    const reason = said === undefined ? `` : scrubReason(said, { home: homeOf(setupLog.value), code: args.code });
+    return reason === `` ? undefined : reason;
+};
+
+// What the funnel hears of a finished run: its outcome, the requirements it stopped on, and why, when it failed. A
+// designed stop (a question, a restart) and a reader's own Stop are not failures, and carry no reason.
+const reportFinished = (args: SetupArgs, ok: boolean, startedAt: number): void => {
+    const failed = !ok && !stopping.value && !expectedStop(setupExit.value ?? null);
+    const reason = failed ? reasonOf(args) : undefined;
+    track(`desktop_install_finished`, { ...runOutcome(`setup`, ok, startedAt), ...requirementFacts(), ...(reason === undefined ? {} : { reason }) });
 };
 
 // A designed stop (desktop.ts) carries no error text, since the requirements list is the message; a stop nobody asked
@@ -237,8 +323,14 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
         carried.value = false;
     }
     setupError.value = failureOf(failure);
-    reportFinished(ok, startedAt);
+    reportEnding(ok);
+    reportFinished(args, ok, startedAt);
     if (!ok) {
+        // A code the platform no longer takes is swapped for a fresh one and the run goes again on it; the card says the
+        // code ran out only when no fresh one could be had.
+        if (!stopping.value && claimExpired(linesOf(`setup`)) && (await rerunOnFreshCode(args))) {
+            return;
+        }
         // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed;
         // `setupAlert` brings it back to the front, in the workspace's place rather than beside it.
         await setupAlert();
@@ -450,25 +542,92 @@ export const endSession = async (how: `restart` | `signout`): Promise<void> => {
     }
 };
 
-/** The setup a Windows restart interrupted, run again unasked while its code is still good. */
+/* A FRESH CODE FOR THE SAME SANDBOX, minted by the app with the workspace's session (commands.rs `setup_fresh_code`):
+   for a setup resumed on an old code, and for a run whose claim the platform refused as invalid or expired. */
+
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The answer, asked again while the platform cannot be reached at all.
+const askForCode = async (args: SetupArgs, attempt = 1): Promise<FreshCode | null> => {
+    const answer = await freshSetupCode(args).catch((error: unknown): FreshCode => ({ kind: `unreached`, reason: String(error) }));
+    if (answer?.kind !== `unreached` || attempt >= RENEW_ATTEMPTS) {
+        return answer;
+    }
+    await pause(RENEW_PAUSE_MS);
+    return askForCode(args, attempt + 1);
+};
+
+/** The same setup on a code the platform hands out now, or undefined when none could be had. */
+const renewCode = async (args: SetupArgs, from: `resume` | `claim`): Promise<SetupArgs | undefined> => {
+    renewing.value = true;
+    const answer = await askForCode(args).finally(() => {
+        renewing.value = false;
+    });
+    const renewed = answer?.kind === `code` ? answer.args : undefined;
+    track(`desktop_install_code_renewed`, { from, answer: answer?.kind ?? `none`, fresh: renewed !== undefined && renewed.code !== args.code });
+    // The bar a re-run of this setup starts from is the same setup's, whatever its code is now called.
+    if (renewed !== undefined && barFor === args.code) {
+        barFor = renewed.code;
+    }
+    return renewed;
+};
+
+// Codes minted here after a refused claim: one refused in turn is a failure to show, never a reason to mint again.
+const renewedAfterClaim = new Set<string>();
+
+/** The platform refused the code at the claim: the same sandbox runs again on a fresh one, once. False when it does not. */
+const rerunOnFreshCode = async (args: SetupArgs): Promise<boolean> => {
+    if (renewedAfterClaim.has(args.code)) {
+        return false;
+    }
+    const renewed = await renewCode(args, `claim`);
+    if (renewed === undefined || renewed.code === args.code) {
+        // No fresh code to be had here (signed out, offline, refused): the card's own way to one.
+        expired.value = true;
+        return false;
+    }
+    renewedAfterClaim.add(renewed.code);
+    pending.value = renewed;
+    await runSetup(`renewed`);
+    return true;
+};
+
+/** The setup a Windows restart interrupted, run again unasked, on a fresh code when its own is getting old. */
 export const loadResumable = async (): Promise<void> => {
     const parked = await resumableSetup();
     if (parked === null) {
         return;
     }
+    if (parked.agedSeconds > PARK_LIMIT_SECONDS) {
+        await forgetResumableSetup();
+        pending.value = parked.args;
+        setupOpen.value = true;
+        expired.value = true;
+        track(`desktop_install_resume_expired`, { agedSeconds: parked.agedSeconds, codeAgeSeconds: parked.codeAgeSeconds, tooOld: true });
+        return;
+    }
     pending.value = parked.args;
     setupOpen.value = true;
     resumedHow.value = parked.how;
-    if (parked.agedSeconds > RESUME_WINDOW_SECONDS) {
+    const renewed = parked.codeAgeSeconds > RENEW_AFTER_SECONDS ? await renewCode(parked.args, `resume`) : undefined;
+    // A link that arrived while the code was being renewed is newer than this park, and is already this window's setup.
+    // Compared by code: the ref hands back a reactive proxy of what it was given, never the object itself.
+    if (pending.value?.code !== parked.args.code || running.value) {
+        return;
+    }
+    if (renewed === undefined && parked.codeAgeSeconds > RESUME_WINDOW_SECONDS) {
         await forgetResumableSetup();
         expired.value = true;
-        track(`desktop_install_resume_expired`, { agedSeconds: parked.agedSeconds });
+        track(`desktop_install_resume_expired`, { agedSeconds: parked.agedSeconds, codeAgeSeconds: parked.codeAgeSeconds });
         return;
+    }
+    if (renewed !== undefined) {
+        pending.value = renewed;
     }
     resuming.value = true;
     // Already agreed to before the restart this app performed on that answer; not asked again.
     consented.value = true;
-    track(`desktop_install_resumed`, { agedSeconds: parked.agedSeconds });
+    track(`desktop_install_resumed`, { agedSeconds: parked.agedSeconds, codeAgeSeconds: parked.codeAgeSeconds, renewed: renewed !== undefined });
     await runSetup(`resume`);
 };
 
@@ -504,6 +663,11 @@ const takeMarker = (marker: RunMarker): void => {
         requirements.value = [...kept, marker.requirement];
         return;
     }
+    const folded = foldRequirement(clocks, marker.state, Date.now());
+    clocks = folded.clocks;
+    if (folded.finished !== undefined) {
+        reportRequirement(folded.finished);
+    }
     requirementState.value = { ...requirementState.value, [marker.state.id]: marker.state };
 };
 
@@ -524,6 +688,7 @@ const boundaryHeard = (event: RunEvent): void => {
     if (event.kind === `exit`) {
         clearCommandFailureTimer();
         setupExit.value = event.code;
+        exitHeardAt = Date.now();
     }
 };
 
@@ -545,7 +710,12 @@ export const takeSetupEvent = (event: RunEvent): boolean => {
     // Folded as each event arrives, since the plan needs to know when each phase started.
     if (progress.value !== undefined) {
         now.value = Date.now();
-        progress.value = advance(progress.value, event, now.value);
+        const before = progress.value;
+        progress.value = advance(before, event, now.value);
+        const left = stepLeft(before, progress.value, now.value);
+        if (left !== undefined) {
+            reportStep(left, `done`);
+        }
     }
     if (event.kind !== `line`) {
         boundaryHeard(event);

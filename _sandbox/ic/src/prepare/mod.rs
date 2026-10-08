@@ -134,6 +134,27 @@ pub fn live(text: &str, live: Live) {
     }
 }
 
+/// A reading for one named row, from work running BESIDE the fix the flow is on (the Docker Desktop download, on its
+/// own thread while WSL2 is turned on). The row always gets it; the screen's live line only when no other fix owns it,
+/// so two jobs do not take turns repainting one line.
+#[cfg(windows)]
+pub fn live_for(id: &str, text: &str, live: Live) {
+    let foreground = WORKING_ON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .is_none_or(|working_on| working_on == id);
+    if foreground {
+        crate::ui::live(text);
+    }
+    announce_live(id, "running", Some(text), live);
+}
+
+/// What can still be done in the session that turning WSL2 on has to end with a restart: what needs no running WSL.
+/// The Docker Desktop download and install are the long ones, and doing them now is what makes that restart the only
+/// one; starting Docker, and anything that asks its engine, waits for the next session.
+#[cfg_attr(not(windows), allow(dead_code))]
+const BEFORE_RESTART: [&str; 2] = ["docker-desktop", "docker-path"];
+
 /// What an elevated fix says while it runs: who it is waiting on, and for how long. `what` is the work, in a
 /// reader's words ("Turning on WSL2"); `stage` is asked each second for where that work is, when it can say.
 /// The two edges, the prompt going up and being answered, are also logged once, as the trail of where time went.
@@ -287,8 +308,23 @@ pub fn run(args: Args) -> Result<()> {
 
     consent(&unmet, args.yes)?;
 
+    // The 600 MB download starts now, on its own thread, rather than when its turn in the list comes: it then runs
+    // while Windows' permission prompt for WSL2 waits on the person and while the features are turned on, which is
+    // minutes on most PCs. The install itself still takes its turn (`apply`).
+    let mut docker_download = unmet.iter().any(|r| r.id == "docker-desktop").then(|| {
+        announce_state(
+            "docker-desktop",
+            "running",
+            Some("downloading Docker Desktop alongside the other steps..."),
+        );
+        std::thread::spawn(|| fix::download_installer(&fix::installer_path(), "docker-desktop"))
+    });
+
     /* Fixes change the machine under their own diagnosis: installing Docker Desktop makes `docker-desktop` go away and `docker-path` appear. */
     let mut previous: Vec<&'static str> = unmet.iter().map(|r| r.id).collect();
+    // Set once a fix has left Windows needing a restart (turning WSL2 on): the rest of the list is still worked through,
+    // but only what needs no running WSL (`BEFORE_RESTART`), and the restart is asked for at the end, once.
+    let mut restart_after: Option<plan::Requirement> = None;
     for pass in 0..3 {
         if pass > 0 {
             facts = facts::probe().map_err(crate::util::Fail)?;
@@ -310,6 +346,9 @@ pub fn run(args: Args) -> Result<()> {
         previous = ids;
 
         for requirement in &todo {
+            if restart_after.is_some() && !BEFORE_RESTART.contains(&requirement.id) {
+                continue;
+            }
             // Uncovered by an earlier fix in this very pass: installing Docker Desktop adds the account to
             // docker-users itself, so the requirement that was a UAC prompt when the list was drawn is a
             // sign-out by the time we reach it. Parked properly rather than reported as a wall.
@@ -333,26 +372,42 @@ pub fn run(args: Args) -> Result<()> {
                 }
                 bail!("{}", explain(&todo));
             }
-            match apply(requirement, &facts)? {
+            let outcome = match apply(requirement, &facts, &mut docker_download) {
+                Ok(outcome) => outcome,
+                // A restart is coming anyway, and the next session retries whatever failed before it (a download
+                // cut by the network resumes where it stopped): the failure is on its row, and the restart still
+                // goes ahead rather than leaving the PC halfway with a wall of red.
+                Err(failure) if restart_after.is_some() => {
+                    crate::ui::warn(&format!(
+                        "{}: {} - the setup tries again after the restart.",
+                        requirement.title, failure.0
+                    ));
+                    continue;
+                }
+                Err(failure) => return Err(failure),
+            };
+            match outcome {
                 Outcome::Continue => {}
                 Outcome::Restart => {
-                    let mut pending = vec![requirement.clone()];
-                    pending[0].action = Action::Restart;
-                    pending[0].remedy =
+                    let mut pending = requirement.clone();
+                    pending.action = Action::Restart;
+                    pending.remedy =
                         "restart this PC and run the same command again - the setup picks up from here."
                             .to_string();
-                    for entry in &pending {
-                        announce(entry);
-                    }
+                    announce(&pending);
                     // Done as far as anything here can take it — the row is finished, and what is left is
                     // the machine going down and coming back.
                     announce_state(requirement.id, "done", Some("waiting for the restart"));
-                    return restart(&pending, args.yes);
+                    restart_after = Some(pending);
                 }
                 /* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`. */
                 // Two fixes end here: granting the group, and starting an engine that then refuses the
                 // account. Either way the row that was being worked on is finished, and what is left is the
                 // one requirement plan.rs builds for exactly this — the same words the examination uses.
+                // The restart already coming is a new sign-in too.
+                Outcome::SignOut if restart_after.is_some() => {
+                    announce_state(requirement.id, "done", Some("waiting for the restart"));
+                }
                 Outcome::SignOut => {
                     let pending = plan::sign_out_requirement(&facts);
                     announce_state(requirement.id, "done", None);
@@ -361,6 +416,9 @@ pub fn run(args: Args) -> Result<()> {
                     return sign_out_or_restart(&pending, &facts.user, args.yes);
                 }
             }
+        }
+        if let Some(pending) = restart_after.take() {
+            return restart(std::slice::from_ref(&pending), args.yes);
         }
     }
 
@@ -386,7 +444,11 @@ enum Outcome {
 }
 
 #[cfg(windows)]
-fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome> {
+fn apply(
+    requirement: &plan::Requirement,
+    facts: &plan::Facts,
+    docker_download: &mut Option<std::thread::JoinHandle<std::result::Result<(), String>>>,
+) -> Result<Outcome> {
     use crate::util::step;
 
     let doing = match requirement.id {
@@ -394,7 +456,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
             "turning on the Windows features Docker needs (Windows will ask for permission)..."
         }
         "wsl-kernel" => "updating WSL2 (Windows will ask for permission)...",
-        "docker-desktop" => "downloading Docker Desktop (about 600 MB)...",
+        "docker-desktop" => "downloading and installing Docker Desktop (about 600 MB)...",
         "docker-path" => "finding Docker on this PC...",
         "docker-users" => {
             "allowing this account to use Docker (Windows will ask for permission)..."
@@ -414,7 +476,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
     let outcome = match requirement.id {
         "wsl-features" => fix::enable_wsl_features(),
         "wsl-kernel" => fix::update_wsl_kernel(),
-        "docker-desktop" => fix::install_docker_desktop(facts),
+        "docker-desktop" => fix::install_docker_desktop(docker_download.take()),
         "docker-path" => fix::put_docker_on_path(facts),
         "docker-users" => fix::add_to_docker_users(facts),
         "docker-running" => fix::start_docker_desktop(facts).and_then(|_| fix::wait_for_daemon()),
@@ -441,6 +503,15 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
         Err(fix::Trouble::Cancelled) => {
             let reason = format!(
                 "Windows asked for permission and the prompt was closed, so nothing was changed for \"{}\". Try again and choose Yes when Windows asks.",
+                requirement.title
+            );
+            announce_state(requirement.id, "failed", Some(reason.as_str()));
+            bail!("{reason}")
+        }
+        // Not an answer at all: the prompt waited, closed itself, was asked again and waited out again.
+        Err(fix::Trouble::Unanswered) => {
+            let reason = format!(
+                "Windows' permission prompt for \"{}\" closed itself twice without an answer, so nothing was changed. Try again, and when Windows asks, choose Yes: if no prompt shows, look for a flashing shield on the taskbar.",
                 requirement.title
             );
             announce_state(requirement.id, "failed", Some(reason.as_str()));

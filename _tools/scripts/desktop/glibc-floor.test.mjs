@@ -7,6 +7,7 @@ import {
     compareVersions,
     DEFAULT_CONFIG,
     declaredFloor,
+    dynamicSymbols,
     glibcImports,
     newestImport,
     packageFloorProblems,
@@ -94,4 +95,22 @@ test("the built package's metadata must carry the floor the config declares", ()
     const requires = "libc.so.6(GLIBC_2.39)(64bit)\nlibwebkit2gtk-4.1.so.0()(64bit)\nlibgtk-3.so.0()(64bit)\n";
     assert.deepEqual(packageFloorProblems("rpm", requires, "2.39"), []);
     assert.deepEqual(packageFloorProblems("rpm", "libgtk-3.so.0()(64bit)\n", "2.39"), ["Requires lacks libc.so.6(GLIBC_2.39)(64bit)"]);
+});
+
+test("a statically linked ELF imports nothing, and any other objdump failure is still one", () => {
+    // What objdump 2.44 does with build-ic.sh's static musl ic, bundled as intentic-ic: the banner on stdout, this on
+    // stderr, exit 1.
+    const failing = (stderr) => () => {
+        throw Object.assign(new Error("Command failed: objdump -T usr/bin/intentic-ic"), { status: 1, stderr });
+    };
+    assert.equal(dynamicSymbols("usr/bin/intentic-ic", failing("objdump: usr/bin/intentic-ic: not a dynamic object\n")), "");
+    assert.deepEqual(glibcImports(dynamicSymbols("usr/bin/intentic-ic", failing("objdump: usr/bin/intentic-ic: not a dynamic object\n"))), []);
+    assert.throws(
+        () => dynamicSymbols("usr/bin/intentic-ic", failing("objdump: usr/bin/intentic-ic: file format not recognized\n")),
+        /Command failed/,
+    );
+    assert.equal(
+        dynamicSymbols("app", () => APP),
+        APP,
+    );
 });

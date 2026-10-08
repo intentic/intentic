@@ -1,6 +1,7 @@
 import {
     EXIT_NEEDS_CONSENT,
     EXIT_NEEDS_RESTART,
+    claimExpired,
     expectedStop,
     parseCommandFailure,
     parseRequirement,
@@ -134,5 +135,18 @@ describe(`a child command reporting terminal failure`, () => {
         expect(parseCommandFailure({ kind: `line`, run: `setup`, stream: `stderr`, text: `enrolling: retrying (1/5)` })).toBeUndefined();
         expect(parseCommandFailure({ kind: `line`, run: `setup`, stream: `stdout`, text: reported })).toBeUndefined();
         expect(parseCommandFailure({ kind: `exit`, run: `setup`, code: 1, ok: false })).toBeUndefined();
+    });
+});
+
+describe(`a claim the platform refused`, () => {
+    // ic's own words for a 404 at the claim (its platform.rs), as `error:` prints them when piped.
+    const refused = `error: the setup code is invalid or expired — refresh the platform's setup page and copy a fresh command.`;
+
+    it(`is told from every other failure by ic's own sentence`, () => {
+        expect(claimExpired([`intentic: [claiming-code] redeeming the setup code...`, refused])).toBe(true);
+        expect(claimExpired([`error: could not reach the platform at https://api.intentic.dev to redeem the setup code.`])).toBe(false);
+        // Another machine holding the code is a refusal no fresh code would change.
+        expect(claimExpired([`error: this setup code was already used on another machine`])).toBe(false);
+        expect(claimExpired([])).toBe(false);
     });
 });

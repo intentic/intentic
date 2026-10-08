@@ -4,6 +4,7 @@
 
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { appExecutableName } from "./parse.js";
 import { powershell, type RunResult } from "./run.js";
 
 /** How long an install may take; generous since it may fetch the WebView2 runtime on a machine without one. */
@@ -29,13 +30,11 @@ export const uninstallSilently = async (uninstallString: string): Promise<RunRes
         { timeoutMs: INSTALL_TIMEOUT_MS },
     );
 
-/** The app's own executable inside an install directory, everything but the uninstaller. */
+/** The app's own executable inside an install directory: neither the uninstaller nor a sidecar (parse.ts). */
 export const appExecutable = async (installLocation: string): Promise<string | undefined> => {
     const entries = await readdir(installLocation, { withFileTypes: true });
-    const executable = entries.find(
-        (entry) => entry.isFile() && entry.name.toLowerCase().endsWith(`.exe`) && !entry.name.toLowerCase().startsWith(`uninstall`),
-    );
-    return executable === undefined ? undefined : join(installLocation, executable.name);
+    const executable = appExecutableName(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
+    return executable === undefined ? undefined : join(installLocation, executable);
 };
 
 // Starts the app detached through the shell; -WindowStyle Hidden hides the launching PowerShell, not the app, which

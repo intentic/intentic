@@ -11,7 +11,9 @@ mod local;
 mod machine_sandbox;
 mod notice;
 mod offline;
+mod prefetch;
 mod project;
+mod resume;
 mod scripts;
 mod setup_link;
 mod shown;
@@ -59,11 +61,11 @@ enum Opening {
 /// The launch decision, as a function of four facts — pure, because a launch is the one moment with no window
 /// for anything to go wrong in front of.
 ///
-/// A PARKED SETUP OUTRANKS THE ENGINE: it is why this launch is happening at all (RunOnce, commands.rs
-/// `end_session`), and the card that resumes it is the app's own face — opening the workspace instead left
-/// the user on the setup page they had already been through, with the parked setup waiting behind a tray menu
-/// nobody had been shown. It also starts Docker as one of its own steps (`ic docker prepare`), so a second
-/// thing starting it would draw two cards about one wait.
+/// A PARKED SETUP OUTRANKS THE ENGINE: it is why this launch is happening at all (the sign-in entry, resume.rs),
+/// and the card that resumes it is the app's own face — opening the workspace instead left the user on the setup
+/// page they had already been through, with the parked setup waiting behind a tray menu nobody had been shown. It
+/// also starts Docker as one of its own steps (`ic docker prepare`), so a second thing starting it would draw two
+/// cards about one wait.
 ///
 /// A SLEEPING ENGINE is the morning after a restart, and the reason a non-technical owner meets this face far
 /// more often than the first one: Docker Desktop does not start itself (scripts.rs has the whole of why), so a
@@ -160,6 +162,7 @@ pub fn run() {
             commands::sign_out_for_setup,
             commands::resumable_setup,
             commands::forget_resumable_setup,
+            commands::setup_fresh_code,
             commands::sandbox_list,
             commands::sandbox_power,
             commands::sandbox_recreate,
@@ -297,6 +300,8 @@ pub fn run() {
             std::thread::spawn(move || {
                 scripts::prune_logs();
                 project::sweep_paths_files(&sweeping);
+                // A sign-in entry with nothing parked for it is taken away, so a launch it made is its last (resume.rs).
+                resume::settle(&sweeping);
             });
             // The file server a few seconds in, when a local window is likely: an install that has opened any is likely
             // to again.

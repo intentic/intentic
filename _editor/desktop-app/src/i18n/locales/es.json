@@ -34,6 +34,7 @@
         "seeAllDevices": "Ver todos tus dispositivos",
         "settingUp": "Preparando",
         "setupCodeRanOut": "Tu código de instalación caducó mientras este dispositivo estaba ausente. Todo aquello para lo que era el reinicio ya está hecho; solo necesita un código nuevo para continuar.",
+        "setupCodeRanOutHere": "Tu código de instalación caducó antes de que este dispositivo pudiera usarlo, y no se pudo obtener uno nuevo desde aquí. No se pierde nada de lo ya hecho; solo necesita un código nuevo para continuar.",
         "showLog": "Mostrar el registro",
         "startDocker": "Iniciar Docker",
         "startingOnDevice": "Iniciando en este dispositivo…",

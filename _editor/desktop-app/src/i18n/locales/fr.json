@@ -34,6 +34,7 @@
         "seeAllDevices": "Voir tous vos appareils",
         "settingUp": "Préparation :",
         "setupCodeRanOut": "Votre code d'installation a expiré pendant que cet appareil était absent. Tout ce pour quoi le redémarrage avait lieu est déjà fait ; il ne manque qu'un nouveau code pour continuer.",
+        "setupCodeRanOutHere": "Votre code d'installation a expiré avant que cet appareil puisse l'utiliser, et un nouveau n'a pas pu être obtenu d'ici. Rien de ce qui est déjà fait n'est perdu ; il ne manque qu'un nouveau code pour continuer.",
         "showLog": "Afficher le journal",
         "startDocker": "Démarrer Docker",
         "startingOnDevice": "Démarrage sur cet appareil…",

@@ -20,7 +20,9 @@
 # that binary: connect.ps1 fetches `$IC_URL/ic-windows-amd64.exe`, defaulting to the latest GitHub release. A
 # working-tree installer carries the 0.0.0 sentinel and so names no release of its own, which means a local
 # install tests this branch's app driving the last release's CLI unless IC_URL points back here
-# (try-onboarding.mjs sets it to http://localhost:4321/desktop).
+# (try-onboarding.mjs sets it to http://localhost:4321/desktop). The installers carry an ic of their own beside the
+# app as well, but a shim copies that one only when the run is pinned to a release (IC_VERSION), which a 0.0.0
+# build never is.
 #
 # Each bundle is built independently and failures don't abort the rest — whatever succeeded is
 # staged, so a missing AppImage prerequisite never blocks the .deb/.rpm downloads.
@@ -93,6 +95,21 @@ build_bundle() {
 
 if [ "$STAGE_ONLY" -eq 0 ]; then
     cd "$APP"
+    # The ic CLI each installer carries beside the app (tauri.conf.json `externalBin`), for the targets this run
+    # bundles, made or reused off the shipping toolchain (stage-desktop-ic.sh --bundle). A stop rather than one more
+    # failed bundle: what `pnpm test:rust` leaves in src-tauri/binaries is a debug build or a placeholder, and
+    # every bundle below would carry it without a word.
+    ic_triples=()
+    if [ "$LINUX" -eq 1 ]; then
+        ic_triples+=("$(rustc -vV | sed -n 's/^host: //p')")
+    fi
+    if [ "$WINDOWS" -eq 1 ]; then
+        ic_triples+=(x86_64-pc-windows-msvc)
+    fi
+    if ! bash "$ROOT/_tools/scripts/desktop/stage-desktop-ic.sh" --bundle "${ic_triples[@]}"; then
+        echo "error: no ic to put in the installers (see above), so none were built." >&2
+        exit 1
+    fi
     if [ "$LINUX" -eq 1 ]; then
         build_bundle deb
         build_bundle rpm

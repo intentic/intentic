@@ -45,11 +45,19 @@ const MB: u64 = 1024 * 1024;
 /// One reading of the Docker Desktop download: how much, out of what, how fast, and how long is left. The
 /// rate and the estimate are only given once there is enough of a run to measure; a guess in the first
 /// second swings by minutes.
+#[cfg(test)]
 pub fn download(written: u64, total: u64, elapsed: Duration) -> String {
+    download_resumed(written, total, elapsed, 0)
+}
+
+/// [`download`], for a download that picked up `from` bytes an earlier run left: they count towards how far it is, and
+/// not towards how fast, or a resumed download would claim a rate the line never had.
+pub fn download_resumed(written: u64, total: u64, elapsed: Duration, from: u64) -> String {
     let done = written / MB;
-    let measured = elapsed >= Duration::from_secs(2) && written > 0;
+    let fresh = written.saturating_sub(from);
+    let measured = elapsed >= Duration::from_secs(2) && fresh > 0;
     let rate = if measured {
-        written as f64 / elapsed.as_secs_f64()
+        fresh as f64 / elapsed.as_secs_f64()
     } else {
         0.0
     };
@@ -92,10 +100,35 @@ fn time_left(left: Duration) -> String {
     }
 }
 
-/// Where Docker Desktop's own installer writes when it runs as administrator, and where it says which phase it is
-/// in (`[InstallWorkflow][I] Phase 1: Staging`). Read, never written; an older file there is the last install's,
-/// so the caller only believes one written since its own run began.
-pub const DOCKER_INSTALL_LOG: &str = r"C:\ProgramData\DockerDesktop\install-log-admin.txt";
+/// Where Docker Desktop's own installer writes, and where it says which phase it is in (`[InstallWorkflow][I] Phase 1:
+/// Staging`): the all-users install's file under ProgramData, and the per-user install's under the account's
+/// LOCALAPPDATA. Read, never written; an older file is the last install's, so the caller only believes one written
+/// since its own run began, and the newest of those.
+pub fn docker_install_logs(
+    local_app_data: Option<&str>,
+    program_data: Option<&str>,
+) -> Vec<String> {
+    let mut paths = Vec::new();
+    if let Some(local) = local_app_data.filter(|base| !base.is_empty()) {
+        let local = local.trim_end_matches('\\');
+        for file in [
+            "Docker\\install-log.txt",
+            "Docker\\install-log-user.txt",
+            "DockerDesktop\\install-log.txt",
+            "DockerDesktop\\install-log-user.txt",
+        ] {
+            paths.push(format!("{local}\\{file}"));
+        }
+    }
+    let program_data = program_data
+        .filter(|base| !base.is_empty())
+        .unwrap_or("C:\\ProgramData")
+        .trim_end_matches('\\');
+    paths.push(format!(
+        "{program_data}\\DockerDesktop\\install-log-admin.txt"
+    ));
+    paths
+}
 
 /// The phase Docker's installer last reported, in a reader's words. `None` when the log names none: the row
 /// then says what it is doing without a stage, rather than inventing one.
@@ -161,6 +194,38 @@ mod tests {
     fn the_first_second_of_a_download_makes_no_promises() {
         let line = download(3 * MB, 600 * MB, Duration::from_millis(900));
         assert_eq!(line, "Downloading Docker Desktop: 3 of 600 MB (0%).");
+    }
+
+    /// A download resumed after a restart counts what it had towards the bar, and only what it fetched towards the rate.
+    #[test]
+    fn a_resumed_download_does_not_count_its_old_bytes_as_speed() {
+        let line = download_resumed(400 * MB, 600 * MB, Duration::from_secs(20), 300 * MB);
+        assert_eq!(
+            line,
+            "Downloading Docker Desktop: 400 of 600 MB (66%) at 5.0 MB/s, less than a minute left."
+        );
+        assert_eq!(
+            download_resumed(300 * MB, 600 * MB, Duration::from_secs(20), 300 * MB),
+            "Downloading Docker Desktop: 300 of 600 MB (50%)."
+        );
+    }
+
+    #[test]
+    fn the_install_log_is_looked_for_where_either_kind_of_install_writes_it() {
+        let paths = docker_install_logs(Some("C:\\Users\\radar\\AppData\\Local\\"), None);
+        assert!(
+            paths
+                .contains(&"C:\\Users\\radar\\AppData\\Local\\Docker\\install-log.txt".to_string()),
+            "{paths:?}"
+        );
+        assert_eq!(
+            paths.last().map(String::as_str),
+            Some("C:\\ProgramData\\DockerDesktop\\install-log-admin.txt")
+        );
+        assert_eq!(
+            docker_install_logs(None, Some("D:\\PD")),
+            vec!["D:\\PD\\DockerDesktop\\install-log-admin.txt".to_string()]
+        );
     }
 
     #[test]

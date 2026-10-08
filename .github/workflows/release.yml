@@ -90,10 +90,72 @@ jobs:
         if: ${{ steps.release.outputs.version != '' }}
         run: node _tools/scripts/release/check-publishable.mjs
 
+  # THE ic CLI, built ONCE per release and handed to everything that ships it. The shims download these five binaries
+  # from the GitHub Release, and both desktop installers carry their platform's one beside the app (tauri.conf.json
+  # `externalBin`), which a shim pinned to the app's release copies into place instead of downloading
+  # (stage-desktop-ic.sh says why). One build is what makes those the same bytes: an installer whose ic differed from
+  # the one the release attaches would be a second binary answering to one version. windows-build and linux-build
+  # download this artifact into _sandbox/ic/dist-bin, where build-ic.sh writes, and stage it from there
+  # (stage-desktop-ic.sh --release refuses a binary of any other version); linux-build carries the directory on to
+  # publish inside its own artifact, so what publish attaches and attests is what the installers carry.
+  #
+  # Its own job because the two desktop builds run beside each other and both need it. What that costs is this job
+  # on the front of the Windows chain; the five builds themselves moved here out of linux-build.
+  ic-build:
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+      CARGO_HOME: /ci-cache/cargo
+      # linux-build's directory, where these builds ran until they moved here, so its cache is warm for them. Never
+      # held by both at once: linux-build starts only after this job has finished.
+      CARGO_TARGET_DIR: /ci-cache/desktop-target
+      # For the windows-x64 target (cargo-xwin): the ~1.1 GB MSVC splat cache, shared.
+      XWIN_CACHE_DIR: /ci-cache/xwin
+      # Authenticode for ic-windows-amd64.exe, which build-ic.sh signs: the shims download it like an installer, and
+      # the Windows installer carries it. Unset, the build runs and says so (sign-windows.sh).
+      WINDOWS_SIGN_TOOL: ${{ secrets.WINDOWS_SIGN_TOOL }}
+      WINDOWS_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
+      WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
+      WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
+      WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      # Empties _sandbox/ic/dist-bin among the rest, so the artifact holds this build and nothing a previous job on
+      # this runner left there.
+      - uses: ./.github/actions/prepare-workspace
+      # Every platform a connect/recreate one-liner can land on: the .sh shims cover Linux + macOS, the .ps1 shims
+      # Windows. All five come off the zig/xwin toolchains baked into this image, with no Apple SDK anywhere in it
+      # (build-ic.sh header).
+      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      # A directory upload is rooted at the directory, so the artifact holds the five binaries by name, and a download
+      # into _sandbox/ic/dist-bin puts them back exactly where build-ic.sh wrote them.
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: ic-release-binaries
+          path: _sandbox/ic/dist-bin
+          if-no-files-found: error
+          retention-days: 7
+
   # The versioned candidate. This is the only build of the Windows installer in the release lifecycle; the
   # publish job downloads and stages it instead of asking cargo-xwin for a similar second file.
   windows-build:
-    needs: plan
+    needs: [plan, ic-build]
     if: ${{ needs.plan.outputs.version != '' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
@@ -137,6 +199,13 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       # Match release-prepare's transient package state before the UI is compiled into the candidate.
       - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
+      # The release's own ic, which the installer carries beside the app: build-desktop.sh stages ic-windows-amd64.exe
+      # from here (stage-desktop-ic.sh --release) rather than cross-building a second one. After prepare-workspace,
+      # which empties this directory.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ic-release-binaries
+          path: _sandbox/ic/dist-bin
       - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --windows-only
       - uses: ./.github/actions/upload-artifact-retry
         with:
@@ -257,7 +326,7 @@ jobs:
   # (the 2026-08-03 lesson, previously enforced by running it inside prepareCmd): a failure here means the
   # publish job never starts, so there is no tag, no Release, and no npm publish.
   linux-build:
-    needs: plan
+    needs: [plan, ic-build]
     if: ${{ needs.plan.outputs.version != '' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
@@ -280,7 +349,7 @@ jobs:
       # cache carries straight over; still its own directory for the lock-and-fingerprint reasons ci.yml's
       # desktop jobs spell out.
       CARGO_TARGET_DIR: /ci-cache/desktop-target
-      # For build-ic.sh's windows-x64 target (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared.
+      # For the Windows launcher's build and the Explorer menu's DLL (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared.
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
@@ -318,13 +387,15 @@ jobs:
       # The one machine-side agent (computer links + desktop sync), for every platform either capability's card
       # can land on: the sync half has always covered macOS, the computer half rides along there.
       - run: bash _tools/scripts/build/build-agent-binaries.sh _devices/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
-      # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
-      # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
-      # image, with no Apple SDK anywhere in it (build-ic.sh header).
-      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      # The ic host-side CLI, all five platforms, as ic-build made them: the Linux bundles below carry ic-linux-amd64
+      # beside the app (stage-desktop-ic.sh --release), and the upload at the end carries the directory to publish.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ic-release-binaries
+          path: _sandbox/ic/dist-bin
       # The Windows launcher stub, which is what the machine agent above actually registers at logon: without it
       # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
-      # console window on the desktop at every boot. Same xwin toolchain as the ic build above; ~200 KB.
+      # console window on the desktop at every boot. The xwin toolchain ic-build uses; ~200 KB.
       - run: bash _tools/scripts/build/build-win-launcher.sh windows-x64
       - run: bash _tools/scripts/desktop/build-desktop.sh "$RELEASE_VERSION" --linux-only
       # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
@@ -467,7 +538,7 @@ jobs:
       # THE RELEASE, AND WHETHER IT HAPPENED — which are two different facts, and everything below this step
       # depends on the second one.
       #
-      # `plan` computed PLANNED_RELEASE_VERSION before five build jobs ran; by the time this job starts, an
+      # `plan` computed PLANNED_RELEASE_VERSION before six build jobs ran; by the time this job starts, an
       # hour of commits has landed on main and semantic-release declines with "the local branch main is behind
       # the remote one". It exits 0. At this commit rate that is the ORDINARY outcome, and every step below
       # publishes a tag that in that case was never pushed — which is how three of the ten most recent failed

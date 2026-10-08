@@ -9,7 +9,7 @@
 // `libc.so.6(GLIBC_x.y)(64bit)` must name the same version, and the download page and the desktop-app README
 // repeat it for people. This fails when:
 //
-//   - any ELF in the payload (the app, its sidecar, every library an AppImage vendors) imports a GLIBC_ symbol
+//   - any ELF in the payload (the app, its sidecars, every library an AppImage vendors) imports a GLIBC_ symbol
 //     version newer than the floor, which is what happens silently when the build base moves to a newer Debian;
 //   - the rpm's declared floor is not the deb's;
 //   - the built package does not carry the floor in its metadata, which only the bundler can get wrong.
@@ -141,6 +141,23 @@ function elfFiles(dir) {
 
 const run = (command, args) => execFileSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
+/**
+ * An ELF's `objdump -T` listing, or nothing at all for a STATICALLY linked one: it has no dynamic symbol table, so it
+ * imports no glibc version, and objdump says "not a dynamic object" and exits 1 rather than listing none. The
+ * intentic-ic the bundles carry beside the app is one (build-ic.sh links ic static against musl), and without this the
+ * gate died on it instead of passing it. Any other failure is still one.
+ */
+export function dynamicSymbols(path, objdump = (file) => run("objdump", ["-T", file])) {
+    try {
+        return objdump(path);
+    } catch (error) {
+        if (String(error?.stderr ?? "").includes("not a dynamic object")) {
+            return "";
+        }
+        throw error;
+    }
+}
+
 function packageMetadata(pkg) {
     if (pkg.endsWith(".deb")) {
         return { kind: "deb", text: run("dpkg-deb", ["-f", pkg, "Depends"]) };
@@ -169,7 +186,7 @@ function parseArgs(argv) {
 function main(argv) {
     const { config, label, dir, pkg } = parseArgs(argv);
     const floor = declaredFloor(JSON.parse(readFileSync(config, "utf8")));
-    const files = elfFiles(dir).map((path) => ({ path: relative(dir, path), objdump: run("objdump", ["-T", path]) }));
+    const files = elfFiles(dir).map((path) => ({ path: relative(dir, path), objdump: dynamicSymbols(path) }));
     const problems = violations(files, floor).map(({ path, version, symbol }) => `${path} needs GLIBC_${version} for ${symbol}`);
     if (pkg) {
         const { kind, text } = packageMetadata(pkg);

@@ -1,5 +1,6 @@
 import type { WindowInfo } from "@intentic/desktop-automation";
 import {
+    appExecutableName,
     assistantReplied,
     asList,
     containerNames,
@@ -61,6 +62,15 @@ test("the installed app is found by display name, across hives", () => {
         installLocation: `C:\\Users\\ci\\AppData\\Local\\Intentic`,
         uninstallString: `"C:\\Users\\ci\\AppData\\Local\\Intentic\\uninstall.exe"`,
     });
+});
+
+test("the app's executable is found among its sidecars, whatever order the folder lists them in", () => {
+    const installed = [`intentic-desktop.exe`, `intentic-files.exe`, `intentic-ic.exe`, `intentic_explorer_menu.dll`, `uninstall.exe`];
+    expect(appExecutableName(installed)).toBe(`intentic-desktop.exe`);
+    // A listing that puts the sidecars first still finds the app, in whatever case Windows spells them.
+    expect(appExecutableName([`INTENTIC-IC.EXE`, `Uninstall.exe`, `Intentic-Files.exe`, `Intentic.exe`])).toBe(`Intentic.exe`);
+    expect(appExecutableName([`intentic-ic.exe`, `intentic-files.exe`, `uninstall.exe`])).toBeUndefined();
+    expect(appExecutableName([])).toBeUndefined();
 });
 
 test("the quotes Windows stores around InstallLocation are stripped, and the ones around UninstallString are not", () => {

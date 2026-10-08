@@ -97,6 +97,12 @@ Var IntenticAgentKept
       Sleep 500
     ${Loop}
     Delete "$APPDATA\${BUNDLEID}\roster.json"
+    ; A setup parked for the next sign-in (resume.rs), and the entry that would start it: left behind, Windows would try
+    ; a missing program at every sign-in, and a reinstall would resume a setup the reader walked away from. An update
+    ; keeps both, since the entry names the same program and the setup is still the reader's.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "IntenticResumeSetup"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "IntenticResumeSetup"
+    Delete "$APPDATA\${BUNDLEID}\resume-setup.json"
     ; The Explorer menu's package, while its DLL is still here to remove it (an update keeps it: the install that
     ; follows re-registers only what changed, and asks nothing). Removing it also ends the surrogate holding the DLL.
     !insertmacro INTENTIC_REGSVR32 "/s /u /n /i:quiet"

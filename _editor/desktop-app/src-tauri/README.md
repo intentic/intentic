@@ -43,8 +43,10 @@ flowchart LR
   pointing one at another folder; `sidecar.rs` owns the
   `intentic-files` process that serves them; `project.rs` is a folder becoming a sandbox's project and the machine
   agent's runs on it.
-- **Staged scripts.** `staged-scripts/` is gitignored and filled by `pnpm stage:scripts`. `test:rust` and `lint:rust`
-  run it first; a bare `cargo` call does not.
+- **Staged scripts and binaries.** `staged-scripts/` is gitignored and filled by `pnpm stage:scripts`; `binaries/`
+  holds the two programs the installer puts beside the app (`externalBin`), `intentic-files` (`pnpm stage:local`) and
+  `intentic-ic`, the `ic` CLI under a name nothing on PATH answers to (`pnpm stage:ic`), per target triple. tauri-build refuses to build without them, so `test:rust` and
+  `lint:rust` run all three first; a bare `cargo` call does not.
 
 ## Key files
 

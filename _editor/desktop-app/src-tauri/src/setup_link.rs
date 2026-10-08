@@ -406,6 +406,18 @@ pub struct SetupArgs {
     /// finished setup without one finds its container as the newest (commands.rs `newest_slug`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
+    /// When the code was minted, in Unix seconds, as near as this app knows: the link's arrival (windows.rs
+    /// `park_setup`, since a link does not say), or the moment the app minted it itself (commands.rs
+    /// `setup_fresh_code`). Kept across a park, so a setup resumed after two restarts knows its code is older than
+    /// either of them. Never from a link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minted_at: Option<u64>,
+    /// The profile the setup page's reader arrived with (`@intentic/constants` profile.ts), which the platform folds
+    /// into the code it mints: the sandbox's first claim seeds that profile's half of the machine from it. Carried so
+    /// a code this app mints itself, for a setup whose own code ran out (commands.rs `setup_fresh_code`), asks for the
+    /// same profile rather than silently none. Only a known name: anything else is dropped, as on the auth link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 /// `intentic://recreate?slug=…[&hash=…][&rollback=1]` — swap the sandbox onto a different image. This is what
@@ -612,6 +624,8 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 platform_url: get("platform").filter(|_| from_app),
                 project,
                 slug: None,
+                minted_at: None,
+                profile: get("profile").filter(|name| PROFILES.contains(&name.as_str())),
             })))
         }
         "signin" => Some(Link::SignIn {
@@ -787,6 +801,16 @@ mod tests {
             Some("https://api.intentic.dev")
         );
         assert_eq!(args.cf_token, None);
+        assert_eq!(args.profile, None, "no profile on the link is none");
+    }
+
+    /// The profile the code was minted with rides the link, so a code the app mints later asks for the same one.
+    #[test]
+    fn a_setup_link_carries_a_known_profile_and_drops_anything_else() {
+        let desk = setup_of("intentic://setup?code=abc&sandbox=sbx_7&profile=desk").unwrap();
+        assert_eq!(desk.profile.as_deref(), Some("desk"));
+        let forged = setup_of("intentic://setup?code=abc&sandbox=sbx_7&profile=..%2Fevil").unwrap();
+        assert_eq!(forged.profile, None);
     }
 
     #[test]

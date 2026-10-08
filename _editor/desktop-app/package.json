@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "pnpm stage:scripts && pnpm stage:local && vite",
+        "dev": "pnpm stage:scripts && pnpm stage:local && pnpm stage:ic && vite",
         "build": "pnpm stage:scripts && vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.local.json && vite build && vite build --config vite.local.config.ts",
         "tauri": "tauri",
         "tauri:dev": "tauri dev",
@@ -15,12 +15,13 @@
         "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.local.json && vue-tsc --noEmit -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",
-        "test:rust": "pnpm stage:scripts && pnpm stage:local && cargo test --manifest-path src-tauri/Cargo.toml",
+        "test:rust": "pnpm stage:scripts && pnpm stage:local && pnpm stage:ic && cargo test --manifest-path src-tauri/Cargo.toml",
         "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
-        "lint:rust": "pnpm stage:scripts && pnpm stage:local && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "lint:rust": "pnpm stage:scripts && pnpm stage:local && pnpm stage:ic && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
         "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check && pnpm lint:rust && pnpm test:rust",
         "dev:local": "vite --config vite.local.config.ts",
-        "stage:local": "bash ../../_tools/scripts/desktop/stage-local-files.sh"
+        "stage:local": "bash ../../_tools/scripts/desktop/stage-local-files.sh",
+        "stage:ic": "bash ../../_tools/scripts/desktop/stage-desktop-ic.sh"
     },
     "dependencies": {
         "@intentic/entry-css": "workspace:*",

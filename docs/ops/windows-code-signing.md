@@ -4,7 +4,7 @@ How release builds put an Authenticode signature on every Windows binary from Li
 
 ```mermaid
 flowchart LR
-    secrets["WINDOWS_SIGN_* secrets"] --> jobs["release.yml<br/>windows-build · linux-build · publish"]
+    secrets["WINDOWS_SIGN_* secrets"] --> jobs["release.yml<br/>ic-build · windows-build · linux-build · publish"]
     jobs --> tauri["tauri build<br/>signCommand"]
     jobs --> helpers["build-ic.sh · build-agent-binaries.sh<br/>build-win-launcher.sh"]
     tauri --> sign(["sign-windows.sh"])
@@ -32,6 +32,6 @@ CA/Browser Forum rules keep a code-signing certificate's private key on certifie
 
 1. Buy the certificate or set up the signing service, and pick the signer.
 2. For `jsign`, add `default-jre-headless` and the jsign `.deb` to [`_tools/ci-desktop/Dockerfile`](../../_tools/ci-desktop/Dockerfile); the image bakes only `osslsigncode`.
-3. Add `WINDOWS_SIGN_TOOL` and the signer's variables as repository secrets, and `WINDOWS_SIGN_PUBLISHER`: the certificate's subject exactly as Windows shows it (`CN=…, O=…, L=…, S=…, C=…`). It is the publisher of the identity package behind "Open with Intentic" in Windows 11's context menu ([explorer-menu](../../_editor/desktop-app/explorer-menu)), which Windows registers only when it names who signed it. With it, that package ships signed and registers with no prompt; without it a signing build fails verification, since every user would meet a UAC prompt the certificate exists to spare them. `release.yml` passes the `jsign` set to `windows-build`, `linux-build` and `publish`; the `osslsigncode` pair has to be added to those `env` blocks, and `WINDOWS_SIGN_PFX` is a path, so the job must write the certificate to a file first.
+3. Add `WINDOWS_SIGN_TOOL` and the signer's variables as repository secrets, and `WINDOWS_SIGN_PUBLISHER`: the certificate's subject exactly as Windows shows it (`CN=…, O=…, L=…, S=…, C=…`). It is the publisher of the identity package behind "Open with Intentic" in Windows 11's context menu ([explorer-menu](../../_editor/desktop-app/explorer-menu)), which Windows registers only when it names who signed it. With it, that package ships signed and registers with no prompt; without it a signing build fails verification, since every user would meet a UAC prompt the certificate exists to spare them. `release.yml` passes the `jsign` set to `ic-build`, `windows-build`, `linux-build` and `publish`; the `osslsigncode` pair has to be added to those `env` blocks, and `WINDOWS_SIGN_PFX` is a path, so the job must write the certificate to a file first.
 4. Cut a release. The build log shows `==> signed <file>` for each binary, and `verify-desktop-bundle.sh` prints `signed` for the installer.
 5. If the Microsoft Store is waiting on a signed installer, dispatch `msstore-publish.yml` at that tag ([microsoft-store.md](microsoft-store.md)).
