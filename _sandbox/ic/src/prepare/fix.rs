@@ -54,7 +54,7 @@ fn from_exit(output: &shell::Output, what: &str, on_success: Done) -> Fixed {
     if output.ok {
         return Ok(on_success);
     }
-    // The elevated child's transcript is in stdout (shell::run_elevated), and its last few lines are the ones
+    // The elevated child's transcript is in stdout (shell::run_elevated_watched), and its last few lines are the ones
     // that say why. The whole thing can be pages of dism progress.
     let tail: Vec<&str> = output
         .stdout
@@ -97,8 +97,9 @@ exit 1\n";
 
 #[cfg(windows)]
 pub fn enable_wsl_features() -> Fixed {
+    let mut watch = super::elevated_watch("Turning on WSL2", || None);
     from_exit(
-        &shell::run_elevated(ENABLE_WSL),
+        &shell::run_elevated_watched(ENABLE_WSL, &mut watch),
         "turning on WSL2",
         Done::AfterRestart,
     )
@@ -115,50 +116,85 @@ exit $updated\n";
 
 #[cfg(windows)]
 pub fn update_wsl_kernel() -> Fixed {
-    from_exit(&shell::run_elevated(UPDATE_WSL), "updating WSL2", Done::Now)
+    let mut watch = super::elevated_watch("Updating WSL2", || None);
+    from_exit(
+        &shell::run_elevated_watched(UPDATE_WSL, &mut watch),
+        "updating WSL2",
+        Done::Now,
+    )
 }
 
-/* The package manager when there is one: it handles the download, the hash and the elevation itself, and a PC that has it is a PC where this is one line. */
-const INSTALL_WITH_WINGET: &str = "\
-winget.exe install --id Docker.DockerDesktop --exact --silent --accept-package-agreements --accept-source-agreements *>> $Log\n\
-# -1978335189 is winget's \"already installed\", which is a success for our purposes.\n\
-if ($LASTEXITCODE -eq -1978335189) { exit 0 }\n\
+/* ONE ROUTE FOR DOCKER DESKTOP: our own download, then Docker's installer — because only that route can be WATCHED. */
+// This used to prefer `winget install` where winget existed (most Windows 10 and 11 PCs). It was one line, and it
+// was also one silent elevated call that downloaded 600 MB and ran an installer inside it: a reported setup sat on
+// "installing Docker Desktop (about 600 MB)..." for minutes, with no way to tell a download from a permission
+// prompt nobody could see from a hang. The direct download is the same file from the same place (winget's
+// manifest points at desktop.docker.com too), and here every second of it can be told: megabytes, rate, time
+// left; then the prompt, until it is answered; then Docker's installer, phase by phase from its own log.
+// What winget's manifest hash vouched for, Docker's Authenticode signature vouches for instead: checked by the
+// elevated script before it runs anything, because that is the side about to act on the file.
+
+/// The elevated half: the signature, then the installer. `%PATH%` is the downloaded file. `install` (not the bare
+/// exe) is the unattended entry point; --accept-license is what the interactive installer's first screen asks, and
+/// --backend=wsl-2 stops it choosing Hyper-V on a Pro machine, which would then need a different set of features
+/// than the ones we just turned on.
+const RUN_DOCKER_INSTALLER: &str = "\
+$installer = '%PATH%'\n\
+$sig = Get-AuthenticodeSignature -FilePath $installer\n\
+$signer = ''\n\
+if ($sig.SignerCertificate) { $signer = $sig.SignerCertificate.Subject }\n\
+Add-Content -Path $Log -Value (\"signature: \" + $sig.Status + \" \" + $signer)\n\
+if (($sig.Status -ne 'Valid') -or ($signer -notmatch '(^|, )O=Docker Inc(,|$)')) { exit %UNSIGNED% }\n\
+& $installer install --quiet --accept-license --backend=wsl-2 *>> $Log\n\
 exit $LASTEXITCODE\n";
 
+/// [`RUN_DOCKER_INSTALLER`]'s exit when the file is not Docker's. Far from anything an installer returns.
+const UNSIGNED: i32 = 7861;
+
+fn run_docker_installer_script(installer: &str) -> String {
+    RUN_DOCKER_INSTALLER
+        .replace("%PATH%", &installer.replace('\'', "''"))
+        .replace("%UNSIGNED%", &UNSIGNED.to_string())
+}
+
 #[cfg(windows)]
-pub fn install_docker_desktop(facts: &Facts) -> Fixed {
-    if facts.winget {
-        return from_exit(
-            &shell::run_elevated(INSTALL_WITH_WINGET),
-            "installing Docker Desktop",
-            Done::Now,
-        );
-    }
+pub fn install_docker_desktop(_facts: &Facts) -> Fixed {
     let installer = std::env::temp_dir().join("Docker Desktop Installer.exe");
     if let Err(problem) = download(INSTALLER_URL, &installer) {
         return Err(Trouble::Failed(problem));
     }
-    super::progress(
-        "running Docker's installer (this takes a few minutes, and it says nothing while it works)",
-    );
-    let path = installer.to_string_lossy().replace('\'', "''");
-    // `install` (not the bare exe) is the unattended entry point; --accept-license is what the interactive
-    // installer's first screen asks, and --backend=wsl-2 stops it choosing Hyper-V on a Pro machine, which
-    // would then need a different set of features than the ones we just turned on.
-    let script = format!(
-        "& '{path}' install --quiet --accept-license --backend=wsl-2 *>> $Log\n\
-         exit $LASTEXITCODE\n"
-    );
-    let outcome = from_exit(
-        &shell::run_elevated(&script),
-        "installing Docker Desktop",
-        Done::Now,
-    );
+    super::progress("downloaded; Windows will now ask for permission to install it");
+    let script = run_docker_installer_script(&installer.to_string_lossy());
+    let started = std::time::SystemTime::now();
+    let mut watch = super::elevated_watch("Installing Docker Desktop", move || {
+        docker_install_stage(started)
+    });
+    let output = shell::run_elevated_watched(&script, &mut watch);
     let _ = std::fs::remove_file(&installer);
-    outcome
+    if output.code == UNSIGNED {
+        return Err(Trouble::Failed(
+            "The downloaded Docker Desktop installer is not signed by Docker, so it was not run. Try again; if this keeps happening, something on this network is changing downloads.".to_string(),
+        ));
+    }
+    from_exit(&output, "installing Docker Desktop", Done::Now)
 }
 
-/* 600 MB with no output is the single longest silence in this whole flow, and the desktop app draws its progress from these lines. */
+/// Where Docker's installer says it is, from its own log, once that log is this run's: the file there before
+/// this run started is the LAST install's, and its "Installation succeeded" would be a lie told about this one.
+#[cfg(windows)]
+fn docker_install_stage(since: std::time::SystemTime) -> Option<String> {
+    let path = std::path::Path::new(super::watch::DOCKER_INSTALL_LOG);
+    let modified = std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()?;
+    if modified < since {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    super::watch::docker_stage(&String::from_utf8_lossy(&bytes))
+}
+
+/* 600 MB is the longest wait in this whole flow, and the desktop app draws it from these readings. */
 #[cfg(windows)]
 fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     let agent = ureq::Agent::config_builder()
@@ -168,6 +204,7 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
         .timeout_connect(Some(Duration::from_secs(30)))
         .build()
         .new_agent();
+    super::live("Connecting to docker.com...", super::Live::default());
     let response = agent
         .get(url)
         .call()
@@ -184,8 +221,10 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     let mut reader = response.into_body().into_reader();
     let mut buffer = vec![0u8; 256 * 1024];
     let mut written: u64 = 0;
-    let mut announced: u64 = 0;
-    const ANNOUNCE_EVERY: u64 = 25 * 1024 * 1024;
+    let started = Instant::now();
+    // The row is told every second; the log only every tenth of the way, which is a trail rather than a stream.
+    let mut told = Instant::now();
+    let mut logged_tenth: u64 = 0;
     loop {
         let read = reader
             .read(&mut buffer)
@@ -196,20 +235,25 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
         file.write_all(&buffer[..read])
             .map_err(|error| format!("could not write the installer to disk: {error}"))?;
         written += read as u64;
-        if written - announced >= ANNOUNCE_EVERY {
-            announced = written;
-            if total > 0 {
-                super::progress(&format!(
-                    "downloaded {} MB of {} MB",
-                    written / (1024 * 1024),
-                    total / (1024 * 1024)
-                ));
-            } else {
-                super::progress(&format!("downloaded {} MB", written / (1024 * 1024)));
+        if told.elapsed() >= Duration::from_secs(1) {
+            told = Instant::now();
+            let reading = super::watch::download(written, total, started.elapsed());
+            super::live(
+                &reading,
+                super::Live {
+                    needs_you: false,
+                    percent: super::watch::percent(written, total),
+                },
+            );
+            let tenth = (written * 10).checked_div(total).unwrap_or(0);
+            if tenth > logged_tenth {
+                logged_tenth = tenth;
+                crate::ui::note(&reading);
             }
         }
     }
     drop(file);
+    crate::ui::note(&super::watch::download(written, total, started.elapsed()));
     // Rename only once it is whole: a half-downloaded installer that Windows agrees to run is worse than no
     // installer at all. The same download-then-rename the shims use for this binary.
     std::fs::rename(&temporary, into)
@@ -270,8 +314,9 @@ pub fn add_to_docker_users(facts: &Facts) -> Fixed {
         ));
     }
     let script = ADD_TO_DOCKER_USERS.replace("%NAME%", &who.replace('\'', "''"));
+    let mut watch = super::elevated_watch("Giving this account permission to use Docker", || None);
     from_exit(
-        &shell::run_elevated(&script),
+        &shell::run_elevated_watched(&script, &mut watch),
         "adding this account to docker-users",
         Done::AfterSignOut,
     )
@@ -437,6 +482,40 @@ mod tests {
             !INSTALLER_URL.contains(' '),
             "the space in the filename must stay percent-encoded"
         );
+    }
+
+    /* Nothing runs elevated that Docker did not sign. */
+    #[test]
+    fn the_installer_runs_only_after_its_docker_signature_checks_out() {
+        let script = run_docker_installer_script("C:\\Temp\\It's\\Docker Desktop Installer.exe");
+        let check = script
+            .find("Get-AuthenticodeSignature")
+            .expect("the signature is read");
+        let gate = script
+            .find("exit 7861")
+            .expect("an unsigned file stops the script");
+        let run = script
+            .find("& $installer install")
+            .expect("the installer is run");
+        assert!(
+            check < gate && gate < run,
+            "check, then refuse, then run: {script}"
+        );
+        assert!(
+            script.contains("'Valid'"),
+            "an expired or tampered signature is not good enough"
+        );
+        assert!(
+            script.contains("O=Docker Inc"),
+            "signed by somebody is not signed by Docker"
+        );
+        assert!(
+            script.contains("$installer = 'C:\\Temp\\It''s\\Docker Desktop Installer.exe'"),
+            "{script}"
+        );
+        assert!(script.contains("--quiet --accept-license --backend=wsl-2"));
+        assert!(!script.contains('%'), "every placeholder filled: {script}");
+        assert!(script.is_ascii());
     }
 
     /* THE REPORTED FAILURE, PINNED AT ITS CAUSE. */

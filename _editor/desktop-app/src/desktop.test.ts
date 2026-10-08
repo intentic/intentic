@@ -72,6 +72,28 @@ describe(`how one requirement is going`, () => {
         ).toBe(`failed`);
     });
 
+    it(`reads the bar to fill and whether the wait is on the person`, () => {
+        expect(
+            parseRequirementState(
+                `intentic-requirement-state: {"detail":"Downloading Docker Desktop: 212 of 598 MB (35%) at 5.3 MB/s, about 1 minute left.","id":"docker-desktop","percent":35,"state":"running"}`,
+            ),
+        ).toEqual({
+            id: `docker-desktop`,
+            state: `running`,
+            detail: `Downloading Docker Desktop: 212 of 598 MB (35%) at 5.3 MB/s, about 1 minute left.`,
+            percent: 35,
+        });
+        expect(
+            parseRequirementState(`intentic-requirement-state: {"detail":"Windows is asking","id":"docker-desktop","needs":"you","state":"running"}`)
+                ?.needsYou,
+        ).toBe(true);
+        // Anything else in those fields is ignored rather than drawn: a bar past its end, a needs nobody defined.
+        const odd = parseRequirementState(`intentic-requirement-state: {"id":"x","state":"running","percent":140,"needs":"them"}`);
+        expect(odd?.percent).toBe(100);
+        expect(odd?.needsYou).toBeUndefined();
+        expect(parseRequirementState(`intentic-requirement-state: {"id":"x","state":"running","percent":"35"}`)?.percent).toBeUndefined();
+    });
+
     it(`refuses anything it cannot key or draw`, () => {
         // No id: nothing to attach it to. Unknown state: nothing to draw. Truncated input must not crash it.
         expect(parseRequirementState(`intentic-requirement-state: {"state":"running"}`)).toBeUndefined();

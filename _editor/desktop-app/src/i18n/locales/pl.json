@@ -115,6 +115,7 @@
             "needsSignOut": "wymaga wylogowania",
             "onHost": "na maszynie hosta",
             "unsupported": "nieobsługiwane",
+            "waitingForYou": "czeka na Ciebie",
             "weDoIt": "zrobimy to za Ciebie",
             "working": "w toku",
             "youDoIt": "to zadanie dla Ciebie"

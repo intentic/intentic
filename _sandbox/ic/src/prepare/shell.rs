@@ -121,13 +121,39 @@ pub fn run_within(script: &str, limit: std::time::Duration) -> Output {
 }
 
 /* `Start-Process -Verb RunAs` is the only way to raise a process from a non-elevated one, and it hands back an exit code and nothing else. */
+
+/// Where an elevated run is, as seen from the side that asked for it. The permission prompt and the work behind
+/// it are one blocking call to Windows; these are the only two things that can be told apart from outside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Elevation {
+    /// Windows' prompt is up and nobody has answered it, for this long.
+    Asking(std::time::Duration),
+    /// The prompt was answered with Yes and the script has been running for this long.
+    Running(std::time::Duration),
+}
+
+/// How often the waiting side looks, and so how often [`run_elevated_watched`]'s `tick` is called.
 #[cfg(windows)]
-pub fn run_elevated(script: &str) -> Output {
+const WATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/* Run a script elevated, with somebody told once a second where it is. */
+// The elevated child's first act is to create a file beside its transcript; that file existing is the prompt
+// having been answered. A file of its own rather than a line in the transcript: Windows PowerShell's `>>` writes
+// UTF-16, and two writers with two encodings in one file is how a transcript stops being readable.
+#[cfg(windows)]
+pub fn run_elevated_watched(script: &str, tick: &mut dyn FnMut(Elevation)) -> Output {
+    use std::time::Instant;
     let log = std::env::temp_dir().join(format!("intentic-elevated-{}.log", std::process::id()));
+    let granted = log.with_extension("granted");
+    let _ = std::fs::remove_file(&log);
+    let _ = std::fs::remove_file(&granted);
     let log_path = log.to_string_lossy().replace('\'', "''");
+    let granted_path = granted.to_string_lossy().replace('\'', "''");
     // The child gets the same preamble the parent does: it is the one writing the transcript, and a progress
     // record serialised into that file is XML in the middle of the reason a fix failed.
-    let child = format!("{PREAMBLE}${LOG} = '{log_path}'\n{script}\n");
+    let child = format!(
+        "{PREAMBLE}New-Item -ItemType File -Force -Path '{granted_path}' | Out-Null\n${LOG} = '{log_path}'\n{script}\n"
+    );
     let outer = format!(
         "try {{\n  \
            $p = Start-Process -FilePath 'powershell.exe' \
@@ -137,11 +163,34 @@ pub fn run_elevated(script: &str) -> Output {
          }} catch {{\n  exit {CANCELLED}\n}}\n",
         encoded = encoded(&child)
     );
-    let mut output = run(&outer);
+    let worker = std::thread::spawn(move || run(&outer));
+    let asked = Instant::now();
+    let mut running_since: Option<Instant> = None;
+    while !worker.is_finished() {
+        if running_since.is_none() && granted.exists() {
+            running_since = Some(Instant::now());
+        }
+        tick(match running_since {
+            None => Elevation::Asking(asked.elapsed()),
+            Some(since) => Elevation::Running(since.elapsed()),
+        });
+        // In slices, so a run that ends is noticed at once rather than up to a second later.
+        let next = Instant::now() + WATCH_EVERY;
+        while Instant::now() < next && !worker.is_finished() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    let mut output = worker.join().unwrap_or_else(|_| Output {
+        ok: false,
+        code: -1,
+        stdout: String::new(),
+        stderr: "the elevated run stopped unexpectedly".to_string(),
+    });
     if let Ok(transcript) = std::fs::read_to_string(&log) {
         output.stdout = strip_clixml(&transcript);
     }
     let _ = std::fs::remove_file(&log);
+    let _ = std::fs::remove_file(&granted);
     output
 }
 

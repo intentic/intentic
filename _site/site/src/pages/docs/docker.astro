@@ -62,8 +62,8 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     </p>
     <p>
         Every install path checks that chain in one go before touching anything, shows you the whole list, and asks once. It then turns on
-        what it can (the features, then a restart), installs Docker Desktop (through the Windows package manager where there is one, and
-        straight from docker.com where there isn't), starts its engine and makes sure it is in Linux-container mode. What it cannot do it
+        what it can (the features, then a restart), installs Docker Desktop (downloaded straight from docker.com, and
+        run only once its Docker signature checks out), starts its engine and makes sure it is in Linux-container mode. What it cannot do it
         says so about: a firmware virtualization switch is changed in BIOS/UEFI before Windows boots, and a Windows running inside a virtual
         machine needs nested virtualization enabled on its host.
     </p>

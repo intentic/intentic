@@ -450,6 +450,19 @@ pub fn progress(text: &str) {
     repaint(&mut state);
 }
 
+/// A reading that is only worth seeing while it is current: a clock, a percentage ticking once a second. A screen
+/// gets it in place, like [`progress`]; a pipe gets nothing, since a line a second is a log nobody can read — the
+/// reader there is the desktop app, which has the same reading as a row's live detail (prepare's `live`).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn live(text: &str) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        return;
+    }
+    state.detail = text.to_string();
+    repaint(&mut state);
+}
+
 /// Feed one line of docker's pull output into the live progress. Returns whether the line was ABSORBED — a
 /// caller in Rich prints only what this refuses, which is how the pull's forty lines of layer chatter become
 /// one readout without also hiding the "unauthorized" that is the whole diagnosis of a failed pull.

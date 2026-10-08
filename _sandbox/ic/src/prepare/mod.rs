@@ -2,6 +2,7 @@ pub mod facts;
 pub mod fix;
 pub mod plan;
 pub mod shell;
+pub mod watch;
 
 #[cfg(windows)]
 use crate::util::bail;
@@ -62,11 +63,40 @@ fn announce(requirement: &plan::Requirement) {
 /* WHAT IS HAPPENING TO ONE REQUIREMENT, RIGHT NOW — the marker that turns a list into a live checklist. */
 #[cfg(windows)]
 fn announce_state(id: &str, state: &str, detail: Option<&str>) {
+    announce_live(id, state, detail, Live::default());
+}
+
+/// What a live reading carries besides its sentence, for an app to DRAW rather than read: a bar that fills, and a
+/// row that turns to the person when the wait is on them. Both left out of the marker when unset, so an app from
+/// before them sees exactly the marker it always did and draws the sentence under a spinner, which is right too.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Live {
+    /// The row is waiting on the PERSON (Windows' permission prompt), not on the machine.
+    pub needs_you: bool,
+    /// How far through a measured job (the download), 0 to 100.
+    pub percent: Option<u64>,
+}
+
+fn live_marker(id: &str, state: &str, detail: Option<&str>, live: Live) -> serde_json::Value {
+    let mut line = serde_json::json!({ "id": id, "state": state, "detail": detail });
+    if live.needs_you {
+        line["needs"] = serde_json::json!("you");
+    }
+    if let Some(percent) = live.percent {
+        line["percent"] = serde_json::json!(percent.min(100));
+    }
+    line
+}
+
+#[cfg(windows)]
+fn announce_live(id: &str, state: &str, detail: Option<&str>, live: Live) {
     if !piped() {
         return;
     }
-    let line = serde_json::json!({ "id": id, "state": state, "detail": detail });
-    println!("intentic-requirement-state: {line}");
+    println!(
+        "intentic-requirement-state: {}",
+        live_marker(id, state, detail, live)
+    );
 }
 
 /// Which requirement the fixes below are currently working on, so their progress readings can be attributed
@@ -86,6 +116,64 @@ pub fn progress(text: &str) {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(id) = *working_on {
         announce_state(id, "running", Some(text));
+    }
+}
+
+/// A reading that changes every second (a clock, a download): the row's detail and the screen's live line, never
+/// a line of its own in the log. Milestones still go through [`progress`], so the log keeps its trail.
+#[cfg(windows)]
+pub fn live(text: &str, live: Live) {
+    crate::ui::live(text);
+    let working_on = WORKING_ON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(id) = *working_on {
+        announce_live(id, "running", Some(text), live);
+    }
+}
+
+/// What an elevated fix says while it runs: who it is waiting on, and for how long. `what` is the work, in a
+/// reader's words ("Turning on WSL2"); `stage` is asked each second for where that work is, when it can say.
+/// The two edges, the prompt going up and being answered, are also logged once, as the trail of where time went.
+#[cfg(windows)]
+pub fn elevated_watch<'a>(
+    what: &'a str,
+    mut stage: impl FnMut() -> Option<String> + 'a,
+) -> impl FnMut(shell::Elevation) + 'a {
+    let mut seen_asking = false;
+    let mut seen_running = false;
+    let mut last_stage: Option<String> = None;
+    move |at| match at {
+        shell::Elevation::Asking(waited) => {
+            if !seen_asking {
+                seen_asking = true;
+                crate::ui::note("waiting for Windows' permission prompt to be answered...");
+            }
+            live(
+                &watch::asking(waited),
+                Live {
+                    needs_you: true,
+                    percent: None,
+                },
+            );
+        }
+        shell::Elevation::Running(elapsed) => {
+            if !seen_running {
+                seen_running = true;
+                crate::ui::note("permission given; working...");
+            }
+            let now = stage();
+            if now.is_some() && now != last_stage {
+                if let Some(said) = &now {
+                    crate::ui::note(&format!("{what}: {said}"));
+                }
+                last_stage = now.clone();
+            }
+            live(
+                &watch::working(what, now.as_deref(), elapsed),
+                Live::default(),
+            );
+        }
     }
 }
 
@@ -304,7 +392,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
             "turning on the Windows features Docker needs (Windows will ask for permission)..."
         }
         "wsl-kernel" => "updating WSL2 (Windows will ask for permission)...",
-        "docker-desktop" => "installing Docker Desktop (about 600 MB)...",
+        "docker-desktop" => "downloading Docker Desktop (about 600 MB)...",
         "docker-path" => "finding Docker on this PC...",
         "docker-users" => {
             "allowing this account to use Docker (Windows will ask for permission)..."
@@ -524,6 +612,51 @@ pub fn run(_args: Args) -> Result<()> {
 #[cfg(test)]
 mod tests {
     /* The flow above is Windows-only; its DECISIONS are plan.rs's and are tested there against fact literals, on every runner. */
+
+    use super::{live_marker, Live};
+
+    /* The app's parser (desktop.ts `parseRequirementState`) reads these fields by these names. */
+    #[test]
+    fn a_live_marker_carries_its_bar_and_its_ask_only_when_it_has_them() {
+        let plain = live_marker("docker-desktop", "running", Some("x"), Live::default());
+        assert_eq!(
+            plain.to_string(),
+            r#"{"detail":"x","id":"docker-desktop","state":"running"}"#,
+            "an older app must see the marker it always did"
+        );
+        let download = live_marker(
+            "docker-desktop",
+            "running",
+            Some("y"),
+            Live {
+                needs_you: false,
+                percent: Some(35),
+            },
+        );
+        assert_eq!(download["percent"], 35);
+        assert!(download.get("needs").is_none());
+        let asking = live_marker(
+            "docker-desktop",
+            "running",
+            Some("z"),
+            Live {
+                needs_you: true,
+                percent: None,
+            },
+        );
+        assert_eq!(asking["needs"], "you");
+        assert!(asking.get("percent").is_none());
+        let over = live_marker(
+            "docker-desktop",
+            "running",
+            None,
+            Live {
+                needs_you: false,
+                percent: Some(140),
+            },
+        );
+        assert_eq!(over["percent"], 100);
+    }
 
     #[test]
     fn the_requirement_marker_cannot_be_mistaken_for_a_step() {

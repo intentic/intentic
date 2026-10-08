@@ -115,6 +115,7 @@
             "needsSignOut": "needs a sign-out",
             "onHost": "on the host machine",
             "unsupported": "not supported",
+            "waitingForYou": "waiting for you",
             "weDoIt": "we'll do this",
             "working": "working on it",
             "youDoIt": "you'll have to do this"

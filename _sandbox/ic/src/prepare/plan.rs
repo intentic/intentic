@@ -430,13 +430,8 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
 
     // ---- Docker itself ----
     if facts.docker_desktop_path.is_empty() && !facts.docker_cli {
-        let how = if facts.winget {
-            "We will install it with the Windows package manager (about 600 MB). Windows asks for permission once."
-        } else {
-            // The reported failure, and its fix: winget's absence is not a dead end, it is a different
-            // download. Docker publishes the installer at a stable URL and it takes silent-install flags.
-            "We will download it from docker.com and install it (about 600 MB). Windows asks for permission once."
-        };
+        // One route, with or without the Windows package manager: see fix.rs, where it is the one that can be watched.
+        let how = "We will download it from docker.com (about 600 MB) and install it. Windows asks for permission once, when the download is done.";
         found.push(req(
             "docker-desktop",
             "Docker Desktop",
@@ -763,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn with_a_package_manager_the_remedy_uses_it() {
+    fn with_a_package_manager_the_remedy_is_still_the_download_it_can_watch() {
         let facts = Facts {
             winget: true,
             docker_desktop_path: String::new(),
@@ -776,12 +771,12 @@ mod tests {
             .into_iter()
             .find(|r| r.id == "docker-desktop")
             .expect("reported");
+        assert!(desktop.remedy.contains("docker.com"), "{}", desktop.remedy);
         assert!(
-            desktop.remedy.contains("package manager"),
-            "{}",
+            desktop.remedy.contains("when the download is done"),
+            "the prompt comes after the wait, and the row has to say so before it starts: {}",
             desktop.remedy
         );
-        assert!(!desktop.remedy.contains("docker.com"));
     }
 
     /* VIRTUALIZATION OFF IN FIRMWARE — the one outcome the user has to leave Windows for, and the one the old script could not see at all. */

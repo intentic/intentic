@@ -143,8 +143,8 @@ WHAT THE INSTALLER DOES. It installs a per-user application (no administrator ne
 intentic:// URL scheme. The silent switch is /S.
 
 WHAT THE APP DOES ON FIRST RUN, with the user's confirmation and never silently:
-• Checks for Docker Desktop. If it is absent, it installs it — through winget where available, otherwise by
-  downloading Docker Inc.'s own signed installer from docker.com.
+• Checks for Docker Desktop. If it is absent, it installs it by downloading Docker Inc.'s own signed installer
+  from docker.com, and checks that signature before running it.
 • Turns on WSL2 and the two Windows features it needs. This requires administrator, Windows shows its own
   consent prompt, and a restart may follow.
 • Pulls the Intentic sandbox image (several GB) and starts two containers.

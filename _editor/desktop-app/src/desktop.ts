@@ -498,6 +498,10 @@ export interface RequirementProgress {
     readonly id: string;
     readonly state: RequirementState;
     readonly detail?: string;
+    /** The row is waiting on the person (Windows' permission prompt), not on the machine: `needs: "you"`. */
+    readonly needsYou?: boolean;
+    /** How far through a measured job (the Docker Desktop download), 0 to 100, for a bar that fills. */
+    readonly percent?: number;
 }
 
 const STATES = new Set<string>([`running`, `done`, `failed`]);
@@ -508,14 +512,17 @@ export const parseRequirementState = (line: string): RequirementProgress | undef
         return undefined;
     }
     try {
-        const parsed = JSON.parse(found[1] ?? ``) as Partial<RequirementProgress>;
+        const parsed = JSON.parse(found[1] ?? ``) as Partial<RequirementProgress> & { needs?: unknown; percent?: unknown };
         if (typeof parsed.id !== `string` || parsed.id === `` || !STATES.has(parsed.state ?? ``)) {
             return undefined;
         }
+        const percent = typeof parsed.percent === `number` && Number.isFinite(parsed.percent) ? Math.min(100, Math.max(0, parsed.percent)) : undefined;
         return {
             id: parsed.id,
             state: parsed.state as RequirementState,
             ...(parsed.detail ? { detail: parsed.detail } : {}),
+            ...(parsed.needs === `you` ? { needsYou: true } : {}),
+            ...(percent === undefined ? {} : { percent }),
         };
     } catch {
         return undefined;

@@ -27,6 +27,10 @@ const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; e
 // Looks up a row's live progress. A row with no report is simply pending; nothing here invents an intermediate
 // state.
 const stateOf = (id: string): RequirementProgress | undefined => props.progress?.[id];
+// Still running, but the next move is the person's (Windows' permission prompt): drawn as theirs, not as ours.
+const waitingOnYou = (id: string): boolean => stateOf(id)?.state === `running` && stateOf(id)?.needsYou === true;
+// The bar is only for the row that is running a measured job; a finished row says done in its icon instead.
+const barOf = (id: string): number | undefined => (stateOf(id)?.state === `running` ? stateOf(id)?.percent : undefined);
 
 // Which walkthroughs are open; closed by default so a short fix isn't buried under a long one.
 const opened = ref<Record<string, boolean>>({});
@@ -114,7 +118,9 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
 const many = computed(() => props.requirements.length > 1);
 
 const badgeOf = (requirement: Requirement): string | undefined =>
-    stateBadgeFor(stateOf(requirement.id)?.state ?? `pending`) ?? (many.value ? badgeFor(requirement.action) : undefined);
+    (waitingOnYou(requirement.id) ? t(`desktop.requirements.badge.waitingForYou`) : undefined) ??
+    stateBadgeFor(stateOf(requirement.id)?.state ?? `pending`) ??
+    (many.value ? badgeFor(requirement.action) : undefined);
 
 const remedyOf = (requirement: Requirement): string | undefined => (SAID_BY_BUTTON.has(requirement.action) ? undefined : requirement.remedy);
 
@@ -140,10 +146,17 @@ const sessionNote = computed(() => {
         </p>
 
         <ul class="flex flex-col gap-2.5">
-            <li v-for="requirement in requirements" :key="requirement.id" class="rounded-lg border border-line bg-canvas p-3.5">
+            <li
+                v-for="requirement in requirements"
+                :key="requirement.id"
+                class="rounded-lg border bg-canvas p-3.5"
+                :class="waitingOnYou(requirement.id) ? 'border-warning' : 'border-line'"
+            >
                 <div class="flex items-start gap-3">
-                    <!-- Live state overrides the static action icon once something is actually happening. -->
-                    <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
+                    <!-- Live state overrides the static action icon once something is actually happening. A wait that is on
+                         the person wears Windows' own shield rather than a spinner: a spinner says "nothing for you to do". -->
+                    <Icon v-if="waitingOnYou(requirement.id)" name="shield" class="mt-0.5 shrink-0 text-warning" />
+                    <Icon v-else-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
                     <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
                     <Icon
                         v-else
@@ -165,10 +178,22 @@ const sessionNote = computed(() => {
                         </div>
                         <p class="text-xs leading-relaxed text-muted">{{ requirement.problem }}</p>
                         <!-- Live detail replaces the static remedy once the row is running; after a failure it is the reason, and what to do. -->
+                        <!-- A measured job gets a bar that fills: a number changing in a sentence is easy to miss, a bar moving is not. -->
+                        <div
+                            v-if="barOf(requirement.id) !== undefined"
+                            class="mt-1 h-1.5 overflow-hidden rounded-full bg-content/15"
+                            role="progressbar"
+                            :aria-valuenow="barOf(requirement.id)"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                        >
+                            <span class="block h-full rounded-full bg-link transition-[width] duration-700 ease-out" :style="{ width: `${barOf(requirement.id)}%` }" />
+                        </div>
                         <p
                             v-if="stateOf(requirement.id)?.detail"
-                            class="text-xs leading-relaxed"
-                            :class="stateOf(requirement.id)?.state === `failed` ? 'text-content' : 'text-subtle'"
+                            class="text-xs leading-relaxed tabular-nums"
+                            :class="stateOf(requirement.id)?.state === `failed` || waitingOnYou(requirement.id) ? 'text-content' : 'text-subtle'"
+                            :aria-live="waitingOnYou(requirement.id) ? 'assertive' : 'off'"
                         >
                             {{ stateOf(requirement.id)?.detail }}
                         </p>

@@ -104,8 +104,9 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
             desktop app saves the setup and picks it up again after the restart; from a terminal, run the same command once you are back.
         </li>
         <li>
-            <strong>Docker Desktop isn't installed</strong>: installed for you. If this PC has no Windows package manager, the installer is
-            downloaded straight from docker.com instead, which is the same thing by a different route.
+            <strong>Docker Desktop isn't installed</strong>: installed for you. The installer is downloaded straight from docker.com, with
+            its progress shown as it goes, and run only once its Docker signature checks out. Windows asks for permission when the download
+            is done; if the setup says it is waiting for that and you see no prompt, look for a flashing shield on the taskbar.
         </li>
         <li>
             <strong>Docker is installed but the engine isn't up</strong>: started and waited for. If Docker Desktop is showing you its
