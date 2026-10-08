@@ -102,13 +102,13 @@ export const DESKTOP_VIEW_ID = `desktop`;
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
 // on the rail by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
 // first-party extensions, installed from the registry: their tiles are declared here so an install lands them in the
-// band a product decision put them in, not at the end of the column like an unlisted stranger. Pipelines sits directly
-// above Deployments, so the band reads down the road a change travels: checked by CI once it is pushed, then deployed.
+// band a product decision put them in, not at the end of the column like an unlisted stranger. Deployments sits directly
+// above Maintenance, so the judge band reads down the road a change travels once CI has spoken.
 const judge = (): RailGroup => ({
     id: `judge`,
     label: t(`views.registry.judge`),
     // Needs you leads the band: what agents are waiting on a person for, on the rail only while anything is.
-    items: [signal(`needs`), signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+    items: [signal(`needs`), signal(`approvals`), signal(`acceptance`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is counted in Needs you instead.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
@@ -132,7 +132,14 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
         {
             id: `work`,
             label: t(`views.registry.work`),
-            items: [always(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), signal(DEVICES_VIEW_ID)],
+            items: [
+                always(PROJECTS_VIEW_ID),
+                always(`chat`),
+                always(`agents`),
+                always(WORKSPACE_VIEW_ID),
+                signal(`pipelines`),
+                signal(DEVICES_VIEW_ID),
+            ],
         },
         judge(),
         setup(),
@@ -148,6 +155,7 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
                 always(`chat`),
                 always(`agents`),
                 signal(WORKSPACE_VIEW_ID),
+                signal(`pipelines`),
                 signal(DEVICES_VIEW_ID),
             ],
         },

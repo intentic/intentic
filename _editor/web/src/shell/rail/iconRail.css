@@ -21,9 +21,11 @@
     flex-shrink: 0;
 }
 
-/* One gap unit for a band seam, matching the old hairline's rhythm; scales with the rail via `rail()`. */
+/* One gap unit for a band seam, matching the old hairline's rhythm; scales with the rail via `rail()`.
+   Negative margin cancels the nav column's flex gap on both sides, which would otherwise triple the seam. */
 .icon-rail-band {
     height: var(--icon-rail-gap);
+    margin-block: calc(-1 * var(--icon-rail-gap));
 }
 
 /* The one unbounded run (one tile per extension), so it's the one that scrolls; everything else stays anchored. */

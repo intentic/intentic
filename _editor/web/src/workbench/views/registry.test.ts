@@ -284,11 +284,16 @@ describe(`rail order`, () => {
         }
     });
 
-    // Down the road a change travels: checked by CI once it is pushed, then deployed.
-    it(`puts Pipelines directly above Deployments, a tile that holds its place only while it has news`, () => {
-        expect(railRank(`pipelines`)).toBe(railRank(`acceptance`) + 1);
-        expect(railRank(`deployments`)).toBe(railRank(`pipelines`) + 1);
+    it(`keeps Pipelines beside Workspace in the work band, a tile that holds its place only while it has news`, () => {
+        expect(railRank(`pipelines`)).toBe(railRank(`workspace`) + 1);
+        expect(railRank(`devices`)).toBe(railRank(`pipelines`) + 1);
         expect(railPolicy(`pipelines`)).toBe(`signal`);
+    });
+
+    // Down the road a change travels once CI has spoken: deployed, then maintained.
+    it(`puts Deployments directly above Maintenance in the judge band`, () => {
+        expect(railRank(`deployments`)).toBe(railRank(`acceptance`) + 1);
+        expect(railRank(`maintenance`)).toBe(railRank(`deployments`) + 1);
     });
 
     it(`heads the decisions band with Needs you, then Approvals: the two where nothing moves until the owner acts`, () => {
