@@ -9386,9 +9386,13 @@
             "clickForShared": "Kliknij: wspólna",
             "copyAria": "Prywatna kopia: {name}",
             "copyUnreadable": "Kopia nieczytelna",
+            "findCopy": "Znajdź kopię rozmowy",
+            "noCopyMatches": "Żadna kopia nie pasuje.",
             "readOnlyClickToSwitch": "Tylko odczyt · kliknij, by zmienić",
+            "sharedHint": "Tu trafia skończona praca",
             "sharedWorkspace": "Współdzielona przestrzeń robocza",
-            "untitledConversation": "Rozmowa bez tytułu"
+            "showFilesFrom": "Pokaż pliki z",
+            "showMore": "Pokaż {count} więcej"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Wróć do współdzielonej przestrzeni roboczej",

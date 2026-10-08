@@ -5514,8 +5514,13 @@
             "clickForShared": "Clic : espace partagé",
             "copyAria": "Copie privée : {name}",
             "copyUnreadable": "Copie illisible",
+            "findCopy": "Trouver la copie d'une conversation",
+            "noCopyMatches": "Aucune copie ne correspond.",
             "readOnlyClickToSwitch": "Lecture seule · clic pour changer",
-            "sharedWorkspace": "Espace de travail partagé"
+            "sharedHint": "Là où arrive le travail terminé",
+            "sharedWorkspace": "Espace de travail partagé",
+            "showFilesFrom": "Afficher les fichiers de",
+            "showMore": "Afficher {count} de plus"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Retour à l'espace de travail partagé",

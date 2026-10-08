@@ -9808,9 +9808,13 @@
             "clickForShared": "Click for shared",
             "copyAria": "Private copy: {name}",
             "copyUnreadable": "Copy unreadable",
+            "findCopy": "Find a conversation's copy",
+            "noCopyMatches": "No copy matches.",
             "readOnlyClickToSwitch": "Read-only · click to switch",
+            "sharedHint": "Where finished work lands",
             "sharedWorkspace": "Shared workspace",
-            "untitledConversation": "Untitled conversation"
+            "showFilesFrom": "Show files from",
+            "showMore": "Show {count} more"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Back to the shared workspace",

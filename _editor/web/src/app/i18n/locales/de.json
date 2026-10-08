@@ -5565,8 +5565,13 @@
             "clickForShared": "Klick: geteilter Bereich",
             "copyAria": "Private Kopie: {name}",
             "copyUnreadable": "Kopie unlesbar",
+            "findCopy": "Kopie einer Unterhaltung finden",
+            "noCopyMatches": "Keine Kopie passt.",
             "readOnlyClickToSwitch": "Schreibgeschützt · Klick wechselt",
-            "sharedWorkspace": "Geteilter Workspace"
+            "sharedHint": "Hier landet fertige Arbeit",
+            "sharedWorkspace": "Geteilter Workspace",
+            "showFilesFrom": "Dateien zeigen aus",
+            "showMore": "{count} weitere zeigen"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Zurück zum geteilten Workspace",

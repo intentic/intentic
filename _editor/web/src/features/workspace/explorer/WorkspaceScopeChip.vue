@@ -1,30 +1,26 @@
 <script setup lang="ts">
-import { ContextMenu, Icon, type Tip, toneWash, ui } from "@intentic/ui";
-import type { MenuItem } from "primevue/menuitem";
+import { Icon, ResponsiveOverlay, type Tip, toneWash, ui, useDevice } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { useMenuLink } from "../../../lib/routes/menuLink";
-import { useAgents } from "../../agents/fleet/useAgents";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "./useWorkspaceTree";
 import { workspaceAgent } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
+import WorkspaceScopePicker from "./WorkspaceScopePicker.vue";
 
 const t = useT();
 
 // Shows whose workspace is open; the scope is otherwise invisible (tree and files look the same for every agent).
 // A chip in the existing bar rather than a banner, since the scope is a persistent mode, not a one-off alert.
-// Absent on the shared tree: the default needs no marker.
+// Absent on the shared tree: the default needs no marker. A press opens the switcher (WorkspaceScopePicker): a
+// searchable list under the board's lanes, not a menu, since a busy sandbox has dozens of copies to choose between.
 
-const { fleet } = useAgents();
 const { error } = useWorkspaceTree();
-const link = useMenuLink();
 const title = useScopeTitle();
+const { mobile } = useDevice();
 
-const menu = ref<{ show: (event: Event) => void }>();
-
-// Other agents with a private checkout to switch to (excludes the current one and any without a checkout).
-const switchable = computed(() => fleet.value.filter((agent) => agent.branch !== undefined && agent.id !== workspaceAgent.value));
+const open = ref(false);
+const anchor = ref<HTMLElement>();
 
 // True when an archived agent has lost its checkout (branch kept, checkout gone).
 const broken = computed(() => error.value !== undefined);
@@ -43,45 +39,38 @@ const ariaLabel = computed(() =>
         : t(`workspace.workspaceScopeChip.copyAria`, { name: title.value }),
 );
 
-const items = computed<MenuItem[]>(() => [
-    {
-        label: t(`workspace.workspaceScopeChip.sharedWorkspace`),
-        icon: `folder`,
-        checked: workspaceAgent.value === undefined,
-        command: () => (workspaceAgent.value = undefined),
-    },
-    ...(switchable.value.length === 0
-        ? []
-        : [
-              { separator: true },
-              ...switchable.value.map((agent) => ({
-                  label: agent.title ?? t(`workspace.workspaceScopeChip.untitledConversation`),
-                  icon: `robot` as const,
-                  command: () => (workspaceAgent.value = agent.id),
-              })),
-          ]),
-    // A link, not a command, so it carries its address via useMenuLink.
-    ...(workspaceAgent.value === undefined
-        ? []
-        : [{ separator: true }, { label: t(`workspace.words.seeChanges`), icon: `check-square`, ...link(`/agents/${workspaceAgent.value}`) }]),
-]);
+const pick = (agent: string | undefined): void => {
+    open.value = false;
+    workspaceAgent.value = agent;
+};
 </script>
 
 <template>
     <template v-if="workspaceAgent !== undefined">
         <button
+            ref="anchor"
             type="button"
             :class="ui.chip({ on: !broken }, `h-6 shrink-0 px-1.5`, broken && toneWash(`warning`))"
-            aria-haspopup="menu"
+            aria-haspopup="listbox"
+            :aria-expanded="open"
             :aria-label="ariaLabel"
-            v-tooltip.bottom="tip"
-            @click="menu?.show($event)"
+            v-tooltip.bottom="open ? undefined : tip"
+            @click="open = !open"
         >
             <Icon :name="broken ? `exclamation-triangle` : `robot`" class="shrink-0 text-[0.7rem]" />
             <!-- Name truncates first on narrow panes; icon and tint alone still mark a non-shared scope, tooltip has the rest. -->
             <span class="max-w-28 truncate max-lg:hidden">{{ title }}</span>
-            <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-70" />
+            <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-70 transition-transform" :class="{ 'rotate-180': open }" />
         </button>
-        <ContextMenu ref="menu" :model="items" :min-width="14" />
+        <ResponsiveOverlay
+            v-model="open"
+            :anchor="anchor"
+            side="bottom"
+            cross="end"
+            :header="t(`workspace.workspaceScopeChip.showFilesFrom`)"
+            panel-class="w-[23rem] max-w-[calc(100vw-1rem)]"
+        >
+            <WorkspaceScopePicker :current="workspaceAgent" :autofocus="!mobile" @pick="pick" @close="open = false" />
+        </ResponsiveOverlay>
     </template>
 </template>
