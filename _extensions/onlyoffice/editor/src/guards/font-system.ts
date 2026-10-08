@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ported from ranuts/document lib/onlyoffice/font-system.ts at 1301bb8b (AGPL-3.0); see editor/NOTICE.
+// Ported from ranuts/document lib/onlyoffice/font-system.ts at 1301bb8b (AGPL-3.0); see editor/NOTICE. Changed: a font
+// system that is up has its catalog completed (font-faces.ts) before anything is handed the fonts.
+import { installFamilyFacesFix } from "./font-faces.js";
 
 // The font-system dependency the vendor never declared. The open conversion awaits `AscCommon.fetchFonts`, which walks
 // a font system that is initialised in parallel with the document load; losing that race is a TypeError that fails the
@@ -39,6 +41,7 @@ export const waitForFontSystem = async (win: FontSystemWindow, timeoutMs = FONT_
     for (let waited = 0; waited < timeoutMs; waited += FONT_SYSTEM_POLL_MS) {
         try {
             if (isFontSystemReady(win)) {
+                installFamilyFacesFix(win);
                 return true;
             }
         } catch (error) {
@@ -56,6 +59,7 @@ export const waitForFontSystem = async (win: FontSystemWindow, timeoutMs = FONT_
 export const awaitFontSystem = (win: FontSystemWindow, original: (cb: (fonts: unknown[]) => void) => unknown, cb: (fonts: unknown[]) => void): void => {
     // Ready already, the normal path: hand over at once, as the vendor's own call would.
     if (isFontSystemReady(win)) {
+        installFamilyFacesFix(win);
         original.call(win.AscCommon, cb);
         return;
     }

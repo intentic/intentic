@@ -10,6 +10,8 @@ import {
     installServerlessImagePipeline,
     installServerlessSaveSemantics,
 } from "./api-guards.js";
+import { installFamilyFacesFix } from "./font-faces.js";
+import type { FontSystemWindow } from "./font-system.js";
 import { injectLocalChromeCss, installCanvasLossGuard, installFetchFontsGuard, installHintFallbackGuard, installSingleUnloadPrompt, shadowSharedWorker } from "./frame-guards.js";
 import { installOpenFailureGuard, type OpenFailureHooks } from "./open-failure.js";
 import { releaseWasmBinary } from "./wasm-binary-release.js";
@@ -39,6 +41,8 @@ export const prepareEditorFrame = (win: Window, hooks: FrameHooks): boolean => {
         installX2tWorkerProxy(win),
         releaseWasmBinary(win),
     ];
+    // SAFETY: the frame's globals are the vendor's; FontSystemWindow declares every member read here as optional.
+    installFamilyFacesFix(win as Window & FontSystemWindow);
     installSeriesSettingsGuard(win);
     installFontLoadAcceleration(win);
     installCommentSelectionGuard(win);

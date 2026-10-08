@@ -31,8 +31,13 @@ sequenceDiagram
   or take theirs.
 - Bytes the editor exports while no save waits for them are the reader's own export (File > Download as), and go to
   the browser as a download.
-- [src/guards/](src/guards) holds runtime corrections to the offline build, ported from ranuts/document: each one a
+- [src/guards/](src/guards) holds runtime corrections to the offline build, most ported from ranuts/document: each one a
   defect that stopped documents opening or saving without a document server. They re-apply while the editor boots.
+- The bundle's font catalog answers some proprietary names with only the regular face of their stand-in (Calibri with
+  Carlito Regular), and the editor's synthesized bold and italic draw wrong: oversized, overlapping letters in small
+  bold text, and lines that break where Word's do not. [src/guards/font-faces.ts](src/guards/font-faces.ts) gives
+  such a row the styled faces of the row sharing its regular face, once the catalog is built and before a document
+  asks it for faces.
 
 ## Key files
 

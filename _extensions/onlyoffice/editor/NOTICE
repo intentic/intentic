@@ -94,8 +94,10 @@ Intentic's modifications to the bundle, applied after verification
 src/main.ts, src/save.ts, src/frame.ts and src/workspace.ts are Intentic's. src/guards/ holds runtime
 corrections to the offline build ported from ranuts/document's
 lib/onlyoffice/ at the same commit (AGPL-3.0); each file names the file it came
-from and says what was changed. They patch the editor at run time and leave the
-bundle's files as they were verified.
+from and says what was changed. src/guards/font-faces.ts is Intentic's: it gives
+a font catalog row that names only a regular face the styled faces of the row
+sharing that face (Calibri takes Carlito's bold and italic). They patch the
+editor at run time and leave the bundle's files as they were verified.
 
 
 How the terms are honoured
