@@ -352,8 +352,11 @@ export const sandboxAvailable = async (scratch: string): Promise<boolean> => {
 export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSources = defaultSources()): Promise<IsolationAnchor> => {
     const layout = sandboxLayout(join(plan.overlays, `sandbox-${randomBytes(4).toString("hex")}`));
     let teardownTask: Promise<void> | undefined;
-    // allow(silent-catch): best effort, after a start that already failed; what stays behind is disk under the overlays.
-    const teardown = (): Promise<void> => teardownTask ??= rm(layout.dir, { recursive: true, force: true }).catch(() => undefined);
+    const teardown = (): Promise<void> => {
+        // allow(silent-catch): best effort, after a start that already failed; what stays behind is disk under the overlays.
+        teardownTask ??= rm(layout.dir, { recursive: true, force: true }).catch(() => undefined);
+        return teardownTask;
+    };
     await mkdir(layout.tmp, { recursive: true, mode: 0o700 });
     await mkdir(join(layout.tmuxSocket, ".."), { recursive: true, mode: 0o700 });
     await mkdir(layout.terminalLogs, { recursive: true, mode: 0o700 });

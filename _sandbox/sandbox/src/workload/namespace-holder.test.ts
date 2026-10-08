@@ -189,6 +189,6 @@ test("a complete fenced PID report survives later noise in the same info chunk",
     const info = new PassThrough();
     const readiness = namespaceHolderReady(child, "ready", info);
     child.stdout.write("ready\n");
-    info.write(`{\"child-pid\":61234}\n${"x".repeat(8192)}`);
+    info.write(`{"child-pid":61234}\n${"x".repeat(8192)}`);
     await expect(readiness).resolves.toBe(61_234);
 });
