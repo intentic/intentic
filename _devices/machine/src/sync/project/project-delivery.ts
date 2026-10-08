@@ -9,15 +9,15 @@ import {
     type ProjectDelivery,
     type ProjectDeliveryResult,
 } from "@intentic/sandbox-contract";
-import { baseDir } from "../config.js";
-import { deliversByItself, isProjectPairing, type Pairing, pairingKey, readState } from "./config.js";
-import { runProcess } from "./exec.js";
-import { ensureMutagen, sessionName } from "./mutagen.js";
+import { baseDir } from "../../config.js";
+import { deliversByItself, isProjectPairing, type Pairing, pairingKey, readState } from "../config.js";
+import { runProcess } from "../exec.js";
+import { ensureMutagen, sessionName } from "../mutagen.js";
 import { isPortablePath } from "./project-files.js";
 import { assertFolder, type Durability, hashFile, installFile, localFile, localTarget, realDurability, removeFile } from "./project-local.js";
 import { mutagenSession, realProjectRunner } from "./project-remote.js";
 import { clearStaging, exclusively, type FolderContext, folderStateDir, type ProjectPairing, whileHeld } from "./project-transfer.js";
-import { backUp, createPointDir, pruneRestorePoints, type RestoreEntry, sealPoint, writeManifest } from "./restore-points.js";
+import { backUp, createPointDir, pruneRestorePoints, type RestoreEntry, sealPoint, writeManifest } from "../restore-points.js";
 
 // LANDED WORK WRITTEN INTO THE OWNER'S FOLDER (`deliverProject` on the device link, the contract's
 // schemas/project-delivery.ts). A folder attached to this computer's sandbox is copied one way into `/work/<name>`; when

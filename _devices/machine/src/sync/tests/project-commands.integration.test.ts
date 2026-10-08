@@ -12,7 +12,7 @@ process.env["USERPROFILE"] = process.env["HOME"];
 const home = process.env["HOME"];
 const { agentHome } = await import("@intentic/local-agent");
 const { readState } = await import("../config.js");
-const { projectCommands, requestedPaths } = await import("../project-commands.js");
+const { projectCommands, requestedPaths } = await import("../project/project-commands.js");
 const { restoreDir } = await import("../restore-points.js");
 
 // The scanner as the real app configures it (app.ts), so `--paths-file` reaches `pathsFile`.

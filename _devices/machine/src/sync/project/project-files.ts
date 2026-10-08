@@ -1,4 +1,4 @@
-import { isSafeRelativePath } from "./residue.js";
+import { isSafeRelativePath } from "../residue.js";
 
 // WHAT A COPY-FIRST PROJECT'S SANDBOX CHANGED, worked out from two listings of the same folder: this device's copy and
 // the sandbox's, each path with its size and sha256. Pure, so every rule below is a test rather than a branch inside a

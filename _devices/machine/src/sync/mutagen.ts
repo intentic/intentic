@@ -18,12 +18,12 @@ import {
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
-import { adoptFolder } from "./adopt.js";
+import { adoptFolder } from "./project/adopt.js";
 import { clearAdoptFolder, isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess } from "./exec.js";
-import { projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
+import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";

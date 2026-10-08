@@ -10,8 +10,8 @@ import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransp
 import { transportFor } from "./endpoint.js";
 import { canonicalFolder, folderRefusal, overlappingPairing, sameFolder } from "./folders.js";
 import { ensureMutagen, existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, syncSessionNames } from "./mutagen.js";
-import { answer, projectPairingFor } from "./project-commands.js";
-import { assertFolder, listingRecordPath } from "./project-local.js";
+import { answer, projectPairingFor } from "./project/project-commands.js";
+import { assertFolder, listingRecordPath } from "./project/project-local.js";
 import { refuseAcrossPc, type Siblings } from "./siblings.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
 

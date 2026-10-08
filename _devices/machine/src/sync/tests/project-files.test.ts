@@ -14,7 +14,7 @@ import {
     parseListing,
     type ProjectChange,
     selectChanges,
-} from "../project-files.js";
+} from "../project/project-files.js";
 import { PROJECT_IGNORES } from "../ssh.js";
 
 // What counts as the sandbox's change in a copy-first project, decided from two listings and the record of where they

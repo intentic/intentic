@@ -2,12 +2,12 @@ import { readFile } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { z } from "zod";
-import { baseDir } from "../config.js";
-import { readResidentPid } from "../resident.js";
-import { isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "./config.js";
-import { canonicalFolder, foldersOverlap, sameFolder } from "./folders.js";
-import { ensureMutagen, sessionName } from "./mutagen.js";
-import { pairingEndpoint } from "./endpoint.js";
+import { baseDir } from "../../config.js";
+import { readResidentPid } from "../../resident.js";
+import { isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "../config.js";
+import { canonicalFolder, foldersOverlap, sameFolder } from "../folders.js";
+import { ensureMutagen, sessionName } from "../mutagen.js";
+import { pairingEndpoint } from "../endpoint.js";
 import { mutagenSession, projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
 import {
     bringBack,
@@ -18,8 +18,8 @@ import {
     restorePoint,
     restorePoints,
 } from "./project-transfer.js";
-import type { Skipped } from "./restore-points.js";
-import { mutagenSshPath } from "./ssh.js";
+import type { Skipped } from "../restore-points.js";
+import { mutagenSshPath } from "../ssh.js";
 
 // THE COPY-FIRST COMMANDS the desktop app's "Bring back changes" runs, under `intentic-machine sync`: `changes`,
 // `bring-back`, `restore-points`, `restore` and `direction`. Each names its project by the folder (`--dir`), and with

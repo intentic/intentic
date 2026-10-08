@@ -3,7 +3,7 @@ import { createHash, type Hash } from "node:crypto";
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { type RemoteShell, remoteShell, type SandboxEndpoint } from "./endpoint.js";
+import { type RemoteShell, remoteShell, type SandboxEndpoint } from "../endpoint.js";
 import { type Listing, parseListing } from "./project-files.js";
 
 // THE SANDBOX'S SIDE of a copy-first project, reached the way file sync reaches it: over the pairing's ssh alias, one

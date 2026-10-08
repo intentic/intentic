@@ -5,9 +5,9 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { PROJECT_DELIVERY_MAX_BYTES, type ProjectDelivery } from "@intentic/sandbox-contract";
 import { FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject } from "../../testing.js";
 import { attachedKey, type Pairing } from "../config.js";
-import { decodeDelivery, type DeliveryContext, type DeliveryRefused, deliveryPairingFor, deliverToFolder } from "../project-delivery.js";
-import { mutagenSession, projectShell, sandboxCopy } from "../project-remote.js";
-import { type ProjectPairing, restorePoint, restorePoints } from "../project-transfer.js";
+import { decodeDelivery, type DeliveryContext, type DeliveryRefused, deliveryPairingFor, deliverToFolder } from "../project/project-delivery.js";
+import { mutagenSession, projectShell, sandboxCopy } from "../project/project-remote.js";
+import { type ProjectPairing, restorePoint, restorePoints } from "../project/project-transfer.js";
 import { restoreDir } from "../restore-points.js";
 
 // LANDED WORK DELIVERED INTO AN ATTACHED FOLDER, end to end on a temp folder: the session is the fake Mutagen the

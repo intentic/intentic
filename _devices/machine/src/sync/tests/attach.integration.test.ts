@@ -14,7 +14,7 @@ const home = process.env["HOME"];
 const { agentHome } = await import("@intentic/local-agent");
 const { readState, upsertPairing } = await import("../config.js");
 const { attachCommands, attachFolder, detachFolder, planAttach } = await import("../attach-commands.js");
-const { listingRecordPath } = await import("../project-local.js");
+const { listingRecordPath } = await import("../project/project-local.js");
 const { restoreDir } = await import("../restore-points.js");
 const { sessionName } = await import("../mutagen.js");
 

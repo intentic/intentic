@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { z } from "zod";
-import type { ChangeKind } from "./project-files.js";
-import { type Durability, hashFile, installFile, localFile, localTarget, removeFile } from "./project-local.js";
+import type { ChangeKind } from "./project/project-files.js";
+import { type Durability, hashFile, installFile, localFile, localTarget, removeFile } from "./project/project-local.js";
 
 // RESTORE POINTS: what `sync bring-back` keeps before it writes a byte into the owner's folder, one directory per bring-back
 // under ~/.intentic/machine/restore/<pairing key>/ (config.ts `pairingKey`): `manifest.json`, and `files/<path>`, a copy

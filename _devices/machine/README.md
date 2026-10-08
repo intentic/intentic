@@ -404,7 +404,7 @@ holds `--`, so the name can be no sandbox's session nor its `-state` backup (a f
 keeps `my.app` and `my_app` apart, which sanitize alike. Letting every folder poll was rejected: ten folders would cost
 the daemon eleven polls every five seconds, and three rejected polls counted per sandbox would revoke after one tick.
 
-**Delivering landed work** ([`sync/project-delivery.ts`](src/sync/project-delivery.ts)). When a conversation's work
+**Delivering landed work** ([`sync/project/project-delivery.ts`](src/sync/project/project-delivery.ts)). When a conversation's work
 lands in `/work/<name>`, the daemon calls `deliverProject` on the device link (`ProjectDeliverySchema` in the contract),
 and this agent writes the change into the folder. It is a procedure of the link, not an MCP tool, so no agent can call
 it, and it sits behind no switch of the grant: the folder's own `deliver: "auto"` is the permission. It is logged and
@@ -717,7 +717,7 @@ source text, so the compiled binary needs no second file; both it and the SIGKIL
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
 - [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
 - [src/sync/attach-commands.ts](src/sync/attach-commands.ts) — `sync attach` and `sync detach`, folders on this computer's own sandbox.
-- [src/sync/project-delivery.ts](src/sync/project-delivery.ts) — landed work written into an attached folder (`deliverProject`).
+- [src/sync/project/project-delivery.ts](src/sync/project/project-delivery.ts) — landed work written into an attached folder (`deliverProject`).
 - [src/sync/gone.ts](src/sync/gone.ts) — when a paired sandbox counts as gone; `gone-watch.ts` acts on it, `retire.ts` retires its pairings, `forget-command.ts` is `sync forget`.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.

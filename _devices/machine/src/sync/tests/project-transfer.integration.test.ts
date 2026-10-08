@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pidFileBody } from "@intentic/local-agent";
 import { FAKE_DOCKER, FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject, type FakeSessionState, mutagenConflict } from "../../testing.js";
-import { HELD_CHANGED_HERE, HELD_NOT_RUNNING } from "../project-files.js";
-import { listingRecordPath } from "../project-local.js";
-import { mutagenSession, projectShell, sandboxCopy } from "../project-remote.js";
-import { bringBack, projectChanges, type ProjectContext, type ProjectPairing, restorePoint, restorePoints } from "../project-transfer.js";
+import { HELD_CHANGED_HERE, HELD_NOT_RUNNING } from "../project/project-files.js";
+import { listingRecordPath } from "../project/project-local.js";
+import { mutagenSession, projectShell, sandboxCopy } from "../project/project-remote.js";
+import { bringBack, projectChanges, type ProjectContext, type ProjectPairing, restorePoint, restorePoints } from "../project/project-transfer.js";
 import { expiredPoints, pointId, type PointOnDisk, pruneRestorePoints, restoreDir } from "../restore-points.js";
 
 // A COPY-FIRST PROJECT'S WAY BACK, end to end on temp trees: the sandbox's copy is a local folder behind a fake ssh that

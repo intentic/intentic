@@ -133,8 +133,8 @@ let writing: Promise<unknown> = Promise.resolve();
 const patchQuery = (patch: Record<string, string | undefined>): void => {
     writing = writing
         .then(() => router.replace({ query: { ...route.query, ...patch } }))
-        .catch((error: unknown) => {
-            console.warn(`models: could not write the open tile into the address`, error);
+        .catch((failure) => {
+            console.warn(`models: could not write the open tile into the address`, failure);
         });
 };
 // Replaced, not pushed: picking a tile is not a visit.

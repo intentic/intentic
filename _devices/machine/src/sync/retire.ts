@@ -7,7 +7,7 @@ import { baseDir } from "../config.js";
 import { isProjectPairing, type Pairing, pairingKey, pairingTransport, readState, removeSandboxPairings } from "./config.js";
 import { realBridgeExec, realUnbridgeFs, unbridgeRepos } from "./git-bridge.js";
 import { existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, ourForwardSessions, forwardSessionName, syncSessionNames } from "./mutagen.js";
-import { listingRecordPath } from "./project-local.js";
+import { listingRecordPath } from "./project/project-local.js";
 import { forgetKnownHost, pairingSshConfig, sanitizeId, sshAlias, writeManagedSshConfig } from "./ssh.js";
 import { pairingSlugs } from "./swap-pause.js";
 

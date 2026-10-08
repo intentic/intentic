@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { FAKE_SSH, fakeProject } from "../../testing.js";
-import { adoptFolder, asideFolder, setAsidePaths } from "../adopt.js";
-import type { Listed } from "../project-files.js";
-import { projectShell, sandboxCopy } from "../project-remote.js";
+import { adoptFolder, asideFolder, setAsidePaths } from "../project/adopt.js";
+import type { Listed } from "../project/project-files.js";
+import { projectShell, sandboxCopy } from "../project/project-remote.js";
 import { IGNORES } from "../ssh.js";
 
 // A FOLDER SET UP AGAIN AFTER IT SAT UNSYNCED, end to end on temp trees: the sandbox's copy is a local folder behind the

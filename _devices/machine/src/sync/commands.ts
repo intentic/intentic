@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { clearWindowsRunValue, createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
@@ -41,9 +41,9 @@ import { type TransportAsk, transportFor } from "./endpoint.js";
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
-import { asidePrefix } from "./adopt.js";
+import { asidePrefix } from "./project/adopt.js";
 import { attachCommands } from "./attach-commands.js";
-import { projectCommands } from "./project-commands.js";
+import { projectCommands } from "./project/project-commands.js";
 import {
     ensureMutagen,
     existingSyncSessions,
@@ -493,7 +493,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
 };
 
 // Whether a folder exists and has anything in it; what it holds is adopt.ts's to compare.
-const holdsEntries = async (dir: string): Promise<boolean> => ((await readdir(dir).catch(() => undefined))?.length ?? 0) > 0;
+const holdsEntries = async (dir: string): Promise<boolean> => ((await readdir(dir).catch(undefinedIfMissing))?.length ?? 0) > 0;
 
 // The container a new file-sync pairing reaches its sandbox through, or undefined for one reached over ssh. A mirror-only
 // enrollment has no folder, so whatever transportFor chose for it is moot.

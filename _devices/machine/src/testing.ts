@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FixCheck, KeeperSeams, LinkView, ListedSandbox } from "./device/sandbox-rounds/keeper.js";
 import type { IcRun } from "./device/tools/sandboxes.js";
-import { FETCH_PROGRAM, LISTING_PROGRAM, type ProjectRunner, realProjectRunner, type Spawned } from "./sync/project-remote.js";
+import { FETCH_PROGRAM, LISTING_PROGRAM, type ProjectRunner, realProjectRunner, type Spawned } from "./sync/project/project-remote.js";
 
 // The fakes the copy-first project suites share (this repo's `testing.ts` convention, excluded from the build).
 //

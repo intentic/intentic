@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { claimPidFile, livePidRecord, releasePidFile } from "@intentic/local-agent";
-import { type Pairing, pairingKey, pairingRemoteDir, projectDirection, type ProjectDirection } from "./config.js";
+import { type Pairing, pairingKey, pairingRemoteDir, projectDirection, type ProjectDirection } from "../config.js";
 import {
     capped,
     type ChangeKind,
@@ -43,8 +43,8 @@ import {
     sealPoint,
     type Skipped,
     writeManifest,
-} from "./restore-points.js";
-import { ignoresFor } from "./ssh.js";
+} from "../restore-points.js";
+import { ignoresFor } from "../ssh.js";
 
 // BRINGING A COPY-FIRST PROJECT'S CHANGES BACK, and undoing that. The sandbox's copy is listed against this device's
 // (project-files.ts says what counts as the sandbox's change, and what may never be written over), a restore point is

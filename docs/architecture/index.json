@@ -2733,7 +2733,7 @@
           "what": "sync attach and sync detach, folders on this computer's own sandbox."
         },
         {
-          "path": "_devices/machine/src/sync/project-delivery.ts",
+          "path": "_devices/machine/src/sync/project/project-delivery.ts",
           "what": "landed work written into an attached folder (deliverProject)."
         },
         {

@@ -9,7 +9,7 @@ import { heldDistros } from "../environments/machine.js";
 import { WINDOWS_SIDE } from "../wsl.js";
 import { readState } from "./config.js";
 import { ensureMutagen } from "./mutagen.js";
-import { answer } from "./project-commands.js";
+import { answer } from "./project/project-commands.js";
 import { retireSandbox, type Retired, sandboxesNamed } from "./retire.js";
 
 // `intentic-machine sync forget <slug|sandboxId>` (2026-10-05): retire every pairing of one sandbox NOW, with the same
