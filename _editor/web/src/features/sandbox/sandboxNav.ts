@@ -38,12 +38,13 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         key: `configuration`,
         label: t(`sandbox.sandboxNav.configuration`),
         items: [
-            { slug: `environment`, label: t(`sandbox.words.environment`), icon: `box` },
-            { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
             // What the agent runs on, before how it behaves: every account, subscription, local model and endpoint this
             // box can reach, and the one place a first one is connected. Maintainer, as the daemon holds every sign-in.
+            // Above Environment and Secrets: most owners connect a model first; the box plumbing can wait.
             { slug: `models`, label: t(`shared.models`), icon: `sparkles`, maintainer: true },
             { slug: `agent`, label: t(`shared.agent`), icon: `robot`, maintainer: true },
+            { slug: `environment`, label: t(`sandbox.words.environment`), icon: `box` },
+            { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
             // Finding, installing, managing and disabling as one.
             { slug: `extensions`, label: t(`sandbox.sandboxNav.extensions`), icon: `sliders-h` },
         ],
