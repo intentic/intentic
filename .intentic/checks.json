@@ -3,6 +3,6 @@
         { "when": "edit", "run": "node _tools/checks/run.mjs --paths {file}", "label": "checks that can read one file" },
         { "when": "edit", "run": "node _tools/oxlint/lint-edit.mjs {file}", "label": "Lint the edit" },
         { "when": "turn", "run": "node _tools/scripts/verify/verify-turn.mjs", "label": "Checks CI runs on every push, for what this change added" },
-        { "when": "turn", "run": "node _tools/turbo-cache/warm.mjs", "timeoutMs": 120000, "label": "Send this change's typecheck passes to the fleet's shared cache, so CI replays them" }
+        { "when": "turn", "run": "node _tools/turbo-cache/warm.mjs", "timeoutMs": 120000, "label": "Share this change's typecheck results with CI's cache" }
     ]
 }
