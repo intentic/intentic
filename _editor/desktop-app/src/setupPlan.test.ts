@@ -32,8 +32,8 @@ describe(`a re-run's bar`, () => {
 
     it(`carries the bar without shortening the card's millisecond estimate or changing phase progress`, () => {
         const plan = [
-            { phase: `first`, label: `First`, weight: 100 },
-            { phase: `last`, label: `Last`, weight: 100 },
+            { phase: `first`, label: () => `First`, weight: 100 },
+            { phase: `last`, label: () => `Last`, weight: 100 },
         ];
         const measure = (floor: number) => {
             const running = advance(startProgress(plan, 0, floor), line(`intentic: [first] starting`), 0);

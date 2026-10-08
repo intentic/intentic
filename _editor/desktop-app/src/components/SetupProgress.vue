@@ -159,7 +159,7 @@ watch(
 
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-subtle">
             <span v-if="position && !done && !failed">{{
-                blocked ? t(`desktop.setupProgress.pausedAt`, { toLowerCase: position.toLowerCase() }) : position
+                parked ? t(`desktop.setupProgress.pausedAt`, { toLowerCase: position.toLowerCase() }) : position
             }}</span>
             <span v-if="live && view.remaining">{{ view.remaining }}</span>
             <span class="flex-1" />

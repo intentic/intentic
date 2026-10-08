@@ -8,8 +8,12 @@ import { t } from "@intentic/ui/i18n";
 export interface PlanStep {
     /** The phase id the scripts print. */
     readonly phase: string;
-    /** The checklist row, what this step is, in the reader's terms rather than the script's. */
-    readonly label: string;
+    /**
+     * The checklist row, what this step is, in the reader's terms rather than the script's. A function, not a string:
+     * a plan outlives the language it was drawn in (a run resumed after a restart is planned before the reader's
+     * catalog has loaded), so it is translated each time it is drawn, never once when the plan is made.
+     */
+    readonly label: () => string;
     /** Roughly how long it takes on a normal machine, in seconds. Only ever compared, never shown. */
     readonly weight: number;
 }
@@ -33,31 +37,31 @@ export interface PlanInput {
 // check needs the installer binary. Drawing them in real order is this screen's whole contract.
 export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
     const windows = input.os === `windows`;
-    const fetch: PlanStep = { phase: `fetching-ic`, label: t(`desktop.setupPlan.fetchInstaller`), weight: 15 };
+    const fetch: PlanStep = { phase: `fetching-ic`, label: () => t(`desktop.setupPlan.fetchInstaller`), weight: 15 };
     const check: PlanStep = {
         phase: `checking-docker`,
-        label: windows ? t(`desktop.setupPlan.checkDockerNeeds`) : t(`desktop.setupPlan.checkDocker`),
+        label: () => windows ? t(`desktop.setupPlan.checkDockerNeeds`) : t(`desktop.setupPlan.checkDocker`),
         weight: windows ? 12 : 5,
     };
     // Can dominate the whole install (download, installer, maybe WSL2); weighted heavily so the bar doesn't stall.
     const install: PlanStep[] = input.dockerReady
         ? []
-        : [{ phase: `installing-docker`, label: windows ? t(`desktop.setupPlan.setUpDocker`) : t(`desktop.setupPlan.installDocker`), weight: windows ? 600 : 420 }];
+        : [{ phase: `installing-docker`, label: () => windows ? t(`desktop.setupPlan.setUpDocker`) : t(`desktop.setupPlan.installDocker`), weight: windows ? 600 : 420 }];
     return [
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
-        { phase: `preflight`, label: t(`desktop.setupPlan.checkDevice`), weight: 10 },
-        { phase: `claiming-code`, label: t(`desktop.setupPlan.redeemSetupCode`), weight: 5 },
+        { phase: `preflight`, label: () => t(`desktop.setupPlan.checkDevice`), weight: 10 },
+        { phase: `claiming-code`, label: () => t(`desktop.setupPlan.redeemSetupCode`), weight: 5 },
         // Reports real progress via docker's layer names, so this weight only needs to be right about its share. An image
         // already here is a docker answer away, and weighted so: at 240 it held half the bar for a step that takes none.
         input.imageReady === true
-            ? { phase: `pulling-image`, label: t(`desktop.setupPlan.useSandboxImage`), weight: 2 }
-            : { phase: `pulling-image`, label: t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
-        { phase: `starting-sandbox`, label: t(`desktop.setupPlan.startSandbox`), weight: 25 },
-        { phase: `waiting-health`, label: t(`desktop.setupPlan.waitToComeUp`), weight: 40 },
-        { phase: `verifying`, label: t(`desktop.setupPlan.checkAnswers`), weight: 20 },
-        ...(input.syncing ? [{ phase: `desktop-sync`, label: t(`desktop.setupPlan.setUpFolderSync`), weight: 45 }] : []),
+            ? { phase: `pulling-image`, label: () => t(`desktop.setupPlan.useSandboxImage`), weight: 2 }
+            : { phase: `pulling-image`, label: () => t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
+        { phase: `starting-sandbox`, label: () => t(`desktop.setupPlan.startSandbox`), weight: 25 },
+        { phase: `waiting-health`, label: () => t(`desktop.setupPlan.waitToComeUp`), weight: 40 },
+        { phase: `verifying`, label: () => t(`desktop.setupPlan.checkAnswers`), weight: 20 },
+        ...(input.syncing ? [{ phase: `desktop-sync`, label: () => t(`desktop.setupPlan.setUpFolderSync`), weight: 45 }] : []),
         // Covers a silent ~100 MB agent download; sized against pulling-image so the bar doesn't stall near 99%.
-        { phase: `connecting-machine`, label: t(`desktop.setupPlan.connectDevice`), weight: 75 },
+        { phase: `connecting-machine`, label: () => t(`desktop.setupPlan.connectDevice`), weight: 75 },
     ];
 };
 
@@ -247,7 +251,7 @@ const remainingOf = (state: Progress, now: number): string | undefined => {
 export const progressView = (state: Progress, now: number): ProgressView => ({
     steps: state.plan.map((step, at) => ({
         phase: step.phase,
-        label: step.label,
+        label: step.label(),
         state:
             state.ended === `ok` || at < state.index
                 ? `done`
