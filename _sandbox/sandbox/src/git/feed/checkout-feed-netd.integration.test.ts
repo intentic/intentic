@@ -9,7 +9,7 @@ import { observeGitCommands } from "@intentic/base/git";
 import { requires } from "@intentic/testing/requires";
 import { connectNetd, type NetdLink } from "../../netd/netd-link.js";
 import { statusPaths } from "../changes/changes.js";
-import { netdCheckoutFeed, useCheckoutFeed } from "./checkout-feed.js";
+import { checkoutGeneration, netdCheckoutFeed, useCheckoutFeed } from "./checkout-feed.js";
 
 // The daemon's reads against the real netd's change feed: this test is the Node netd supervises, over the same
 // socket, and a status taken while the checkout's count stands still spawns no git.
@@ -75,11 +75,12 @@ test.skipIf(!built.runs)(built.title("an unchanged checkout's status is read onc
                 runs.push(at);
             }
         });
-        const feed = netdCheckoutFeed(link);
-        // The first read names the checkout; its count exists once netd has walked it.
+        // The first read names the checkout; its count exists once netd has walked it. Asked through the feed the reads
+        // use, as the daemon asks: a second feed would send netd a second watch, whose walk bumps the count whenever it
+        // finishes (netd runs it beside the syncs, not in line with them), so a read after "settled" would see it move.
         expect(await statusPaths(dir)).toEqual(["a.txt"]);
         const deadline = Date.now() + 5_000;
-        while ((await feed.generation(dir)) === undefined) {
+        while ((await checkoutGeneration(dir)) === undefined) {
             expect(Date.now()).toBeLessThan(deadline);
             await new Promise((resolve) => setTimeout(resolve, 20));
         }
