@@ -278,11 +278,7 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
     opacity: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .tab-lift-glide,
-    .tab-enter-active,
-    .tab-leave-active {
-        transition: none;
-    }
+:root[data-motion="reduced"] :is(.tab-lift-glide, .tab-enter-active, .tab-leave-active) {
+    transition: none;
 }
 </style>

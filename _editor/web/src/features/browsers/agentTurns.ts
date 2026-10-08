@@ -13,6 +13,7 @@ export interface AgentTurns {
 
 // Until the shell says otherwise, no turn is known to be running: a window the person can use rather than one they are
 // locked out of by a board that hasn't loaded.
+// allow(module-state): handed in once by the runtime above every route, as functions reading the board, which follows the current sandbox itself
 const answers = shallowRef<AgentTurns>({ running: () => false, title: () => undefined });
 
 export const provideAgentTurns = (turns: AgentTurns): void => {

@@ -9,7 +9,9 @@ import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../worktree-paths.js";
 const STAGE = "/run/intentic-view";
 const LEASE = "/run/intentic-domain";
 const LEASE_STAGE = "/mnt/intentic-domain-lease";
-const PRIVATE_STATE = [`${STATE_DIR}/secrets`, `${STATE_DIR}/identity`];
+// Whole state subtrees, root-relative, that the view masks: directories rather than declared state files, so they are
+// spelled from STATE_DIR here and not built through statePath (which names files WORKSPACE_STATE_FILES declares).
+const PRIVATE_STATE = [path.join(STATE_DIR, "secrets"), path.join(STATE_DIR, "identity")];
 // The daemon endpoints every domain gets, shared with it through their group (AGENT_GID), never their owner. The pane
 // door is not among them: it is the domain's own, in its run directory (domain-anchor.ts).
 const RUN_FILES = ["agent.token", "room.sock"];
