@@ -7420,6 +7420,27 @@
             "noneUsed": "No passkey was used.",
             "refused": "The sandbox refused ({status})."
         },
+        "deviceUpdateStages": {
+            "downloadLabel": "Downloading the new version",
+            "downloadNote": "The sandbox keeps working meanwhile",
+            "checkLabel": "Checking and backing up its data",
+            "checkNote": "Read-only: nothing changes yet",
+            "swapLabel": "Restarting onto it",
+            "swapNote": "The sandbox is away for about a minute",
+            "layersOf": "{done} of {total} layer | {done} of {total} layers"
+        },
+        "deviceUpdateProgress": {
+            "updating": "Updating {name}",
+            "rollingBack": "Rolling {name} back",
+            "keepsWorking": "{name} keeps working until the restart. This runs on {machine}, so it carries on if you leave this page.",
+            "restarting": "{name} is restarting on the new image, and is back in about a minute.",
+            "restartingSelf": "This sandbox is restarting on the new image. This page reconnects on its own.",
+            "updatedIn": "Updated in {elapsed}.",
+            "rolledBackIn": "Rolled back in {elapsed}.",
+            "showLog": "Show the output",
+            "hideLog": "Hide the output",
+            "outputOn": "Running on {machine}: it keeps going even if you leave this page."
+        },
         "devRebuildStages": {
             "compileLabel": "Compiling your packages",
             "compileNote": "Turbo builds what the image bakes in",

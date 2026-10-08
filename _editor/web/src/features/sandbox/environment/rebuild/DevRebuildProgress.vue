@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { Code, commandLang, DeviceRunLog, formatElapsed, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { Code, commandLang, formatElapsed, Notice, type NoticeModel } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { DEV_REBUILD_STEPS, type DevRebuildStage, stageStart } from "./devRebuildStages";
+import { DEV_REBUILD_STEPS } from "./devRebuildStages";
+import StagedProgress from "../../progress/StagedProgress.vue";
+import type { ProgressStatus } from "../../progress/stagedProgress";
 import { type DevRebuildRun, outOfContact, rebuildRunning } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
-// A REBUILD DRAWN AS THE THREE THINGS IT DOES, not as a wall of somebody else's build output. The log is what a reader
-// reaches for when something has gone wrong, and for the other twenty minutes it is noise that hides the one fact they
-// came for — so it sits behind a toggle that opens itself on a failure.
-// One moving part on screen: the bar and the step list share a single spinner, on whichever step is running.
+// A REBUILD DRAWN AS THE THREE THINGS IT DOES (<StagedProgress>, which a device's update shares), with what only a
+// rebuild has to say beside it: what it costs the reader right now, how it ended, and where its ending is written
+// once this page can no longer read it. The log opens itself on a failure.
 
 const t = useT();
 
@@ -32,71 +33,20 @@ const now = useNow(() => live.value);
 // cannot see coming and says where the ending is written instead, while the follow keeps asking underneath.
 const unheard = computed(() => outOfContact(props.run, now.value));
 
-type StepState = "done" | "running" | "pending" | "stopped" | "unheard";
-
-const rankOf = (stage: DevRebuildStage): number => DEV_REBUILD_STEPS.findIndex((step) => step.key === stage);
-
-const stateOf = (stage: DevRebuildStage): StepState => {
-    const here = rankOf(stage);
-    const at = rankOf(props.run.stage);
+// The status the steps are drawn in: not known to be going nor known to have stopped is the step this page lost sight
+// of; where it got to and stopped is not finished, and not still going either.
+const status = computed<ProgressStatus>(() => {
     if (props.run.phase === `done`) {
         return `done`;
     }
-    if (here < at) {
-        return `done`;
-    }
-    if (here > at) {
-        return `pending`;
-    }
-    // Not known to be going, nor known to have stopped: the step this page lost sight of.
     if (unheard.value) {
         return `unheard`;
     }
-    // Where it got to and stopped: not finished, and not still going either.
     return live.value ? `running` : `stopped`;
-};
+});
 
-// A step's own clock runs from the moment it was first seen to the moment the next one was. Both are absent for a
-// build adopted mid-flight, and a step that nothing timed shows no number rather than a made-up one.
-const secondsOf = (stage: DevRebuildStage): number | undefined => {
-    const from = props.run.stageAt[stage];
-    if (from === undefined) {
-        return undefined;
-    }
-    const later = DEV_REBUILD_STEPS.slice(rankOf(stage) + 1)
-        .map((step) => props.run.stageAt[step.key])
-        .find((at) => at !== undefined);
-    const to = later ?? props.run.endedAt ?? (live.value ? now.value : undefined);
-    return to === undefined ? undefined : Math.max(0, Math.round((to - from) / 1000));
-};
-
-// How much of a step's own segment of the bar is filled. Zero for a step with nothing countable in it, which the
-// segment then says by pulsing rather than by sitting at a number it cannot justify.
-const fillOf = (stage: DevRebuildStage, weight: number): number => Math.min(1, Math.max(0, (props.run.fraction - stageStart(stage)) / weight));
-
-const steps = computed(() =>
-    DEV_REBUILD_STEPS.map((step) => ({
-        ...step,
-        state: stateOf(step.key),
-        seconds: secondsOf(step.key),
-        fill: fillOf(step.key, step.weight),
-    })),
-);
-
-const ICONS: Record<StepState, IconName> = {
-    done: `check-circle`,
-    running: `spinner`,
-    pending: `circle`,
-    stopped: `exclamation-triangle`,
-    unheard: `question-circle`,
-};
-const TONES: Record<StepState, string> = {
-    done: `text-success`,
-    running: `text-info`,
-    pending: `text-muted`,
-    stopped: `text-warning`,
-    unheard: `text-warning`,
-};
+// A finished rebuild finished every step, whichever marker its last tail happened to end on.
+const stage = computed(() => (props.run.phase === `done` ? `swap` : props.run.stage));
 
 const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : formatElapsed(props.elapsed)));
 
@@ -192,51 +142,27 @@ watch(
     },
     { immediate: true },
 );
-
-const logLabel = computed(() => (showLog.value ? t(`sandbox.devRebuildProgress.hideLog`) : t(`sandbox.devRebuildProgress.showLog`)));
 </script>
 
 <template>
-    <!-- No card of its own: it is drawn inside a group that is already a surface, and a second border there is chrome. -->
-    <div class="flex flex-col gap-3">
-        <!-- One line for the whole run: what it is, and how long it has been going. -->
-        <div class="flex items-baseline gap-2">
-            <span class="flex-1 text-xs font-medium text-content">{{ heading }}</span>
-            <span v-if="elapsedLabel" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{ elapsedLabel }}</span>
-        </div>
-
-        <!-- One segment per step, sized by how long that step takes, so a full segment means a finished step rather
-             than a share of an arbitrary total. A running step with nothing countable in it pulses instead of
-             claiming a number. -->
-        <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
-            <div
-                v-for="step in steps"
-                :key="step.key"
-                class="h-full overflow-hidden rounded-full"
-                :class="step.state === 'running' && step.fill === 0 ? `animate-pulse bg-primary-400/30` : `bg-canvas`"
-                :style="{ flexGrow: step.weight, flexBasis: 0 }"
-            >
-                <div
-                    class="h-full rounded-full transition-[width] duration-500 ease-out"
-                    :class="step.state === 'stopped' ? `bg-warning` : `bg-primary-400`"
-                    :style="{ width: `${step.state === 'done' ? 100 : step.fill * 100}%` }"
-                />
-            </div>
-        </div>
-
-        <ol class="flex flex-col gap-1.5">
-            <li v-for="step in steps" :key="step.key" class="flex items-center gap-2" :class="{ 'opacity-50': step.state === 'pending' }">
-                <Icon :name="ICONS[step.state]" :spin="step.state === 'running'" :class="`shrink-0 ${TONES[step.state]}`" />
-                <span class="min-w-0 flex-1">
-                    <span class="block truncate text-2xs text-content">{{ step.label }}</span>
-                    <span v-if="step.state === 'running'" class="block truncate text-2xs text-subtle">{{ detail ?? step.note }}</span>
-                </span>
-                <span v-if="step.seconds !== undefined" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{
-                    formatElapsed(step.seconds)
-                }}</span>
-            </li>
-        </ol>
-
+    <StagedProgress
+        v-model:log="showLog"
+        :heading="heading"
+        :elapsed="elapsed"
+        :steps="DEV_REBUILD_STEPS"
+        :stage="stage"
+        :stage-at="run.stageAt"
+        :ended-at="run.endedAt"
+        :fraction="run.fraction"
+        :status="status"
+        :live="live"
+        :detail="detail"
+        :lines="run.lines"
+        :empty-log="t(`sandbox.devRebuildProgress.waitingFirstLineDevice`)"
+        :show-log-label="t(`sandbox.devRebuildProgress.showLog`)"
+        :hide-log-label="t(`sandbox.devRebuildProgress.hideLog`)"
+        @dismiss="$emit(`dismiss`)"
+    >
         <p v-if="cost" class="text-2xs text-muted">{{ cost }}</p>
 
         <div v-if="notice" class="flex flex-col gap-1.5">
@@ -258,21 +184,12 @@ const logLabel = computed(() => (showLog.value ? t(`sandbox.devRebuildProgress.h
         <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
         <p v-if="hiccup" class="text-2xs text-subtle">{{ t(`sandbox.devRebuildProgress.cantReadLogAt`, { hiccup }) }}</p>
 
-        <!-- Verbatim, unsummarised, and only ever on purpose. -->
-        <DeviceRunLog v-if="showLog" :lines="run.lines" :running="live" :empty="t(`sandbox.devRebuildProgress.waitingFirstLineDevice`)" />
-
-        <div class="flex flex-wrap items-center gap-x-3">
-            <button type="button" :class="ui.textAction(`text-2xs`)" @click="showLog = !showLog">
-                <Icon :name="showLog ? `chevron-down` : `chevron-right`" />{{ logLabel }}
-            </button>
-            <button v-if="!live" type="button" :class="ui.textAction(`text-2xs`)" @click="$emit(`dismiss`)">
-                <Icon name="times" />{{ t(`ui.action.dismiss`) }}
-            </button>
-            <!-- The whole thing outlives this card, so where it lives is worth keeping beside the tail it shows. -->
-            <p v-if="showLog" class="text-2xs text-subtle">
+        <!-- The whole thing outlives this card, so where it lives is worth keeping beside the tail it shows. -->
+        <template #log-footer>
+            <p class="text-2xs text-subtle">
                 {{ t(`sandbox.devRebuildProgress.fullOutputIn`) }} <span class="font-mono">{{ logPath }}</span>
                 {{ t(`sandbox.devRebuildProgress.onDevice`) }}
             </p>
-        </div>
-    </div>
+        </template>
+    </StagedProgress>
 </template>

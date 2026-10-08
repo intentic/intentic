@@ -6,6 +6,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
+import { type DeviceUpdateRun, foldUpdateLine, isStagedVerb, settleUpdateRun, startUpdateRun } from "./deviceUpdateStages";
 import { agentInFlight, agentRunOf, beginDeviceWork, dismissAgentRun, machineCalling, pressAgent, sandboxesWorking } from "./deviceWork";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../shapeFlow";
 import {
@@ -295,6 +296,9 @@ export interface DeviceOps {
     readonly verbRunning: (group: DeviceSandboxGroup) => boolean;
     readonly lines: (group: DeviceSandboxGroup) => readonly string[];
     readonly logShown: (group: DeviceSandboxGroup) => boolean;
+    /** An update or rollback on this row, drawn as its steps rather than as a log, until it is dismissed. */
+    readonly stagedRun: (group: DeviceSandboxGroup) => DeviceUpdateRun | undefined;
+    readonly dismissStaged: (group: DeviceSandboxGroup) => void;
     readonly confirmingAct: Ref<PendingAct | undefined>;
     readonly actPrompt: ComputedRef<ActPrompt | undefined>;
     readonly confirmAct: () => void;
@@ -403,6 +407,24 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const logShown = (group: DeviceSandboxGroup): boolean => openLog.value === rowKey(group);
     const lines = (group: DeviceSandboxGroup): readonly string[] => runLines.value[rowKey(group)] ?? [];
 
+    // The verbs that recreate a sandbox onto another image take minutes, and their stream is `ic` narrating three
+    // steps (deviceUpdateStages.ts), so the row draws those steps — the same card a checkout rebuild draws — and keeps
+    // the lines behind a toggle. Kept once it ends, so its verdict stays under the row until the reader puts it away.
+    const stagedRuns = ref<Record<string, DeviceUpdateRun>>({});
+    const stagedRun = (group: DeviceSandboxGroup): DeviceUpdateRun | undefined => stagedRuns.value[rowKey(group)];
+    const setStaged = (key: string, run: DeviceUpdateRun | undefined): void => {
+        const { [key]: _gone, ...rest } = stagedRuns.value;
+        stagedRuns.value = run === undefined ? rest : { ...rest, [key]: run };
+    };
+    const dismissStaged = (group: DeviceSandboxGroup): void => {
+        const key = rowKey(group);
+        setStaged(key, undefined);
+        // The verdict was drawn inside the card, so it goes with it.
+        if (outcome.value?.key === key) {
+            outcome.value = undefined;
+        }
+    };
+
     // Splits the row's own verb back out of the single-string `busy`, since only one op runs at a time.
     const runningVerb = (group: DeviceSandboxGroup): SandboxVerb | undefined => {
         const prefix = `${rowKey(group)}:`;
@@ -470,19 +492,37 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         runLines.value = { ...runLines.value, [key]: [] };
         // Opened before lines arrive, so an empty pane reads as "reading" rather than an ignored click.
         openLog.value = verb === `logs` ? key : undefined;
+        // A reshape rides `update`'s op on some machines, but it is not one: only the two verbs themselves are staged.
+        const staged = intent === undefined && isStagedVerb(verb);
+        setStaged(key, staged ? startUpdateRun(verb, Date.now()) : undefined);
         const endMark = markVerb(machine(), group, verb);
+        // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
+        const severing = (intent === undefined || shapeSevers(intent)) && severs(group, verb);
         const payload = actPayload(
             flow,
             to,
-            (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
-            // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
-            (intent === undefined || shapeSevers(intent)) && severs(group, verb),
+            (line) => {
+                runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] };
+                const run = stagedRuns.value[key];
+                if (run !== undefined) {
+                    setStaged(key, foldUpdateLine(run, line, Date.now()));
+                }
+            },
+            severing,
         );
+        const settle = (ok: boolean): void => {
+            const run = stagedRuns.value[key];
+            if (run !== undefined) {
+                setStaged(key, settleUpdateRun(run, ok, severing, Date.now()));
+            }
+        };
         try {
             const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], payload);
+            settle(true);
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
+            settle(false);
             failure.value = { key, notice: noticeFrom(error, t(`sandbox.deviceOps.didntWorkOnDevice`)), command: sandboxFallback(verb, slug, intent, { takesSet, to }) };
             if (verb === `logs`) {
                 openLog.value = undefined;
@@ -959,6 +999,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         verbRunning,
         lines,
         logShown,
+        stagedRun,
+        dismissStaged,
         confirmingAct,
         actPrompt,
         confirmAct,

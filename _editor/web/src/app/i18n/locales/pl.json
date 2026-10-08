@@ -7013,6 +7013,27 @@
             "noneUsed": "Nie użyto żadnego klucza dostępu.",
             "refused": "Sandbox odmówił ({status})."
         },
+        "deviceUpdateStages": {
+            "downloadLabel": "Pobieranie nowej wersji",
+            "downloadNote": "Sandbox w tym czasie działa dalej",
+            "checkLabel": "Sprawdzanie i kopia zapasowa danych",
+            "checkNote": "Tylko odczyt: jeszcze nic się nie zmienia",
+            "swapLabel": "Restart na nowym obrazie",
+            "swapNote": "Sandbox znika na około minutę",
+            "layersOf": "{done} z {total} warstw"
+        },
+        "deviceUpdateProgress": {
+            "updating": "Aktualizowanie {name}",
+            "rollingBack": "Cofanie {name}",
+            "keepsWorking": "{name} działa aż do restartu. To dzieje się na {machine}, więc idzie dalej, nawet jeśli opuścisz tę stronę.",
+            "restarting": "{name} restartuje się na nowym obrazie i wraca za około minutę.",
+            "restartingSelf": "Ten sandbox restartuje się na nowym obrazie. Ta strona połączy się ponownie sama.",
+            "updatedIn": "Zaktualizowano w {elapsed}.",
+            "rolledBackIn": "Cofnięto w {elapsed}.",
+            "showLog": "Pokaż wyjście",
+            "hideLog": "Ukryj wyjście",
+            "outputOn": "Działa na {machine}: idzie dalej, nawet jeśli opuścisz tę stronę."
+        },
         "devRebuildStages": {
             "compileLabel": "Kompilowanie Twoich pakietów",
             "compileNote": "Turbo buduje to, co trafia do obrazu",

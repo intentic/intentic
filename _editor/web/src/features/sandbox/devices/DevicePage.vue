@@ -26,6 +26,7 @@ import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
+import DeviceUpdateProgress from "./runners/DeviceUpdateProgress.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
 import SyncSwitchMenu from "./sync/SyncSwitchMenu.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
@@ -565,10 +566,20 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     </template>
                     <!-- The machine's own output, visible while a row works and afterward for as long as its log is being read. -->
                     <template #footer="{ group }">
+                        <!-- An update or a rollback is minutes of `ic` and docker: drawn as its steps, the lines a press away. -->
+                        <DeviceUpdateProgress
+                            v-if="ops.stagedRun(group)"
+                            :run="ops.stagedRun(group)!"
+                            :name="group.title"
+                            :machine="machine.label"
+                            :self="ops.selfGroup(group)"
+                            :outcome="ops.outcome.value?.key === ops.rowKey(group) ? ops.outcome.value.message : undefined"
+                            @dismiss="ops.dismissStaged(group)"
+                        />
                         <!-- Not while a batch works down the list: the bar says where it has got, and a pane opening under
                              each row in turn would be five logs for one press. -->
                         <DeviceRunLog
-                            v-if="(ops.verbRunning(group) && ops.batchProgress.value === undefined) || ops.logShown(group)"
+                            v-else-if="(ops.verbRunning(group) && ops.batchProgress.value === undefined) || ops.logShown(group)"
                             :lines="ops.lines(group)"
                             :running="ops.verbRunning(group)"
                             :empty="t(`sandbox.devicePage.startingOnDevice`)"
@@ -580,8 +591,12 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             :command="ops.failure.value.command"
                             :machine="machine.label"
                         />
-                        <!-- Line breaks kept: a machine's answer is a verdict, then what it has to say about this row. -->
-                        <p v-else-if="ops.outcome.value?.key === ops.rowKey(group)" class="text-xs whitespace-pre-line text-muted">{{ ops.outcome.value.message }}</p>
+                        <!-- Line breaks kept: a machine's answer is a verdict, then what it has to say about this row. An update's
+                             or a rollback's answer is said inside its own card, so not twice. -->
+                        <p
+                            v-else-if="ops.outcome.value?.key === ops.rowKey(group) && !ops.stagedRun(group)"
+                            class="text-xs whitespace-pre-line text-muted"
+                        >{{ ops.outcome.value.message }}</p>
                     </template>
                 </DeviceDetail>
             </div>

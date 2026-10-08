@@ -313,9 +313,47 @@ const SANDBOX_DONE: Record<string, string> = {
     remove: `Removed`,
     reshape: `Reshaped`,
 };
+// What `ic sandbox update` and `rollback` stream, in the order recreate.rs prints it, so the Devices page draws its
+// steps from the same words a real machine sends: docker's pull, the read-only pre-flight, the backup, the swap.
+const RECREATE_LINES = (slug: string): string[] => [
+    `intentic: pre-flighting the state conversions of ghcr.io/intentic/sandbox:stable on this sandbox's data (read-only)…`,
+    `intentic: backed up ${slug}'s state before the swap (snapshot 479bdfba).`,
+    `intentic: recreating the sandbox from ghcr.io/intentic/sandbox:stable…`,
+    `intentic: waiting for the sandbox daemon to come up…`,
+];
+const LAYERS = [`3f4ca61aafcd`, `9b3a2e4c11d0`, `d5c0f2a8e771`, `5e1b0c9d2f44`, `a07c6d3e8b19`];
+const UPDATE_LINES = (slug: string): string[] => [
+    `intentic: pulling ghcr.io/intentic/sandbox:stable…`,
+    `stable: Pulling from intentic/sandbox`,
+    `${LAYERS[0]}: Already exists`,
+    ...LAYERS.slice(1).map((layer) => `${layer}: Pulling fs layer`),
+    ...LAYERS.slice(1).flatMap((layer) => [`${layer}: Download complete`, `${layer}: Pull complete`]),
+    `Digest: sha256:1366a71da67cabd5d9f5c90d3b3a4181d861c7b29decc57cc0201c546317ab60`,
+    `Status: Downloaded newer image for ghcr.io/intentic/sandbox:stable`,
+    ...RECREATE_LINES(slug),
+    `intentic: sandbox updated to ghcr.io/intentic/sandbox:stable (channel stable).`,
+    `          Roll back with: ic sandbox rollback ${slug}`,
+];
+const flowLines = (slug: string, op: string): string[] => {
+    switch (op) {
+        case `logs`:
+            return [`[${slug}] listening on :8080`, `[${slug}] GET /health 200 2ms`];
+        case `update`:
+            return UPDATE_LINES(slug);
+        case `rollback`:
+            return [
+                `intentic: rolling back to intentic-sandbox-pin-${slug}:1.320.0…`,
+                ...RECREATE_LINES(slug),
+                `intentic: sandbox rolled back to intentic-sandbox-pin-${slug}:1.320.0 — run rollback again to return.`,
+            ];
+        default:
+            return [`docker ${op} intentic-sandbox-${slug}`];
+    }
+};
+
 const sandboxFlow = (slug: string, op: string): Frames<DeviceFlowLine> =>
     paced({
-        lines: op === `logs` ? [`[${slug}] listening on :8080`, `[${slug}] GET /health 200 2ms`] : [`docker ${op} intentic-sandbox-${slug}`],
+        lines: flowLines(slug, op),
         result: `${SANDBOX_DONE[op] ?? `Ran ${op} on`} sandbox "${slug}".`,
         after: () => {
             if (op === `start` || op === `restart` || op === `update` || op === `rollback`) {
