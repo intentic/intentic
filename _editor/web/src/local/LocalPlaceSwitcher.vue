@@ -19,18 +19,19 @@ import { sandboxSlot, sandboxSlotChord } from "./localKeys";
 
 const t = useT();
 const host = localHost();
-const face = localFace();
+// Read through `computed`, so the chip follows a folder pointed at in this window's place (folderSwitch.ts).
+const face = computed(localFace);
 
 const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 
 // The main window is the one the workspace swaps in for; from any other, a sandbox opens in that window, not this one.
-const inMainWindow = face?.home === true;
+const inMainWindow = face.value?.home === true;
 
 // The window's folder, as the chip names it. A document opened on its own names its folder too: the chip is about the
 // place, the tab row about the document.
-const name = computed(() => face?.name ?? t(`shared.files`));
-const chipTip = computed((): Tip => ({ title: name.value, note: face?.path ?? `` }));
+const name = computed(() => face.value?.name ?? t(`shared.files`));
+const chipTip = computed((): Tip => ({ title: name.value, note: face.value?.path ?? `` }));
 
 // Read each time the chip opens. Only the newest read writes, so one answering late cannot put back a list the reader
 // has since changed.

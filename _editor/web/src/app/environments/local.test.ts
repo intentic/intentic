@@ -83,3 +83,31 @@ test("a local window asks an agent about an entry, and asks its sandbox for chan
     // The list reads back as the paths chosen, whatever they hold.
     expect(JSON.parse(new URL(heard[3] ?? ``).searchParams.get(`paths`) ?? `null`)).toEqual([`a b.md`, `src/x&y.ts`]);
 });
+
+/* Another folder pointed at in the window's place (local/folderSwitch.ts): the window wears its face from then on, and
+   what reads the face inside a computed reads it again, with no reload. */
+test("a face worn in place is the window's from then on, and a computed reading it follows", async () => {
+    const { localFace, wearFace } = await load(FACE);
+    const { computed } = await import("vue");
+    const name = computed(() => localFace()?.name);
+    expect(name.value).toBe(`project`);
+    wearFace({ ...FACE, id: `w2`, name: `other`, path: `/home/me/other` });
+    expect(name.value).toBe(`other`);
+    expect(localFace()).toEqual({ ...FACE, id: `w2`, name: `other`, path: `/home/me/other` });
+});
+
+test("a folder is the editor's sandbox `local-<id>`, whatever else its face says", async () => {
+    const { localSandboxId } = await load(FACE);
+    expect(localSandboxId(FACE)).toBe(`local-w1`);
+});
+
+/* What the app hands over crossed a process boundary: a whole face is one, and anything short of it is nothing. */
+test("a face handed over by the app is read only when it is whole", async () => {
+    const { faceOf } = await load(FACE);
+    expect(faceOf(FACE)).toEqual(FACE);
+    expect(faceOf({ ...FACE, file: `notes.md`, sandbox: true, home: false })).toEqual({ ...FACE, file: `notes.md`, sandbox: true, home: false });
+    expect(faceOf({ ...FACE, token: undefined })).toBeUndefined();
+    expect(faceOf({ ...FACE, sandbox: `yes` })).toBeUndefined();
+    expect(faceOf(`face`)).toBeUndefined();
+    expect(faceOf(null)).toBeUndefined();
+});

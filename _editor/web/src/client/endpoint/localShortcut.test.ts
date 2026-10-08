@@ -124,3 +124,12 @@ it(`stops reaching when Chrome says no, whatever this app was told earlier`, asy
     expect(await revoked.answerFor(LAPTOP)).toBe(`declined`);
     expect(revoked.question.value).toBeUndefined();
 });
+
+// The desktop app's window on a folder records a no for each folder it shows, since the folder is on loopback already;
+// one pointed at in the window's place records it while this page runs, and is not asked about either.
+it(`counts a no stored after the page loaded`, async () => {
+    const { answerFor } = await load();
+    expect(await answerFor(DESKTOP)).toBe(`unasked`);
+    localStorage.setItem(`intentic.localShortcut.declined.${DESKTOP}`, `yes`);
+    expect(await answerFor(DESKTOP)).toBe(`declined`);
+});

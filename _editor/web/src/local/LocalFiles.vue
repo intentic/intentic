@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, nextTick, onMounted, onUnmounted, provide, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
@@ -9,6 +9,7 @@ import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTre
 import { useRootDrop } from "../features/workspace/explorer/transfer/useRootDrop";
 import EditorPane from "../features/workspace/files/EditorPane.vue";
 import { supportsRoute } from "../client/sandbox/useDaemonRoutes";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import { HOISTED_CONTEXT } from "../features/workspace/files/viewerChrome";
 import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
 import { matchToggles } from "../features/workspace/search/useSearchOptions";
@@ -20,6 +21,7 @@ import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
 import { useFolderSandbox } from "./folderSandbox";
+import { folderDrawn } from "./folderSwitch";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
@@ -39,10 +41,22 @@ const face = localFace();
 // The viewers (images, PDF, Office, EPUB) are extensions; this is the host that activates them for this window.
 useExtensionHost();
 
-const { listingOf, hiddenIn, keepListed, error, isLoading, busy } = useWorkspaceTree();
+const { listingOf, hiddenIn, keepListed, hasSnapshot, error, isLoading, busy } = useWorkspaceTree();
 const tree = computed(() => listingOf(``) ?? []);
 keepListed(() => ``);
 const rootHidden = computed(() => hiddenIn(``));
+// The folder's files are drawn, or its listing has said why they cannot be: a switch to this folder may show it now
+// rather than hold the one it left (folderSwitch.ts).
+const { activeSandboxId } = useSandbox();
+watch(
+    () => (hasSnapshot.value || error.value !== undefined ? activeSandboxId.value : undefined),
+    (drawnFor) => {
+        if (drawnFor !== undefined) {
+            folderDrawn(drawnFor);
+        }
+    },
+    { immediate: true },
+);
 // A folder whose listing has come back with nothing to draw. A document opened on its own is never one: its folder is
 // not what the window shows.
 const folderEmpty = computed(() => face?.file === undefined && listingOf(``)?.length === 0 && error.value === undefined);

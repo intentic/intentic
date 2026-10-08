@@ -5,7 +5,8 @@
    Motion is spent where it shows the reader something, not everywhere: a chart growing from its baseline says how
    big each figure is as the eye follows it, rows arriving in reading order say how a board is laid out, the
    workspace arriving says where the file tree and the editor are. A page switching or a menu opening says nothing a
-   static frame does not, so those do not move.
+   static frame does not, so those do not move. A whole window changing what it shows is the exception: a cut there
+   reads as the window going blank, so it crossfades.
 
    THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/choice.ts from the Appearance setting and,
    under `system`, the OS's reduce-motion answer. Under it every duration token reads 0ms and every transition is
@@ -80,6 +81,17 @@
     :root[data-motion="reduced"] .p-ink {
         display: none;
     }
+}
+
+/* A WINDOW CHANGING WHAT IT SHOWS, IN PLACE: a desktop window on a folder moving to another one (the web's
+   local/folderSwitch.ts). Where a cut would be a flash, the page being left crossfades into the one arriving, captured as
+   a view transition; what both pages share, the rail, does not appear to move at all. Under the switch the token reads
+   0ms, and the transition is a cut: still between two finished pages, since it holds the old one until the new one is
+   drawn. */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: var(--motion-base);
+    animation-timing-function: var(--ease-smooth);
 }
 
 @layer components {

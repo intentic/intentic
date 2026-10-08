@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import type { LocalFace } from "@intentic/web/local";
+import { type LocalFace, localFace } from "@intentic/web/local";
 import type { LocalHost, LocalMachineAction, LocalProjectHost, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
 import { readAccount, signOutAccount, updateAccount } from "./account";
@@ -67,9 +67,10 @@ const DEVICE_VIEW: LocalView = {
    machine_sandbox.rs, device/machineSandbox.ts), and the window's folder on its way into it (project.rs
    `project_attach`). Nothing here runs anything: the app does, whichever window is open, and every window hears it. */
 
-// The folder this window shows, by the path the app told it: how its own entry in the record is found.
+// The folder this window shows, by the path the app told it: how its own entry in the record is found. Read through the
+// editor's own reader, so the card's computed below follows a folder pointed at in this window's place.
 const folderPath = (): string | undefined => {
-    const face = window.__INTENTIC_LOCAL__;
+    const face = localFace();
     return face === undefined || face.file !== undefined ? undefined : face.path;
 };
 

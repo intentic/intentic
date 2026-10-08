@@ -1,5 +1,5 @@
 import type { apiContract, SandboxSummary, User } from "@intentic/api-contract";
-import type { LocalFace } from "@intentic/web/local";
+import { type LocalFace, localFace, localSandboxId } from "@intentic/web/local";
 import type { AccountAnswer, AccountAsk } from "../src/desktop";
 import { LOCAL_PLATFORM_ORIGIN } from "./origin";
 
@@ -34,7 +34,7 @@ export interface LocalSession {
 export const LOCAL_EMAIL = `you@this-computer.invalid`;
 const LOCAL_USER: User = { id: `local`, email: LOCAL_EMAIL, name: ``, image: null };
 
-export const sandboxIdOf = (face: LocalFace): string => `local-${face.id}`;
+export const sandboxIdOf = (face: LocalFace): string => localSandboxId(face);
 
 const rowOf = (face: LocalFace): SandboxSummary => ({
     id: sandboxIdOf(face),
@@ -132,7 +132,8 @@ export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void =>
         // The editor's API client asks with a Request and options beside it (`credentials`), which a new Request merges.
         const method = (init?.method ?? (input instanceof Request ? input.method : `GET`)).toUpperCase();
         if (relay === undefined || !isRelayed(url, method)) {
-            return Promise.resolve(platformAnswer(face, url));
+            // The face the window wears now: another folder pointed at in its place is answered as the one sandbox.
+            return Promise.resolve(platformAnswer(localFace() ?? face, url));
         }
         return relayed(relay, input instanceof Request ? new Request(input, init) : new Request(url, init));
     };

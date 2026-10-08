@@ -42,8 +42,12 @@ flowchart LR
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
   first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
   offers (below), takes the window's place
-  (`local_pick`, then `point`: a grant of its own, the old one revoked, the page reloaded onto the new face at
-  `#/workspace`); a folder another window already shows raises that window instead. Other folders and documents open
+  (`local_pick`, then `point`: a grant of its own, and the new face handed to the page as `intentic:repoint`). The page
+  moves to the folder in place, with no reload (the web's `local/folderSwitch.ts`): to the editor a folder is one
+  sandbox, `local-<id>`, so the move is the editor's own sandbox switch, the rail stays put, and the old folder's page is
+  held until the new one has drawn its files, then crossfades into it. The old grant is revoked ten seconds later, once
+  what the page had in flight on it has finished. A page that does not take the event (still booting) is reloaded onto
+  the new face at `#/workspace`. A folder another window already shows raises that window instead. Other folders and documents open
   from the tray, each in a window of its own. The main window's ×, like the workspace's, is a question and a hide (`request_close`), so nothing it holds
   is lost and the tray brings it back as it was. The shell's routes ride the page's hash (`files/local#/device`),
   since the asset protocol answers `files/local` with the local page and an address below it with the bundle's other
@@ -498,6 +502,7 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic-desktop-update` | workspace | `{ version }` of a downloaded update. |
 | `intentic-desktop-setup` | workspace | This device's setup progress (`SetupReport`). |
 | `intentic:face` | a worn spare | none: `window.__INTENTIC_LOCAL__` has just been set. |
+| `intentic:repoint` | local window pointed at another folder | the folder's face, kept for the window's reloads. Cancelable: the page takes it to move in place (`local/main.ts` seeds the folder's session, the web's `local/folderSwitch.ts` moves), and a page that does not take it is reloaded onto it. |
 | `intentic:open` | local folder window | `{ path }` of a document inside its folder, root-relative. |
 | `intentic:close-requested` | local window | none: a close is held for unsaved changes. |
 | `intentic:project` | local folder window | `{ kind: "changes" \| "brought-back" \| "restored" \| "direction", result }`, `result` being the machine agent's own `{ ok, … }`; or `{ kind: "error", verb, error }` when the agent is missing, would not start, timed out or printed no JSON, or the folder has a run under way already. |

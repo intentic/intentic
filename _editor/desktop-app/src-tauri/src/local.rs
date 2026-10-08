@@ -41,8 +41,13 @@ const SPARE_AFTER: Duration = Duration::from_secs(2);
 /// opening folders is not about to open the next one this second.
 const SPARE_IDLE: Duration = Duration::from_secs(5 * 60);
 
+/// How long a window's old grant outlives a [`point`] that took it to another folder. The page switches folders in
+/// place, so reads it still had in flight on the folder it left finish rather than fail on a token the sidecar has
+/// forgotten; nothing asks with that token once the switch is done.
+const POINTED_GRACE: Duration = Duration::from_secs(10);
+
 /// Where a window's face is kept for its reloads: the window's own session storage, which a reload keeps and no
-/// other window shares. Written only by the app ([`face_given`], [`face_moved`]).
+/// other window shares. Written only by the app ([`face_given`], [`face_moved`], [`face_pointed`]).
 const FACE_KEY: &str = "intentic.local.face";
 
 /// What the app asks the sidecar to serve for one window, and what the sidecar made of it (the real folder, the
@@ -371,11 +376,13 @@ fn face_moved(face: &serde_json::Value) -> String {
     )
 }
 
-/// A window pointed at another folder (`point`): its new face is kept, and the page reloads onto the folder's files
-/// rather than onto whatever screen of the old one it was on.
+/// A window pointed at another folder (`point`): its new face is kept for its reloads and handed to the page as a
+/// cancelable `intentic:repoint`. A page that takes it (the web's local/folderSwitch.ts) moves to the folder in place,
+/// with no reload, so the window never goes blank between the two. One that does not, still booting, reloads onto the
+/// folder's files rather than onto whatever screen of the old one it was on.
 fn face_pointed(face: &serde_json::Value) -> String {
     format!(
-        "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.history.replaceState(null, \"\", window.location.pathname + \"#/workspace\"); window.location.reload(); }})();"
+        "(function () {{ var face = {face}; try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify(face)); }} catch (error) {{}} var taken = !window.dispatchEvent(new CustomEvent('intentic:repoint', {{ cancelable: true, detail: face }})); if (!taken) {{ window.history.replaceState(null, \"\", window.location.pathname + \"#/workspace\"); window.location.reload(); }} }})();"
     )
 }
 
@@ -758,7 +765,8 @@ fn granted_folder(
 /* POINTING A WINDOW AT ANOTHER FOLDER — the folder menu (the web's local/LocalFolderMenu.vue). */
 
 /// Show `path`, a folder, in the window `label`, in place of the folder it shows: a grant of its own, the old one
-/// revoked, the page reloaded onto the new face. A folder another window already shows is that window's, which is
+/// revoked once the page has had time to leave it, the page moved onto the new face in place ([`face_pointed`]). A
+/// folder another window already shows is that window's, which is
 /// raised instead: two windows on one folder would each keep their own unsaved copy of its documents. The main
 /// window remembers where it was pointed, so the next launch opens there.
 pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
@@ -797,7 +805,7 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
         .unwrap()
         .insert(label.to_string(), grant.clone());
     if let Some(old) = replaced {
-        let _ = crate::sidecar::send(app, &revoke_line(&old.token));
+        revoke_later(app, old.token);
     }
     let _ = window.set_title(&format!("{name} · Intentic"));
     let _ = window.eval(face_pointed(&grant.face));
@@ -807,6 +815,16 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
         state.remember_home_folder(&asked);
     }
     Ok(())
+}
+
+/// Revoke a grant the window has just left, after [`POINTED_GRACE`]. A sidecar that came back on another port meanwhile
+/// never knew the token, and a revoke of a token it does not hold is nothing to it.
+fn revoke_later(app: &AppHandle, token: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(POINTED_GRACE).await;
+        let _ = crate::sidecar::send(&app, &revoke_line(&token));
+    });
 }
 
 /* THE WARM WINDOW — one hidden files window, already loaded, that the next open wears. */
@@ -1631,6 +1649,24 @@ mod tests {
             "{sandboxed}"
         );
         assert!(!sandboxed.contains("reload"), "{sandboxed}");
+        // A window pointed at another folder keeps it for its reloads and offers it to the page, which moves in place;
+        // only a page that does not take it reloads, and onto the folder's files.
+        let pointed = face_pointed(&face);
+        assert!(
+            pointed
+                .contains(r#"sessionStorage.setItem("intentic.local.face", JSON.stringify(face))"#),
+            "{pointed}"
+        );
+        assert!(
+            pointed.contains(
+                "var taken = !window.dispatchEvent(new CustomEvent('intentic:repoint', { cancelable: true, detail: face }));"
+            ),
+            "{pointed}"
+        );
+        assert!(
+            pointed.contains(r##"if (!taken) { window.history.replaceState(null, "", window.location.pathname + "#/workspace"); window.location.reload(); }"##),
+            "{pointed}"
+        );
     }
 
     /// Only the windows on that very folder are told it has a sandbox: not a document opened from inside it, and not a

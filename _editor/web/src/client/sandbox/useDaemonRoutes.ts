@@ -9,19 +9,27 @@ import { contractUncompiled } from "./contractFreshness";
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
 // by breaking. Two kinds of gap: a route the daemon lacks, or one it shapes differently; both are non-blocking.
 
-// Route names the daemon advertises; undefined means unknown (not connected yet, no hello read) and is read as fully
-// supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
-// another.
-const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
-
-// Per-route shape fingerprint from the daemon's build; undefined (route or whole map) means no evidence, not
-// mismatch.
-const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
-
 // What answers: a sandbox's daemon, or the desktop app's sidecar serving a folder on this computer. A folder lacks most
 // routes by nature rather than by age, so it is never "behind" and its gaps are never an update away.
 export type DaemonSurface = NonNullable<Hello["surface"]>;
-const advertisedSurface = sandboxRef<DaemonSurface>(() => `sandbox`);
+
+// The last hello of a folder's sidecar. Every folder a desktop window shows is served by the app's one sidecar, so what
+// it advertised still holds for another folder pointed at in the window's place (local/folderSwitch.ts), until that
+// folder's own hello says otherwise. A switch back to a folder last seen online is reachable at once, before its hello,
+// and would otherwise read every route a sandbox has as served, and ask the sidecar for them. A sandbox's daemon is
+// another machine of another age, so nothing of its hello is carried across a switch.
+let sidecarHello: { readonly routes: ReadonlySet<string> | undefined; readonly shapes: Readonly<Record<string, string>> | undefined } | undefined;
+
+// Route names the daemon advertises; undefined means unknown (not connected yet, no hello read) and is read as fully
+// supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
+// another.
+const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => sidecarHello?.routes);
+
+// Per-route shape fingerprint from the daemon's build; undefined (route or whole map) means no evidence, not
+// mismatch.
+const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => sidecarHello?.shapes);
+
+const advertisedSurface = sandboxRef<DaemonSurface>(() => (sidecarHello === undefined ? `sandbox` : `folder`));
 
 // Called on every hello frame; nothing advertised leaves the assume-supported state. A hello that names no surface is
 // a daemon's, from before the field.
@@ -29,6 +37,7 @@ export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: 
     advertised.value = routes === undefined ? undefined : new Set(routes);
     advertisedShapes.value = shapes;
     advertisedSurface.value = surface ?? `sandbox`;
+    sidecarHello = surface === `folder` ? { routes: advertised.value, shapes } : undefined;
 };
 
 // True for a window on a folder of this computer (the desktop app's local face).

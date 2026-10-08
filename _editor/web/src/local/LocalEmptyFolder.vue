@@ -98,7 +98,7 @@ const openProject = async (project: OfferedProject): Promise<void> => {
     opening.value = project.path;
     rowFailure.value = undefined;
     try {
-        // The window reloads onto the folder; nothing after this runs on a success.
+        // The window moves onto the folder in place (folderSwitch.ts), and this page goes with the folder it offered.
         await host.point(project.path);
     } catch (error) {
         rowFailure.value = { path: project.path, message: error instanceof Error ? error.message : String(error) };

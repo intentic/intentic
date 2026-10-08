@@ -39,8 +39,12 @@ export const shortcutAnswer = async (sandboxId: string): Promise<ShortcutAnswer>
     if (browser === `granted` || browser === `ungated`) {
         return `allowed`;
     }
-    return allowed.value ? `allowed` : declined.value.has(sandboxId) ? `declined` : `unasked`;
+    return allowed.value ? `allowed` : declinedHere(sandboxId) ? `declined` : `unasked`;
 };
+
+// A refusal this page recorded, or one written to storage since it loaded: the desktop app's window on a folder records
+// one for each folder it is pointed at (the folder is on loopback already), the next one in place, without a reload.
+const declinedHere = (sandboxId: string): boolean => declined.value.has(sandboxId) || storedValue(`${DECLINED_PREFIX}${sandboxId}`) === `yes`;
 
 export function useLocalShortcut() {
     // Raises the question; callers gate on shortcutAnswer first so this never re-asks something already answered.

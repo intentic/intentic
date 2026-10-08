@@ -1,3 +1,4 @@
+import { ref } from "vue";
 import { openDesktopLink } from "./desktop";
 
 // The desktop app's window on a folder of the user's own disk (_editor/desktop-app, its "local face"): this same
@@ -32,7 +33,47 @@ declare global {
     }
 }
 
-export const localFace = (): LocalFace | undefined => window.__INTENTIC_LOCAL__;
+// Bumped each time the window is pointed at another folder in place (`wearFace`), so whatever reads the face inside a
+// `computed` or a render reads it again. The face itself stays on the window, where the app and the tests set it.
+// allow(module-state): the one window's one face, and how many times it has changed
+const faceWorn = ref(0);
+
+export const localFace = (): LocalFace | undefined => {
+    void faceWorn.value;
+    return window.__INTENTIC_LOCAL__;
+};
+
+/** The window now shows another folder, without a reload (local/folderSwitch.ts): the face it wears from here on. */
+export const wearFace = (face: LocalFace): void => {
+    window.__INTENTIC_LOCAL__ = Object.freeze({ ...face });
+    faceWorn.value += 1;
+};
+
+// The "sandbox" the editor knows a local window's folder as, keying its tabs, tree and session: `local-<id>`, stable per
+// folder, so a folder opened again finds what it left.
+export const localSandboxId = (face: Pick<LocalFace, `id`>): string => `local-${face.id}`;
+
+const isText = (value: unknown): value is string => typeof value === `string`;
+const isOptional = (value: unknown, is: (value: unknown) => boolean): boolean => value === undefined || is(value);
+
+/** A face as the app hands one over (`intentic:repoint`), read off a detail that crossed a process boundary; nothing for any other shape. */
+export const faceOf = (detail: unknown): LocalFace | undefined => {
+    if (typeof detail !== `object` || detail === null) {
+        return undefined;
+    }
+    const face: Partial<Record<keyof LocalFace, unknown>> = detail;
+    const whole =
+        isText(face.daemonUrl) &&
+        isText(face.token) &&
+        isText(face.id) &&
+        isText(face.name) &&
+        isText(face.path) &&
+        isOptional(face.file, isText) &&
+        isOptional(face.sandbox, (value) => typeof value === `boolean`) &&
+        isOptional(face.home, (value) => typeof value === `boolean`);
+    // SAFETY: every field LocalFace names was checked just above.
+    return whole ? (detail as LocalFace) : undefined;
+};
 
 // The compiled-in extensions a local window runs: the ones that show files. Every other one acts on a sandbox, which
 // this window has none of.
@@ -94,3 +135,7 @@ export const LOCAL_NAVIGATE_EVENT = `intentic:navigate`;
 export const LOCAL_SANDBOX_EVENT = `intentic:sandbox`;
 // The app asking this window to put up its folder's sandbox dialog (`sandbox` asked by link for a folder with none).
 export const LOCAL_PROJECT_ASK_EVENT = `intentic:project-ask`;
+// This window pointed at another folder (the folder menu, an empty folder's offers): the folder's face, as `detail`.
+// Cancelable: a page that moves to it in place takes it (local/folderSwitch.ts), and one that does not is reloaded onto
+// it by the app (local.rs `face_pointed`). The desktop page seeds the folder's session first (desktop-app local/main.ts).
+export const LOCAL_REPOINT_EVENT = `intentic:repoint`;

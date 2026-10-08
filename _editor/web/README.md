@@ -81,7 +81,8 @@ flowchart LR
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files with the folder menu on the folder's
-  name (`LocalFolderMenu.vue`: open a folder, and the folders opened lately), the views the app adds, and at
+  name (`LocalFolderMenu.vue`: open a folder, and the folders opened lately; one opened in the window's place is moved
+  to in place by `folderSwitch.ts`, as the editor's own sandbox switch to `local-<id>`, crossfaded with no reload), the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
   before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W (by default: they follow the keymap's overrides for the workspace commands they stand
   for) and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits

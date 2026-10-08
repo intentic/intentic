@@ -6,11 +6,13 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import AccountPanel from "../shell/AccountPanel.vue";
 import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { navigatedPath } from "./appEvents";
+import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
 import LocalProject from "./LocalProject.vue";
@@ -28,6 +30,8 @@ const route = useRoute();
 const router = useRouter();
 const { iconRailSize } = useIconRailSize();
 const { user } = useAccount();
+// The folder this window shows, as the editor knows it: the page is drawn anew for each (folderSwitch.ts).
+const { activeSandboxId } = useSandbox();
 const gridStyle = computed(() => railFrame(iconRailSize.value));
 
 interface Tile {
@@ -61,6 +65,13 @@ const onNavigate = (event: Event): void => {
 };
 onMounted(() => window.addEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
+
+// Another folder in this window's place moves the page in place while the shell is up; before it is, the app reloads.
+let stopTaking: (() => void) | undefined;
+onMounted(() => {
+    stopTaking = takeFolderSwitches();
+});
+onUnmounted(() => stopTaking?.());
 </script>
 
 <template>
@@ -92,7 +103,11 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <div class="min-h-0 flex-1 overflow-auto">
-                <RouterView />
+                <!-- Keyed by the folder: one pointed at in this window's place gets a page of its own, not the last one's
+                     search, selection and layout (folderSwitch.ts). -->
+                <RouterView v-slot="{ Component }">
+                    <component :is="Component" :key="activeSandboxId" />
+                </RouterView>
             </div>
         </main>
         <!-- The folder's own sandbox: its dialog, and its build's card, in sight from every screen of this window. -->

@@ -12,13 +12,14 @@ import { cautionSentence, copyWeight, refusalSentence } from "./projectWords";
 import { useLocalProject } from "./useLocalProject";
 
 const t = useT();
-const face = localFace();
+// Read through `computed`: the dialog outlives a folder pointed at in this window's place (folderSwitch.ts).
+const face = computed(localFace);
 const { dialogOpen, preview, attaching, failure, attach, cancel } = useLocalProject();
 
 // The folder's own name, known before the app has finished weighing it.
-const name = computed(() => (preview.value?.kind === `new` ? preview.value.name : (face?.name ?? ``)));
+const name = computed(() => (preview.value?.kind === `new` ? preview.value.name : (face.value?.name ?? ``)));
 const fresh = computed(() => (preview.value?.kind === `new` ? preview.value : undefined));
-const refused = computed(() => (preview.value?.kind === `refused` ? refusalSentence(preview.value.refusal, face?.path ?? ``) : undefined));
+const refused = computed(() => (preview.value?.kind === `refused` ? refusalSentence(preview.value.refusal, face.value?.path ?? ``) : undefined));
 const document = computed(() => preview.value?.kind === `document`);
 
 const header = computed(() => {
@@ -32,9 +33,9 @@ const header = computed(() => {
 });
 
 // The folder's path, split where its own name begins, so the name is never what gets cut off.
-const folder = computed(() => face?.name ?? ``);
+const folder = computed(() => face.value?.name ?? ``);
 const parent = computed(() => {
-    const path = face?.path ?? ``;
+    const path = face.value?.path ?? ``;
     return path.endsWith(folder.value) ? path.slice(0, path.length - folder.value.length) : ``;
 });
 

@@ -17,6 +17,7 @@ interface Labels {
     readonly local: { readonly localFiles: { readonly toggleFolder: string } };
     readonly shared: { readonly files: string };
     readonly workspace: { readonly fileViewer: { readonly saveFile: string } };
+    readonly shell: { readonly notificationSources: { readonly fasterSandboxRunsOn: string } };
 }
 // SAFETY: the editor's own catalogue, nested objects of strings; a key gone from it reads as undefined, which the first
 // step's assertion names.
@@ -24,6 +25,8 @@ const EN = JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/
 const TOGGLE_FOLDER = EN.local.localFiles.toggleFolder;
 const FILES = EN.shared.files;
 const SAVE_FILE = EN.workspace.fileViewer.saveFile;
+// The offer of a faster way to a sandbox on this device, which a folder, on loopback already, is never made.
+const LOOPBACK_OFFER = EN.shell.notificationSources.fasterSandboxRunsOn;
 
 const FOLDER = {
     "README.md": `# A folder on this computer\n\nOpened in the desktop app's local face.\n`,
@@ -31,6 +34,11 @@ const FOLDER = {
     "hello.txt": `hello from disk\n`,
 } satisfies Readonly<Record<string, string>>;
 const TYPED = `edited in the local face`;
+// A second folder, for the window to be pointed at in the first one's place.
+const OTHER_FOLDER = {
+    "notes.md": `# Notes\n`,
+    "src/main.ts": `export {};\n`,
+} satisfies Readonly<Record<string, string>>;
 
 // Console errors that are not the page's fault, each with why. Empty is the goal.
 const ALLOWED_CONSOLE_ERRORS: readonly { readonly pattern: RegExp; readonly why: string }[] = [];
@@ -53,6 +61,38 @@ let folder: string;
 let bundle: FaceServer;
 let sidecar: Sidecar;
 let local: LocalFace;
+let other: LocalFace;
+
+// What the app's local.rs `face_pointed` runs in a window pointed at another folder: the face kept for the window's
+// reloads, offered to the page, and reloaded onto only when the page does not take it. Answers whether it was taken.
+const pointAt = (face: LocalFace): boolean => {
+    try {
+        window.sessionStorage.setItem(`intentic.local.face`, JSON.stringify(face));
+    } catch {
+        // allow(silent-catch): local.rs swallows a refused storage the same way.
+    }
+    const taken = !window.dispatchEvent(new CustomEvent(`intentic:repoint`, { cancelable: true, detail: face }));
+    if (!taken) {
+        window.history.replaceState(null, ``, `${window.location.pathname}#/workspace`);
+        window.location.reload();
+    }
+    return taken;
+};
+
+// One painted frame, as a reader would see it: the rail, the folder named at the head of the explorer, its tree's rows,
+// and whether a sandbox's loopback offer was up.
+interface Frame {
+    readonly rail: boolean;
+    readonly folder: string;
+    readonly rows: number;
+    readonly offer: boolean;
+}
+declare global {
+    interface Window {
+        __frames?: Frame[];
+        __sameLoad?: boolean;
+    }
+}
 
 test.beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), `intentic-local-face-`));
@@ -69,6 +109,15 @@ test.beforeAll(async () => {
     const id = `e2e-local-face`;
     const granted = await sidecar.grant({ token, id, path: folder, kind: `folder` });
     local = { daemonUrl: sidecar.url, token, id, name: granted.name, path: granted.root, sandbox: false };
+
+    const otherFolder = join(scratch, `Other Folder`);
+    for (const [path, text] of Object.entries(OTHER_FOLDER)) {
+        await mkdir(dirname(join(otherFolder, path)), { recursive: true });
+        await writeFile(join(otherFolder, path), text);
+    }
+    const otherToken = randomBytes(24).toString(`base64url`);
+    const otherGranted = await sidecar.grant({ token: otherToken, id: `e2e-other-folder`, path: otherFolder, kind: `folder` });
+    other = { daemonUrl: sidecar.url, token: otherToken, id: `e2e-other-folder`, name: otherGranted.name, path: otherGranted.root, sandbox: false };
 });
 
 test.afterAll(async () => {
@@ -179,5 +228,74 @@ test(`a window on a folder lists it, opens, edits and saves a file, and asks the
         expect(seen.sidecar.length).toBeGreaterThan(0);
     });
 
+    expect(seen.errors, `uncaught errors and console errors`).toEqual([]);
+});
+
+test(`another folder pointed at in the window's place takes it in place: no reload, and no frame blank or half drawn`, async ({ page }) => {
+    const seen = await record(page);
+    await page.addInitScript({ content: `window.__INTENTIC_LOCAL__ = Object.freeze(${JSON.stringify(local)});` });
+    const row = (name: string) => page.getByRole(`treeitem`, { name, exact: true });
+    await page.goto(bundle.page);
+    await expect(row(`hello.txt`)).toBeVisible();
+
+    // Every frame painted from here on, and a mark only this load of the page carries: a reload would drop both.
+    const watchFrames = async (): Promise<void> =>
+        page.evaluate((offer) => {
+            const frames: Frame[] = [];
+            window.__frames = frames;
+            window.__sameLoad = true;
+            const paint = (): void => {
+                frames.push({
+                    rail: document.querySelector(`nav.icon-rail`) !== null,
+                    folder: document.querySelector(`aside [aria-haspopup="menu"]`)?.textContent?.trim() ?? ``,
+                    rows: document.querySelectorAll(`[role="treeitem"]`).length,
+                    offer: document.body.textContent?.includes(offer) === true,
+                });
+                requestAnimationFrame(paint);
+            };
+            requestAnimationFrame(paint);
+        }, LOOPBACK_OFFER);
+    // The frames since `watchFrames`, checked: the shell in every one, and the arriving folder never named over an empty tree.
+    const expectNoBlankFrame = async (arriving: string): Promise<void> => {
+        expect(await page.evaluate(() => window.__sameLoad), `the page was reloaded`).toBe(true);
+        const frames = (await page.evaluate(() => window.__frames)) ?? [];
+        expect(frames.filter((frame) => !frame.rail), `frames painted without the shell's rail`).toEqual([]);
+        const arrived = frames.filter((frame) => frame.folder === arriving);
+        expect(arrived.length).toBeGreaterThan(0);
+        expect(arrived.filter((frame) => frame.rows === 0), `frames naming ${arriving} over an empty tree`).toEqual([]);
+        // Nothing a sandbox has that a folder does not: a folder is on loopback already, so no faster way is offered.
+        expect(frames.filter((frame) => frame.offer), `frames offering ${arriving} a faster way to a sandbox`).toEqual([]);
+    };
+
+    await test.step(`the page takes the folder the app points it at`, async () => {
+        await watchFrames();
+        expect(await page.evaluate(pointAt, other)).toBe(true);
+    });
+
+    await test.step(`its files take the first folder's place, on the folder's own screen and title`, async () => {
+        await expect(row(`notes.md`)).toBeVisible();
+        await expect(row(`src`)).toBeVisible();
+        await expect(row(`hello.txt`)).toHaveCount(0);
+        await expect(page.getByRole(`complementary`).getByText(other.name, { exact: true })).toBeVisible();
+        await expect(page).toHaveTitle(new RegExp(other.name));
+        expect(new URL(page.url()).hash).toBe(`#/workspace`);
+    });
+
+    await test.step(`with no reload, the shell in every frame, and no frame of the new folder half drawn`, async () => {
+        // Long enough for anything the folder's arrival sets off to have drawn (a sandbox's loopback offer came at ~50 ms).
+        await page.waitForTimeout(500);
+        await expectNoBlankFrame(other.name);
+    });
+
+    await test.step(`and back, with motion off: a cut rather than a crossfade, still between two whole pages`, async () => {
+        await page.emulateMedia({ reducedMotion: `reduce` });
+        await watchFrames();
+        expect(await page.evaluate(pointAt, local)).toBe(true);
+        await expect(row(`hello.txt`)).toBeVisible();
+        await expect(row(`notes.md`)).toHaveCount(0);
+        await expectNoBlankFrame(local.name);
+    });
+
+    expect.soft(seen.failed, `requests to the sidecar that failed`).toEqual([]);
     expect(seen.errors, `uncaught errors and console errors`).toEqual([]);
 });

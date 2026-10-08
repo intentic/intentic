@@ -105,15 +105,10 @@ const replacing = (key: string, go: () => Promise<void>): void => {
         void attempt(key, go);
         return;
     }
-    let ran = false;
-    props.leaving(() => {
-        ran = true;
-        void attempt(key, go);
-    });
-    // The question is up: the menu steps aside for it, and comes back only with a failure to say.
-    if (!ran) {
-        open.value = false;
-    }
+    // The menu steps aside at once, for the question if one is up, and otherwise because what answers the press is the
+    // window itself, moving to the folder in place (folderSwitch.ts). It comes back only with a failure to say.
+    open.value = false;
+    props.leaving(() => void attempt(key, go));
 };
 
 // The modifier that keeps this window as it is: Ctrl, or Cmd on macOS, as a browser opens a link in a new tab.

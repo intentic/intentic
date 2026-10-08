@@ -251,10 +251,27 @@ describe(`a folder on this computer`, () => {
         expect(staleDaemonReason(`workspace.file`)).toBeUndefined();
     });
 
+    // Every folder a desktop window shows is served by the one sidecar: a folder pointed at in the window's place is
+    // reachable before its hello when it was last seen online, and must not read a sandbox's routes as served meanwhile.
+    it(`carries the sidecar's routes to the next folder the window shows, until that folder's own hello`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        resetSandboxScope();
+        expect([folderSurface.value, supportsRoute(`workspace.tree`), supportsRoute(`settings.audience`)]).toEqual([true, true, false]);
+        setDaemonRoutes([...FOLDER, `settings.audience`], undefined, `folder`);
+        expect(supportsRoute(`settings.audience`)).toBe(true);
+    });
+
     it(`reads a hello that names no surface as a sandbox's, as every daemon before the field sent`, () => {
         setDaemonRoutes(FOLDER, undefined, `folder`);
         setDaemonRoutes(withoutVpn);
         expect([folderSurface.value, daemonBehind.value]).toEqual([false, true]);
         expect(staleDaemonReason(`vpn.list`)).toMatch(/^This sandbox's daemon doesn't provide 'vpn\.list'\./);
+    });
+
+    // Another sandbox is another daemon, of its own age: what the last one said is no evidence about it.
+    it(`carries nothing of a sandbox's hello across a switch`, () => {
+        setDaemonRoutes(withoutVpn);
+        resetSandboxScope();
+        expect([folderSurface.value, supportsRoute(`vpn.list`)]).toEqual([false, true]);
     });
 });
