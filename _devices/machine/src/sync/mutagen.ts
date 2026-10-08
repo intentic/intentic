@@ -18,10 +18,12 @@ import {
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
-import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
+import { adoptFolder } from "./adopt.js";
+import { clearAdoptFolder, isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess } from "./exec.js";
+import { projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
@@ -830,6 +832,9 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
         return true; // a mirror-only enrollment has no file sync at all: just port forwards
     }
     const held = { ...pairing, localDir: pairing.localDir };
+    if (pairing.adoptFolder === true && !(await adoptBeforeFirstSession(mutagen, held, log))) {
+        return false;
+    }
     const symlinks = await deviceSymlinks();
     if (symlinks.refusal !== undefined) {
         log(
@@ -845,6 +850,37 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     }
     retireStrayBackup(mutagen, pairing, log);
     return converged;
+};
+
+// A folder that already held files when it was set up (config.ts `adoptFolder`) is made to agree with the sandbox's copy
+// before its first session (adopt.ts). A session that already exists has compared the two itself, so only the flag
+// goes. False keeps the pairing pending: no session is made over a folder that could not be compared, and the next pass
+// tries again.
+const adoptBeforeFirstSession = async (mutagen: string, pairing: Pairing & { readonly localDir: string }, log: Log): Promise<boolean> => {
+    const key = pairingKey(pairing);
+    const existing = existingSyncSessions(mutagen, [sessionName(key)]);
+    if (existing === undefined) {
+        return false;
+    }
+    if (existing.length === 0) {
+        try {
+            await adoptFolder({
+                localDir: pairing.localDir,
+                sandbox: sandboxCopy(
+                    realProjectRunner,
+                    projectShell(pairingEndpoint(pairing), mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"])),
+                    pairingRemoteDir(pairing),
+                ),
+                ignores: ignoresFor(pairing),
+                log: (line) => log(`${key}: ${line}`),
+            });
+        } catch (error) {
+            log(`${key}: ${pairing.localDir} could not be compared with the sandbox's copy (${errorMessage(error)}), so its file sync waits rather than start over two copies that disagree. Retrying later.`);
+            return false;
+        }
+    }
+    await clearAdoptFolder(key);
+    return true;
 };
 
 // What one pairing's sessions should be, in the order they are converged; labelled when an owner is given.

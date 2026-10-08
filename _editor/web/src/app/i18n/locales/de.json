@@ -3578,6 +3578,9 @@
             "noFilesTouched": "Keine Dateien berührt",
             "notSyncedHere": "Noch nicht mit diesem Computer synchronisiert.",
             "portsOntoLocalhost": "Ports auf localhost",
+            "settingUpInto": "Synchronisierung wird eingerichtet in",
+            "settingUpMirror": "Port-Spiegelung wird eingerichtet…",
+            "settingUpNote": "Beim ersten Mal wird die Sync-Engine installiert und der Agent dieses Computers neu gestartet, daher kann er kurz als „verbindet neu“ erscheinen. Das dauert meist ein bis zwei Minuten und läuft weiter, auch wenn du diese Seite verlässt.",
             "syncFilesHere": "Dateien hierher synchronisieren"
         },
         "sandboxUnauthorized": {

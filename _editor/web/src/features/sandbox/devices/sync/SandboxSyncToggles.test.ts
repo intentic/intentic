@@ -9,6 +9,7 @@ import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import type { DeviceRow, MachineRow } from "../deviceRows";
+import { forgetSyncSetups } from "./syncSetup";
 
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active: { value: { name: `work` } }, daemonUrl: { value: `https://sandbox-82789f4106b4.radarsu.com` } }),
@@ -26,12 +27,19 @@ const row = (device: Partial<Device> & { key: string }): DeviceRow =>
 const group = sandboxGroups([], [], [{ slug: `sandbox-82789f4106b4`, running: true, image: `dev` }])[0]!;
 
 const sent: { command: string; folder: unknown; door: string | undefined }[] = [];
+// A setup is minutes on a real machine: a test that wants to see it in flight holds the answer back until it says so.
+let answer: (() => void) | undefined;
+let holdAnswers = false;
 const ops = {
     working: { value: false },
+    failure: { value: undefined },
     rowKey: () => `row`,
     syncRunning: () => false,
     runSync: async (environment: DeviceRow, _key: string, _sandboxId: string | undefined, command: string, folder?: unknown) => {
         sent.push({ command, folder, door: environment.device.hostId });
+        if (holdAnswers) {
+            await new Promise<void>((resolve) => void (answer = resolve));
+        }
     },
 } as unknown as DeviceOps;
 
@@ -41,6 +49,9 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     sent.length = 0;
+    holdAnswers = false;
+    answer = undefined;
+    forgetSyncSetups();
 });
 
 const mount = (machine: MachineRow): HTMLElement => {
@@ -121,4 +132,40 @@ it(`asks for ports without files as its own act, carrying no folder`, async () =
 it(`says nothing when the machine has no open door`, () => {
     const cardless = { key: `rog`, label: `rog`, environments: [row({ key: `rog-wsl`, facts: ARCH })], groups: [group] } as unknown as MachineRow;
     expect(mount(cardless).textContent?.trim()).toBe(``);
+});
+
+// Setting a folder up restarts the machine's agent, and the row it was pressed on is made again while the press is still
+// out. Kept in the component, the typed folder fell back to the suggestion halfway through and the pressed state went
+// with it, so a setup that was working read as one that had done nothing (2026-10-08).
+it(`keeps the folder as typed across a remount`, async () => {
+    const field = fields(mount(pc()))[1]!;
+    field.value = `/home/radarsu/intentic/workspace-82789f4106b4`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    expect(fields(mount(pc()))[1]?.value).toBe(`/home/radarsu/intentic/workspace-82789f4106b4`);
+});
+
+it(`says the folder back while it sets up, across a remount, and offers the fields again once it is done`, async () => {
+    holdAnswers = true;
+    const field = fields(mount(pc()))[1]!;
+    field.value = `/home/radarsu/intentic/workspace-82789f4106b4`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    syncButtons()[1]?.click();
+    await nextTick();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    const el = mount(pc());
+    expect(fields(el)).toHaveLength(0);
+    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`/home/radarsu/intentic/workspace-82789f4106b4`);
+
+    answer?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    // Set up now, so the typed folder is spent: a later setup starts from the suggestion again.
+    expect(fields(el).map((each) => each.value)[1]).toBe(`/home/radarsu/intentic/work-82789f4106b4`);
 });

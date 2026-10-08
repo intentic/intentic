@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
@@ -41,6 +41,7 @@ import { type TransportAsk, transportFor } from "./endpoint.js";
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
+import { asidePrefix } from "./adopt.js";
 import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project-commands.js";
 import {
@@ -438,6 +439,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards, and the
     // projects host has none by design.
     const localDir = mode === "sync" ? folder : undefined;
+    // A folder that already holds files is made to agree with the sandbox's copy before the first session compares them
+    // (adopt.ts): a session with no history would carry every stale file into the sandbox and stop on every difference.
+    // A project folder is the copy that counts, so it is never adopted.
+    const adopt = localDir !== undefined && placement.project !== true && (await holdsEntries(localDir));
     if (localDir !== undefined) {
         // Create the local root up front: an immediately-visible folder is the user's anchor that setup worked.
         await mkdir(localDir, { recursive: true });
@@ -452,6 +457,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
                   mode,
                   syncToken,
                   ...(localDir === undefined ? {} : { localDir, ...placement, ...reach }),
+                  ...(adopt ? { adoptFolder: true as const } : {}),
               };
 
     ui.step("sync-linking", "linking the folder to your sandbox…");
@@ -485,6 +491,9 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     registerMutagenAutostart(mutagen, machineLauncher(), out);
     finishSetup(ui, flags.url, pairing, pairings);
 };
+
+// Whether a folder exists and has anything in it; what it holds is adopt.ts's to compare.
+const holdsEntries = async (dir: string): Promise<boolean> => ((await readdir(dir).catch(() => undefined))?.length ?? 0) > 0;
 
 // The container a new file-sync pairing reaches its sandbox through, or undefined for one reached over ssh. A mirror-only
 // enrollment has no folder, so whatever transportFor chose for it is moot.
@@ -520,6 +529,16 @@ const proveTransport = async (out: Log, sandboxId: string, container: string | u
     await probeSshTransport(ssh, alias, out);
 };
 
+// What a file-sync setup leaves true. The first copy is still to come when setup returns, so it says it is under way
+// rather than done; a folder that already held files says where the ones that disagree with the sandbox go (adopt.ts),
+// since that is the one thing setup does to files the owner put there.
+const syncedSentence = (pairing: Pairing): string => {
+    const kept = `That folder and your sandbox's ${pairingRemoteDir(pairing)} are kept the same from now on; the first copy can take a few minutes.`;
+    return pairing.adoptFolder === true && pairing.localDir !== undefined
+        ? `${kept}\nThe folder already held files: any that differ from the sandbox's copy are moved to ${asidePrefix(pairing.localDir)}<time> first, so the sandbox's version is the one that syncs. Nothing is deleted.`
+        : kept;
+};
+
 // The ending block. The fleet is said out loud first: pairing a sandbox on a machine that already had one is the exact
 // moment the user needs to know the others are still syncing. The address a person acts on is the folder, the thing
 // they open, and an immediately visible path is the anchor that setup worked.
@@ -548,9 +567,7 @@ const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: rea
     ui.finished(
         syncing ? "Desktop sync is running." : "Enrolled for port mirroring.",
         syncing ? pairing.localDir : undefined,
-        syncing
-            ? `That folder and your sandbox's ${pairingRemoteDir(pairing)} are now the same files.`
-            : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
+        syncing ? syncedSentence(pairing) : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
         [
             ["check it", "intentic-machine status"],
             ["remove it", "intentic-machine sync uninstall"],

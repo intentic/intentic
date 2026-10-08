@@ -3576,6 +3576,9 @@
             "noFilesTouched": "Aucun fichier touché",
             "notSyncedHere": "Pas encore synchronisé avec cet ordinateur.",
             "portsOntoLocalhost": "Ports sur localhost",
+            "settingUpInto": "Configuration de la synchronisation dans",
+            "settingUpMirror": "Configuration de la mise en miroir des ports…",
+            "settingUpNote": "La première fois, cela installe le moteur de synchronisation et redémarre l'agent de cet ordinateur, qui peut donc apparaître en reconnexion un instant. Cela prend généralement une ou deux minutes et continue même si vous quittez cette page.",
             "syncFilesHere": "Synchroniser les fichiers ici"
         },
         "sandboxUnauthorized": {

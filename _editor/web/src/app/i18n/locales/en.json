@@ -6483,6 +6483,9 @@
             "noFilesTouched": "No files touched",
             "notSyncedHere": "Not synced to this computer yet.",
             "portsOntoLocalhost": "Ports onto localhost",
+            "settingUpInto": "Setting up sync into",
+            "settingUpMirror": "Setting up port mirroring…",
+            "settingUpNote": "The first time, this installs the sync engine and restarts this computer's agent, so it may show as reconnecting for a moment. It usually takes a minute or two, and carries on if you leave this page.",
             "syncFilesHere": "Sync files here"
         },
         "sandboxUnauthorized": {

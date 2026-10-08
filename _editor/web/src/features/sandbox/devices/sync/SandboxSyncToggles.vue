@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { syncFolder } from "@intentic/sandbox-contract";
 import { Button, type DeviceSandboxGroup, ui } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
+import { beginSetup, draftFolder, pendingSetup, setDraftFolder } from "./syncSetup";
 
 // TURNING SYNC ON WHERE IT IS READ ABOUT. A machine already connected needs no one-liner to start syncing a folder:
 // the switches that pause, unpair and mirror live on this row already, and the one that STARTS it belongs beside them.
@@ -57,10 +58,21 @@ const environmentLabel = (environment: DeviceRow): string => {
     return distro === undefined || title.includes(distro) ? title : `${title} · ${distro}`;
 };
 
-// One editable folder per environment, seeded from its suggestion and kept as typed.
-const folders = ref<Record<string, string>>({});
-const folderFor = (environment: DeviceRow): string => folders.value[environment.device.key] ?? suggestion(environment);
-const setFolder = (environment: DeviceRow, value: string): void => void (folders.value = { ...folders.value, [environment.device.key]: value });
+// One editable folder per environment, seeded from its suggestion and kept as typed, outside this component: setting a
+// folder up restarts the machine's agent, which remounts this row while the press is still out (syncSetup.ts).
+const folderFor = (environment: DeviceRow): string => draftFolder(machine.key, group.sandboxId, environment.device.key) ?? suggestion(environment);
+const setFolder = (environment: DeviceRow, value: string): void => setDraftFolder(machine.key, group.sandboxId, environment.device.key, value);
+
+// A setup of this row in flight, from this mount or one before it: the folder it was given, said back while it works.
+const pending = computed(() => pendingSetup(machine.key, group.sandboxId));
+// Seconds since it began, so a setup that takes minutes reads as one still going rather than one that stalled.
+const now = ref(Date.now());
+const ticker = setInterval(() => void (now.value = Date.now()), 1000);
+onUnmounted(() => clearInterval(ticker));
+const elapsed = computed(() => {
+    const seconds = Math.max(0, Math.floor((now.value - (pending.value?.startedAt ?? now.value)) / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, `0`)}`;
+});
 
 // The field's floor: the path it holds (one monospace `ch` a character, a spare one for the caret, and the field's own
 // padding and border), never under 16rem and never past the line. A fixed floor let a typical path scroll out of its own
@@ -70,17 +82,39 @@ const fieldFloor = (environment: DeviceRow): string =>
 
 const key = computed(() => ops.rowKey(group));
 
-const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
+const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<void> => {
     const target = door.value;
-    if (target === undefined) {
+    if (target === undefined || ops.working.value) {
         return;
     }
-    void ops.runSync(target, key.value, group.sandboxId, `sync-install`, mode === `mirror` ? { mode } : { mode, localDir: folderFor(environment) });
+    const folder = folderFor(environment).trim();
+    const end = beginSetup(machine.key, group.sandboxId, { folder, mode });
+    const rowKey = key.value;
+    try {
+        await ops.runSync(target, rowKey, group.sandboxId, `sync-install`, mode === `mirror` ? { mode } : { mode, localDir: folder });
+    } finally {
+        // A refused setup keeps the folder as typed, to correct and press again.
+        end(ops.failure.value?.key !== rowKey);
+    }
 };
 </script>
 
 <template>
-    <div v-if="door" class="flex flex-col gap-2">
+    <!-- WHILE IT SETS UP: the folder it was given, said back, and why it takes a while. The machine's agent restarts
+         partway through, so the computer reading as reconnecting is expected rather than a failure. -->
+    <div v-if="door && pending" class="flex flex-col gap-1" role="status">
+        <p class="flex min-h-6.5 items-center gap-1.5 text-xs">
+            <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />
+            <span v-if="pending.mode === `mirror`">{{ t(`sandbox.sandboxSyncToggles.settingUpMirror`) }}</span>
+            <span v-else class="min-w-0">
+                {{ t(`sandbox.sandboxSyncToggles.settingUpInto`) }}
+                <code class="font-mono break-all">{{ pending.folder }}</code>
+            </span>
+            <span class="ml-auto shrink-0 text-subtle tabular-nums">{{ elapsed }}</span>
+        </p>
+        <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxSyncToggles.settingUpNote`) }}</p>
+    </div>
+    <div v-else-if="door" class="flex flex-col gap-2">
         <!-- One button tall, so the sentence sits on the line of the name beside it. The field labels below say which
              side each folder syncs through, so the sentence no longer has to explain the rule. -->
         <p class="flex min-h-6.5 items-center text-xs text-muted">{{ t(`sandbox.sandboxSyncToggles.notSyncedHere`) }}</p>
@@ -104,10 +138,9 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
                 <Button
                     size="small"
                     :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
-                    :loading="ops.syncRunning(key, `sync-install`)"
                     :disabled="ops.working.value || folderFor(environment).trim() === ``"
                     v-tooltip.top="{ title: t(`sandbox.sandboxSyncToggles.filesAndPorts`), note: t(`sandbox.sandboxSyncToggles.portsOntoLocalhost`) }"
-                    @click="enable(environment, `sync`)"
+                    @click="void enable(environment, `sync`)"
                 >
                     <template #icon><Icon name="folder" /></template>
                 </Button>
@@ -119,10 +152,9 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
                 size="small"
                 severity="secondary"
                 :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
-                :loading="ops.syncRunning(key, `sync-install`)"
                 :disabled="ops.working.value"
                 v-tooltip.top="{ title: t(`sandbox.words.ontoLocalhost`), note: t(`sandbox.sandboxSyncToggles.noFilesTouched`) }"
-                @click="enable(choices[0] ?? machine.environments[0]!, `mirror`)"
+                @click="void enable(choices[0] ?? machine.environments[0]!, `mirror`)"
             >
                 <template #icon><Icon name="ports" /></template>
             </Button>

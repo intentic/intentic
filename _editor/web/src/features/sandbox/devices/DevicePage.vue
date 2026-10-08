@@ -580,7 +580,8 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             :command="ops.failure.value.command"
                             :machine="machine.label"
                         />
-                        <p v-else-if="ops.outcome.value?.key === ops.rowKey(group)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                        <!-- Line breaks kept: a machine's answer is a verdict, then what it has to say about this row. -->
+                        <p v-else-if="ops.outcome.value?.key === ops.rowKey(group)" class="text-xs whitespace-pre-line text-muted">{{ ops.outcome.value.message }}</p>
                     </template>
                 </DeviceDetail>
             </div>

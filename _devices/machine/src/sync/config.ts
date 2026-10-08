@@ -129,6 +129,10 @@ export interface Pairing {
     // The slug this machine's ic lists the sandbox under, recorded the first time it does: the proof that the sandbox is
     // kept HERE, which is what lets ic's listing say it is gone (gone.ts `localVerdict`).
     readonly icSlug?: string | undefined;
+    // (2026-10-08) Set by `setup` when the folder it was given already held files and no session of this pairing had
+    // compared them yet: the agent makes the folder agree with the sandbox's copy (adopt.ts) before the first session,
+    // then clears it. Never on a project pairing, whose folder is the copy that counts.
+    readonly adoptFolder?: true | undefined;
 }
 
 // Who said a sandbox is gone: the platform's edge, or this machine's own ic.
@@ -372,6 +376,10 @@ export const setFileSyncAutoPaused = async (key: string, paused: boolean): Promi
 
 export const setFileSyncSwapPaused = async (key: string, paused: boolean): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, fileSyncSwapPaused: paused ? true : undefined }));
+
+// The folder compared and made to agree with the sandbox's copy (adopt.ts): nothing left to do before its first session.
+export const clearAdoptFolder = async (key: string): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, adoptFolder: undefined }));
 
 export const setFileSyncPausedFor = async (key: string, reason: WatcherPause | undefined): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, fileSyncPausedFor: reason }));

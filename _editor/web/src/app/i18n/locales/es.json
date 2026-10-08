@@ -3591,6 +3591,9 @@
             "noFilesTouched": "Sin tocar archivos",
             "notSyncedHere": "Todavía no se sincroniza con este ordenador.",
             "portsOntoLocalhost": "Puertos a localhost",
+            "settingUpInto": "Configurando la sincronización en",
+            "settingUpMirror": "Configurando la réplica de puertos…",
+            "settingUpNote": "La primera vez instala el motor de sincronización y reinicia el agente de este equipo, así que puede aparecer como reconectando un momento. Suele tardar uno o dos minutos y continúa aunque salgas de esta página.",
             "syncFilesHere": "Sincronizar archivos aquí"
         },
         "sandboxUnauthorized": {

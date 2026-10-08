@@ -22,6 +22,7 @@ import {
 import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { t } from "@intentic/ui/i18n";
+import { setupSaid } from "../sync/syncSetup";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
 // own two ops, and revoking the enrollment. One op at a time per machine, since a mirroring switch racing a
@@ -835,7 +836,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         try {
             const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
-            outcome.value = result.ok ? { key, message: result.message } : undefined;
+            // Setup answers with the CLI's whole narration; the row keeps only what a reader of it needs (syncSetup.ts).
+            outcome.value = result.ok ? { key, message: command === `sync-install` ? setupSaid(result.message) : result.message } : undefined;
             failure.value = result.ok
                 ? undefined
                 : {

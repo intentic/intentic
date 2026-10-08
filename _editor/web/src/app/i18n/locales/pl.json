@@ -6145,6 +6145,9 @@
             "noFilesTouched": "Pliki nietknięte",
             "notSyncedHere": "Jeszcze nie synchronizowane z tym komputerem.",
             "portsOntoLocalhost": "Porty na localhost",
+            "settingUpInto": "Konfigurowanie synchronizacji do",
+            "settingUpMirror": "Konfigurowanie odbijania portów…",
+            "settingUpNote": "Za pierwszym razem instaluje to silnik synchronizacji i restartuje agenta tego komputera, więc przez chwilę może być widoczny jako ponownie łączący się. Zwykle trwa to minutę lub dwie i nie przerywa się, jeśli opuścisz tę stronę.",
             "syncFilesHere": "Synchronizuj pliki tutaj"
         },
         "sandboxUnauthorized": {
