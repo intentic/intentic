@@ -917,7 +917,7 @@
             "open": "Open",
             "apps": "Apps",
             "webDetail": "A page in your own browser",
-            "more": "Apps and desktop"
+            "more": "More windows"
         },
         "phone": {
             "toggle": "Phone frame",
@@ -9596,7 +9596,7 @@
             "failedCount": "{count} failed | {count} failed",
             "draftDetails": "Details",
             "redraft": "Redraft",
-            "redraftTip": "Ask the models for this message again",
+            "redraftTip": "Asks the models again",
             "couldntRedraft": "Couldn't ask for a new message",
             "moreCommitActions": "More commit actions",
             "commitAndPush": "Commit and {verb}",
@@ -9609,7 +9609,7 @@
             "committedInRepos": "Committed in {count} repo | Committed in {count} repos",
             "undo": "Undo",
             "undoCommit": "Undo this commit",
-            "undoCommitNote": "Its files come back staged and its message returns to the box. Nothing on disk changes.",
+            "undoCommitNote": "Files return staged, disk untouched",
             "chipYou": "You",
             "chipAll": "All",
             "commitFiles": "Commit {count} file | Commit {count} files",
@@ -9772,7 +9772,7 @@
             "viewing": "Viewing as",
             "moveBack": "Move Back",
             "openToSide": "Open to the Side",
-            "refreshFetches": "Also asks every remote what's new",
+            "refreshFetches": "Also fetches every remote",
             "showCommitPage": "Back to the commit page"
         },
         "workspaceEmptyState": {

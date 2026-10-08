@@ -5,20 +5,20 @@ import { messageOr, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
-import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { useChat } from "../../chat/run/useChat";
-import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
-import { useNotifications } from "../../../workbench/notifications/notifications";
-import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { useLayout } from "../../../workbench/window/useLayout";
-import { useRepos } from "../explorer/useRepos";
-import { repoOfPath, turnWrites } from "../files/liveWrites";
-import { ahead, syncable, unpublished } from "../push/outgoingWork";
-import { useOutgoing } from "../push/useOutgoing";
-import { chipMessageNotice, draftReport, draftRunning, type DraftReportRow, summarizeOrigins } from "./changeOrigins";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useChat } from "../../../chat/run/useChat";
+import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import { useLayout } from "../../../../workbench/window/useLayout";
+import { useRepos } from "../../explorer/useRepos";
+import { repoOfPath, turnWrites } from "../../files/liveWrites";
+import { ahead, syncable, unpublished } from "../../push/outgoingWork";
+import { useOutgoing } from "../../push/useOutgoing";
+import { chipMessageNotice, draftReport, draftRunning, type DraftReportRow, summarizeOrigins } from "../changeOrigins";
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter } from "./commitMessage";
 import { draftLine, type DraftLine } from "./commitScope";
-import { COMMIT_SCOPE, useChanges } from "./useChanges";
+import { COMMIT_SCOPE, useChanges } from "../useChanges";
 import { useCommitReceipt } from "./useCommitReceipt";
 import { useCommitScope } from "./useCommitScope";
 
@@ -406,14 +406,14 @@ const failureIn = (key: string) => changes.failures.value.get(key);
         <template v-if="changes.count.value > 0">
             <!-- The box, its draft line and (in the dock) the button are one field, the way the chat composer holds its
                  send: the line keeps one height through every state, so nothing under it moves when a message lands. -->
-            <div class="ui-field-box flex min-w-0 flex-col gap-0 !p-0 focus-within:border-primary-500" :class="page ? `` : `ui-field-sm`">
+            <div class="ui-field-shell flex min-w-0 flex-col">
                 <textarea
                     ref="commitBox"
                     v-model="commitMessage"
                     :rows="page ? 4 : 1"
                     :placeholder="chipNotice ?? commitPlaceholder"
-                    class="block w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent outline-none"
-                    :class="page ? `max-h-[360px] px-3 py-2 text-sm leading-relaxed` : `max-h-[142px] px-2 py-1.5 leading-snug`"
+                    class="field-bare block w-full min-w-0 resize-none overflow-y-auto"
+                    :class="page ? `max-h-90 px-3 py-2 leading-relaxed` : `max-h-36 px-2 py-1.5 leading-snug md:text-xs`"
                     @keydown.ctrl.enter.exact="doCommit()"
                     @keydown.meta.enter.exact="doCommit()"
                     data-commit-message
@@ -421,7 +421,7 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                 <div
                     v-if="!page || scopeOrigin !== undefined"
                     class="flex min-w-0 items-center gap-1.5 border-t border-dashed border-line-subtle text-2xs"
-                    :class="page ? `h-7 px-3` : `min-h-7 py-0.5 pr-0.5 pl-2`"
+                    :class="page ? `h-7 px-3` : `min-h-7 py-px pr-0.5 pl-2`"
                     data-draft-line
                 >
                     <template v-if="scopeOrigin !== undefined">
@@ -467,7 +467,7 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                             type="button"
                             :class="ui.textAction(`shrink-0 gap-0.5 text-link hover:underline`)"
                             :disabled="redrafting"
-                            v-tooltip.top="t(`workspace.reviewPanel.redraftTip`)"
+                            v-tooltip.top="{ title: t(`workspace.reviewPanel.redraft`), note: t(`workspace.reviewPanel.redraftTip`) }"
                             :aria-label="t(`workspace.reviewPanel.redraft`)"
                             @click="redraft"
                             data-redraft
@@ -491,7 +491,7 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                         <Button
                             size="small"
                             severity="success"
-                            class="!h-6 !min-h-0 max-md:!h-8 !rounded-r-none !px-2 whitespace-nowrap"
+                            class="!rounded-r-none whitespace-nowrap"
                             :disabled="!commitReady"
                             @click="doCommit()"
                             v-tooltip.top="commitTip"
@@ -502,7 +502,7 @@ const failureIn = (key: string) => changes.failures.value.get(key);
                         <Button
                             size="small"
                             severity="success"
-                            class="!h-6 !min-h-0 max-md:!h-8 !rounded-l-none !border-l !border-l-black/20 !px-1"
+                            class="!rounded-l-none !border-l !border-l-black/20 !px-1.5"
                             :disabled="commitRunning || changes.actionBusy.value"
                             :aria-label="t(`workspace.reviewPanel.moreCommitActions`)"
                             aria-haspopup="menu"

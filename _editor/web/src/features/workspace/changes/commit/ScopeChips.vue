@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import HoverCard from "../../chat/tabs/HoverCard.vue";
-import { originHue } from "./changeOrigins";
-import { useChanges } from "./useChanges";
+import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
+import HoverCard from "../../../chat/tabs/HoverCard.vue";
+import { originHue } from "../changeOrigins";
+import { useChanges } from "../useChanges";
 import { chipState, type ScopeChip, useCommitScope } from "./useCommitScope";
 
 // Stage in one click: a chip per session with work here, your own edits, and all of it (useCommitScope.ts). A click

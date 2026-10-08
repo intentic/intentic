@@ -2,14 +2,14 @@ import { isScratch, type GitDiffSide, type LandedMessage, type LandedMessageDraf
 import { formatElapsed } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
-import { useChat } from "../../chat/run/useChat";
-import { commitMessageOf, draftRunning, landedMessage, originsOf, summarizeOrigins } from "./changeOrigins";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { currentAction, unfinishedMark } from "../../../agents/fleet/agentStatus";
+import { useChat } from "../../../chat/run/useChat";
+import { commitMessageOf, draftRunning, landedMessage, originsOf, summarizeOrigins } from "../changeOrigins";
 import { nameCommitAfter, namedAfter } from "./commitMessage";
 import { type CommitScope, commitScopeFor, inScope, namingOrigin, scopeCommit, scopeFiles } from "./commitScope";
-import { truncatedTotal } from "./truncation";
-import { useChanges } from "./useChanges";
+import { truncatedTotal } from "../truncation";
+import { useChanges } from "../useChanges";
 
 // What Commit records and what to stage for it, shared by everything that shows it: the Changes list, the scope chips,
 // and the composer (the commit page on a desktop, the list's own dock on a phone). Commit records the index, or

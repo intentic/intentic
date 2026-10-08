@@ -114,6 +114,7 @@ export const commitLog = async (
             `--max-count=${limit + 1}`,
             `--skip=${skip}`,
             `--pretty=format:${format}`,
+            // allow(silent-catch): an unborn HEAD makes `git log` exit non-zero, which is an empty graph rather than an error.
         ]).catch(() => undefined),
     ]);
     const branch = branchOut.stdout.trim();

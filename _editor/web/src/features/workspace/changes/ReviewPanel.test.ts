@@ -35,8 +35,8 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
 }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
-const { default: CommitPage } = await import("./CommitPage.vue");
-const { commitMessage, nameCommitAfter } = await import("./commitMessage");
+const { default: CommitPage } = await import("./commit/CommitPage.vue");
+const { commitMessage, nameCommitAfter } = await import("./commit/commitMessage");
 
 let app: App | undefined;
 
@@ -183,9 +183,6 @@ const mixedTree = (): GitChanges => ({
         },
     ],
 });
-
-const rowOf = (el: HTMLElement, name: string): HTMLElement | undefined =>
-    [...el.querySelectorAll<HTMLElement>(`.group\\/file`)].find((row) => row.textContent?.includes(name));
 
 // A session's chip is the row's + for every file it landed, named by scope so files past a truncated list go in too.
 // Commit then records the index, the hand-staged file with them, as git would.

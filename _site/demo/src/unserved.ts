@@ -257,6 +257,7 @@ export const UNSERVED = {
     "agents.includeScratch": UNSIMULATED_WRITE,
     "agents.place": UNSIMULATED_WRITE,
     "agents.purge": UNSIMULATED_WRITE,
+    "agents.redraftMessage": UNSIMULATED_WRITE,
     "agents.requestLand": UNSIMULATED_WRITE,
     "agents.stopWatching": UNSIMULATED_WRITE,
     "approvals.approveHooks": UNSIMULATED_WRITE,

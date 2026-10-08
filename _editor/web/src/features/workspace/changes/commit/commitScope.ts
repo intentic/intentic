@@ -1,7 +1,7 @@
 import { isScratch, type GitDiffSide, type LandedMessageDraft, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract";
-import { modelLabelFor } from "../../chat/accounts/providerCatalog";
-import { originsOf } from "./changeOrigins";
-import { truncatedTotal } from "./truncation";
+import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
+import { originsOf } from "../changeOrigins";
+import { truncatedTotal } from "../truncation";
 
 // What Commit records, git's way: the index when something is staged, else everything (staged first, scratch left out,
 // as every stage-everything leaves it out). What gets staged is picked in the list (a row's +) or by the scope chips

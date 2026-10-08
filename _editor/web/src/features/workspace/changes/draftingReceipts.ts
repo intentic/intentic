@@ -2,7 +2,7 @@ import { computed, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 import { commitMessageOf, draftRunning } from "./changeOrigins";
-import { fillCommitMessage, namedAfter } from "./commitMessage";
+import { fillCommitMessage, namedAfter } from "./commit/commitMessage";
 import { t } from "@intentic/ui/i18n";
 
 // Watches every landing's drafted commit message from module scope, not from ReviewPanel (which is destroyed
@@ -43,7 +43,9 @@ export const startDraftingReceipts = (): void => {
             const report = current?.landedMessageDraft;
             const refused = report?.steps.filter((step) => step.status === `refused`) ?? [];
             const blame =
-                refused.length > 0 ? t(`workspace.draftingReceipts.modelsRefused`, { models: refused.map((step) => step.model).join(`, `) }) : report?.reason;
+                refused.length > 0
+                    ? t(`workspace.draftingReceipts.modelsRefused`, { models: refused.map((step) => step.model).join(`, `) })
+                    : report?.reason;
             say(
                 blame === undefined
                     ? t(`workspace.draftingReceipts.couldntWriteCommitMessage`, { title: titleOf(agent.id) })

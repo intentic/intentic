@@ -34,15 +34,6 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/features/workspace/changes/ReviewPanel.vue`,
-        new Map([
-            [
-                `max-h-[142px]`,
-                `eight rows exactly: 8 x 16.5px (text-xs at leading-snug) + 8px of py-1 + the 2px border. max-h-36 (144px) would add a 2px sliver of a ninth row under the eighth, which is the visual bug this number was picked to avoid.`,
-            ],
-        ]),
-    ],
-    [
         `_editor/web/src/features/sandbox/overview/version/UpdateWhatsNew.vue`,
         new Map([
             [

@@ -53,7 +53,7 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
-import CommitPage from "../changes/CommitPage.vue";
+import CommitPage from "../changes/commit/CommitPage.vue";
 import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";

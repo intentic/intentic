@@ -1,8 +1,8 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { ahead, syncable, unpublished } from "../push/outgoingWork";
+import { ahead, syncable, unpublished } from "../../push/outgoingWork";
 import { commitMessage } from "./commitMessage";
-import { COMMIT_SCOPE, useChanges } from "./useChanges";
+import { COMMIT_SCOPE, useChanges } from "../useChanges";
 import { useCommitScope } from "./useCommitScope";
 
 export const useCommitReceipt = () => {

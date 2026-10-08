@@ -3,12 +3,12 @@ import type { GitChange, RepoChanges } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { ahead, behind, unpublished } from "../push/outgoingWork";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import { ahead, behind, unpublished } from "../../push/outgoingWork";
 import CommitComposer from "./CommitComposer.vue";
 import RepoHistory from "./RepoHistory.vue";
 import ScopeChips from "./ScopeChips.vue";
-import { useChanges } from "./useChanges";
+import { useChanges } from "../useChanges";
 import { useCommitScope } from "./useCommitScope";
 
 // The center of the workspace while the Changes list is open on a desktop: what to stage, the message with the room

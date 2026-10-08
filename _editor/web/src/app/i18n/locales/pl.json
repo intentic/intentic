@@ -917,7 +917,7 @@
             "open": "Otwarte",
             "apps": "Aplikacje",
             "webDetail": "Strona w Twojej własnej przeglądarce",
-            "more": "Aplikacje i pulpit"
+            "more": "Więcej okien"
         },
         "phone": {
             "toggle": "Ramka telefonu",
@@ -9171,7 +9171,7 @@
             "failedCount": "{count} nieudana | {count} nieudane | {count} nieudanych",
             "draftDetails": "Szczegóły",
             "redraft": "Napisz ponownie",
-            "redraftTip": "Poproś modele o ten opis jeszcze raz",
+            "redraftTip": "Pyta modele jeszcze raz",
             "couldntRedraft": "Nie udało się poprosić o nowy opis",
             "moreCommitActions": "Więcej akcji commitu",
             "commitAndPush": "Zatwierdź i {verb}",
@@ -9184,7 +9184,7 @@
             "committedInRepos": "Zatwierdzono w {count} repozytorium | Zatwierdzono w {count} repozytoriach | Zatwierdzono w {count} repozytoriach",
             "undo": "Cofnij",
             "undoCommit": "Cofnij ten commit",
-            "undoCommitNote": "Jego pliki wracają jako przygotowane, a opis wraca do pola. Nic na dysku się nie zmienia.",
+            "undoCommitNote": "Pliki wracają przygotowane, dysk nietknięty",
             "chipYou": "Ty",
             "chipAll": "Wszystko",
             "commitFiles": "Zatwierdź {count} plik | Zatwierdź {count} pliki | Zatwierdź {count} plików",
@@ -9350,7 +9350,7 @@
             "viewing": "Widok jako",
             "moveBack": "Przenieś z powrotem",
             "openToSide": "Otwórz obok",
-            "refreshFetches": "Pyta też każde zdalne repozytorium, co nowego",
+            "refreshFetches": "Pobiera też ze wszystkich zdalnych",
             "showCommitPage": "Wróć do strony commitu"
         },
         "workspaceEmptyState": {

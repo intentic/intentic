@@ -234,21 +234,18 @@ test("a moment that passed while the sandbox was down still fires, and the wake 
 });
 
 // A daily cron whose moment was `hoursAgo` ago, on UTC so the test reads no zone setting. Daily, so the poll windows a
-// test ticks through never meet another occurrence.
-const dailyAt = (hoursAgo: number): Automation["trigger"] => {
-    const at = new Date(Date.now() - hoursAgo * 3_600_000);
-    return { kind: "schedule", cron: `${at.getUTCMinutes()} ${at.getUTCHours()} * * *`, tz: UTC };
-};
-// The minute the daily cron above last came round, as an ISO instant: what the late note names.
-const lastOccurrence = (hoursAgo: number): string => {
+// test ticks through never meet another occurrence. `due` is the minute it last came round, as an ISO instant: what the
+// late note names. Both are read off one clock reading, so a minute turning over mid-test cannot set them apart.
+const dailyAt = (hoursAgo: number): { trigger: Automation["trigger"]; due: string } => {
     const at = new Date(Date.now() - hoursAgo * 3_600_000);
     at.setUTCSeconds(0, 0);
-    return at.toISOString();
+    return { trigger: { kind: "schedule", cron: `${at.getUTCMinutes()} ${at.getUTCHours()} * * *`, tz: UTC }, due: at.toISOString() };
 };
 
 test("a cron that came due while the daemon was down fires once at start, coalesced and saying how late it is", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automationConfig("dreaming", { trigger: dailyAt(3) }));
+    const nightly = dailyAt(3);
+    await services.automations.upsert(automationConfig("dreaming", { trigger: nightly.trigger }));
     // Last ran two and a bit days ago: two nightly moments (27h and 3h ago) fell while the machine was asleep.
     await services.automations.recordRun("dreaming", { at: Date.now() - 50 * 3_600_000, outcome: "completed" });
     const prompts: string[] = [];
@@ -262,7 +259,7 @@ test("a cron that came due while the daemon was down fires once at start, coales
     // One catch-up for both missed nights, told about the latest of them.
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("wake:dreaming\n\n--- About this wake ---\n");
-    expect(prompts[0]).toContain(`due at ${lastOccurrence(3)}`);
+    expect(prompts[0]).toContain(`due at ${nightly.due}`);
     expect(prompts[0]).toContain("the sandbox was not running when its moment came");
     // The first poll after start has nothing left to fire: the catch-up accounted for it.
     await automationIdle("dreaming");
@@ -283,7 +280,8 @@ const boot = async (services: Services, prompts: string[]): Promise<ReturnType<t
 test("a schedule that never ran and was never seen armed owes nothing at its first boot: it is armed from then", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     // Created by hand while the daemon was down, its moment three hours ago: from before anybody asked for it.
-    await services.automations.upsert(automationConfig("fresh", { trigger: dailyAt(3) }));
+    const nightly = dailyAt(3);
+    await services.automations.upsert(automationConfig("fresh", { trigger: nightly.trigger }));
     const prompts: string[] = [];
     const before = Date.now();
     await boot(services, prompts);
@@ -298,12 +296,12 @@ test("a schedule that never ran and was never seen armed owes nothing at its fir
     await services.scheduleCoverage.mark({ fresh: { coveredUntil: Date.now() - 26 * 3_600_000 } });
     await boot(services, prompts);
     await waitFor(async () => expect((await services.automations.get("fresh"))?.runs).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain(`due at ${lastOccurrence(3)}`);
+    expect(prompts[0]).toContain(`due at ${nightly.due}`);
 });
 
 test("a schedule seen switched off owes nothing for the time it was off, even switched back on while the daemon was down", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automationConfig("paused", { trigger: dailyAt(3), enabled: false }));
+    await services.automations.upsert(automationConfig("paused", { trigger: dailyAt(3).trigger, enabled: false }));
     await services.automations.recordRun("paused", { at: Date.now() - 30 * DAY, outcome: "completed" });
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));

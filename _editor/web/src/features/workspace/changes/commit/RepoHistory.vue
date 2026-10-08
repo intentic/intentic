@@ -3,12 +3,12 @@ import type { GitCommit, RepoChanges } from "@intentic/sandbox-contract";
 import { Button, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { rpcQuery } from "../../../client/sandbox/rpcQuery";
-import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
-import { useOutgoing } from "../push/useOutgoing";
-import { useChanges } from "./useChanges";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import { ahead, behind, syncable, unpublished } from "../../push/outgoingWork";
+import { useOutgoing } from "../../push/useOutgoing";
+import { useChanges } from "../useChanges";
 import { useCommitReceipt } from "./useCommitReceipt";
 
 // One repo's line on the commit page, git-graph style: what the next commit takes (when it reaches this repo), the
@@ -134,15 +134,15 @@ const upstreamOn = (commit: GitCommit): string | undefined =>
             <li v-for="(node, index) in nodes" :key="node.kind === `commit` ? node.commit.sha : node.kind" class="flex min-w-0 items-stretch gap-2.5">
                 <!-- The gutter: the line in two halves around the dot, so its colour can change at any node. -->
                 <span class="relative w-3 shrink-0" aria-hidden="true">
-                    <span v-if="lineAbove(index)" class="absolute top-0 left-[5px] h-1/2 w-0.5" :class="lineAbove(index)"></span>
-                    <span v-if="lineBelow(index)" class="absolute bottom-0 left-[5px] h-1/2 w-0.5" :class="lineBelow(index)"></span>
+                    <span v-if="lineAbove(index)" class="absolute top-0 left-1/2 h-1/2 w-0.5 -translate-x-1/2" :class="lineAbove(index)"></span>
+                    <span v-if="lineBelow(index)" class="absolute bottom-0 left-1/2 h-1/2 w-0.5 -translate-x-1/2" :class="lineBelow(index)"></span>
                     <span
                         v-if="node.kind === `next`"
                         class="absolute top-1/2 left-0 size-3 -translate-y-1/2 rounded-full border-2 border-dashed border-subtle bg-canvas"
                     ></span>
                     <span
                         v-else-if="node.kind === `commit`"
-                        class="absolute top-1/2 left-[1px] size-2.5 -translate-y-1/2 rounded-full ring-2 ring-canvas"
+                        class="absolute top-1/2 left-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-canvas"
                         :class="node.local ? `bg-link` : `bg-subtle ${fade(node.age)}`"
                     ></span>
                 </span>

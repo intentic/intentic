@@ -52,6 +52,19 @@ const ALLOWED = new Map([
         ]),
     ],
     [
+        `_editor/web/src/features/workspace/changes/commit/CommitComposer.vue`,
+        new Map([
+            [
+                `!rounded-r-none whitespace-nowrap`,
+                `THE COMMIT SPLIT BUTTON'S SEAM, the same joint as AgentRunButton's: Commit and its chevron are one control, so the left half gives up its right corners where the two meet. Size and tier are the caller's (\`size="small"\`, success) and both halves take them unchanged.`,
+            ],
+            [
+                `!rounded-l-none !border-l !border-l-black/20 !px-1.5`,
+                `The same seam from the chevron's side: it gives up its left corners, draws the hairline that marks the joint, and narrows to a glyph's room, because a full label's padding around one chevron reads as a second button rather than the menu half of the first.`,
+            ],
+        ]),
+    ],
+    [
         `_editor/ui/src/components/layout/FloatingAction.vue`,
         new Map([
             [
