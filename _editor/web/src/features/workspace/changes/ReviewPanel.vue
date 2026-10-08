@@ -21,7 +21,6 @@ import {
     Notice,
     timeAgo,
     type Tip,
-    type TipRow,
     toneWash,
     type TooltipValue,
     ui,
@@ -927,7 +926,7 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
     }
     return `push`;
 });
-// Icons match the pills beside the button (↑ push, ↓ pull), so the two read as one language. Straight arrows, since the
+// Icons match the arrows on the counts the button carries (↑ push, ↓ pull), so the two read as one language. Straight arrows, since the
 // diagonal one means "open elsewhere" across the app.
 // The button's hover (`syncTip`) adds what the label can't: which repos, and the replay caveat when pulling.
 // `running` is the word the status line says while the verb is in flight.
@@ -1006,39 +1005,21 @@ const heldTip = computed((): Tip | undefined => {
 const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
     stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
-// How much is waiting outlives the press that failed to send it, so the counts stay under a standing verdict — where
-// the width is the verdict's, they earn it only by having something to count; the offer states "no upstream yet" too.
-const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value === `held` && (aheadTotal.value > 0 || behindTotal.value > 0)));
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
 const syncTier = computed<ButtonTier>(() => (changes.count.value > 0 ? `boring` : `accent`));
-// Names which repos, since the summary beside the button only counts. The replay caveat rides here too
-// — the one thing about this verb a user can be surprised by, now that the per-row pull pill is gone.
+// The button carries the bare count, as Commit does; its hover says which way each number goes and which repos it
+// spans. The replay caveat rides here too — the one thing about this verb a user can be surprised by.
 const syncTip = computed((): Tip => ({
     title: syncMeta.value?.label ?? words.value.sync,
     rows: [
+        ...(aheadTotal.value > 0 ? [{ label: t(`workspace.reviewPanel.notPushed`), value: aheadTotal.value }] : []),
+        ...(behindTotal.value > 0 ? [{ label: t(`workspace.reviewPanel.toPull`), value: behindTotal.value }] : []),
         {
             label: t(`workspace.reviewPanel.repoLabel`, {}, syncRepos.value.length),
             value: syncRepos.value.map((repo) => repo.repo).join(`, `),
         },
     ],
     note: behindTotal.value > 0 ? t(`workspace.reviewPanel.rebasesNeverMerges`) : undefined,
-}));
-// Where a pill's commits sit: the one repo by name, or how many.
-const whereRow = (counted: readonly { readonly repo: string }[]): TipRow => ({
-    label: t(`workspace.reviewPanel.repoLabel`, {}, counted.length),
-    value: counted.length === 1 ? counted[0]!.repo : counted.length,
-});
-// What each pill counts; the glyph and number alone don't say which way or where.
-const aheadTip = computed((): Tip => ({
-    title: t(`workspace.reviewPanel.notPushed`),
-    rows: [{ label: t(`workspace.reviewPanel.commitsLabel`), value: aheadTotal.value }, whereRow(syncRepos.value.filter((repo) => ahead(repo) > 0))],
-}));
-const behindTip = computed((): Tip => ({
-    title: t(`workspace.reviewPanel.toPull`),
-    rows: [
-        { label: t(`workspace.reviewPanel.commitsLabel`), value: behindTotal.value },
-        whereRow(syncRepos.value.filter((repo) => behind(repo) > 0)),
-    ],
 }));
 // Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
 const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
@@ -1297,32 +1278,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         </span>
                     </span>
                 </button>
-                <!-- The counts belong to the tree, not to the press: a refused push leaves exactly as much waiting to go
-                     out as before it, so the standing verdict is drawn beside them rather than over them. -->
-                <div
-                    v-if="showCounts"
-                    class="flex items-center gap-1.5 truncate"
-                    :class="outgoing === `held` ? `shrink-0` : `min-w-0 flex-1`"
-                    :aria-label="syncSummary"
-                >
-                    <!-- The hint hangs off the pills it explains, not the row, which stretches to the button's edge. -->
-                    <span
-                        v-if="behindTotal > 0"
-                        v-tooltip.bottom="behindTip"
-                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
-                    >
-                        <Icon name="arrow-down" class="text-2xs text-link" aria-hidden="true" />
-                        {{ behindTotal }}
-                    </span>
-                    <span
-                        v-if="aheadTotal > 0"
-                        v-tooltip.bottom="aheadTip"
-                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
-                    >
-                        <Icon name="arrow-up" class="text-2xs text-link" aria-hidden="true" />
-                        {{ aheadTotal }}
-                    </span>
-                    <!-- A branch git reports no count for; the offer has the width to say so, the held card doesn't. -->
+                <!-- The counts ride on the button (as Commit's does), so all the offer's own width says is what the button
+                     can't: a branch with no upstream to count against, and how many repos the press spans. -->
+                <div v-if="outgoing === `offer`" class="flex min-w-0 flex-1 items-center gap-1.5 truncate">
                     <span v-if="behindTotal === 0 && aheadTotal === 0" class="truncate text-2xs text-subtle">
                         {{ t(`workspace.reviewPanel.noUpstreamYet`) }}
                     </span>
@@ -1349,9 +1307,18 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     class="shrink-0 whitespace-nowrap"
                     :disabled="changes.actionBusy.value"
                     v-tooltip.bottom="syncTip"
+                    :aria-label="`${syncMeta.label} ${syncSummary}`"
                     @click="doSync"
                 >
                     <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
+                    <!-- How much the press moves, on the press itself. One direction needs only the number, since the
+                         verb and its arrow already say which way; Sync moves both, so each number keeps its arrow. -->
+                    <span v-if="syncVerb === `sync`" class="inline-flex items-center gap-1 tabular-nums opacity-70" aria-hidden="true">
+                        <span class="inline-flex items-center"><Icon name="arrow-down" class="text-3xs" />{{ behindTotal }}</span>
+                        <span v-if="aheadTotal > 0" class="inline-flex items-center"><Icon name="arrow-up" class="text-3xs" />{{ aheadTotal }}</span>
+                    </span>
+                    <span v-else-if="syncVerb === `push` && aheadTotal > 0" class="tabular-nums opacity-70" aria-hidden="true">{{ aheadTotal }}</span>
+                    <span v-else-if="syncVerb === `pull`" class="tabular-nums opacity-70" aria-hidden="true">{{ behindTotal }}</span>
                 </Button>
             </template>
         </div>
