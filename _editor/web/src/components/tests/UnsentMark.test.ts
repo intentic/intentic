@@ -1,5 +1,5 @@
-// Tests what the hover says, not the markup: the mark itself can only say a message exists, so the hover carries
-// which one and how long. Mounted with plain Vue, glyph and tooltip stubbed as in MatchLine.test.
+// The chip says "Unsent"; the accessible name carries age and opening words for screen readers. Mounted with plain Vue,
+// glyph stubbed as in MatchLine.test.
 import "@intentic/testing/dom";
 import { mocked } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
@@ -8,8 +8,6 @@ import UnsentMark from "../UnsentMark.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 let app: App | undefined;
-// Hover direction, read off the tooltip directive's binding modifiers (a stub renders nothing else to measure).
-let opens: Partial<Record<string, boolean>> = {};
 
 const render = (props: { preview?: string; at?: number }): HTMLElement => {
     app?.unmount();
@@ -17,18 +15,11 @@ const render = (props: { preview?: string; at?: number }): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(UnsentMark, props) });
     app.component(`Icon`, IconStub);
-    opens = {};
-    app.directive(`tooltip`, {
-        mounted: (_el, binding) => {
-            opens = binding.modifiers;
-        },
-    });
     app.mount(host);
     return host;
 };
 
-// Read off aria-label, which mirrors the tooltip text since a tooltip itself isn't announced.
-const hintOf = (props: { preview?: string; at?: number }): string | null => render(props).querySelector(`span`)!.getAttribute(`aria-label`);
+const ariaOf = (props: { preview?: string; at?: number }): string | null => render(props).querySelector(`span`)!.getAttribute(`aria-label`);
 
 describe(`<UnsentMark>`, () => {
     // A chip with the send glyph, not a lone icon, so it doesn't blend in while skimming the rail.
@@ -42,7 +33,7 @@ describe(`<UnsentMark>`, () => {
         // A multiple of the mark's 15s step, so the age is exactly twelve minutes rather than rounded down past it.
         jest.spyOn(Date, `now`).mockReturnValue(1_005_000);
         try {
-            expect(hintOf({ preview: `fix the login redirect`, at: 1_005_000 - 12 * 60_000 })).toBe(`Not sent, 12m ago, fix the login redirect`);
+            expect(ariaOf({ preview: `fix the login redirect`, at: 1_005_000 - 12 * 60_000 })).toBe(`Not sent, 12m ago, fix the login redirect`);
         } finally {
             mocked(Date.now).mockRestore();
         }
@@ -67,25 +58,18 @@ describe(`<UnsentMark>`, () => {
         }
     });
 
-    // An attachment or a queued message has nothing to quote; the mark still shows, the hint just omits the words.
+    // An attachment or a queued message has nothing to quote; the mark still shows, the accessible name just omits the words.
     it(`reports the age alone when what is unsent is not typed words`, () => {
         jest.spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
         try {
-            expect(hintOf({ at: 0 })).toBe(`Not sent, 2d ago`);
+            expect(ariaOf({ at: 0 })).toBe(`Not sent, 2d ago`);
         } finally {
             mocked(Date.now).mockRestore();
         }
     });
 
-    // With neither the words nor the age (e.g. a snapshot with no stamp), the hint names the state plainly.
+    // With neither the words nor the age (e.g. a snapshot with no stamp), the accessible name names the state plainly.
     it(`falls back to naming the state when it has neither the words nor the age`, () => {
-        expect(hintOf({})).toBe(`Not sent`);
-    });
-
-    // Opens downward: the mark sits under the session title in every frame, and an upward hover would cover it
-    // instead of the meta line below. On the rail this also clears HoverCard, opening to the right off the same hover.
-    it(`opens away from the title it belongs to`, () => {
-        render({ preview: `fix the login redirect`, at: 1_000 });
-        expect(opens).toEqual({ bottom: true });
+        expect(ariaOf({})).toBe(`Not sent`);
     });
 });

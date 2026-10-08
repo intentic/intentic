@@ -948,7 +948,7 @@ describe("draft cards", () => {
     });
 
     // The words and `draftAt` are not confined to nameless cards: a titled agent's half-written follow-up needs the
-    // same mark tooltip (UnsentMark), naming which message and how old.
+    // same mark (UnsentMark), carrying which message and how old for screen readers.
     it("carries the message's words and its age on a card that has a title of its own", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
