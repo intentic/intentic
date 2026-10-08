@@ -9,6 +9,7 @@ import {
     MODEL_TILES,
     offeredKeys,
     type TileFacts,
+    tileCount,
     tileLine,
     tileOf,
 } from "./providerGrid";
@@ -39,14 +40,17 @@ const facts = (overrides: Partial<TileFacts> = {}): TileFacts => ({
     ...overrides,
 });
 
-test("a tile's one line says what is happening, else what it holds, else that this computer has it", () => {
+test("a tile's one line says what is happening, else that this computer has it; how many it holds is the corner count", () => {
     // Nothing to say is nothing said; the price is the tile's corner label, not this line.
     expect(tileLine(`claude`, facts())).toBeUndefined();
     expect(tileLine(`gemini`, facts())).toBeUndefined();
     expect(tileLine(`claude`, facts({ found: true }))).toEqual({ text: `On this computer`, tone: `live` });
-    expect(tileLine(`gemini`, facts({ count: 31, standing: `waiting` }))).toEqual({ text: `31 accounts`, tone: `muted` });
-    expect(tileLine(`claude`, facts({ count: 1, standing: `attention` }))).toEqual({ text: `1 account`, tone: `warning` });
-    expect(tileLine(LOCAL_TILE, facts({ count: 2, standing: `ready` }))).toEqual({ text: `2 models`, tone: `muted` });
+    expect(tileLine(`gemini`, facts({ count: 31, standing: `waiting` }))).toBeUndefined();
+    expect(tileLine(`claude`, facts({ count: 1, standing: `attention` }))).toBeUndefined();
+    expect(tileLine(LOCAL_TILE, facts({ count: 2, standing: `ready` }))).toBeUndefined();
+    expect(tileCount(facts({ count: 31 }))).toBe(31);
+    expect(tileCount(facts({ count: 2 }))).toBe(2);
+    expect(tileCount(facts())).toBeUndefined();
     // What is happening outranks everything.
     expect(tileLine(`claude`, facts({ count: 3, signingIn: true }))).toEqual({ text: `Signing in…`, tone: `live` });
     expect(tileLine(`claude`, facts({ count: 3, failed: true }))).toEqual({ text: `Didn't connect`, tone: `danger` });

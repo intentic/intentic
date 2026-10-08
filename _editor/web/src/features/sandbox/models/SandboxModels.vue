@@ -39,6 +39,7 @@ import {
     MODEL_TILES,
     offeredKeys,
     type TileKey,
+    tileCount,
     tileLine,
     tileOf,
 } from "./providerGrid";
@@ -169,7 +170,14 @@ const tileFacts = computed(() =>
                 found: foundRows.value.some((provider) => provider === tile),
             };
             // Before the lists land a count would read as zero, which is a claim: nothing is said until they do.
-            return [tile, { line: accessKnown.value ? tileLine(tile, facts) : undefined, standing: accessKnown.value ? standing : undefined }];
+            return [
+                tile,
+                {
+                    line: accessKnown.value ? tileLine(tile, facts) : undefined,
+                    count: accessKnown.value ? tileCount(facts) : undefined,
+                    standing: accessKnown.value ? standing : undefined,
+                },
+            ];
         }),
     ),
 );
@@ -477,6 +485,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 :tile="tile"
                 :selected="selected === tile"
                 :line="tileFacts[tile]?.line"
+                :count="tileFacts[tile]?.count"
                 :standing="tileFacts[tile]?.standing"
                 :controls="panelId"
                 @select="select(tile)"

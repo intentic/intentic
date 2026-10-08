@@ -7,17 +7,18 @@ import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import type { ModelSourceStanding } from "./modelSources";
 import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerGrid";
 
-// One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, and one line that says what it
-// holds or what is happening with it. Every tile is the same size whatever it says, so the grid reads as a set of peers
-// rather than a list whose rows grow with their news. Pressing it opens its panel below the grid, as a persona's tile
-// opens its editor; pressing the open one closes it.
+// One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, a count in the corner when it
+// holds any, and a status line only while something is happening with it. Pressing it opens its panel below the grid,
+// as a persona's tile opens its editor; pressing the open one closes it.
 
 const t = useT();
 
-const { tile, selected, line, standing, controls } = defineProps<{
+const { tile, selected, line, count, standing, controls } = defineProps<{
     tile: TileKey;
     selected: boolean;
     line: { readonly text: string; readonly tone: TileTone } | undefined;
+    // Accounts held or models served; the number alone, top-right.
+    count: number | undefined;
     // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
     standing: ModelSourceStanding | undefined;
     // The panel this tile opens, for assistive tech.
@@ -46,7 +47,7 @@ const LINE = {
 <template>
     <button
         type="button"
-        class="ui-row-select group relative flex size-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl px-1.5"
+        class="ui-row-select group relative flex w-[4.75rem] shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-2"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
@@ -55,12 +56,22 @@ const LINE = {
         <!-- The price, where it is nothing: a corner label rather than the tile's line, so it outlives the first account. -->
         <span
             v-if="isFreeTile(tile)"
-            class="absolute right-1.5 top-1.5 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
+            class="absolute left-1.5 top-1.5 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
             >{{ t(`connect.connect.free`) }}</span
         >
-        <!-- An app-icon square, so a monochrome mark has the same weight as the next one whatever its shape. -->
         <span
-            class="relative flex size-10 items-center justify-center rounded-xl bg-card text-xl shadow-sm"
+            v-if="count !== undefined"
+            class="absolute right-1.5 top-1.5 text-[0.65rem] font-medium leading-4 tabular-nums text-subtle"
+            :aria-label="
+                tile === LOCAL_TILE
+                    ? t(`connect.providerGrid.models`, { count }, count)
+                    : t(`connect.modelSources.accounts`, { count }, count)
+            "
+            >{{ count }}</span
+        >
+        <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
+        <span
+            class="relative flex shrink-0 items-center justify-center text-3xl"
             :class="selected ? `text-content` : `text-muted group-hover:text-content`"
         >
             <Icon v-if="tile === LOCAL_TILE" name="cpu" />
@@ -75,9 +86,6 @@ const LINE = {
         <span class="w-full truncate text-center text-xs font-medium leading-tight" :class="selected ? `text-content` : `text-muted`">{{
             name
         }}</span>
-        <!-- Always the line's height, said or not, so a tile with news is the size of one without. -->
-        <span class="flex h-4 max-w-full items-center">
-            <span v-if="line" class="truncate text-[0.65rem] leading-4" :class="LINE[line.tone]">{{ line.text }}</span>
-        </span>
+        <span v-if="line" class="max-w-full truncate text-[0.65rem] leading-4" :class="LINE[line.tone]">{{ line.text }}</span>
     </button>
 </template>

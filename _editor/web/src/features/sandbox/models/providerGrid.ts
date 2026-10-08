@@ -53,26 +53,22 @@ export interface TileFacts {
 export type TileTone = `muted` | `live` | `warning` | `danger`;
 
 /**
- * The one line under a tile's name: what is happening with it, else what it holds, else that this computer already has
- * it. Not the price: "Free" is the tile's own corner label (isFreeTile), so it stays said once the tile holds accounts.
+ * The one line under a tile's name: what is happening with it, else that this computer already has it. How many it holds
+ * is the tile's top-right corner (tileCount), not this line. Not the price: "Free" is the tile's own corner label
+ * (isFreeTile), so it stays said once the tile holds accounts.
  */
-export const tileLine = (key: TileKey, facts: TileFacts): { readonly text: string; readonly tone: TileTone } | undefined => {
+export const tileLine = (_key: TileKey, facts: TileFacts): { readonly text: string; readonly tone: TileTone } | undefined => {
     if (facts.signingIn) {
         return { text: t(`connect.providerTile.signingIn`), tone: `live` };
     }
     if (facts.failed) {
         return { text: t(`connect.providerGrid.didntConnect`), tone: `danger` };
     }
-    if (facts.count > 0) {
-        const text =
-            key === LOCAL_TILE
-                ? t(`connect.providerGrid.models`, { count: facts.count }, facts.count)
-                : t(`connect.modelSources.accounts`, { count: facts.count }, facts.count);
-        const tone = facts.standing === `attention` ? `warning` : facts.standing === `blocked` ? `danger` : `muted`;
-        return { text, tone };
-    }
-    return facts.found ? { text: t(`connect.providerGrid.onThisComputer`), tone: `live` } : undefined;
+    return facts.found && facts.count === 0 ? { text: t(`connect.providerGrid.onThisComputer`), tone: `live` } : undefined;
 };
+
+/** How many accounts or models the tile holds, when there is any; drawn as a number only, in the tile's top-right corner. */
+export const tileCount = (facts: TileFacts): number | undefined => (facts.count > 0 ? facts.count : undefined);
 
 /**
  * The tile open on arrival, when one is worth opening: the provider a link named, the sign-in in flight or the one that
