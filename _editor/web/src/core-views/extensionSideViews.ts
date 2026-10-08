@@ -27,7 +27,11 @@ const describeWith =
         // SAFETY: an extension's glyph is an open string, and the Icon component draws its fallback for a name its set
         // lacks, as it does for a document provider's.
         const icon = (said.icon ?? `extensions`) as IconName;
-        return { title: said.title, icon, tip: { title: said.title, note: said.tooltip } };
+        const label = { title: said.title, icon };
+        if (said.tooltip === undefined || said.tooltip === ``) {
+            return label;
+        }
+        return { ...label, tip: { title: said.tooltip } };
     };
 
 // `go` takes the reader to an app path: the host's own navigation, handed in so this registry needs no route table.

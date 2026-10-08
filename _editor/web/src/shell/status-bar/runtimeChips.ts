@@ -40,14 +40,25 @@ export const terminalChip = (facts: {
     readonly keys: string | undefined;
 }): RuntimeChip => {
     const label = t(`shared.terminal`);
-    return {
+    const tip =
+        facts.keys === undefined && facts.summary === undefined
+            ? undefined
+            : {
+                  title: label,
+                  keys: facts.keys,
+                  rows: facts.summary === undefined ? [] : [{ label: t(`shared.running`), value: facts.summary }],
+              };
+    const chip: RuntimeChip = {
         id: `terminal`,
         label,
         ...(facts.count > 0 ? { count: facts.count } : {}),
         active: facts.open,
         aria: spoken(label, facts.summary) + (facts.keys === undefined ? `` : ` (${facts.keys})`),
-        tip: { title: label, keys: facts.keys, rows: facts.summary === undefined ? [] : [{ label: t(`shared.running`), value: facts.summary }] },
     };
+    if (tip === undefined) {
+        return chip;
+    }
+    return { ...chip, tip };
 };
 
 /**
@@ -112,7 +123,6 @@ export const desktopChip = (facts: { readonly windows: number; readonly here: bo
         ...(facts.windows > 0 ? { count: facts.windows } : {}),
         active: facts.here,
         aria: spoken(label, open),
-        tip: open === undefined ? { title: label } : { title: label, note: open },
     };
 };
 

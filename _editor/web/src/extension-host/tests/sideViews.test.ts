@@ -71,7 +71,7 @@ it(`draws a declared side view under the extension's own id, its tab in the exte
     const tab = { id: sideTabId(`acme.ci/run`, { runId: 7 }), view: `acme.ci/run`, input: { runId: 7 } };
 
     expect(sideViewOf(`acme.ci/run`)?.label).toBe(`CI run`);
-    expect(describeTab(tab)).toEqual({ title: `#7`, icon: `pipelines`, tip: { title: `#7`, note: `Run 7 of build` } });
+    expect(describeTab(tab)).toEqual({ title: `#7`, icon: `pipelines`, tip: { title: `Run 7 of build` } });
     homeOf(tab)?.open();
     expect(push).toHaveBeenCalledWith(`/ext/ci?run=7`);
 });

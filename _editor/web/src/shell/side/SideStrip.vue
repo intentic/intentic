@@ -29,10 +29,15 @@ const emit = defineEmits<{
 
 const t = useT();
 
-// The hover: the tab's own explanation, and for the peek, the gesture that keeps it, since italic alone doesn't say.
-const hint = (tab: SideStripItem): Tip => {
-    const tip = tab.label.tip ?? { title: tab.label.title };
-    return tab.id === peek ? { ...tip, note: t(`shell.sidePanel.doubleClickToKeep`) } : tip;
+// A hover card only when the tab carries more than its visible title (path, whose copy, an extension's note). The peek
+// adds how to keep it; truncated titles use overflow on the label span instead of repeating the same words here.
+const hint = (tab: SideStripItem): Tip | undefined => {
+    if (tab.id === peek) {
+        const base = tab.label.tip;
+        const keep = t(`shell.sidePanel.doubleClickToKeep`);
+        return base === undefined ? { title: tab.label.title, note: keep } : { ...base, note: keep };
+    }
+    return tab.label.tip;
 };
 
 const scroller = useTemplateRef<HTMLElement>(`scroller`);
@@ -121,7 +126,12 @@ watch(
         >
             <Icon :name="tab.label.icon" class="shrink-0 text-2xs" :class="tab.label.iconClass ?? `text-muted`" />
             <!-- Italic slants past its box; the padding keeps truncation from clipping the last glyph. -->
-            <span class="min-w-0 truncate" :class="tab.id === peek ? `pr-[0.2em] italic` : ``">{{ tab.label.title }}</span>
+            <span
+                class="min-w-0 truncate"
+                :class="tab.id === peek ? `pr-[0.2em] italic` : ``"
+                v-tooltip.bottom.overflow="hint(tab) === undefined ? tab.label.title : undefined"
+                >{{ tab.label.title }}</span
+            >
             <span
                 class="flex h-3 w-3 shrink-0 items-center justify-center rounded transition-opacity group-hover:opacity-60"
                 :class="tab.id === active ? `opacity-60` : `opacity-0`"

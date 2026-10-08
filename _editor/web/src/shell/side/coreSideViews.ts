@@ -97,7 +97,6 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
             return {
                 title: name === undefined ? label : `${label} · ${name}`,
                 icon: front.kind === `preview` ? `eye` : front.kind === `web` ? `browsers` : `screen`,
-                tip: { title: label, note: name },
             };
         },
         // From a popped-out chat, the app's own window goes to its Browsers; this one has no section to go to.

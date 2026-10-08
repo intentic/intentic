@@ -218,7 +218,6 @@ const roster = computed(() => {
                                 <div
                                     v-for="segment in capacity"
                                     :key="segment.band"
-                                    v-tooltip.top="`${segment.count} ${segment.label}`"
                                     class="ui-meter-fill h-full rounded-full"
                                     :class="planLimitBandTone(segment.band)"
                                     :style="{ width: `${segment.share}%`, ...planLimitBandTint(segment.band) }"

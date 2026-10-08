@@ -494,7 +494,6 @@ const openHistory = (event: Event): void => {
                     v-if="runningCount > 0"
                     class="flex shrink-0 items-center gap-1 text-subtle"
                     :aria-label="t(`chat.chatTabs.running`, { runningCount })"
-                    v-tooltip.bottom="t(`chat.chatTabs.running`, { runningCount })"
                 >
                     <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
                 </span>
@@ -503,7 +502,6 @@ const openHistory = (event: Event): void => {
                     class="ui-status-pill flex shrink-0 items-center gap-1 font-semibold"
                     :class="toneWash(`warning`)"
                     :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
-                    v-tooltip.bottom="t(`chat.chatTabs.waiting`, { attentionCount })"
                 >
                     <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
                 </span>
