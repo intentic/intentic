@@ -13,6 +13,8 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     "model-helper-only",
     // The privacy shield refused an untrusted provider on a runtime it cannot stand in front of.
     "privacy-unshielded",
+    // The protected execution boundary refused admission, not an executed provider/runtime failure.
+    "agent-domain-refused",
     "sandbox-memory-low",
     "trial-unavailable",
     "trial-model-unavailable",

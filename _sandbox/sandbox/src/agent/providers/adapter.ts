@@ -5,6 +5,7 @@ import type { TurnTrim } from "../prompt/window/context-trim.js";
 import { opt } from "../../opt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { AgentRequest, TurnBase, TurnCredential, TurnSpec } from "./agent-request.js";
+import { assertAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // The seam every agent runtime sits behind, and everything that crosses it: what the planner hands an arm (TurnContext),
 // what the arm answers (TurnArmPlan), and the adapter itself. The planner imports this file; nothing here imports back.
@@ -66,7 +67,18 @@ export const armPlan = <C extends TurnCredential>(
     loop: (request: AgentRequest<C>) => AsyncGenerator<AgentEvent>,
     request: AgentRequest<C>,
     account?: string,
-): ArmPlan => ({ ok: true, run: (spec) => loop({ ...request, spec }), ...opt("account", account), request });
+): ArmPlan => {
+    const execution = request.execution;
+    return {
+        ok: true,
+        run: (spec) => {
+            assertAgentExecution(execution, spec);
+            return loop({ ...request, execution, spec });
+        },
+        ...opt("account", account),
+        request,
+    };
+};
 
 // What the route has already resolved before a provider can be picked: the request every arm builds on, the turn's two
 // cwds (see runTurn), and the seams only some arms use.
@@ -114,9 +126,9 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     readonly preflight: (deps: D, input: RoutedAgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.
     readonly health: (deps: D) => Promise<AdapterHealth>;
-    // Whether this runtime still holds `sessionId` under `cwd`, from the store rather than the id's existence: a
-    // runtime can report an id before the session is saved.
-    readonly holdsSession: (deps: D, sessionId: string, cwd: string) => Promise<boolean>;
+    // Whether this runtime still holds `sessionId` in the admitted execution view, from the store rather than the id's
+    // existence. Process-capable probes must enter that view or refuse; a string cwd is not execution authority.
+    readonly holdsSession: (deps: D, sessionId: string, execution: AgentExecutionContext) => Promise<boolean>;
     // This runtime's arm and loop honour `policy.sealed` (agent-request.ts): a helper's request, no tools, no session,
     // answered once. Absent, nothing sealed is sent to it, since a loop that ignored the flag would run with its tools.
     readonly sealed?: true;

@@ -13,6 +13,7 @@ import type { HeadroomService } from "../../usage/headroom.js";
 import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
 import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } from "../../usage/model-refusals.js";
 import type { ObservedLimitStore } from "../../usage/observed-limits.js";
+import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
@@ -37,6 +38,7 @@ export interface ProvidersSlice {
     // The three orchestrators a runtime needs but may not import, since each reaches most of the daemon: the safety judge,
     // filing a browser account, and recomposing the environment overlay.
     readonly judgeCommand: (
+        execution: AgentExecutionContext,
         input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
         signal: AbortSignal,
     ) => Promise<SafetyVerdict>;
@@ -121,7 +123,7 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
         providerCatalogs: providerCatalogsOf(built.providerModules, whole),
         providerReadiness: () => providerReadiness(whole()),
-        judgeCommand: (input, signal) => judgeCommand(whole(), input, signal),
+        judgeCommand: (execution, input, signal) => judgeCommand(whole(), execution, input, signal),
         endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints"), localTolerantFetch, { onChanged: resyncTranslator }),
         // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
         agent: (request) => runAgent(conversations, request),

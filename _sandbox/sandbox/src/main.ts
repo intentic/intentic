@@ -43,6 +43,10 @@ import { startLoopWatchdog } from "./system/resources/loop/loop-watchdog.js";
 import { answers } from "./ports/port-probe.js";
 import { type RunnerModeEnv, runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
+import { join } from "node:path";
+import { authRootOf } from "./state-paths.js";
+import { agentDomainPolicyDocument, fileAgentDomainPolicy } from "./workload/agent-domain-policy.js";
+import { requireAgentDomainRollout } from "./workload/agent-domain-rollout.js";
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. It settles the process,
 // builds the services once, and then calls each phase of boot in the one order that is behavior: listeners come up
@@ -72,6 +76,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Read, so out of the environment before anything is spawned: no child inherits a container secret (sealed-env.ts).
     sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys: config });
     attempt.historyRoot = config.historyRoot;
+    // Before composing services or starting provider helpers: a persisted, unsupported domain never boots into root.
+    attempt.stage = "Checking the agent execution domain";
+    requireAgentDomainRollout(await fileAgentDomainPolicy(join(authRootOf(config), agentDomainPolicyDocument.path)).get());
     requireAuthWhenReachable(config);
     requireLocalContract(config);
     requireProjectDir(config);

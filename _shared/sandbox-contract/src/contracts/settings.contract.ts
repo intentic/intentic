@@ -1,6 +1,7 @@
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { procedure } from "../protocol/route-meta.js";
 import {
+    AgentDomainPolicySchema,
     AudienceAnswerSchema,
     AudienceStateSchema,
     BuiltinPromptSchema,
@@ -24,6 +25,15 @@ import { DayWindowQuerySchema } from "../schemas/providers/usage.js";
 // overwrites whole. `savings` measures each token-reduction mechanism's worth over the same UTC day window the spend
 // ledger takes. `builtinPrompt` returns a built-in prompt's actual text to show or fork.
 export const settingsContract = {
+    agentDomain: procedure
+        .route({ method: "GET", path: "/settings/agent-domain", summary: "Read the agent execution domain" })
+        .meta({ panel: false, control: "never" })
+        .output(AgentDomainPolicySchema),
+    setAgentDomain: procedure
+        .route({ method: "POST", path: "/settings/agent-domain", summary: "Choose the agent execution domain" })
+        .meta({ floor: "owner", panel: false, control: "never" })
+        .input(AgentDomainPolicySchema)
+        .output(OkSchema),
     get: procedure
         .route({
             method: "GET",

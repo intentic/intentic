@@ -4,6 +4,8 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { fakeCodexProcess, memoryFleet } from "../../testing.js";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
+import { rootExecution } from "../../workload/agent-execution.testing.js";
 import {
     type AppServerNotification,
     type CodexAppServerConnector,
@@ -217,13 +219,21 @@ test("a subagent's thread reads under the spawn call that started it, and its co
     });
 });
 
-test("starts an app-server thread and turn with native text/image inputs and translator configuration", async () => {
+test.each([false, true])("app-server wire inputs keep translator configuration but never the daemon namespace reference (anchored=%s)", async (anchored) => {
     const appServer = fakeAppServer([
         { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },
         { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
     ]);
+    const namespace = anchored ? registerMountEntry(62004) : undefined;
+    let events: CodexEvent[];
+    try {
+        const scoped = { ...turn(), ...(namespace === undefined ? {} : { namespace: { pid: namespace.pid, cwd: WORKSPACE_ROOT, namespace } }) };
+        events = await collect(createCodexAppServerRunner(appServer.connector)(scoped));
+    } finally {
+        if (namespace !== undefined) { forgetNamespaceEntry(namespace); }
+    }
 
-    expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
+    expect(events).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
         { type: "turn.started" },
         { type: "turn.completed" },
@@ -621,6 +631,39 @@ test("a refused steer becomes the next turn's input on the same thread", async (
     ]);
 });
 
+test("stdio entry uses the issued namespace reference and refuses stale or reconstructed descriptors before spawn", async () => {
+    const reference = registerMountEntry(62005);
+    const process = fakeCodexProcess();
+    const spawn = jest.fn(() => process.child);
+    const connector = stdioConnector(async () => "/usr/local/bin/codex", spawn);
+    const descriptor = { pid: reference.pid, cwd: "/work/project", namespace: reference };
+    try {
+        const connection = await connector({ ...turn(), namespace: descriptor, spawnDepth: 2 });
+        try {
+            expect(spawn).toHaveBeenCalledWith(
+                "nsenter",
+                ["--mount=/proc/62005/ns/mnt", "--wdns=/work/project", "--", "env", "-u", "PWD", "-u", "OLDPWD", "/usr/local/bin/codex", "app-server", "--stdio"],
+                { CODEX_HOME: "/codex" },
+                2,
+            );
+        } finally {
+            connection.close();
+        }
+        forgetNamespaceEntry(reference);
+        const replacement = registerMountEntry(reference.pid);
+        try {
+            await expect(connector({ ...turn(), namespace: descriptor })).rejects.toThrow("namespace anchor 62005 reference is not registered");
+            await expect(connector({ ...turn(), namespace: { ...descriptor, namespace: { ...replacement } } }))
+                .rejects.toThrow("namespace anchor 62005 reference is not registered");
+            expect(spawn).toHaveBeenCalledTimes(1);
+        } finally {
+            forgetNamespaceEntry(replacement);
+        }
+    } finally {
+        forgetNamespaceEntry(reference);
+    }
+});
+
 test("aborting an active stdio turn sends turn/interrupt before killing the app-server", async () => {
     jest.useFakeTimers();
     const process = fakeCodexProcess();
@@ -817,19 +860,25 @@ test("final completion refuses a steer while terminal usage is still being consu
     ]);
     const agent = createCodexAgent({ codexHome: "/codex", runner: createCodexAppServerRunner(appServer.connector) });
     const admitted: boolean[] = [];
-    for await (const event of agent({
-        spec: { prompt: "hello", cwd: WORKSPACE_ROOT, steering },
-        policy: {},
-        tools: {},
-        credential: { kind: "container" },
-        hooks: { cards: parkedCards(memoryFleet().conversations) },
-        signal: new AbortController().signal,
-    })) {
-        if (event.kind === "usage") {
-            admitted.push(steering.push("too late"));
+    const execution = rootExecution({ localCwd: WORKSPACE_ROOT });
+    try {
+        for await (const event of agent({
+            execution: execution.context,
+            spec: { prompt: "hello", cwd: WORKSPACE_ROOT, steering },
+            policy: {},
+            tools: {},
+            credential: { kind: "container" },
+            hooks: { cards: parkedCards(memoryFleet().conversations) },
+            signal: new AbortController().signal,
+        })) {
+            if (event.kind === "usage") {
+                admitted.push(steering.push("too late"));
+            }
         }
+    } finally {
+        execution.release();
+        steering.close();
     }
-    steering.close();
     expect(admitted).toEqual([false]);
     expect(steering.delivered).toBe(0);
 });

@@ -46,7 +46,7 @@ const services = (overrides: Partial<Services> = {}): Services =>
     });
 
 const context: TurnContext = {
-    base: { spec: { prompt: "look at my browser", cwd: ROOT }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
+    base: { execution: unstubbed("execution", {}), spec: { prompt: "look at my browser", cwd: ROOT }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd: ROOT,
     effectiveCwd: ROOT,

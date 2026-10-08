@@ -1,6 +1,7 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { IsolationPlan, TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { forgetNamespaceEntry, registerMountEntry, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { syncHookOutput } from "../../testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
@@ -205,6 +206,36 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
             "--noEmit",
         ],
     });
+});
+
+test("diagnostic entrants keep the issued reference, refusing stale or reconstructed generations even at a reused PID", async () => {
+    const reference = registerMountEntry(62001);
+    const enterFor = async (namespace: NamespaceEntryReference) => {
+        const { requests, diag } = asked();
+        const anchor = { pid: namespace.pid, cwd: WORKSPACE_ROOT, plan: PLAN, namespace, dispose: () => {} };
+        await fire(editDiagnosticsHooks({ plan: PLAN, anchor }, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
+        return requests[0]?.placement?.enter;
+    };
+    try {
+        const enter = await enterFor(reference);
+        const expected = {
+            command: "nsenter",
+            args: ["--mount=/proc/62001/ns/mnt", "--wdns=/work", "--", "env", "-u", "PWD", "-u", "OLDPWD", "tsgo", "--noEmit"],
+        };
+        expect(enter?.("tsgo", ["--noEmit"])).toEqual(expected);
+        forgetNamespaceEntry(reference);
+        const replacement = registerMountEntry(reference.pid);
+        try {
+            expect(() => enter?.("tsgo", ["--noEmit"])).toThrow("namespace anchor 62001 reference is not registered");
+            const reconstructed = await enterFor({ ...replacement });
+            expect(() => reconstructed?.("tsgo", ["--noEmit"])).toThrow("namespace anchor 62001 reference is not registered");
+            expect((await enterFor(replacement))?.("tsgo", ["--noEmit"])).toEqual(expected);
+        } finally {
+            forgetNamespaceEntry(replacement);
+        }
+    } finally {
+        forgetNamespaceEntry(reference);
+    }
 });
 
 // No namespace was built, so the worktree is reachable directly and path translation is the whole of the check.

@@ -29,6 +29,12 @@ flowchart LR
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
   and never reads as out of date.
+- `settings.agentDomain` reads the execution-domain policy; `settings.setAgentDomain` requires the owner's bearer,
+  never a panel, agent or control token. This policy is stored in the daemon's auth root, not in the agent-writable
+  settings manifest. Its rollout default remains `root`; a daemon build whose execution boundary is incomplete
+  refuses activation of `unprivileged` even for the owner, rather than promising protection it cannot enforce.
+  A turn refused for an unsupported or unreadable protected policy carries `agent-domain-refused`, an admission
+  refusal: its queued words remain owed, not consumed as an executed failure.
 - Some rules live here as code, not only shapes, because both ends must reach the same answer. The main one is
   whether an account can serve a turn: `serviceState` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
   seat, a translator bench, a standing refusal and the plan limits into one `AccountState` (`ready` · `spent` ·

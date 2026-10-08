@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { unstubbed } from "@intentic/testing";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
@@ -37,6 +38,7 @@ test("an image-generation item becomes a completed tool card with a file-backed 
 
     const events = [];
     for await (const event of createCodexAgent({ codexHome, runner })({
+        execution: unstubbed("execution", {}),
         spec: { prompt: "draw a crocodile", cwd: workspaceRoot },
         policy: {},
         tools: {},

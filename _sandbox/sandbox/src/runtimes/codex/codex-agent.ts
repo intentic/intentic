@@ -698,6 +698,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         const instructions = await codexInstructionConfig(request.spec, activeCodexHome);
         const runtimeConfig = { ...instructions, ...QUESTION_TOOL_CONFIG, ...codexMcpConfig(request.tools) };
         const credential = request.credential;
+        const anchor = request.spec.isolation?.anchor;
         const turnBase: CodexTurnBase = {
             ...(credential.kind === "codex-endpoint"
                 ? {
@@ -708,9 +709,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                   { env: { ...env, ...containerKeyEnv("codex") }, config: runtimeConfig }),
             // Anchors an isolated turn's worktree at /work for app-server and its forks; absent, the turn just runs
             // cwd'd.
-            ...(request.spec.isolation?.anchor === undefined
-                ? {}
-                : { namespace: { pid: request.spec.isolation.anchor.pid, cwd: request.spec.isolation.anchor.cwd } }),
+            ...(anchor === undefined ? {} : { namespace: { pid: anchor.pid, cwd: anchor.cwd, ...opt("namespace", anchor.namespace) } }),
             ...opt("spawnDepth", request.spec.spawnDepth),
         };
         // request.spec.cwd is this conversation's own checkout; the shared root would misplace an isolated turn's image.

@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "./agent.js";
@@ -28,6 +29,7 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
 const collect = async (queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     const request: HarnessRequest = {
+        execution: unstubbed("execution", {}),
         spec: { prompt: "plan the work", cwd: WORKSPACE_ROOT },
         policy: {},
         tools: {},

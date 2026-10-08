@@ -10,7 +10,8 @@ import { detachedStamp } from "../../seams/workload-stamp.js";
 import { SESSION_STATE } from "../../sessions/session-store.js";
 import { stateRelPath } from "../../state-paths.js";
 import { queueRoot } from "../../system/resources/queue-slots.js";
-import { forgetSandboxEntry, registerSandboxEntry } from "../../workload/namespace-entry.js";
+import { registerSandboxEntry } from "../../workload/namespace-entry.js";
+import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
 import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolation.js";
 
 // A fenced turn's sandbox. The turn was started by a person who holds areas, and what its checkout was cut to is only
@@ -350,8 +351,9 @@ export const sandboxAvailable = async (scratch: string): Promise<boolean> => {
 // fenced turn never runs in half of one.
 export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSources = defaultSources()): Promise<IsolationAnchor> => {
     const layout = sandboxLayout(join(plan.overlays, `sandbox-${randomBytes(4).toString("hex")}`));
+    let teardownTask: Promise<void> | undefined;
     // allow(silent-catch): best effort, after a start that already failed; what stays behind is disk under the overlays.
-    const teardown = (): Promise<void> => rm(layout.dir, { recursive: true, force: true }).catch(() => undefined);
+    const teardown = (): Promise<void> => teardownTask ??= rm(layout.dir, { recursive: true, force: true }).catch(() => undefined);
     await mkdir(layout.tmp, { recursive: true, mode: 0o700 });
     await mkdir(join(layout.tmuxSocket, ".."), { recursive: true, mode: 0o700 });
     await mkdir(layout.terminalLogs, { recursive: true, mode: 0o700 });
@@ -377,72 +379,34 @@ export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSourc
         stdio: ["ignore", "pipe", "pipe", "pipe"],
         detached: true,
     });
-    if (child.pid === undefined) {
-        await teardown();
-        throw new Error("fenced turn: could not start its sandbox");
-    }
-    let pid: number;
-    try {
-        pid = await new Promise<number>((resolve, reject) => {
-            let info = "";
-            let out = "";
-            let errors = "";
-            let inner: number | undefined;
-            let ready = false;
-            const settle = (): void => {
-                if (inner !== undefined && ready) {
-                    resolve(inner);
-                }
-            };
-            child.stdio[INFO_FD]?.on("data", (chunk: Buffer) => {
-                info += chunk.toString();
-                const match = /"child-pid"\s*:\s*(\d+)/.exec(info);
-                if (match?.[1] !== undefined && inner === undefined) {
-                    inner = Number(match[1]);
-                    settle();
-                }
-            });
-            child.stdout?.on("data", (chunk: Buffer) => {
-                out += chunk.toString();
-                if (!ready && out.includes(READY)) {
-                    ready = true;
-                    settle();
-                }
-            });
-            child.stderr?.on("data", (chunk: Buffer) => {
-                errors += chunk.toString();
-            });
-            child.on("exit", (code: number | null) =>
-                reject(new Error(`fenced turn: sandbox exited ${String(code)} before it was ready: ${errors.trim()}`)),
-            );
-            child.on("error", reject);
-        });
-    } catch (error) {
+    const lifetime = namespaceHolderLifetime(child, () => {
         child.kill("SIGKILL");
+        void teardown();
+    });
+    try {
+        if (child.pid === undefined) { throw new Error("fenced turn: could not start its sandbox"); }
+        const pid = await namespaceHolderReady(child, READY, child.stdio[INFO_FD] ?? null);
+        const namespace = lifetime.register(() => registerSandboxEntry(pid, { uid: SANDBOX_UID, gid: SANDBOX_GID }));
+        // The turn's own streams must not keep the daemon's event loop alive after it ends.
+        child.unref();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.stdio[INFO_FD]?.destroy();
+        return {
+            pid,
+            namespace,
+            cwd: plan.root,
+            plan,
+            sandbox: layout,
+            // Released, not killed: what the turn left running keeps the sandbox up until it ends (ANCHOR_SCRIPT).
+            dispose: () => {
+                // allow(silent-catch): the anchor ends once this file is gone; already gone is already released.
+                void unlink(layout.held).catch(() => undefined);
+            },
+        };
+    } catch (error) {
+        lifetime.end();
         await teardown();
         throw error;
     }
-    registerSandboxEntry(pid, { uid: SANDBOX_UID, gid: SANDBOX_GID });
-    child.removeAllListeners("exit");
-    child.removeAllListeners("error");
-    child.once("exit", () => {
-        forgetSandboxEntry(pid);
-        void teardown();
-    });
-    // The turn's own streams must not keep the daemon's event loop alive after it ends.
-    child.unref();
-    child.stdout?.destroy();
-    child.stderr?.destroy();
-    child.stdio[INFO_FD]?.destroy();
-    return {
-        pid,
-        cwd: plan.root,
-        plan,
-        sandbox: layout,
-        // Released, not killed: what the turn left running keeps the sandbox up until it ends (ANCHOR_SCRIPT).
-        dispose: () => {
-            // allow(silent-catch): the anchor ends once this file is gone; already gone is already released.
-            void unlink(layout.held).catch(() => undefined);
-        },
-    };
 };

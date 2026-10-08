@@ -8,6 +8,8 @@ import { KEEP_WARM_PROMPT } from "../../../../runtimes/claude/claude-warm.js";
 import type { RoutedTurn } from "../../../../seams/turn-starter.js";
 import type { AgentRequest, TurnHooks } from "../../../providers/agent-request.js";
 import type { HarnessRequest } from "../../agent.js";
+import { assertAgentExecution, type AgentExecutionLease } from "../../../../workload/agent-execution.js";
+import { rootExecution } from "../../../../workload/agent-execution.testing.js";
 import { nextPromptDayAt } from "../../prompt-fingerprint.js";
 import { armKeepWarm, autoKeepWarm, dropKeepWarm, keepableOf, keepWarmDueOf, noteKeepable, stopKeepWarm, tendKeepWarm } from "../cache-keepwarm.js";
 
@@ -27,7 +29,15 @@ const CARDS: TurnHooks["cards"] = unstubbed<TurnHooks["cards"]>("cards", {});
 
 // The request the last turn sent, with everything a refresh must not send again: its notes, attachments, conversation,
 // and a hook that rebases the tree.
+const requestLeases: AgentExecutionLease[] = [];
+afterEach(() => { for (const lease of requestLeases.splice(0)) { lease.release(); } });
+const requestExecution = () => {
+    const lease = rootExecution({ localCwd: WORKSPACE_ROOT });
+    requestLeases.push(lease);
+    return lease.context;
+};
 const lastRequest = (credential: AgentRequest["credential"] = { kind: "claude-oauth", token: "stale-token" }): AgentRequest => ({
+    execution: requestExecution(),
     spec: {
         prompt: "the last turn's words",
         notes: [{ title: "Open in the editor", text: "a.ts" }],
@@ -72,6 +82,7 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
     const rows: Omit<UsageTurn, "at" | "day">[] = [];
     const deps = services({
         async *agent(request) {
+            assertAgentExecution(request.execution, request.spec);
             sent.push(request);
             for (const frame of frames) {
                 if (request.signal.aborted) {
@@ -251,6 +262,7 @@ describe("tending a hold", () => {
         // Only the card seam the permission gate needs: nothing the turn did (a rebase, its notes) runs again.
         expect(request?.hooks).toEqual({ cards: CARDS });
         expect(request?.credential).toEqual({ kind: "claude-oauth", token: "fresh-acct" });
+        expect(() => assertAgentExecution(request!.execution, request!.spec)).toThrow("Agent execution context is not registered or has been released.");
         expect(hold(deps)).toEqual({ since: T0 + MINUTE, until: T0 + 4 * HOUR, refreshes: 1, readTokens: 198_000 });
         expect(deps.conversations.state(ID)?.turn.promptCache).toEqual({ at: T0 + 51 * MINUTE, ttlMs: HOUR });
         expect(rows).toEqual([expect.objectContaining({ purpose: "keep-warm", conversationId: ID, account: "acct", cacheReadTokens: 198_000 })]);

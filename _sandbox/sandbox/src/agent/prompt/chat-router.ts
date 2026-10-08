@@ -18,7 +18,8 @@ import type { Services } from "../../composition.js";
 import { reachablePersonas } from "../../personas/persona-reach.js";
 import { autoOffer } from "../models/auto-offer.js";
 import type { RoleAnswer } from "../models/role-answer.js";
-import { askRoleModel } from "../models/role-model.js";
+import { askRoleModel, roleModelIsSet } from "../models/role-model.js";
+import { AgentDomainRefusedError, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 
 // What a new chat opens on, read once from the message it opens with: which persona handles it, and which model,
@@ -364,15 +365,22 @@ export const routeChat = async (services: Services, ask: ChatRouteAsk, held: rea
     const siteOf = asked.personas === undefined ? undefined : siteLookup(await services.capabilities.list());
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(ROUTE_DEADLINE_MS)]);
     try {
-        const answer = await askRoleModel(
-            services,
-            "model-router",
-            { prompt: routerPrompt(ask, asked, Date.now(), settings.autoModelGuidance, siteOf), answer: routeAnswer(asked) },
-            deadline,
+        if (!(await roleModelIsSet(services, "model-router"))) {
+            return { ...settled, ...routingOff(asked) };
+        }
+        const answer = await withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
+            askRoleModel(
+                services,
+                execution,
+                "model-router",
+                { prompt: routerPrompt(ask, asked, Date.now(), settings.autoModelGuidance, siteOf), answer: routeAnswer(asked) },
+                deadline,
+            ),
         );
         // Named whether or not anything was chosen: the reading was paid for either way, and the chat says so.
         return { ...settled, ...verdicts(answer.value, asked), judge: modelPinKey(answer.choice) };
     } catch (error: unknown) {
+        if (error instanceof AgentDomainRefusedError) { throw error; }
         // Routing simply switched off (no model for the job) is a setting, not a failure: nothing is said about the
         // persona, and the model half, asked for only by a chat set to Auto, gets a plain note naming the job.
         if (error instanceof RoleModelUnsetError) {

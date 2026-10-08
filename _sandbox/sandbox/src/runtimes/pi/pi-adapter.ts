@@ -15,6 +15,7 @@ import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { onPath } from "../../image/on-path.js";
+import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // The Pi row: the reserved `pi` agent-kind capability, served over Pi's own RPC protocol. A plain adapter rather than a
 // provider module (the ACP reason): Pi is an installed capability, so everything past serving a turn is the capability
@@ -64,5 +65,9 @@ export const PI_ADAPTER: AgentAdapter<"pi", PiAdapterDeps> = {
     },
     // A Pi session is a JSONL file (the id on the wire is its path); resume-ability is whether the file still exists,
     // asked of the filesystem since there's no process between turns to ask. Only a missing file is a lost session.
-    holdsSession: async (_services, sessionId) => (await access(sessionId).then(() => true, undefinedIfMissing)) ?? false,
+    holdsSession: async (_services, sessionId, execution) => {
+        // A path in a domain is not the daemon's filesystem view.
+        requireRootAgentExecution(execution, "Pi's filesystem session probe");
+        return (await access(sessionId).then(() => true, undefinedIfMissing)) ?? false;
+    },
 };

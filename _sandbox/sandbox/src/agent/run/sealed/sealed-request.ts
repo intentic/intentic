@@ -8,6 +8,7 @@ import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
 import { type SealedDeadline, sealedDeadline } from "./sealed-deadline.js";
+import { assertAgentExecutionContext, type AgentExecutionContext } from "../../../workload/agent-execution.js";
 
 // A helper job (a title, a commit subject, a verdict, a route) as a request on the turn's own seam: planned by the
 // runtime's arm (adapter.preflight), run by its loop (plan.run), its failures classified and filed by the turn's own
@@ -28,6 +29,10 @@ const THINKING_DEADLINE_MS = 90_000;
 const MAX_RETRY_WAIT_MS = 15_000;
 
 export interface SealedAsk {
+    // The daemon-issued execution context the request runs under (workload/agent-execution.ts): where its runtime is
+    // launched, and the authority to launch it at all. A helper with no live context, or one whose admission chose a
+    // domain it has no placement in, is refused rather than run as root.
+    readonly execution: AgentExecutionContext;
     // Whose credential and catalog it runs on, and the loop the pin names; the adapter table picks the runtime.
     readonly provider: AgentProvider;
     readonly harness: AgentHarness;
@@ -54,11 +59,13 @@ const sealedQueries = (services: Services): FailureQueries => ({
     },
 });
 
-// The request every arm builds on, with nothing but the words, where they run, and the knobs the pin named.
+// The request every arm builds on, with nothing but the words, where they run, and the knobs the pin named. Where they
+// run is the issued context's view, which armPlan holds the request to (agent/providers/adapter.ts).
 const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signal: AbortSignal): TurnContext => {
-    const root = services.workspace.root;
+    const root = ask.execution.cwd;
     return {
         base: {
+            execution: ask.execution,
             spec: {
                 prompt,
                 cwd: root,
@@ -191,6 +198,7 @@ const answerOf = async (services: Services, ask: SealedAsk, plan: () => Promise<
 };
 
 export const runSealedRequest = async (services: Services, ask: SealedAsk): Promise<string> => {
+    assertAgentExecutionContext(ask.execution);
     const adapter = services.adapters.for(ask.provider, ask.harness);
     if (adapter.sealed !== true) {
         throw new Error(`${adapter.runtime} runs no helper, so there is nothing to ask it one line with.`);
@@ -202,6 +210,8 @@ export const runSealedRequest = async (services: Services, ask: SealedAsk): Prom
         conversationId: ask.conversationId,
         prompt: ask.prompt,
     });
+    // The shield's read does not hold the authority for the request: checked again right before a runtime is planned.
+    assertAgentExecutionContext(ask.execution);
     // The caller's cancel is forwarded rather than passed through, since an answer must tear the loop down too. Covers
     // every attempt: a rung the chain is waiting on must not double its budget by being planned again.
     const abort = new AbortController();

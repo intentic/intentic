@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";
@@ -24,6 +25,7 @@ const request = (
     prompt: string,
     overrides: { readonly spec?: Pick<TurnSpec, "sessionId">; readonly policy?: Pick<TurnPolicy, "permissionMode"> } = {},
 ): AgentRequest<ContainerCredential> => ({
+    execution: unstubbed("execution", {}),
     spec: { prompt, cwd: WORKSPACE_ROOT, ...overrides.spec },
     policy: { ...overrides.policy },
     tools: {},

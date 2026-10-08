@@ -51,7 +51,7 @@ const daemonSideWorktree = async (): Promise<string> => {
 };
 
 const contextIn = (root: string, localCwd = root): TurnContext => ({
-    base: { spec: { prompt: "do the thing", cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
+    base: { execution: unstubbed("execution", {}), spec: { prompt: "do the thing", cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd,
     effectiveCwd: localCwd,

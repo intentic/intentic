@@ -51,7 +51,7 @@ import { createListenerRoutes } from "./extensions/listener/listener.routes.js";
 import { createExtensionOwnRoutes } from "./extensions/runtime/own.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.routes.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
-import { judgeCommand } from "./agent/tools/command-judge.js";
+import { judgeIndependentCommand } from "./agent/tools/command-judge.js";
 import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
@@ -489,7 +489,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         cards: cardDeps(services),
         held: services.heldCards,
         turnRun: (conversationId) => turnRunOf(services.conversations, conversationId),
-        judge: (input, signal) => judgeCommand(services, input, signal),
+        judge: (input, signal) => judgeIndependentCommand(services, input, signal),
     });
     const webextRoutes = webextPeerRoutes(services);
     const phoneRoutes = phonePeerRoutes(services);

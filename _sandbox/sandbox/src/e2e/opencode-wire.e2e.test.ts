@@ -18,6 +18,7 @@ import { OPENCODE_GEMINI_PROVIDER } from "../runtimes/gemini/gemini-models.js";
 import { createOpenCodeService, type OpenCodeService } from "../runtimes/opencode/opencode.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
+import { rootExecution } from "../workload/agent-execution.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -178,8 +179,10 @@ const runTurn = async (scenario: { marker: string }, overrides: TurnOverrides = 
     const events: AgentEvent[] = [];
     const timeouts = overrides.inactivityMs === undefined ? DEFAULT_TURN_TIMEOUTS : { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: overrides.inactivityMs };
     const agent = createOpenCodeAgent(createOpenCodeRunner(service!, timeouts), OPENCODE_GEMINI_PROVIDER);
+    const lease = rootExecution({ localCwd: workspace });
     try {
         for await (const event of agent({
+            execution: lease.context,
             spec: { prompt: `${scenario.marker}: do the thing`, cwd: workspace, model: MODEL_ID, ...overrides.spec },
             policy: overrides.policy ?? {},
             tools: overrides.tools ?? {},
@@ -192,6 +195,7 @@ const runTurn = async (scenario: { marker: string }, overrides: TurnOverrides = 
         }
     } finally {
         controller.abort();
+        lease.release();
     }
     const mine = model!.requests.filter((request) => JSON.stringify(request).includes(scenario.marker));
     return { events, requests: mine };

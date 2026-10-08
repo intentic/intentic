@@ -9,6 +9,8 @@ import { memoryConversationGrants } from "../../../../personas/conversation-gran
 import { memoryFleet } from "../../../../testing.js";
 import type { TurnBase } from "../../../providers/agent-request.js";
 import { type TurnSafetyDeps, withTurnSafety } from "../turn-safety.js";
+import { assertAgentExecutionContext, type AgentExecutionContext } from "../../../../workload/agent-execution.js";
+import { rootExecutionService } from "../../../../workload/agent-execution.testing.js";
 
 // One place sets what every runtime's command gate is built with, so a Codex or Cursor turn is judged by the owner's
 // policy, setting and grants exactly as a Claude Code turn is: these pin that the planner puts them on the base every
@@ -16,22 +18,36 @@ import { type TurnSafetyDeps, withTurnSafety } from "../turn-safety.js";
 
 const cards = parkedCards(memoryFleet().conversations);
 
-const baseOf = (over: { readonly isolation?: TurnPlacement; readonly canInstall?: boolean } = {}): TurnBase => ({
-    spec: { prompt: "p", cwd: WORKSPACE_ROOT, ...(over.isolation === undefined ? {} : { isolation: over.isolation }) },
-    policy: { dependencyInstallAllowed: over.canInstall ?? true },
-    tools: {},
-    hooks: { cards },
-    signal: new AbortController().signal,
-});
+const executionService = rootExecutionService();
+const admission = await executionService.admit();
+const releases: (() => void)[] = [];
+afterEach(() => { for (const release of releases.splice(0)) { release(); } });
+afterAll(() => executionService.close(admission));
+
+const baseOf = (over: { readonly isolation?: TurnPlacement; readonly canInstall?: boolean } = {}): TurnBase => {
+    const lease = executionService.acquire(admission, { localCwd: WORKSPACE_ROOT, ...(over.isolation === undefined ? {} : { isolation: over.isolation }) });
+    releases.push(lease.release);
+    return {
+        execution: lease.context,
+        spec: { prompt: "p", cwd: WORKSPACE_ROOT, ...(over.isolation === undefined ? {} : { isolation: over.isolation }) },
+        policy: { dependencyInstallAllowed: over.canInstall ?? true },
+        tools: {},
+        hooks: { cards },
+        signal: new AbortController().signal,
+    };
+};
 
 const harness = () => {
     const judged: { policy: string; program: string; pins: readonly ModelPin[] }[] = [];
+    const executions: AgentExecutionContext[] = [];
     const conversationGrants = memoryConversationGrants();
     const deps: TurnSafetyDeps = {
         conversationGrants,
         // The shipped table, as a sandbox with no overrides reads it.
         heavyCommands: { read: async () => mergeHeavyRules() },
-        judgeCommand: async (request) => {
+        judgeCommand: async (execution, request) => {
+            assertAgentExecutionContext(execution);
+            executions.push(execution);
             judged.push({ policy: request.policy, program: request.program, pins: request.pins });
             return { decision: "allow", sentence: "Fine." };
         },
@@ -41,11 +57,11 @@ const harness = () => {
         safetyPolicy: unstubbed("safetyPolicy", { text: async () => "# the owner's policy", append: async () => undefined }),
         workspace: unstubbed<TurnSafetyDeps["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     };
-    return { deps, judged, conversationGrants };
+    return { deps, judged, executions, conversationGrants };
 };
 
 test("every runtime's base carries the owner's policy, judge mode, outside wake and install rule", async () => {
-    const { deps, judged } = harness();
+    const { deps, judged, executions } = harness();
     const settings = SandboxSettingsSchema.parse({ commandJudge: "watch", projectInstalls: "ask" });
     const base = await withTurnSafety(deps, { conversationId: "c1", outsideWake: "discord" }, baseOf(), settings);
 
@@ -53,6 +69,8 @@ test("every runtime's base carries the owner's policy, judge mode, outside wake 
     expect(base.hooks.projectInstalls).toMatchObject({ placement: { kind: "shared" }, root: "/work", mode: "ask", canInstall: true });
     await base.hooks.judge?.("rm -rf /", { consequences: [], unattended: false, language: "bash" }, new AbortController().signal);
     expect(judged).toEqual([{ policy: "# the owner's policy", program: "rm -rf /", pins: [] }]);
+    expect(executions).toEqual([base.execution]);
+    expect(executions[0]).toBe(base.execution);
     expect(await base.tools.heavyCommands?.()).toMatchObject({ queue: true });
 });
 

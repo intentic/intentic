@@ -1,4 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getEventListeners } from "node:events";
 import { homedir } from "node:os";
@@ -64,6 +65,7 @@ const collect = async (request: Parameters<typeof runAgent>[1], queryFn: QueryFn
 // browserOutputDir present is a browser-carrying turn; its absence is the core-image signal that strips browser
 // guidance.
 const request: HarnessRequest = {
+    execution: unstubbed("execution", {}),
     spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
     policy: {},
     tools: { browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser` },
@@ -1759,6 +1761,8 @@ test("a sealed request offers no tool or server, reads no settings file, saves n
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
     const sealed: HarnessRequest = {
+        // The loop takes the context as handed; armPlan is where a request is held to it (adapter.test.ts).
+        execution: unstubbed("execution", {}),
         spec: { prompt: "Write a commit subject.", cwd: WORKSPACE_ROOT, model: "claude-haiku-4-5", systemPromptMode: "custom", systemPrompt: "Answer with exactly what the prompt asks for." },
         policy: { sealed: true },
         tools: {},

@@ -25,6 +25,7 @@ import type { Services } from "../../composition.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
 import { OPENCODE_XAI_PROVIDER } from "../opencode/xai-models.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
+import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Grok contributes, listed in runtimes/runtime-table.ts; its loop and credential are OpenCode's (runtimes/opencode).
 
@@ -101,7 +102,10 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
         // install fixes it.
         return (await enginesReady(grokProvider)) ? healthReady() : healthUnavailable(engineMissing("the OpenCode CLI", "Grok"));
     },
-    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
+    holdsSession: async (services, sessionId, execution) => {
+        requireRootAgentExecution(execution, "Grok's shared OpenCode session probe");
+        return services.openCode.sessionExists(sessionId, execution.cwd);
+    },
 };
 
 // What the Grok module reads beyond its adapter: the translator's answer for the routed pickers.

@@ -13,6 +13,10 @@ import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { SHARED_STATE } from "../../workload/worktree-paths.js";
 import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
+import { type NamespaceEntryReference, registerMountEntry } from "../../workload/namespace-entry.js";
+import { type NamespaceHolder, namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
+import type { Readable } from "node:stream";
+import { signalGroup } from "../../workload/process-group.js";
 
 // An isolated turn's own view of /work: without this, an absolute path (a memory, an AGENTS.md, a message) named the
 // shared tree directly, bypassing `land` and losing attribution. A mount namespace makes the worktree BE /work; shared
@@ -143,7 +147,7 @@ const ANCHOR_TRAILER = `echo ${ANCHOR_READY}\nexec sleep infinity`;
 
 // How a process enters an anchor's namespace lives with the rest of process launching, so a runtime can start one
 // there without importing this module (workload/namespace-entry.ts); named here too, where its callers look.
-export { nsenterArgv, nsenterPrefix } from "../../workload/namespace-entry.js";
+export { namespaceTargetOf, nsenterArgv, nsenterPrefix } from "../../workload/namespace-entry.js";
 
 // A tmux client with no server forks one, keeping its mounts for life; inside a turn's namespace every future pane
 // would inherit that worktree forever. The daemon hands its own namespace to the wrapper instead.
@@ -221,6 +225,9 @@ export interface TurnPlacement {
 export interface IsolationAnchor {
     // The pid holding the namespace open; what every entrant joins via nsenter.
     readonly pid: number;
+    // Every real factory carries the issued generation. Optional only for root-mode legacy descriptors and test seams;
+    // this interface is placement plumbing, not authority to admit an unprivileged turn.
+    readonly namespace?: NamespaceEntryReference;
     // The workspace root as the namespace sees it; where entrants start.
     readonly cwd: string;
     // What was mounted; every daemon-side reader needs it to translate an agent's paths back.
@@ -228,9 +235,30 @@ export interface IsolationAnchor {
     // A fenced turn's sandbox (turn-sandbox.ts): its own temp dir, tmux socket and terminal logs, which the turn's env
     // and the Bash tool's rewrite must point at. Absent for an unfenced turn's plain mount namespace.
     readonly sandbox?: SandboxLayout;
+    // An unprivileged agent domain's own directories (domain-anchor.ts). Absent for a root-mode anchor.
+    readonly domain?: DomainLayout;
     // Drops the anchor; anything still running inside keeps the namespace alive until it exits.
     readonly dispose: () => void;
 }
+
+// What an agent domain adds to its anchor (domain-anchor.ts). `dir` is the conversation's run directory and `tmp` the
+// domain's /tmp inside it, both at the same path inside the domain and out; the pane door is the daemon's socket a
+// domain's tmux-run asks to open its panes (terminal/pane-door.ts), seen inside at PANE_DOOR_PATH.
+export interface DomainLayout {
+    readonly dir: string;
+    readonly tmp: string;
+    readonly door: string;
+}
+
+// Whether a placement is a worktree of the conversation's own rather than the main tree. Every turn of a sandbox in
+// unprivileged mode has a placement, a main-tree turn's being the workspace itself (domain-anchor.ts), so having one no
+// longer says a turn is isolated: what runs only for an isolated turn asks this.
+export const ownWorktree = (isolation: TurnPlacement | undefined): isolation is TurnPlacement =>
+    isolation !== undefined && isolation.plan.worktree !== isolation.plan.root;
+
+// Where the daemon hands an anchored turn files it must read at the same path (the Bash tool's command files, the MCP
+// config, background job dirs): a fenced sandbox's own temp dir, an agent domain's, else the daemon's own.
+export const handoffDirOf = (anchor: IsolationAnchor | undefined): string | undefined => anchor?.sandbox?.tmp ?? anchor?.domain?.tmp;
 
 // Resolves only once the mounts are actually up, so no caller can hand work to a half-built namespace. Rejects rather
 // than degrading: the capability was already probed, so a failure here is a real fault.
@@ -238,50 +266,65 @@ export interface IsolationAnchor {
 // fence for a conversation whose person holds only some of the workspace.
 export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor> => {
     const fence = plan.fence;
-    if (fence !== undefined) {
-        return startSandboxAnchor({ ...plan, fence });
-    }
+    return fence === undefined ? startMountAnchor(plan) : startSandboxAnchor({ ...plan, fence });
+};
+
+type MountAnchorProcess = NamespaceHolder & {
+    readonly stdout: Readable;
+    readonly stderr: Readable;
+    readonly unref: () => void;
+    readonly kill: (signal: NodeJS.Signals) => boolean;
+    // Injected with the process so fake PIDs never reach a real signal. Only failed setup uses the whole owned group.
+    readonly stopSetup: () => void;
+};
+const spawnMountAnchor = (plan: IsolationPlan): MountAnchorProcess => {
     const child = spawn("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(plan)], {
         // Stamped, since its own group puts it out of netd's reach when the daemon dies: the next boot ends it
         // (system/boot/generation-sweep.ts), which no turn needs once the daemon that ran it is gone.
         env: { ...process.env, ...detachedStamp("isolation-anchor") },
         stdio: ["ignore", "pipe", "pipe"],
-        // Own process group, so killing the anchor never takes down a pane the agent left running.
+        // Own setup group. Successful disposal kills only the anchor, not independently running panes.
         detached: true,
     });
-    const pid = child.pid;
-    if (pid === undefined) {
-        throw new Error("turn isolation: could not spawn the namespace anchor");
-    }
-    const dispose = (): void => {
-        child.kill("SIGKILL");
-    };
+    return Object.assign(child, { stopSetup: (): void => {
+        if (child.pid !== undefined) { signalGroup(child.pid, "SIGKILL"); }
+    } });
+};
+
+// The real mount-only factory with a process seam for fake-data lifecycle tests. A fenced plan cannot take this door.
+export const startMountAnchor = async (
+    plan: IsolationPlan,
+    start: (plan: IsolationPlan) => MountAnchorProcess = spawnMountAnchor,
+    warn: (error: unknown) => void = (error) => { process.emitWarning(`turn isolation cleanup failed: ${String(error)}`); },
+): Promise<IsolationAnchor> => {
+    if (plan.fence !== undefined) { throw new Error("a fenced turn requires its sandbox, not a mount-only anchor"); }
+    const child = start(plan);
+    let admitted = false;
+    const lifetime = namespaceHolderLifetime(child, () => {
+        try {
+            if (admitted) { child.kill("SIGKILL"); } else { child.stopSetup(); }
+        } catch (error) {
+            // An owned-group signal refusal is reported, not thrown out of an exit/error EventEmitter listener.
+            // The independent readiness listener must still settle the setup refusal.
+            warn(error);
+        } finally {
+            if (!admitted) { child.stdout.destroy(); child.stderr.destroy(); }
+        }
+    });
     try {
-        await new Promise<void>((resolve, reject) => {
-            let out = "";
-            let errors = "";
-            child.stdout.on("data", (chunk: Buffer) => {
-                out += chunk.toString();
-                if (out.includes(ANCHOR_READY)) {
-                    resolve();
-                }
-            });
-            child.stderr.on("data", (chunk: Buffer) => {
-                errors += chunk.toString();
-            });
-            // A failed mount kills the whole script (`set -e`); the exit is the error, stderr says which mount.
-            child.on("exit", (code: number | null) => reject(new Error(`turn isolation: namespace setup exited ${String(code)}: ${errors.trim()}`)));
-            child.on("error", reject);
-        });
+        if (child.pid === undefined) { throw new Error("turn isolation: could not spawn the namespace anchor"); }
+        const pid = await namespaceHolderReady(child, ANCHOR_READY);
+        const namespace = lifetime.register(() => registerMountEntry(pid));
+        // The turn's own streams must not keep the daemon's event loop alive after it ends.
+        child.unref();
+        child.stdout.destroy();
+        child.stderr.destroy();
+        admitted = true;
+        return { pid, namespace, cwd: plan.root, plan, dispose: lifetime.end };
     } catch (error) {
-        dispose();
+        lifetime.end();
         throw error;
     }
-    // The turn's own streams must not keep the daemon's event loop alive after it ends.
-    child.unref();
-    child.stdout.destroy();
-    child.stderr.destroy();
-    return { pid, cwd: plan.root, plan, dispose };
 };
 
 // Every directory in a checkout holding a `.git` entry, root-relative ("" is the root): the root repository's pointer

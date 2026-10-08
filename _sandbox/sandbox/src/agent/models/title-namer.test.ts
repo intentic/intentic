@@ -3,13 +3,28 @@ import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { Social } from "../../conversations/registry/agents-store.js";
 import { conversationAfter } from "../../testing.js";
-import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import { assertAgentExecutionContext, type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
+import { rootExecutionService } from "../../workload/agent-execution.testing.js";
 
 const ask = jest.fn<() => Promise<{ value: string }>>();
 // Whether a model is set for session titles; false means this pass must ask before spending anything.
 const modelSet = jest.fn<() => boolean>(() => true);
-jest.mock("./role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
+const executions: AgentExecutionContext[] = [];
+jest.mock("./role-model.js", () => ({
+    askRoleModel: (_services: Services, execution: AgentExecutionContext) => {
+        assertAgentExecutionContext(execution);
+        executions.push(execution);
+        return ask();
+    },
+    roleModelIsSet: async () => modelSet(),
+}));
+const { cleanSessionTitle, nameAgentTitle: nameAgentTitleInExecution, splitTitleAction } = await import("./title-namer.js");
+
+const nameAgentTitle = (services: Services, conversationId: string, prompt: string): Promise<void> =>
+    withAgentExecution(services.agentExecution, { localCwd: "/work" }, (execution) =>
+        nameAgentTitleInExecution(services, execution, conversationId, prompt),
+    );
 
 // Same instinct as cleanCommitSubject: an answer's wrapper is stripped rather than refusing a good name over stray
 // formatting.
@@ -83,11 +98,13 @@ const STOLEN_TITLES = [
 const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0): Services =>
     unstubbed<Services>("services", {
         privacyShield: privacySliceFake().privacyShield,
+        agentExecution: rootExecutionService(),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { social: { title, reactions: [] } }), setTitle }),
     });
 
 beforeEach(() => {
     ask.mockReset();
+    executions.length = 0;
     modelSet.mockReturnValue(true);
 });
 
@@ -146,6 +163,24 @@ test("a chain that never wrote a usable name leaves the derived title standing",
     ).rejects.toThrow(/tool call/);
 
     expect(setTitle).not.toHaveBeenCalled();
+});
+
+test("passes the caller's live execution context unchanged to the title model", async () => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    const services = servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle);
+    const admission = await services.agentExecution.admit();
+    const lease = services.agentExecution.acquire(admission, { localCwd: "/work" });
+    ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
+    try {
+        await nameAgentTitleInExecution(services, lease.context, "c1", "fix the auth tests");
+        expect(executions).toEqual([lease.context]);
+        expect(executions[0]).toBe(lease.context);
+        assertAgentExecutionContext(lease.context);
+        expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
+    } finally {
+        lease.release();
+        services.agentExecution.close(admission);
+    }
 });
 
 test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass runs again and heals it", async (stolen) => {

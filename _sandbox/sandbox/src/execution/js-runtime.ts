@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
-import { nsenterArgv } from "../workload/namespace-entry.js";
+import { namespaceTargetOf, nsenterArgv } from "../workload/namespace-entry.js";
 import { inWorktree } from "../workload/worktree-paths.js";
 import type { TurnPersona } from "../personas/personas.js";
 import { runCheck } from "../workload/run-check.js";
@@ -103,7 +103,7 @@ export const runJs = async (
     const placed = placedPlan(plan, options.placement);
     const anchor = options.placement?.anchor;
     const invocation =
-        anchor === undefined ? { command: "node", args: nodeArgs(placed) } : nsenterArgv(anchor.pid, placed.cwd, "node", nodeArgs(placed));
+        anchor === undefined ? { command: "node", args: nodeArgs(placed) } : nsenterArgv(namespaceTargetOf(anchor), placed.cwd, "node", nodeArgs(placed));
     const ran = await runCheck({
         argv: [invocation.command, ...invocation.args],
         ...(anchor === undefined ? { cwd: placed.cwd } : {}),

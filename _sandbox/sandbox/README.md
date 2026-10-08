@@ -85,6 +85,30 @@ flowchart LR
   (`conversations/worktrees/isolation.ts`). Cursor's SDK agent, which ran inside the daemon, moves for such a turn into
   a runtime process born there (`runtimes/cursor/cursor-host.ts`, `cursor-agent-runtime.ts`); its custom tools, hook
   gate and frames stay in the daemon, reached over the process's IPC channel.
+- The unprivileged agent domain (`agentDomain`, `workload/agent-domain-policy.ts`) is a setting kept in the auth root,
+  not in the workspace settings, and only the owner may change it. It defaults to `root`, and this build still refuses
+  `unprivileged` everywhere it is read (`workload/agent-domain-rollout.ts` lists what is missing). When it is on, each
+  turn runs inside a domain the daemon builds (`conversations/worktrees/domain-anchor.ts`): a user namespace whose root
+  is uid 1500 on disk, with no capability outside it, plus mount and PID namespaces the daemon owns. The workspace is
+  shown to it through idmapped binds, so files it writes stay root-owned on disk. Secrets, `/root`, the daemon's
+  sockets and every repository's git metadata are hidden or read-only (`workload/agent-domain-view.ts`). The agent's
+  HOME is `/home/agent`, kept on the history volume and refreshed by the daemon before each domain starts
+  (`workload/agent-home.ts`). Only Claude Code runs there so far, and a fenced conversation is refused.
+- A domain's Bash panes cannot use the root tmux server, so `bin/tmux-run` asks the domain's own pane door instead
+  (`terminal/pane-door.ts`), and the daemon opens the window. The pane enters the domain in two steps, so its command
+  still leads its own session and the session-based process lookups keep working (`workload/namespace-entry.ts`
+  `agentPaneLine`). Each conversation's domain also has a run directory (`agent-run/c-<id>` under the history root),
+  bound at the same path inside and out. It is the domain's `/tmp` and the place the daemon hands the turn its command
+  files and background job directories.
+- Every local turn carries a daemon-issued execution context (`workload/agent-execution.ts`). It ties the request to
+  the admitted mode, working directory and namespace, and a runtime refuses a request whose placement does not match.
+  Helpers and runtimes that cannot run in a domain yet refuse unprivileged execution rather than run as root. A
+  refusal at admission (`agent-domain-refused`) keeps the queued message, since nothing ran. The domain, its view, the
+  agent's HOME and a pane opened through the door were run in a throwaway container on omen (2026-10-08): the agent
+  writes the workspace as root-owned files, cannot read the masked secrets, `/root` or the daemon's `/proc`, and its
+  pane leads its own session on a real terminal. Inside the domain the repositories' git metadata is read-only, so
+  `git status` and `git log` work and `git commit` does not. A full turn on a runtime has not been run there yet, and
+  never belongs in this running sandbox.
 - A fenced conversation (started by a member who holds areas) runs in a bubblewrap sandbox instead
   (`conversations/worktrees/turn-sandbox.ts`): an unprivileged user with no capabilities, its own pid namespace, and a
   filesystem holding only the system, its own checkout with every `.git` pointer masked, its own session store and a

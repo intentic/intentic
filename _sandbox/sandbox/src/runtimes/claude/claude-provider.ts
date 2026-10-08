@@ -12,6 +12,7 @@ import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "./
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";
+import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Everything Claude contributes to the daemon (listed in runtimes/runtime-table.ts). Claude is the anchor module:
 // its adapter is the Claude Code loop, which also serves Kimi and the routed providers under the claude-code harness.
@@ -65,7 +66,12 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
         }
         return accounts.length > 0 ? healthReady() : healthUnavailable("Connect your Claude subscription in Sandbox ▸ Agent.");
     },
-    holdsSession: (services, sessionId, cwd) => services.sessions.exists(cwd, sessionId),
+    holdsSession: async (services, sessionId, execution) => {
+        // A daemon-side read of the shared store. A domain's HOME links that same store (workload/agent-home.ts), so the
+        // answer holds for a turn in either mode; the context still has to be a live one.
+        assertAgentExecutionContext(execution);
+        return services.sessions.exists(execution.cwd, sessionId);
+    },
 };
 
 // What the Claude module reads beyond its adapter: the catalog it serves and the account door's stores.

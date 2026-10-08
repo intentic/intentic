@@ -1,5 +1,6 @@
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
+import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../providers/failure-sentences.js";
 import { sentenceAnswer } from "./role-answer.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
@@ -105,7 +106,7 @@ const chosenName = (entry: PersistedAgent): string | undefined => {
 
 // No-ops whenever there is nothing to do, including no model set for this role, which is the job switched off. Throws
 // only what askRoleModel throws; the caller logs it and leaves the derived title standing for the next turn to retry.
-export const nameAgentTitle = async (services: Services, conversationId: string, prompt: string): Promise<void> => {
+export const nameAgentTitle = async (services: Services, execution: AgentExecutionContext, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
     if (entry === undefined || !(await roleModelIsSet(services, `session-title`))) {
         return;
@@ -119,6 +120,7 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
     }
     const { value: named } = await askRoleModel(
         services,
+        execution,
         `session-title`,
         { prompt: namePrompt(prompt), answer: titleAnswer },
         new AbortController().signal,

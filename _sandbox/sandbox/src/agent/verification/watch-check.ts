@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type IsolationPlan, isolationScript, nsenterArgv, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { type IsolationPlan, isolationScript, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
 import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { runCheck } from "../../workload/run-check.js";
@@ -105,7 +106,7 @@ const sandboxedCheck = async (command: string, options: CheckOptions, plan: Isol
         return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${error instanceof Error ? error.message : String(error)}` };
     }
     try {
-        const entry = nsenterArgv(anchor.pid, anchor.cwd, "bash", ["-lc", command]);
+        const entry = nsenterArgv(namespaceTargetOf(anchor), anchor.cwd, "bash", ["-lc", command]);
         const env = { ...options.env };
         if (anchor.sandbox !== undefined) {
             Object.assign(env, sandboxEnv(anchor.sandbox));

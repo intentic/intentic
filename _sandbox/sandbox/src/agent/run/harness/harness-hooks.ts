@@ -3,7 +3,8 @@ import type { Rule } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";
-import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../conversations/worktrees/isolation.js";
+import { fromWorktree, inWorktree, type IsolationAnchor, ownWorktree } from "../../../conversations/worktrees/isolation.js";
+import { namespaceTargetOf, nsenterPrefix } from "../../../workload/namespace-entry.js";
 import type { Services } from "../../../composition.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
@@ -33,7 +34,7 @@ export type HarnessHooksDeps = Pick<
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
 export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined, repo?: string): string =>
-    anchor === undefined ? command : `${nsenterPrefix(anchor.pid, repoCwd(anchor.cwd, repo))}bash -c ${shellQuote(command)}`;
+    anchor === undefined ? command : `${nsenterPrefix(namespaceTargetOf(anchor), repoCwd(anchor.cwd, repo))}bash -c ${shellQuote(command)}`;
 
 // Stamps a rule's firing on the settings list; best-effort, so a failed stamp costs the rule its date, not the turn.
 const stampFiring = (deps: Pick<Services, "logger" | "ruleFirings">, rule: Rule): void => {
@@ -104,7 +105,7 @@ const turnChangeOf = async (deps: HarnessHooksDeps, conversationId: string, name
 const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
     const isolation = context.base.spec.isolation;
     const conversationId = context.base.spec.conversationId;
-    if (rules.length === 0 || isolation === undefined || conversationId === undefined) {
+    if (rules.length === 0 || !ownWorktree(isolation) || conversationId === undefined) {
         return {};
     }
     const named = new Set(rules.flatMap((rule) => (rule.when?.repo === undefined ? [] : [rule.when.repo])));

@@ -25,6 +25,7 @@ import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
+import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
 
@@ -148,7 +149,10 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini", GeminiAdapterDeps
         }
         return (await enginesReady(geminiProvider)) ? healthReady() : healthUnavailable(engineMissing("the OpenCode CLI", "Google"));
     },
-    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
+    holdsSession: async (services, sessionId, execution) => {
+        requireRootAgentExecution(execution, "Gemini's shared OpenCode session probe");
+        return services.openCode.sessionExists(sessionId, execution.cwd);
+    },
 };
 
 export const geminiProvider: ProviderModule<GeminiAdapterDeps> = {

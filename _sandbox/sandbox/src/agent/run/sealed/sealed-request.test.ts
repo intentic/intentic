@@ -5,6 +5,8 @@ import type { Services } from "../../../composition.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
 import { tokenOf } from "../../../privacy/tokens.js";
 import type { TurnArmPlan, TurnContext } from "../../providers/adapter.js";
+import { AgentDomainRefusedError, type AgentExecutionLease } from "../../../workload/agent-execution.js";
+import { rootExecution } from "../../../workload/agent-execution.testing.js";
 import { runSealedRequest, SEALED_SYSTEM_PROMPT, type SealedAsk } from "./sealed-request.js";
 
 // A helper's request on the turn's own seam: planned by the runtime's arm, run by its loop, read whole by the privacy
@@ -59,7 +61,17 @@ const services = (adapter: Adapter, policy: Parameters<typeof privacySliceFake>[
     return { fake, refusals, observed, ledger: privacy.privacyLedger };
 };
 
+// Every request runs under an issued execution context (workload/agent-execution.ts), here the workspace's own view.
+let lease: AgentExecutionLease;
+beforeEach(() => {
+    lease = rootExecution({ localCwd: WORKSPACE_ROOT });
+});
+afterEach(() => {
+    lease.release();
+});
+
 const ask = (fields: Partial<SealedAsk> = {}): SealedAsk => ({
+    execution: lease.context,
     provider: "cursor",
     harness: "claude-code",
     model: "composer-2.5",
@@ -97,6 +109,7 @@ test("plans a sealed request on the runtime's own arm and answers with what its 
         effort: "low",
         conversationId: "vivid-rowan-moks",
     });
+    expect(context.base.execution).toBe(lease.context);
     expect(context.base.policy).toEqual({ sealed: true });
     expect(context.base.tools).toEqual({});
     expect(context.base.spec).toEqual({
@@ -112,6 +125,51 @@ test("plans a sealed request on the runtime's own arm and answers with what its 
     expect(context.attachmentPaths).toEqual([]);
     // Its words on the wire settle what Cursor last refused on that account, as a turn's do.
     expect(refusals.clear).toHaveBeenCalledWith("cursor", "cursor-one");
+});
+
+test("runs in the issued context's view, not wherever the workspace happens to be", async () => {
+    const { adapter, planned } = arm(async function* () {
+        yield* saying("fix: tighten the tree truncation");
+    });
+    const view = rootExecution({ localCwd: `${WORKSPACE_ROOT}/helper-view` });
+    try {
+        await expect(runSealedRequest(services(adapter).fake, ask({ execution: view.context }))).resolves.toBe("fix: tighten the tree truncation");
+        const context = planned[0]?.context;
+        expect(context?.base.execution).toBe(view.context);
+        expect([context?.base.spec.cwd, context?.localCwd, context?.effectiveCwd]).toEqual([
+            `${WORKSPACE_ROOT}/helper-view`, `${WORKSPACE_ROOT}/helper-view`, `${WORKSPACE_ROOT}/helper-view`,
+        ]);
+    } finally {
+        view.release();
+    }
+});
+
+test.each(["released", "forged"] as const)("a %s execution context is refused before the shield reads it or any arm plans it", async (kind) => {
+    const execution = kind === "forged" ? { mode: "root" as const, cwd: WORKSPACE_ROOT } : lease.context;
+    if (kind === "released") {
+        lease.release();
+    }
+    const pending = runSealedRequest(unstubbed<Services>("nothing may be touched", {}), ask({ execution }));
+    await expect(pending).rejects.toBeInstanceOf(AgentDomainRefusedError);
+    await expect(pending).rejects.toMatchObject({ code: "agent-domain-refused", message: "Agent execution context is not registered or has been released." });
+});
+
+test("a context released while the shield reads the request is refused before any arm plans it", async () => {
+    const { adapter, planned } = arm(async function* () {
+        yield* saying("never asked");
+    });
+    const { fake } = services(adapter);
+    const guarded = unstubbed<Services>("services", {
+        ...fake,
+        privacyShield: unstubbed<Services["privacyShield"]>("privacyShield", {
+            seal: async (request) => {
+                lease.release();
+                return { prompt: request.prompt, restore: (text: string) => text };
+            },
+        }),
+    });
+    await expect(runSealedRequest(guarded, ask())).rejects.toMatchObject({ code: "agent-domain-refused" });
+    expect(planned).toEqual([]);
 });
 
 test("a subagent's words are not the answer", async () => {

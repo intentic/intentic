@@ -19,6 +19,7 @@ import { rungLimit, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";
 import { opt } from "../../opt.js";
+import { AgentDomainRefusedError, assertAgentExecutionContext, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Resolves what a role's chain actually runs on (connected accounts, catalogs, the walk itself); the contract
 // (model-pins.ts) decides the order, this file supplies the facts and executes it. Every ask names its own role and
@@ -156,9 +157,18 @@ const promptFor = <T>(ask: RoleAsk<T>, room: number): string => (typeof ask.prom
 // One rung asked as a sealed request (agent/run/sealed/sealed-request.ts), on the same arm, loop, privacy shield and
 // failure records a turn on that model would meet. Runtime is decided by the adapter table/capabilitiesOf, never here,
 // so a provider that refuses a harness always lands on its own regardless of the pin. Effort, thinking and fast ride
-// along unchanged.
-const askRung = (services: Services, pin: ModelPin, prompt: string, signal: AbortSignal, conversationId: string | undefined): Promise<string> =>
-    runSealedRequest(services, {
+// along unchanged. The issued execution context rides with it: the request runs in that admitted view or refuses.
+const askRung = (
+    services: Services,
+    execution: AgentExecutionContext,
+    pin: ModelPin,
+    prompt: string,
+    signal: AbortSignal,
+    conversationId: string | undefined,
+): Promise<string> => {
+    assertAgentExecutionContext(execution);
+    return runSealedRequest(services, {
+        execution,
         provider: pin.provider,
         harness: pin.harness ?? `claude-code`,
         prompt,
@@ -169,6 +179,7 @@ const askRung = (services: Services, pin: ModelPin, prompt: string, signal: Abor
         ...opt("conversationId", conversationId),
         signal,
     });
+};
 
 // Every refusal (allowance, credential, outage, or a wrong-shaped reply) is stepped over the same way, asking the next
 // rung; a user cancel stops the walk outright.
@@ -183,11 +194,13 @@ export interface RoleModelOptions {
 
 export const askRoleModel = async <T>(
     services: Services,
+    execution: AgentExecutionContext,
     role: ModelRole,
     ask: RoleAsk<T>,
     signal: AbortSignal,
     options: RoleModelOptions = {},
 ): Promise<RoleModelAnswer<T>> => {
+    assertAgentExecutionContext(execution);
     const onProgress = options.onProgress;
     // An empty list means the job is off; refuse before touching a catalog, unlike accounts that are simply gone.
     const pinned = options.pins ?? (await services.sandboxSettings.get()).modelRoles[role] ?? [];
@@ -275,7 +288,7 @@ export const askRoleModel = async <T>(
             };
             try {
                 // A credential failing at resolution is the same dead end as one failing outright.
-                const text = await askRung(services, choice, prompt, signal, options.conversationId);
+                const text = await askRung(services, execution, choice, prompt, signal, options.conversationId);
                 // Reply is validated here, not by the caller, so a bad-shaped answer is stepped over like a refusal.
                 const value = readRoleAnswer(ask.answer, text);
                 // Clears any memo: an answer proves whatever this rung refused for before is over.
@@ -284,8 +297,8 @@ export const askRoleModel = async <T>(
                 settle({ choice, status: `answered`, at: from, ms: spent() });
                 return { answer: { value, choice, skipped }, asked };
             } catch (error) {
-                if (signal.aborted) {
-                    // A user cancel earns no memo: the next call must ask this rung as if nothing happened.
+                if (signal.aborted || error instanceof AgentDomainRefusedError) {
+                    // Cancellation or execution refusal is not a provider's failure: no memo, retry or next rung.
                     throw error;
                 }
                 services.perf.record("role.model", spent(), { role, provider: choice.provider, model: choice.model }, true);

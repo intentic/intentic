@@ -3,6 +3,7 @@ import { declaredAllows, declaredTestNote, type LandedMessageDraft, type LandedM
 import { type RoleAnswer, sentenceReason } from "../../agent/models/role-answer.js";
 import { askRoleModel, type RoleModelAttempt, roleModelIsSet } from "../../agent/models/role-model.js";
 import type { Services } from "../../composition.js";
+import { withAgentExecution } from "../../workload/agent-execution.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import {
     cleanBreakingNote,
@@ -20,8 +21,8 @@ import { reposOf } from "../registry/agents-store.js";
 import { opt } from "../../opt.js";
 
 // The commit subject read off the code at land time, not the frozen session title (which describes the ask, not the
-// change). Read through the same collectRepoDiff a real commit uses, so the two agree. Best-effort: nothing here may
-// fail a land.
+// change). Read through the same collectRepoDiff a real commit uses, so the two agree. Ordinary draft failures may
+// fall back at the caller; an execution-domain refusal must propagate unchanged.
 
 // Past this many repos the per-repo patch budget is too thin to say anything; caps one runaway land's prompt.
 const MAX_REPOS = 12;
@@ -107,8 +108,8 @@ const step = (attempt: RoleModelAttempt): LandedMessageStep => ({
     ...(attempt.reason === undefined ? {} : { reason: attempt.reason }),
 });
 
-// No-op when there's nothing to say; never throws, since every caller is a land that already succeeded. Not awaited:
-// the land's own response must not wait on a cheap-model call.
+// No-op when there's nothing to say; a failed draft is reported and rethrown to its detached caller. The land's own
+// response must not wait on this cheap-model call.
 export const describeLanding = async (services: Services, id: string): Promise<void> => {
     const entry = services.agents.entry(id);
     if (entry === undefined) {
@@ -144,16 +145,19 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     // Diff only, no title: a title-plus-diff answer tends to write the title back verbatim, poisoning the commit.
     // Each walk beat publishes immediately; the outcome (`ended`) is written last, after the sentence is already live.
     try {
-        const { value } = await services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
-            askRoleModel(
-                services,
-                `commit-message`,
-                // Sized per rung rather than built once: the patch budget is the largest thing any helper sends, and a
-                // model on a small window gets a clipped diff instead of a prompt it has to refuse.
-                { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote, diffs.flatMap((diff) => diff.subjects)) },
-                new AbortController().signal,
-                // The land's own conversation: a provider the owner let read it reads the diff it made too.
-                { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }), conversationId: id },
+        const { value } = await withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
+            services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
+                askRoleModel(
+                    services,
+                    execution,
+                    `commit-message`,
+                    // Sized per rung rather than built once: the patch budget is the largest thing any helper sends, and a
+                    // model on a small window gets a clipped diff instead of a prompt it has to refuse.
+                    { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote, diffs.flatMap((diff) => diff.subjects)) },
+                    new AbortController().signal,
+                    // The land's own conversation: a provider the owner let read it reads the diff it made too.
+                    { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }), conversationId: id },
+                ),
             ),
         );
         // `!` is forced whenever a shrink was detected, not trusted from the model: release tooling majors on it.

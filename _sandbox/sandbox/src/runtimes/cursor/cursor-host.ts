@@ -6,7 +6,7 @@ import type { AgentOptions, SDKCustomTool, SendOptions } from "@cursor/sdk";
 import type { Logger } from "pino";
 import { errorMessage } from "@intentic/base/errors";
 import { opt } from "../../opt.js";
-import { nsenterArgv } from "../../workload/namespace-entry.js";
+import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { outputTail } from "../stdio/child-output.js";
@@ -267,7 +267,8 @@ const remoteSession = (channel: RuntimeChannel, agentId: string): CursorSession 
 
 export interface NamespacedHostInput {
     // The turn's namespace anchor: its pid, and the root as the namespace sees it (/work, which is the worktree there).
-    readonly namespace: { readonly pid: number; readonly cwd: string };
+    // The reference stays in the daemon, never on the runtime wire; optional only for legacy root-mode descriptors.
+    readonly namespace: { readonly pid: number; readonly cwd: string; readonly namespace?: NamespaceEntryReference };
     readonly sdk: SdkErrors;
     // The SDK entry this daemon resolved, loaded by the runtime too, so both processes run one copy; undefined is this
     // package's own dependency.
@@ -288,7 +289,7 @@ export const namespacedHost =
         const command = input.command ?? runtimeCommand();
         // nsenter execs the runtime into the anchor's namespace and stays a direct child; --wdns makes its cwd /work as
         // the namespace sees it, before the SDK is even loaded.
-        const argv = nsenterArgv(input.namespace.pid, input.namespace.cwd, command.file, [...command.args, input.sdkEntry ?? ""]);
+        const argv = nsenterArgv(namespaceTargetOf(input.namespace), input.namespace.cwd, command.file, [...command.args, input.sdkEntry ?? ""]);
         const child = (input.spawn ?? spawnRuntime)(argv.command, argv.args, input.spawnDepth, input.owner);
         const channel = runtimeChannel(child, customTools, input.sdk, input.logger);
         try {

@@ -1,5 +1,7 @@
 import type { ModelPin, SafetyDecision, SafetyVerdict } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import { FENCE } from "@intentic/sandbox-contract";
@@ -150,11 +152,13 @@ export const judgeAnswer: RoleAnswer<JudgedReply> = {
 // Throws when no rung answered: the caller decides what an unavailable judge means, since that differs by posture.
 export const judgeCommand = async (
     services: Services,
+    execution: AgentExecutionContext,
     input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
     signal: AbortSignal,
 ): Promise<SafetyVerdict> => {
     const { value } = await askRoleModel(
         services,
+        execution,
         `safety-judge`,
         { prompt: judgePrompt(input.policy, input.program, input.facts), answer: judgeAnswer },
         signal,
@@ -162,4 +166,19 @@ export const judgeCommand = async (
         { pins: input.pins },
     );
     return value.verdict;
+};
+
+// Device gates have no live turn lease to lend to the judge. Admit this independent helper only when it will ask a
+// model; the explicit local placement cannot authorize unprivileged execution without a genuine domain.
+export const judgeIndependentCommand = (
+    services: Services,
+    input: Parameters<typeof judgeCommand>[2],
+    signal: AbortSignal,
+): Promise<SafetyVerdict> => {
+    if (input.pins.length === 0) {
+        return Promise.reject(new RoleModelUnsetError("safety-judge"));
+    }
+    return withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
+        judgeCommand(services, execution, input, signal),
+    );
 };

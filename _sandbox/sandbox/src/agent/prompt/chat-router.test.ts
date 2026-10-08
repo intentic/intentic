@@ -2,6 +2,11 @@ import { type Area, type ModelOffer, modelPinKey, type Persona } from "@intentic
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
+import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionService } from "../../workload/agent-execution.js";
+import { rootExecutionService } from "../../workload/agent-execution.testing.js";
+import type { RoleAsk } from "../models/role-answer.js";
+import { readRoleAnswer } from "../models/role-answer.js";
+import type { RouteVerdict } from "./chat-router.js";
 
 /* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the router
    makes of it, and the offer is mocked so a test can state what is connected. One reading answers both halves, so what
@@ -10,20 +15,26 @@ import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 const ask = jest.fn<(prompt: string) => Promise<string>>();
 // Which role each ask named, so a test can pin that both halves spend one list, and it is the routing one.
 const roles: string[] = [];
+const executions: AgentExecutionContext[] = [];
+const modelSet = jest.fn<() => boolean>(() => true);
 // The rung the mocked walk lands on, and the key the answer reports it back as.
 const RUNG = { provider: "claude", model: "haiku" };
 const RUNG_KEY = modelPinKey(RUNG);
 
 jest.mock("../models/role-model.js", () => ({
     askRoleModel: async (
-        _services: unknown,
+        _services: Services,
+        execution: AgentExecutionContext,
         role: string,
-        request: { prompt: string; answer: { read: (reply: string) => unknown; unusable: (value: never) => string | undefined } },
+        request: RoleAsk<RouteVerdict>,
     ) => {
+        assertAgentExecutionContext(execution);
+        executions.push(execution);
         roles.push(role);
-        const { readRoleAnswer } = await import("../models/role-answer.js");
-        return { value: readRoleAnswer(request.answer as never, await ask(request.prompt)), choice: RUNG, skipped: [] };
+        const prompt = typeof request.prompt === "string" ? request.prompt : request.prompt(4_000);
+        return { value: readRoleAnswer(request.answer, await ask(prompt)), choice: RUNG, skipped: [] };
     },
+    roleModelIsSet: async () => modelSet(),
 }));
 
 const offer = jest.fn<() => ModelOffer>();
@@ -61,8 +72,10 @@ const AREAS: readonly Area[] = [
 ];
 
 // The owner's standing preferences live in settings, so a router test states them the way the daemon reads them.
-const services = (over: { guidance?: string; cards?: readonly Persona[] } = {}): Services =>
+const services = (over: { guidance?: string; cards?: readonly Persona[]; execution?: AgentExecutionService } = {}): Services =>
     unstubbed<Services>("services", {
+        agentExecution: over.execution ?? rootExecutionService(),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [...(over.cards ?? CARDS)] }),
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [...AREAS] }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", {
@@ -88,6 +101,8 @@ beforeEach(() => {
     ask.mockReset();
     warn.mockReset();
     roles.splice(0);
+    executions.length = 0;
+    modelSet.mockReturnValue(true);
     offer.mockReset();
     offer.mockReturnValue(OFFER);
 });
@@ -321,6 +336,58 @@ test("routing switched off says nothing about personas, and tells an Auto chat w
         model: { reason: `Auto picks a model only when "New chat routing" has one in Sandbox ▸ Agent ▸ Models, so this chat keeps the model it had.` },
     });
     expect(warn).not.toHaveBeenCalled();
+});
+
+test.each([false, true])("owns and releases independent router execution when the model fails=%s", async (fails) => {
+    const service = rootExecutionService();
+    const admit = jest.spyOn(service, "admit");
+    const close = jest.spyOn(service, "close");
+    const acquire = jest.spyOn(service, "acquire");
+    if (fails) { ask.mockRejectedValue(new Error("router unavailable")); }
+    else { ask.mockResolvedValue("backend"); }
+
+    await routeChat(services({ execution: service }), PERSONA_ONLY, undefined);
+
+    expect(executions).toHaveLength(1);
+    expect(executions[0]?.cwd).toBe("/work");
+    expect(() => assertAgentExecutionContext(executions[0]!)).toThrow(AgentDomainRefusedError);
+    const admission = acquire.mock.calls[0]![0];
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(acquire).toHaveBeenCalledWith(admission, { localCwd: "/work" });
+    expect(close).toHaveBeenCalledWith(admission);
+    expect(() => service.acquire(admission, { localCwd: "/work" })).toThrow(AgentDomainRefusedError);
+});
+
+test("an unplaced unprivileged router refuses rather than falling back to a model or an unread route", async () => {
+    const readProtectedPolicy = async () => ({ agentDomain: "unprivileged" as const });
+    const service = createAgentExecutionService(readProtectedPolicy, () => undefined);
+    const close = jest.spyOn(service, "close");
+
+    await expect(routeChat(services({ execution: service }), PERSONA_ONLY, undefined)).rejects.toBeInstanceOf(AgentDomainRefusedError);
+
+    expect(ask).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+});
+
+test("router model domain refusals survive fallback unchanged and release the helper", async () => {
+    const refusal = new AgentDomainRefusedError("router context was released");
+    ask.mockRejectedValue(refusal);
+    await expect(routeChat(services(), PERSONA_ONLY, undefined)).rejects.toBe(refusal);
+    expect(warn).not.toHaveBeenCalled();
+    expect(() => assertAgentExecutionContext(executions[0]!)).toThrow(AgentDomainRefusedError);
+});
+
+test("an unset router and deterministic route never admit independent execution", async () => {
+    const service = rootExecutionService();
+    const admit = jest.spyOn(service, "admit");
+    modelSet.mockReturnValue(false);
+    expect(await routeChat(services({ execution: service }), PERSONA_ONLY, undefined)).toEqual({});
+    expect(await routeChat(services({ execution: service }), { ...PERSONA_ONLY, folder: "api" }, undefined)).toEqual({
+        persona: { id: "backend", reason: "Opened in api, which Backend works in." },
+    });
+    expect(admit).not.toHaveBeenCalled();
+    expect(ask).not.toHaveBeenCalled();
 });
 
 test("a chat with nothing left to ask spends nothing at all", async () => {

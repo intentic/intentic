@@ -1,6 +1,11 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy, AgentEvent } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
+import type { Services } from "../../../../composition.js";
+import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/agent-domain-rollout.js";
+import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
+import { streamAgent } from "../../stream-agent.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
 import type { JournalledTurn } from "../turn-journal.js";
 import { type AttachEntry, type AttachHead, turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
@@ -587,6 +592,60 @@ describe(`turn runs`, () => {
 
         await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {} } })
             .settled;
+        expect(writes).toEqual([]);
+    });
+
+    const domainRefusals = [
+        ["unprivileged", async (): Promise<AgentDomainPolicy> => ({ agentDomain: "unprivileged" }), AGENT_DOMAIN_NOT_READY],
+        ["unreadable protected", async (): Promise<AgentDomainPolicy> => { throw new Error("protected policy is unreadable"); }, "protected policy is unreadable"],
+    ] as const;
+
+    it.each(domainRefusals)("the real %s domain-policy refusal retracts an unexecuted run instead of recording a failure", async (name, get, message) => {
+        const { writes, journalDeps, conversations } = journalledFleet();
+        const policyRead = jest.fn(get);
+        // No placement, provider, runtime, title helper or resource seam is supplied: reaching any of them throws.
+        const services = unstubbed<Services>("services", {
+            agentDomainPolicy: unstubbed<Services["agentDomainPolicy"]>("agentDomainPolicy", { get: policyRead }),
+            // The daemon's own issuer over the same protected read, as composition.ts builds it.
+            agentExecution: createAgentExecutionService(policyRead),
+        });
+        const conversationId = `c-domain-${name}`;
+        const transcript = jest.fn(async () => true);
+        const settled: DomainEventMap["run.settled"][] = [];
+        journalDeps.events.subscribe("run.settled", (event) => void settled.push(event));
+        const run = started(startTurnRun(
+            journalDeps,
+            (input, signal) => streamAgent(services, input, signal),
+            { ...turn(conversationId), isolated: true, attachments: ["draft.txt", "diagram.png"] },
+            {
+                journalled: true,
+                opening: () => [{ role: "user", text: "do the thing", sentAt: 1, attachments: ["draft.txt", "diagram.png"] }],
+                transcript,
+            },
+        ));
+        const frames: AgentEvent[] = [];
+        for await (const frame of run.frames()) {
+            frames.push(frame);
+        }
+        await waitFor(() => expect(settled).toHaveLength(1));
+
+        expect(frames).toEqual([
+            { kind: "error", code: "agent-domain-refused", message },
+            { kind: "done" },
+        ]);
+        expect(policyRead).toHaveBeenCalledTimes(1);
+        expect(run.done).toBe(true);
+        expect(run.ranNothing).toBe(true);
+        expect(run.rows).toEqual([{
+            role: "notice",
+            text: `${message} Your message was not delivered: it is held for you to send again.`,
+            noticeCode: { code: "undelivered", params: { message, error: "agent-domain-refused" } },
+            run: run.id,
+        }]);
+        expect(transcript).not.toHaveBeenCalled();
+        expect(writes).toEqual([]);
+        // Even opening this conversation later cannot flush an unseen refusal into its execution journal.
+        await conversations.send(conversationId, { kind: "begin", turn: { conversationId, isolated: false, prompt: "later", profile: {} } }).settled;
         expect(writes).toEqual([]);
     });
 

@@ -23,6 +23,8 @@ import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { startDomainAnchor } from "../../conversations/worktrees/domain-anchor.js";
+import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
@@ -72,6 +74,7 @@ import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
 import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
+import { AgentDomainRefusedError, agentExecutionScope, assertAgentExecution, withAdmittedAgentExecution, type AgentExecutionAdmission, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
 
@@ -123,21 +126,31 @@ const recordSystemPrompt = (services: Services, input: RoutedTurn, request: Agen
 // Runs one agent turn, streaming AgentEvents; `input.agent` picks the provider adapter. Owns the turn's control
 // surface: the AbortController /agent/stop cancels, and the SteeringQueue /agent/steer injects into.
 export async function* streamAgent(services: Services, sent: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
-    // Routed as it comes in, for a caller that reached the body without the port (a suite, a runner's mirror).
-    const input = withRuntimeDefaults(sent);
-    // A controller of the turn's own, since /agent/stop ends this turn and not the caller's; the caller's signal still
-    // ends it. Linked with anySignal rather than a listener on the caller's, which a caller that outlives the turn
-    // would keep for good.
-    const controller = new AbortController();
-    const turnSignal = anySignal(controller.signal, signal);
+    // Read before routing, title helpers, placement, or a remote dispatch. An unreadable policy is not root mode.
+    let admission: AgentExecutionAdmission;
+    try {
+        admission = await services.agentExecution.admit();
+    } catch (error) {
+        yield { kind: "error", code: "agent-domain-refused", message: error instanceof Error ? error.message : String(error) };
+        yield { kind: "done" };
+        return;
+    }
     let steering: SteeringQueue | undefined;
     try {
+        // Routed as it comes in, for a caller that reached the body without the port (a suite, a runner's mirror).
+        const input = withRuntimeDefaults(sent);
+        // A controller of the turn's own, since /agent/stop ends this turn and not the caller's; the caller's signal still
+        // ends it. Linked with anySignal rather than a listener on the caller's, which a caller that outlives the turn
+        // would keep for good.
+        const controller = new AbortController();
+        const turnSignal = anySignal(controller.signal, signal);
         // Steering exists only where the runtime declares it; others register abort alone.
         steering = capabilitiesOf(input.agent, input.harness).steering ? new SteeringQueue() : undefined;
         const control: ActiveTurn = { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) };
-        yield* runConversationTurn(services, input, turnSignal, control);
+        yield* runConversationTurn(services, input, admission, turnSignal, control);
     } finally {
         steering?.close();
+        services.agentExecution.close(admission);
     }
 }
 
@@ -163,6 +176,7 @@ const isolatedOf = (existing: PersistedAgent | undefined, input: RoutedTurn, run
 const placementOf = (
     services: Services,
     input: RoutedTurn,
+    admission: AgentExecutionAdmission,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
     conversation: { readonly id: string; readonly snapshot: SnapshotTurn; readonly runner: string | undefined; readonly isolated: boolean },
@@ -182,7 +196,7 @@ const placementOf = (
     // settles, and the whole noted as it closes (turn-reach.ts).
     const reach = reachWatch(services, id);
     if (!conversation.isolated) {
-        return mainTreePlacement(() => runTurn(services, input, signal, undefined, steering, snapshot, reach), reach);
+        return mainTreePlacement(() => runTurn(services, input, admission, signal, undefined, steering, snapshot, reach), reach);
     }
     return worktreePlacement(
         services,
@@ -190,7 +204,7 @@ const placementOf = (
         {
             compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), true),
             versionMain: (repos) => versionMainTree(services, repos),
-            run: (worktree) => runTurn(services, input, signal, worktree, steering, snapshot, reach),
+            run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
             fix: (span) => runWorktreeFixers(services, id, span),
         },
@@ -216,6 +230,7 @@ const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, pr
 async function* runConversationTurn(
     services: Services,
     input: RoutedTurn,
+    admission: AgentExecutionAdmission,
     signal: AbortSignal | undefined,
     control: ActiveTurn,
 ): AsyncGenerator<AgentEvent> {
@@ -227,7 +242,7 @@ async function* runConversationTurn(
             yield { kind: "done" };
             return;
         }
-        yield* runTurn(services, input, signal, undefined, steering);
+        yield* runTurn(services, input, admission, signal, undefined, steering);
         return;
     }
     const conversationId = input.conversationId;
@@ -275,17 +290,18 @@ async function* runConversationTurn(
             yield* refusedBegin(began);
             return;
         }
-        // Names the conversation while the turn runs, fire-and-forget; a gate skips one already better-named.
-        // Warn, not debug: this pass is invisible by construction, so a debug failure goes unnoticed fleet-wide.
-        nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
-            services.logger.warn({ err: error }, "agents: title naming failed"),
-        );
+        // Acquire before dispatch and worktree composition, not after the helper's asynchronous gates: the title owns
+        // its view independently until its whole detached call settles, even if this turn closes admission first.
+        // A plain workspace placement refuses unprivileged execution until a helper-domain placement exists.
+        withAdmittedAgentExecution(services.agentExecution, admission, { localCwd: services.workspace.root },
+            (execution) => nameAgentTitle(services, execution, conversationId, input.prompt),
+        ).catch((error: unknown) => services.logger.warn({ err: error }, "agents: title naming failed"));
         // Read once above the placement, so every placement checkpoints under the same index.
         const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
         yield* placedTurn(
             services.conversations,
             conversationId,
-            placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
+            placementOf(services, input, admission, signal, steering, { id: conversationId, snapshot, runner, isolated }),
             turnCloser(services, conversationId, steering, signal),
         );
     } finally {
@@ -353,15 +369,16 @@ const handoffNoteFor = async (
 
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
 // instead. A store that can't be probed is trusted, not doubted.
-const sessionToResume = async (services: Services, input: RoutedTurn, effectiveCwd: string): Promise<string | undefined> => {
+const sessionToResume = async (services: Services, input: RoutedTurn, execution: AgentExecutionContext): Promise<string | undefined> => {
     const { sessionId } = input;
     if (sessionId === undefined) {
         return undefined;
     }
     const adapter = services.adapters.for(input.agent, input.harness);
     const held = await services.perf
-        .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, effectiveCwd))
+        .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, execution))
         .catch((error: unknown) => {
+            if (error instanceof AgentDomainRefusedError) { throw error; }
             services.logger.warn({ err: error, sessionId }, "session probe failed, resuming as asked");
             return true;
         });
@@ -415,13 +432,55 @@ const fencedRefusal = async (services: Services, input: RoutedTurn): Promise<str
     return undefined;
 };
 
-// Built only for the runtime that enters the namespace; others stay cwd'd, told so in the prompt instead.
-const isolationOf = async (
+// In unprivileged mode every turn runs in an agent domain, a main-tree turn as much as an isolated one; what cannot be
+// placed in one is refused, never run as root instead. Only Claude Code so far: the other runtimes keep their homes and
+// logins in the auth root, which the domain masks, and Cursor's turn host and the shared servers are not domain-placed.
+const domainIsolationOf = async (
     services: Services,
     input: RoutedTurn,
     worktree: WorktreeRun | undefined,
     localCwd: string,
+    sshSocket: string | undefined,
+): Promise<TurnPlacement | { readonly refused: string }> => {
+    if (worktree?.fence !== undefined) {
+        return {
+            refused: "This conversation is limited to some areas of the workspace, and the unprivileged agent domain cannot hold such a conversation yet. Set the agent domain back to root to run it.",
+        };
+    }
+    if (capabilitiesOf(input.agent, input.harness).runtime !== "claude-code") {
+        return {
+            refused: "Only Claude Code runs inside the unprivileged agent domain so far. Switch this conversation to a Claude model, or set the agent domain back to root.",
+        };
+    }
+    if (!(await services.turnIsolation.available())) {
+        return {
+            refused: "This sandbox cannot build namespaces (it has no CAP_SYS_ADMIN), so the unprivileged agent domain cannot run here. Set the agent domain back to root, or recreate the sandbox with it.",
+        };
+    }
+    const plan = await services.turnIsolation.planFor(localCwd, undefined);
+    const anchor = await startDomainAnchor({
+        plan,
+        historyRoot: services.config.historyRoot,
+        authRoot: authRootOf(services.config),
+        conversationId: input.conversationId,
+        sshSocket,
+        logger: services.logger,
+    });
+    return { plan, anchor };
+};
+
+// Built only for the runtime that enters the namespace; others stay cwd'd, told so in the prompt instead.
+const isolationOf = async (
+    services: Services,
+    input: RoutedTurn,
+    mode: AgentExecutionAdmission["mode"],
+    worktree: WorktreeRun | undefined,
+    localCwd: string,
+    cliEnv: Readonly<Record<string, string>>,
 ): Promise<TurnPlacement | undefined | { readonly refused: string }> => {
+    if (mode === "unprivileged") {
+        return domainIsolationOf(services, input, worktree, localCwd, cliEnv["SSH_AUTH_SOCK"]);
+    }
     if (worktree?.fence !== undefined) {
         const refused = await fencedRefusal(services, input);
         if (refused !== undefined) {
@@ -456,6 +515,7 @@ const baseRequestOf = (
     services: Pick<Services, "conversations" | "cards">,
     input: RoutedTurn,
     turn: {
+        readonly execution: AgentExecutionContext;
         readonly history: readonly TranscriptRow[];
         readonly cwd: string;
         readonly isolation: TurnPlacement | undefined;
@@ -467,6 +527,7 @@ const baseRequestOf = (
     // Editor context attaches to THIS message, so it folds in before the older history preamble wraps it.
     const prompt = input.editorContext !== undefined ? `${input.prompt}\n\n${editorContextNote(input.editorContext)}` : input.prompt;
     return {
+        execution: turn.execution,
         spec: {
             prompt: turn.history.length > 0 ? withRuntimeHistory(prompt, turn.history) : prompt,
             cwd: turn.cwd,
@@ -519,6 +580,7 @@ interface Preflight {
 const preflight = async (
     services: Services,
     input: RoutedTurn,
+    executionScope: ReturnType<typeof agentExecutionScope>,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
@@ -534,13 +596,15 @@ const preflight = async (
     }
     // Two paths: `localCwd` is the daemon's tree; `effectiveCwd` is the root as the agent sees it.
     const localCwd = worktree?.cwd ?? services.workspace.root;
-    const placed = await isolationOf(services, input, worktree, localCwd);
+    const placed = await isolationOf(services, input, executionScope.mode, worktree, localCwd, cliEnv);
     if (placed !== undefined && "refused" in placed) {
         return placed;
     }
     const isolation = placed;
+    // Ownership begins immediately on acquisition, before probes, history, settings or planning can fail.
+    const execution = executionScope.acquire({ localCwd, ...opt("isolation", isolation) });
     clock.mark("isolation");
-    const effectiveCwd = isolation?.anchor?.cwd ?? localCwd;
+    const effectiveCwd = execution.cwd;
     // Kicked off early to overlap setup; opposite the pre-turn rebase, into the user's checkout.
     const repoSync =
         worktree !== undefined
@@ -550,13 +614,13 @@ const preflight = async (
                   return [];
               });
     // Asks the runtime's store whether it still holds the named session: a session id is a claim, not a fact.
-    const resumed = await sessionToResume(services, input, effectiveCwd);
+    const resumed = await sessionToResume(services, input, execution);
     const history = await handoffOf(services, input, resumed);
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
     clock.mark("history");
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
-    const base = baseRequestOf(services, input, { history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
+    const base = baseRequestOf(services, input, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
     const context = {
         base,
@@ -676,13 +740,14 @@ interface PreparedTurn {
 async function* prepareTurn(
     services: Services,
     input: RoutedTurn,
+    executionScope: ReturnType<typeof agentExecutionScope>,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
     turn: SnapshotTurn | undefined,
 ): AsyncGenerator<AgentEvent, PreparedTurn | undefined> {
     const clock = preflightClock();
-    const ready = await preflight(services, input, signal, worktree, steering, clock);
+    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock);
     if ("refused" in ready) {
         yield { kind: "error", message: ready.refused };
         yield { kind: "done" };
@@ -690,8 +755,7 @@ async function* prepareTurn(
     }
     const plan = await planTurn(services, input, ready.context);
     if (!plan.ok) {
-        // The namespace anchor was built before the gates ran, so a refusal must dispose it too.
-        ready.isolation?.anchor?.dispose();
+        // The outer preparation scope owns release, including a generator return while disclosing this refusal.
         yield refusalFrame(plan, input.unattended === true);
         yield { kind: "done" };
         return undefined;
@@ -786,16 +850,9 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     return turn.account === undefined || frame.account !== undefined ? frame : { ...frame, account: turn.account };
 };
 
-// What a turn holds for its life, released together once its frames end: the account, so a proactive refresh waits for
-// a gap rather than rotating the token under it, and the namespace anchor, though not the namespace, which a pane the
-// agent left running keeps alive.
-const holdTurn = (account: string | undefined, isolation: TurnPlacement | undefined): (() => void) => {
-    const releaseAccount = account !== undefined ? holdAccount(account) : undefined;
-    return () => {
-        releaseAccount?.();
-        isolation?.anchor?.dispose();
-    };
-};
+// Account refresh waits for this runtime's gap. Execution ownership lives in the outer preparation scope, not here:
+// that scope also closes on preflight/planning failure and generator return before a runtime ever starts.
+const holdTurn = (account: string | undefined): (() => void) => account !== undefined ? holdAccount(account) : () => {};
 
 // One agent turn's body, on the main tree or inside an isolated worktree; the cwd override is the one binding point
 // every adapter and session store follows. Prepared and planned, then every frame through the pipeline (suppressed if
@@ -804,6 +861,7 @@ const holdTurn = (account: string | undefined, isolation: TurnPlacement | undefi
 async function* runTurn(
     services: Services,
     input: RoutedTurn,
+    admission: AgentExecutionAdmission,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
@@ -812,11 +870,30 @@ async function* runTurn(
     // Takes the frames' half of where the work went; its placement reads the rest as the turn closes.
     reach?: ReachWatch,
 ): AsyncGenerator<AgentEvent> {
-    const prepared = yield* prepareTurn(services, input, signal, worktree, steering, turn);
-    if (prepared === undefined) {
-        return;
+    const executionScope = agentExecutionScope(services.agentExecution, admission);
+    try {
+        const prepared = yield* prepareTurn(services, input, executionScope, signal, worktree, steering, turn);
+        if (prepared === undefined) { return; }
+        yield* runPreparedTurn(services, input, signal, worktree, prepared, reach);
+    } catch (error) {
+        if (!(error instanceof AgentDomainRefusedError)) { throw error; }
+        yield refusalFrame({ code: error.code, message: error.message }, input.unattended === true);
+        yield { kind: "done" };
+    } finally {
+        executionScope.dispose();
     }
+}
+
+async function* runPreparedTurn(
+    services: Services,
+    input: RoutedTurn,
+    signal: AbortSignal | undefined,
+    worktree: WorktreeRun | undefined,
+    prepared: PreparedTurn,
+    reach: ReachWatch | undefined,
+): AsyncGenerator<AgentEvent> {
     const { plan, request, isolation, effectiveCwd, frames } = prepared;
+    assertAgentExecution(request.execution, request.spec);
     const provider = input.agent;
     const account = plan.account;
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
@@ -830,7 +907,7 @@ async function* runTurn(
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
     const startedAt = Date.now();
-    const release = holdTurn(account, isolation);
+    const release = holdTurn(account);
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
     try {

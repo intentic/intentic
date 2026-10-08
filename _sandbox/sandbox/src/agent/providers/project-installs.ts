@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { writeFileAtomic } from "@intentic/base/fs";
 import type { AgentEvent, ProjectInstallMode } from "@intentic/sandbox-contract";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
-import { inWorktree, type IsolationPlan, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { inWorktree, type IsolationPlan, ownWorktree, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { gitIgnores } from "../../git-ignores.js";
 import { opt } from "../../opt.js";
 import { agentCommand, classifyImageInstalls, type ProjectInstall, projectInstallsOf } from "./agent-installs.js";
@@ -33,7 +33,7 @@ export type InstallPlacement =
     | { readonly kind: "shared" };
 
 export const installPlacementOf = (isolation: TurnPlacement | undefined): InstallPlacement =>
-    isolation === undefined ? { kind: "shared" } : { kind: isolation.anchor === undefined ? "mirrored" : "private", plan: isolation.plan };
+    !ownWorktree(isolation) ? { kind: "shared" } : { kind: isolation.anchor === undefined ? "mirrored" : "private", plan: isolation.plan };
 
 // "Allow installs for this conversation", bound to one conversation: read at every install, so a yes given on this
 // turn's card holds for its next install, and a yes taken back on the Grants page asks again from the next one.

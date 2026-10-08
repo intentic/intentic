@@ -79,6 +79,9 @@ import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
 import { heldCardWake } from "./agent/run/turn/held-card-wake.js";
 import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
 import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument } from "./settings/settings-store.js";
+import { agentDomainPolicyDocument, fileAgentDomainPolicy, type AgentDomainPolicyStore } from "./workload/agent-domain-policy.js";
+import { createAgentExecutionService, type AgentExecutionService } from "./workload/agent-execution.js";
+import { forgetRunDir } from "./conversations/worktrees/domain-anchor.js";
 import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from "./rules/rule-firings.js";
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
@@ -233,6 +236,10 @@ export interface Services
     readonly activity: ActivityStore;
     // Per-sandbox agent settings; streamAgent reads it to gate per-turn behavior and the owner's rule table.
     readonly sandboxSettings: SandboxSettingsStore;
+    // Off the agent-writable workspace; unreadable policies refuse execution rather than reverting to root.
+    readonly agentDomainPolicy: AgentDomainPolicyStore;
+    // Daemon-issued admission and independently releasable invocation handles; placement alone grants no execution.
+    readonly agentExecution: AgentExecutionService;
     // Safety policy the judge is handed, and what it decided; a policy is a document, the log changes mid-turn.
     readonly safetyPolicy: SafetyPolicyStore;
     readonly safetyLog: SafetyLog;
@@ -514,6 +521,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const workspaceSlice = createWorkspaceSlice({ config, logger });
     const { workspace } = workspaceSlice;
     const authRoot = authRootOf({ agentAuthDir: config.agentAuthDir, workspaceRoot: workspace.root });
+    const agentDomainPolicy = fileAgentDomainPolicy(join(authRoot, agentDomainPolicyDocument.path));
     const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root, logger);
@@ -607,6 +615,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             secretsSlice.credentialGrants.forget(conversationId);
             brokerSlice.rulePrompts.forget(conversationId);
             void brokerSlice.sshAgent.forget(conversationId);
+            // Its agent domain's /tmp and background job dirs (domain-anchor.ts).
+            void forgetRunDir(config.historyRoot, conversationId, logger);
             // A purged conversation's grants go with it, so a reused id inherits nothing it was not given.
             void conversationGrants
                 .forget(conversationId)
@@ -705,6 +715,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         invariants,
         activity,
         sandboxSettings,
+        agentDomainPolicy,
+        agentExecution: createAgentExecutionService(() => agentDomainPolicy.get()),
         runtimeInstalls,
         push,
         // A native install's notification passes the privacy shield on its way to Apple; read through `whole` since the

@@ -27,6 +27,7 @@ import { type CodexCatalog, createCodexCatalog } from "./codex-catalog.js";
 import { writeCodexConfig } from "./codex-config.js";
 import { codexReadiness } from "./codex-readiness.js";
 import { codexThreadExists } from "./codex-sessions.js";
+import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Codex contributes to the daemon, listed in runtimes/runtime-table.ts; the runtime files keep their own jobs.
 
@@ -143,8 +144,11 @@ const CODEX_ADAPTER: AgentAdapter<"codex", CodexAdapterDeps> = {
         }
         return readiness.ok ? healthReady() : healthUnavailable(readiness.detail);
     },
-    // One CODEX_HOME serves every turn, so a thread lookup needs no cwd.
-    holdsSession: (services, sessionId) => services.codexThreadExists(sessionId),
+    // The shared CODEX_HOME is not a domain's store; retain its root lookup, not an unplaced domain probe.
+    holdsSession: async (services, sessionId, execution) => {
+        requireRootAgentExecution(execution, "Codex's shared session probe");
+        return services.codexThreadExists(sessionId);
+    },
 };
 
 // Reads connection state from disk, never a live probe: on a core image the translator binary is absent, so a probe

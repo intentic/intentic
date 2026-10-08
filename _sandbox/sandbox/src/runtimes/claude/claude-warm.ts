@@ -7,12 +7,13 @@ import type { Services } from "../../composition.js";
 import type { IsolationAnchor } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
 import { ensureFreshToken, holdAccount } from "./claude-credentials.js";
+import { agentExecutionScope, assertAgentExecution, requireRootAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Keeping a Claude conversation's prompt cache warm: one forked, unsaved request on the subscription account that served
 // the last turn, carrying that turn's prefix (system prompt, tools, model, reasoning) and a one-word prompt. The Claude
 // Code loop turns `policy.keepWarm` into the refresh's own options (agent/run/agent.ts keepWarmOptions).
 
-export type ClaudeWarmDeps = Pick<Services, "agent" | "claudeStore">;
+export type ClaudeWarmDeps = Pick<Services, "agent" | "claudeStore" | "agentExecution">;
 
 // What a refresh says; the model reads it, answers in a word, and nothing of it is saved.
 export const KEEP_WARM_PROMPT = "Automated prompt-cache refresh, not a message from the user. Reply with only: ok";
@@ -64,7 +65,8 @@ interface ClaudeWarmRecipe {
 
 // The refresh request: the recipe forked from its session under a fresh token, in a namespace of its own when the turn
 // had one, attached to no conversation.
-const refreshRequest = (recipe: ClaudeWarmRecipe, token: string, anchor: IsolationAnchor | undefined, signal: AbortSignal): HarnessRequest => ({
+const refreshRequest = (recipe: ClaudeWarmRecipe, execution: AgentExecutionContext, token: string, anchor: IsolationAnchor | undefined, signal: AbortSignal): HarnessRequest => ({
+    execution,
     spec: {
         ...recipe.spec,
         prompt: KEEP_WARM_PROMPT,
@@ -80,19 +82,35 @@ const refreshRequest = (recipe: ClaudeWarmRecipe, token: string, anchor: Isolati
 });
 
 async function* sendRefresh(deps: ClaudeWarmDeps, recipe: ClaudeWarmRecipe, signal: AbortSignal): AsyncGenerator<AgentEvent> {
-    const token = await ensureFreshToken(deps.claudeStore, recipe.account);
-    if (token === undefined) {
-        yield { kind: "error", message: "The account is signed out." };
-        return;
-    }
-    const release = holdAccount(recipe.account);
-    let anchor: IsolationAnchor | undefined;
+    // The recorded turn context has already been released. Every refresh independently reads protected policy; the
+    // existing root anchor factory is guarded before it runs, never used to build an unprivileged replacement.
+    const admission = await deps.agentExecution.admit();
+    const gate = agentExecutionScope(deps.agentExecution, admission);
+    const scope = agentExecutionScope(deps.agentExecution, admission);
     try {
-        anchor = recipe.placement?.anchor === undefined ? undefined : await recipe.anchor(recipe.placement.plan);
-        yield* deps.agent(refreshRequest(recipe, token, anchor, signal));
+        const gateContext = gate.acquire({ localCwd: recipe.spec.cwd });
+        requireRootAgentExecution(gateContext, "Claude cache refresh");
+        const token = await ensureFreshToken(deps.claudeStore, recipe.account);
+        if (token === undefined) {
+            yield { kind: "error", message: "The account is signed out." };
+            return;
+        }
+        requireRootAgentExecution(gateContext, "Claude cache refresh");
+        const release = holdAccount(recipe.account);
+        try {
+            const anchor = recipe.placement?.anchor === undefined ? undefined : await recipe.anchor(recipe.placement.plan);
+            const isolation = recipe.placement === undefined ? undefined : { plan: recipe.placement.plan, ...opt("anchor", anchor) };
+            const execution = scope.acquire({ localCwd: recipe.spec.cwd, ...opt("isolation", isolation) });
+            yield* deps.agent(refreshRequest(recipe, execution, token, anchor, signal));
+        } finally {
+            release();
+        }
     } finally {
-        anchor?.dispose();
-        release();
+        try { scope.dispose(); }
+        finally {
+            try { gate.dispose(); }
+            finally { deps.agentExecution.close(admission); }
+        }
     }
 }
 
@@ -102,6 +120,8 @@ export const claudeKeepable = (deps: ClaudeWarmDeps, turn: WarmTurn): WarmReplay
     if (request.credential.kind !== "claude-oauth") {
         return undefined;
     }
+    assertAgentExecution(request.execution, request.spec);
+    requireRootAgentExecution(request.execution, "Claude cache refresh", request.spec.cwd);
     const recipe: ClaudeWarmRecipe = {
         spec: warmSpec(request.spec),
         placement: request.spec.isolation,

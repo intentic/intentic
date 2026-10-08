@@ -1,6 +1,7 @@
 import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
 import { sleep } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
+import { AgentDomainRefusedError } from "../../workload/agent-execution.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
@@ -93,8 +94,8 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
 };
 
 // What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
-// claim is committed under it. A draft that fails is already told on its report; it must not cost the commit, which
-// falls back to the title. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
+// claim is committed under it. An ordinary draft failure is already told on its report and falls back to the title;
+// an execution-domain refusal is not permission to continue. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
 // otherwise once the claim is committed (or failed to be).
 export const settleLanding = async (services: Services, id: string, unhold: () => void = () => undefined): Promise<void> => {
     try {
@@ -103,7 +104,10 @@ export const settleLanding = async (services: Services, id: string, unhold: () =
         if (rule === undefined) {
             unhold();
         }
-        await describeLanding(services, id).catch((error: unknown) => services.logger.debug({ err: error, agent: id }, "landed subject: draft failed"));
+        await describeLanding(services, id).catch((error: unknown) => {
+            if (error instanceof AgentDomainRefusedError) { throw error; }
+            services.logger.debug({ err: error, agent: id }, "landed subject: draft failed");
+        });
         if (rule === undefined) {
             return;
         }

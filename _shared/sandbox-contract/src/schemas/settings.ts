@@ -9,6 +9,11 @@ import { LimitPolicySchema, RetryPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
+// Kept in the daemon's auth root, never in SandboxSettings: an agent cannot edit its execution boundary.
+export const AgentDomainSchema = z.enum(["root", "unprivileged"]);
+export const AgentDomainPolicySchema = z.object({ agentDomain: AgentDomainSchema.default("root") });
+export type AgentDomainPolicy = z.infer<typeof AgentDomainPolicySchema>;
+
 export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.

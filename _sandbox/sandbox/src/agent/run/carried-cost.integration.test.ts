@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "./agent.js";
@@ -89,6 +90,7 @@ const cards = parkedCards(actors);
 
 const resumedTurn = async (sessionStore: string, queryFn: QueryFn): Promise<AgentEvent[]> => {
     const request: HarnessRequest = {
+        execution: unstubbed("execution", {}),
         spec: { prompt: "carry on", cwd: WORKSPACE_ROOT, sessionStore, sessionId: SESSION },
         policy: {},
         tools: {},

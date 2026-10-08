@@ -32,7 +32,9 @@ import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { join, normalize, relative, sep } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
-import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
+import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
+import { PANE_DOOR_PATH } from "../../workload/agent-domain-view.js";
+import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
 import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
@@ -231,10 +233,15 @@ export const pinnedRouting = (env: Readonly<Record<string, string | undefined>>)
 });
 
 // What an anchored turn's processes need told about where they run: a plain namespace hands tmux-run the daemon's own
-// namespace to reach the shared server from; a fenced turn's sandbox names its own server, temp and log dirs.
-const anchorEnv = (anchor: IsolationAnchor | undefined): Record<string, string> => {
+// namespace to reach the shared server from; a fenced turn's sandbox names its own server, temp and log dirs; an agent
+// domain names the pane door its tmux-run asks instead (terminal/pane-door.ts), and no terminal log dir, since the
+// daemon's is not in its view.
+const anchorEnv = (anchor: IsolationAnchor | undefined) => {
     if (anchor === undefined) {
         return {};
+    }
+    if (anchor.domain !== undefined) {
+        return { INTENTIC_PANES_SOCKET: PANE_DOOR_PATH, INTENTIC_TERMINAL_LOGS_DIR: "", TMPDIR: "/tmp" };
     }
     return anchor.sandbox === undefined ? { [TMUX_NS_ENV]: daemonMountNs } : sandboxEnv(anchor.sandbox);
 };
@@ -408,11 +415,11 @@ export const mcpConfigOffArgv = (args: readonly string[], tmp: string = tmpdir()
 const runtimeSpawn =
     (anchor: IsolationAnchor | undefined, spawnDepth: number, onStderr: (data: string) => void) =>
     (options: SpawnOptions): SpawnedProcess => {
-        const config = mcpConfigOffArgv(options.args, anchor?.sandbox?.tmp);
+        const config = mcpConfigOffArgv(options.args, handoffDirOf(anchor));
         const { command, args } =
             anchor === undefined
                 ? { command: options.command, args: config.args }
-                : nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
+                : nsenterArgv(namespaceTargetOf(anchor), anchor.cwd, options.command, config.args);
         const child = spawnAs({ class: "agentRuntime", spawnDepth }, command, args, {
             ...(anchor === undefined ? opt("cwd", options.cwd) : {}),
             env: options.env,
@@ -541,7 +548,7 @@ const baseOptions = (
                 checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
                 // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
                 // change is said back, and the model fixes it or says why not. Nothing waits on them.
-                turnCheckHooks(request.hooks.turnChecks, request.spec.isolation !== undefined),
+                turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation)),
                 // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
                 settingsHookChangeHooks(request),
                 // Apply worktree redirection only when no anchor already resolves paths.

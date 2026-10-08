@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { createOpenCodeAgent, type OpenCodeRunner, type OpenCodeTurn } from "./opencode-agent.js";
@@ -25,6 +26,7 @@ const fakeRunner = (...turns: unknown[][]): { runner: OpenCodeRunner; calls: Ope
 };
 
 const request: AgentRequest<ContainerCredential> = {
+    execution: unstubbed("execution", {}),
     spec: { prompt: "what is wrong with this screen?", cwd: WORKSPACE_ROOT },
     policy: {},
     tools: {},

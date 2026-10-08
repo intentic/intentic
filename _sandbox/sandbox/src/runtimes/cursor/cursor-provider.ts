@@ -28,6 +28,7 @@ import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
 import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
 import { cursorAccountForTurn, cursorTurnLimit } from "./cursor-usage.js";
+import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Cursor contributes to the daemon, listed in runtimes/runtime-table.ts; the directory's other files keep
 // their own jobs. Holds only what the shared tables used to hold: the turn arm, the adapter row, the service slice, and
@@ -143,13 +144,15 @@ const CURSOR_ADAPTER: AgentAdapter<"cursor", CursorAdapterDeps> = {
     // Asked of the SDK, not the filesystem: the local store is pluggable and the daemon doesn't own its layout. Listed,
     // not fetched: Agent.get is cloud-only and would misreport a resumable session as gone; no pack answers false
     // correctly.
-    holdsSession: async (_services, sessionId, cwd) => {
+    holdsSession: async (_services, sessionId, execution) => {
+        requireRootAgentExecution(execution, "Cursor's in-process session probe");
         const sdk = await cursorSdk();
+        requireRootAgentExecution(execution, "Cursor's in-process session probe");
         if (sdk === undefined) {
             return false;
         }
         // A listing that failed rejects: the caller resumes as asked rather than discarding a session it could not see.
-        return (await sdk.Agent.list({ runtime: "local", cwd })).items.some((agent) => agent.agentId === sessionId);
+        return (await sdk.Agent.list({ runtime: "local", cwd: execution.cwd })).items.some((agent) => agent.agentId === sessionId);
     },
 };
 

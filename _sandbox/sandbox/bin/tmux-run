@@ -40,6 +40,7 @@
 set -u
 
 envflags=()
+envnames=()
 agentcmd=""
 jobdir=""
 cmdfile=""
@@ -47,7 +48,7 @@ while getopts e:b:f: opt; do
     case "$opt" in
         # Regex first: [[ ]] short-circuits, so an invalid name never reaches the (fatal under bash) indirect
         # expansion. Indirection, not printenv: command substitution would strip trailing newlines.
-        e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") ;;
+        e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") && envnames+=("$OPTARG") ;;
         b) jobdir="$OPTARG" ;;
         f) cmdfile="$OPTARG" ;;
         *) exit 2 ;;
@@ -72,6 +73,15 @@ fi
 # What the filter is told this command IS. Only the filter sees it — the pane runs, logs and reports $cmd.
 : "${agentcmd:=$cmd}"
 
+# AN AGENT DOMAIN'S PANES ARE OPENED BY THE DAEMON (src/terminal/pane-door.ts). A turn in the unprivileged domain cannot
+# reach the root tmux server, and must not: that server starts panes anywhere, as root. $INTENTIC_PANES_SOCKET names the
+# domain's own door instead, and every tmux call below has its door form: open the window, ask whether it is dead, end
+# it. The daemon starts the whole pane inside the domain, runner and all, so the runner runs where this wrapper does and
+# the session it leads is the pane's, as in root mode. The forwarded -e values reach the pane through a file beside the
+# runner, which the runner reads and deletes, not through the door: nothing outside the domain needs to see them.
+door="${INTENTIC_PANES_SOCKET:-}"
+doorcall() { curl -sS --fail --noproxy '*' --max-time 10 --unix-socket "$door" "$@"; }
+
 # WHEN THIS DID NOT RUN WHERE IT WAS MEANT TO, SAY SO.
 #
 # Fail open: any tmux failure below must degrade to running the command plainly, never break the caller. That
@@ -94,6 +104,8 @@ fallback() {
     # stderr, not stdout: stdout is the tool RESULT and belongs to the command. And `--`, because the line
     # starts with dashes.
     printf -- '--- intentic: ran outside a terminal pane (%s): no live view, no capture, no output filter\n' "$reason" >&2
+    # The forwarded values are in this process's own environment already; their file must not outlive the run.
+    [ -n "${d:-}" ] && rm -f "$d/env" 2>/dev/null
     # A background job's status file is the daemon's ONLY completion signal, so even the degraded path publishes
     # one — otherwise an adopted watch polls for a file no path left behind and reports a timeout for a command
     # that finished. Same atomic rename the pane runner uses, for the same reason.
@@ -132,7 +144,10 @@ fallback() {
 # its own on that socket instead: the first call forks it inside the sandbox, every pane inherits the sandbox, and
 # nothing of it reaches the owner's terminals, which talk to the shared server on its default socket.
 # Resolved to a path once because the wrapper below calls the FUNCTION, which must not find itself by name.
-tmuxbin="$(command -v tmux)" || fallback "no tmux on PATH"
+# A domain's wrapper never runs tmux itself, so it needs none on its PATH.
+if [ -z "$door" ]; then
+    tmuxbin="$(command -v tmux)" || fallback "no tmux on PATH"
+fi
 hop=()
 socket=()
 if [ -n "${INTENTIC_TMUX_SOCKET:-}" ]; then
@@ -217,7 +232,18 @@ epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?
 # that is finished has nothing left running. The output goes through a process substitution rather than a pipe so the
 # runner learns the command returned even while a leftover still holds the output open, and tee is waited for after
 # the sweep, so the status still means the capture is complete.
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on \\; set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
+# The runner's first line. In root mode it sets remain-on-exit on its own window (above). In a domain the door already
+# set it, in the command that made the window; the runner instead closes the user-namespace descriptor its way in left
+# open (agentPaneLine, src/workload/namespace-entry.ts) and takes the forwarded values from their file.
+if [ -n "$door" ]; then
+    first="exec 9<&-; [ -f $(printf %q "$d/env") ] && { . $(printf %q "$d/env"); rm -f $(printf %q "$d/env"); }"
+    if [ "${#envnames[@]}" -gt 0 ]; then
+        ( umask 077; for n in "${envnames[@]}"; do printf 'export %s=%q\n' "$n" "${!n}"; done > "$d/env" )
+    fi
+else
+    first="$(printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on \\; set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null' "$epitaph")"
+fi
+printf '%s\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$first" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -262,7 +288,13 @@ create() { tmux new-session -d -s "$session" "${window[@]}"; }
 # command created it in the meantime, so attach is tried once more. The attempts before the last drop their stderr —
 # those are the expected racy misses ("can't find session" / "duplicate session"); the last one's failure is the
 # real one and must reach the caller, and only then does fail-open drop the command out of tmux entirely.
-pane="$(attach 2>/dev/null)" || pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback "tmux would not open a window in session $session"
+if [ -n "$door" ]; then
+    # The door makes the window with remain-on-exit set and the session stamped, and prunes what finished before it.
+    pane="$(doorcall --data-urlencode "session=$session" --data-urlencode "name=$name" --data-urlencode "cwd=$PWD" --data-urlencode "runner=$d/runner" http://pane/open)" \
+        || fallback "the pane door would not open a window in session $session"
+else
+    pane="$(attach 2>/dev/null)" || pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback "tmux would not open a window in session $session"
+fi
 [ -n "$wake" ] && { exec 4<>"$d/wake"; } 2>/dev/null || wake=""
 [ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
 
@@ -285,8 +317,10 @@ stamp=()
 # That cleanup race is expected, so keep tmux's "can't find window" diagnostic out of an unrelated tool result.
 # A read loop rather than `xargs tmux`: xargs execs the BINARY it is given and would walk straight past the
 # namespace hop the function above exists to make.
-tmux ${stamp[@]+"${stamp[@]}"} list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
-    | awk '$1==1{print $2}' | while read -r dead; do tmux kill-window -t "$dead" 2>/dev/null; done
+if [ -z "$door" ]; then
+    tmux ${stamp[@]+"${stamp[@]}"} list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
+        | awk '$1==1{print $2}' | while read -r dead; do tmux kill-window -t "$dead" 2>/dev/null; done
+fi
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed
@@ -297,14 +331,27 @@ tmux ${stamp[@]+"${stamp[@]}"} list-panes -s -t "=$session" -F '#{pane_dead} #{w
 # timeout: killing the pane there is what made `run_in_background` a promise the sandbox could not keep. The
 # capture dir stays too — the daemon reads the status file out of it long after this process is gone.
 endpane() {
+    if [ -n "$door" ]; then
+        doorcall --data-urlencode "pane=$pane" http://pane/kill >/dev/null 2>&1
+        return
+    fi
     local leader
     leader="$(tmux display -p -t "$pane" '#{pane_pid}' 2>/dev/null)"
     [ -n "$leader" ] && pkill -TERM -s "$leader" 2>/dev/null
+    tmux kill-window -t "$pane" 2>/dev/null
+}
+# Whether the pane is still alive: tmux's answer, or the door's for a domain.
+panealive() {
+    if [ -n "$door" ]; then
+        [ "$(doorcall --get --data-urlencode "pane=$pane" http://pane/dead 2>/dev/null)" = "0" ]
+        return
+    fi
+    [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ]
 }
 if [ -n "$jobdir" ]; then
     trap 'emit 143; exit 143' TERM INT
 else
-    trap 'endpane; tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
+    trap 'endpane; emit 143; rm -rf "$d"; exit 143' TERM INT
 fi
 
 # Completion is the status file, not tail/pane timing: the runner writes it strictly AFTER `tee` closes
@@ -348,9 +395,9 @@ while [ ! -f "$d/status" ]; do
         got=$?
         [ "$got" -eq 0 ] && continue
         [ "$got" -le 128 ] && wake=""
-        [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && continue
+        panealive && continue
     else
-        [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && { sleep 0.05; continue; }
+        panealive && { sleep 0.05; continue; }
     fi
     # Pane gone/dead: a normal fast exit writes status just before the pane dies, so give it a brief grace.
     for _ in 1 2 3 4 5; do [ -f "$d/status" ] && break; sleep 0.05; done

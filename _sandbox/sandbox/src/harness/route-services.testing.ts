@@ -43,6 +43,7 @@ import { type WorkspaceFakeOverrides, workspaceSliceFake } from "../workspace/wo
 import { fakeHistory } from "./route-fakes.testing.js";
 import { memoryAreasStore, memoryPersonasStore, memorySshKeyStore } from "./route-stores.testing.js";
 import type { SliceFakeContext } from "./slice-fake.testing.js";
+import { createAgentExecutionService } from "../workload/agent-execution.js";
 
 // Composes the daemon's `Services` for route suites driving its HTTP surface: each slice's members from that slice's
 // own fake (`<slice>.testing.ts`, beside the slice), the members Services declares itself here, and what a suite
@@ -156,6 +157,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             set: async () => {},
             ...sandboxSettings,
         }),
+        agentDomainPolicy: unstubbed("agentDomainPolicy", { get: async () => ({ agentDomain: "root" as const }) }),
+        // Admit from this fixture's protected reader too, including a suite's policy override; never default a request.
+        agentExecution: createAgentExecutionService(() => context.self().agentDomainPolicy.get()),
         // Shipped policy: a planned turn snapshots it for the judge, so every route running a turn reads it.
         safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // An empty key store, in memory, as a fresh sandbox holds: every turn asks it (capabilities/turn-env.ts) and,

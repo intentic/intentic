@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 import { errorMessage, isMissing } from "@intentic/base/errors";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
 import type { RoleAnswer } from "../agent/models/role-answer.js";
-import { askRoleModel } from "../agent/models/role-model.js";
+import { askRoleModel, roleModelIsSet } from "../agent/models/role-model.js";
+import { RoleModelUnsetError } from "../seams/role-model-unset.js";
+import { AgentDomainRefusedError, type AgentExecutionContext, withAgentExecution } from "../workload/agent-execution.js";
 import type { Services } from "../composition.js";
 import { outputTail, runCheck as runCheckCommand, shellArgv } from "../workload/run-check.js";
 import { verdictPathIn } from "./loop-brief.js";
@@ -80,7 +82,7 @@ const readDocument = async (services: Services, loop: Loop, iteration: number): 
 
 // Judge sees the goal, rubric, and closing report, never the diff (a real limit; a judge needing the tree is a
 // `command` check instead). Reply is parsed by its first word; anything unrecognized falls through to not-done.
-const askJudge = async (services: Services, loop: Loop, rubric: string, report: string, signal: AbortSignal): Promise<StopVerdict> => {
+const askJudge = async (services: Services, execution: AgentExecutionContext, loop: Loop, rubric: string, report: string, signal: AbortSignal): Promise<StopVerdict> => {
     const prompt = [
         `You are reviewing whether a coding agent has finished a job. You did none of this work and have no stake in it being done.`,
         ``,
@@ -99,13 +101,8 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
         `Say DONE only if the report shows the rubric is met NOW. Partial work, work described as nearly finished, and work ` +
             `whose verification is not described are all CONTINUE. If the report is too vague to tell, that is CONTINUE.`,
     ].join(`\n`);
-    try {
-        const { value } = await askRoleModel(services, `loop-verdict`, { prompt, answer: JUDGE_ANSWER }, signal);
-        return value;
-    } catch (error) {
-        // A judge that fails to run reports why, so the row doesn't read as a silent ruling of not-done.
-        return { done: false, detail: `Judge did not run: ${error instanceof Error ? error.message : "unknown error"}` };
-    }
+    const { value } = await askRoleModel(services, execution, `loop-verdict`, { prompt, answer: JUDGE_ANSWER }, signal);
+    return value;
 };
 
 // Runs in the conversation's own tree (an isolated loop's worktree), not the workspace root. Automations guard's runner
@@ -127,15 +124,29 @@ const runCommand = async (command: string, cwd: string, signal: AbortSignal): Pr
     return { done: ran.exitCode === 0 && !ran.truncated, ...(detail !== "" ? { detail } : {}) };
 };
 
-const runCheck = (
+const runCheck = async (
     services: Services,
     loop: Loop,
     check: LoopCheck,
     params: { readonly cwd: string; readonly report: string; readonly signal: AbortSignal },
-): Promise<StopVerdict> =>
-    check.kind === "command"
-        ? runCommand(check.command, params.cwd, params.signal)
-        : askJudge(services, loop, check.rubric, params.report, params.signal);
+): Promise<StopVerdict> => {
+    if (check.kind === "command") {
+        return runCommand(check.command, params.cwd, params.signal);
+    }
+    try {
+        if (!(await roleModelIsSet(services, "loop-verdict"))) {
+            throw new RoleModelUnsetError("loop-verdict");
+        }
+        // The iteration has ended; its execution lease cannot authorize this independent reading.
+        return await withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
+            askJudge(services, execution, loop, check.rubric, params.report, params.signal),
+        );
+    } catch (error) {
+        if (error instanceof AgentDomainRefusedError) { throw error; }
+        // A judge that fails to run reports why, so the row doesn't read as a silent ruling of not-done.
+        return { done: false, detail: `Judge did not run: ${error instanceof Error ? error.message : "unknown error"}` };
+    }
+};
 
 // Evaluates completion for the iteration that just ended (`cwd` its tree, `report` its closing text, the judge's only
 // evidence). The document survives a failed check, so a good report isn't dropped.

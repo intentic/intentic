@@ -1,9 +1,11 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import type { CodexEvent, CodexItem, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
@@ -15,6 +17,7 @@ const cards = parkedCards(memoryFleet().conversations);
 const createTestAgent = (runner: CodexRunner, codexHome = "/home") => createCodexAgent({ codexHome, runner });
 
 const request: AgentRequest<CodexCredential> = {
+    execution: unstubbed("execution", {}),
     spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
     policy: {},
     tools: {},
@@ -974,6 +977,27 @@ test("an anchored turn's app-server is born in the turn's mount namespace", asyn
     });
 
     expect(calls[0]!.namespace).toEqual({ pid: 4321, cwd: WORKSPACE_ROOT });
+});
+
+test("Codex's local descriptors preserve the same namespace capability across planning and execution", async () => {
+    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
+    const namespace = registerMountEntry(62003);
+    const anchor = { pid: namespace.pid, cwd: WORKSPACE_ROOT, plan, namespace, dispose: () => {} };
+    const { runner, calls } = fakeCodexRunner([{ type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } }], []);
+    try {
+        await collect(
+            createTestAgent(runner),
+            { ...request, spec: { ...request.spec, isolation: { plan, anchor } }, policy: { ...request.policy, permissionMode: "plan" } },
+            () => ({ approve: true }),
+        );
+        expect(calls).toHaveLength(2);
+        expect(calls[0]?.namespace).toEqual({ pid: 62003, cwd: WORKSPACE_ROOT, namespace });
+        expect(calls[0]?.namespace?.namespace).toBe(namespace);
+        expect(calls[1]?.namespace).toBe(calls[0]?.namespace);
+        expect(calls[1]?.namespace?.namespace).toBe(namespace);
+    } finally {
+        forgetNamespaceEntry(namespace);
+    }
 });
 
 test("an isolated turn the container could not anchor carries no namespace and runs cwd'd as before", async () => {

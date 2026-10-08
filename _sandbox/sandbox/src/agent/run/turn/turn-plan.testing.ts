@@ -48,6 +48,8 @@ export const budgetOn = (
     });
 
 export const base: TurnBase = {
+    // These fixtures plan only; the execution capability must stay unused until an actual launch is tested.
+    execution: unstubbed("execution", {}),
     spec: { prompt: "do the thing", cwd: ROOT },
     policy: {},
     tools: {},

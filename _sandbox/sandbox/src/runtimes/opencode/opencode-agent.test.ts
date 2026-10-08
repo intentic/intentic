@@ -35,6 +35,7 @@ const fakeRunner = (...turns: unknown[][]): { runner: OpenCodeRunner; calls: Ope
 };
 
 const request: AgentRequest<ContainerCredential> = {
+    execution: unstubbed("execution", {}),
     spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
     policy: {},
     tools: {},

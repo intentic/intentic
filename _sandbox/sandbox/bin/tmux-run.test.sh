@@ -29,9 +29,13 @@ export INTENTIC_RUN_FILTER=0
 unset INTENTIC_TURN_OWNER
 mkdir -p "$INTENTIC_TERMINAL_LOGS_DIR"
 # One cleanup for the whole run — a second `trap ... EXIT` later would silently replace this one, not add to it.
+DS=agent-selfdoor
+DOORPID=""
 cleanup() {
     tmux kill-session -t "$S" 2>/dev/null
     tmux kill-session -t "$R" 2>/dev/null
+    tmux kill-session -t "$DS" 2>/dev/null
+    [ -n "$DOORPID" ] && kill "$DOORPID" 2>/dev/null
     rm -rf "$LOGS" ${F:+"$F"}
 }
 trap cleanup EXIT
@@ -196,4 +200,71 @@ grep -q 'ran outside a terminal pane' "$err" || { echo "FAIL: degraded run said 
 # And it names the CAUSE rather than only the symptom: the namespace it was told to reach tmux from is gone.
 grep -q 'is unreachable' "$err" || { echo "FAIL: degraded run did not name the unreachable namespace: '$(cat "$err")'"; exit 1; }
 
-echo "PASS: tmux-run returns full output + real exit code, -e env, -f command files, pkill-proof, pipeline statuses, output cap, soft timeout + filter, honest fallback"
+# DOOR MODE (an agent domain's panes, src/terminal/pane-door.ts). The real door starts the pane inside a domain, which
+# this script cannot build; this one is a stand-in that opens a plain window running the runner, so what is asserted is
+# the wrapper's half: every tmux call becomes a door call, the forwarded values reach the pane through their file and
+# leave no trace, and the command's output and exit code come back as in root mode. A `tmux` on PATH that only records
+# being run proves the wrapper never calls tmux itself here; the stand-in names the real one by its path.
+REALTMUX="$(command -v tmux)"
+DOOR="$F/door.sock"
+cat > "$F/door.cjs" <<'JS'
+const http = require("node:http");
+const { execFileSync } = require("node:child_process");
+const [sock, tmux] = process.argv.slice(2);
+const opened = new Set();
+const run = (args) => execFileSync(tmux, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+        const url = new URL(req.url, "http://pane");
+        const form = req.method === "POST" ? new URLSearchParams(body) : url.searchParams;
+        try {
+            if (url.pathname === "/open") {
+                const session = form.get("session");
+                const line = `bash ${form.get("runner")}`;
+                const settle = [";", "set-option", "-w", "-t", `=${session}:`, "remain-on-exit", "on"];
+                let pane;
+                try { pane = run(["new-window", "-t", `=${session}:`, "-P", "-F", "#{pane_id}", "-c", form.get("cwd"), line, ...settle]); }
+                catch { pane = run(["new-session", "-d", "-s", session, "-P", "-F", "#{pane_id}", "-c", form.get("cwd"), line, ...settle]); }
+                opened.add(pane);
+                res.end(`${pane}\n`);
+            } else if (url.pathname === "/dead" && opened.has(form.get("pane"))) {
+                res.end(`${run(["display-message", "-p", "-t", form.get("pane"), "#{pane_dead}"]) === "0" ? "0" : "1"}\n`);
+            } else if (url.pathname === "/kill" && opened.has(form.get("pane"))) {
+                run(["kill-window", "-t", form.get("pane")]);
+                res.end("killed\n");
+            } else {
+                res.statusCode = 404;
+                res.end("no\n");
+            }
+        } catch (error) {
+            res.statusCode = 500;
+            res.end(`${String(error)}\n`);
+        }
+    });
+}).listen(sock);
+JS
+node "$F/door.cjs" "$DOOR" "$REALTMUX" & DOORPID=$!
+for _ in $(seq 50); do [ -S "$DOOR" ] && break; sleep 0.1; done
+[ -S "$DOOR" ] || { echo "FAIL: the stand-in door never listened"; exit 1; }
+mkdir -p "$F/stub"
+printf '#!/usr/bin/env bash\necho "$*" >> %q\nexit 1\n' "$F/tmux-called" > "$F/stub/tmux"
+chmod +x "$F/stub/tmux"
+out="$(PATH="$F/stub:$PATH" INTENTIC_PANES_SOCKET="$DOOR" bash "$W" "$DS" 'echo door-ok; exit 4' run)"; rc=$?
+[ "$rc" = 4 ] || { echo "FAIL: door run exited $rc (want 4): '$out'"; exit 1; }
+[ "$out" = "door-ok" ] || { echo "FAIL: door run returned '$out' (want door-ok)"; exit 1; }
+[ ! -e "$F/tmux-called" ] || { echo "FAIL: door mode ran tmux itself: $(cat "$F/tmux-called")"; exit 1; }
+# -e by file: the pane's shell is the server's, so the value can only have come through the runner's env file.
+C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
+printf 'echo "got=$DOOR_PROBE"; ls "%s"\n' "$C" > "$C/line"
+out="$(DOOR_PROBE='a b$c' PATH="$F/stub:$PATH" INTENTIC_PANES_SOCKET="$DOOR" bash "$W" -e DOOR_PROBE -f "$C/line" "$DS")"
+case "$out" in *'got=a b$c'*) ;; *) echo "FAIL: forwarded value did not reach the door pane: '$out'"; exit 1;; esac
+case "$out" in *env*) echo "FAIL: the env file was still there while the command ran: '$out'"; exit 1;; esac
+[ ! -d "$C" ] || { echo "FAIL: door run left its capture dir behind"; exit 1; }
+# A door that will not open degrades to a plain run, and says so, as a tmux fault does.
+out="$(PATH="$F/stub:$PATH" INTENTIC_PANES_SOCKET="$F/no-door.sock" bash "$W" "$DS" 'echo plain; exit 5' run 2>"$err")"; rc=$?
+[ "$rc" = 5 ] && [ "$out" = "plain" ] || { echo "FAIL: a missing door did not degrade to a plain run (exit $rc, '$out')"; exit 1; }
+grep -q 'pane door would not open' "$err" || { echo "FAIL: a missing door was not named: '$(cat "$err")'"; exit 1; }
+
+echo "PASS: tmux-run returns full output + real exit code, -e env, -f command files, pkill-proof, pipeline statuses, output cap, soft timeout + filter, honest fallback, door mode"

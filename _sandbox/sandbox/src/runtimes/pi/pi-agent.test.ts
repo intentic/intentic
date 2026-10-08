@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
@@ -107,6 +108,7 @@ const request = (
         readonly signal?: AbortSignal;
     } = {},
 ): AgentRequest<ContainerCredential> => ({
+    execution: unstubbed("execution", {}),
     spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, ...over.spec },
     policy: { ...over.policy },
     tools: {},

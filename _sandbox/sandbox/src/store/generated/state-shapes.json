@@ -1,4 +1,10 @@
 {
+  "auth:agent-domain.json": [
+    {
+      "type": "{ agentDomain?: \"root\" | \"unprivileged\" }",
+      "since": "unreleased"
+    }
+  ],
   "auth:capability-secrets.json": [
     {
       "type": "Record<string, string>",

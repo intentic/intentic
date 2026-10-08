@@ -2,6 +2,27 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, MINTED_PROVIDERS, NATIVE_PROVIDERS, PROVIDERS } from "@intentic/sandbox-contract";
 import * as onPathOriginal from "../image/on-path.js";
 import * as engineResolveOriginal from "../engines/engine-resolve.js";
+import * as filesystemOriginal from "node:fs/promises";
+import * as cursorSdkOriginal from "./cursor/cursor-sdk.js";
+import { unstubbed } from "@intentic/testing";
+import type { RuntimeDeps } from "./runtime-table.js";
+import { AgentDomainRefusedError } from "../workload/agent-execution.js";
+import { rootExecution } from "../workload/agent-execution.testing.js";
+import { domainExecution } from "./execution.testing.js";
+
+// Session probes exercise only fake stores/SDK/filesystem seams, never the ambient local session state.
+const missing = Object.assign(new Error("missing session"), { code: "ENOENT" });
+const piAccess = jest.fn<(path: unknown) => Promise<void>>(async () => {
+    throw missing;
+});
+const cursorList = jest.fn<(input: { runtime: string; cwd: string }) => Promise<{ items: { agentId: string }[] }>>(async () => ({ items: [] }));
+const cursorSdk = jest.fn(async () => ({ Agent: { list: cursorList } }));
+jest.mock("node:fs/promises", () => ({ ...filesystemOriginal, access: piAccess }));
+jest.mock("./cursor/cursor-sdk.js", () => ({ ...cursorSdkOriginal, cursorSdk }));
+beforeEach(() => {
+    jest.clearAllMocks();
+    cursorSdk.mockImplementation(async () => ({ Agent: { list: cursorList } }));
+});
 
 // opencode's health checks whether the feature pack is installed on the machine running the suite (present locally,
 // absent in CI); stubbed present so the tests only cover the credential logic.
@@ -63,13 +84,27 @@ test("each runtime is asked about a resume by its own session store", async () =
         },
     });
 
-    const held = Object.fromEntries(
-        await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", WORKSPACE_ROOT)])),
-    );
+    cursorList.mockImplementationOnce(async ({ runtime, cwd }) => {
+        asked.push(`cursor:${runtime}:${cwd}`);
+        return { items: [] };
+    });
+    piAccess.mockImplementationOnce(async (path) => {
+        asked.push(`pi:${String(path)}`);
+        throw missing;
+    });
+    const execution = rootExecution({ localCwd: WORKSPACE_ROOT });
+    let held: Record<string, boolean>;
+    try {
+        held = Object.fromEntries(
+            await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", execution.context)])),
+        );
+    } finally {
+        execution.release();
+    }
 
     // Twice is correct, not a duplicate: Grok and Gemini share one warm `opencode serve` and its session store, though
     // they're split for health and credentials.
-    expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work", "opencode:s-1:/work"]);
+    expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "cursor:local:/work", "opencode:s-1:/work", "opencode:s-1:/work", "pi:s-1"]);
     // Pi's store is the filesystem: a session-file path that doesn't exist can't resume. Cursor's is the SDK's own
     // local store: no row for an id that was never opened under this cwd, so false rather than a later, less clear
     // failure.
@@ -82,6 +117,100 @@ test("each runtime is asked about a resume by its own session store", async () =
         acp: true,
         pi: false,
     });
+});
+
+test.each(["forged", "released", "stale"] as const)(
+    "every session probe refuses %s authority before any store, SDK or filesystem access",
+    async (kind) => {
+        const execution = rootExecution({ localCwd: WORKSPACE_ROOT });
+        const domain = kind === "stale" ? await domainExecution(64301) : undefined;
+        if (kind === "released") {
+            execution.release();
+        }
+        domain?.retire();
+        const context = kind === "forged" ? { ...execution.context } : (domain?.context ?? execution.context);
+        const unavailable = unstubbed<RuntimeDeps>("stores must not be consulted", {});
+        try {
+            for (const adapter of ADAPTERS) {
+                const failed = adapter.holdsSession(unavailable, "s-1", context);
+                await expect(failed).rejects.toBeInstanceOf(AgentDomainRefusedError);
+                await expect(failed).rejects.toMatchObject({ code: "agent-domain-refused" });
+            }
+            expect(cursorSdk).not.toHaveBeenCalled();
+            expect(cursorList).not.toHaveBeenCalled();
+            expect(piAccess).not.toHaveBeenCalled();
+        } finally {
+            execution.release();
+            domain?.release();
+        }
+    },
+);
+
+test("unplaced session stores and process-capable probes stay closed to issued unprivileged contexts", async () => {
+    const execution = await domainExecution(64302);
+    const unavailable = unstubbed<RuntimeDeps>("unplaced stores must not be consulted", {});
+    // Claude Code's store is placed: the domain's HOME links the shared store the daemon reads (workload/agent-home.ts).
+    const exists = jest.fn(async () => true);
+    const shared = unstubbed<RuntimeDeps>("services", { sessions: unstubbed<RuntimeDeps["sessions"]>("sessions", { exists }) });
+    try {
+        for (const adapter of ADAPTERS) {
+            if (adapter.runtime === "acp") {
+                // A constant resume hint asks no daemon store/process; its later loop still owns resume placement.
+                await expect(adapter.holdsSession(unavailable, "s-1", execution.context)).resolves.toBe(true);
+            } else if (adapter.runtime === "claude-code") {
+                await expect(adapter.holdsSession(shared, "s-1", execution.context)).resolves.toBe(true);
+                expect(exists).toHaveBeenCalledWith(execution.context.cwd, "s-1");
+            } else {
+                const failed = adapter.holdsSession(unavailable, "s-1", execution.context);
+                await expect(failed).rejects.toBeInstanceOf(AgentDomainRefusedError);
+                await expect(failed).rejects.toMatchObject({ code: "agent-domain-refused" });
+                await expect(failed).rejects.toThrow("does not support unprivileged agent execution yet.");
+            }
+        }
+        expect(cursorSdk).not.toHaveBeenCalled();
+        expect(cursorList).not.toHaveBeenCalled();
+        expect(piAccess).not.toHaveBeenCalled();
+    } finally {
+        execution.release();
+    }
+});
+
+test("Cursor rechecks the execution lease after SDK resolution and before local session listing", async () => {
+    const execution = rootExecution({ localCwd: "/work/probe-view" });
+    cursorSdk.mockImplementationOnce(async () => {
+        execution.release();
+        return { Agent: { list: cursorList } };
+    });
+    try {
+        await expect(
+            RUNTIME_ADAPTERS.for("cursor", "native").holdsSession(unstubbed<RuntimeDeps>("services", {}), "s-1", execution.context),
+        ).rejects.toMatchObject({ code: "agent-domain-refused" });
+        expect(cursorList).not.toHaveBeenCalled();
+    } finally {
+        execution.release();
+    }
+});
+
+test("root session probes use the issued view cwd rather than a shared workspace default", async () => {
+    const execution = rootExecution({ localCwd: "/work/probe-view" });
+    const exists = jest.fn(async () => true);
+    const sessionExists = jest.fn(async () => true);
+    const stores = unstubbed<RuntimeDeps>("services", {
+        sessions: unstubbed<RuntimeDeps["sessions"]>("sessions", { exists }),
+        openCode: unstubbed<RuntimeDeps["openCode"]>("openCode", { sessionExists }),
+    });
+    cursorList.mockResolvedValueOnce({ items: [{ agentId: "s-1" }] });
+    try {
+        for (const provider of ["claude", "grok", "gemini", "cursor"] as const) {
+            await expect(RUNTIME_ADAPTERS.for(provider, "native").holdsSession(stores, "s-1", execution.context)).resolves.toBe(true);
+        }
+        expect(exists).toHaveBeenCalledWith("/work/probe-view", "s-1");
+        expect(sessionExists).toHaveBeenCalledTimes(2);
+        expect(sessionExists).toHaveBeenCalledWith("s-1", "/work/probe-view");
+        expect(cursorList).toHaveBeenCalledWith({ runtime: "local", cwd: "/work/probe-view" });
+    } finally {
+        execution.release();
+    }
 });
 
 // Health is a fact about configuration, stubbed here. The three-state distinction matters: a failed probe must answer

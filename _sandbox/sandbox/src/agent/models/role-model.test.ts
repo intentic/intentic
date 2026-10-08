@@ -15,6 +15,8 @@ import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { sentenceAnswer } from "./role-answer.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import { AgentDomainRefusedError, agentInvocation, type AgentExecutionContext, type AgentExecutionLease } from "../../workload/agent-execution.js";
+import { rootExecution } from "../../workload/agent-execution.testing.js";
 
 // Only the readiness sweep is faked; a provider it leaves unnamed is one that cannot run.
 const ready = jest.fn<() => Promise<Partial<Record<NativeProvider, boolean>>>>();
@@ -24,21 +26,33 @@ const readiness = async (): Promise<Record<NativeProvider, boolean>> => {
 };
 
 // Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took. Each stands for the model's
-// answer to one sealed request: its words, or the failure its loop reports as an error frame.
-const oneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
-const geminiOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
-const cursorOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
-const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
+// answer to one sealed request: its words, or the failure its loop reports as an error frame. It is handed what the
+// request carried: the model, and the issued execution context and the directory it runs in.
+interface SealedRun {
+    readonly model: string;
+    readonly execution: AgentExecutionContext;
+    readonly cwd: string;
+}
+const oneShot = jest.fn<(ask: SealedRun) => Promise<string>>();
+const geminiOneShot = jest.fn<(ask: SealedRun) => Promise<string>>();
+const cursorOneShot = jest.fn<(ask: SealedRun) => Promise<string>>();
+const runners: Record<string, (ask: SealedRun) => Promise<string>> = {
     "claude-code": (ask) => oneShot(ask),
     "opencode-gemini": (ask) => geminiOneShot(ask),
     cursor: (ask) => cursorOneShot(ask),
 };
 type Adapter = ReturnType<Services[`adapters`][`for`]>;
-// The frames a loop would send for one answer: the words as a delta, or the failure as its error frame.
-async function* framesOf(run: (ask: { model: string }) => Promise<string>, model: string): AsyncGenerator<AgentEvent> {
-    const said = await run({ model }).then(
+// The frames a loop would send for one answer: the words as a delta, or the failure as its error frame. An execution
+// refusal is thrown out of the loop instead, as a runtime's launch refuses: it is no provider's failure.
+async function* framesOf(run: (ask: SealedRun) => Promise<string>, ask: SealedRun): AsyncGenerator<AgentEvent> {
+    const said = await run(ask).then(
         (text) => ({ text }),
-        (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+        (error: unknown) => {
+            if (error instanceof AgentDomainRefusedError) {
+                throw error;
+            }
+            return { error: error instanceof Error ? error.message : String(error) };
+        },
     );
     yield "text" in said ? { kind: `delta`, text: said.text } : { kind: `error`, message: said.error };
     yield { kind: `done` };
@@ -57,7 +71,11 @@ const adapterFor = (provider: AgentProvider, harness: AgentHarness): Adapter => 
         // The arm's plan for the sealed request it was handed: the loop bound to the model the request names.
         preflight: async (_deps, input, context) => {
             const request = { ...context.base, credential: { kind: `container` as const } };
-            return { ok: true, request, run: () => framesOf(run, input.model ?? ``) };
+            return {
+                ok: true,
+                request,
+                run: (spec) => framesOf(run, { model: input.model ?? ``, execution: request.execution, cwd: spec.cwd }),
+            };
         },
         health: unasked.health,
         holdsSession: unasked.holdsSession,
@@ -131,6 +149,8 @@ const BETWEEN_TESTS_MS = REFUSED_FOR_MS + 60 * 60 * 1000;
 // Just past the memo window, for tests that check it expiring.
 const PAST_THE_MEMO_MS = REFUSED_FOR_MS + 60 * 1000;
 let clock = 1_700_000_000_000;
+let lease: AgentExecutionLease;
+let execution: AgentExecutionContext;
 
 beforeEach(() => {
     clock += BETWEEN_TESTS_MS;
@@ -138,6 +158,8 @@ beforeEach(() => {
     // Reset all mocks so queued one-shot failures cannot leak between tests.
     jest.resetAllMocks();
     timed.length = 0;
+    lease = rootExecution({ localCwd: "/admitted-helper-view" });
+    execution = lease.context;
     ready.mockResolvedValue({ claude: true, gemini: true, codex: true, cursor: true });
     oneShot.mockResolvedValue(`fix: tree truncation`);
     geminiOneShot.mockResolvedValue(`fix: tree truncation`);
@@ -145,21 +167,70 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    lease.release();
     jest.useRealTimers();
 });
 
 test("spends the first model in the order and reports nothing skipped", async () => {
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(answer.skipped).toEqual([]);
     expect(oneShot).toHaveBeenCalledTimes(1);
+    const ask = oneShot.mock.calls[0]![0];
+    expect(ask.execution).toBe(execution);
+    expect(ask.cwd).toBe("/admitted-helper-view");
+    expect(agentInvocation(ask.execution, "helper", [])).toEqual({ command: "helper", args: [], cwd: "/admitted-helper-view" });
+});
+
+test.each(["forged", "released"] as const)("refuses %s helper authority before settings or provider work", async (kind) => {
+    const context = kind === "forged" ? { mode: "root" as const, cwd: execution.cwd } : execution;
+    if (kind === "released") { lease.release(); }
+    const services = unstubbed<Services>("no-helper-access", {});
+    const pending = askRoleModel(services, context, ROLE, DRAFT, signal());
+    await expect(pending).rejects.toBeInstanceOf(AgentDomainRefusedError);
+    await expect(pending).rejects.toMatchObject({ code: "agent-domain-refused", message: "Agent execution context is not registered or has been released." });
+    expect(ready).not.toHaveBeenCalled();
+    expect(oneShot).not.toHaveBeenCalled();
+});
+
+test("a coded execution refusal is neither cooled nor stepped over to another provider", async () => {
+    const refusal = new AgentDomainRefusedError("synthetic helper entry refused");
+    oneShot.mockRejectedValueOnce(refusal);
+    const services = fakeServices([`codex:gpt-5.6`, `gemini:gemini-3-flash-lite`]);
+    await expect(askRoleModel(services, execution, ROLE, DRAFT, signal())).rejects.toBe(refusal);
+    expect(oneShot).toHaveBeenCalledTimes(1);
+    expect(geminiOneShot).not.toHaveBeenCalled();
+    expect(timed).toEqual([]);
+    oneShot.mockClear();
+    const answer = await askRoleModel(services, execution, ROLE, DRAFT, signal());
+    expect(answer.choice).toEqual({ provider: "codex", model: "gpt-5.6" });
+    expect(answer.skipped).toEqual([]);
+    expect(oneShot).toHaveBeenCalledTimes(1);
+});
+
+test("a context released while the privacy shield reads the request refuses before helper dispatch", async () => {
+    const services = fakeServices([`claude:claude-opus-5`]);
+    const guarded = unstubbed<Services>("services", {
+        ...services,
+        privacyShield: unstubbed<Services["privacyShield"]>("privacyShield", {
+            seal: async (request) => {
+                lease.release();
+                return { prompt: request.prompt, restore: (text: string) => text };
+            },
+        }),
+    });
+    await expect(askRoleModel(guarded, execution, ROLE, DRAFT, signal())).rejects.toMatchObject({
+        code: "agent-domain-refused", message: "Agent execution context is not registered or has been released.",
+    });
+    expect(oneShot).not.toHaveBeenCalled();
+    expect(timed).toEqual([]);
 });
 
 test("steps over a spent allowance and answers on the next model down", async () => {
     oneShot.mockRejectedValueOnce(new Error(`ChatGPT usage limit reached: the allowance is exhausted.`));
 
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.value).toBe(`fix: tree truncation`);
     expect(answer.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
@@ -170,7 +241,7 @@ test("treats a credential that fails on the way in as one more refusal to step o
     // A token that fails at resolution passes the cheap readiness check first; the next account must still answer.
     oneShot.mockRejectedValueOnce(new Error(`Reconnect your ChatGPT account.`));
 
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice.provider).toBe(`claude`);
     expect(answer.skipped[0]?.reason).toMatch(/ChatGPT|Reconnect/i);
@@ -179,7 +250,7 @@ test("treats a credential that fails on the way in as one more refusal to step o
 test("names every model it asked when the whole chain is spent", async () => {
     oneShot.mockRejectedValue(new Error(`usage limit reached`));
 
-    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal())).rejects.toThrow(
+    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal())).rejects.toThrow(
         /gpt-5\.6.*claude-haiku-4-5/,
     );
 });
@@ -191,12 +262,12 @@ test("stops the moment the user cancels rather than spending the rest of the cha
         throw new Error(`aborted`);
     });
 
-    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, controller.signal)).rejects.toThrow(`aborted`);
+    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, controller.signal)).rejects.toThrow(`aborted`);
     expect(oneShot).toHaveBeenCalledTimes(1);
 });
 
 test("asks nothing at all when no model is set for the job", async () => {
-    const thrown = await askRoleModel(fakeServices([]), ROLE, DRAFT, signal()).catch((error: unknown) => error);
+    const thrown = await askRoleModel(fakeServices([]), execution, ROLE, DRAFT, signal()).catch((error: unknown) => error);
 
     expect(thrown).toBeInstanceOf(RoleModelUnsetError);
     expect((thrown as Error).message).toBe(`No model is set for this job, so it does not run. Set one in Sandbox ▸ Agent ▸ Models.`);
@@ -217,12 +288,12 @@ test("spends the list belonging to the role that asked, not another role's", asy
         }),
     });
 
-    expect((await askRoleModel(services, `safety-judge`, DRAFT, signal())).choice).toEqual({ provider: `claude`, model: `claude-opus-5` });
+    expect((await askRoleModel(services, execution, `safety-judge`, DRAFT, signal())).choice).toEqual({ provider: `claude`, model: `claude-opus-5` });
     expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
 test("walks the pins a caller snapshotted instead of re-reading the role's list", async () => {
-    const answer = await askRoleModel(fakeServices([`gemini:gemini-3-flash-lite`]), ROLE, DRAFT, signal(), {
+    const answer = await askRoleModel(fakeServices([`gemini:gemini-3-flash-lite`]), execution, ROLE, DRAFT, signal(), {
         pins: asPins([`claude:claude-opus-5`]),
     });
 
@@ -232,7 +303,7 @@ test("walks the pins a caller snapshotted instead of re-reading the role's list"
 
 // Settings still has `codex:gpt-5.6` for this role, but an empty pins snapshot refuses rather than falling back to it.
 test("refuses on the snapshot it was handed rather than re-reading the role's list", async () => {
-    const thrown = await askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal(), { pins: [] }).catch((error: unknown) => error);
+    const thrown = await askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, signal(), { pins: [] }).catch((error: unknown) => error);
 
     expect(thrown).toBeInstanceOf(RoleModelUnsetError);
     expect((thrown as Error).message).toBe(`No model is set for this job, so it does not run. Set one in Sandbox ▸ Agent ▸ Models.`);
@@ -242,7 +313,7 @@ test("refuses on the snapshot it was handed rather than re-reading the role's li
 test("says the job's accounts have gone rather than failing on a model call", async () => {
     ready.mockResolvedValue({ claude: false, gemini: false, codex: false });
 
-    const thrown = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`]), ROLE, DRAFT, signal()).catch((error: unknown) => error);
+    const thrown = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal()).catch((error: unknown) => error);
 
     expect(thrown).toBeInstanceOf(Error);
     expect(thrown).not.toBeInstanceOf(RoleModelUnsetError);
@@ -255,11 +326,11 @@ test("says the job's accounts have gone rather than failing on a model call", as
 test("a model that just refused is stepped over without being asked again", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
     expect(oneShot).toHaveBeenCalledTimes(2);
 
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     expect(oneShot).toHaveBeenCalledTimes(1);
     expect(oneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `claude-haiku-4-5` }));
@@ -269,11 +340,11 @@ test("a model that just refused is stepped over without being asked again", asyn
 test("asks it again once the memo has run out: an allowance resets and nothing announces it", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(answer.skipped).toEqual([]);
@@ -282,12 +353,12 @@ test("asks it again once the memo has run out: an allowance resets and nothing a
 test("an answer clears the memo, so a recovered model keeps its place at the top", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -296,11 +367,11 @@ test("an answer clears the memo, so a recovered model keeps its place at the top
 test("tries the whole chain anyway when every rung is cooling down", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValue(new Error(`usage limit reached`));
-    await expect(askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal())).rejects.toThrow();
+    await expect(askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal())).rejects.toThrow();
 
     oneShot.mockClear();
     oneShot.mockResolvedValue(`fix: tree truncation`);
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -309,7 +380,7 @@ test("tries the whole chain anyway when every rung is cooling down", async () =>
 test("steps over a rung that writes a tool call instead of an answer", async () => {
     oneShot.mockResolvedValueOnce(`[tool_call: glob for pattern '**']`);
 
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.value).toBe(`fix: tree truncation`);
     expect(answer.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
@@ -319,10 +390,10 @@ test("steps over a rung that writes a tool call instead of an answer", async () 
 test("an unusable reply leaves no memo: the same rung is asked again on the next call", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockResolvedValueOnce(`[tool_call: glob for pattern '**']`);
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -333,7 +404,7 @@ test("names what every rung wrote when none of them wrote an answer", async () =
     oneShot.mockResolvedValue(`I need more context. What am I naming?`);
     geminiOneShot.mockResolvedValue(`I need more context. What am I naming?`);
 
-    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal())).rejects.toThrow(
+    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal())).rejects.toThrow(
         /gpt-5\.6: answered the asker.*claude-haiku-4-5: answered the asker/,
     );
 });
@@ -342,7 +413,7 @@ test("names what every rung wrote when none of them wrote an answer", async () =
 // quota, so a Gemini rung must never run that loop.
 
 test("runs a Cursor rung on its own runtime, never through the Claude Code harness", async () => {
-    const answer = await askRoleModel(fakeServices([`cursor:composer-2.5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`cursor:composer-2.5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `cursor`, model: `composer-2.5` });
     expect(cursorOneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `composer-2.5` }));
@@ -350,7 +421,7 @@ test("runs a Cursor rung on its own runtime, never through the Claude Code harne
 });
 
 test("runs a Gemini rung on its own runtime, never through the Claude Code harness", async () => {
-    const answer = await askRoleModel(fakeServices([`gemini:gemini-3-flash-lite`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`gemini:gemini-3-flash-lite`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
     expect(geminiOneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `gemini-3-flash-lite` }));
@@ -358,7 +429,7 @@ test("runs a Gemini rung on its own runtime, never through the Claude Code harne
 });
 
 test("keeps every other provider on the Claude Code harness", async () => {
-    await askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, signal());
 
     expect(oneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `gpt-5.6` }));
     expect(geminiOneShot).not.toHaveBeenCalled();
@@ -366,7 +437,7 @@ test("keeps every other provider on the Claude Code harness", async () => {
 });
 
 test("steps over a rung the recorded quota already says is spent", async () => {
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -375,14 +446,14 @@ test("steps over a rung the recorded quota already says is spent", async () => {
 });
 
 test("a rung with headroom on file is asked, whatever the rest of the fleet looks like", async () => {
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(answer.skipped).toEqual([]);
 });
 
 test("asks every rung anyway when the quota says the whole chain is spent", async () => {
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`, `claude`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`, `claude`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -395,10 +466,10 @@ test("a cancel leaves no memo behind", async () => {
         controller.abort();
         throw new Error(`aborted`);
     });
-    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, controller.signal)).rejects.toThrow(`aborted`);
+    await expect(askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, controller.signal)).rejects.toThrow(`aborted`);
 
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
@@ -407,9 +478,9 @@ test("a cancel leaves no memo behind", async () => {
 // `skipped` lists only rungs the walk passed on its way to an answer, not ones behind it that were never reached.
 test("does not report a cooling rung that sits behind the model that answered", async () => {
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
-    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
-    const answer = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`, `codex:gpt-5.6`]), ROLE, DRAFT, signal());
+    const answer = await askRoleModel(fakeServices([`claude:claude-haiku-4-5`, `codex:gpt-5.6`]), execution, ROLE, DRAFT, signal());
 
     expect(answer.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
     expect(answer.skipped).toEqual([]);
@@ -419,7 +490,7 @@ test("tells a listener every beat: asking, the refusal in its own words, and the
     const beats: string[] = [];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
 
-    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal(), {
+    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal(), {
         onProgress: (attempts) => beats.push(attempts.map((attempt) => `${attempt.choice.model}:${attempt.status}`).join(` `)),
     });
 
@@ -434,11 +505,11 @@ test("tells a listener every beat: asking, the refusal in its own words, and the
 test("a rung skipped on its memo is a beat too, with the remembered reason, and a listener's throw costs the walk nothing", async () => {
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
-    await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
 
     const beats: { model: string; status: string; reason?: string | undefined }[] = [];
     oneShot.mockClear();
-    const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal(), {
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal(), {
         onProgress: (attempts) => {
             beats.push(...attempts.slice(beats.length > 0 ? -1 : 0).map((a) => ({ model: a.choice.model, status: a.status, reason: a.reason })));
             throw new Error(`a broken listener`);
@@ -452,7 +523,7 @@ test("a rung skipped on its memo is a beat too, with the remembered reason, and 
 test("bills every model it asks, by name, answered or refused", async () => {
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
 
-    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), ROLE, DRAFT, signal());
+    await askRoleModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), execution, ROLE, DRAFT, signal());
 
     expect(timed.map((entry) => [entry.op, entry.fields[`model`], entry.failed])).toEqual([
         [`role.model`, `gpt-5.6`, true],
@@ -481,7 +552,7 @@ test("a rung too small for the ask is stepped over, and the next one answers", a
     const services = withEndpoint([`endpoint/tiny:llama`, `claude:claude-opus-5`], 16_384);
     const big = { ...DRAFT, prompt: `x`.repeat(200_000) };
 
-    const answer = await askRoleModel(services, ROLE, big, signal());
+    const answer = await askRoleModel(services, execution, ROLE, big, signal());
 
     // The small rung was never asked: no round trip, no memo, no raw 400.
     expect(timed.map((billed) => billed.fields[`model`])).toEqual([`claude-opus-5`]);
@@ -503,7 +574,7 @@ test("an ask that sizes itself is built for the rung's own room and asked", asyn
         },
     };
 
-    const answer = await askRoleModel(services, ROLE, sizing, signal());
+    const answer = await askRoleModel(services, execution, ROLE, sizing, signal());
 
     expect(answer.choice.model).toBe(`llama`);
     // 16,384 window − 1,000 reply = 15,384 tokens × 4 chars: the whole window bar room to answer, since a one-shot
@@ -515,7 +586,7 @@ test("an ask that sizes itself is built for the rung's own room and asked", asyn
 test("an unknown window is asked whatever the prompt's size", async () => {
     const services = fakeServices([`claude:claude-opus-5`]);
 
-    const answer = await askRoleModel(services, ROLE, { ...DRAFT, prompt: `x`.repeat(500_000) }, signal());
+    const answer = await askRoleModel(services, execution, ROLE, { ...DRAFT, prompt: `x`.repeat(500_000) }, signal());
 
     expect(answer.choice.model).toBe(`claude-opus-5`);
 });

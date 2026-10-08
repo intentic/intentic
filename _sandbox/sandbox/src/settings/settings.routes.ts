@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { bearerFrom } from "../auth/auth.js";
 import { settingsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { forkablePrompt, intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
@@ -14,6 +15,7 @@ import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } fro
 import { settingsDocument } from "./settings-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
+import { requireAgentDomainRollout } from "../workload/agent-domain-rollout.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
@@ -32,6 +34,23 @@ export const createSettingsRoutes = (services: Services) => {
     const versioned = <T>(subject: string, write: () => Promise<T>): Promise<T> =>
         versionedSettingsWrite(services, [settingsDocument.path], `Settings: ${subject}`, write);
     return {
+        agentDomain: i.agentDomain.handler(() => services.agentDomainPolicy.get()),
+        setAgentDomain: i.setAgentDomain.handler(async ({ input, context }) => {
+            // An owner bearer only: panel/agent/control tokens and unauthenticated loopback never change the boundary.
+            if (services.auth === undefined) {
+                throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
+            }
+            try {
+                await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+            } catch {
+                throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
+            }
+            try { requireAgentDomainRollout(input); } catch (error) {
+                throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+            }
+            await services.agentDomainPolicy.set(input);
+            return { ok: true } as const;
+        }),
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
             await versioned("agent settings", () => services.sandboxSettings.set(input)).catch((error: unknown) => {

@@ -45,17 +45,7 @@ import { issuesDocument } from "../issues/issues-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
 import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
-import {
-    hostEnrollmentsDocument,
-    hostPairConsumedDocument,
-    phoneEnrollmentsDocument,
-    phonePairConsumedDocument,
-    runnerEnrollmentsDocument,
-    runnerPairConsumedDocument,
-    syncPairConsumedDocument,
-    webextEnrollmentsDocument,
-    webextPairConsumedDocument,
-} from "../peers/enrollment.js";
+import { hostEnrollmentsDocument, hostPairConsumedDocument, phoneEnrollmentsDocument, phonePairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
 import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
@@ -105,6 +95,7 @@ import { usageLedgerDocument } from "../usage/usage-store.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
 import { webchatOutboxDocument } from "../webchat/webchat-outbox.js";
 import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from "../workflows/workflows-store.js";
+import { agentDomainPolicyDocument } from "../workload/agent-domain-policy.js";
 import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
@@ -213,20 +204,11 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webchatOutboxDocument,
     workflowRunsDocument,
     workflowsDocument,
+    agentDomainPolicyDocument,
     heavyCommandsDocument,
     dependencyRequestsDocument,
 ];
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
-    [
-        identityOffWorkspaceStep,
-        passkeysOffWorkspaceStep,
-        automationsRelocationStep,
-        pre1308ImportStep,
-        conversationsSchemaStep,
-        landCheckLeftoversStep,
-        pushChecksLeftoversStep,
-        stateRegroupStep,
-        workflowGateTokensStep,
-    ].toSorted((a, b) => a.id.localeCompare(b.id));
+    [identityOffWorkspaceStep, passkeysOffWorkspaceStep, automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, landCheckLeftoversStep, pushChecksLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));

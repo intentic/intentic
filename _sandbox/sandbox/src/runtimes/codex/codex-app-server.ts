@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { whenAborted } from "@intentic/base/async";
-import { nsenterArgv } from "../../conversations/worktrees/isolation.js";
+import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
@@ -32,6 +32,8 @@ export type JsonValue = string | number | boolean | null | readonly JsonValue[] 
 export interface CodexNamespace {
     readonly pid: number;
     readonly cwd: string;
+    // Daemon-local capability, never sent to app-server; optional only for legacy root-mode descriptors.
+    readonly namespace?: NamespaceEntryReference;
 }
 
 export interface CodexTurn {
@@ -447,7 +449,7 @@ export const stdioConnector =
         const argv =
             turn.namespace === undefined
                 ? { command: binary, args: ["app-server", "--stdio"] }
-                : nsenterArgv(turn.namespace.pid, turn.namespace.cwd, binary, ["app-server", "--stdio"]);
+                : nsenterArgv(namespaceTargetOf(turn.namespace), turn.namespace.cwd, binary, ["app-server", "--stdio"]);
         const child = spawnProcess(argv.command, argv.args, turn.env, turn.spawnDepth ?? 0);
         const messages = new AsyncQueue<AppServerMessage>();
         const pending = new Map<number, { readonly resolve: (value: unknown) => void; readonly reject: (error: unknown) => void }>();

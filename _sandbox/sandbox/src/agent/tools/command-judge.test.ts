@@ -1,5 +1,28 @@
-import { judgeAnswer } from "./command-judge.js";
 import { readRoleAnswer, UnusableAnswerError } from "../models/role-answer.js";
+import type { Services } from "../../composition.js";
+import { unstubbed } from "@intentic/testing";
+import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionLease } from "../../workload/agent-execution.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
+import { rootExecutionService } from "../../workload/agent-execution.testing.js";
+
+const asked = jest.fn<() => Promise<{ value: { verdict: { decision: "allow"; sentence: string }; recognised: boolean } }>>();
+const executions: AgentExecutionContext[] = [];
+jest.mock("../models/role-model.js", () => ({
+    askRoleModel: (_services: Services, execution: AgentExecutionContext) => {
+        assertAgentExecutionContext(execution);
+        executions.push(execution);
+        return asked();
+    },
+}));
+const { judgeAnswer, judgeCommand, judgeIndependentCommand } = await import("./command-judge.js");
+const JUDGE_INPUT: Parameters<typeof judgeCommand>[2] = {
+    policy: "Allow searches.", program: "rg title src", pins: [{ provider: "claude", model: "haiku" }],
+    facts: { consequences: [], language: "bash", unattended: false },
+};
+beforeEach(() => {
+    executions.length = 0;
+    asked.mockReset();
+});
 
 // Routed through readRoleAnswer, not judgeAnswer.read directly: the contract is the pair, an unwrapped value and the
 // usability check over it.
@@ -54,4 +77,99 @@ test("a walkthrough where a sentence was asked for is unusable", () => {
 // contract.
 test("a provider's refusal is a refusal, not a ruling", () => {
     expect(() => verdict(`You have exceeded your current quota.`)).toThrow();
+});
+
+test("passes the caller's authentic execution to the judge and preserves a domain refusal", async () => {
+    const service = rootExecutionService();
+    const services = unstubbed<Services>("services", { agentExecution: service });
+    const admission = await service.admit();
+    const lease = service.acquire(admission, { localCwd: "/work" });
+    const input = JUDGE_INPUT;
+    const signal = new AbortController().signal;
+    asked.mockResolvedValue({ value: { verdict: { decision: "allow", sentence: "Searches source files." }, recognised: true } });
+    try {
+        expect(await judgeCommand(services, lease.context, input, signal)).toEqual({ decision: "allow", sentence: "Searches source files." });
+        expect(executions).toEqual([lease.context]);
+        expect(executions[0]).toBe(lease.context);
+        // The judge borrows the turn's authority, not its lifetime: the caller still owns this lease.
+        assertAgentExecutionContext(lease.context);
+        const refusal = new AgentDomainRefusedError("judge context was released");
+        asked.mockRejectedValue(refusal);
+        await expect(judgeCommand(services, lease.context, input, signal)).rejects.toBe(refusal);
+        expect(executions).toEqual([lease.context, lease.context]);
+        expect(executions[1]).toBe(lease.context);
+    } finally {
+        lease.release();
+        service.close(admission);
+    }
+});
+
+test.each(["returned", "rejected", "refused"])("independent host judge closes its authentic execution when the model %s", async (outcome) => {
+    const service = rootExecutionService();
+    const acquireLease = service.acquire;
+    const leases: AgentExecutionLease[] = [];
+    const admit = jest.spyOn(service, "admit");
+    const close = jest.spyOn(service, "close");
+    const acquire = jest.spyOn(service, "acquire").mockImplementation((admission, placement) => {
+        const lease = acquireLease(admission, placement);
+        const tracked = { context: lease.context, release: jest.fn(lease.release) };
+        leases.push(tracked);
+        return tracked;
+    });
+    const services = unstubbed<Services>("services", {
+        agentExecution: service,
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+    });
+    const failure = outcome === "refused" ? new AgentDomainRefusedError("host judge context was released") : new Error("host judge unavailable");
+    if (outcome === "returned") {
+        asked.mockResolvedValue({ value: { verdict: { decision: "allow", sentence: "Searches source files." }, recognised: true } });
+    } else { asked.mockRejectedValue(failure); }
+
+    const judging = judgeIndependentCommand(services, JUDGE_INPUT, new AbortController().signal);
+    if (outcome === "returned") { await expect(judging).resolves.toEqual({ decision: "allow", sentence: "Searches source files." }); }
+    else { await expect(judging).rejects.toBe(failure); }
+
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(acquire).toHaveBeenCalledTimes(1);
+    const admission = acquire.mock.calls[0]![0];
+    expect(acquire).toHaveBeenCalledWith(admission, { localCwd: "/work" });
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toBe(leases[0]!.context);
+    expect(leases[0]!.release).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith(admission);
+    expect(() => assertAgentExecutionContext(executions[0]!)).toThrow(AgentDomainRefusedError);
+    expect(() => acquireLease(admission, { localCwd: "/work" })).toThrow(AgentDomainRefusedError);
+});
+
+test("an independent host judge that is unset never admits or acquires execution", async () => {
+    const service = rootExecutionService();
+    const admit = jest.spyOn(service, "admit");
+    const acquire = jest.spyOn(service, "acquire");
+    const services = unstubbed<Services>("services", { agentExecution: service });
+    await expect(judgeIndependentCommand(services, { ...JUDGE_INPUT, pins: [] }, new AbortController().signal)).rejects.toBeInstanceOf(RoleModelUnsetError);
+    expect(admit).not.toHaveBeenCalled();
+    expect(acquire).not.toHaveBeenCalled();
+    expect(asked).not.toHaveBeenCalled();
+});
+
+test("an unplaced unprivileged host judge refuses before asking a model and closes admission", async () => {
+    const readProtectedPolicy = async () => ({ agentDomain: "unprivileged" as const });
+    const service = createAgentExecutionService(readProtectedPolicy, () => undefined);
+    const admit = jest.spyOn(service, "admit");
+    const acquire = jest.spyOn(service, "acquire");
+    const close = jest.spyOn(service, "close");
+    const services = unstubbed<Services>("services", {
+        agentExecution: service,
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+    });
+    await expect(judgeIndependentCommand(services, JUDGE_INPUT, new AbortController().signal)).rejects.toBeInstanceOf(AgentDomainRefusedError);
+    expect(admit).toHaveBeenCalledTimes(1);
+    const admission = acquire.mock.calls[0]![0];
+    expect(acquire).toHaveBeenCalledWith(admission, { localCwd: "/work" });
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith(admission);
+    expect(() => service.acquire(admission, { localCwd: "/work" })).toThrow("Agent execution admission is not registered or has been closed.");
+    expect(asked).not.toHaveBeenCalled();
+    expect(executions).toEqual([]);
 });

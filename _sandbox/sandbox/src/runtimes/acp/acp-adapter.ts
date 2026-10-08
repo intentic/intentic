@@ -13,6 +13,7 @@ import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
+import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
 // Sited beside the runtime it serves, like the native providers, but a plain adapter, not a module: an ACP agent's
@@ -78,5 +79,8 @@ export const ACP_ADAPTER: AgentAdapter<"acp", AcpAdapterDeps> = {
     },
     // Always true: a session lives inside the agent's own process, with no store to ask out here. The pool asks the
     // agent directly at resume time (acp-agent.ts); answering "gone" here would retire every session blindly.
-    holdsSession: async () => true,
+    holdsSession: async (_services, _sessionId, execution) => {
+        assertAgentExecutionContext(execution);
+        return true;
+    },
 };

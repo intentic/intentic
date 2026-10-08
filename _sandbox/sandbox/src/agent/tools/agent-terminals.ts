@@ -4,7 +4,8 @@ import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { forkedExec } from "@intentic/base/git";
 import { z } from "zod";
-import { nsenterPrefix, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { handoffDirOf, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { namespaceTargetOf, nsenterPrefix } from "../../workload/namespace-entry.js";
 import { AGENT_SESSION_ENV } from "../../system/boot/container-owner.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
@@ -306,21 +307,22 @@ const taskStopHooks = (jobs: BackgroundJobSeed): TaskStopHooks => ({
     },
 });
 
-// Where a Bash call's command files are written: a fenced turn's sandbox sees only its own temp dir, at the same path
-// the daemon writes it; every other turn reads the daemon's.
-const runRootFor = (isolation: TurnPlacement | undefined): string => isolation?.anchor?.sandbox?.tmp ?? tmpdir();
+// Where a Bash call's command files are written: a fenced turn's sandbox and an agent domain each see only their own temp
+// dir, at the same path the daemon writes it (handoffDirOf); every other turn reads the daemon's.
+const runRootFor = (isolation: TurnPlacement | undefined): string => handoffDirOf(isolation?.anchor) ?? tmpdir();
 
 // A background job's seed, with its dir made where the turn can see it (runRootFor).
 const jobSeedFor = (jobs: BackgroundJobSeed, isolation: TurnPlacement | undefined): BackgroundJobSeed => {
-    const tmp = isolation?.anchor?.sandbox?.tmp;
+    const tmp = handoffDirOf(isolation?.anchor);
     return tmp === undefined ? jobs : { ...jobs, tmp };
 };
 
 // What a pane's line runs through before the command: the hop into an anchored turn's namespace, since the shared tmux
-// server forks panes in the daemon's. A fenced turn's panes need none: their tmux server runs inside its sandbox.
+// server forks panes in the daemon's. A fenced turn's panes need none: their tmux server runs inside its sandbox. Nor
+// does an agent domain's: the daemon starts its whole pane inside the domain (terminal/pane-door.ts).
 const paneHop = (isolation: TurnPlacement | undefined): string => {
     const anchor = isolation?.anchor;
-    return anchor === undefined || anchor.sandbox !== undefined ? "" : nsenterPrefix(anchor.pid, anchor.cwd);
+    return anchor === undefined || anchor.sandbox !== undefined || anchor.domain !== undefined ? "" : nsenterPrefix(namespaceTargetOf(anchor), anchor.cwd);
 };
 
 export const bashTmuxHooks = (

@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
@@ -12,6 +13,7 @@ import { memoryFleet } from "../../../testing.js";
 const cards = parkedCards(memoryFleet().conversations);
 
 const request: AgentRequest = {
+    execution: unstubbed("execution", {}),
     spec: { prompt: "ship the parser", cwd: WORKSPACE_ROOT },
     policy: {},
     tools: {},

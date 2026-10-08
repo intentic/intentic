@@ -6,7 +6,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
-import { nsenterArgv } from "../../workload/namespace-entry.js";
+import { forgetNamespaceEntry, nsenterArgv, registerMountEntry, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CallResult, HostCall, HostMessage, RuntimeMessage } from "./cursor-runtime-protocol.js";
 import type { CursorHookService } from "./cursor-hooks.js";
@@ -54,6 +54,7 @@ const deps = (): CursorAgentDeps => ({
 });
 
 const request = (): AgentRequest<CursorCredential> => ({
+    execution: unstubbed("execution", {}),
     spec: { prompt: `add an auto mode of model selecting`, cwd: WORKSPACE_ROOT, model: MODEL },
     policy: {},
     tools: {},
@@ -353,9 +354,16 @@ test("the SDK's catch-all error is reported as the failure it is, not as a lost 
 
 // An isolated turn's placement: its worktree, and the namespace anchor that makes it /work, when the container has one.
 const plan = { worktree: `${HISTORY_ROOT}/worktrees/c1/work`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
-const anchored = (base = request()): AgentRequest<CursorCredential> => ({
+const anchored = (base = request(), namespace?: NamespaceEntryReference): AgentRequest<CursorCredential> => ({
     ...base,
-    spec: { ...base.spec, spawnDepth: 1, isolation: { plan, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } } },
+    spec: {
+        ...base.spec,
+        spawnDepth: 1,
+        isolation: {
+            plan,
+            anchor: { pid: namespace?.pid ?? 4321, cwd: WORKSPACE_ROOT, plan, ...(namespace === undefined ? {} : { namespace }), dispose: () => {} },
+        },
+    },
 });
 
 // An SDK error as the runtime reports one: its message, and the class the daemon rebuilds it as.
@@ -455,6 +463,45 @@ test("an anchored turn's SDK agent is born in the turn's mount namespace, at /wo
     expect(events).toContainEqual({ kind: `delta`, text: `from the worktree` });
     expect(events.some((event) => event.kind === `error`)).toBe(false);
     expect(events.at(-1)).toEqual({ kind: `done` });
+});
+
+test("Cursor preserves the issued namespace capability to the host without putting it on the runtime wire", async () => {
+    const namespace = registerMountEntry(62006);
+    const fake = fakeRuntime(oneTurn);
+    try {
+        const events = await collect(createCursorAgent({ ...deps(), runtime: fake.runtime })(anchored(request(), namespace)));
+        expect(fake.spawned).toEqual([{
+            command: "nsenter",
+            args: [
+                "--mount=/proc/62006/ns/mnt", "--wdns=/work", "--", "env", "-u", "PWD", "-u", "OLDPWD",
+                "/usr/local/bin/node", "/opt/sandbox/dist/runtimes/cursor/cursor-agent-runtime.js", SDK_ENTRY,
+            ],
+            spawnDepth: 1,
+        }]);
+        expect(fake.calls.map((call) => call.method)).toEqual(["open", "send", "wait", "close"]);
+        expect(JSON.stringify(fake.calls)).not.toContain(String(namespace.pid));
+        expect(events.at(-1)).toEqual({ kind: "done" });
+        expect(events.filter((event) => event.kind === "error")).toEqual([]);
+    } finally {
+        forgetNamespaceEntry(namespace);
+    }
+});
+
+test("Cursor refuses stale and reconstructed namespace references before spawning a runtime at the reused PID", async () => {
+    const reference = registerMountEntry(62007);
+    forgetNamespaceEntry(reference);
+    const replacement = registerMountEntry(reference.pid);
+    const fake = fakeRuntime(oneTurn);
+    try {
+        for (const namespace of [reference, { ...replacement }]) {
+            const events = await collect(createCursorAgent({ ...deps(), runtime: fake.runtime })(anchored(request(), namespace)));
+            expect(events).toEqual([{ kind: "error", message: "namespace anchor 62007 reference is not registered" }, { kind: "done" }]);
+        }
+        expect(fake.spawned).toEqual([]);
+        expect(fake.calls).toEqual([]);
+    } finally {
+        forgetNamespaceEntry(replacement);
+    }
 });
 
 test("an isolated turn the container could not anchor runs its agent in this process, cwd'd into its worktree", async () => {

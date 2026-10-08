@@ -19,6 +19,7 @@ import type { MountedPlugin } from "../../guard/settings-hooks.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
 import type { HeavyCommands } from "../../workload/heavy-commands.js";
+import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
@@ -267,6 +268,8 @@ export interface TurnHooks {
 }
 
 export interface AgentRequest<C extends TurnCredential = TurnCredential> {
+    // Daemon-admitted execution authority, retained by identity; the spec alone cannot select an execution view.
+    readonly execution: AgentExecutionContext;
     readonly spec: TurnSpec;
     readonly policy: TurnPolicy;
     readonly tools: TurnTools;

@@ -15,5 +15,5 @@ export interface HostGuardDeps {
     /** Where a card the agent stopped waiting on is held for the turn's close (guard/held-cards.ts). */
     readonly held: Pick<HeldCards, "add">;
     /** The safety judge's verdict on one program (agent/tools/command-judge.ts). */
-    readonly judge: (input: Parameters<typeof judgeCommand>[1], signal: AbortSignal) => Promise<SafetyVerdict>;
+    readonly judge: (input: Parameters<typeof judgeCommand>[2], signal: AbortSignal) => Promise<SafetyVerdict>;
 }

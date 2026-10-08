@@ -330,7 +330,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             anchor === undefined
                 ? inProcessHost(sdk)
                 : namespacedHost({
-                      namespace: { pid: anchor.pid, cwd: anchor.cwd },
+                      namespace: { pid: anchor.pid, cwd: anchor.cwd, ...opt("namespace", anchor.namespace) },
                       sdk,
                       sdkEntry: await cursorSdkEntry(),
                       spawnDepth: request.spec.spawnDepth ?? 0,

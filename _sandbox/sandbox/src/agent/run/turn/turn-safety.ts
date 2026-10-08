@@ -2,6 +2,7 @@ import type { ModelPin, SandboxSettings } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { opt } from "../../../opt.js";
+import type { AgentExecutionContext } from "../../../workload/agent-execution.js";
 import type { TurnBase } from "../../providers/agent-request.js";
 import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../../providers/project-installs.js";
 
@@ -19,10 +20,10 @@ export type TurnSafetyDeps = Pick<
 // A closure over the judge, the policy text and the owner's model pin rather than any of them directly, because the seam
 // it fills lives in guard/.
 const judgeFor =
-    (deps: Pick<Services, "judgeCommand">, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
+    (deps: Pick<Services, "judgeCommand">, execution: AgentExecutionContext, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
     (program, facts, signal) =>
-        // An unpinned role reads as an empty list, which the walk answers with its Auto ladder.
-        deps.judgeCommand({ policy, program, facts, pins: pins ?? [] }, signal);
+        // An unpinned role stays off; its empty snapshot must not substitute a different model.
+        deps.judgeCommand(execution, { policy, program, facts, pins: pins ?? [] }, signal);
 
 // The turn as the safety layers read it: which conversation, and what woke it when the owner did not.
 export interface TurnSafetyInput {
@@ -51,7 +52,7 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
         },
         hooks: {
             ...base.hooks,
-            judge: judgeFor(deps, safetyPolicy, settings.modelRoles[`safety-judge`]),
+            judge: judgeFor(deps, base.execution, safetyPolicy, settings.modelRoles[`safety-judge`]),
             // The safety log is the owner's record of what the judge decided; a line it could not keep is said out loud.
             logSafety: (entry) => {
                 void deps.safetyLog.record(entry).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: a judged command was not recorded"));

@@ -12,6 +12,7 @@ import { writeCodexConfig } from "../runtimes/codex/codex-config.js";
 import { codexBinary } from "../runtimes/codex/codex-path.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
+import { rootExecution } from "../workload/agent-execution.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -60,9 +61,11 @@ const runTurn = async (modelId: string, script: readonly ScriptedStep[], overrid
     const model = await startFakeModel({ script, requireKey: AUTH_TOKEN });
     const controller = new AbortController();
     const events: AgentEvent[] = [];
+    const lease = rootExecution({ localCwd: cwd });
     try {
         const agent = createCodexAgent({ codexHome });
         for await (const event of agent({
+            execution: lease.context,
             spec: { prompt: "do the thing", cwd, model: modelId, ...overrides.spec },
             policy: { ...overrides.policy },
             tools: { ...overrides.tools },
@@ -75,6 +78,7 @@ const runTurn = async (modelId: string, script: readonly ScriptedStep[], overrid
         return { events, requests: [...model.requests], bearers: [...model.bearers], cwd, codexHome };
     } finally {
         controller.abort();
+        lease.release();
         await model.close();
     }
 };
@@ -198,9 +202,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             const { cwd, codexHome } = await scratch();
             const model = await startFakeModel({ script: [{ text: "first answer" }, { text: "second answer" }], requireKey: AUTH_TOKEN });
             const controller = new AbortController();
+            const lease = rootExecution({ localCwd: cwd });
             try {
                 const agent = createCodexAgent({ codexHome });
                 const base: Omit<AgentRequest<CodexCredential>, "spec"> = {
+                    execution: lease.context,
                     policy: {},
                     tools: {},
                     credential: { kind: "codex-endpoint", baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
@@ -230,6 +236,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                 expect(users.join("\n"), "a resumed thread must carry the earlier turn's message").toContain("remember the word banana");
             } finally {
                 controller.abort();
+                lease.release();
                 await model.close();
             }
         });

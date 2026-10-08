@@ -1,6 +1,6 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentTurn, type Capability, type CredentialGateKind, profileOf } from "@intentic/sandbox-contract";
-import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
+import { ownWorktree, type TurnPlacement } from "../../../conversations/worktrees/isolation.js";
 import { accountsServer } from "../../../browser/tools/accounts-tools.js";
 import { ANONYMOUS_BROWSER_SERVER, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
 import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
@@ -132,7 +132,7 @@ const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess):
     });
 
 const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
-    isolation === undefined
+    !ownWorktree(isolation)
         ? {}
         : {
               placement: {
@@ -165,7 +165,7 @@ const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, context: T
         dependencies: deps.dependencies,
         canInstall: persona.powers.files === "write" && persona.powers.shell,
         origin: { kind: "request", ...opt("conversationId", input.conversationId), ...opt("title", title) },
-        worktree: context.base.spec.isolation?.plan.worktree,
+        worktree: ownWorktree(context.base.spec.isolation) ? context.base.spec.isolation.plan.worktree : undefined,
         signal: context.base.signal,
     });
 };

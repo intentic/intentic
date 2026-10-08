@@ -1,7 +1,8 @@
 import { extname } from "node:path";
 import { type CheckPlacement, diagnose } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { fromWorktree, inWorktree, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
 import { modulesNear, type NearbyModules } from "../../workspace/deps/dependency-drift.js";
 import type { ShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
@@ -120,7 +121,7 @@ const checkBoundary = (
     }
     // Anchored: the turn is asked in its own names and answers in them, so nothing is translated either way.
     return {
-        checkPlacement: { enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) },
+        checkPlacement: { enter: (command, args) => nsenterArgv(namespaceTargetOf(anchor), anchor.cwd, command, args) },
         asAgentNames: (file) => file,
         inTurn: (file) => file,
     };

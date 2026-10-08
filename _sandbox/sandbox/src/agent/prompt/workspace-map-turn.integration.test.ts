@@ -53,7 +53,7 @@ const projectAt = async (prefix: string, marker: string): Promise<string> => {
 
 // The model's message comes from CONTEXT.base.spec.prompt, not the turn's; attachments are already folded in by then.
 const contextIn = (root: string, localCwd = root, prompt = "do the thing"): TurnContext => ({
-    base: { spec: { prompt, cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
+    base: { execution: unstubbed("execution", {}), spec: { prompt, cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd,
     effectiveCwd: localCwd,
