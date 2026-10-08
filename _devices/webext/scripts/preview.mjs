@@ -90,16 +90,17 @@ const shot = `<!doctype html>
     <head>
         <meta charset="utf-8" />
         <title>Intentic — store shot</title>
+        <link rel="stylesheet" href="faces.css" />
         <style>
             html, body { margin: 0; width: 1280px; height: 800px; overflow: hidden; }
             body {
                 display: flex; align-items: center; gap: 72px; padding: 0 90px; box-sizing: border-box;
                 background: radial-gradient(120% 120% at 15% 10%, #15100b 0%, #0c0907 60%);
-                color: #efe3cd; font: 16px/1.5 system-ui, sans-serif;
+                color: #efe3cd; font: 300 16px/1.5 "Public Sans", system-ui, sans-serif;
             }
-            h1 { font-size: 40px; line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.02em; }
+            h1 { font-size: 40px; font-weight: 500; line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.02em; }
             p { margin: 0 0 14px; color: #b7a68d; max-width: 30ch; font-size: 18px; }
-            b { color: #efe3cd; font-weight: 600; }
+            b { color: #efe3cd; font-weight: 500; }
             .accent { color: #f59b3f; }
             .mark { width: 64px; height: 64px; margin: 0 0 26px; display: block; }
             iframe { width: 360px; height: 600px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.55); }

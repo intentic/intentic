@@ -41,6 +41,8 @@ const ICONS = {
     paused: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM6.4 5.6v4.8M9.6 5.6v4.8" },
     offline: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM3.6 3.6l8.8 8.8" },
     info: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM8 7.3v4M8 4.8v.1" },
+    done: { d: "M3 8.5 6.5 12 13 4.5" },
+    failed: { d: "M4 4l8 8M12 4l-8 8" },
 } as const;
 
 const icon = (name: keyof typeof ICONS): SVGSVGElement => {
@@ -63,13 +65,10 @@ const button = (
     label: string,
     weight: "primary" | "plain" | "quiet",
     onClick: (event: MouseEvent) => void,
-    glyph?: keyof typeof ICONS,
+    size: "regular" | "small" = "regular",
 ): HTMLButtonElement => {
-    const node = h("button", { class: weight === "plain" ? "btn" : `btn ${weight}` });
+    const node = h("button", { class: ["btn", weight === "plain" ? "" : weight, size === "small" ? "small" : ""].filter(Boolean).join(" ") });
     node.type = "button";
-    if (glyph !== undefined) {
-        node.append(icon(glyph));
-    }
     node.append(label);
     node.addEventListener("click", onClick);
     return node;
@@ -95,9 +94,9 @@ const ago = (at: number, short = false): string => {
 };
 
 // A time that keeps itself current: the tick below rewrites every one of these without redrawing the popup.
-const when = (at: number, short: boolean, className?: string): HTMLTimeElement => {
+const when = (at: number, short: boolean): HTMLTimeElement => {
     // zone-checked: the extension has no kit; this formats per call on the reader's own clock and browser language.
-    const node = h("time", { text: ago(at, short), title: new Date(at).toLocaleString(), ...(className === undefined ? {} : { class: className }) });
+    const node = h("time", { text: ago(at, short), title: new Date(at).toLocaleString() });
     node.dataset["at"] = String(at);
     node.dataset["short"] = short ? "1" : "";
     return node;
@@ -176,26 +175,27 @@ const modeHint = (scopes: WebExtScopes): string => {
     return `Read & act also lets it click and type${asks}.`;
 };
 
+// The header's first line is the state itself, which is the one thing a glance at the popup is for. Before any
+// sandbox is paired there is no state to report, so it names the product instead.
 const renderHeader = (state: PopupState): void => {
-    const pill = byId("pill");
     const [className, label] =
         state.sandbox === undefined
-            ? ["pill", "Not connected"]
+            ? ["mark", "Intentic"]
             : state.paused
-              ? ["pill held", "Paused"]
+              ? ["mark held", "Paused"]
               : state.link === "open"
-                ? ["pill on", "Connected"]
+                ? ["mark on", "Connected"]
                 : state.link === "connecting"
-                  ? ["pill wait", "Connecting"]
-                  : ["pill off", "Offline"];
-    pill.className = className;
-    byId("pill-text").textContent = label;
+                  ? ["mark wait", "Connecting…"]
+                  : ["mark off", "Offline"];
+    byId("status").className = className;
+    byId("status-text").textContent = label;
     const where = byId("where");
     where.textContent = state.sandbox === undefined ? "Your agent, in your browser" : siteOf(state.sandbox.url);
     where.title = state.sandbox?.url ?? "";
     const pause = byId<HTMLButtonElement>("pause");
     show(pause, state.sandbox !== undefined);
-    pause.className = state.paused ? "btn primary" : "btn";
+    pause.className = state.paused ? "btn primary small" : "btn small";
     pause.replaceChildren(icon(state.paused ? "play" : "pause"), state.paused ? "Resume" : "Pause");
     pause.title = state.paused ? "Let the agent work in this browser again" : "Stop the agent from doing anything in this browser";
 };
@@ -206,9 +206,12 @@ const askCard = (pending: PendingAccess, scopes: WebExtScopes): HTMLElement => {
     return h(
         "div",
         { class: "card ask" },
-        h("div", { class: "eyebrow" }, h("span", { class: "beacon" }), "Your agent is asking", when(pending.at, false, "when")),
+        h("div", { class: "eyebrow" }, h("span", { text: "Your agent is asking for" }), when(pending.at, false)),
         h("div", { class: "title" }, favicon(pending.origin), h("span", { text: siteOf(pending.origin), title: pending.origin })),
-        h("p", { class: "reason", text: pending.reason === "" ? "It gave no reason." : `“${pending.reason}”` }),
+        h("p", {
+            class: pending.reason === "" ? "reason muted" : "reason",
+            text: pending.reason === "" ? "It gave no reason." : `“${pending.reason}”`,
+        }),
         h(
             "div",
             { class: "actions" },
@@ -228,10 +231,10 @@ const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => 
     return h(
         "div",
         { class: "card ask" },
-        h("div", { class: "eyebrow" }, h("span", { class: "beacon" }), "A sandbox wants to connect"),
+        h("div", { class: "eyebrow" }, h("span", { text: "A sandbox wants to connect" })),
         h("div", { class: "title" }, favicon(`${new URL(offered.url).origin}/*`), h("span", { text: siteOf(offered.url), title: offered.url })),
         h("p", {
-            class: "hint",
+            class: "reason muted",
             text: "Its agent will work in this browser only on the sites you allow here, and you can pause or disconnect it at any time.",
         }),
         h(
@@ -252,13 +255,9 @@ const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => 
     );
 };
 
+// A line with its icon in the icon column: the header already says the state, this says what it means for you.
 const notice = (kind: "paused" | "offline" | "info", glyph: keyof typeof ICONS, title: string, body: string): HTMLElement =>
-    h(
-        "div",
-        { class: `notice ${kind}` },
-        icon(glyph),
-        h("div", { class: "grow" }, h("strong", { text: title }), h("span", { class: "muted", text: body })),
-    );
+    h("div", { class: `note ${kind}` }, icon(glyph), h("p", {}, h("strong", { text: title }), ` ${body}`));
 
 const renderAlerts = (state: PopupState): void => {
     const node = byId("alerts");
@@ -270,9 +269,9 @@ const renderAlerts = (state: PopupState): void => {
         items.push(askCard(state.pending, state.scopes));
     }
     if (state.sandbox !== undefined && state.paused) {
-        items.push(notice("paused", "paused", "Paused", "Every tool call the agent makes is refused until you resume."));
+        items.push(notice("paused", "paused", "Your agent can't do anything here.", "Everything it asks for is refused until you resume."));
     } else if (state.sandbox !== undefined && state.link === "closed") {
-        items.push(notice("offline", "offline", "Can't reach your sandbox", "It reconnects by itself once the sandbox is running again."));
+        items.push(notice("offline", "offline", "Can't reach your sandbox.", "It reconnects by itself once the sandbox is running again."));
     }
     node.replaceChildren(...items);
     show(node, items.length > 0);
@@ -308,7 +307,6 @@ const renderSites = (state: PopupState, here: string | undefined): void => {
     const section = byId("sites");
     show(section, state.sandbox !== undefined || state.grants.length > 0);
     const grants = state.grants.toSorted((a, b) => siteOf(a.origin).localeCompare(siteOf(b.origin)));
-    byId("sites-count").textContent = grants.length === 0 ? "" : String(grants.length);
 
     // The tab in front, when it is a site nobody allowed yet: the quickest way to allow one is to be on it.
     const card = byId("here");
@@ -317,56 +315,63 @@ const renderSites = (state: PopupState, here: string | undefined): void => {
     const error = byId("add-error");
     card.replaceChildren();
     if (offerHere) {
-        card.className = "here";
+        // Two equal choices: this is a suggestion, and the popup's one loud surface is the agent's own request.
         card.append(
-            favicon(here),
             h(
                 "div",
-                { class: "host" },
+                { class: "offer" },
+                favicon(here),
                 h("span", { class: "name", text: siteOf(here), title: here }),
-                h("span", { class: "muted", text: "This tab · allow it to" }),
-            ),
-            h(
-                "div",
-                { class: "buttons" },
-                button("Read", "plain", () => void allow(here, "read", error)),
-                button("Read & act", "primary", () => void allow(here, "act", error)),
+                h("span", { class: "sub", text: "This tab isn't allowed" }),
+                h(
+                    "div",
+                    { class: "buttons" },
+                    button("Read", "plain", () => void allow(here, "read", error), "small"),
+                    button("Read & act", "plain", () => void allow(here, "act", error), "small"),
+                ),
             ),
         );
     }
     show(card, offerHere);
 
-    const list = byId("site-list");
-    const rows: HTMLElement[] = [];
+    // What a switch on the sandbox's card does to the list, said above it rather than inside it.
+    const notes: HTMLElement[] = [];
     if (state.sandbox !== undefined && state.scopes.read !== "on") {
-        rows.push(
+        notes.push(
             notice(
                 "info",
                 "info",
-                "Reading pages is off",
-                "It is switched off on this browser's card in your sandbox, so the sites below do nothing until it is on.",
+                "Reading pages is off.",
+                "It is switched off on this browser's card in your sandbox, so these sites do nothing until it is on.",
             ),
         );
     } else if (state.sandbox !== undefined && state.scopes.act !== "on" && grants.some((grant) => grant.mode === "act")) {
-        rows.push(
+        notes.push(
             notice(
                 "info",
                 "info",
-                "Clicking and typing is off",
+                "Clicking and typing is off.",
                 "It is switched off on this browser's card in your sandbox, so every site works as read only for now.",
             ),
         );
     }
+    byId("site-notes").replaceChildren(...notes);
+
+    const rows: HTMLElement[] = [];
     for (const grant of grants) {
         const remove = h("button", { class: "icon-btn", title: `Remove ${siteOf(grant.origin)}` }, icon("remove"));
         remove.type = "button";
         remove.setAttribute("aria-label", `Remove ${siteOf(grant.origin)}`);
         remove.addEventListener("click", () => void send({ type: "revoke", origin: grant.origin }).then(refresh));
-        const host = h("span", { class: "host" }, h("span", { text: siteOf(grant.origin), title: `${grant.origin} — ${modeLabel(grant.mode)}` }));
+        const host = h(
+            "div",
+            { class: "host" },
+            h("span", { class: "name", text: siteOf(grant.origin), title: `${grant.origin} — ${modeLabel(grant.mode)}` }),
+        );
         if (grant.origin === here) {
-            host.append(h("span", { class: "tag", text: "this tab" }));
+            host.append(h("span", { class: "sub here", text: "This tab" }));
         }
-        rows.push(h("div", { class: "site" }, favicon(grant.origin), host, segment(grant), remove));
+        rows.push(h("div", { class: "row" }, favicon(grant.origin), host, segment(grant), remove));
     }
     if (grants.length === 0) {
         rows.push(
@@ -378,7 +383,7 @@ const renderSites = (state: PopupState, here: string | undefined): void => {
             }),
         );
     }
-    list.replaceChildren(...rows);
+    byId("site-list").replaceChildren(...rows);
 };
 
 const LOG_SHORT = 5;
@@ -418,18 +423,19 @@ const renderActivity = (state: PopupState): void => {
     const rows = shown.map((entry) => {
         const { text, note, raw } = sentence(entry);
         const kind = entry.tool === "owner" ? "you" : entry.tool === "connection" ? "sys" : entry.ok ? "ok" : "bad";
-        const sign = kind === "ok" ? "✓" : kind === "bad" ? "✕" : "•";
+        // A tick for a call that worked, a cross for one that did not, and a dot for what you or the link did.
+        const sign = kind === "ok" ? icon("done") : kind === "bad" ? icon("failed") : h("span", { class: "pip" });
         const row = h(
             "li",
             { class: kind },
-            h("span", { class: "sign", text: sign }),
+            h("span", { class: "sign" }, sign),
             h("span", { class: raw ? "text raw" : "text", text, title: text }),
             when(entry.at, true),
         );
         if (!entry.ok && note !== undefined && note !== "") {
             // The refusal's first sentence is the fact ("Not allowed on mail.google.com."); the rest is advice written
             // for the agent, kept in the tooltip.
-            row.append(h("span", { class: "note", text: upperFirst(note.split(/(?<=\.)\s/)[0] ?? note), title: note }));
+            row.append(h("span", { class: "note-line", text: upperFirst(note.split(/(?<=\.)\s/)[0] ?? note), title: note }));
         }
         return row;
     });
@@ -438,13 +444,12 @@ const renderActivity = (state: PopupState): void => {
             h(
                 "li",
                 { class: "sys" },
-                h("span", { class: "sign", text: "•" }),
+                h("span", { class: "sign" }, h("span", { class: "pip" })),
                 h("span", { class: "text", text: "Nothing yet. What the agent does here shows up as it happens." }),
             ),
         );
     }
     byId("log").replaceChildren(...rows);
-    byId("activity-count").textContent = state.log.length === 0 ? "" : `last ${Math.min(state.log.length, LOG_LONG)}`;
     const more = byId<HTMLButtonElement>("log-more");
     const hiddenCount = Math.min(state.log.length, LOG_LONG) - shown.length;
     show(more, logExpanded || hiddenCount > 0);
@@ -602,6 +607,13 @@ const wire = (): void => {
         unpair.textContent = "Disconnect";
         void send({ type: "unpair" }).then(refresh);
     });
+
+    // The header only needs an edge once something has scrolled under it.
+    const header = byId("header");
+    const edge = (): void => {
+        header.classList.toggle("scrolled", window.scrollY > 0);
+    };
+    window.addEventListener("scroll", edge, { passive: true });
 
     // Follows the worker while open: a request arriving, the agent's next call, a pause from another window.
     chrome.storage.onChanged.addListener(() => void refresh());

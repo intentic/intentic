@@ -28,7 +28,8 @@ for (const [file, budget] of Object.entries(BUDGETS)) {
 }
 
 // An unexpected file in dist/ is uploaded to the store as-is: a stray source map or scratch file ships to users.
-const EXPECTED = new Set(["background.js", "pair-bridge.js", "popup.js", "popup.html", "manifest.json", "icons"]);
+// `fonts/` and `faces.css` are the app's own face for the popup (Public Sans, ~45 kB), from _tools/scripts/fonts.mjs.
+const EXPECTED = new Set(["background.js", "pair-bridge.js", "popup.js", "popup.html", "faces.css", "fonts", "manifest.json", "icons"]);
 const strays = readdirSync(dist).filter((entry) => !EXPECTED.has(entry));
 
 if (over.length > 0 || strays.length > 0) {

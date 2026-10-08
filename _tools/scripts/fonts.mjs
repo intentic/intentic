@@ -60,6 +60,15 @@ const TARGETS = [
         families: ["public-sans", "baloo-2", "jetbrains-mono"],
     },
     {
+        label: "webext",
+        fonts: "_devices/webext/static/fonts",
+        css: "_devices/webext/static/faces.css",
+        // Relative, since the popup is a page inside the extension package and the same file opens as dist/preview.html.
+        url: "fonts",
+        // The popup sets every line in the app's face, and nothing it shows is code.
+        families: ["public-sans"],
+    },
+    {
         label: "starter",
         fonts: "_sandbox/sandbox/starter-site/public/fonts",
         css: "_sandbox/sandbox/starter-site/src/styles/faces.css",
