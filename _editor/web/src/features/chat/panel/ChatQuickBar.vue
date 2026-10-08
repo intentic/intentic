@@ -49,7 +49,8 @@ const standing = computed<Standing>(() => {
     return title.value === undefined ? `inviting` : `named`;
 });
 
-// The fleet card's two readings in its own order (tileRim): a turn in flight spins, otherwise context fullness.
+// The pill's own rim, which is the chat's and not the cards' (their rim is progress only, tileRim): a turn in flight
+// spins, otherwise context fullness, since this pill is the conversation itself and context is acted on here.
 const rim = computed<{ percent: number; tone: string; spin: boolean } | undefined>(() => {
     if (streaming.value) {
         return { percent: 25, tone: `text-link`, spin: true };

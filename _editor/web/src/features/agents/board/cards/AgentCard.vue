@@ -4,7 +4,6 @@ import {
     Button,
     formatMoney,
     OverflowActions,
-    ProgressRing,
     ResponsiveOverlay,
     SandboxLogo,
     SegmentRing,
@@ -331,8 +330,8 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 // Gated on exactly what it renders, no more and no less: gating on a subset hides what should show, a superset opens an
 // empty strip.
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
-// Context is deliberately absent: it moved to the identity tile's rim (see `rim`), so a card whose only stat was
-// its context now opens no summary row at all.
+// Context is deliberately absent: it is a row of the identity tile's hover (see `tileHint`), so a card whose only stat
+// was its context opens no summary row at all.
 const stats = computed(
     () =>
         props.agent.costUsd !== undefined ||
@@ -341,21 +340,22 @@ const stats = computed(
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
-// `tileRim` decides which reading it draws: the agent's own checklist when it kept one, how full the context window
-// is otherwise. Cost stays a number either way, because "$3.26 of what?" has no denominator to draw an arc against.
-// Plain ink on a receipt, where either reading is history rather than a live gauge.
+// `tileRim` draws one reading on it: the agent's own checklist, plus a segment for the session's ending, which is the
+// whole rim for a session that kept no list. Context and cost stay off it: a fill percentage drawn as an arc read as
+// unfinished work on every finished card, and "$3.26 of what?" has no denominator to draw against.
+// Plain ink on a receipt, where the reading is history rather than a live gauge.
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
 // One hover for a tile carrying the category as well, since two nested tooltips would raise two boxes over the same
-// 28 pixels. Either half can be missing: a title the category reading declines still has a rim, and a fresh agent has
-// a category and nothing measured yet. Both of the rim's readings are rows, whichever one it draws, since the rim can
-// only draw one; a reading not taken leaves its row empty and the card drops it.
+// 28 pixels. Context fullness is said here and nowhere else on the card. Either half can be missing: a title the
+// category reading declines still has its readings, and a fresh agent has a category and nothing measured yet. A
+// reading not taken leaves its row empty and the card drops it.
 const tileHint = computed((): TooltipValue => {
     const type = category.value?.type;
-    if (rim.value === undefined) {
-        return type;
-    }
     const list = props.agent.checklist;
     const percent = contextPct(props.agent.contextTokens, props.agent.contextWindow);
+    if (list === undefined && percent === undefined) {
+        return type;
+    }
     return {
         title: type ?? t(`agents.agentCard.progress`),
         rows: [
@@ -614,29 +614,9 @@ const grab = (event: PointerEvent): void => {
     >
         <div class="flex items-center gap-2.5">
             <!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
-            <span
-                v-tooltip.top="tileHint"
-                class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
-            >
-                <!-- Ticks for a checklist, an arc for a context window; `tileRim` picks, and both draw at the same size and weight. -->
-                <SegmentRing
-                    v-if="rim?.kind === `steps`"
-                    :segments="rim.segments"
-                    :filled="rim.filled"
-                    :size="28"
-                    :stroke="1.5"
-                    class="absolute inset-0"
-                    :class="rim.tone"
-                />
-                <ProgressRing
-                    v-else-if="rim?.kind === `context`"
-                    :value="rim.percent"
-                    :size="28"
-                    :stroke="1.5"
-                    class="absolute inset-0"
-                    :class="rim.tone"
-                />
+            <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
+                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="28" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
                 <IdentityTile :title="agent.title" :action="agent.titleAction" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
             </span>
             <input

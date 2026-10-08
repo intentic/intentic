@@ -1059,53 +1059,32 @@ export const contextPct = (tokens: number | undefined, window: number | undefine
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
 
 // Enough of an agent to draw its identity tile's rim; a FleetAgent, a roster AgentSummary and a test literal all fit.
-export type RimAgent = AgentStanding & Pick<AgentSummary, "checklist" | "contextTokens" | "contextWindow">;
+export type RimAgent = AgentStanding & Pick<AgentSummary, "checklist">;
 
-interface RimInk {
-    // Tailwind text-* class: SegmentRing and ProgressRing both draw in `currentColor`.
+// What the identity tile's rim draws: lit segments of a SegmentRing, in a Tailwind text-* tone (it draws in
+// `currentColor`).
+export interface TileRim {
+    readonly segments: number;
+    readonly filled: number;
     readonly tone: string;
-    // One sentence naming both readings, since the rim can only draw one of them.
-    readonly hint: string;
 }
-export type TileRim =
-    | (RimInk & { readonly kind: "steps"; readonly segments: number; readonly filled: number })
-    | (RimInk & { readonly kind: "context"; readonly percent: number });
 
-const contextSpent = (percent: number): string => t(`agents.agentStatus.contextUsed`, { percent });
-
-// Amber past 80%, the band where a compaction is close; accent below it. A quiet rim states its number without
-// arguing for it, which is what a receipt and a destination row both want.
-const contextRim = (percent: number, quiet: boolean): TileRim => ({
-    kind: `context`,
-    percent,
-    tone: quiet ? `text-subtle` : percent >= 80 ? `text-warning` : `text-primary-500`,
-    hint: contextSpent(percent),
-});
-
-// ONE RIM, SO ONE READING, AND THE CHECKLIST WINS IT. "2 of 4 steps" says what a session will do next; a fill
-// percentage says only when it will start forgetting, which matters to fewer readers more rarely. So the context arc
-// keeps the rim only for the conversations that wrote no list, which is most short ones, and rides the hover for the
-// rest.
-// SEGMENTS ARE ITEMS PLUS ONE, and the extra closes only once the turn settles with every item done: a list emptied
-// mid-turn is not a finished session, and a ring already full while the agent works would claim it was.
-export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim | undefined => {
-    const percent = contextPct(agent.contextTokens, agent.contextWindow);
-    const list = agent.checklist;
-    if (list === undefined) {
-        return percent === undefined ? undefined : contextRim(percent, quiet);
-    }
-    const done = Math.min(list.done, list.total);
-    const settled = done === list.total && !turnWorking(agent);
-    return {
-        kind: `steps`,
-        segments: list.total + 1,
-        filled: settled ? list.total + 1 : done,
-        tone: quiet ? `text-subtle` : `text-primary-500`,
-        // Noun agrees with the total, not the count done: '1 of 4 steps', but '1 of 1 step'.
-        hint: [t(`agents.agentStatus.stepsDone`, { done, count: list.total }, list.total), percent === undefined ? undefined : contextSpent(percent)]
-            .filter((part): part is string => part !== undefined)
-            .join(` · `),
-    };
+// THE RIM SAYS HOW FAR THE SESSION GOT, AND NOTHING ELSE. It used to fall back to the context window's fill for a
+// session that kept no list, and a gauge reads as progress whatever it measures: most of Finished wore half-empty rims
+// on work that was done. Context is the tile's hover now (AgentCard's tileHint), and the chat's own status bar, where
+// it is acted on.
+// SEGMENTS ARE ITEMS PLUS ONE, the extra being the session's own ending, and it closes only once the card files in
+// Finished (laneOf): a list emptied by a turn still running, a turn parked on a question, one that broke or was stopped
+// is not a finished session, and a closed ring would claim it was. A session that kept no list is the same rule with no
+// items: one segment, empty until it is done and whole after, so a closed ring is a finished card's default and a gap
+// in Finished means a list left short.
+export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim => {
+    const total = agent.checklist?.total ?? 0;
+    // The daemon promises done <= total; a frame that broke it would otherwise light more segments than exist.
+    const done = Math.min(agent.checklist?.done ?? 0, total);
+    const finished = done === total && laneOf(agent) === `finished`;
+    // A quiet rim states its count without arguing for it, which is what a receipt and a destination row both want.
+    return { segments: total + 1, filled: finished ? total + 1 : done, tone: quiet ? `text-subtle` : `text-primary-500` };
 };
 
 // The activity line's icon by tool family, a glanceable "what is it doing" glyph, mock-style.

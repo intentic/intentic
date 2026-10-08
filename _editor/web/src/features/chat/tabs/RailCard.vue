@@ -1,7 +1,7 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
 import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
-import { formatElapsed, type IconName, ProgressRing, SegmentRing, timeAgo, type Tip } from "@intentic/ui";
+import { formatElapsed, type IconName, SegmentRing, timeAgo, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
@@ -32,9 +32,8 @@ const props = defineProps<{
     chip?: StandingChip;
     // True when the `corner` slot's mark (the board's seal) stands in for the resting status glyph (proofSeal.sealStandsIn).
     statusYields?: boolean;
-    // What the identity mark's rim draws: checklist ticks or a context arc, decided once by agentStatus.tileRim so
-    // this card and the board's cannot disagree. Undefined for a row with nothing measured (and for every row that
-    // isn't a session), which wears the empty rim instead.
+    // What the identity mark's rim draws: how far the session got, decided once by agentStatus.tileRim so this card and
+    // the board's cannot disagree. Undefined for every row that isn't a session, which wears the empty rim instead.
     rim?: TileRim;
     live?: { icon: IconName; text: string; since?: number };
     // When true, the live readout trails the facts line instead of taking its own row, for narrow rails.
@@ -92,17 +91,9 @@ const chipHint = computed((): Tip | undefined =>
                     :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
                 >
                     <SegmentRing
-                        v-if="rim?.kind === `steps`"
+                        v-if="rim !== undefined"
                         :segments="rim.segments"
                         :filled="rim.filled"
-                        :size="24"
-                        :stroke="1.5"
-                        class="absolute inset-0"
-                        :class="rim.tone"
-                    />
-                    <ProgressRing
-                        v-else-if="rim?.kind === `context`"
-                        :value="rim.percent"
                         :size="24"
                         :stroke="1.5"
                         class="absolute inset-0"

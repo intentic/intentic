@@ -296,8 +296,6 @@
             "inChannel": " in {channel}",
             "workedSince": "Worked since you last opened it, {when}",
             "subagents": "{count} subagent | {count} subagents",
-            "contextUsed": "{percent}% of context used",
-            "stepsDone": "{done} of {count} step done | {done} of {count} steps done",
             "loopIteration": "Iteration {iteration}/{max} · until {goal}",
             "loopDone": "Goal met after {iteration}",
             "loopExhausted": "Ran out of iterations after {iteration}",

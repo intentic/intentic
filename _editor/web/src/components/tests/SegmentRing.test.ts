@@ -83,3 +83,11 @@ it(`holds the construction at the rail's size`, async () => {
     const { track } = rings(await mount(4, 1, 24));
     expect(total(track) * 4).toBeCloseTo(2 * Math.PI * ((24 - STROKE) / 2), 6);
 });
+
+// A session that kept no list is one segment (agentStatus.tileRim), and a finished one must read as a closed ring, not
+// one notched at twelve o'clock by a gap with no neighbour to keep apart.
+it(`closes a lone segment into a whole ring`, async () => {
+    const { track, arc } = rings(await mount(1, 1));
+    expect(holes(track)).toBe(0);
+    expect(inked(arc)).toBeCloseTo(CIRCUMFERENCE, 6);
+});

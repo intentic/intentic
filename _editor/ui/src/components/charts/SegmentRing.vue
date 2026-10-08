@@ -17,7 +17,8 @@ const circumference = computed(() => 2 * Math.PI * radius.value);
 // At least one slot: a zero count would divide the circumference by nothing.
 const count = computed(() => Math.max(1, Math.round(segments)));
 const slot = computed(() => circumference.value / count.value);
-const gap = computed(() => (slot.value >= MIN_SLOT ? GAP : 0));
+// A lone segment has no neighbour to keep apart, so it closes into a whole ring rather than one notched at 12 o'clock.
+const gap = computed(() => (count.value > 1 && slot.value >= MIN_SLOT ? GAP : 0));
 const dash = computed(() => slot.value - gap.value);
 const lit = computed(() => Math.min(count.value, Math.max(0, Math.round(filled))));
 const track = computed(() => `${dash.value} ${gap.value}`);
