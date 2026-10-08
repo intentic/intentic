@@ -128,9 +128,14 @@ const remembered = tileNamed(route.query[`open`]);
 const selected = ref<TileKey | undefined>(remembered);
 // Query writes run one after another, each spreading the address the previous one left: two replaces issued in one tick
 // (the arrival dropping `?provider=`, the tile it opened) would otherwise each spread the stale query and undo the other.
+// A write that throws (a guard's error; an aborted one resolves) is said and leaves the chain open for the next.
 let writing: Promise<unknown> = Promise.resolve();
 const patchQuery = (patch: Record<string, string | undefined>): void => {
-    writing = writing.then(() => router.replace({ query: { ...route.query, ...patch } })).catch(() => undefined);
+    writing = writing
+        .then(() => router.replace({ query: { ...route.query, ...patch } }))
+        .catch((error: unknown) => {
+            console.warn(`models: could not write the open tile into the address`, error);
+        });
 };
 // Replaced, not pushed: picking a tile is not a visit.
 watch(selected, (tile) => {
