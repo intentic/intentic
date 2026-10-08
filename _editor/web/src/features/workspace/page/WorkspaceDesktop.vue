@@ -53,6 +53,7 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import CommitPage from "../changes/CommitPage.vue";
 import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
@@ -783,6 +784,13 @@ const rootHealthTooltip = computed((): Tip => ({
     title: t(`workspace.workspaceDesktop.codebaseHealth`),
     keys: commandShortcut(`workspace.codebaseHealth`),
 }));
+// The Changes list's own home is the commit page (CommitPage.vue): the list beside it dims what a commit leaves out.
+const commitHome = computed(() => layout.sidebarPanel.value === `changes`);
+const commitHomeTooltip = computed((): Tip => ({
+    title: t(`workspace.workspaceDesktop.showCommitPage`),
+    keys: commandShortcut(`workspace.showHome`),
+    note: t(`workspace.workspaceDesktop.tabsStayOpen`),
+}));
 const homeTooltip = computed((): Tip => ({
     title: t(`workspace.workspaceDesktop.showHome`),
     keys: commandShortcut(`workspace.showHome`),
@@ -851,10 +859,10 @@ const includeTip = computed((): Tip => ({
                         <button
                             type="button"
                             :class="ui.iconButton()"
-                            @click="changes.refresh()"
+                            @click="changes.refreshAll()"
                             v-tooltip.bottom="
                                 changes.landing.value === undefined
-                                    ? t(`ui.action.refresh`)
+                                    ? { title: t(`ui.action.refresh`), note: t(`workspace.workspaceDesktop.refreshFetches`) }
                                     : t(`workspace.workspaceDesktop.landingNow`, { landing: changes.landing.value })
                             "
                             :aria-label="t(`workspace.workspaceDesktop.refreshChanges`)"
@@ -1081,9 +1089,24 @@ const includeTip = computed((): Tip => ({
                                 aria-hidden="true"
                             ></span>
                         </button>
-                        <!-- What is under the tabs, without closing any; only while a tab covers the home. -->
+                        <!-- What is under the tabs, without closing any; only while a tab covers the home. With the Changes
+                             list open the home is the commit page, so the way back says so, and how much waits there. -->
                         <button
-                            v-if="homeCovered"
+                            v-if="homeCovered && commitHome"
+                            type="button"
+                            :class="
+                                ui.textAction(`mr-1 gap-1 self-center rounded-md px-1.5 py-1 text-xs text-muted hover:bg-overlay hover:text-content`)
+                            "
+                            @click="showHome"
+                            v-tooltip.bottom="commitHomeTooltip"
+                            :aria-label="t(`workspace.workspaceDesktop.showCommitPage`)"
+                            data-show-commit-page
+                        >
+                            <Icon name="check" class="text-2xs text-success" />{{ t(`workspace.reviewPanel.commit`) }}
+                            <span v-if="changes.count.value > 0" class="tabular-nums text-subtle">{{ changes.count.value }}</span>
+                        </button>
+                        <button
+                            v-else-if="homeCovered"
                             type="button"
                             :class="ui.iconButton(`mr-1 h-7 w-7 self-center`)"
                             @click="showHome"
@@ -1092,6 +1115,10 @@ const includeTip = computed((): Tip => ({
                         >
                             <Icon name="th-large" class="text-sm" />
                         </button>
+                    </template>
+                    <template #home>
+                        <CommitPage v-if="commitHome" />
+                        <HomeView v-else />
                     </template>
                     <template #status>
                         <div class="flex shrink-0 items-center gap-2 px-2">

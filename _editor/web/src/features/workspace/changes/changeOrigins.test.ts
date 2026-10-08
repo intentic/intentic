@@ -132,28 +132,11 @@ describe(`chipMessageNotice`, () => {
         expect(chipMessageNotice({ ...state, message: `fix: cascading markers` })).toBeUndefined();
     });
 
-    test(`names whose message is coming, and leaves the step-by-step to the report below`, () => {
-        const waiting = chipMessageNotice({ ...state, draft: running() });
-        expect(waiting).toContain(state.label);
-        expect(waiting).not.toBe(chipMessageNotice(state));
-    });
-
-    test(`says the same before any model has been reached: the report below has the phase`, () => {
-        const waiting = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } });
-        expect(waiting).toContain(state.label);
-        expect(waiting).toBe(chipMessageNotice({ ...state, draft: running() }));
-    });
-
-    test(`says a sentence is never coming when none was written`, () => {
-        const absent = chipMessageNotice(state);
-        expect(absent).toContain(state.label);
-        expect(absent).not.toBe(chipMessageNotice({ ...state, draft: running() }));
-    });
-
-    test(`a failed draft reads as the absence, not as a wait`, () => {
-        const absent = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } });
-        expect(absent).toContain(state.label);
-        expect(absent).toBe(chipMessageNotice(state));
+    test(`leaves the wait and the absence to the draft line under the box`, () => {
+        expect(chipMessageNotice({ ...state, draft: running() })).toBeUndefined();
+        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } })).toBeUndefined();
+        expect(chipMessageNotice(state)).toBeUndefined();
+        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } })).toBeUndefined();
     });
 
     test(`explains itself when the box is the user's, and says what to do about it`, () => {
@@ -167,14 +150,14 @@ describe(`chipMessageNotice`, () => {
         expect(blocked).toBe(chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true }));
     });
 
-    test(`falls back to the absence when neither the box nor the session has anything to file`, () => {
-        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(chipMessageNotice(state));
+    test(`says nothing about the user's box when the session has nothing to put in it`, () => {
+        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBeUndefined();
     });
 
     test(`the "you" row has no landed sentence by definition, and says so`, () => {
         const yours = chipMessageNotice({ ...state, label: `you`, yours: true });
         expect(yours).not.toBe(chipMessageNotice({ ...state, label: `you`, yours: false }));
-        expect(yours).not.toBe(chipMessageNotice({ ...state, draft: running() }));
+        expect(yours).toEqual(expect.any(String));
     });
 });
 

@@ -4,9 +4,11 @@ import type { Glyph } from "./glyph.js";
 export const ACTION_GLYPHS = {
     "align-left": { outline: `M4 5h16 M4 10h11 M4 15h16 M4 20h11` },
     "arrow-circle-up": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 17V7 M8 11l4-4 4 4` },
+    "arrow-down": { outline: `M12 4v16 M6 14l6 6 6-6` },
     "arrow-down-left": { outline: `M19 5 5 19 M5 8v11h11` },
     "arrow-left": { outline: `M20 12H4 M10 6l-6 6 6 6` },
     "arrow-right": { outline: `M4 12h16 M14 6l6 6-6 6` },
+    "arrow-up": { outline: `M12 20V4 M6 10l6-6 6 6` },
     "arrow-up-right": { outline: `M5 19 19 5 M8 5h11v11` },
     "arrows-h": { outline: `M3 12h18 M7 8l-4 4 4 4 M17 8l4 4-4 4` },
     "chevron-down": { outline: `m6 9 6 6 6-6` },

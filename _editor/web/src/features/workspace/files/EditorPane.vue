@@ -169,8 +169,11 @@ const diffOutline = useLoadingReveal(
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
             <ExtensionDocument :extension="activeTab.extension" :provider="activeTab.provider" :path="activeTab.path" :title="activeTab.title" />
         </div>
-        <!-- The home, whenever there are files to draw; an empty workspace still gets every way to get code in. -->
-        <HomeView v-else-if="!empty" />
+        <!-- The home, whenever there are files to draw; an empty workspace still gets every way to get code in. The host
+             may put its own page there instead (the commit page, while the Changes list is open). -->
+        <slot v-else-if="!empty" name="home">
+            <HomeView />
+        </slot>
         <!-- Nothing in the workspace yet: every way to get code in, or what the pane's owner says instead (a folder of this
              computer has no repository to clone into it, local/LocalEmptyFolder.vue). -->
         <slot v-else name="empty">

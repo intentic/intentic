@@ -27,6 +27,13 @@ export const GitScopeSchema = z.object({
         .min(1)
         .optional()
         .describe("Narrow to the files one conversation landed. Leave it out for everyone's, including your own edits."),
+    // The complement of every origin: what the review draws with no conversation's mark.
+    unlanded: z
+        .boolean()
+        .optional()
+        .describe(
+            "Narrow to the files no conversation landed: your own edits, and whatever a terminal wrote. Ignored when `origin` names a conversation.",
+        ),
 });
 export type GitScope = z.infer<typeof GitScopeSchema>;
 
@@ -57,16 +64,29 @@ const oneTarget = (target: GitTarget): boolean => target.paths === undefined || 
 // {}: stage everything, then commit.
 // { scope }: stage what the scope names, then commit.
 // { paths }: stage exactly those paths, then commit.
-// Never `commit --only`: a partial commit over a half-staged file would record the worktree while the row showed the
-// index.
+// `only` narrows the record to what `stage` named (`commit --only`), leaving the rest of the index staged: what a commit
+// scoped to one conversation needs when someone else's files are already staged. The named paths are staged first,
+// so a half-staged file is recorded as it stands on disk, the same content a stage-then-commit would record.
 export const CommitSchema = RepoParamSchema.extend({
-    message: z.string().min(1).describe("The commit message."),
+    message: z.string().describe("The commit message. Empty only when amending, which then keeps the last commit's own."),
     stage: GitTargetSchema.refine(oneTarget, ONE_TARGET)
         .optional()
         .describe(
             "What to stage before committing. Leave it out to record the index exactly as it stands; give it an empty object to stage everything first.",
         ),
-});
+    only: z
+        .boolean()
+        .optional()
+        .describe(
+            "Record only what `stage` names, and leave anything else already staged where it is, still staged. Without it the commit records the whole index. Has no effect without `stage`.",
+        ),
+    amend: z
+        .boolean()
+        .optional()
+        .describe(
+            "Rewrite the last commit instead of adding one: what is staged joins it, and a message given replaces its own. Refused once that commit is on a remote, where rewriting it would need a force push.",
+        ),
+}).refine((input) => input.message.length > 0 || input.amend === true, { message: "a commit needs a message", path: ["message"] });
 export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
     .describe("What to throw away. Neither paths nor a scope discards every uncommitted change in the repository.")
     .refine(oneTarget, ONE_TARGET);
@@ -356,6 +376,7 @@ export type GitChanges = z.infer<typeof GitChangesSchema>;
 // absent follows the scan's own drop rule; merge `originAgents` over what you hold, don't replace it.
 export const CommitResultSchema = z.object({
     committed: z.boolean().describe("Whether a commit was actually recorded."),
+    sha: z.string().optional().describe("The commit now at the tip of the branch, in full, when one was recorded. What an undo names."),
     changes: RepoChangesSchema.optional().describe(
         "What this repository looks like now, read in the same breath as the commit so a caller can redraw from here instead of asking for a fresh scan. Absent means there is nothing left to show.",
     ),
@@ -462,7 +483,9 @@ export const AgentChangesSchema = z.object({
                 uncommitted: z
                     .boolean()
                     .optional()
-                    .describe("Whether its copy there holds uncommitted changes to tracked files, which no merge brings until they are committed there."),
+                    .describe(
+                        "Whether its copy there holds uncommitted changes to tracked files, which no merge brings until they are committed there.",
+                    ),
             }),
         )
         .optional()

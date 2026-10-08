@@ -12,12 +12,18 @@ export interface ChangedSides {
 // What each verb can move; `git add` on an unmerged path settles a merge, so conflicts are stageable too.
 export const STAGEABLE_SIDES: readonly GitDiffSide[] = ["unstaged", "conflicted"];
 export const UNSTAGEABLE_SIDES: readonly GitDiffSide[] = ["staged"];
+// What a commit narrowed to a scope records: whatever of it is staged already, and whatever is still on disk only.
+export const COMMITTABLE_SIDES: readonly GitDiffSide[] = ["staged", "unstaged"];
 // Discard rewrites the worktree, which every side has one of.
 export const DISCARDABLE_SIDES: readonly GitDiffSide[] = ["conflicted", "staged", "unstaged"];
 
 // Whether a landed conversation put this change where it is; both legs of a rename are checked, keyed by path.
 const landedBy = (change: GitChange, origin: string, origins: Readonly<Record<string, readonly string[]>>): boolean =>
     (origins[change.path] ?? []).includes(origin) || (change.from !== undefined && (origins[change.from] ?? []).includes(origin));
+
+// No conversation claims the path or either leg of its rename: the review's "your own edits".
+const landedByAnyone = (change: GitChange, origins: Readonly<Record<string, readonly string[]>>): boolean =>
+    (origins[change.path]?.length ?? 0) > 0 || (change.from !== undefined && (origins[change.from]?.length ?? 0) > 0);
 
 // Paths a scope resolves to, for a verb that moves `sides`; both legs of a rename included, none acts on half a move.
 // Deduplicated: a path staged and edited again is two rows over one file, and a rename's legs can be named twice.
@@ -30,9 +36,14 @@ export const scopedPaths = (
     const origin = scope.origin;
     const reading = scope.side === undefined ? sides : sides.filter((side) => side === scope.side);
     const rows = reading.flatMap((side) => changed[side]);
-    const named = origin === undefined ? rows : rows.filter((change) => landedBy(change, origin, origins));
+    const named =
+        origin !== undefined
+            ? rows.filter((change) => landedBy(change, origin, origins))
+            : scope.unlanded === true
+              ? rows.filter((change) => !landedByAnyone(change, origins))
+              : rows;
     return [...new Set(named.flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from])))];
 };
 
 // A scope that narrows nothing is the whole repository; two of the three verbs say so to git directly, unenumerated.
-export const isWholeRepo = (scope: GitScope): boolean => scope.side === undefined && scope.origin === undefined;
+export const isWholeRepo = (scope: GitScope): boolean => scope.side === undefined && scope.origin === undefined && scope.unlanded !== true;

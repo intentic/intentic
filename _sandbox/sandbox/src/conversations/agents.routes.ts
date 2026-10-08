@@ -22,6 +22,7 @@ import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { endingOf } from "./registry/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landByHandLeased } from "./land/land-by-hand.js";
+import { describeLanding } from "./land/landed-subject.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -37,6 +38,8 @@ export const createAgentsRoutes = (services: Services) => {
     // The one lookup every route here addresses a conversation through: unknown is NOT_FOUND, and one the caller may not
     // see (a guest's colleague's, or work outside a fenced member's areas) is FORBIDDEN (auth/fleet-scope.ts). A route's
     // role floor says what a caller may do, never to whose conversation, so no route reads or acts on an id without it.
+    // Conversations whose commit message is being written again by hand (redraftMessage).
+    const redrafting = new Set<string>();
     const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
         const entry = services.agents.entry(id);
         if (entry === undefined) {
@@ -95,7 +98,9 @@ export const createAgentsRoutes = (services: Services) => {
     // Recorded from the turn's `session` frame, not re-derived from where it ran: an isolated worktree is the workspace
     // root, so its path has no session. `sessionIdOf`, not `entry.sessionId`, flushed only at finish.
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "profile">): string | undefined =>
-        capabilitiesOf(agent.profile.provider, agent.profile.harness).runtime === "claude-code" ? services.conversations.sessionIdOf(agent.id) : undefined;
+        capabilitiesOf(agent.profile.provider, agent.profile.harness).runtime === "claude-code"
+            ? services.conversations.sessionIdOf(agent.id)
+            : undefined;
     // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
     return i.router({
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
@@ -156,7 +161,11 @@ export const createAgentsRoutes = (services: Services) => {
             const agent = entryFor(input.id, context);
             const sessionId = sdkSessionIdOf(agent);
             // One page, newest turns first, walking back on each `before`, not the whole conversation every time.
-            const { rows: messages, from, more } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
+            const {
+                rows: messages,
+                from,
+                more,
+            } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
             // Session/provider/account are the entry's own values, not the client's, which can disagree after a switch.
             return {
                 ...(sessionId !== undefined
@@ -176,7 +185,9 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Fills in what `transcript` counted rather than carried. Off the record, so it answers for an archived
         // conversation too, unlike the subagent registry, which is an in-memory map.
-        toolChildren: i.toolChildren.handler(async ({ input, context }) => ({ children: await services.transcripts.toolChildren(entryFor(input.id, context), input.toolId) })),
+        toolChildren: i.toolChildren.handler(async ({ input, context }) => ({
+            children: await services.transcripts.toolChildren(entryFor(input.id, context), input.toolId),
+        })),
         // A subagent the conversation's runtime ran in-process, as a transcript of its own. Seen by whoever may see the
         // conversation whose turn it ran in, since its work is that conversation's.
         subagentTranscript: i.subagentTranscript.handler(async ({ input, context }) => {
@@ -307,6 +318,22 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
             return summary;
+        }),
+        // Detached like the land's own drafting: the press answers at once, and the draft streams on the summary. One at
+        // a time per conversation, since two would race to publish the same report.
+        redraftMessage: i.redraftMessage.handler(({ input, context }) => {
+            entryFor(input.id, context);
+            if (services.conversations.landing(input.id)) {
+                throw new ORPCError("CONFLICT", { message: "this agent is merging, and its message is written when that finishes" });
+            }
+            if (redrafting.has(input.id)) {
+                throw new ORPCError("CONFLICT", { message: "this message is already being written again" });
+            }
+            redrafting.add(input.id);
+            void describeLanding(services, input.id)
+                .catch((error: unknown) => services.logger.debug({ err: error, agent: input.id }, "landed subject: redraft failed"))
+                .finally(() => redrafting.delete(input.id));
+            return { ok: true } as const;
         }),
         // Changes hands. Legal in every state, like a reaction: it says who answers for the work, not anything about it.
         assign: i.assign.handler(async ({ input, context }) => {
@@ -462,7 +489,11 @@ export const createAgentsRoutes = (services: Services) => {
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, await anchorOf(entry.placement, dir, main, entry.placement.branch, undefined, composed.base));
+            return services.git.fileDiff(
+                dir,
+                input.path,
+                await anchorOf(entry.placement, dir, main, entry.placement.branch, undefined, composed.base),
+            );
         }),
         includeScratch: i.includeScratch.handler(async ({ input, context }) => {
             const { dir, named } = await scratchNamed(input, context);
@@ -545,7 +576,9 @@ export const createAgentsRoutes = (services: Services) => {
         purge: i.purge.handler(async ({ context }) => {
             // The whole archive or nothing (purgeArchived), so a caller who cannot see all of it cannot empty it.
             if (services.agents.listArchived().some((agent) => !visibleTo(context.identity, agent))) {
-                throw new ORPCError("FORBIDDEN", { message: "the archive holds conversations outside your areas; only someone who can see all of it can empty it" });
+                throw new ORPCError("FORBIDDEN", {
+                    message: "the archive holds conversations outside your areas; only someone who can see all of it can empty it",
+                });
             }
             // Same disarm-before-delete as `discard`: an outlived watch would try to start a turn on a removed id.
             for (const summary of services.agents.listArchived()) {

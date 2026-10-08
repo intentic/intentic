@@ -43,7 +43,7 @@ import {
     revertCommit,
 } from "./changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes/changes-diff.js";
-import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
+import { amendHead, commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
 import { type ScratchScope, scratchOf } from "./changes/scratch.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
 import { type CommitScope, collectRepoDiff, type RepoDiff } from "./ops/commit-message.js";
@@ -92,6 +92,8 @@ export interface GitSlice {
             author: { readonly name: string; readonly email: string },
             git?: GitRunner,
         ) => Promise<boolean>;
+        // Rewrites the tip commit; refused for one a remote already holds (changes-index.ts).
+        readonly amendHead: (dir: string, message: string, author: { name: string; email: string }, paths?: readonly string[]) => Promise<void>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
         // Branches and the remote; remote verbs return an ActionResult since 'no remote' is an outcome, not an error.
         readonly listBranches: (dir: string) => Promise<GitBranch[]>;
@@ -178,6 +180,7 @@ export const createGitSlice = (): GitSlice => ({
         unstagePaths,
         commitIndex,
         commitOnly,
+        amendHead,
         discardPaths,
         listBranches,
         listRemoteBranches,

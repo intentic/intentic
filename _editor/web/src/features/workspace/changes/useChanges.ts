@@ -21,7 +21,7 @@ import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useRole } from "../../../client/sandbox/useRole";
 import { refusalSummary } from "../push/refusalSummary";
-import { outgoingWork } from "../push/outgoingWork";
+import { outgoingWork, syncable } from "../push/outgoingWork";
 import { landingLine, landingNow } from "./landing";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { truncatedTotal } from "./truncation";
@@ -182,6 +182,10 @@ export const fetchChanges = (): Promise<GitChanges> => sandboxRpc.git.changes();
 
 // Invalidates the change list, its file diffs, and every agent's review: committing or discarding changes what a review
 // reads though no ref moved. Fired directly, not left to the throttled file-watcher pass.
+// A commit's history moves with it: the family extensions share by name, and the contract's own `git.log` reads (the
+// commit page's recent commits).
+const invalidateLogs = (): Promise<void> =>
+    Promise.all([GIT_LOG.every, rpcPrefix(`git.log`)].map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined);
 const invalidateChanges = (): Promise<void> =>
     Promise.all([...workingReviewKeys, ...agentReviewPrefixes].map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined);
 
@@ -209,30 +213,104 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
     queryClient.setQueryData<GitChanges>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
 };
 
-// One real commit per group (git can't span repos); stageFirst stages the group's target first when nothing's staged
-// yet.
-// No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
-const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<void> => {
+// How one commit call reads the group: `stage` stages its target first, `only` records just that target and leaves
+// anything else staged where it is, `amend` rewrites the last commit instead of adding one.
+export interface CommitOptions {
+    readonly stage: boolean;
+    readonly only?: boolean;
+    readonly amend?: boolean;
+}
+
+// One commit this panel recorded, kept so the dock can offer to take it back. Per repo, since git can't span repos.
+export interface RecordedCommit {
+    readonly repo: string;
+    readonly sha: string;
+    // Whether the repo had a remote when this was recorded. The scan leaves out a repo that is clean with nothing to
+    // sync, so once it's gone this is all that says whether the commit can still be walked back without a force push.
+    readonly remote: boolean;
+}
+export interface CommitReceipt {
+    readonly commits: readonly RecordedCommit[];
+    readonly message: string;
+    readonly files: number | undefined;
+    readonly amend: boolean;
+}
+
+// The last commit this tab recorded, outliving the panel being closed; cleared by its undo or the next commit.
+const lastCommit = sandboxRef<CommitReceipt | undefined>(() => undefined);
+
+// One real commit per group (git can't span repos). No refetch on the happy path — each commit's own answer is
+// spliced in directly; a refusal falls back to a full read. Answers what was recorded, repo by repo.
+const commitRepos = async (
+    groups: readonly RepoTarget[],
+    message: string,
+    options: CommitOptions,
+    files?: number,
+): Promise<readonly RecordedCommit[]> => {
     committingHere.value = groups.map((group) => group.repo);
+    const recorded: RecordedCommit[] = [];
     try {
         await runBatch(
             groups.map((group) => ({
                 scope: COMMIT_SCOPE,
-                action: t(`workspace.useChanges.commitFailed`),
+                action: options.amend === true ? t(`workspace.useChanges.amendFailed`) : t(`workspace.useChanges.commitFailed`),
                 run: async (): Promise<void> => {
+                    const remote =
+                        queryClient.getQueryData<GitChanges>(changesKey())?.repos.find((entry) => entry.repo === group.repo)?.remote?.remote !==
+                        undefined;
                     const result = await sandboxRpc.git.commit({
                         repo: group.repo,
                         message,
-                        ...(stageFirst ? { stage: targetBody(group) } : {}),
+                        ...(options.stage ? { stage: targetBody(group) } : {}),
+                        ...(options.only === true ? { only: true } : {}),
+                        ...(options.amend === true ? { amend: true } : {}),
                     });
+                    if (result.committed && result.sha !== undefined) {
+                        recorded.push({ repo: group.repo, sha: result.sha, remote });
+                    }
                     await applyCommitResult(group.repo, result);
                 },
             })),
-            () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
+            () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : invalidateLogs()),
         );
     } finally {
         committingHere.value = [];
     }
+    if (recorded.length > 0) {
+        lastCommit.value = { commits: recorded, message, files, amend: options.amend === true };
+    }
+    return recorded;
+};
+
+// Walks each recorded commit back with a soft reset (its files return, staged), and only while the branch still sits
+// on it: the daemon's reflog read names the commit it would undo, and a branch that moved since is refused rather
+// than walked back past someone else's work.
+const undoCommit = (receipt: CommitReceipt): Promise<void> =>
+    runBatch(
+        receipt.commits.map((commit) => ({
+            scope: COMMIT_SCOPE,
+            action: t(`workspace.useChanges.undoFailed`),
+            run: async (): Promise<void> => {
+                const { action } = await sandboxRpc.git.undoable({ repo: commit.repo });
+                if (action === undefined || action.sha !== commit.sha || (action.kind !== `commit` && action.kind !== `amend`)) {
+                    throw new Error(t(`workspace.useChanges.branchMovedSince`, { repo: commit.repo }));
+                }
+                const result = await sandboxRpc.git.undo({ repo: commit.repo, previousSha: action.previousSha, discardChanges: false });
+                if (!result.ok) {
+                    throw new Error(result.reason);
+                }
+            },
+        })),
+        () => {
+            if (!failures.value.has(COMMIT_SCOPE)) {
+                lastCommit.value = undefined;
+            }
+            return Promise.all([invalidateChanges(), invalidateLogs()]);
+        },
+    );
+
+const dismissReceipt = (): void => {
+    lastCommit.value = undefined;
 };
 
 // Discards a selection: tracked content resets to HEAD, untracked files are deleted; an empty target discards the whole
@@ -312,7 +390,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
                 }
             },
         })),
-        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
+        () => Promise.all([invalidateChanges(), invalidateLogs()]),
     );
 
 // One busy span with one real sync per repo (git can't span remotes); per repo, pull runs before push so a
@@ -353,7 +431,7 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
                 }
             },
         })),
-        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
+        () => Promise.all([invalidateChanges(), invalidateLogs()]),
     );
 
 // Polls while another tab's (or this tab's pre-reload) commit is running — this tab's own splices in directly.
@@ -416,8 +494,17 @@ export function useChanges() {
         landing: landingLine,
         error,
         refresh: query.refetch,
+        // The panel's one refresh: rescans the tree and asks every remote what moved, so "to pull" is never older than
+        // the last press. A member who can't ship only rescans, since a fetch writes refs.
+        refreshAll: (): Promise<unknown> => {
+            const remotes = repos.value.filter((repo) => repo.error === undefined && syncable(repo)).map((repo) => repo.repo);
+            return remotes.length > 0 && canShip.value ? fetchRepos(remotes) : query.refetch();
+        },
         fileDiff,
         commitRepos,
+        lastCommit,
+        undoCommit,
+        dismissReceipt,
         discardGroups,
         abortOperation,
         stageGroups,

@@ -7,6 +7,7 @@ import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
+import { CLEAN_HEAD } from "./git-slice.testing.js";
 import type { Remover } from "../conversations/registry/agents-store.js";
 
 // The git routes, driven over the daemon's HTTP surface exactly as the browser drives them; fakes and client are shared
@@ -247,9 +248,10 @@ test("git.commit records the index, staging the whole repo first when the target
             }),
         ),
     );
-    expect(await client.git.commit({ repo: "root", message: "m1" })).toEqual({ committed: true });
-    expect(await client.git.commit({ repo: "intent", message: "m2", stage: {} })).toEqual({ committed: true });
-    expect(await client.git.commit({ repo: "intent", message: "m3", stage: { paths: ["a.ts", "b.ts"] } })).toEqual({ committed: true });
+    const recorded = { committed: true, sha: CLEAN_HEAD };
+    expect(await client.git.commit({ repo: "root", message: "m1" })).toEqual(recorded);
+    expect(await client.git.commit({ repo: "intent", message: "m2", stage: {} })).toEqual(recorded);
+    expect(await client.git.commit({ repo: "intent", message: "m3", stage: { paths: ["a.ts", "b.ts"] } })).toEqual(recorded);
     const intent = join(workspace.root, "intent");
     expect(calls).toEqual([
         `index ${workspace.root} m1`,
@@ -258,6 +260,75 @@ test("git.commit records the index, staging the whole repo first when the target
         `stage ${intent} a.ts,b.ts`,
         `index ${intent} m3`,
     ]);
+});
+
+test("git.commit with `only` records just what the scope names and stages nothing else; `amend` rewrites the tip", async () => {
+    const workspace = tempWorkspace([]);
+    const calls: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    changedFiles: async () => ({
+                        conflicted: [],
+                        staged: [{ path: "staged-by-you.ts", status: "modified" }],
+                        unstaged: [
+                            { path: "mine.ts", status: "modified" },
+                            { path: "theirs.ts", status: "modified" },
+                        ],
+                        blobs: new Map(),
+                    }),
+                    stageAll: async () => {
+                        calls.push(`stage-all`);
+                    },
+                    stagePaths: async (_dir, paths) => {
+                        calls.push(`stage ${paths.join(",")}`);
+                    },
+                    commitIndex: async (_dir, message) => {
+                        calls.push(`index ${message}`);
+                        return true;
+                    },
+                    commitOnly: async (_dir, paths, message) => {
+                        calls.push(`only ${paths.join(",")} ${message}`);
+                        return true;
+                    },
+                    amendHead: async (_dir, message, _author, paths) => {
+                        calls.push(`amend ${paths?.join(",") ?? "index"} ${message}`);
+                    },
+                },
+            }),
+        ),
+    );
+    // Nobody claims anything here, so every row is the owner's own.
+    expect(await client.git.commit({ repo: "root", message: "m1", stage: { scope: { unlanded: true } }, only: true })).toMatchObject({
+        committed: true,
+        sha: CLEAN_HEAD,
+    });
+    await client.git.commit({ repo: "root", message: "m2", stage: { paths: ["mine.ts"] }, only: true });
+    await client.git.commit({ repo: "root", message: "m3", amend: true });
+    await client.git.commit({ repo: "root", message: "m4", stage: { paths: ["theirs.ts"] }, only: true, amend: true });
+    // `only` without a stage target has nothing to narrow to, so the whole index is recorded.
+    await client.git.commit({ repo: "root", message: "m5", only: true });
+    expect(calls).toEqual([`only staged-by-you.ts,mine.ts,theirs.ts m1`, `only mine.ts m2`, `amend index m3`, `amend theirs.ts m4`, `index m5`]);
+});
+
+test("git.commit carries an amend refusal back as a CONFLICT in its own words", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                git: {
+                    ...services().git,
+                    amendHead: async () => {
+                        throw new Error("the last commit is already on origin/main, and amending it would need a force push");
+                    },
+                },
+            }),
+        ),
+    );
+    await expect(client.git.commit({ repo: "root", message: "m", amend: true })).rejects.toThrow(/force push/);
 });
 
 // `feat!(git): …` misplaces `!` after the type, not the scope, so a hook reads subject/type as empty; only unparsable
@@ -398,6 +469,7 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
     );
     expect(await client.git.commit({ repo: "intent", message: "m1" })).toEqual({
         committed: true,
+        sha: CLEAN_HEAD,
         changes: {
             repo: "intent",
             branch: "main",
@@ -409,7 +481,7 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
         },
         originAgents: { a1: { title: "Write notes", provider: "claude" } },
     });
-    expect(await client.git.commit({ repo: "spent", message: "m2" })).toEqual({ committed: true });
+    expect(await client.git.commit({ repo: "spent", message: "m2" })).toEqual({ committed: true, sha: CLEAN_HEAD });
 });
 
 // Commit state is server-side because it must survive a reload, a second tab, or a phone, all mid-commit.
