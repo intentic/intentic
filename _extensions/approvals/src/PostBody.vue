@@ -47,12 +47,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                     class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-card to-transparent"
                 ></div>
             </div>
-            <button
-                v-if="foldable"
-                type="button"
-                :class="ui.linkButton(`mt-1 gap-1 text-2xs text-muted hover:text-content`)"
-                @click="expanded = !expanded"
-            >
+            <button v-if="foldable" type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` }, `mt-1`)" @click="expanded = !expanded">
                 {{ expanded ? t(`postBody.showLess`) : t(`postBody.showWholePost`) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>

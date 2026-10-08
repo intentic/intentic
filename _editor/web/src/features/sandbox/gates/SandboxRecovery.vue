@@ -109,11 +109,11 @@ const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hos
             <summary class="cursor-pointer text-link">{{ t(`sandbox.diagnosis.otherOptions`) }}</summary>
             <div class="mt-2 flex min-w-0 flex-col gap-3">
                 <div v-if="others.includes(`restart-hosted`) || others.includes(`rollback-hosted`)" class="flex flex-wrap gap-2">
-                    <Button v-if="others.includes(`restart-hosted`)" size="small" severity="secondary" :label="t(`sandbox.diagnosis.restartIt`)" @click="restartHosted" />
+                    <Button v-if="others.includes(`restart-hosted`)" size="small" tier="boring" :label="t(`sandbox.diagnosis.restartIt`)" @click="restartHosted" />
                     <Button
                         v-if="others.includes(`rollback-hosted`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :label="t(`capabilities.hostRecreate.rollBackVerb`)"
                         @click="rollingBack = true"
                     />
@@ -126,7 +126,7 @@ const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hos
                 <!-- The cheaper way where it exists: a sandbox of the owner's that still answers can press these on that machine. -->
                 <p v-for="sibling in siblings" :key="sibling.sandbox.id" class="flex flex-wrap items-center gap-x-1.5 text-muted">
                     <span>{{ t(`sandbox.sandboxRecovery.siblingReaches`, { name: sibling.sandbox.name, machine: sibling.machineLabel }) }}</span>
-                    <button type="button" :class="ui.linkButton()" @click="manageFrom(sibling)">
+                    <button type="button" :class="ui.textButton()" @click="manageFrom(sibling)">
                         {{ t(`sandbox.sandboxRecovery.openItsDevices`) }}
                     </button>
                 </p>

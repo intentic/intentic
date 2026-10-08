@@ -307,11 +307,11 @@ const confirmRemove = async (): Promise<void> => {
             <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                 <span>{{ emptyNote }}</span>
                 <!-- An empty list is the moment to answer 'where do extensions come from', not just point at another surface. -->
-                <button v-if="entries.length === 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
+                <button v-if="entries.length === 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
                     {{ t(`sandbox.extensionsInstalled.discoverWhatPeoplePublished`) }}
                 </button>
                 <!-- The empty state answers the active filter before offering reset. -->
-                <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
+                <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
                     {{ t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches) }}
                 </button>
                 <Button v-if="matches.length === 0 && entries.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />

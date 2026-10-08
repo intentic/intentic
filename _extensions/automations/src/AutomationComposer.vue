@@ -155,7 +155,7 @@ const finish = (id: string): void => {
             <!-- The selected template is shown beside the close control. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
                 <!-- Clearing stays inside the selected-template chip. -->
-                <div class="ui-chip gap-0 px-0" :class="template ? `ui-chip-on` : ``">
+                <div :class="ui.chip({ on: template !== undefined }, `gap-0 px-0`)">
                     <button
                         type="button"
                         class="flex max-w-64 cursor-pointer items-center gap-1.5 py-1 pl-2.5 text-2xs"
@@ -192,12 +192,12 @@ const finish = (id: string): void => {
                         ref="recipeFilterInput"
                         v-model="recipeFilter"
                         :placeholder="t(`automationComposer.filterTemplates`)"
-                        :class="ui.inputSm()"
+                        :class="ui.input({ size: `sm` })"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
                     <div class="@container flex max-h-panel flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
-                            <span :class="ui.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
+                            <span :class="ui.sectionLabel({ size: `xs` }, 'px-0.5 pt-1 first:pt-0')">{{ group.label }}</span>
                             <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">
                                 <button
                                     v-for="recipe in group.items"
@@ -246,7 +246,7 @@ const finish = (id: string): void => {
             <AutomationFields ref="fields" :state="state" :recipe-note="template?.title" />
 
             <div :class="['flex justify-end gap-2 border-t border-line-subtle pt-3', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
-                <Button :label="t(`automationComposer.cancel`)" severity="secondary" :text="true" @click="emit(`close`)" />
+                <Button :label="t(`automationComposer.cancel`)" tier="quiet" @click="emit(`close`)" />
                 <Button type="submit" :label="t(`automationComposer.create`)" :loading="save.isPending.value">
                     <template #icon><Icon name="check" /></template>
                 </Button>

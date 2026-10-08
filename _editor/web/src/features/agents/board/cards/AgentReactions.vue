@@ -113,9 +113,11 @@ const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((ch
             :key="chip.emoji"
             type="button"
             :class="[
-                dense ? `touch-target inline-flex cursor-pointer items-center gap-1 rounded transition-colors` : `ui-chip gap-1 px-2`,
+                dense
+                    ? `touch-target inline-flex cursor-pointer items-center gap-1 rounded transition-colors`
+                    : ui.chip({ on: chip.mine }, `gap-1 px-2`),
                 /* On the card the mark is a stat among stats, so its own tint says it is yours; on a page with room the chip wears the kit's lit plate. */
-                chip.mine ? (dense ? `font-medium text-link` : `ui-chip-on`) : dense ? `hover:text-content` : ``,
+                dense ? (chip.mine ? `font-medium text-link` : `hover:text-content`) : ``,
             ]"
             :aria-pressed="chip.mine"
             :aria-label="t(`agents.agentReactions.markedBy`, { emoji: chip.emoji, who: chip.who })"
@@ -143,7 +145,7 @@ const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((ch
             <button
                 ref="trigger"
                 type="button"
-                :class="ui.iconButton(`h-6 w-6`)"
+                :class="ui.iconButton()"
                 :aria-label="t(`agents.agentReactions.addReaction`)"
                 v-tooltip.top="t(`agents.agentReactions.addReaction`)"
                 :disabled="pending !== undefined"

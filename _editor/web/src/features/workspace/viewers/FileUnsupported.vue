@@ -28,7 +28,7 @@ const message = computed(() => {
 <template>
     <EmptyState :icon="icon" :title="message" class="h-full">
         <template v-if="mode !== 'empty'" #actions>
-            <Button severity="secondary" @click="emit('download')">
+            <Button tier="boring" @click="emit('download')">
                 <Icon name="download" class="text-xs" />
                 {{ t(`ui.action.download`) }}
             </Button>

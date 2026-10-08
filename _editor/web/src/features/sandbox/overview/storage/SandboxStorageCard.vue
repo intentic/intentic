@@ -153,7 +153,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                      nothing on the row; they cross-fade, the leaving one shrinking a touch as the arriving one settles. -->
                 <Button
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :aria-label="scanning ? t(`sandbox.sandboxStorageCard.stop`) : scanLabel"
                     :disabled="!scanning && storage.cleaningCategory.value !== undefined"
                     @click="pressScan"
@@ -238,7 +238,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                             v-if="row.offer.kind === `clean`"
                             :label="cleanLabel(row.category)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :loading="storage.cleaningCategory.value === row.category.id"
                             :disabled="scanning || (storage.cleaningCategory.value !== undefined && storage.cleaningCategory.value !== row.category.id)"
                             @click="press(row.category)"

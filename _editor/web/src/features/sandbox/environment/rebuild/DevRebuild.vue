@@ -170,12 +170,7 @@ const checkout = computed(() => {
                 @focusout="onBlur"
             >
                 <!-- A hammer, not the bolt a swap onto an image that already exists wears: this one builds it first. -->
-                <Button
-                    :label="t(`sandbox.devRebuild.rebuildCheckout`)"
-                    size="small"
-                    :severity="secondary ? `secondary` : undefined"
-                    @click="onButtonClick"
-                >
+                <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" :tier="secondary ? `boring` : `accent`" @click="onButtonClick">
                     <template #icon><Icon name="hammer" /></template>
                 </Button>
             </div>

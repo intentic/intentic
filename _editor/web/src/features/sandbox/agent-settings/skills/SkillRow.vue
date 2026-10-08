@@ -113,16 +113,16 @@ watch(
                     <Button
                         v-if="!confirmRemove"
                         size="small"
-                        severity="danger"
-                        text
+                        tier="quiet"
+                        tone="danger"
                         :label="t(`sandbox.skillRow.deleteSkill`)"
                         :disabled="disabled"
                         @click="confirmRemove = true"
                     />
                     <template v-else>
                         <span class="text-2xs text-muted">{{ t(`sandbox.skillRow.deleteAgentStopsBeing`, { name: skill.name }) }}</span>
-                        <Button size="small" severity="danger" :label="t(`ui.action.delete`)" :disabled="disabled" @click="emit(`remove`)" />
-                        <Button size="small" severity="secondary" text :label="t(`sandbox.skillRow.keep`)" @click="confirmRemove = false" />
+                        <Button size="small" tone="danger" :label="t(`ui.action.delete`)" :disabled="disabled" @click="emit(`remove`)" />
+                        <Button size="small" tier="quiet" :label="t(`sandbox.skillRow.keep`)" @click="confirmRemove = false" />
                     </template>
                 </div>
             </template>

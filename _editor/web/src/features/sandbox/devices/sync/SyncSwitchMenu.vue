@@ -42,15 +42,7 @@ const list = ref<{ show: (event: Event) => void } | undefined>();
 </script>
 
 <template>
-    <Button
-        size="small"
-        severity="secondary"
-        :text="true"
-        :loading="running"
-        :disabled="ops.working.value"
-        aria-haspopup="menu"
-        @click="list?.show($event)"
-    >
+    <Button size="small" tier="quiet" :loading="running" :disabled="ops.working.value" aria-haspopup="menu" @click="list?.show($event)">
         <span class="flex items-center gap-1.5">
             <Icon :name="menu.icon" aria-hidden="true" />
             <span>{{ menu.label }}</span>

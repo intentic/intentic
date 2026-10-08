@@ -43,7 +43,7 @@ const found = computed(() => {
         class="h-full"
     >
         <template #actions>
-            <Button :as="RouterLink" to="/sandbox/extensions?view=installed" size="small" severity="secondary" :label="t(`extensions.extensionHost.turnBackOnIn`)" />
+            <Button :as="RouterLink" to="/sandbox/extensions?view=installed" size="small" tier="boring" :label="t(`extensions.extensionHost.turnBackOnIn`)" />
         </template>
     </EmptyState>
     <EmptyState v-else-if="!isLoading" :title="t(`extensions.extensionHost.nothingHereViewsContent`)" class="h-full" />

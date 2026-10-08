@@ -42,14 +42,14 @@ const tone = (scope: ApprovalScope): string => (scope.failed > 0 ? `text-danger`
 // A `v-tooltip` card, typed here since the extension does not depend on the kit that declares `Tip`.
 interface CountTip {
     readonly title: string;
-    readonly rows: readonly { label: string; value: number | string; tone?: "warn" | "danger" }[];
+    readonly rows: readonly { label: string; value: number | string; tone?: "warning" | "danger" }[];
 }
 // Hover card for the row's number: failed first, then waiting, then the slice's plain size; a zero row is left out.
 const note = (scope: ApprovalScope): CountTip => ({
     title: scope.label,
     rows: [
         { label: t(`approvalsView.failed`), value: scope.failed > 0 ? scope.failed : ``, tone: `danger` },
-        { label: t(`approvalRail.waiting`), value: scope.waiting > 0 ? scope.waiting : ``, tone: `warn` },
+        { label: t(`approvalRail.waiting`), value: scope.waiting > 0 ? scope.waiting : ``, tone: `warning` },
         { label: t(`approvalRail.total`), value: scope.total },
     ],
 });

@@ -54,7 +54,7 @@ const t = useT();
         <button
             ref="more"
             type="button"
-            :class="ui.iconButton(`h-7 w-7`)"
+            :class="ui.iconButton({ size: `md` })"
             :aria-label="t(`ui.action.moreActions`)"
             aria-haspopup="menu"
             :aria-expanded="sheetOpen"

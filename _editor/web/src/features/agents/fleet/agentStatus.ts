@@ -19,6 +19,7 @@ import {
     type TurnBreakPolicy,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { toneWash } from "@intentic/ui/tone";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { parentOf } from "../board/ownership";
 
@@ -968,7 +969,7 @@ export interface StandingChip {
 
 // Muted for a spent allowance: it needs a person, but nothing is wrong and nothing is lost.
 const LIMIT_TONE = `bg-content/10 text-muted`;
-const REASON_TONE = `bg-warning/15 text-warning`;
+const REASON_TONE = toneWash(`warning`);
 const UNREAD_TONE = `bg-primary-600/15 text-link`;
 
 export const standingChip = (
@@ -1294,7 +1295,7 @@ export const promptLine = (
         elapsed,
         hint: {
             title: t(`agents.agentStatus.waitingForInput`),
-            tone: `warn`,
+            tone: `warning`,
             rows: [
                 { label: t(`agents.agentStatus.inputWaitProcess`), value: job.inputWait.program },
                 { label: t(`agents.agentStatus.inputWaitFor`), value: elapsed },

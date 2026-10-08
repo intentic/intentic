@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ConversationPrompt, PromptSection } from "@intentic/sandbox-contract";
-import { CopyButton, MarkdownDocument, Modal, Notice } from "@intentic/ui";
+import { CopyButton, MarkdownDocument, Modal, Notice, ui } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
@@ -118,8 +118,7 @@ const shown = (text: string, title: string): string => {
     <div class="flex justify-center pb-1">
         <button
             type="button"
-            class="ui-chip cursor-pointer"
-            :class="open && `ui-chip-on`"
+            :class="ui.chip({ on: open }, `cursor-pointer`)"
             :aria-label="t(`chat.chatSystemPrompt.chip`)"
             v-tooltip.bottom="{ title: t(`chat.chatSystemPrompt.instructions`), note: t(`chat.chatSystemPrompt.sentBeforeYours`) }"
             @click="open = true"

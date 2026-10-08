@@ -57,8 +57,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             <Button
                 v-if="owner"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :disabled="!reachable || isSaving || streaming"
                 v-tooltip.top="{
                     title: t(`chat.chatPaneNotices.privacyLetReadTitle`),
@@ -68,7 +67,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             >
                 {{ t(`chat.chatPaneNotices.privacyLetRead`, { provider: standing.label }) }}
             </Button>
-            <Button :as="RouterLink" :to="safety" size="small" severity="secondary" :text="true">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
+            <Button :as="RouterLink" :to="safety" size="small" tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
         </template>
     </Notice>
     <!-- Granted: said for as long as it holds, since this conversation's reads leave unmasked while it does. -->
@@ -81,8 +80,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
         <Button
             v-if="owner"
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             class="shrink-0"
             :disabled="!reachable || isSaving"
             v-tooltip.top="{ title: t(`chat.chatPaneNotices.privacyTakeBackTitle`) }"

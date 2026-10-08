@@ -152,7 +152,7 @@ const preview = (job: AgentJob): void => {
                 <button
                     v-if="row.job?.handed === true && row.job.ports !== undefined && row.job.stoppedBy === undefined"
                     type="button"
-                    :class="ui.textAction(`text-2xs`)"
+                    :class="ui.textButton({ tone: `quiet`, size: `xs` })"
                     @click="preview(row.job)"
                 >
                     {{ t(`chat.chatLeftRunning.openInPreview`) }}
@@ -170,7 +170,7 @@ const preview = (job: AgentJob): void => {
                 <button
                     v-if="row.job?.stoppedBy === undefined"
                     type="button"
-                    :class="ui.textAction(`text-2xs`)"
+                    :class="ui.textButton({ tone: `quiet`, size: `xs` })"
                     :disabled="!reachable || pressing === row.key"
                     v-tooltip.top="{
                         title: row.watch !== undefined ? t(`chat.chatLeftRunning.disarm`) : t(`chat.chatLeftRunning.endNow`),

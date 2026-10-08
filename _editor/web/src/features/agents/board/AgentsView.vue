@@ -5,10 +5,12 @@ import {
     EmptyState,
     FloatingAction,
     Modal,
+    Notice,
     ProjectChip,
     SearchBar,
     SegmentedControl,
     timeAgo,
+    toneWash,
     ui,
     useDevice,
     useNarrow,
@@ -290,7 +292,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 <Button
                     v-if="chatStrip.panes.length >= 2"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :disabled="synthesizing"
                     class="shrink-0"
                     @click="synthesize"
@@ -299,19 +301,15 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     {{ chatStrip.panes.length }}
                 </Button>
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
-                <Button v-if="!mobile" size="small" class="ui-button-thumb shrink-0" @click="startAgent()">
+                <Button v-if="!mobile" size="small" thumb @click="startAgent()">
                     <Icon name="plus" />{{ t(`chat.words.newAgent`) }}
                 </Button>
             </div>
         </div>
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
-        <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
-            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-            <span class="min-w-0 flex-1">{{ notice }}</span>
-            <button type="button" :aria-label="t(`ui.action.dismiss`)" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </p>
+        <Notice v-if="notice !== undefined" tone="danger" size="sm" strip :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissNotice">
+            {{ notice }}
+        </Notice>
         <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <span class="sr-only" aria-live="polite">{{ foundAnnouncement }}</span>
@@ -368,7 +366,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 type="button"
                                 :aria-label="t(`agents.agentsView.backToFinishedAgents`)"
                                 v-tooltip.bottom="t(`agents.agentsView.leaveArchive`)"
-                                :class="ui.iconButton(`h-4 w-4 rounded`)"
+                                :class="ui.iconButton({ size: `xs` })"
                                 @click="toggleArchive"
                             >
                                 <Icon name="arrow-left" class="text-2xs" />
@@ -394,8 +392,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                     type="button"
                                     :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
                                     v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: t(`shared.agents`), value: archiveSize }], note: t(`agents.words.allKept`) }"
-                                    class="ui-chip shrink-0 gap-1"
-                                    :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
+                                    :class="ui.chip({ on: pulsing }, `shrink-0 gap-1`, pulsing && `ring-1 ring-primary-500/50`)"
                                     @click="toggleArchive"
                                 >
                                     <Icon name="history" class="text-2xs" />{{ archiveSize }}
@@ -404,9 +401,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 <Button
                                     v-if="clearable > 0 && !filtering"
                                     size="small"
-                                    severity="secondary"
-                                    :text="true"
-                                    class="ui-button-thumb shrink-0"
+                                    tier="quiet" thumb
+                                    class="shrink-0"
                                     :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
                                     v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: t(`shared.agents`), value: clearable }], note: t(`agents.words.undoable`) }"
                                     @click="archive()"
@@ -418,8 +414,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             <Button
                                 v-if="lane.key === 'finished' && view.archive && archiveSize > 0 && !filtering"
                                 size="small"
-                                severity="danger"
-                                :text="true"
+                                tier="quiet" tone="danger"
                                 class="shrink-0"
                                 :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
                                 :disabled="purging"
@@ -650,7 +645,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             class="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-4 py-2 text-2xs font-medium transition-colors"
             :class="
                 over === 'discard' && action !== undefined
-                    ? 'border-danger bg-danger/15 text-danger'
+                    ? toneWash(`danger`, `border-danger`)
                     : accepts('discard')
                       ? 'border-line-strong bg-card text-muted'
                       : 'border-line bg-card text-subtle opacity-40'
@@ -665,7 +660,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             </p>
             <p class="mt-2 text-xs text-muted">{{ t(`agents.agentsView.nothingWrittenToWorkspace`) }}</p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="cancelResolve" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="cancelResolve" />
                 <Button size="small" :label="t(`agents.agentsView.askAgent`)" @click="confirmResolve" />
             </template>
         </Modal>
@@ -682,8 +677,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 {{ t(`agents.agentsView.landConfirmFiles`, { count: pendingLand.files }, pendingLand.files) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="cancelLand" />
-                <Button size="small" severity="success" :label="pendingLand?.chosen === `reland` ? words.landAgain : words.land" @click="confirmLand" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="cancelLand" />
+                <Button size="small" tone="success" :label="pendingLand?.chosen === `reland` ? words.landAgain : words.land" @click="confirmLand" />
             </template>
         </Modal>
         <!-- Archiving loses nothing, but one tap taking a whole family off the board is not something to do unasked. -->
@@ -701,7 +696,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         >
             <p class="text-xs text-muted">{{ t(`agents.agentsView.archiveFamilyKept`) }}</p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="familyArchive.cancel" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="familyArchive.cancel" />
                 <Button
                     size="small"
                     :label="
@@ -720,10 +715,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 {{ t(`agents.agentsView.workTheyAlreadyLanded`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingPurge = false" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingPurge = false" />
                 <Button
                     size="small"
-                    severity="danger"
+                    tone="danger"
                     :label="t(`agents.agentsView.deleteAgents`, { count: archived.length }, archived.length)"
                     @click="confirmPurge"
                 />

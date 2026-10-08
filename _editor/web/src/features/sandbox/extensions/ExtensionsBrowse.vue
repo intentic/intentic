@@ -321,7 +321,7 @@ const emptyNote = computed<string | undefined>(() => {
                 />
                 <input v-model="draftToken" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input(`w-32`)" />
                 <Button :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
-                <Button :label="t(`ui.action.cancel`)" size="small" text @click="changing = false" />
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" tone="accent" @click="changing = false" />
             </div>
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>

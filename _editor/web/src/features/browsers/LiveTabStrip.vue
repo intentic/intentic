@@ -134,8 +134,9 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
                         type="button"
                         :class="
                             ui.iconButton(
-                                'mr-1.5 h-5 w-5 rounded-full focus-visible:opacity-100',
-                                tab.id === activeId ? '' : 'opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden',
+                                { size: `xs`, round: true },
+                                `mr-1.5 focus-visible:opacity-100`,
+                                tab.id === activeId ? `` : `opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden`,
                             )
                         "
                         :aria-label="t(`browsers.browsers.closeTab`)"
@@ -154,7 +155,7 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
              can show (the apps, the desktop). It was the + itself once, which made the commonest press a menu. -->
         <button
             type="button"
-            :class="ui.iconButton('h-7 w-7 self-center rounded-full')"
+            :class="ui.iconButton({ size: `md`, round: true }, 'self-center')"
             :aria-label="t(`browsers.browsers.newTab`)"
             v-tooltip.bottom="t(`browsers.browsers.newTab`)"
             @click="emit('quickOpen')"
@@ -163,7 +164,7 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
         </button>
         <button
             type="button"
-            :class="ui.iconButton('-ml-1 h-7 w-5 self-center rounded-full')"
+            :class="ui.iconButton({ size: `xs`, round: true }, `-ml-1 self-center`)"
             aria-haspopup="menu"
             :aria-label="t(`browsers.launcher.more`)"
             v-tooltip.bottom="t(`browsers.launcher.more`)"

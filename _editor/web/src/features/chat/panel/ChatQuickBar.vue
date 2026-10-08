@@ -212,7 +212,7 @@ const restingLine = computed(() => {
                             rim !== undefined
                                 ? ``
                                 : standing === `asking`
-                                  ? `ring-(length:--ring-track) ring-inset ring-warning/50`
+                                  ? `ring-(length:--ring-track) ring-inset ring-warning`
                                   : `ring-(length:--ring-track) ring-inset ring-content/12`
                         "
                     >

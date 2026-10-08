@@ -107,7 +107,7 @@ const diffOutline = useLoadingReveal(
             <button
                 v-if="pane === 'side'"
                 type="button"
-                :class="ui.iconButton(`mx-1 h-7 w-7 shrink-0 self-center`)"
+                :class="ui.iconButton({ size: `md` }, `mx-1 shrink-0 self-center`)"
                 @click="collapseSplit()"
                 v-tooltip.bottom="{ title: t(`workspace.workspaceDesktop.closeSplit`), note: t(`workspace.editorPane.tabsRejoin`) }"
                 :aria-label="t(`workspace.editorPane.closeSplit`)"

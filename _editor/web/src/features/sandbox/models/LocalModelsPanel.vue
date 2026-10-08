@@ -86,7 +86,7 @@ const held = computed(() =>
             :description="entry.description"
         >
             <template #control>
-                <RouterLink :to="entry.manage" :class="ui.linkButton(`text-xs`)">{{ t(`connect.modelSources.manage`) }}</RouterLink>
+                <RouterLink :to="entry.manage" :class="ui.textButton()">{{ t(`connect.modelSources.manage`) }}</RouterLink>
             </template>
         </ConnectionRow>
 
@@ -98,12 +98,12 @@ const held = computed(() =>
              for somebody already running a server, the card that points at it. Named once, here, without a tour. -->
         <RowNote variant="block">
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
-                <RouterLink to="/capabilities/localmodel" :class="ui.linkButton(`text-xs`)">
+                <RouterLink to="/capabilities/localmodel" :class="ui.textButton()">
                     <Icon name="sliders-h" class="text-2xs" />{{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
                 </RouterLink>
                 <span class="flex flex-wrap items-center gap-x-2 text-muted">
                     <Icon name="server" class="text-2xs text-subtle" />{{ t(`connect.providerGrid.ownServer`) }}
-                    <RouterLink to="/capabilities/endpoint" :class="ui.linkButton(`text-xs`)">
+                    <RouterLink to="/capabilities/endpoint" :class="ui.textButton()">
                         {{ t(`connect.providerGrid.pointAtServer`) }}<Icon name="arrow-right" class="text-2xs" />
                     </RouterLink>
                 </span>

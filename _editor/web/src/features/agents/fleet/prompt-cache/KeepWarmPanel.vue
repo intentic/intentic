@@ -86,7 +86,7 @@ const choose = async (until: number | null): Promise<void> => {
         <p v-else-if="ended !== undefined && ended.reason !== `elapsed`" class="text-warning">{{ endedLine(ended) }}</p>
         <p v-if="explain !== `` && (offered || kept !== undefined)" class="text-subtle">{{ explain }}</p>
         <div v-if="choices.length > 0" class="flex flex-wrap gap-1.5">
-            <Button v-for="choice in choices" :key="choice.until" size="small" severity="secondary" :disabled="busy" @click="choose(choice.until)">
+            <Button v-for="choice in choices" :key="choice.until" size="small" tier="boring" :disabled="busy" @click="choose(choice.until)">
                 <span class="flex flex-col items-start text-left">
                     <span>{{ choice.capped ? t(`agents.keepWarm.untilTime`, { time: formatClock(choice.until) }) : t(`agents.keepWarm.hours`, { hours: choice.hours }) }}</span>
                     <span class="text-2xs text-subtle">{{ t(`agents.keepWarm.refreshes`, { refreshes: choice.refreshes }) }}</span>
@@ -97,7 +97,7 @@ const choose = async (until: number | null): Promise<void> => {
         <p v-if="unavailable !== undefined" class="text-subtle">{{ unavailable }}</p>
         <p v-if="offered || kept !== undefined" class="text-2xs text-subtle">{{ t(`agents.keepWarm.stopsWhen`, { reserve }) }}</p>
         <div v-if="kept !== undefined">
-            <Button size="small" severity="secondary" :disabled="busy" @click="choose(null)">{{ t(`agents.keepWarm.stop`) }}</Button>
+            <Button size="small" tier="boring" :disabled="busy" @click="choose(null)">{{ t(`agents.keepWarm.stop`) }}</Button>
         </div>
         <p v-if="refusal !== undefined" class="text-2xs text-warning">{{ refusal }}</p>
     </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SideViewInput } from "@intentic/extension-api";
-import { formatTimestamp, Icon, StatusBadge, timeAgo, ui, useNarrow } from "@intentic/extension-ui";
+import { formatTimestamp, Icon, StatusBadge, timeAgo, toneTint, ui, useNarrow } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import PipelineDagGraph from "./graph/PipelineDagGraph.vue";
 import { pipelineStages } from "./graph/pipelineDag";
@@ -64,7 +64,7 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
                 :href="page"
                 target="_blank"
                 rel="noopener"
-                :class="ui.iconButton(`h-7 w-7 shrink-0 rounded`)"
+                :class="ui.iconButton({ size: `md` }, `shrink-0`)"
                 :aria-label="t(`runSide.openOn`, { forge: forgeName })"
                 v-tooltip.bottom="forgeName"
             >
@@ -80,7 +80,7 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
             <div v-else-if="run === undefined" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="pipelines" class="text-2xl text-subtle" />
                 <p class="text-xs text-muted">{{ t(`runSide.notListed`, { number: runRef.runId, repo: runRef.repo }) }}</p>
-                <a v-if="page !== undefined" :href="page" target="_blank" rel="noopener" :class="ui.linkButton(`text-xs`)">
+                <a v-if="page !== undefined" :href="page" target="_blank" rel="noopener" :class="ui.textButton()">
                     {{ t(`runSide.openOn`, { forge: forgeName }) }}
                 </a>
             </div>
@@ -90,12 +90,14 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
             <!-- The whole graph, given the tab: pan and zoom inside it rather than a band cropped to a row. -->
             <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurringJobs" fill :direction="narrow ? `TB` : `LR`" />
             <div v-else-if="run.failedJobs?.length" class="flex flex-col gap-2 p-3">
-                <div :class="ui.sectionLabelSm()">{{ t(`pipelineRunRow.failedJobs`) }}</div>
+                <div :class="ui.sectionLabel({ size: `xs` })">{{ t(`pipelineRunRow.failedJobs`) }}</div>
                 <div class="flex flex-wrap gap-1.5">
                     <span
                         v-for="job in run.failedJobs"
                         :key="job"
-                        class="inline-flex items-center gap-1 rounded-md border border-danger/20 bg-danger/5 px-2 py-1 text-xs font-medium text-danger"
+                        :class="
+                            toneTint(`danger`, `soft`, `inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-danger`)
+                        "
                     >
                         <Icon name="exclamation-circle" class="text-2xs" />
                         {{ job }}

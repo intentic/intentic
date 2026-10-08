@@ -109,7 +109,7 @@ const submit = (): void => {
                     <input
                         v-model="instanceNames[template.key]"
                         type="text"
-                        :class="ui.inputSm(`flex-1`)"
+                        :class="ui.input({ size: `sm` }, `flex-1`)"
                         :placeholder="t(`addAppDialog.eGShopApi`)"
                     />
                 </div>

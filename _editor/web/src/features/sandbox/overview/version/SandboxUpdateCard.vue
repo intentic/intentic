@@ -1,5 +1,19 @@
 <script setup lang="ts">
-import { Button, Code, commandLang, CopyButton, type IconName, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui, useOsPreference } from "@intentic/ui";
+import {
+    Button,
+    Code,
+    commandLang,
+    CopyButton,
+    type IconName,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    RowNote,
+    StatusBadge,
+    toneDot,
+    ui,
+    useOsPreference,
+} from "@intentic/ui";
 import { useAsyncAction, useNow } from "@intentic/ui/async";
 import { computed, ref, watchEffect } from "vue";
 import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
@@ -368,7 +382,7 @@ const finePrint = computed(
                     <template v-else-if="hosted">
                         <!-- Own block so the column's stretch doesn't draw the button at full width. -->
                         <div v-if="isOwner">
-                            <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" class="ui-button-loud ui-button-gilded" :loading="restarting" @click="restartHosted">
+                            <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" tier="loud" gilded :loading="restarting" @click="restartHosted">
                                 <template #icon><Icon name="arrow-circle-up" /></template>
                             </Button>
                         </div>
@@ -427,7 +441,7 @@ const finePrint = computed(
                  the sandbox's API or config, so they are named, counted and folded, not painted as a danger. -->
             <div v-if="finePrint" class="flex flex-col gap-3 border-t border-line-subtle px-5 py-4 sm:px-6">
                 <details v-if="convertedFiles.length > 0" class="group">
-                    <summary :class="ui.textAction(`w-full list-none [&::-webkit-details-marker]:hidden`)">
+                    <summary :class="ui.textButton({ tone: `quiet` }, `w-full list-none [&::-webkit-details-marker]:hidden`)">
                         <Icon name="file-edit" class="shrink-0 text-subtle" aria-hidden="true" />
                         <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length) }}</span>
                         <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
@@ -445,7 +459,7 @@ const finePrint = computed(
                     {{ t(`sandbox.sandboxUpdateCard.newerVersionConvertedTheseFiles`) }}
                 </p>
                 <details v-if="breakingNotes.length > 0" class="group">
-                    <summary :class="ui.textAction(`w-full list-none [&::-webkit-details-marker]:hidden`)">
+                    <summary :class="ui.textButton({ tone: `quiet` }, `w-full list-none [&::-webkit-details-marker]:hidden`)">
                         <Icon name="code" class="shrink-0 text-warning" aria-hidden="true" />
                         <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.developerChanges`, { count: breakingNotes.length }, breakingNotes.length) }}</span>
                         <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
@@ -460,14 +474,14 @@ const finePrint = computed(
                         </p>
                         <ul class="flex flex-col gap-1.5">
                             <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
-                                <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning/70" aria-hidden="true" />
+                                <span :class="toneDot(`warning`, `mt-1.5 h-1 w-1 shrink-0 rounded-full`)" aria-hidden="true" />
                                 <span>{{ note }}</span>
                             </li>
                         </ul>
                     </div>
                 </details>
                 <!-- The way back, tucked away: there for whoever comes looking and never pitched to whoever doesn't. -->
-                <button v-if="troubleAtFoot" type="button" :class="ui.textAction(`self-end text-2xs text-subtle`)" :aria-expanded="rollbackOpen" @click="toggleRollback">
+                <button v-if="troubleAtFoot" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)" :aria-expanded="rollbackOpen" @click="toggleRollback">
                     {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
                 </button>
                 <UpdateRollbackPanel
@@ -512,7 +526,7 @@ const finePrint = computed(
                     </div>
                     <p v-if="plan.skipped" class="flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <span>{{ t(`sandbox.sandboxUpdateCard.skippedLine`, { version: plan.skipped }) }}</span>
-                        <button type="button" :class="ui.textAction()" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
                     </p>
                     <Notice v-if="skipNotice" :of="skipNotice" />
 
@@ -532,7 +546,7 @@ const finePrint = computed(
                                 <button
                                     v-if="troubleBesideRebuild"
                                     type="button"
-                                    :class="ui.textAction(`text-2xs text-subtle ${rebuildFollowing ? `self-end` : ``}`)"
+                                    :class="ui.textButton({ tone: `subtle`, size: `xs` }, rebuildFollowing && `self-end`)"
                                     :aria-expanded="rollbackOpen"
                                     @click="toggleRollback"
                                 >
@@ -553,21 +567,21 @@ const finePrint = computed(
                         <!-- Held back by its own pre-flight: not offered, and skipping it is the one thing left to decide. -->
                         <template v-else>
                             <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.notOfferedUntilFixed`) }}</p>
-                            <button v-if="skipServed && latest" type="button" :class="ui.textAction()" @click="skip(latest)">
+                            <button v-if="skipServed && latest" type="button" :class="ui.textButton({ tone: `quiet` })" @click="skip(latest)">
                                 {{ t(`sandbox.sandboxUpdateCard.skipThisVersion`) }}
                             </button>
                         </template>
                     </div>
 
                     <!-- The downloaded build's pre-flight over this sandbox's own files: a refusal is said before anyone takes it. -->
-                    <div v-if="planRefused" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
-                        <p class="text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
-                        <ul class="flex flex-col gap-1">
+                    <Notice v-if="planRefused" tone="danger">
+                        <p class="font-medium">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
+                        <ul class="mt-1.5 flex flex-col gap-1">
                             <li v-for="failure in stagedPlan?.failures ?? []" :key="failure.document" class="text-2xs text-content">
                                 <span class="font-mono">{{ failure.document }}</span>: {{ failure.detail }}
                             </li>
                         </ul>
-                    </div>
+                    </Notice>
 
                     <!-- The way back, tucked away behind a quiet "Having trouble?" at the foot; a withdrawn release opens the
                          same panel from its notice instead. When "Having trouble?" already sits beside the checkout rebuild,
@@ -576,7 +590,7 @@ const finePrint = computed(
                         <button
                             v-if="troubleAtFoot"
                             type="button"
-                            :class="ui.textAction(`self-end text-2xs text-subtle`)"
+                            :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)"
                             :aria-expanded="rollbackOpen"
                             @click="toggleRollback"
                         >

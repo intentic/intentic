@@ -115,7 +115,7 @@ defineExpose({ focus });
             :href="value"
             target="_blank"
             rel="noopener"
-            :class="ui.iconButton(`shrink-0 text-subtle`)"
+            :class="ui.iconButton({ tone: `subtle` }, `shrink-0`)"
             :aria-label="openLabel ?? t(`ui.action.newTab`)"
             v-tooltip.bottom="openLabel ?? t(`ui.action.newTab`)"
         >

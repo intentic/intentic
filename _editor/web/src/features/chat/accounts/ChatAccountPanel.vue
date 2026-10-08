@@ -59,10 +59,10 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
             t(`chat.chatAccountPanel.signInWaiting`, { provider: providerDisplayLabel(live.provider) })
         }}</span>
         <span class="flex shrink-0 items-center gap-3">
-            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelSignIn">
+            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelSignIn">
                 {{ t(`ui.action.cancel`) }}
             </button>
-            <RouterLink :to="MODELS_PATH" :class="ui.linkButton(`text-2xs font-semibold`)">
+            <RouterLink :to="MODELS_PATH" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`chat.chatAccountPanel.finishSignIn`) }}
             </RouterLink>
         </span>
@@ -83,10 +83,10 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
             {{ failure.message }}</span
         >
         <span class="flex shrink-0 items-center gap-3">
-            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="dismissSignInFailure">
+            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="dismissSignInFailure">
                 {{ t(`ui.action.dismiss`) }}
             </button>
-            <RouterLink :to="retryTo" :class="ui.linkButton(`text-2xs font-semibold`)">
+            <RouterLink :to="retryTo" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`ui.action.tryAgain`) }}
             </RouterLink>
         </span>
@@ -102,7 +102,7 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
             chosen ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) : t(`chat.chatAccountPanel.noModelYet`)
         }}</span>
         <ChatChooseModelButton />
-        <RouterLink v-if="canShip" :to="MODELS_PATH" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
+        <RouterLink v-if="canShip" :to="MODELS_PATH" :class="ui.textButton({ size: `xs`, tone: `subtle` }, `shrink-0`)">
             {{ t(`chat.words.connectAModel`) }}
         </RouterLink>
         <span v-else class="shrink-0 text-2xs text-subtle">{{ t(`chat.chatAccountPanel.maintainerConnects`) }}</span>

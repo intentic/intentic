@@ -89,13 +89,13 @@ const clock = computed(() =>
             <p class="min-w-0 flex-1 text-2xs text-subtle">
                 {{ spawned ? t(`chat.chatSubagentBar.spawnedNote`) : t(`chat.chatSubagentBar.inProcessNote`) }}
             </p>
-            <Button v-if="!spawned" size="small" severity="secondary" :text="true" class="shrink-0" @click="emit(`back`)">
+            <Button v-if="!spawned" size="small" tier="quiet" class="shrink-0" @click="emit(`back`)">
                 <Icon name="arrow-left" class="text-2xs" />{{ t(`chat.chatSubagentBar.writeParent`) }}
             </Button>
-            <Button v-if="spawned" size="small" severity="secondary" :text="true" class="shrink-0" @click="emit(`write`)">
+            <Button v-if="spawned" size="small" tier="quiet" class="shrink-0" @click="emit(`write`)">
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatSubagentBar.write`) }}
             </Button>
-            <Button v-if="stoppable" size="small" severity="secondary" class="shrink-0" @click="emit(`stop`)">
+            <Button v-if="stoppable" size="small" tier="boring" class="shrink-0" @click="emit(`stop`)">
                 <Icon name="stop" class="text-2xs" />{{ t(`ui.action.stop`) }}
             </Button>
         </div>

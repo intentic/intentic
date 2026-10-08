@@ -3,7 +3,7 @@ import { computed, nextTick, ref } from "vue";
 import { type JumpScope, jumpScopes, scopedQuery } from "../../workbench/commands/jumpSearch";
 import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
 import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
-import { type IconName, Modal, Notice, useListNavigation } from "@intentic/ui";
+import { type IconName, Modal, Notice, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 // The jump palette (Ctrl/Cmd+P, and Ctrl/Cmd+Shift+P opened on `>`): one field over agents, files, terminals and
@@ -128,8 +128,7 @@ const onShow = async (): Promise<void> => {
                     v-for="scope in scopes"
                     :key="scope.label"
                     type="button"
-                    class="ui-chip"
-                    :class="{ 'ui-chip-on': parsed.kind === scope.kind }"
+                    :class="ui.chip({ on: parsed.kind === scope.kind })"
                     :aria-pressed="parsed.kind === scope.kind"
                     @click="narrow(scope)"
                 >

@@ -51,7 +51,7 @@ const submit = async (): Promise<void> => {
         <AutomationFields :state="form" :name-locked="true" />
         <!-- Match the composer's footer size because this is a form submit. -->
         <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
-            <Button :label="t(`automationRow.cancel`)" severity="secondary" :text="true" @click="emit(`done`)" />
+            <Button :label="t(`automationRow.cancel`)" tier="quiet" @click="emit(`done`)" />
             <Button :label="t(`automationRow.save`)" :loading="saving" @click="submit">
                 <template #icon><Icon name="check" /></template>
             </Button>

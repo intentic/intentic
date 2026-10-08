@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
+import { Button, Notice } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import {
     dismissPushError,
@@ -120,17 +120,16 @@ const detail = (row: LedgerRow): string => {
         </p>
 
         <template v-if="open">
-            <p v-if="pushRowError !== undefined" class="mt-1 flex items-start gap-1.5 rounded-md bg-danger/10 px-2 py-1 text-2xs text-danger">
-                <span class="min-w-0 flex-1">{{ pushRowError }}</span>
-                <button
-                    type="button"
-                    :aria-label="t(`ui.action.dismiss`)"
-                    class="shrink-0 rounded p-0.5 hover:bg-overlay"
-                    @click="dismissPushError()"
-                >
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </p>
+            <Notice
+                v-if="pushRowError !== undefined"
+                tone="danger"
+                size="xs"
+                class="mt-1"
+                :dismiss-label="t(`ui.action.dismiss`)"
+                @dismiss="dismissPushError()"
+            >
+                {{ pushRowError }}
+            </Notice>
 
             <div v-for="row in rows" :key="ledgerKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
                 <div class="min-w-0 flex-1">
@@ -144,7 +143,7 @@ const detail = (row: LedgerRow): string => {
                 <Button
                     v-if="sendable(row)"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     class="shrink-0"
                     :disabled="pushingRow !== undefined"
                     :label="pushingRow === ledgerKey(row) ? t(`ui.status.sending`) : sendVerb(row)"

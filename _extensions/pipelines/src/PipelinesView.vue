@@ -13,6 +13,7 @@ import {
     RowGroup,
     SkeletonSnapshot,
     SplitView,
+    toneTint,
     useNarrow,
     useRailMemory,
     vSkeletonSource,
@@ -332,7 +333,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                 <!-- One element in the skeleton's place, so its imprint (drawn by PipelinesSkeleton) is the whole board; laid out as the column. -->
                 <div v-else v-skeleton-source="`pipelines.board`" class="flex flex-col">
                     <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
-                    <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                    <div v-if="recurring.length > 0" :class="toneTint(`danger`, `soft`, `mb-5 rounded-lg border px-4 py-3`)">
                         <div class="flex items-center gap-2">
                             <Icon name="exclamation-circle" class="text-sm text-danger" />
                             <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
@@ -341,7 +342,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                             <span
                                 v-for="item in recurring"
                                 :key="`${item.repo}:${item.branch}:${item.job}`"
-                                class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
+                                :class="toneTint(`danger`, `soft`, `inline-flex items-center gap-1.5 rounded-md border bg-canvas px-2 py-1 text-xs`)"
                                 v-tooltip.top="{
                                     title: t(`pipelinesView.keepsFailing`),
                                     tone: `danger`,

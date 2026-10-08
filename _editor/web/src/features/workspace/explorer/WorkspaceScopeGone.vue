@@ -24,7 +24,7 @@ const title = useScopeTitle();
                 <Icon name="check-square" />
                 {{ t(`workspace.words.seeChanges`) }}
             </Button>
-            <Button size="small" severity="secondary" @click="workspaceAgent = undefined">
+            <Button size="small" tier="boring" @click="workspaceAgent = undefined">
                 <Icon name="folder" class="text-[0.7rem]" />
                 {{ t(`workspace.workspaceScopeGone.backToSharedWorkspace`) }}
             </Button>

@@ -96,7 +96,7 @@ export const warmMark = (agent: CacheStanding): WarmMark | undefined => {
             text: t(`agents.promptCache.warmUntil`, { time: formatClock(hold.until) }),
             hint: {
                 title: t(`agents.promptCache.keptWarm`),
-                tone: `ok`,
+                tone: `success`,
                 rows: [
                     { label: t(`agents.promptCache.until`), value: formatClock(hold.until) },
                     { label: t(`agents.promptCache.refreshes`), value: hold.refreshes },
@@ -117,7 +117,7 @@ export const warmMark = (agent: CacheStanding): WarmMark | undefined => {
         text: t(`agents.promptCache.coldSince`, { time: formatClock(hold.ended.at) }),
         hint: {
             title: t(`agents.promptCache.cacheCold`),
-            tone: `warn`,
+            tone: `warning`,
             rows: [
                 { label: t(`agents.promptCache.why`), value: t(`agents.promptCache.endedShort.${hold.ended.reason}`) },
                 { label: t(`agents.promptCache.detail`), value: hold.ended.detail ?? `` },
@@ -157,7 +157,7 @@ export const cacheCooling = (agent: CacheStanding, now: number): CacheCooling | 
         // context leaves its row empty, and the card drops it.
         hint: {
             title: t(`agents.promptCache.cooling`),
-            tone: near ? `warn` : `info`,
+            tone: near ? `warning` : `info`,
             rows: [
                 { label: t(`agents.promptCache.coldIn`), value: countdown },
                 {

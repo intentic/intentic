@@ -9,12 +9,8 @@ jest.mock("@intentic/ui", async () => {
     return {
         ResizeSeam: vue.defineComponent({ setup: () => () => vue.h(`div`, { role: `separator` }) }),
         Meter: vue.defineComponent({ setup: () => () => vue.h(`div`, { "data-meter": `` }) }),
-        ui: {
-            iconButton: (extra: string) => extra,
-            linkButton: (extra: string) => extra,
-            textAction: (extra: string) => extra,
-            sectionLabelSm: (extra: string) => extra,
-        },
+        // The real recipes: they are plain class builders, and a stand-in drifts every time the kit grows a variant.
+        ui: (await import("@intentic/ui/recipes")).ui,
     };
 });
 // The metrics panel's session rows name conversations the way the board does; none are open in this suite.

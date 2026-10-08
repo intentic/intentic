@@ -118,6 +118,8 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [rows](row-tiers.mjs) | a list row that sets its own density or padding |
 | [buttons](button-tiers.mjs) | a hand-styled action button instead of `<Button>` |
 | [inputs](input-tiers.mjs) | a hand-styled field instead of `ui-field-box` |
+| [recipes](recipe-tiers.mjs) | a kit recipe (`ui.iconButton`, `ui.textButton`, …) handed a size, an ink or a radius its variants own, a retired recipe name, or `ui-chip-on` by hand |
+| [tones](tone-tiers.mjs) | a status colour at an opacity (`bg-danger/10`) written outside `_editor/ui/src/lib/tone.ts` |
 | [run-settings](run-settings-tier.mjs) | effort, thinking or speed controls drawn outside `PickerRunSettings.vue` |
 | [model-labels](model-labels.mjs) | a model named by its raw id |
 | [astro-scripts](astro-scripts.mjs) | a `<script` inside an `.astro` frontmatter |

@@ -207,7 +207,12 @@ const approve = async (): Promise<void> => {
             <p class="text-xs break-words whitespace-pre-wrap text-content/85" :class="{ 'line-clamp-4': promptLong && !promptOpen }">
                 {{ automation.prompt }}
             </p>
-            <button v-if="promptLong" type="button" :class="ui.textAction(`self-start text-2xs`)" @click="promptOpen = !promptOpen">
+            <button
+                v-if="promptLong"
+                type="button"
+                :class="ui.textButton({ tone: `quiet`, size: `xs` }, `self-start`)"
+                @click="promptOpen = !promptOpen"
+            >
                 {{ promptOpen ? t(`needs.automation.hidePrompt`) : t(`needs.automation.showPrompt`) }}
             </button>
         </div>

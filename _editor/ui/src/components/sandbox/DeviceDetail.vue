@@ -31,6 +31,7 @@ import {
 } from "./deviceDetail.js";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import { useT } from "../../i18n/index.js";
+import { toneTint } from "../../lib/tone.js";
 import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 
 const t = useT();
@@ -254,7 +255,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 class="ui-row-select flex min-w-0 flex-col gap-1.5 rounded-xl bg-card px-4 py-3 shadow-sm transition-colors duration-500"
                 :class="[
                     selected.includes(item.group.sandboxId) ? `ui-row-select-on` : undefined,
-                    flashing === blockId(item.group) ? `bg-warning/10` : undefined,
+                    flashing === blockId(item.group) ? toneTint(`warning`) : undefined,
                 ]"
                 :aria-label="item.group.title"
             >
@@ -398,7 +399,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                      remedy: so it opens into a block of its own, with the verbs that settle it at its foot. -->
                                 <div
                                     v-if="conflicts.get(item.group.sandboxId)"
-                                    class="flex min-w-0 flex-col gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5"
+                                    :class="toneTint(`warning`, `soft`, `flex min-w-0 flex-col gap-2 rounded-lg border px-3 py-2.5`)"
                                 >
                                     <p class="flex items-center gap-1.5 text-xs font-medium text-warning">
                                         <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />

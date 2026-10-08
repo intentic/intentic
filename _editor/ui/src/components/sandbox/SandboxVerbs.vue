@@ -102,8 +102,7 @@ const items = computed<MenuItem[]>(() => [
         <Button
             v-if="!compact && container"
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             :label="VERB_LABEL[power]"
             :loading="busy === power"
             :disabled="disabled"
@@ -111,8 +110,7 @@ const items = computed<MenuItem[]>(() => [
         />
         <Button
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             :loading="menuBusy"
             :disabled="disabled"
             aria-haspopup="menu"

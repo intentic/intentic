@@ -342,7 +342,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 <span v-if="showDimensions" class="px-1.5 tabular-nums text-subtle">{{ natural.w }} × {{ natural.h }}</span>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
+                    :class="ui.iconButton({ size: `xs` }, `text-sm leading-none`)"
                     :disabled="nextStop(-1) === undefined"
                     v-tooltip.top="{ title: t(`ui.imageView.zoomOut2`), keys: `−` }"
                     :aria-label="t(`ui.imageView.zoomOut2`)"
@@ -354,7 +354,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 <span class="w-10 cursor-help text-center tabular-nums text-content" v-tooltip.top="gestures"> {{ percent }}% </span>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
+                    :class="ui.iconButton({ size: `xs` }, `text-sm leading-none`)"
                     :disabled="nextStop(1) === undefined"
                     v-tooltip.top="{ title: t(`ui.imageView.zoomIn2`), keys: `+` }"
                     :aria-label="t(`ui.imageView.zoomIn2`)"
@@ -366,7 +366,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 <span class="mx-0.5 h-3.5 w-px bg-line"></span>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-5 w-auto rounded px-1.5`)"
+                    :class="ui.iconButton({ size: `xs` }, `w-auto px-1.5`)"
                     :disabled="fitted"
                     v-tooltip.top="{ title: t(`ui.imageView.fitToPane`), keys: `0` }"
                     @mousedown.prevent
@@ -376,7 +376,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 </button>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-5 w-auto rounded px-1.5 tabular-nums`)"
+                    :class="ui.iconButton({ size: `xs` }, `w-auto px-1.5 tabular-nums`)"
                     :disabled="atNatural"
                     v-tooltip.top="{ title: t(`ui.imageView.actualSize`), keys: `1` }"
                     @mousedown.prevent

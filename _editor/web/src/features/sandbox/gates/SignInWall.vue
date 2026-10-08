@@ -176,7 +176,7 @@ const backToSetup = async (): Promise<void> => {
                                 type="text"
                                 autocomplete="off"
                                 :placeholder="t(`sandbox.words.nameEGWork`)"
-                                :class="ui.inputSm(`w-full`)"
+                                :class="ui.input({ size: `sm` }, `w-full`)"
                             />
                             <Button type="submit" :label="t(`sandbox.words.addPasskey`)" class="w-full justify-center" :loading="busy">
                                 <template #icon><Icon name="key" /></template>
@@ -194,13 +194,13 @@ const backToSetup = async (): Promise<void> => {
                                 autocomplete="off"
                                 spellcheck="false"
                                 placeholder="xxxxx-xxxxx-xxxxx-xxxxx"
-                                :class="ui.inputSm(`min-w-0 flex-1 font-mono`)"
+                                :class="ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
                             />
                             <Button
                                 type="submit"
                                 :label="t(`sandbox.signInWall.useCode`)"
                                 size="small"
-                                severity="secondary"
+                                tier="boring"
                                 :disabled="busy || code.trim() === ``"
                             />
                         </div>
@@ -227,7 +227,7 @@ const backToSetup = async (): Promise<void> => {
                     <Button
                         v-if="desktop && !waitingInBrowser"
                         :label="t(`auth.words.continueGoogle`)"
-                        severity="secondary"
+                        tier="boring"
                         class="mt-2 w-full justify-center"
                         @click="signInOutside"
                     >
@@ -239,7 +239,7 @@ const backToSetup = async (): Promise<void> => {
                         <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.usePasskey2`)"
-                            severity="secondary"
+                            tier="boring"
                             class="w-full justify-center"
                             :loading="busy"
                             @click="usePasskey"
@@ -252,14 +252,14 @@ const backToSetup = async (): Promise<void> => {
                 <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to, and only the
                      owner's: /setup on a sandbox a member doesn't own starts a new one on their account instead. -->
                 <div class="mt-2 flex w-full items-center justify-center gap-6">
-                    <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.linkButton()" @click="handoff.start">
+                    <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.textButton()" @click="handoff.start">
                         {{ t(`sandbox.signInWall.openBrowser`) }}
                         <Icon name="external-link" class="text-2xs" />
                     </button>
-                    <button v-if="working || !isOwner" type="button" :class="ui.textAction(`text-subtle`)" @click="notNow">
+                    <button v-if="working || !isOwner" type="button" :class="ui.textButton({ tone: `subtle` })" @click="notNow">
                         {{ t(`sandbox.signInWall.notNow`) }}
                     </button>
-                    <button v-else type="button" :class="ui.textAction(`text-subtle`)" v-action="backToSetup">
+                    <button v-else type="button" :class="ui.textButton({ tone: `subtle` })" v-action="backToSetup">
                         {{ t(`sandbox.signInWall.backToSetup`) }}
                     </button>
                 </div>

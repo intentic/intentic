@@ -208,7 +208,7 @@ const describe = (token: ControlToken): string =>
                 <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
             </template>
             <template #control>
-                <Button :label="t(`ui.action.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
             </template>
         </Row>
 
@@ -224,7 +224,7 @@ const describe = (token: ControlToken): string =>
                             type="text"
                             autocomplete="off"
                             :placeholder="t(`sandbox.controlTokensSection.labelEGNightly`)"
-                            :class="ui.inputSm(`min-w-48 flex-1`)"
+                            :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                         />
                         <div class="flex min-w-0 flex-wrap items-center gap-2">
                             <Picker

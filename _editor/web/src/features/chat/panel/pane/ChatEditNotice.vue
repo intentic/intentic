@@ -45,8 +45,7 @@ const keepBoth = (): void => {
         <!-- The keep-answer action precedes Cancel so the answer is read first. -->
         <Button
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             class="shrink-0"
             v-tooltip.top="{ title: t(`chat.chatPane.forkWithDraft`), note: t(`chat.chatPane.thisChatUnchanged`) }"
             @click="keepBoth"
@@ -55,7 +54,8 @@ const keepBoth = (): void => {
         </Button>
         <Button
             size="small"
-            :text="true"
+            tier="quiet"
+            tone="accent"
             class="shrink-0"
             v-tooltip.top="{ title: t(`chat.chatPane.cancelEdit`), note: t(`chat.chatPane.nothingChangedYet`) }"
             @click="conversation.transcript.cancelEdit()"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type PhoneSummary, phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract";
-import { Button, Code, Modal, useDevice } from "@intentic/ui";
+import { Button, Code, Modal, Notice, toneTint, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -75,7 +75,7 @@ onBeforeUnmount(stop);
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">{{ t(`capabilities.phoneConnectDialog.intro`) }}</p>
 
-            <div v-if="online" class="flex flex-col gap-1 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
+            <div v-if="online" :class="toneTint(`success`, `strong`, `flex flex-col gap-1 rounded-md border px-3 py-2 text-sm text-content`)">
                 <span>
                     <b>{{ id }}</b> {{ t(`capabilities.phoneConnectDialog.connected`) }}
                 </span>
@@ -88,7 +88,7 @@ onBeforeUnmount(stop);
                 <span v-else-if="wake === `failed`" class="text-xs text-warning">{{ t(`capabilities.phoneConnectDialog.wakeFailed`) }}</span>
             </div>
 
-            <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
+            <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
             <div v-else-if="minting || link === ``" class="text-sm text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

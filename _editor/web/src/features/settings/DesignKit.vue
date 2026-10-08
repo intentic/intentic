@@ -1,6 +1,7 @@
 <!-- Dev-only page (behind `import.meta.env.DEV`) showing every shared component, state and scale together so drift between them is visible on one screen. -->
 <script setup lang="ts">
 import {
+    type ButtonLook,
     AnchoredOverlay,
     Avatar,
     BarChart,
@@ -55,6 +56,14 @@ import {
     StatStrip,
     StatusBadge,
     type StatusVariant,
+    diffMark,
+    type Tone,
+    toneDot,
+    toneHover,
+    toneInk,
+    tonePlate,
+    toneTint,
+    toneWash,
     useTextSize,
     useTheme,
     Verdict,
@@ -104,7 +113,9 @@ const PANEL_HEIGHTS = [
     { name: `h-panel-xl`, value: `85dvh`, share: 85 },
     { name: `h-figure`, value: `min(26rem, 50dvh)`, share: 50 },
 ] as const;
-const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
+// The kit's six tones (tone.ts); a StatusBadge's variant is one of them.
+const TONES: readonly Tone[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
+const STATUS_VARIANTS: readonly StatusVariant[] = TONES;
 
 // Two sandboxes cover every row state: run/stop, sync/halted, mirrored/contested port, both power states.
 const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
@@ -211,17 +222,17 @@ const POLICY = `# Safety policy\n\nAsk before anything that **deletes**, and bef
 const policy = ref(POLICY);
 const policyOnDisk = ref(POLICY);
 
-// Order is the rank, top to bottom; the last three are tones, not ranks, and any of them can carry any rank. `warn`,
-// not `warning`: PrimeVue 4's spelling — the old one silently paints the brand colour.
-const BUTTON_TIERS = [
-    { name: `Gilded`, spelling: `class="ui-button-loud ui-button-gilded"`, props: { class: `ui-button-loud ui-button-gilded` } },
-    { name: `Loud`, spelling: `class="ui-button-loud"`, props: { class: `ui-button-loud` } },
+// Order is the rank, top to bottom; the last rows are tones, not ranks, laid on a tier (button.ts).
+const BUTTON_TIERS: readonly { name: string; spelling: string; props: ButtonLook }[] = [
+    { name: `Gilded`, spelling: `tier="loud" gilded`, props: { tier: `loud`, gilded: true } },
+    { name: `Loud`, spelling: `tier="loud"`, props: { tier: `loud` } },
     { name: `Accent`, spelling: `<Button>`, props: {} },
-    { name: `Boring`, spelling: `severity="secondary"`, props: { severity: `secondary` } },
-    { name: `Quiet`, spelling: `:text="true"`, props: { severity: `secondary`, text: true } },
-    { name: `Danger`, spelling: `severity="danger"`, props: { severity: `danger` } },
-    { name: `Warn`, spelling: `severity="warn"`, props: { severity: `warn` } },
-    { name: `Success`, spelling: `severity="success"`, props: { severity: `success` } },
+    { name: `Boring`, spelling: `tier="boring"`, props: { tier: `boring` } },
+    { name: `Quiet`, spelling: `tier="quiet"`, props: { tier: `quiet` } },
+    { name: `Quiet accent`, spelling: `tier="quiet" tone="accent"`, props: { tier: `quiet`, tone: `accent` } },
+    { name: `Danger`, spelling: `tone="danger"`, props: { tone: `danger` } },
+    { name: `Warning`, spelling: `tone="warning"`, props: { tone: `warning` } },
+    { name: `Success`, spelling: `tone="success"`, props: { tone: `success` } },
 ];
 
 const COUNTS = [
@@ -336,30 +347,82 @@ const pickedTier = ref(`collaborator`);
                     <!-- `w-full` under the cap, or a max-width on an empty box measures nothing and draws nothing. -->
                     <div v-for="name in READ_WIDTHS" :key="name" class="flex items-center gap-3">
                         <span class="w-32 shrink-0 text-3xs text-subtle">{{ name }}</span>
-                        <span class="block h-4 w-full rounded bg-primary-500/30" :class="name"></span>
+                        <span :class="[toneTint(`primary`, `strong`, `block h-4 w-full rounded border`), name]"></span>
                     </div>
                     <div v-for="name in POP_WIDTHS" :key="name" class="flex items-center gap-3">
                         <span class="w-32 shrink-0 text-3xs text-subtle">{{ name }}</span>
-                        <span class="block h-4 rounded bg-info/30" :class="name"></span>
+                        <span :class="[toneTint(`info`, `strong`, `block h-4 rounded border`), name]"></span>
                     </div>
                     <div v-for="name in MODAL_SIZES" :key="name" class="flex items-center gap-3">
                         <span class="w-32 shrink-0 text-3xs text-subtle">Modal {{ name }}</span>
                         <span
-                            class="block h-4 rounded bg-success/30"
-                            :class="{
-                                'w-modal-sm': name === `sm`,
-                                'w-modal': name === `md`,
-                                'w-modal-lg': name === `lg`,
-                                'w-modal-xl': name === `xl`,
-                                'w-modal-full': name === `full`,
-                            }"
+                            :class="[
+                                toneTint(`success`, `strong`, `block h-4 rounded border`),
+                                {
+                                    'w-modal-sm': name === `sm`,
+                                    'w-modal': name === `md`,
+                                    'w-modal-lg': name === `lg`,
+                                    'w-modal-xl': name === `xl`,
+                                    'w-modal-full': name === `full`,
+                                },
+                            ]"
                         ></span>
                     </div>
                     <div v-for="height in PANEL_HEIGHTS" :key="height.name" class="flex items-center gap-3">
                         <span class="w-32 shrink-0 text-3xs text-subtle">{{ height.name }}</span>
-                        <span class="block h-4 rounded bg-warning/30" :style="{ width: `${height.share}%` }"></span>
+                        <span :class="toneTint(`warning`, `strong`, `block h-4 rounded border`)" :style="{ width: `${height.share}%` }"></span>
                         <span class="text-3xs text-subtle">{{ height.value }}</span>
                     </div>
+                </div>
+            </section>
+
+            <section class="flex flex-col gap-4">
+                <h2 :class="ui.sectionLabel()">Tones</h2>
+                <p class="text-xs text-muted">
+                    Six tones, named for what a state means rather than its colour, and one helper for each way a tone is drawn. A tinted box is
+                    `strong` when it should be read and `soft` when it only belongs to a state; its rim width, radius and ink stay the caller's.
+                </p>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[46rem] border-separate border-spacing-x-3 border-spacing-y-2 text-left">
+                        <thead>
+                            <tr class="font-mono text-3xs text-subtle">
+                                <th class="font-normal"></th>
+                                <th class="font-normal">toneInk</th>
+                                <th class="font-normal">toneDot</th>
+                                <th class="font-normal">toneWash</th>
+                                <th class="font-normal">toneTint strong</th>
+                                <th class="font-normal">toneTint soft</th>
+                                <th class="font-normal">tonePlate</th>
+                                <th class="font-normal">toneHover</th>
+                            </tr>
+                        </thead>
+                        <tbody class="align-middle text-xs">
+                            <tr v-for="tone in TONES" :key="tone">
+                                <td class="font-medium text-content">{{ tone }}</td>
+                                <td><span :class="toneInk(tone)">a status word</span></td>
+                                <td><span :class="toneDot(tone, `block size-2 rounded-full`)"></span></td>
+                                <td><span :class="toneWash(tone, `ui-status-pill text-2xs`)">a pill</span></td>
+                                <td><span :class="toneTint(tone, `strong`, `block rounded-md border px-2 py-1 text-content`)">to be read</span></td>
+                                <td><span :class="toneTint(tone, `soft`, `block rounded-md border px-2 py-1 text-content`)">belongs to it</span></td>
+                                <td><span :class="tonePlate(tone, `inline-block min-w-4 rounded-full px-1 text-center text-2xs`)">3</span></td>
+                                <td>
+                                    <button type="button" :class="toneHover(tone, `cursor-pointer rounded-md px-2 py-1 text-muted`)">
+                                        point here
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-muted">A diff's three marks are tones with a fixed meaning, the same in prose, a table or a document.</p>
+                <div class="flex flex-wrap items-center gap-4 text-xs text-content">
+                    <span
+                        >Words <span :class="diffMark(`added`)">added</span>, <span :class="diffMark(`removed`)">removed</span> and
+                        <span :class="diffMark(`changed`)">changed</span> inline.</span
+                    >
+                    <span :class="diffMark(`added`, `rule`, `pl-2`)">an added row</span>
+                    <span :class="diffMark(`removed`, `rule`, `pl-2`)">a removed row</span>
+                    <span :class="diffMark(`changed`, `rule`, `pl-2`)">a changed row</span>
                 </div>
             </section>
 
@@ -395,7 +458,7 @@ const pickedTier = ref(`collaborator`);
                     <Notice tone="warning" size="xs">Showing the first 500 matches only.</Notice>
                     <Notice tone="warning" icon="clock" size="sm">
                         Two hours left on the free plan this month.
-                        <template #actions><Button size="small" severity="secondary" :text="true">Billing</Button></template>
+                        <template #actions><Button size="small" tier="quiet">Billing</Button></template>
                     </Notice>
                     <Notice tone="info" size="md">The default size.</Notice>
                     <Notice tone="danger" size="lg">The deployment engine is unreachable.</Notice>
@@ -411,7 +474,7 @@ const pickedTier = ref(`collaborator`);
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <Card class="h-56 p-0">
                         <EmptyState icon="eye" title="Nothing to preview yet." line="Start a dev server in the terminal and it shows here." class="h-full">
-                            <template #actions><Button size="small" severity="secondary" label="Preview an address" /></template>
+                            <template #actions><Button size="small" tier="boring" label="Preview an address" /></template>
                         </EmptyState>
                     </Card>
                     <Card class="h-56 p-0">
@@ -424,7 +487,7 @@ const pickedTier = ref(`collaborator`);
                         <EmptyState icon="robot" size="page" title="No working copy to show." line="The agent was archived; its work stays on its branch." class="h-full">
                             <template #actions>
                                 <Button size="small" label="See changes" />
-                                <Button size="small" severity="secondary" label="Back to the shared workspace" />
+                                <Button size="small" tier="boring" label="Back to the shared workspace" />
                             </template>
                         </EmptyState>
                     </Card>
@@ -461,7 +524,7 @@ const pickedTier = ref(`collaborator`);
                             <template #meta><span class="text-2xs text-subtle">3 files</span><DiffStat :additions="12" :deletions="4" /></template>
                         </Row>
                         <Row title="With a control" description="Actions carry their own hit area">
-                            <template #control><Button size="small" severity="secondary" label="Open" /></template>
+                            <template #control><Button size="small" tier="boring" label="Open" /></template>
                         </Row>
                         <Row title="Navigational" description="Interactive, with a chevron" interactive chevron />
                     </RowGroup>
@@ -485,7 +548,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
 
                 <!-- compact is <RowGroup>'s default; dense is the navigator rail, comfortable a card's masthead. -->
-                <h3 :class="ui.sectionLabel(`text-2xs`)">Tiers, and the lines that are not rows</h3>
+                <h3 :class="ui.sectionLabel({ size: `xs` })">Tiers, and the lines that are not rows</h3>
                 <div class="grid gap-4 md:grid-cols-3">
                     <RowGroup
                         v-for="tier in [`comfortable`, `compact`, `dense`] as const"
@@ -506,7 +569,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
 
                 <!-- Show each disclosure shape with its hit area and body. -->
-                <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
+                <h3 :class="ui.sectionLabel({ size: `xs` })">Disclosure rows</h3>
                 <div class="grid gap-4 md:grid-cols-2">
                     <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
                         <DisclosureRow v-model:open="kitRail" title="A turn that failed" description="Claude · from discord">
@@ -533,7 +596,7 @@ const pickedTier = ref(`collaborator`);
                                 <a href="#" class="block w-fit max-w-full hover:text-link hover:underline">A headline that navigates</a>
                             </template>
                             <template #description>press this line and the row opens; press the name and it navigates</template>
-                            <template #control><Button size="small" severity="secondary" label="Run" /></template>
+                            <template #control><Button size="small" tier="boring" label="Run" /></template>
                             <template #below>
                                 <p class="text-xs text-muted">A drawer takes the full width and no surface of its own: one row, one wash.</p>
                             </template>
@@ -565,8 +628,7 @@ const pickedTier = ref(`collaborator`);
                                 <Button
                                     v-if="port.state !== `mirrored`"
                                     size="small"
-                                    severity="secondary"
-                                    :text="true"
+                                    tier="quiet"
                                     class="-my-1"
                                     :label="port.state === `ignored` ? `Mirror it` : `Don't mirror it`"
                                 />
@@ -575,8 +637,7 @@ const pickedTier = ref(`collaborator`);
                             <template #ports="{ group }">
                                 <Button
                                     size="small"
-                                    severity="secondary"
-                                    :text="true"
+                                    tier="quiet"
                                     :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
                                 />
                             </template>
@@ -625,15 +686,15 @@ const pickedTier = ref(`collaborator`);
                 <h2 :class="ui.sectionLabel()">Hover labels</h2>
                 <p class="text-xs text-muted">A string is a word or two. Anything more is a Tip: a short title, figures as rows, one short note.</p>
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button data-kit-tip="label" size="small" severity="secondary" v-tooltip.top="`Archive`">Label</Button>
-                    <Button data-kit-tip="keys" size="small" severity="secondary" v-tooltip.top="{ title: `Previous`, keys: `Shift+Enter` }">Key cap</Button>
+                    <Button data-kit-tip="label" size="small" tier="boring" v-tooltip.top="`Archive`">Label</Button>
+                    <Button data-kit-tip="keys" size="small" tier="boring" v-tooltip.top="{ title: `Previous`, keys: `Shift+Enter` }">Key cap</Button>
                     <Button
                         data-kit-tip="figures"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         v-tooltip.top="{
                             title: `Memory low`,
-                            tone: `warn`,
+                            tone: `warning`,
                             rows: [
                                 { label: `In RAM`, value: `7.4 GiB` },
                                 { label: `Swapped`, value: `4.1 GiB` },
@@ -646,11 +707,11 @@ const pickedTier = ref(`collaborator`);
                     <Button
                         data-kit-tip="note"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         v-tooltip.bottom="{ title: `Delete all`, rows: [{ label: `Agents`, value: 12 }, { label: `Branches`, value: 12, tone: `danger` }], note: `Can't be undone` }"
                         >Rows and note</Button
                     >
-                    <Button data-kit-tip="brief" size="small" severity="secondary" v-tooltip.bottom="{ title: `Starts now`, tone: `warn`, note: `Risk: slowdown, killed processes` }"
+                    <Button data-kit-tip="brief" size="small" tier="boring" v-tooltip.bottom="{ title: `Starts now`, tone: `warning`, note: `Risk: slowdown, killed processes` }"
                         >Title and note</Button
                     >
                 </div>
@@ -722,13 +783,29 @@ const pickedTier = ref(`collaborator`);
                 <!-- Shown beside the button since a hand-styled `<button>` usually means the alternative wasn't visible. -->
                 <div class="flex flex-wrap items-center gap-4">
                     <button type="button" :class="ui.iconButton()"><Icon name="cog" class="text-xs" /></button>
-                    <button type="button" :class="ui.linkButton()">ui.linkButton — will navigate</button>
-                    <button type="button" :class="ui.textAction()"><Icon name="eye" />ui.textAction — acts in place</button>
-                    <button type="button" class="ui-chip"><Icon name="filter" />ui-chip</button>
-                    <button type="button" class="ui-chip ui-chip-on"><Icon name="filter" />ui-chip-on</button>
-                    <button type="button" class="ui-chip" disabled><Icon name="filter" />disabled</button>
+                    <button type="button" :class="ui.textButton()">ui.textButton() — will navigate</button>
+                    <button type="button" :class="ui.textButton({ tone: `quiet` })"><Icon name="eye" />{ tone: "quiet" } — acts in place</button>
+                    <button type="button" :class="ui.textButton({ tone: `danger` })">{ tone: "danger" } — removes</button>
+                    <button type="button" :class="ui.chip()"><Icon name="filter" />ui.chip()</button>
+                    <button type="button" :class="ui.chip({ on: true })"><Icon name="filter" />ui.chip({ on: true })</button>
+                    <button type="button" :class="ui.chip()" disabled><Icon name="filter" />disabled</button>
                     <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
                     <button type="button" :class="ui.overlayChip()"><Icon name="copy" class="text-2xs" />ui.overlayChip</button>
+                </div>
+                <!-- A group's heading: the size follows the surface, the tone only when the group IS a state. -->
+                <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                    <span class="flex items-baseline gap-2">
+                        <span :class="ui.sectionLabel()">Connections</span>
+                        <span class="font-mono text-3xs text-subtle">ui.sectionLabel()</span>
+                    </span>
+                    <span class="flex items-baseline gap-2">
+                        <span :class="ui.sectionLabel({ size: `xs` })">Your apps</span>
+                        <span class="font-mono text-3xs text-subtle">{ size: "xs" }</span>
+                    </span>
+                    <span class="flex items-baseline gap-2">
+                        <span :class="ui.sectionLabel({ tone: `danger` })">Failed</span>
+                        <span class="font-mono text-3xs text-subtle">{ tone: "danger" }</span>
+                    </span>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />
@@ -736,7 +813,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
                 <!-- tabindex isn't needed to see focus — click into any field. -->
                 <div class="flex flex-col gap-2">
-                    <span :class="ui.sectionLabel(`text-2xs`)">Fields: every variant against every state</span>
+                    <span :class="ui.sectionLabel({ size: `xs` })">Fields: every variant against every state</span>
                     <!-- `minmax(0, 1fr)`, not bare `1fr`: a grid item's implicit min-width is auto and won't shrink otherwise. -->
                     <div
                         class="grid max-w-read-lg items-center gap-x-3 gap-y-2 text-2xs text-subtle"
@@ -744,20 +821,20 @@ const pickedTier = ref(`collaborator`);
                     >
                         <span></span><span>rest</span><span>invalid</span><span>disabled</span>
 
-                        <span class="text-muted">ui.input</span>
+                        <span class="text-muted">ui.input()</span>
                         <input :class="ui.input(`w-full`)" placeholder="38px, a page or a dialog" />
                         <input :class="[ui.input(`w-full`), `ui-field-error-box`]" placeholder="invalid" />
                         <input :class="ui.input(`w-full`)" placeholder="disabled" disabled />
 
-                        <span class="text-muted">ui.inputSm</span>
-                        <input :class="ui.inputSm(`w-full`)" placeholder="26px, a dense surface" />
-                        <input :class="[ui.inputSm(`w-full`), `ui-field-error-box`]" placeholder="invalid" />
-                        <input :class="ui.inputSm(`w-full`)" placeholder="disabled" disabled />
+                        <span class="text-muted">{ size: "sm" }</span>
+                        <input :class="ui.input({ size: `sm` }, `w-full`)" placeholder="26px, a dense surface" />
+                        <input :class="[ui.input({ size: `sm` }, `w-full`), `ui-field-error-box`]" placeholder="invalid" />
+                        <input :class="ui.input({ size: `sm` }, `w-full`)" placeholder="disabled" disabled />
 
-                        <span class="text-muted">ui.inputInline</span>
-                        <input :class="ui.inputInline(`w-full px-1 text-xs`)" placeholder="stands where text stood" />
-                        <input :class="[ui.inputInline(`w-full px-1 text-xs`), `ui-field-error-box`]" placeholder="invalid" />
-                        <input :class="ui.inputInline(`w-full px-1 text-xs`)" placeholder="disabled" disabled />
+                        <span class="text-muted">{ size: "inline" }</span>
+                        <input :class="ui.input({ size: `inline` }, `w-full px-1 text-xs`)" placeholder="stands where text stood" />
+                        <input :class="[ui.input({ size: `inline` }, `w-full px-1 text-xs`), `ui-field-error-box`]" placeholder="invalid" />
+                        <input :class="ui.input({ size: `inline` }, `w-full px-1 text-xs`)" placeholder="disabled" disabled />
 
                         <span class="text-muted">field-bare<br />in ui-field-shell</span>
                         <div class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5">
@@ -775,8 +852,8 @@ const pickedTier = ref(`collaborator`);
                     </div>
                     <!-- Inputs sit in an overflow-hidden box: an outward ring would clip and bleed into its neighbor; inset can't. -->
                     <div class="ui-card flex max-w-read-lg gap-1 overflow-hidden p-0">
-                        <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="clipped container, 4px apart" />
-                        <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="…and neither ring escapes" />
+                        <input :class="ui.input({ size: `sm` }, `min-w-0 flex-1`)" placeholder="clipped container, 4px apart" />
+                        <input :class="ui.input({ size: `sm` }, `min-w-0 flex-1`)" placeholder="…and neither ring escapes" />
                     </div>
                 </div>
                 <div class="grid max-w-read-lg gap-3 md:grid-cols-2">
@@ -887,7 +964,7 @@ const pickedTier = ref(`collaborator`);
                 <div class="flex flex-wrap items-center gap-3">
                     <SegmentedControl v-model="modalSize" :options="MODAL_SIZES.map((value) => ({ label: value, value }))" size="sm" />
                     <Button size="small" label="Open modal" @click="modalOpen = true" />
-                    <Button size="small" severity="danger" label="Open confirm" @click="confirmOpen = true" />
+                    <Button size="small" tone="danger" label="Open confirm" @click="confirmOpen = true" />
                     <button ref="anchoredTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="anchoredOpen = !anchoredOpen">
                         Anchored overlay
                     </button>
@@ -906,7 +983,7 @@ const pickedTier = ref(`collaborator`);
             </p>
             <p v-for="line in 14" :key="line" class="mt-2 text-xs text-muted">Body line {{ line }}, so the scroll cap has something to cap.</p>
             <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="modalOpen = false" />
+                <Button label="Cancel" tier="quiet" @click="modalOpen = false" />
                 <Button label="Save" @click="modalOpen = false" />
             </template>
         </Modal>

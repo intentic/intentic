@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
 import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
-import { activeLocale, Button, formatClock, formatDateTime, Icon, type IconName, ResponsiveOverlay, ui, useNarrow, useNow } from "@intentic/extension-ui";
+import {
+    activeLocale,
+    Button,
+    formatClock,
+    formatDateTime,
+    Icon,
+    type IconName,
+    ResponsiveOverlay,
+    toneWash,
+    ui,
+    useNarrow,
+    useNow,
+} from "@intentic/extension-ui";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { addDays, calendarWeek, type CalendarEntry, type EntryState, instantAt, type LaneBar, layoutDay, minuteOfDay, weekStartOf } from "./calendarModel";
 import CalendarPeek from "./CalendarPeek.vue";
@@ -112,7 +124,7 @@ const SLOT_TONE: Record<EntryState, string> = {
     upcoming: `bg-link/10 text-link hover:bg-link/20`,
     paused: `border border-dashed border-line-strong text-subtle hover:text-muted`,
     completed: `bg-content/5 text-muted hover:bg-content/10`,
-    error: `bg-danger/15 text-danger hover:bg-danger/20`,
+    error: toneWash(`danger`),
     skipped: `border border-line-subtle text-subtle hover:bg-content/5`,
     interrupted: `border border-line-subtle text-subtle hover:bg-content/5`,
 };
@@ -240,7 +252,7 @@ const HOUR_LINES = {
     <div ref="root" class="flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div class="flex items-center gap-1">
-                <Button :label="t(`calendar.today`)" size="small" severity="secondary" :disabled="isCurrentWeek" @click="goToday" />
+                <Button :label="t(`calendar.today`)" size="small" tier="boring" :disabled="isCurrentWeek" @click="goToday" />
                 <button type="button" :class="ui.iconButton()" :aria-label="t(`calendar.previousWeek`)" v-tooltip.top="t(`calendar.previousWeek`)" @click="shift(-1)">
                     <Icon name="chevron-left" class="text-xs" />
                 </button>
@@ -254,8 +266,7 @@ const HOUR_LINES = {
                 <button
                     v-if="pausedCount > 0"
                     type="button"
-                    class="ui-chip"
-                    :class="showPaused ? `ui-chip-on` : ``"
+                    :class="ui.chip({ on: showPaused })"
                     :aria-pressed="showPaused"
                     @click="showPaused = !showPaused"
                 >
@@ -268,7 +279,7 @@ const HOUR_LINES = {
         <!-- The agenda: the same week as a list of days, for a pane too narrow for seven columns. -->
         <div v-if="narrow" class="flex flex-col gap-4">
             <div v-if="lane.length > 0" class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel(`px-1 text-2xs`)">{{ t(`calendar.throughTheDay`) }}</span>
+                <span :class="ui.sectionLabel({ size: `xs` }, `px-1`)">{{ t(`calendar.throughTheDay`) }}</span>
                 <button
                     v-for="bar in lane"
                     :key="bar.key"

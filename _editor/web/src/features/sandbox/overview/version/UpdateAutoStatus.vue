@@ -60,7 +60,7 @@ const line = computed(() => {
                 <p class="text-xs font-medium text-content tabular-nums">{{ status.title }}</p>
                 <p v-if="status.detail" class="text-2xs text-muted">{{ status.detail }}</p>
             </div>
-            <button v-if="answer" type="button" :class="ui.textAction(`shrink-0 text-2xs`)" :disabled="busy" @click="press">
+            <button v-if="answer" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" :disabled="busy" @click="press">
                 {{ answer.label }}
             </button>
         </div>

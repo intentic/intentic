@@ -163,7 +163,7 @@ watch(
             }}</span>
             <span v-if="live && view.remaining">{{ view.remaining }}</span>
             <span class="flex-1" />
-            <button type="button" :class="ui.textAction(`shrink-0`)" @click="listOpen = !listOpen">
+            <button type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" @click="listOpen = !listOpen">
                 {{ listOpen ? t(`desktop.setupProgress.hideSteps`) : t(`desktop.setupProgress.seeAllSteps`, { count: view.steps.length }) }}
             </button>
         </div>

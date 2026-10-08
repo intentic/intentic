@@ -11,6 +11,8 @@ import {
     formatDayMonthTime,
     formatTimestamp,
     Icon,
+    toneInk,
+    toneTint,
     useAgentRunPick,
 } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
@@ -218,7 +220,7 @@ onBeforeUnmount(() => {
         :data-main-failure="`${failure.repo}:${failure.branch}`"
         :data-state="view.state"
         :aria-label="t(`mainFailure.title`, { branch: failure.branch })"
-        class="relative bg-danger/5"
+        :class="toneTint(`danger`, `soft`, `relative`)"
     >
         <div class="flex flex-col gap-1 py-3 pr-3 pl-4">
             <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -260,8 +262,7 @@ onBeforeUnmount(() => {
                         v-if="press !== undefined"
                         :label="starting !== undefined && starting === runKey ? t(`pipelineRunRow.readingLogs`) : press.label"
                         :picker="picker"
-                        :severity="press.primary ? undefined : `secondary`"
-                        :text="!press.primary"
+                        :tier="press.primary ? `accent` : `quiet`"
                         :loading="busy !== undefined && busy === runKey"
                         :disabled="busy !== undefined"
                         @run="pressFix"
@@ -281,7 +282,7 @@ onBeforeUnmount(() => {
 
         <svg
             v-if="lane !== undefined"
-            class="pointer-events-none absolute inset-0 text-danger/50"
+            :class="toneInk(`danger`, `pointer-events-none absolute inset-0 opacity-50`)"
             :width="lane.width"
             :height="lane.height"
             :viewBox="`0 0 ${lane.width} ${lane.height}`"

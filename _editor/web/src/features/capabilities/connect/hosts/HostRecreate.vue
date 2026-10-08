@@ -95,7 +95,6 @@ const VERBS: Record<Action, string> = { Update: `update`, Rebuild: `rebuild`, "R
 const verb = computed(() => t(`capabilities.hostRecreate.${VERBS[props.action]}Verb` as `capabilities.hostRecreate.updateVerb`));
 
 // The loud tier in the house gold (primeng.css); gold stands for moving up a version, so it goes on nothing else.
-const GILDED = `ui-button-loud ui-button-gilded`;
 // The glyph says where the press goes: up a version, or the older swap's bolt.
 const icon = computed<IconName>(() => (props.gilded ? `arrow-circle-up` : `bolt`));
 // The button's row, shared with the caller's `beside` step; the gilded one sits a little further from its neighbour.
@@ -499,9 +498,8 @@ const command = computed(() => {
                 <Button
                     :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))"
                     :size="gilded ? undefined : `small`"
-                    :class="gilded ? GILDED : undefined"
-                    :severity="!gilded && text ? `secondary` : undefined"
-                    :text="text"
+                    :tier="gilded ? `loud` : text ? `quiet` : `accent`"
+                    :gilded="gilded"
                     :loading="running || awaiting || idleWait?.phase === `rebuilding`"
                     @click="runOnMachine"
                 >
@@ -533,14 +531,14 @@ const command = computed(() => {
                         ? t(`capabilities.hostRecreate.waitingForAgents`, { names: idleWait.waitingOn.join(`, `) }, idleWait.waitingOn.length)
                         : t(`capabilities.hostRecreate.startingOnceIdle`)
                 }}</span>
-                <Button :label="t(`capabilities.hostRecreate.stopWaiting`)" size="small" severity="secondary" :text="true" @click="stopWaiting" />
+                <Button :label="t(`capabilities.hostRecreate.stopWaiting`)" size="small" tier="quiet" @click="stopWaiting" />
             </div>
             <p v-else-if="idleWait?.phase === `rebuilding` && !awaiting" class="flex items-center gap-1.5 text-2xs text-muted" role="status">
                 <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ t(`capabilities.hostRecreate.rebuildingNowIdle`) }}
             </p>
             <div v-else-if="idleWait?.phase === `failed`" class="flex flex-col gap-1">
                 <Notice :of="{ tone: `warning`, title: t(`capabilities.hostRecreate.idleRebuildFailed`), detail: idleWait.message }" />
-                <Button :label="t(`ui.action.dismiss`)" size="small" severity="secondary" :text="true" class="self-start" @click="stopWaiting" />
+                <Button :label="t(`ui.action.dismiss`)" size="small" tier="quiet" class="self-start" @click="stopWaiting" />
             </div>
 
             <!-- Not destructive: every action here keeps the sandbox's files and just moves it to another image. -->
@@ -566,7 +564,7 @@ const command = computed(() => {
                     {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
                 </p>
                 <template v-if="offerWait" #actions>
-                    <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" severity="secondary" :text="true" @click="waitForIdle">
+                    <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" tier="quiet" @click="waitForIdle">
                         <template #icon><Icon name="clock" /></template>
                     </Button>
                 </template>
@@ -579,7 +577,8 @@ const command = computed(() => {
                 <Button
                     :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
                     :size="gilded ? undefined : `small`"
-                    :class="gilded ? GILDED : undefined"
+                    :tier="gilded ? `loud` : `accent`"
+                    :gilded="gilded"
                     @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
                 >
                     <template #icon><Icon :name="icon" /></template>
@@ -595,7 +594,8 @@ const command = computed(() => {
             <div v-if="gilded" :class="row">
                 <Button
                     :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
-                    :class="GILDED"
+                    tier="loud"
+                    gilded
                     :aria-expanded="open"
                     @click="open = !open"
                 >

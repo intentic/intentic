@@ -150,7 +150,7 @@ const switchAccount = async (): Promise<void> => {
                         ><span class="font-medium text-content">{{ invitedEmail }}</span></template
                     >
                 </i18n-t>
-                <Button :label="t(`auth.words.continueGoogle`)" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">
+                <Button :label="t(`auth.words.continueGoogle`)" tier="boring" class="mt-6 w-full justify-center" @click="signIn">
                     <template #icon><Icon name="google" /></template>
                 </Button>
             </template>
@@ -178,7 +178,7 @@ const switchAccount = async (): Promise<void> => {
                         ><span class="font-medium text-content">{{ user?.email }}</span></template
                     >
                 </i18n-t>
-                <Button :label="t(`shell.words.switchAccount`)" severity="secondary" class="mt-6 w-full justify-center" @click="switchAccount">
+                <Button :label="t(`shell.words.switchAccount`)" tier="boring" class="mt-6 w-full justify-center" @click="switchAccount">
                     <template #icon><Icon name="sync" /></template>
                 </Button>
             </template>

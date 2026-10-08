@@ -173,7 +173,7 @@ watch(
                 <div v-if="desktop && handoffWaiting" class="handoff" role="status">
                     <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
                     <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
-                    <Button :label="t(`auth.words.openBrowserAgain`)" severity="secondary" class="w-full justify-center" @click="handoff.start">
+                    <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" class="w-full justify-center" @click="handoff.start">
                         <template #icon><Icon name="google" /></template>
                     </Button>
                     <button type="button" class="escape" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
@@ -194,7 +194,7 @@ watch(
                 <Button
                     v-else-if="!desktop && (stallNote || popupOnly)"
                     :label="t(`auth.words.continueOnGooglesPage`)"
-                    :severity="stallNote ? undefined : `secondary`"
+                    :tier="stallNote ? `accent` : `boring`"
                     class="mt-4 w-full justify-center"
                     @click="redirectSignIn"
                 >

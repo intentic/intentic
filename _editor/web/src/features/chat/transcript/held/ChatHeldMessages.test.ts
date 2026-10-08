@@ -65,7 +65,7 @@ const held = (overrides: Partial<QueuedMessage> = {}): QueuedMessage => ({
 // The reason's hover for MEMORY_TEXT: the sandbox's figures, as a card, not its sentence.
 const READING_TIP = {
     title: `Memory low`,
-    tone: `warn`,
+    tone: `warning`,
     rows: [
         { label: `In RAM`, value: `12.4 GiB` },
         { label: `Swapped`, value: `3.6 GiB` },
@@ -159,7 +159,7 @@ describe(`a message the sandbox held for low memory`, () => {
 
         const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
         expect(tips.get(reason)).toEqual(READING_TIP);
-        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({ title: `Starts now`, tone: `warn`, note: `Risk: slowdown, killed processes` });
+        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({ title: `Starts now`, tone: `warning`, note: `Risk: slowdown, killed processes` });
     });
 
     it(`offers the raise beside the send only on a hold that named its ceiling`, async () => {

@@ -58,7 +58,7 @@ const details = computed<string[][]>(() => [
                 <button
                     v-if="entry.session"
                     type="button"
-                    :class="ui.textAction(`touch-target my-0 min-h-0 shrink-0 gap-1 text-2xs`)"
+                    :class="ui.textButton({ tone: `quiet`, size: `xs`, flush: true }, `touch-target shrink-0`)"
                     v-tooltip.bottom="t(`portRow.openTerminal`)"
                     @click="openTerminal"
                 >
@@ -79,7 +79,7 @@ const details = computed<string[][]>(() => [
                 :href="entry.previewUrl"
                 target="_blank"
                 rel="noopener"
-                :class="ui.iconButton(`h-8 w-8`)"
+                :class="ui.iconButton({ size: `lg` })"
                 :aria-label="t(`portRow.openPortPreviewIn`, { port: entry.port })"
                 v-tooltip.bottom="t(`common.newTab`)"
             >
@@ -87,18 +87,11 @@ const details = computed<string[][]>(() => [
             </a>
             <!-- A forwarded port is public: offer the one-click shareable link right where it's exposed. -->
             <SharePreview v-if="entry.previewUrl" :url="entry.previewUrl" />
-            <Button v-if="entry.forwarded" :label="t(`portRow.stop`)" size="small" severity="secondary" :disabled="busy" @click="emit(`stop`)">
+            <Button v-if="entry.forwarded" :label="t(`portRow.stop`)" size="small" tier="boring" :disabled="busy" @click="emit(`stop`)">
                 <template #icon><Icon name="stop" /></template>
             </Button>
             <!-- SECONDARY, LIKE THE STOP BESIDE IT AND LIKE EVERY OTHER ROW ACTION IN THE APP. -->
-            <Button
-                v-else-if="entry.forwardable"
-                :label="t(`portRow.preview`)"
-                size="small"
-                severity="secondary"
-                :disabled="busy"
-                @click="emit(`preview`)"
-            >
+            <Button v-else-if="entry.forwardable" :label="t(`portRow.preview`)" size="small" tier="boring" :disabled="busy" @click="emit(`preview`)">
                 <template #icon><Icon name="play" /></template>
             </Button>
             <span

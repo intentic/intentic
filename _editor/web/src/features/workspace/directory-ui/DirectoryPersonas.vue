@@ -236,18 +236,13 @@ const submit = async (): Promise<void> => {
                 <div class="flex items-center gap-2">
                     <span :class="ui.sectionLabel()">{{ heading }}</span>
                     <!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
-                    <button
-                        v-if="mode !== `new`"
-                        type="button"
-                        :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
-                        @click="startAdd"
-                    >
+                    <button v-if="mode !== `new`" type="button" :class="ui.textButton({ tone: `quiet` }, 'ml-auto')" @click="startAdd">
                         {{ t(`workspace.directoryPersonas.addNewOneInstead`) }}
                     </button>
                     <button
                         v-else-if="elsewhere.length > 0"
                         type="button"
-                        :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
+                        :class="ui.textButton({ tone: `quiet` }, 'ml-auto')"
                         @click="startExisting"
                     >
                         {{ t(`workspace.directoryPersonas.useOneIAlready`) }}
@@ -313,12 +308,7 @@ const submit = async (): Promise<void> => {
                     <!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
                     <div class="flex flex-col gap-3">
                         <div class="flex items-center gap-2">
-                            <button
-                                type="button"
-                                :class="ui.linkButton('gap-1.5 text-xs text-muted hover:text-content')"
-                                :aria-expanded="advanced"
-                                @click="advanced = !advanced"
-                            >
+                            <button type="button" :class="ui.textButton({ tone: `quiet` })" :aria-expanded="advanced" @click="advanced = !advanced">
                                 <Icon name="angle-right" class="transition-transform" :class="advanced ? `rotate-90` : ``" />
                                 {{ t(`workspace.directoryPersonas.advancedWhatMayDo`) }}
                             </button>
@@ -334,10 +324,10 @@ const submit = async (): Promise<void> => {
 
         <template #footer>
             <!-- The rest of a card lives on the page that owns it; this link is the way there, not a second copy of it. -->
-            <RouterLink to="/sandbox/personas" :class="ui.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
+            <RouterLink to="/sandbox/personas" :class="ui.textButton({ tone: `quiet` }, 'mr-auto')">
                 {{ t(`workspace.directoryPersonas.fullEditor`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-            <Button :label="t(`ui.action.cancel`)" text size="small" @click="dir = undefined" />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" tone="accent" size="small" @click="dir = undefined" />
             <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
                 :label="

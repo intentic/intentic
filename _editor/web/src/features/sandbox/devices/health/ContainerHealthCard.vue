@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, Icon, ui } from "@intentic/ui";
+import { Button, Icon, toneTint, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
@@ -95,7 +95,7 @@ const repair = async (): Promise<void> => {
 <template>
     <!-- Title, one sentence, then the action row: the reader learns what is wrong, why, and the one thing that fixes it,
          without a paragraph. What the fix does is said beside its button, quietly, rather than above it as prose. -->
-    <section v-if="notices.length > 0" class="flex flex-col gap-4 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3">
+    <section v-if="notices.length > 0" :class="toneTint(`warning`, `strong`, `flex flex-col gap-4 rounded-lg border px-4 py-3`)">
         <div v-for="(notice, index) of notices" :key="`${notice.fault}:${index}`" class="flex items-start gap-3">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
             <div class="flex min-w-0 flex-1 flex-col gap-1">
@@ -109,7 +109,7 @@ const repair = async (): Promise<void> => {
                     <Button
                         v-if="canRepair && !confirming"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :label="t(`sandbox.containerHealthCard.reconnectSandbox`)"
                         @click="confirming = true"
                     >
@@ -123,7 +123,7 @@ const repair = async (): Promise<void> => {
                             :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
                             @click="repair"
                         />
-                        <Button v-if="!busy" :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="confirming = false" />
+                        <Button v-if="!busy" :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirming = false" />
                     </template>
                     <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
                          they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
@@ -132,7 +132,7 @@ const repair = async (): Promise<void> => {
                         :as="RouterLink"
                         :to="{ path: `/setup`, query: { sandbox: active?.id } }"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :label="t(`sandbox.containerHealthCard.openSetupScreen`)"
                     >
                         <template #icon><Icon name="arrow-up-right" /></template>
@@ -156,7 +156,7 @@ const repair = async (): Promise<void> => {
                     <button
                         v-if="notice.keys?.length"
                         type="button"
-                        :class="ui.textAction(`ml-auto shrink-0 gap-1 text-2xs`)"
+                        :class="ui.textButton({ tone: `quiet`, size: `xs` }, `ml-auto shrink-0`)"
                         :aria-expanded="openDetails === `${notice.fault}:${index}`"
                         @click="toggleDetails(`${notice.fault}:${index}`)"
                     >

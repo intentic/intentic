@@ -315,7 +315,7 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         <span v-tooltip.top="formatDateTime(row.time)">{{ formatDate(row.time) }}</span>
                     </template>
                     <template #control>
-                        <Button size="small" severity="secondary" text @click="() => forget(row.source.source)">
+                        <Button size="small" tier="quiet" @click="() => forget(row.source.source)">
                             {{ t(`sandbox.agentPrivacyShield.forget`) }}
                         </Button>
                     </template>

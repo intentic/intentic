@@ -79,7 +79,7 @@ describe(`rowActionsFor`, () => {
         expect(waiting[0]?.tooltip).toBe(`Checks off`);
         const changed = rowActionsFor(`shop`, sources({ checkDirs: new Map([[`shop`, { adopted: false, changed: true }]]) }));
         expect(changed[0]?.tooltip).toBe(`Checks paused`);
-        expect(changed[0]?.tip).toEqual({ title: `Checks paused`, tone: `warn`, note: `Changed since switched on` });
+        expect(changed[0]?.tip).toEqual({ title: `Checks paused`, tone: `warning`, note: `Changed since switched on` });
     });
 
     // Document leads the row, matching the rail's ordering, not appended after existing affordances.

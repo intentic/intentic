@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerSpec } from "@intentic/sandbox-contract";
-import { Icon } from "@intentic/ui";
+import { Icon, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
@@ -57,7 +57,7 @@ const LINE = {
         <div v-if="isFreeTile(tile) || count !== undefined" class="absolute inset-x-1.5 top-1.5 h-4">
             <span
                 v-if="isFreeTile(tile)"
-                class="absolute left-0 top-0 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
+                :class="toneWash(`success`, `absolute left-0 top-0 rounded px-1 text-[0.6rem] font-medium leading-4`)"
                 >{{ t(`connect.connect.free`) }}</span
             >
             <span

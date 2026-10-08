@@ -32,12 +32,12 @@ test("an ordinary file wears nothing", () => {
 test("every chip says what the role is, not just that there is one", () => {
     expect([REFERENCE_DIR, PUBLIC_DIR, MEMORY_FILE].map((path) => specialChip(path, developer)?.tooltip)).toEqual([
         { title: `Reference only`, note: `No search, setup, sync` },
-        { title: `Open internet`, tone: `warn`, note: `No sign-in` },
+        { title: `Open internet`, tone: `warning`, note: `No sign-in` },
         { title: `Standing instructions`, note: `Every turn from here` },
     ]);
     expect([REFERENCE_DIR, PUBLIC_DIR, MEMORY_FILE].map((path) => specialChip(path, maker)?.tooltip)).toEqual([
         { title: `Reference only`, note: `No search, setup, sync` },
-        { title: `Anyone with link`, tone: `warn`, note: `No sign-in` },
+        { title: `Anyone with link`, tone: `warning`, note: `No sign-in` },
         { title: `Standing instructions`, note: `Every chat from here` },
     ]);
 });

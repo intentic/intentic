@@ -26,7 +26,7 @@ const props = defineProps<{
 }>();
 
 const readout = useSandboxReadout(() => props.metrics);
-const warned = (hint: Tip, warn: boolean): Tip => (warn ? { ...hint, tone: `warn` } : hint);
+const warned = (hint: Tip, warn: boolean): Tip => (warn ? { ...hint, tone: `warning` } : hint);
 
 // The two lists' headings, each read on hover as what its bars measure.
 const rolesTip = computed((): Tip => ({ title: t(`agents.liveMetrics.rolesLabel`), note: t(`agents.liveMetrics.rolesNote`) }));
@@ -93,7 +93,7 @@ const open = (id: string): void => {
 
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabelSm(`cursor-help self-start`)">
+            <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
             <div
@@ -110,7 +110,7 @@ const open = (id: string): void => {
                 v-if="readout.smallRoles.length > 0"
                 type="button"
                 data-small-roles
-                :class="ui.textAction(`flex items-center gap-1 self-start text-2xs text-subtle`)"
+                :class="ui.textButton({ tone: `subtle`, size: `xs` }, `flex items-center self-start`)"
                 :aria-expanded="smallOpen"
                 @click="smallOpen = !smallOpen"
             >
@@ -130,7 +130,7 @@ const open = (id: string): void => {
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
         <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabelSm(`cursor-help self-start`)">
+            <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.sessionsLabel`) }}
             </h4>
             <div
@@ -142,7 +142,7 @@ const open = (id: string): void => {
                 <!-- The text's own height, not the recipe's tap target, so these rows keep the kinds' pitch beside them. -->
                 <button
                     type="button"
-                    :class="ui.textAction(`my-0 min-h-0 min-w-0 max-w-full text-2xs`)"
+                    :class="ui.textButton({ tone: `quiet`, size: `xs`, flush: true }, `min-w-0 max-w-full`)"
                     v-tooltip.top="session.tip"
                     @click="open(session.key)"
                 >
@@ -158,7 +158,7 @@ const open = (id: string): void => {
                 v-if="readout.smallSessions.length > 0"
                 type="button"
                 data-small-sessions
-                :class="ui.textAction(`flex items-center gap-1 self-start text-2xs text-subtle`)"
+                :class="ui.textButton({ tone: `subtle`, size: `xs` }, `flex items-center self-start`)"
                 :aria-expanded="moreSessionsOpen"
                 @click="moreSessionsOpen = !moreSessionsOpen"
             >

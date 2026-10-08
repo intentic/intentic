@@ -4,7 +4,9 @@ import { t } from "./i18n";
 
 // Every way a pipeline status is drawn, in one table shared by runs, stages and jobs, so the same status is always the
 // same tone. Classes are spelled out in full since Tailwind scans source text; `text-${tone}` would never reach the
-// stylesheet.
+// stylesheet. The two tinted marks (a stage's circle, the wash behind a job row) are drawn by the graph views from
+// `variant` with the kit's tone helpers: this table is also read outside a browser (runSide.ts), where the kit can't
+// load.
 
 export interface StatusTone {
     readonly icon: IconName;
@@ -14,10 +16,6 @@ export interface StatusTone {
     readonly variant: StatusVariant;
     // Foreground only, glyphs and text.
     readonly text: string;
-    // The inline stage circle: border + fill + glyph.
-    readonly circle: string;
-    // Wash behind a job card in the graph. DagGraph owns the card's border, so this is fill only.
-    readonly tint: string;
     // A solid dot/stripe fill.
     readonly bar: string;
 }
@@ -34,8 +32,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `neutral`,
         text: `text-muted`,
-        circle: `border-dashed border-muted/60 bg-transparent text-muted`,
-        tint: `bg-transparent`,
         bar: `bg-muted`,
     },
     success: {
@@ -46,8 +42,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `success`,
         text: `text-success`,
-        circle: `border-success bg-success/20 text-success`,
-        tint: `bg-success/5`,
         bar: `bg-success`,
     },
     failed: {
@@ -58,8 +52,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `danger`,
         text: `text-danger`,
-        circle: `border-danger bg-danger/20 text-danger`,
-        tint: `bg-danger/5`,
         bar: `bg-danger`,
     },
     running: {
@@ -70,8 +62,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `info`,
         text: `text-info`,
-        circle: `border-info bg-info/20 text-info`,
-        tint: `bg-info/5`,
         bar: `bg-info`,
     },
     canceled: {
@@ -82,8 +72,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `neutral`,
         text: `text-subtle`,
-        circle: `border-subtle/60 bg-subtle/10 text-subtle`,
-        tint: `bg-transparent`,
         bar: `bg-subtle`,
     },
     skipped: {
@@ -94,8 +82,6 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         },
         variant: `neutral`,
         text: `text-subtle`,
-        circle: `border-subtle/60 bg-subtle/10 text-subtle`,
-        tint: `bg-transparent`,
         bar: `bg-subtle`,
     },
 };

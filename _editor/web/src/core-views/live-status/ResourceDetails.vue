@@ -52,16 +52,7 @@ const logoFailed = reactive(new Set<string>());
                 </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-                <Button
-                    v-if="openUrl"
-                    as="a"
-                    :label="t(`ui.action.open`)"
-                    size="small"
-                    severity="secondary"
-                    :href="openUrl"
-                    target="_blank"
-                    rel="noopener"
-                >
+                <Button v-if="openUrl" as="a" :label="t(`ui.action.open`)" size="small" tier="boring" :href="openUrl" target="_blank" rel="noopener">
                     <template #icon><Icon name="external-link" /></template>
                 </Button>
                 <Button
@@ -69,20 +60,15 @@ const logoFailed = reactive(new Set<string>());
                     as="a"
                     :label="t(`views.words.komodo`)"
                     size="small"
-                    :text="true"
+                    tier="quiet"
+                    tone="accent"
                     :href="deployment.komodoDeploymentUrl"
                     target="_blank"
                     rel="noopener"
                 >
                     <template #icon><Icon name="cog" /></template>
                 </Button>
-                <Button
-                    size="small"
-                    :text="true"
-                    severity="secondary"
-                    :aria-label="t(`views.resourceDetails.closeDetails`)"
-                    @click="selectedId = undefined"
-                >
+                <Button size="small" tier="quiet" :aria-label="t(`views.resourceDetails.closeDetails`)" @click="selectedId = undefined">
                     <template #icon><Icon name="times" /></template>
                 </Button>
             </div>

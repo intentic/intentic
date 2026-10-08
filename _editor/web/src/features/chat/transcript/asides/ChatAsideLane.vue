@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ui } from "@intentic/ui";
 import { computed, ref, useSlots } from "vue";
 import type { ChatAsideMark } from "./chatAsides";
 
@@ -45,8 +46,7 @@ const said = computed(() => slots[`default`] !== undefined);
                     v-for="mark in marks"
                     :key="mark.key"
                     type="button"
-                    class="ui-chip min-h-[calc(1lh+0.375rem)] shrink-0 tabular-nums"
-                    :class="opened === mark.key && `ui-chip-on`"
+                    :class="ui.chip({ on: opened === mark.key }, `min-h-[calc(1lh+0.375rem)] shrink-0 tabular-nums`)"
                     :aria-expanded="opened === mark.key"
                     :aria-label="mark.label"
                     v-tooltip.left="mark.tip ?? mark.label"

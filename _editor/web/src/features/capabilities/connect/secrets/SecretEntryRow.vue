@@ -188,7 +188,7 @@ const removeKey = async (): Promise<void> => {
 
 // Centres its glyph in a fixed 24px box via flex, matching CopyButton's centring, so icon buttons in one cluster
 // don't visually drift apart.
-const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-subtle`);
+const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
 </script>
 
 <template>
@@ -277,7 +277,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             <button
                                 v-tooltip.top="t(`capabilities.secretEntryRow.confirmRemove`)"
                                 type="button"
-                                :class="ui.iconButton(`text-danger hover:bg-danger/10 hover:text-danger`)"
+                                :class="ui.iconButton({ tone: `danger` }, `text-danger`)"
                                 :aria-label="t(`capabilities.secretEntryRow.confirmRemove`)"
                                 v-action="removeKey"
                             >
@@ -381,8 +381,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             v-for="email of approverChoices"
                             :key="email"
                             type="button"
-                            class="ui-chip py-1 px-2 text-2xs"
-                            :class="draftApprovers.includes(email) ? `ui-chip-on` : ``"
+                            :class="ui.chip({ on: draftApprovers.includes(email) }, `py-1 px-2 text-2xs`)"
                             :aria-pressed="draftApprovers.includes(email)"
                             @click="toggleApprover(email)"
                         >
@@ -413,7 +412,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <SegmentedControl v-else v-model="draftScope" :options="SCOPE_OPTIONS" size="xs" wrap class="pt-1" />
 
                     <div class="flex items-center gap-2 pt-2">
-                        <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="!gateDirty" v-action="saveGate">
+                        <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="!gateDirty" v-action="saveGate">
                             {{ gate === undefined ? t(`capabilities.secretEntryRow.requireApproval`) : t(`ui.action.save`) }}
                         </button>
                         <span v-if="draftApprovers.length === 0" class="text-2xs text-warning">{{
@@ -453,7 +452,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     @saved="editing = false"
                     @cancel="editing = false"
                 />
-                <button type="button" :class="ui.linkButton(`text-2xs`)" @click="multiline = !multiline">
+                <button type="button" :class="ui.textButton({ size: `xs` })" @click="multiline = !multiline">
                     {{ multiline ? t(`capabilities.secretEntryRow.singleLineValue`) : t(`capabilities.secretEntryRow.multiLineValueSsh`) }}
                 </button>
             </div>

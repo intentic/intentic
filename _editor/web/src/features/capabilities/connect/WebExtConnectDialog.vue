@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, type WebExtSummary, webextPairingCode } from "@intentic/sandbox-contract";
-import { Button, Code, Modal } from "@intentic/ui";
+import { Button, Code, Modal, Notice, toneTint } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -93,11 +93,11 @@ onBeforeUnmount(() => {
                 {{ t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`) }}
             </p>
 
-            <div v-if="online" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
+            <div v-if="online" :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
                 <b>{{ id }}</b> {{ t(`capabilities.webExtConnectDialog.connectedAllowOnSite`) }}
             </div>
 
-            <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
+            <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
             <div v-else-if="minting || code === ``" class="text-sm text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

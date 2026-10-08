@@ -65,7 +65,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                 <StatusBadge v-if="passkey.backedUp" variant="info" :label="t(`sandbox.passkeysSection.synced`)" size="xs" />
             </template>
             <template #control>
-                <Button :label="t(`ui.action.remove`)" size="small" severity="danger" :text="true" @click="remove(passkey.id)" />
+                <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="remove(passkey.id)" />
             </template>
         </Row>
 
@@ -79,7 +79,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                         type="text"
                         autocomplete="off"
                         :placeholder="t(`sandbox.words.nameEGWork`)"
-                        :class="ui.inputSm(`min-w-48 flex-1`)"
+                        :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                     />
                     <Button
                         type="submit"
@@ -106,7 +106,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                     <Button
                         :label="list.required ? t(`sandbox.passkeysSection.stopRequiring`) : t(`sandbox.passkeysSection.requirePasskey`)"
                         size="small"
-                        :severity="list.required ? `secondary` : `primary`"
+                        :tier="list.required ? `boring` : `accent`"
                         :loading="busy"
                         :disabled="busy || !canRequire"
                         @click="setRequired(!list.required)"
@@ -123,8 +123,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                     <Button
                         :label="t(`sandbox.passkeysSection.newCodes`)"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         :disabled="busy"
                         @click="regenerateCodes"
                     />

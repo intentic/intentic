@@ -115,7 +115,7 @@ const viewPromptTip = computed((): Tip => ({
                         v-if="promptMode !== `custom`"
                         :label="t(`sandbox.agentInstructions.viewPrompt`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         v-tooltip.bottom="viewPromptTip"
                         @click="viewBuiltin(promptMode)"
                     />
@@ -137,14 +137,14 @@ const viewPromptTip = computed((): Tip => ({
                         <Button
                             :label="t(`sandbox.agentInstructions.startIntentics`)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :loading="builtinBusy"
                             @click="forkBuiltin(`intentic`)"
                         />
                         <Button
                             :label="t(`sandbox.agentInstructions.startClaudes`)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :loading="builtinBusy"
                             @click="forkBuiltin(`claude`)"
                         />

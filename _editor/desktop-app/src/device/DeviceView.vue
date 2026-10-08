@@ -188,12 +188,12 @@ onUnmounted(() => {
             <!-- The app's own update: what is true now, never a promise about later. -->
             <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
                 <span>{{ t(`desktop.app.intenticDownloadedInstallsQuit`, { version: update.version }) }}</span>
-                <Button class="ml-2" size="small" severity="secondary" :label="t(`desktop.app.updateRestart`)" @click="applyUpdate" />
+                <Button class="ml-2" size="small" tier="boring" :label="t(`desktop.app.updateRestart`)" @click="applyUpdate" />
             </Notice>
             <!-- A deb or rpm upgrade already replaced this app on disk: the restart onto it is all that is left. -->
             <Notice v-else-if="update.kind === `installed`" tone="info" class="items-center">
                 <span>{{ t(`desktop.app.newerIntenticInstalled`) }}</span>
-                <Button class="ml-2" size="small" severity="secondary" :label="t(`desktop.app.restartIntentic`)" @click="applyUpdate" />
+                <Button class="ml-2" size="small" tier="boring" :label="t(`desktop.app.restartIntentic`)" @click="applyUpdate" />
             </Notice>
             <Notice v-else-if="update.kind === `downloading`" tone="info" class="items-center">{{
                 t(`desktop.app.downloadingIntentic`, { version: update.version, percent: update.percent })
@@ -243,8 +243,7 @@ onUnmounted(() => {
                     <!-- SAYS WHERE IT GOES: the setup came from the workspace, and leaving this page stops nothing. -->
                     <Button
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         class="-my-1 shrink-0"
                         :label="t(`desktop.app.backToWorkspace`)"
                         v-tooltip.left="backTip"
@@ -257,7 +256,7 @@ onUnmounted(() => {
                 <!-- The code this window came back to is older than the platform will accept: not a dead end, one click. -->
                 <Notice v-if="expired" tone="warning" class="items-center text-xs">
                     <span class="flex-1">{{ t(`desktop.app.setupCodeRanOut`) }}</span>
-                    <Button class="ml-2 shrink-0" size="small" severity="secondary" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
+                    <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
                 </Notice>
                 <!-- `=== false`, not `!`: unknown is a real third state here, not yet a warning. -->
                 <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
@@ -304,7 +303,7 @@ onUnmounted(() => {
                     <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup(`retry`)">
                         <template #icon><Icon name="bolt" /></template>
                     </Button>
-                    <button type="button" :class="ui.textAction()" :disabled="running" @click="setUpElsewhere(`stopped`)">
+                    <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="running" @click="setUpElsewhere(`stopped`)">
                         <Icon name="server" class="shrink-0" />
                         <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
                     </button>
@@ -314,23 +313,23 @@ onUnmounted(() => {
                 <footer v-if="!expired" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-subtle">
                     <span v-if="running" class="min-w-0 flex-1">{{ t(`desktop.app.closingWindowDoesntStop`) }}</span>
                     <span v-else class="flex-1" />
-                    <button v-if="running" type="button" :class="ui.textAction(`shrink-0`)" :disabled="stopping" v-action="stopSetup">
+                    <button v-if="running" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? t(`desktop.app.stopping`) : t(`ui.action.stop`) }}
                     </button>
-                    <button v-if="progressShown" type="button" :class="ui.textAction(`shrink-0`)" @click="toggleSetupLog">
+                    <button v-if="progressShown" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" @click="toggleSetupLog">
                         {{ setupLogOpen ? t(`desktop.app.hideLog`) : t(`desktop.app.showLog`) }}
                     </button>
                     <!-- Only beside an open log: away from it, "copy" and "folder" name a thing the reader has not been shown. -->
                     <template v-if="setupLogOpen">
-                        <button type="button" :class="ui.textAction(`shrink-0`)" v-action="copyLog">
+                        <button type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" v-action="copyLog">
                             {{ logCopied ? t(`ui.action.copied`) : t(`desktop.app.copy`) }}
                         </button>
-                        <button v-if="setupLog" type="button" :class="ui.textAction(`shrink-0`)" v-tooltip.top="setupLog" v-action="openLogFolder">
+                        <button v-if="setupLog" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" v-tooltip.top="setupLog" v-action="openLogFolder">
                             {{ t(`desktop.app.openFolder`) }}
                         </button>
                     </template>
                     <!-- A card whose run is over goes when the reader says so; a live one stays, so a later failure has somewhere to land. -->
-                    <button v-if="!running" type="button" :class="ui.textAction(`shrink-0`)" @click="closeSetup">
+                    <button v-if="!running" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" @click="closeSetup">
                         {{ t(`ui.action.dismiss`) }}
                     </button>
                 </footer>
@@ -350,7 +349,7 @@ onUnmounted(() => {
                         </h2>
                         <p v-if="syncSetup.dir" class="font-mono text-2xs break-all text-subtle">{{ syncSetup.dir }}</p>
                     </div>
-                    <Button v-if="syncSetup.error" size="small" severity="secondary" :text="true" class="-my-1 shrink-0" @click="dismissSync">
+                    <Button v-if="syncSetup.error" size="small" tier="quiet" class="-my-1 shrink-0" @click="dismissSync">
                         {{ t(`ui.action.dismiss`) }}
                     </Button>
                 </div>
@@ -386,7 +385,7 @@ onUnmounted(() => {
                     @click="endSession(`restart`)"
                 />
                 <Button v-else class="ml-2 shrink-0" size="small" :label="t(`desktop.requirements.signOutNow`)" @click="endSession(`signout`)" />
-                <button type="button" :class="ui.textAction(`ml-3 shrink-0`)" @click="setUpElsewhere(`requirements`)">
+                <button type="button" :class="ui.textButton({ tone: `quiet` }, `ml-3 shrink-0`)" @click="setUpElsewhere(`requirements`)">
                     <Icon name="server" class="shrink-0" />
                     <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
                 </button>
@@ -410,13 +409,13 @@ onUnmounted(() => {
                 <Notice v-else-if="listError" tone="warning" class="items-start text-2xs">
                     <span class="block font-medium">{{ t(`desktop.app.dockerDidntAnswer`) }}</span>
                     <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
-                    <Button class="mt-2" size="small" severity="secondary" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
+                    <Button class="mt-2" size="small" tier="boring" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
                 </Notice>
                 <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. This
                      computer's own sandbox offers the same start in its section, which is not said twice. -->
                 <Notice v-else-if="engineListening === false && !machineNeedsDocker" tone="warning" icon="box" class="items-center">
                     <span class="min-w-0 flex-1">{{ t(`desktop.device.dockerIsntRunning`) }}</span>
-                    <Button class="ml-2 shrink-0" size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
+                    <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
                 </Notice>
             </template>
 

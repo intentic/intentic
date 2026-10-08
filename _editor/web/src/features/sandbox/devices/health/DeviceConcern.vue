@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/ui";
+import { Button, Icon, toneTint } from "@intentic/ui";
 import type { DeviceAgentOp } from "@intentic/sandbox-contract";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import type { DeviceConcern } from "./deviceAttention";
@@ -26,13 +26,13 @@ const { concern } = defineProps<{
 // the machine every verb would be sent to.
 const emit = defineEmits<{ connect: []; agent: [op: DeviceAgentOp] }>();
 
-// Spelled out per tone, not templated: Tailwind only emits a utility it can see used literally. The two that
-// signal keep <Notice>'s own tint, so they are recognisable as the same rank of thing; `info` is a machine state
-// rather than a fault and takes the page's own surface, which is what stops a sleeping laptop shouting.
+// The two that signal keep <Notice>'s own tint (the strong one, tone.ts), so they are recognisable as the same rank
+// of thing; `info` is a machine state rather than a fault and takes the page's own surface, which is what stops a
+// sleeping laptop shouting.
 const SURFACE: Record<DeviceConcern[`tone`], string> = {
     info: `border-line-subtle bg-content/5`,
-    warning: `border-warning/40 bg-warning/10`,
-    danger: `border-danger/40 bg-danger/10`,
+    warning: toneTint(`warning`),
+    danger: toneTint(`danger`),
 };
 
 const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warning: `text-warning`, danger: `text-danger` };
@@ -63,8 +63,7 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
             :as="RouterLink"
             :to="route"
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             :label="concern.fix.label"
             class="ml-auto shrink-0"
         >
@@ -75,7 +74,7 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
         <Button
             v-else-if="concern.fix?.kind === `agent`"
             size="small"
-            severity="secondary"
+            tier="boring"
             :label="concern.fix.label"
             :loading="running"
             :disabled="busy"
@@ -87,7 +86,7 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
         <Button
             v-else-if="concern.fix?.kind === `connect`"
             size="small"
-            severity="secondary"
+            tier="boring"
             :label="concern.fix.label"
             v-tooltip.top="concern.fix.hint"
             class="ml-auto shrink-0"

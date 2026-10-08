@@ -232,7 +232,7 @@ export const startNotificationSources = (): void => {
                   actions: [
                       {
                           label: t(`ui.action.tryAgain`),
-                          severity: `secondary` as const,
+                          tier: `boring` as const,
                           run: async () => {
                               // allow(silent-catch): still down is this card staying up, which says so already.
                               await checkSession().catch(() => undefined);
@@ -266,7 +266,7 @@ export const startNotificationSources = (): void => {
             actions: [
                 {
                     label: t(`shell.notificationSources.reconnect`),
-                    severity: `secondary` as const,
+                    tier: `boring` as const,
                     run: async () => {
                         await router.push(`/recover`);
                     },
@@ -291,7 +291,7 @@ export const startNotificationSources = (): void => {
             tone: `warning`,
             title: t(`shell.notificationSources.signedIntoGoogle`, { presented }),
             detail: t(`shell.notificationSources.intenticAccountSwitchBefore`, { account }),
-            actions: [{ label: t(`shell.words.switchAccount`), severity: `secondary` as const, run: signInAgain }],
+            actions: [{ label: t(`shell.words.switchAccount`), tier: `boring` as const, run: signInAgain }],
         };
     });
 
@@ -316,7 +316,7 @@ export const startNotificationSources = (): void => {
                       tone: `info`,
                       title: t(`shell.notificationSources.sessionNeedsAttention`),
                       detail: t(`shell.notificationSources.workspaceStillHere`),
-                      actions: [{ label: t(`shell.notificationSources.signInAgain`), severity: `secondary` as const, run: signInAgain }],
+                      actions: [{ label: t(`shell.notificationSources.signInAgain`), tier: `boring` as const, run: signInAgain }],
                   }
                 : undefined;
         }
@@ -378,7 +378,7 @@ export const startNotificationSources = (): void => {
             icon: `refresh`,
             title: said.title,
             detail: said.detail,
-            actions: [{ label: said.action, run: take, severity: `secondary` }],
+            actions: [{ label: said.action, run: take, tier: `boring` as const }],
             dismiss: dismissUpdate,
         };
     });
@@ -398,7 +398,7 @@ export const startNotificationSources = (): void => {
             title: t(`shell.notificationSources.fasterSandboxRunsOn`),
             detail: t(`shell.notificationSources.browserAskToAllow`),
             actions: [
-                { label: t(`ui.action.no`), severity: `secondary` as const, run: (): void => decline(sandboxId) },
+                { label: t(`ui.action.no`), tier: `boring` as const, run: (): void => decline(sandboxId) },
                 {
                     label: t(`shell.notificationSources.allow`),
                     // Probes immediately, inside the click: the friendliest moment to ask a browser for a device

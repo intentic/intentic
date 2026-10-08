@@ -8,6 +8,7 @@ import {
     SandboxResourcesDialog,
     SkeletonSnapshot,
     StatusBadge,
+    toneHover,
     ui,
     vAction,
     vSkeletonSource,
@@ -237,7 +238,8 @@ const removeLogo = async (): Promise<void> => {
                             </button>
                             <button
                                 type="button"
-                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors"
+                                :class="toneHover(`danger`)"
                                 v-action="removeLogo"
                             >
                                 <Icon name="trash" class="shrink-0 text-sm" />{{ t(`sandbox.sandboxOverview.removeLogo`) }}

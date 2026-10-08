@@ -214,7 +214,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
     <div class="flex flex-col gap-6">
         <div class="flex flex-col gap-3">
             <!-- The way back out, above the name rather than beside it, so it is not read as part of the title. -->
-            <RouterLink :to="boardRoute()" :class="ui.linkButton(`inline-flex w-fit items-center gap-1.5 text-2xs`)">
+            <RouterLink :to="boardRoute()" :class="ui.textButton({ size: `xs` }, `inline-flex w-fit items-center`)">
                 <Icon name="chevron-right" class="rotate-180 text-2xs" aria-hidden="true" />
                 {{ t(`sandbox.devicePage.allDevices`) }}
             </RouterLink>
@@ -260,7 +260,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
             <template v-if="shared.door && shared.updateNeeded" #actions>
                 <Button
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="shared.action.label"
                     :loading="ops.agentOp(shared.door) === `upgrade`"
                     :disabled="ops.working.value || ops.agentOp(shared.door) !== undefined"
@@ -295,8 +295,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         :as="RouterLink"
                         :to="distro.connect"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         :label="t(`sandbox.devicePage.connect`)"
                     >
                         <template #icon><Icon name="arrow-up-right" /></template>
@@ -323,8 +322,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     <Button
                         v-if="selection.selectable.value && !selecting"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         :label="t(`sandbox.devicePage.select`)"
                         :disabled="ops.working.value"
                         @click="selecting = true"
@@ -451,7 +449,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="ownerOf(group) && clearable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`sandbox.devicePage.clearBuildOutput`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-clean`)"
                             :disabled="ops.working.value"
@@ -464,7 +462,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="ownerOf(group) && fixable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`sandbox.devicePage.fixAgent`)"
                             :disabled="ops.working.value"
                             v-tooltip.top="conflictTurn(ownerOf(group)!, group).hint"
@@ -478,8 +476,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             :label="group.folder?.paused === true ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-pause`)"
                             :disabled="ops.working.value"
@@ -503,8 +500,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="danger"
-                            :text="true"
+                            tier="quiet" tone="danger"
                             :label="t(`sandbox.words.unpair`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
                             :disabled="ops.working.value"
@@ -526,8 +522,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="port.state !== `mirrored` && ownerOf(group) && commandable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             :label="port.state === `ignored` ? t(`sandbox.devicePage.mirrorPortAgain`) : t(`sandbox.devicePage.dontMirrorPort`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `mirror-ignore`, port.port)"
                             :disabled="ops.working.value"
@@ -552,8 +547,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
                             size="small"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             :label="mirroringOff(group.folder) ? t(`sandbox.devicePage.startMirroring`) : t(`sandbox.devicePage.stopMirroring`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `mirror-off`)"
                             :disabled="ops.working.value"
@@ -637,7 +631,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     <template #control>
                         <Button
                             size="small"
-                            severity="danger"
+                            tone="danger"
                             :label="t(`sandbox.words.revokeAccess`)"
                             :disabled="ops.working.value"
                             @click="ops.confirmingRevoke.value = environment"

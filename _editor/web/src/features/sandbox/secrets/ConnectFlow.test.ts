@@ -3,6 +3,7 @@
 // grant not recognized off the clipboard, and a panel still asking for an address while redeeming the one it has.
 import "@intentic/testing/dom";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { ui as recipes } from "@intentic/ui/recipes";
 import { IconStub } from "@intentic/ui/testing";
 import { installI18n } from "@intentic/ui/i18n";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -38,13 +39,8 @@ jest.mock(`../../chat/run/useChat`, () => ({
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
 jest.mock(`@intentic/ui`, () => ({
-    ui: {
-        inputSm: (extra: string) => extra,
-        textAction: (extra: string) => extra,
-        linkButton: (extra: string) => extra,
-        iconButton: (extra: string) => extra,
-        inputInline: (extra: string) => extra,
-    },
+    // The real recipes: plain class builders, and a stand-in drifts every time the kit grows a variant.
+    ui: recipes,
     // `as`/`href` honoured since the panel's first control is a link to the provider, and its target is asserted here.
     Button: defineComponent({
         props: { label: String, disabled: Boolean, loading: Boolean, as: String, href: String },

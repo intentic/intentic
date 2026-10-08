@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
                     <button
                         v-if="activeTab !== undefined && activeTab.id === panel.peek.value"
                         type="button"
-                        :class="ui.iconButton(`h-7 w-7 rounded`)"
+                        :class="ui.iconButton({ size: `md` })"
                         :aria-label="t(`ui.action.keepOpen`)"
                         v-tooltip.bottom="{ title: t(`ui.action.keepOpen`), note: t(`shell.sidePanel.doubleClickToKeep`) }"
                         @click="keepTab(activeTab.id)"
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
                     <button
                         v-if="beside"
                         type="button"
-                        :class="ui.iconButton(`h-7 w-7 rounded`)"
+                        :class="ui.iconButton({ size: `md` })"
                         :aria-label="t(`shell.sidePanel.showSection`)"
                         :aria-pressed="!fills"
                         v-tooltip.bottom="fills ? t(`shell.sidePanel.showSection`) : t(`shell.sidePanel.fillMiddle`)"
@@ -297,7 +297,7 @@ onBeforeUnmount(() => {
                     <button
                         v-if="activeTab !== undefined && activeHome !== undefined"
                         type="button"
-                        :class="ui.iconButton(`h-7 w-7 rounded`)"
+                        :class="ui.iconButton({ size: `md` })"
                         :aria-label="t(`shell.sidePanel.openIn`, { section: activeHome.label })"
                         v-tooltip.bottom="{ title: t(`shell.sidePanel.openIn`, { section: activeHome.label }) }"
                         @click="openHome(activeTab)"

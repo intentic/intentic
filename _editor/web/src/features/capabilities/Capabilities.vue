@@ -12,6 +12,7 @@ import {
     SegmentedControl,
     SplitView,
     StatusBadge,
+    toneTint,
     ui,
     useDevice,
 } from "@intentic/ui";
@@ -228,7 +229,7 @@ onBeforeUnmount(() => {
                     <!-- Capped below the reading measure: this column holds single-line inputs, not prose. -->
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
                         <!-- Back to the slice the tile was picked from, named rather than a generic "All capabilities". -->
-                        <button type="button" :class="ui.textAction(`mb-4 gap-1`)" @click="back">
+                        <button type="button" :class="ui.textButton({ tone: `quiet` }, `mb-4`)" @click="back">
                             <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
                         </button>
 
@@ -237,7 +238,7 @@ onBeforeUnmount(() => {
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
                             <span class="text-2xs text-muted">{{ t(`capabilities.capabilities.left`, { count: walkQueue.length }) }}</span>
-                            <Button class="ml-auto" :label="t(`ui.action.skip`)" size="small" severity="secondary" text @click="skip" />
+                            <Button class="ml-auto" :label="t(`ui.action.skip`)" size="small" tier="quiet" @click="skip" />
                         </div>
 
                         <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
@@ -260,8 +261,8 @@ onBeforeUnmount(() => {
                                 v-if="soleInstance && selected.kind !== 'devops'"
                                 :label="t(`ui.action.remove`)"
                                 size="small"
-                                severity="danger"
-                                :text="true"
+                                tier="quiet"
+                                tone="danger"
                                 @click="confirmRemoveId = soleInstance.id"
                             >
                                 <template #icon><Icon name="trash" /></template>
@@ -350,7 +351,8 @@ onBeforeUnmount(() => {
                                             v-if="row.session"
                                             :label="t(`capabilities.capabilities.logs`)"
                                             size="small"
-                                            :text="true"
+                                            tier="quiet"
+                                            tone="accent"
                                             @click="viewProcessLogs(row)"
                                         >
                                             <template #icon><Icon name="align-left" /></template>
@@ -358,7 +360,8 @@ onBeforeUnmount(() => {
                                         <Button
                                             :label="row.running ? t(`ui.action.restart`) : t(`ui.action.start`)"
                                             size="small"
-                                            :text="true"
+                                            tier="quiet"
+                                            tone="accent"
                                             :disabled="processBusy === row.id"
                                             @click="startProcess(row)"
                                         >
@@ -368,8 +371,8 @@ onBeforeUnmount(() => {
                                             v-if="row.running"
                                             :label="t(`ui.action.stop`)"
                                             size="small"
-                                            severity="danger"
-                                            :text="true"
+                                            tier="quiet"
+                                            tone="danger"
                                             :disabled="processBusy === row.id"
                                             @click="stopProcess(row)"
                                         >
@@ -429,7 +432,12 @@ onBeforeUnmount(() => {
                                     <template v-else>{{ t(`capabilities.capabilities.addAnother`) }}</template>
                                 </div>
                                 <!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
-                                <button v-if="editing && !selected.singleton" type="button" :class="ui.linkButton(`text-2xs`)" @click="stopEditing">
+                                <button
+                                    v-if="editing && !selected.singleton"
+                                    type="button"
+                                    :class="ui.textButton({ size: `xs` })"
+                                    @click="stopEditing"
+                                >
                                     {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
                                 </button>
                             </div>
@@ -519,7 +527,7 @@ onBeforeUnmount(() => {
                                 />
                             </template>
                             <template v-if="advancedFields(selected).length > 0">
-                                <button type="button" :class="ui.textAction(`gap-1`)" @click="advancedOpen = !advancedOpen">
+                                <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="advancedOpen = !advancedOpen">
                                     <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                                     {{ advancedLabel(selected) }}
                                 </button>
@@ -560,8 +568,7 @@ onBeforeUnmount(() => {
                                     <Button
                                         :label="t(`capabilities.capabilities.notNeeded`)"
                                         size="small"
-                                        severity="secondary"
-                                        text
+                                        tier="quiet"
                                         :loading="dismissRecommendation.isPending.value"
                                         @click="dismiss(selected)"
                                     />
@@ -575,10 +582,10 @@ onBeforeUnmount(() => {
                                 class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
                                 :class="
                                     probeResult.ok
-                                        ? 'border-success/30 bg-success/5 text-content'
+                                        ? toneTint(`success`, `strong`, `text-content`)
                                         : probeResult.checked
-                                          ? 'border-danger/30 bg-danger/5 text-content'
-                                          : 'border-line bg-card text-muted'
+                                          ? toneTint(`danger`, `strong`, `text-content`)
+                                          : `border-line bg-card text-muted`
                                 "
                             >
                                 <Icon
@@ -598,7 +605,7 @@ onBeforeUnmount(() => {
                                 @animationend="shaking = false"
                             >
                                 <!-- The read sits beside the approval, since that's when it matters. -->
-                                <button v-if="auditable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAudit">
+                                <button v-if="auditable" type="button" :class="ui.textButton({ size: `xs` })" @click="startAudit">
                                     {{
                                         updateFrom !== undefined
                                             ? t(`capabilities.capabilities.agentReadWhatChanged`)
@@ -611,8 +618,7 @@ onBeforeUnmount(() => {
                                     class="ml-auto"
                                     :label="t(`capabilities.capabilities.test`)"
                                     size="small"
-                                    severity="secondary"
-                                    text
+                                    tier="quiet"
                                     :loading="probing"
                                     @click="runProbe"
                                 >
@@ -635,7 +641,7 @@ onBeforeUnmount(() => {
             <!-- Step 1: the catalog. -->
             <div v-else class="flex min-h-0 flex-1 flex-col gap-3">
                 <!-- Offered as one action rather than badges to hunt for, above the filter since it's not one. -->
-                <div v-if="walkQueue.length > 0" class="flex flex-wrap items-center gap-3 rounded-lg border border-info/30 bg-info/5 px-4 py-3">
+                <div v-if="walkQueue.length > 0" :class="toneTint(`info`, `soft`, `flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3`)">
                     <Icon name="sparkles" class="text-info" />
                     <div class="min-w-0 flex-1">
                         <div class="text-sm text-content">

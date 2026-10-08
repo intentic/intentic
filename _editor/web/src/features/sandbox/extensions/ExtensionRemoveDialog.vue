@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
+import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, toneTint, ui, vSkeletonSource } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
@@ -138,11 +138,11 @@ const processesLine = computed(() => {
                 <!-- The connections lead, because they are the part nobody expects: entries the owner configured
                  themselves, with credentials in them, that cannot outlive the extension supplying their card. -->
                 <section v-if="plan.connections.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs text-danger`)">
+                    <p :class="ui.sectionLabel({ size: `xs`, tone: `danger` }, `mb-1.5`)">
                         {{ t(`sandbox.extensionRemoveDialog.connectionsRemoved`, { count: plan.connections.length }, plan.connections.length) }}
                     </p>
                     <ul class="flex flex-col gap-1.5">
-                        <li v-for="connection in plan.connections" :key="connection.id" class="rounded border border-danger/40 bg-danger/5 p-2">
+                        <li v-for="connection in plan.connections" :key="connection.id" :class="toneTint(`danger`, `soft`, `rounded border p-2`)">
                             <div class="flex flex-wrap items-baseline gap-x-2">
                                 <span class="font-mono text-xs font-medium text-content">{{ connection.id }}</span>
                                 <StatusBadge variant="neutral" :label="connection.kind" size="xs" />
@@ -164,7 +164,7 @@ const processesLine = computed(() => {
 
                 <!-- Files, settings and processes: the rest of the state, compact because none of it is a surprise. -->
                 <section v-if="plan.files.length > 0 || plan.settings.length > 0 || plan.processes.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRemoveDialog.alsoDeleted`) }}</p>
+                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.alsoDeleted`) }}</p>
                     <!-- `pl-3 -indent-3` hangs the wrap under the text rather than under the dash; several of these lines
                      are long enough to wrap in a narrow modal. -->
                     <ul class="flex flex-col gap-1 text-2xs text-muted">
@@ -181,7 +181,7 @@ const processesLine = computed(() => {
                 </section>
 
                 <section v-if="surfaces.length > 0 || deferred.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRemoveDialog.whatStopsBeing`) }}</p>
+                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.whatStopsBeing`) }}</p>
                     <p v-if="surfaces.length > 0" class="text-2xs text-muted">{{ surfaces.join(` · `) }}.</p>
                     <ul v-if="deferred.length > 0" class="mt-1 flex flex-col gap-0.5">
                         <li v-for="note in deferred" :key="note" class="-indent-3 pl-3 text-2xs text-subtle">— {{ note }}.</li>
@@ -190,7 +190,7 @@ const processesLine = computed(() => {
 
                 <!-- Automations are the quiet failure this whole dialog is for: nothing deletes them, they simply stop. -->
                 <section v-if="plan.automations.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs text-warning`)">
+                    <p :class="ui.sectionLabel({ size: `xs`, tone: `warning` }, `mb-1.5`)">
                         {{ t(`sandbox.extensionRemoveDialog.automationsStop`, { count: plan.automations.length }, plan.automations.length) }}
                     </p>
                     <p class="text-2xs text-muted">
@@ -199,7 +199,7 @@ const processesLine = computed(() => {
                 </section>
 
                 <section v-if="plan.keeps.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRemoveDialog.leftAlone`) }}</p>
+                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.leftAlone`) }}</p>
                     <ul class="flex flex-col gap-0.5">
                         <li v-for="keep in plan.keeps" :key="keep" class="-indent-3 pl-3 text-2xs text-subtle">— {{ keep }}.</li>
                     </ul>
@@ -212,10 +212,10 @@ const processesLine = computed(() => {
         </div>
 
         <template #footer>
-            <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`close`)" />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />
             <Button
                 :label="t(`ui.action.remove`)"
-                severity="danger"
+                tone="danger"
                 autofocus
                 :disabled="plan === undefined || plan.blocked !== undefined"
                 :loading="busy"

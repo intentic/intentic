@@ -29,7 +29,18 @@ flowchart LR
   title short or let the actions run off the edge.
 - **Styling.** `src/styles/index.css` is the one stylesheet import. `theme.ts` points PrimeVue's `--p-*` tokens at
   the CSS variables behind the Tailwind utilities, so light and dark switch at runtime on `[data-mode="dark"]`.
-  Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.
+  Class recipes live in `ui` (`src/lib/ui.ts`), each a `tailwind-variants` recipe: the call names its variants
+  (`ui.iconButton({ size: "lg", tone: "danger" })`, `ui.textButton({ tone: "quiet", size: "xs" })`, `ui.chip({ on })`)
+  and passes layout classes after them, which merge last so layout wins. A size, an ink or a radius is a variant,
+  never an override; the `recipes` check refuses one passed as a class. The old one-argument shape (`ui.x("classes")`)
+  and the retired names (`linkButton`, `textAction`, `inputSm`, `inputInline`, `sectionLabelSm`) still work, because
+  installed extensions call them through the host.
+- **Tones.** `src/lib/tone.ts` is the one tone vocabulary (`success`, `warning`, `danger`, `info`, `neutral`,
+  `primary`) and the only file that spells a tone at a strength: `toneInk`, `toneDot`, `toneWash` (a pill),
+  `toneTint(tone, "strong" | "soft")` (a tinted box's rim and fill), `tonePlate` (a count), `toneHover`, and
+  `diffMark` for a diff's added, removed and changed marks. `<Notice>`, `<StatusBadge>`, the count badge and row tones
+  draw from it; the `tones` check refuses a `bg-danger/10` written anywhere else. `<Button>` takes `tier` (`loud`,
+  `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
   `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
   or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
 - **Motion.** One module, `src/motion/` (`@intentic/ui/motion`), with its stylesheet `src/styles/motion.css`.
@@ -156,7 +167,9 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 - [src/markdown/render.ts](src/markdown/render.ts) — the sanitizing renderer, its parts form and the streaming variant.
 - [src/markdown/figures.ts](src/markdown/figures.ts) — figure fence kinds, their JSON shapes and `splitFigureSegments`.
 - [src/styles/index.css](src/styles/index.css) — the whole stylesheet, in import order.
-- [src/lib/ui.ts](src/lib/ui.ts) — class-string recipes, including the ranked `<Button>` tiers.
+- [src/lib/ui.ts](src/lib/ui.ts) — the class recipes and their variants.
+- [src/lib/tone.ts](src/lib/tone.ts) — the tone vocabulary and the only place a tone gets a strength.
+- [src/components/primitives/button.ts](src/components/primitives/button.ts) — the `<Button>` tiers and how each maps onto PrimeVue.
 
 ## Commands
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, Notice, StatusBadge, timeAgo, ui, useAsyncAction } from "@intentic/ui";
+import { Button, Notice, StatusBadge, timeAgo, toneTint, ui, useAsyncAction } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -160,7 +160,7 @@ const shown = computed(
             <template v-if="unhealthy.autoReverted !== true && extension.previous" #actions>
                 <Button
                     size="small"
-                    severity="warn"
+                    tone="warning"
                     :label="t(`sandbox.extensionUpdateOffer.revertTo`, { ref: short(extension.previous.ref) })"
                     :loading="busy"
                     @click="revert"
@@ -171,12 +171,7 @@ const shown = computed(
         </Notice>
 
         <!-- The offer, under the same name as the row's pill. A security fix wears the danger tone the pill does. -->
-        <div
-            v-if="offer"
-            :id="anchor"
-            class="rounded-lg border px-3 py-2.5"
-            :class="offer.securityFix ? `border-danger/40 bg-danger/5` : `border-info/30 bg-info/5`"
-        >
+        <div v-if="offer" :id="anchor" class="rounded-lg border px-3 py-2.5" :class="toneTint(offer.securityFix ? `danger` : `info`, `soft`)">
             <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                 <Icon
                     :name="offer.securityFix ? `shield` : `arrow-circle-up`"
@@ -233,20 +228,13 @@ const shown = computed(
             <div class="mt-2.5 flex flex-wrap items-center gap-2">
                 <Button v-if="!preview" size="small" :loading="busy" :label="t(`sandbox.extensionUpdateOffer.reviewUpdate`)" @click="stage" />
                 <template v-else>
-                    <Button size="small" :severity="added.length > 0 ? `warn` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
-                    <Button
-                        size="small"
-                        :text="true"
-                        severity="secondary"
-                        :label="t(`ui.action.cancel`)"
-                        :disabled="busy"
-                        @click="preview = undefined"
-                    />
+                    <Button size="small" :tone="added.length > 0 ? `warning` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
+                    <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" :disabled="busy" @click="preview = undefined" />
                 </template>
                 <ActionLink
                     v-if="offer.review"
                     :to="reviewAt(offer.review.conversationId)"
-                    :class="ui.linkButton(`text-2xs`)"
+                    :class="ui.textButton({ size: `xs` })"
                     @activate="openReview(offer.review.conversationId)"
                 >
                     {{ t(`sandbox.extensionUpdateOffer.agentAlreadyReadDiff`) }}
@@ -254,7 +242,7 @@ const shown = computed(
                 <Button
                     v-else-if="!preview"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="t(`sandbox.extensionUpdateOffer.agentReadDiffFirst`)"
                     @click="readDiff"
                 >

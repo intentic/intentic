@@ -303,10 +303,10 @@ const railTip = (lane: PickerLane): Tip => {
     const runtimeDown = providerRuntimeIssue(lead) !== undefined;
     return {
         title: lane.label,
-        tone: runtimeDown || reauth ? `warn` : undefined,
+        tone: runtimeDown || reauth ? `warning` : undefined,
         rows: [
             { label: t(`chat.modelPicker.access`), value: accessBadge(lead) ?? `` },
-            { label: t(`shared.account`), value: reauth ? t(`chat.words.reconnectNeeded`) : ``, tone: `warn` },
+            { label: t(`shared.account`), value: reauth ? t(`chat.words.reconnectNeeded`) : ``, tone: `warning` },
             { label: t(`chat.modelPicker.runtime`), value: runtimeDown ? t(`chat.modelPicker.unavailable`) : ``, tone: `danger` },
         ],
         note: railActive(lane) ? t(`shared.active`) : undefined,

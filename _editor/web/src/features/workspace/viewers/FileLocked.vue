@@ -20,7 +20,7 @@ const locked = computed(() => lockedFile(path));
             <span class="font-semibold">{{ locked.subject }}</span> {{ t(`workspace.fileLocked.keptPrivateBySandbox`) }}
         </template>
         <template v-if="locked.manage" #actions>
-            <Button :as="RouterLink" :to="locked.manage.to" severity="secondary">
+            <Button :as="RouterLink" :to="locked.manage.to" tier="boring">
                 {{ t(`ui.action.open`) }} {{ locked.manage.label }}
                 <Icon name="arrow-right" class="text-xs" />
             </Button>

@@ -39,7 +39,7 @@ it(`draws a string as a plain label`, () => {
 it(`draws a tip as a card of headline, key cap, figures and note`, () => {
     const { anchor, done } = anchored({
         title: `Memory low`,
-        tone: `warn`,
+        tone: `warning`,
         keys: `Shift+Enter`,
         rows: [
             { label: `Resident`, value: `7.4 GiB` },
@@ -52,7 +52,7 @@ it(`draws a tip as a card of headline, key cap, figures and note`, () => {
     const card = box()!;
     expect(card.classList.contains(`ui-tooltip-card`)).toBe(true);
     expect(card.querySelector(`.ui-tip-title`)?.textContent).toBe(`Memory low`);
-    expect(card.querySelector<HTMLElement>(`.ui-tip-dot`)?.dataset[`tone`]).toBe(`warn`);
+    expect(card.querySelector<HTMLElement>(`.ui-tip-dot`)?.dataset[`tone`]).toBe(`warning`);
     expect(card.querySelector(`kbd`)?.textContent).toBe(`Shift+Enter`);
     // A row with nothing to say is dropped rather than drawn as a dangling label.
     expect([...card.querySelectorAll(`dt`)].map((dt) => dt.textContent)).toEqual([`Resident`, `Swap`]);

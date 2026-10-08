@@ -200,7 +200,7 @@ export const followAcross = (): void => {
                   tone: `warning`,
                   title: partial.title,
                   detail: partial.detail,
-                  actions: [{ label: t(`ui.action.tryAgain`), severity: `secondary` as const, run: refreshAcross }],
+                  actions: [{ label: t(`ui.action.tryAgain`), tier: `boring` as const, run: refreshAcross }],
               };
     });
     onUnmounted(releaseNotice);

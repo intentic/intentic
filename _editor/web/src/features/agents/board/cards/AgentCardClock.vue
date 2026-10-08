@@ -73,7 +73,7 @@ const limitTip = computed((): Tip | undefined => {
     if (corner.kind === `back`) {
         return {
             title: t(`agents.agentStatus.usageLimit`),
-            tone: `warn`,
+            tone: `warning`,
             rows: [provider, { label: t(`agents.agentCard.reopens`), value: formatWhen(corner.clock.at, now.value) }],
             ...(corner.unbooked === true ? { note: t(`agents.agentCard.resendNotBooked`) } : {}),
         };
@@ -157,8 +157,7 @@ const coolingTip = computed((): Tip | undefined =>
         <span class="shrink-0 tabular-nums">{{ prompt.elapsed }}</span>
         <Button
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             class="shrink-0"
             :aria-label="t(`agents.agentCard.stopCommand`)"
             v-tooltip.top="{ title: t(`agents.agentCard.stopCommand`), note: t(`agents.agentCard.stopCommandNote`) }"
@@ -183,8 +182,7 @@ const coolingTip = computed((): Tip | undefined =>
         <!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
         <Button
             size="small"
-            severity="secondary"
-            :text="true"
+            tier="quiet"
             class="shrink-0"
             :aria-label="stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`)"
             v-tooltip.top="{ title: stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`), note: t(`agents.agentCard.chatWontWake`) }"

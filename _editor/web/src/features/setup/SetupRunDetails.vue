@@ -52,10 +52,10 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         <div v-if="!desktop && downloads" class="flex flex-col gap-2 border-t border-line pt-3">
             <p class="text-xs text-subtle">{{ t(`setup.setupRunDetails.useDesktopApp`) }}</p>
             <div class="grid grid-cols-2 gap-2">
-                <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" severity="secondary">
+                <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" tier="boring">
                     <template #icon><Icon name="download" /></template>
                 </Button>
-                <Button as="a" :href="DESKTOP_DOWNLOADS.linuxAppImage" label="Linux" severity="secondary">
+                <Button as="a" :href="DESKTOP_DOWNLOADS.linuxAppImage" label="Linux" tier="boring">
                     <template #icon><Icon name="download" /></template>
                 </Button>
             </div>

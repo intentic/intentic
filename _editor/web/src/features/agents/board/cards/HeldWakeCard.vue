@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, timeAgo } from "@intentic/ui";
+import { Button, Icon, timeAgo, toneWash } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { AutomationApproval } from "@intentic/sandbox-contract";
 import { computed } from "vue";
@@ -54,8 +54,8 @@ const autoRunLabel = computed(() => {
         <div class="flex items-center gap-2.5">
             <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
-                <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-warning/15">
-                    <Icon name="pause" class="text-2xs text-warning" />
+                <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full" :class="toneWash(`warning`)">
+                    <Icon name="pause" class="text-2xs" />
                 </span>
             </span>
             <!-- Holds use the live card's weight outside the Attention lane. -->
@@ -65,7 +65,7 @@ const autoRunLabel = computed(() => {
                 :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
                 >{{ entry.title ?? entry.automationId }}</span
             >
-            <span class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ t(`agents.heldWakeCard.held`) }}</span>
+            <span class="ui-status-pill shrink-0 text-2xs font-semibold" :class="toneWash(`warning`)">{{ t(`agents.heldWakeCard.held`) }}</span>
         </div>
         <div v-if="snippet !== undefined" class="truncate text-2xs text-muted">{{ snippet }}</div>
         <div class="flex items-center gap-2.5">
@@ -76,9 +76,10 @@ const autoRunLabel = computed(() => {
             <!-- Compact action buttons use a 44px touch target on coarse pointers. -->
             <Button
                 size="small"
-                severity="danger"
-                :text="true"
-                class="ui-button-thumb shrink-0"
+                tier="quiet"
+                tone="danger"
+                thumb
+                class="shrink-0"
                 :aria-label="t(`agents.heldWakeCard.rejectHeldWake`)"
                 v-tooltip.top="{ title: t(`agents.heldWakeCard.dropWake`), note: t(`agents.heldWakeCard.automationUnchanged`) }"
                 @click.stop="emit(`reject`)"
@@ -87,7 +88,7 @@ const autoRunLabel = computed(() => {
             </Button>
             <Button
                 size="small"
-                class="ui-button-thumb shrink-0"
+                thumb
                 :aria-label="t(`agents.heldWakeCard.approveHeldWake`)"
                 v-tooltip.top="{ title: t(`agents.heldWakeCard.runNow`), note: t(`agents.heldWakeCard.landsOnBoard`) }"
                 @click.stop="emit(`approve`)"

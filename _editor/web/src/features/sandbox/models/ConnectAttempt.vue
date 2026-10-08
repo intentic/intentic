@@ -72,7 +72,7 @@ defineExpose({ reveal });
                 v-if="phase !== `failed`"
                 type="button"
                 :disabled="finishing || phase === `starting`"
-                :class="ui.textAction(`shrink-0 text-xs`)"
+                :class="ui.textButton({ tone: `quiet` }, `shrink-0`)"
                 @click="emit(`cancel`)"
             >
                 {{ t(`ui.action.cancel`) }}
@@ -87,7 +87,7 @@ defineExpose({ reveal });
 
         <div v-else-if="phase === `failed`" class="flex flex-wrap items-center gap-2">
             <Button size="small" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
-            <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.dismiss`)" @click="emit(`dismiss`)" />
+            <Button size="small" tier="quiet" :label="t(`ui.action.dismiss`)" @click="emit(`dismiss`)" />
         </div>
     </section>
 </template>

@@ -108,19 +108,19 @@ const signIn = async (): Promise<void> => {
                 :to="setupTo"
                 :label="notice.action.label"
                 icon-pos="right"
-                severity="secondary"
+                tier="boring"
             >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
-            <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" severity="secondary" @click="signIn">
+            <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" tier="boring" @click="signIn">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->
             <template v-else-if="notice.action?.kind === `billing`">
-                <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" class="ui-button-loud">
+                <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" tier="loud">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
-                <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" severity="secondary" />
+                <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" tier="boring" />
             </template>
         </template>
         <template v-if="recovering || explained" #below>

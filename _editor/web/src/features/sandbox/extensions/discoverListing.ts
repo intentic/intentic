@@ -76,7 +76,7 @@ export const checksTip = (entry: RegistryEntry): Tip | undefined => {
             : { label: t(`sandbox.discoverListing.manifest`), value: checks.manifest };
     return {
         title: t(`sandbox.discoverListing.scanFailed`),
-        tone: `warn`,
+        tone: `warning`,
         rows: [{ label: t(`sandbox.words.commit`), value: checks.sha.slice(0, 7) }, failed],
     };
 };

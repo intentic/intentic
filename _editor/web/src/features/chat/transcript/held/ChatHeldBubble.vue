@@ -94,12 +94,12 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                 ref="editor"
                 v-model="rewording"
                 rows="3"
-                :class="ui.inputSm('w-full resize-y')"
+                :class="ui.input({ size: `sm` }, 'w-full resize-y')"
                 :aria-label="t(`chat.chatQueue.rewordLabel`)"
                 @keydown.esc.prevent="rewording = undefined"
             />
             <div class="flex justify-end gap-1">
-                <Button size="small" :text="true" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
+                <Button size="small" tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
                 <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
             </div>
         </form>

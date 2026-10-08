@@ -56,7 +56,7 @@ const contextRing = computed(() => {
     const warn = pct >= 80;
     const tooltip: Tip = {
         title: t(`chat.chatPaneStatus.context`),
-        tone: warn ? `warn` : undefined,
+        tone: warn ? `warning` : undefined,
         rows: [
             { label: t(`chat.chatPaneStatus.contextUsed`), value: formatTokens(usage.tokens) },
             { label: t(`chat.chatPaneStatus.contextWindow`), value: formatTokens(usage.contextWindow) },
@@ -103,7 +103,11 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
         return {
             icon: `moon`,
             text: t(`chat.chatPaneStatus.cacheCold`),
-            hint: { title: coldWhy(ended.reason), tone: `warn`, rows: [{ label: t(`chat.chatPaneStatus.stoppedAt`), value: formatClock(ended.at) }] },
+            hint: {
+                title: coldWhy(ended.reason),
+                tone: `warning`,
+                rows: [{ label: t(`chat.chatPaneStatus.stoppedAt`), value: formatClock(ended.at) }],
+            },
             tone: `text-warning`,
         };
     }

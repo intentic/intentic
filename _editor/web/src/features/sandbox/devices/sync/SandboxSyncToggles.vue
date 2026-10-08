@@ -131,7 +131,7 @@ const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<
                     :value="folderFor(environment)"
                     spellcheck="false"
                     :aria-label="choices.length > 1 ? undefined : t(`sandbox.sandboxSyncToggles.folderOnComputer`)"
-                    :class="ui.inputSm(`flex-1 font-mono`)"
+                    :class="ui.input({ size: `sm` }, `flex-1 font-mono`)"
                     :style="{ minWidth: fieldFloor(environment) }"
                     @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
                 />
@@ -150,7 +150,7 @@ const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<
         <div class="flex flex-wrap items-center">
             <Button
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
                 :disabled="ops.working.value"
                 v-tooltip.top="{ title: t(`sandbox.words.ontoLocalhost`), note: t(`sandbox.sandboxSyncToggles.noFilesTouched`) }"

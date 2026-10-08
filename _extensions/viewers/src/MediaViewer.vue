@@ -417,7 +417,7 @@ watch(
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">{{ t(`mediaViewer.formatCantPlayedIn`) }}</p>
-            <Button severity="secondary" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`mediaViewer.download`) }} </Button>
+            <Button tier="boring" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`mediaViewer.download`) }} </Button>
         </div>
 
         <!-- Audio files get a centered filename card instead of a picture. -->

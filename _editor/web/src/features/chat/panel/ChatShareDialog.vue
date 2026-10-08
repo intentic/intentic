@@ -131,7 +131,7 @@ const share = async (): Promise<void> => {
         <template #footer>
             <Button v-if="result" :label="t(`ui.action.done`)" size="small" @click="emit(`update:visible`, false)" />
             <template v-else>
-                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="emit(`update:visible`, false)" />
                 <Button :label="t(`chat.chatShareDialog.share`)" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
             </template>
             <CopyButton v-if="result?.url" :text="result.url" :label="t(`ui.action.copyLink`)" />

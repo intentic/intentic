@@ -79,7 +79,7 @@ const setDailyMax = (raw: string): void => {
             <p v-if="eligible.length === 0" class="text-2xs text-warning">
                 {{ t(`gatePanel.gateReadsDeclaredOutput`) }}
             </p>
-            <Button v-else :label="t(`gatePanel.addGate`)" size="small" severity="secondary" class="self-start" @click="add()">
+            <Button v-else :label="t(`gatePanel.addGate`)" size="small" tier="boring" class="self-start" @click="add()">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
@@ -137,7 +137,7 @@ const setDailyMax = (raw: string): void => {
             <GateAccess v-if="gateToken !== undefined" :workflow="{ id: workflow.id, name: workflow.name, gateToken }" />
             <p v-else class="text-2xs text-subtle">{{ t(`gatePanel.savingMintsWebhookUrl`) }}</p>
 
-            <button type="button" :class="ui.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">
+            <button type="button" :class="ui.textButton({ tone: `danger` }, `self-start`)" @click="emit(`patch`, undefined)">
                 {{ t(`gatePanel.removeGateUrlStops`) }}
             </button>
         </template>

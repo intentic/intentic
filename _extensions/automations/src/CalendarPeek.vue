@@ -112,10 +112,10 @@ const openTranscript = (): void => {
         <p class="line-clamp-4 text-2xs leading-relaxed whitespace-pre-wrap text-muted">{{ automation.prompt }}</p>
 
         <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-2.5">
-            <Button :label="t(`automationRow.runNow2`)" size="small" severity="secondary" :text="true" :disabled="busy" @click="emit(`run`)">
+            <Button :label="t(`automationRow.runNow2`)" size="small" tier="quiet" :disabled="busy" @click="emit(`run`)">
                 <template #icon><Icon name="play" /></template>
             </Button>
-            <Button :label="t(`automationRow.edit2`)" size="small" severity="secondary" @click="emit(`edit`)">
+            <Button :label="t(`automationRow.edit2`)" size="small" tier="boring" @click="emit(`edit`)">
                 <template #icon><Icon name="pencil" /></template>
             </Button>
         </div>

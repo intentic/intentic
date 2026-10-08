@@ -253,7 +253,7 @@ const parked = computed(() => streaming.value && !writing.value);
 const landHint = computed((): Tip => {
     const rows = [{ label: t(`shared.changes`), value: changes.pending.value.length }];
     return writing.value
-        ? { title: t(`agents.agentDetail.stillWriting`), tone: `warn`, rows, note: t(`agents.agentDetail.asksToConfirm`) }
+        ? { title: t(`agents.agentDetail.stillWriting`), tone: `warning`, rows, note: t(`agents.agentDetail.asksToConfirm`) }
         : { title: parked.value ? t(`agents.agentDetail.writtenSoFar`) : t(`agents.agentDetail.toWorkspace`), rows };
 });
 // The collaborator's press: who it waits on, and where the ask goes.
@@ -515,7 +515,7 @@ const confirmHandOver = async (): Promise<void> => {
                     v-if="sessionMenuShown"
                     ref="menuAnchor"
                     type="button"
-                    :class="ui.iconButton(`h-7 w-7`)"
+                    :class="ui.iconButton({ size: `md` })"
                     :aria-expanded="menuOpen"
                     @click="menuOpen = !menuOpen"
                     v-tooltip.bottom="t(`agents.agentDetail.sessionActions`)"
@@ -528,7 +528,7 @@ const confirmHandOver = async (): Promise<void> => {
             <Button
                 v-if="remoteName !== undefined"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 class="shrink-0 whitespace-nowrap"
                 @click="crossToAgent"
                 v-tooltip.bottom="t(`agents.agentDetail.switchesWindow`)"
@@ -637,8 +637,8 @@ const confirmHandOver = async (): Promise<void> => {
                 {{ t(`agents.agentDetail.nothingFinalArrivesUncommitted`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingForceLand = false" />
-                <Button size="small" severity="warn" :label="words.landAnyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingForceLand = false" />
+                <Button size="small" tone="warning" :label="words.landAnyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
             </template>
         </Modal>
 
@@ -656,8 +656,8 @@ const confirmHandOver = async (): Promise<void> => {
                 {{ t(`agents.agentDetail.workAlreadyLandedStays`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = false" />
-                <Button size="small" severity="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingDiscard = false" />
+                <Button size="small" tone="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Modal>
 
@@ -688,12 +688,12 @@ const confirmHandOver = async (): Promise<void> => {
                     type="email"
                     autocomplete="off"
                     placeholder="teammate@example.com"
-                    :class="ui.inputSm('min-w-0')"
+                    :class="ui.input({ size: `sm` }, 'min-w-0')"
                 />
             </form>
             <p v-if="handOverError !== undefined" class="mt-2 text-xs text-danger">{{ handOverError }}</p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingHandOver = false" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingHandOver = false" />
                 <Button
                     size="small"
                     :label="t(`agents.agentDetail.handOverConfirm`)"

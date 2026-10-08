@@ -146,7 +146,7 @@ const remove = (path: string): void => {
                 v-for="path in picked"
                 :key="path"
                 type="button"
-                class="ui-chip ui-chip-on group py-0.5 pl-1.5 pr-1 text-xs hover:border-danger"
+                :class="ui.chip({ on: true }, `group py-0.5 pl-1.5 pr-1 text-xs hover:border-danger`)"
                 :aria-label="t(`sandbox.folderPicker.remove`, { path })"
                 @click="remove(path)"
             >
@@ -159,7 +159,7 @@ const remove = (path: string): void => {
 
             <button
                 type="button"
-                :class="ui.linkButton('ml-auto h-auto shrink-0 gap-1 py-0 text-xs text-muted hover:text-content')"
+                :class="ui.textButton({ tone: `quiet` }, 'ml-auto h-auto shrink-0 py-0')"
                 :aria-expanded="open"
                 @click="open = !open"
             >
@@ -187,7 +187,7 @@ const remove = (path: string): void => {
                     <button
                         v-if="openable(row.entry)"
                         type="button"
-                        :class="ui.iconButton('h-6 w-5')"
+                        :class="ui.iconButton({ size: `sm` })"
                         :aria-expanded="opened.has(row.entry.path)"
                         :aria-label="opened.has(row.entry.path) ? t(`sandbox.folderPicker.collapse`, { path: row.entry.path }) : t(`sandbox.folderPicker.expand`, { path: row.entry.path })"
                         v-action="() => expand(row.entry)"
@@ -198,7 +198,7 @@ const remove = (path: string): void => {
                             class="text-2xs"
                         />
                     </button>
-                    <span v-else class="h-6 w-5 shrink-0" />
+                    <span v-else class="h-6 w-6 shrink-0" />
 
                     <button
                         type="button"

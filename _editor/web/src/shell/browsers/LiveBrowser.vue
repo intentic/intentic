@@ -905,8 +905,7 @@ const { floats } = useBrowsersFloating();
                         <button
                             ref="switcherTrigger"
                             type="button"
-                            class="ui-chip mb-1 mr-1.5 shrink-0 self-center px-2 py-1 text-content"
-                            :class="switcherOpen ? `ui-chip-on` : ``"
+                            :class="ui.chip({ on: switcherOpen }, `mb-1 mr-1.5 shrink-0 self-center px-2 py-1 text-content`)"
                             aria-haspopup="menu"
                             :aria-expanded="switcherOpen"
                             :aria-label="t(`browsers.browsers.switchWindow`)"
@@ -970,7 +969,7 @@ const { floats } = useBrowsersFloating();
         <div class="view-header flex h-10 shrink-0 items-center gap-0.5 border-b border-line bg-card px-2">
             <button
                 type="button"
-                :class="ui.iconButton('h-7 w-7 rounded-full')"
+                :class="ui.iconButton({ size: `md`, round: true })"
                 :disabled="!webInFront || !interactive"
                 :aria-label="t(`browsers.browsers.back`)"
                 v-tooltip.bottom="t(`browsers.browsers.back`)"
@@ -981,7 +980,7 @@ const { floats } = useBrowsersFloating();
             <button
                 v-if="!compact"
                 type="button"
-                :class="ui.iconButton('h-7 w-7 rounded-full')"
+                :class="ui.iconButton({ size: `md`, round: true })"
                 :disabled="!webInFront || !interactive"
                 :aria-label="t(`browsers.browsers.forward`)"
                 v-tooltip.bottom="t(`browsers.browsers.forward`)"
@@ -991,7 +990,7 @@ const { floats } = useBrowsersFloating();
             </button>
             <button
                 type="button"
-                :class="ui.iconButton('h-7 w-7 rounded-full')"
+                :class="ui.iconButton({ size: `md`, round: true })"
                 :disabled="front.kind === `preview` ? frontPreview?.framed !== true : !webInFront || !interactive"
                 :aria-label="t(`ui.action.reload`)"
                 v-tooltip.bottom="t(`ui.action.reload`)"
@@ -1039,7 +1038,7 @@ const { floats } = useBrowsersFloating();
                     <button
                         v-if="steppedIn"
                         type="button"
-                        class="ui-chip ui-chip-on ml-1 shrink-0 px-2.5 py-1 font-medium"
+                        :class="ui.chip({ on: true }, `ml-1 shrink-0 px-2.5 py-1 font-medium`)"
                         v-tooltip.bottom="{ title: t(`browsers.browsers.handBack`), note: t(`browsers.browsers.agentCarriesOn`) }"
                         @click="handBack"
                     >
@@ -1076,7 +1075,7 @@ const { floats } = useBrowsersFloating();
                 />
                 <button
                     type="button"
-                    :class="ui.iconButton('h-7 w-7 rounded-full', phoneOn ? 'bg-overlay text-content' : '')"
+                    :class="ui.iconButton({ on: phoneOn, size: `md`, round: true })"
                     :aria-pressed="phoneOn"
                     :aria-label="t(`browsers.phone.toggle`)"
                     v-tooltip.bottom="{ title: t(`browsers.phone.toggle`), note: phoneOn ? phone.label : t(`browsers.phone.note`) }"
@@ -1090,7 +1089,7 @@ const { floats } = useBrowsersFloating();
             <button
                 ref="menuTrigger"
                 type="button"
-                :class="ui.iconButton('h-7 w-7 rounded-full', menuOpen ? 'bg-overlay text-content' : '')"
+                :class="ui.iconButton({ on: menuOpen, size: `md`, round: true })"
                 aria-haspopup="menu"
                 :aria-expanded="menuOpen"
                 :aria-label="t(`browsers.browsers.more`)"
@@ -1258,7 +1257,7 @@ const { floats } = useBrowsersFloating();
                         </form>
                         <p v-if="openError" class="flex flex-wrap items-center justify-center gap-x-2 text-center text-xs text-danger">
                             {{ openError }}
-                            <button type="button" :class="ui.linkButton('my-0 min-h-0')" @click="openOwn(lastOpen)">{{ t(`ui.action.tryAgain`) }}</button>
+                            <button type="button" :class="ui.textButton({ flush: true })" @click="openOwn(lastOpen)">{{ t(`ui.action.tryAgain`) }}</button>
                         </p>
                         <p v-else class="max-w-md text-center text-2xs text-muted">
                             {{ opening ? t(`browsers.browsers.starting`) : t(`browsers.browsers.startCaption`) }}
@@ -1308,7 +1307,7 @@ const { floats } = useBrowsersFloating();
                     <div v-if="watchHint && !interactive" class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
                         <div class="pointer-events-auto flex items-center gap-3 rounded-full border border-line bg-card py-1 pl-3.5 pr-1 shadow-lg">
                             <span class="text-xs text-content">{{ t(`browsers.browsers.watchingOnly`) }}</span>
-                            <button type="button" class="ui-chip ui-chip-on shrink-0 px-2.5 py-1 font-medium" @click="takeOver">
+                            <button type="button" :class="ui.chip({ on: true }, `shrink-0 px-2.5 py-1 font-medium`)" @click="takeOver">
                                 {{ t(`browsers.browsers.takeOver`) }}
                             </button>
                         </div>
@@ -1333,7 +1332,7 @@ const { floats } = useBrowsersFloating();
                             @keydown.esc.prevent="answerDialog(false)"
                         />
                         <div class="flex justify-end gap-2">
-                            <Button v-if="dialog.kind !== `alert`" size="small" severity="secondary" @click="answerDialog(false)">
+                            <Button v-if="dialog.kind !== `alert`" size="small" tier="boring" @click="answerDialog(false)">
                                 {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`ui.action.cancel`) }}
                             </Button>
                             <Button size="small" @click="answerDialog(true)">
@@ -1395,7 +1394,7 @@ const { floats } = useBrowsersFloating();
                                 <Button size="small" class="shrink-0" @click="() => resolveHelp(true)">
                                     {{ t(`chat.words.doneHandBack`) }}
                                 </Button>
-                                <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
+                                <Button size="small" tier="boring" class="shrink-0" @click="() => resolveHelp(false)">
                                     {{ t(`chat.words.cantHelpNow`) }}
                                 </Button>
                             </div>

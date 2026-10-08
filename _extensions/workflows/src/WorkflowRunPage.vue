@@ -87,7 +87,7 @@ const chatLink = (conversationId: string) => {
                 v-if="run.state === `running`"
                 :label="t(`workflowRunPage.stop`)"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :disabled="stop.isPending.value"
                 @click="stopRun()"
             >
@@ -121,14 +121,7 @@ const chatLink = (conversationId: string) => {
                     <span v-if="shown.costUsd" class="text-2xs text-subtle">${{ shown.costUsd.toFixed(2) }}</span>
                 </div>
 
-                <Button
-                    :label="t(`workflowRunPage.openSessionLog`)"
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    as="a"
-                    v-bind="chatLink(shown.conversationId)"
-                >
+                <Button :label="t(`workflowRunPage.openSessionLog`)" size="small" tier="quiet" as="a" v-bind="chatLink(shown.conversationId)">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
 

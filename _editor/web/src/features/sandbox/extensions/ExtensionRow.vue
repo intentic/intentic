@@ -292,7 +292,7 @@ const source = computed<{ words: string; mark?: string }>(() => {
                     <template #actions>
                         <Button
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`sandbox.extensionRow.devBackToPinned`)"
                             :disabled="pending"
                             @click="emit(`devClear`)"
@@ -354,7 +354,7 @@ const source = computed<{ words: string; mark?: string }>(() => {
                                 <button
                                     v-if="tightenable"
                                     type="button"
-                                    :class="ui.linkButton(`text-2xs`)"
+                                    :class="ui.textButton({ size: `xs` })"
                                     @click="startAgent(tightenBrief(tighten))"
                                 >
                                     {{ t(`sandbox.extensionRow.agentGoThrough`) }}
@@ -387,7 +387,7 @@ const source = computed<{ words: string; mark?: string }>(() => {
                             <div v-if="publishable" class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                 <Button
                                     size="small"
-                                    severity="secondary"
+                                    tier="boring"
                                     :label="t(`sandbox.extensionRow.publishWithAgent`)"
                                     @click="startAgent(publishBrief(publish))"
                                 >
@@ -438,7 +438,7 @@ const source = computed<{ words: string; mark?: string }>(() => {
                         <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
                         <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
                     </div>
-                    <Button size="small" severity="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`)">
+                    <Button size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`)">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </footer>

@@ -98,7 +98,7 @@ const when = (at: number): string => {
                     <Button
                         :label="t(`sharedConversations.update`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :disabled="busy !== undefined"
                         v-tooltip.bottom="{ title: t(`sharedConversations.publishLatest`), note: t(`sharedConversations.linkStaysSame`) }"
                         @click="act(share.id, update.mutateAsync)"
@@ -108,7 +108,7 @@ const when = (at: number): string => {
                     <Button
                         :label="t(`sharedConversations.stopSharing`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :disabled="busy !== undefined"
                         @click="act(share.id, remove.mutateAsync)"
                     >

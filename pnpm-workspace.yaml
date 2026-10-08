@@ -393,6 +393,9 @@ catalog:
   sqlite-vec: 0.1.9
   ssh2: 1.17.0
   tailwind-merge: 3.7.0
+  # The kit's variant recipes (_editor/ui/src/lib): variants, compound rules and slots over twMerge, which it
+  # already carries as a peer. Runtime only in @intentic/ui; extensions reach the recipes through the host.
+  tailwind-variants: 3.3.1
   tailwindcss: 4.3.3
   tar-stream: 3.2.2
   testcontainers: 12.2.0

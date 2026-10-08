@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, ui, useLatest } from "@intentic/extension-ui";
+import { diffMark, Icon, ui, useLatest } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { anchorsOf, compareDocx } from "./docxCompare.js";
 import { fitPages, keepFitted } from "./docxFit.js";
@@ -143,10 +143,8 @@ const TICK_CLASS: Record<RedlineEvent["kind"], string> = { changed: `bg-warning`
             <span v-else-if="whole" class="text-subtle">{{ t(`docxCompare.tooDifferent`) }}</span>
             <span class="flex-1"></span>
             <span class="flex items-center gap-2 text-subtle">
-                <ins class="rounded-sm bg-success/15 px-1 text-content underline decoration-success underline-offset-2">{{
-                    t(`docxCompare.legendAdded`)
-                }}</ins>
-                <del class="rounded-sm bg-danger/10 px-1 text-muted line-through decoration-danger">{{ t(`docxCompare.legendRemoved`) }}</del>
+                <ins :class="diffMark(`added`, `inline`, `px-1 text-content`)">{{ t(`docxCompare.legendAdded`) }}</ins>
+                <del :class="diffMark(`removed`, `inline`, `px-1`)">{{ t(`docxCompare.legendRemoved`) }}</del>
             </span>
             <template v-if="events.length > 0">
                 <span class="tabular-nums text-subtle">{{

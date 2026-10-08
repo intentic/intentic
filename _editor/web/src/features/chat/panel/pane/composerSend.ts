@@ -382,7 +382,7 @@ export const useComposerSend = (host: SendHost) => {
         }),
         sendHint: computed((): TooltipValue => {
             if (!host.reachable.value) {
-                return { title: t(`chat.chatPane.sandboxBusy`), tone: `warn`, note: t(`chat.chatPane.keepTyping`) };
+                return { title: t(`chat.chatPane.sandboxBusy`), tone: `warning`, note: t(`chat.chatPane.keepTyping`) };
             }
             // What the press does with nothing connected: opens the model list, keeping the draft.
             if (!connected.value) {
@@ -390,7 +390,7 @@ export const useComposerSend = (host: SendHost) => {
             }
             // A refusal's sentence is the status line's; the greyed button names it.
             const refused = sendRefusalTitle(situation.value);
-            return refused === undefined ? sendHintFor(intent.value, words.value) : { title: refused, tone: `warn` };
+            return refused === undefined ? sendHintFor(intent.value, words.value) : { title: refused, tone: `warning` };
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
         stopLabel: computed(() => (awaitingDecision.value ? t(`chat.composerSend.stopTheTurn`) : t(`chat.composerSend.stopGenerating`))),

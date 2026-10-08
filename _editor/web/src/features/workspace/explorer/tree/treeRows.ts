@@ -166,9 +166,9 @@ export const deadLink = (entry: WorkspaceTreeEntry): boolean => entry.link?.stat
 export const linkTooltip = (link: WorkspaceLink): Tip => {
     const rows = [{ label: t(`workspace.treeRows.target`), value: link.to }];
     return link.state === `broken`
-        ? { title: t(`workspace.treeRows.brokenLink`), tone: `warn`, rows }
+        ? { title: t(`workspace.treeRows.brokenLink`), tone: `warning`, rows }
         : link.state === `outside`
-          ? { title: t(`workspace.treeRows.outsideWorkspace`), tone: `warn`, rows, note: t(`workspace.treeRows.wontOpen`) }
+          ? { title: t(`workspace.treeRows.outsideWorkspace`), tone: `warning`, rows, note: t(`workspace.treeRows.wontOpen`) }
           : { title: t(`workspace.words.symlink`), rows };
 };
 

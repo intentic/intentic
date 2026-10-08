@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { unzipParts } from "./zip/unzip";
-import { Button, Icon, useLatest } from "@intentic/extension-ui";
+import { Button, Icon, ui, useLatest } from "@intentic/extension-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { openEpub, type EpubBook } from "./epub/book";
 import { renderChapter } from "./epub/page";
@@ -71,8 +71,7 @@ watch(
         <div v-if="book !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-1.5 text-2xs">
             <button
                 type="button"
-                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
-                :class="showContents ? `ui-chip-on` : ``"
+                :class="ui.chip({ on: showContents }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
                 :aria-pressed="showContents"
                 @click="showContents = !showContents"
             >
@@ -83,10 +82,10 @@ watch(
                 <span v-if="book.author !== undefined"> · {{ book.author }}</span>
             </span>
             <span class="shrink-0 text-subtle">{{ index + 1 }} / {{ chapters.length }}</span>
-            <Button size="small" severity="secondary" :text="true" :disabled="index === 0" @click="show(index - 1)">
+            <Button size="small" tier="quiet" :disabled="index === 0" @click="show(index - 1)">
                 <Icon name="chevron-left" class="text-2xs" />
             </Button>
-            <Button size="small" severity="secondary" :text="true" :disabled="index >= chapters.length - 1" @click="show(index + 1)">
+            <Button size="small" tier="quiet" :disabled="index >= chapters.length - 1" @click="show(index + 1)">
                 <Icon name="chevron-right" class="text-2xs" />
             </Button>
         </div>

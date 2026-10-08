@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // Per-group "viewed" tick: reader place-keeping, not an approval gate. Two states only; partial progress shows as
 // a count instead of a third glyph. Toggling acts on rows under the current filter, not the whole group.
-import { ui } from "@intentic/ui";
+import { ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
+const { mobile } = useDevice();
 
 const { name, total, viewed } = defineProps<{
     // Heading this belongs to (repo id or module name); named in the tooltip so a sweep states its target.
@@ -21,7 +22,7 @@ const emit = defineEmits<{ toggle: [] }>();
         type="button"
         :class="
             ui.iconButton(
-                `h-5 w-6 rounded max-md:h-8 max-md:w-9`,
+                { size: mobile ? `lg` : `sm` },
                 viewed === total
                     ? `text-success`
                     : viewed > 0

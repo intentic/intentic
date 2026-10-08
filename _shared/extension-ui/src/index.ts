@@ -41,7 +41,16 @@ export {
     // `ChangeStatusMark` is fixed-width, so a column of paths stays aligned whatever status letter lands in it.
     ChangeStatusMark,
     type ChangeStatus,
+    // The kit's recipes: a variant is chosen by name (`ui.iconButton({ size: "lg", tone: "danger" })`), never by
+    // overriding the recipe's own classes.
     ui,
+    type IconButtonVariants,
+    type TextButtonVariants,
+    type InputVariants,
+    type ChipVariants,
+    type SectionLabelVariants,
+    type ButtonTier,
+    type ButtonTone,
     Code,
     // The editable counterpart to `Code`: syntax-coloured text with a caret in it.
     CodeField,
@@ -197,6 +206,23 @@ export {
     freshness,
     timeAgo,
 } from "./format.js";
+// Also reachable as `@intentic/extension-ui/tone`: the one tone vocabulary (ink, dot, wash, tint, plate, hover, and a
+// diff's three marks), so an extension's "danger" is the shell's.
+export {
+    type DiffMark,
+    diffMark,
+    type Signal,
+    type TintWeight,
+    type Tone,
+    toneDot,
+    toneFill,
+    toneHover,
+    toneInk,
+    tonePlate,
+    toneRim,
+    toneTint,
+    toneWash,
+} from "./tone.js";
 // Also reachable as `@intentic/extension-ui/diff`: the edit scripts a viewer marks two versions of a file with.
 export { diffSequence, pairEdits, similarity, wordDiff } from "./diff.js";
 // Also reachable as `@intentic/extension-ui/worker`: work moved off the page, with the page as its fallback.

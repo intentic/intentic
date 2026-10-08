@@ -130,11 +130,11 @@ const dirty = computed(() => {
             <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretHosts.explain`) }}</p>
             <p v-if="stored?.source === `connector`" class="pt-0.5 text-2xs text-subtle">{{ t(`capabilities.secretHosts.fromConnector`) }}</p>
             <div v-if="draft.length > 0" class="flex flex-wrap gap-1 pt-1">
-                <span v-for="host of draft" :key="host" class="ui-chip ui-chip-on gap-1 py-1 pl-2 pr-1 font-mono text-2xs">
+                <span v-for="host of draft" :key="host" :class="ui.chip({ on: true }, `gap-1 py-1 pl-2 pr-1 font-mono text-2xs`)">
                     {{ host }}
                     <button
                         type="button"
-                        :class="ui.iconButton(`size-4 text-subtle`)"
+                        :class="ui.iconButton({ size: `xs`, tone: `subtle` }, `-my-0.5`)"
                         :aria-label="t(`capabilities.secretHosts.removeHost`, { host })"
                         @click="removeHost(host)"
                     >
@@ -151,15 +151,15 @@ const dirty = computed(() => {
                     spellcheck="false"
                     :placeholder="t(`capabilities.secretHosts.placeholder`)"
                     :aria-label="t(`capabilities.secretHosts.addHost`)"
-                    :class="ui.inputSm(`min-w-40 flex-1 font-mono`)"
+                    :class="ui.input({ size: `sm` }, `min-w-40 flex-1 font-mono`)"
                 />
-                <button type="submit" :class="ui.linkButton(`text-2xs`)" :disabled="typed.trim() === ``">
+                <button type="submit" :class="ui.textButton({ size: `xs` })" :disabled="typed.trim() === ``">
                     {{ t(`capabilities.secretHosts.addHost`) }}
                 </button>
             </form>
             <p v-if="typedError" class="pt-1 text-2xs text-warning">{{ typedError }}</p>
             <div class="flex items-center gap-2 pt-2">
-                <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="!dirty" v-action="saveDraft">
+                <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="!dirty" v-action="saveDraft">
                     {{ storedOn ? t(`ui.action.save`) : t(`capabilities.secretHosts.turnOn`) }}
                 </button>
             </div>

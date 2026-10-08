@@ -92,14 +92,9 @@ const conversationGrants = computed(() => policy?.conversations.length ?? 0);
                 <span class="min-w-0 flex-1">{{
                     t(`sandbox.agentPrivacyShield.conversationGrants`, { count: conversationGrants }, conversationGrants)
                 }}</span>
-                <Button
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    :disabled="!ready"
-                    @click="emit(`write`, (current) => ({ ...current, conversations: [] }))"
-                    >{{ t(`sandbox.agentPrivacyShield.takeBackAll`) }}</Button
-                >
+                <Button size="small" tier="quiet" :disabled="!ready" @click="emit(`write`, (current) => ({ ...current, conversations: [] }))">{{
+                    t(`sandbox.agentPrivacyShield.takeBackAll`)
+                }}</Button>
             </span>
         </RowNote>
 

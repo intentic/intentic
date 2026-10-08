@@ -129,7 +129,7 @@ const items = computed<MenuItem[]>(() => {
             </template>
             <template #control>
                 <div class="flex shrink-0 items-center gap-1">
-                    <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
+                    <Button v-if="primary" :label="primary.label" size="small" tier="quiet" tone="accent" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>
                     <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.moreActions`)" @click="menu?.show($event)">

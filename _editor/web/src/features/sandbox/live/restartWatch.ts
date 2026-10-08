@@ -62,7 +62,7 @@ export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebu
     }
     // The card keeps the durable record — the log, its path, the dismissal. This is only the sentence that finds
     // whoever left, which by the time a rebuild lands is nearly everyone.
-    const seeTheLog = [{ label: t(`sandbox.restartWatch.seeLog`), severity: `secondary` as const, run: openEnvironment }];
+    const seeTheLog = [{ label: t(`sandbox.restartWatch.seeLog`), tier: `boring` as const, run: openEnvironment }];
     if (run.phase === `done`) {
         const seconds = rebuildSeconds(run);
         const took = seconds === undefined ? undefined : formatElapsed(seconds);

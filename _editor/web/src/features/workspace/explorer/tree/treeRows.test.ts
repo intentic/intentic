@@ -201,12 +201,12 @@ describe(`the index and the row facts`, () => {
         expect(linkTooltip({ to: `../skills/github` })).toEqual({ title: `Link`, rows: [{ label: `Target`, value: `../skills/github` }] });
         expect(linkTooltip({ to: `../skills/gone`, state: `broken` })).toEqual({
             title: `Broken link`,
-            tone: `warn`,
+            tone: `warning`,
             rows: [{ label: `Target`, value: `../skills/gone` }],
         });
         expect(linkTooltip({ to: `/etc`, state: `outside` })).toEqual({
             title: `Outside workspace`,
-            tone: `warn`,
+            tone: `warning`,
             rows: [{ label: `Target`, value: `/etc` }],
             note: `Sandbox won't open it`,
         });

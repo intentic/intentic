@@ -1,6 +1,6 @@
 <!-- What this conversation still waits on people for, above its composer, whatever its transcript has scrolled past. -->
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
+import { Button, toneRim } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import NeedCard from "./NeedCard.vue";
@@ -19,7 +19,8 @@ const shown = computed(() => open.value.find((need) => need.id === unfolded.valu
 </script>
 
 <template>
-    <div v-if="open.length > 0" class="flex flex-col gap-2 rounded-xl border border-warning/40 bg-card px-3 py-2 text-2xs">
+    <!-- The warning's rim on the card's own fill: the strip holds a form, so it stays as legible as the card it opens. -->
+    <div v-if="open.length > 0" :class="toneRim(`warning`, `strong`, `flex flex-col gap-2 rounded-xl border bg-card px-3 py-2 text-2xs`)">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Icon name="exclamation-circle" class="shrink-0 text-warning" />
             <span class="shrink-0 font-medium text-content">{{ t(`needs.strip.waiting`, { count: open.length }, open.length) }}</span>
@@ -28,8 +29,8 @@ const shown = computed(() => open.value.find((need) => need.id === unfolded.valu
                 v-for="need in open"
                 :key="need.id"
                 size="small"
-                :text="true"
-                :severity="unfolded === need.id ? undefined : `secondary`"
+                tier="quiet"
+                :tone="unfolded === need.id ? `accent` : undefined"
                 class="shrink-0"
                 :aria-expanded="unfolded === need.id"
                 @click="unfolded = unfolded === need.id ? undefined : need.id"

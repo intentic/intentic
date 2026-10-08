@@ -220,12 +220,12 @@ const pushToCi = async (): Promise<void> => {
                 <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" :disabled="adding" @click="openAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
-                <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" severity="secondary" />
+                <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
                 <Button
                     v-if="ciKnown"
                     :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
                     size="small"
-                    :severity="ciStale ? undefined : `secondary`"
+                    :tier="ciStale ? `accent` : `boring`"
                     :disabled="!ciStale"
                     :loading="pushing"
                     @click="pushToCi"
@@ -292,7 +292,7 @@ const pushToCi = async (): Promise<void> => {
                                 <button
                                     v-if="newKeyValid && !newKeyTaken"
                                     type="button"
-                                    :class="ui.textAction(`text-2xs text-link`)"
+                                    :class="ui.textButton({ size: `xs` })"
                                     :disabled="generating"
                                     v-tooltip.top="{
                                         title: t(`sandbox.sandboxSecrets.neverShown`),
@@ -302,7 +302,7 @@ const pushToCi = async (): Promise<void> => {
                                 >
                                     {{ t(`sandbox.sandboxSecrets.generateRandom`) }}
                                 </button>
-                                <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">
+                                <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelAdd">
                                     {{ t(`ui.action.cancel`) }}
                                 </button>
                             </div>

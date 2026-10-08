@@ -345,8 +345,7 @@ defineExpose({ beginRename: actions.beginRename });
                     <Button
                         v-if="clearing[lane.key].size > 0"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         class="shrink-0"
                         :aria-label="clearLabel(lane)"
                         v-tooltip.bottom="{

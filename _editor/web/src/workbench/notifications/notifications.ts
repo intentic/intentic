@@ -1,4 +1,4 @@
-import type { IconName, TooltipValue } from "@intentic/ui";
+import type { ButtonTier, ButtonTone, IconName, TooltipValue } from "@intentic/ui";
 import type { Component } from "vue";
 import { computed, ref, shallowReactive } from "vue";
 import { t } from "@intentic/ui/i18n";
@@ -19,7 +19,9 @@ export type NotificationTone = "done" | "problem" | "info" | "warning" | "danger
 export interface NotificationAction {
     readonly label: string;
     readonly run: () => void | Promise<void>;
-    readonly severity?: "primary" | "secondary" | "warn";
+    /** The button's tier (Button's own vocabulary); a toast's actions default to `boring`, beside the card's own words. */
+    readonly tier?: ButtonTier;
+    readonly tone?: ButtonTone;
     /** A tooltip, where the label alone cannot say what the press costs or which shortcut also does it. */
     readonly hint?: TooltipValue;
 }

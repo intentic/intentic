@@ -19,7 +19,7 @@ const lines = computed(() => notes.map((note) => ({ note, ...noteLines(note) }))
 
 <template>
     <div class="flex flex-col gap-3.5">
-        <h3 :class="ui.sectionLabelSm()">{{ t(`sandbox.sandboxUpdateCard.whatsNew`) }}</h3>
+        <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxUpdateCard.whatsNew`) }}</h3>
         <ul class="flex flex-col gap-3">
             <li v-for="line in lines" :key="line.note" class="flex gap-3">
                 <!-- A small gold lozenge, the house's own mark, rather than a bullet that reads as a list of chores. -->
@@ -30,7 +30,7 @@ const lines = computed(() => notes.map((note) => ({ note, ...noteLines(note) }))
                 </span>
             </li>
         </ul>
-        <a v-if="more > 0" href="https://intentic.dev/changelog/" target="_blank" rel="noopener" :class="ui.linkButton(`ml-[1.125rem] font-medium`)">
+        <a v-if="more > 0" href="https://intentic.dev/changelog/" target="_blank" rel="noopener" :class="ui.textButton(`ml-[1.125rem] font-medium`)">
             {{ t(`sandbox.sandboxUpdateCard.moreInChangelog`, { count: more }, more) }}
             <Icon name="arrow-up-right" class="text-2xs" aria-hidden="true" />
         </a>

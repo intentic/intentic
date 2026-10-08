@@ -12,6 +12,8 @@ import {
     PullToRefresh,
     SegmentedControl,
     SkeletonSnapshot,
+    toneHover,
+    toneWash,
     ui,
     useLoadingReveal,
     usePageBack,
@@ -326,23 +328,13 @@ const onPick = (event: Event): void => {
                 class="bg-card"
             >
                 <template #lead>
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)"
-                        :aria-label="t(`ui.action.back`)"
-                        @click="router.back()"
-                    >
+                    <button type="button" :class="ui.iconButton({ size: `xl` })" :aria-label="t(`ui.action.back`)" @click="router.back()">
                         <Icon name="arrow-left" class="text-lg" />
                     </button>
                 </template>
             </DiffToolbar>
             <div v-else class="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-card px-1">
-                <button
-                    type="button"
-                    :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)"
-                    :aria-label="t(`ui.action.back`)"
-                    @click="router.back()"
-                >
+                <button type="button" :class="ui.iconButton({ size: `xl` })" :aria-label="t(`ui.action.back`)" @click="router.back()">
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ basename(openPath ?? "") }}</span>
@@ -385,13 +377,7 @@ const onPick = (event: Event): void => {
 
         <template v-else>
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
-                <button
-                    v-if="back"
-                    type="button"
-                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
-                    :aria-label="back.label"
-                    @click="back.go()"
-                >
+                <button v-if="back" type="button" :class="ui.iconButton({ size: `xl` })" :aria-label="back.label" @click="back.go()">
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
@@ -402,7 +388,7 @@ const onPick = (event: Event): void => {
                 <SaveActions v-if="maker && segment === 'changes'" />
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, segment === `history` ? `bg-overlay text-content` : ``)"
+                    :class="ui.iconButton({ on: segment === `history`, size: `xl` })"
                     :aria-pressed="segment === 'history'"
                     :aria-label="t(`workspace.workspaceMobile.restorePoints`)"
                     @click="segment = 'history'"
@@ -413,9 +399,7 @@ const onPick = (event: Event): void => {
                 <button
                     v-if="segment === 'files' && !contentMode"
                     type="button"
-                    :class="
-                        ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)
-                    "
+                    :class="ui.iconButton({ size: `xl` }, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)"
                     :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
                     @click="filterSheet = true"
                 >
@@ -424,7 +408,7 @@ const onPick = (event: Event): void => {
                 <!-- One refresh for the row, refetching whichever segment shows; Changes no longer carries its own header row. -->
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
+                    :class="ui.iconButton({ size: `xl` })"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
                     :aria-label="t(`ui.action.refresh`)"
                     :disabled="
@@ -512,8 +496,7 @@ const onPick = (event: Event): void => {
                     <span class="flex-1"></span>
                     <button
                         type="button"
-                        class="ui-chip h-8 shrink-0 gap-1 px-2 font-medium"
-                        :class="search.includeIgnored.value ? `ui-chip-on` : ``"
+                        :class="ui.chip({ on: search.includeIgnored.value }, `h-8 shrink-0 gap-1 px-2 font-medium`)"
                         :aria-pressed="search.includeIgnored.value"
                         @click="search.includeIgnored.value = !search.includeIgnored.value"
                     >
@@ -533,7 +516,7 @@ const onPick = (event: Event): void => {
                     <button
                         v-if="dir !== workspaceDir"
                         type="button"
-                        :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
+                        :class="ui.iconButton({ size: `xl` })"
                         :aria-label="t(`workspace.workspaceMobile.upOneDirectory`)"
                         @click="openDir(parentDir(dir))"
                     >
@@ -612,7 +595,7 @@ const onPick = (event: Event): void => {
                             <span
                                 v-if="specialChip(node.path, words)"
                                 class="ui-status-pill shrink-0 text-2xs font-medium"
-                                :class="specialChip(node.path, words)?.tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-subtle/10 text-subtle'"
+                                :class="toneWash(specialChip(node.path, words)?.tone === `warning` ? `warning` : `neutral`)"
                                 >{{ specialChip(node.path, words)?.label }}</span
                             >
                             <Icon
@@ -736,7 +719,8 @@ const onPick = (event: Event): void => {
                         </button>
                         <button
                             type="button"
-                            class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
+                            class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger"
+                            :class="toneHover(`danger`)"
                             @click="removeEntry(sheetEntry)"
                         >
                             <Icon name="trash" class="text-base" /> {{ t(`ui.action.delete`) }}
@@ -763,7 +747,7 @@ const onPick = (event: Event): void => {
                 @keydown.enter="confirmRename"
             />
             <template #footer>
-                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="cancelRename()" />
+                <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="cancelRename()" />
                 <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>

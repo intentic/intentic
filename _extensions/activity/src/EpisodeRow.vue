@@ -106,7 +106,7 @@ const facts = computed(() =>
                 <button
                     v-if="episode.sessionId"
                     type="button"
-                    :class="ui.linkButton('gap-1 text-2xs')"
+                    :class="ui.textButton({ size: `xs` })"
                     @click="api.chat.openSession(episode.sessionId)"
                 >
                     <Icon name="external-link" class="shrink-0" /> {{ t(`episodeRow.openTranscript`) }}

@@ -1,7 +1,7 @@
 <!-- One thing waiting on a person, opened: what it is and who asked, the agent's own case for it, and its answer, which
      is the same control it has wherever else it is drawn (the need's card, the board's permission, the view's presses). -->
 <script setup lang="ts">
-import { BrandMark, Code, Notice, timeAgo, useNow } from "@intentic/ui";
+import { BrandMark, Code, Notice, timeAgo, toneWash, useNow } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -68,7 +68,10 @@ const ink = computed(() => TONE_INK[props.item.broken === true ? `danger` : prop
                 <span v-if="asked" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle">{{ asked }}</span>
             </div>
             <h2 class="text-lg font-semibold leading-snug text-content">{{ item.title }}</h2>
-            <span v-if="item.group === `blocking`" class="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-medium text-warning">
+            <span
+                v-if="item.group === `blocking`"
+                :class="toneWash(`warning`, `inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-2xs font-medium`)"
+            >
                 <Icon name="pause" />{{ t(`needs.inbox.groupBlocking`) }}
             </span>
         </header>

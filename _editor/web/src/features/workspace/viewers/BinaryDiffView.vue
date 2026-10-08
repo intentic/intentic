@@ -265,7 +265,7 @@ const panes = computed(() =>
                     <button
                         v-if="pane.side.url"
                         type="button"
-                        :class="ui.iconButton(`h-5 w-5 rounded`)"
+                        :class="ui.iconButton({ size: `xs` })"
                         @click="download(pane.side, pane.label.toLowerCase())"
                         v-tooltip.bottom="t(`ui.action.download`)"
                         :aria-label="t(`workspace.binaryDiffView.downloadVersion2`, { toLowerCase: pane.label.toLowerCase(), filename })"
@@ -301,7 +301,7 @@ const panes = computed(() =>
                     <!-- Nothing draws this format: say what it is and hand over the bytes. -->
                     <EmptyState v-else icon="box" :title="t(`workspace.binaryDiffView.binaryFileNoPreview`)" class="h-full">
                         <template v-if="pane.side.url" #actions>
-                            <Button severity="secondary" @click="download(pane.side, pane.label.toLowerCase())">
+                            <Button tier="boring" @click="download(pane.side, pane.label.toLowerCase())">
                                 <Icon name="download" class="text-xs" />
                                 {{ t(`ui.action.download`) }}
                             </Button>

@@ -62,7 +62,7 @@ const commit = (value: string): void => {
         :ref="focusOnMount"
         type="datetime-local"
         :value="toInput(at)"
-        :class="ui.inputSm()"
+        :class="ui.input({ size: `sm` })"
         :aria-label="t(`scheduleControl.goAheadAt`, { label })"
         @change="commit(($event.target as HTMLInputElement).value)"
         @keydown.escape="editing = false"
@@ -71,7 +71,7 @@ const commit = (value: string): void => {
     <button
         v-else
         type="button"
-        :class="ui.textAction()"
+        :class="ui.textButton({ tone: `quiet` })"
         v-tooltip.top="
             at === undefined ? { title: t(`scheduleControl.goesAtOnce`), note: t(`scheduleControl.clickToSchedule`) } : formatTimestamp(at)
         "

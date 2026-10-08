@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { Button, useDevice } from "@intentic/ui";
+import { Button, toneTint, useDevice } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, reasonCopy, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
@@ -76,7 +76,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 
 <template>
     <!-- Nothing was written yet: the worktree still holds every change, so this is a decision point, not a failure. -->
-    <div class="flex shrink-0 flex-col gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5">
+    <div class="flex shrink-0 flex-col gap-1.5 rounded-md border px-2 py-1.5" :class="toneTint(`warning`, `strong`)">
         <span class="text-2xs font-medium text-warning">
             <template v-if="blockedCount === 0">{{ t(`agents.agentConflictReport.couldntReachWorkspacesCopy`) }}</template>
             <template v-else>
@@ -115,10 +115,10 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.landsOnOwnTurn`) }}</span>
             <span class="flex-1"></span>
             <!-- Desktop already shows the conversation in the docked chat; only mobile needs a mode switch to watch it. -->
-            <Button v-if="mobile" size="small" :text="true" class="whitespace-nowrap" @click="emit('chat')">
+            <Button v-if="mobile" size="small" tier="quiet" tone="accent" class="whitespace-nowrap" @click="emit('chat')">
                 {{ t(`agents.agentConflictReport.watch`) }}
             </Button>
-            <Button v-if="streaming" size="small" severity="secondary" :label="t(`ui.action.stop`)" :class="INLINE" @click="emit('stop')" />
+            <Button v-if="streaming" size="small" tier="boring" :label="t(`ui.action.stop`)" :class="INLINE" @click="emit('stop')" />
             <span v-if="streaming" class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.conflictStaysExactly`) }}</span>
         </div>
 
@@ -159,7 +159,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <!-- Written by a Sandbox page, not typed: one press saves exactly those files and lands again. With the agent's own part
                  still unresolved, that land is refused on it alone (nothing applied), and the report narrows to it. -->
             <div v-if="box === undefined && theirs.length > 0 && settingsPages !== undefined" :class="ROW">
-                <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" :disabled="busy" @click="saveSettings">
+                <Button size="small" :tier="mine.length === 0 ? `accent` : `boring`" :class="INLINE" :disabled="busy" @click="saveSettings">
                     <Icon name="check" />{{ t(`agents.agentConflictReport.saveThemAndLand`) }}
                 </Button>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.savesThenLands`) }}</span>
@@ -167,7 +167,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 
             <!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
             <div v-if="box === undefined && theirs.length > 0 && settingsPages === undefined" :class="ROW">
-                <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
+                <Button size="small" :tier="mine.length === 0 ? `accent` : `boring`" :class="INLINE" @click="emit('commit')">
                     <Icon name="file-edit" />{{ t(`agents.agentConflictReport.openChanges`) }}
                 </Button>
                 <!-- The label names where the press goes, since it cannot commit anything itself; the line says what to do there. -->
@@ -178,7 +178,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <div v-if="mergeable" :class="ROW">
                 <Button
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :class="INLINE"
                     :disabled="busy || writing"
                     @click="emit('merge')"

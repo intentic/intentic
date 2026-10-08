@@ -55,7 +55,7 @@ const syncBothWays = (): void => {
 
 <template>
     <section class="flex shrink-0 flex-col gap-1.5 border-t border-line px-3 py-2 text-xs" aria-labelledby="local-bring-back-title">
-        <h2 id="local-bring-back-title" :class="ui.sectionLabelSm()">{{ t(`local.localBringBack.title`) }}</h2>
+        <h2 id="local-bring-back-title" :class="ui.sectionLabel({ size: `xs` })">{{ t(`local.localBringBack.title`) }}</h2>
         <p class="text-muted">
             {{ state.direction === `both` ? t(`local.localBringBack.bothWays`) : t(`local.localBringBack.copyFirst`) }}
         </p>
@@ -65,7 +65,7 @@ const syncBothWays = (): void => {
                     t(`local.localBringBack.changes`, { count: `${step.changes.length}${step.truncated ? `+` : ``}` }, step.changes.length)
                 }}</span>
                 <span class="text-subtle" aria-hidden="true">·</span>
-                <button type="button" :class="ui.linkButton()" @click="review">{{ t(`local.localBringBack.review`) }}</button>
+                <button type="button" :class="ui.textButton()" @click="review">{{ t(`local.localBringBack.review`) }}</button>
             </template>
             <span v-else-if="step.at === `checked`" class="text-content">{{ t(`local.localBringBack.noChanges`) }}</span>
             <span v-else-if="step.at === `bringing`" class="flex items-center gap-1.5 text-muted">
@@ -78,7 +78,7 @@ const syncBothWays = (): void => {
                         : t(`local.localBringBack.broughtSkipped`, { count: step.count, skipped: step.skipped.length }, step.count)
                 }}</span>
                 <span class="text-subtle" aria-hidden="true">·</span>
-                <button type="button" :class="ui.linkButton()" @click="undo">{{ t(`ui.action.undo`) }}</button>
+                <button type="button" :class="ui.textButton()" @click="undo">{{ t(`ui.action.undo`) }}</button>
             </template>
             <span v-else-if="step.at === `restoring`" class="flex items-center gap-1.5 text-muted">
                 <Icon name="spinner" spin class="text-2xs" />{{ t(`local.localBringBack.restoring`) }}
@@ -100,7 +100,7 @@ const syncBothWays = (): void => {
             <Button
                 v-else-if="step.at === `idle` || step.at === `checking` || step.at === `failed`"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :label="t(`local.localBringBack.check`)"
                 :loading="step.at === `checking`"
                 @click="check"
@@ -109,7 +109,7 @@ const syncBothWays = (): void => {
         <button
             v-if="state.direction === `both`"
             type="button"
-            :class="ui.textAction()"
+            :class="ui.textButton({ tone: `quiet` })"
             :disabled="state.switching"
             v-tooltip.top="{ title: t(`local.localBringBack.switchToCopyFirst`), note: t(`local.localBringBack.copyFirstHint`) }"
             @click="switchTo(`to-sandbox`)"
@@ -119,7 +119,7 @@ const syncBothWays = (): void => {
         <button
             v-else-if="state.direction === `to-sandbox`"
             type="button"
-            :class="ui.textAction()"
+            :class="ui.textButton({ tone: `quiet` })"
             :disabled="state.switching"
             @click="confirmingBoth = true"
         >

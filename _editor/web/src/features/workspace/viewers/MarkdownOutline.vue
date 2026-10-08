@@ -40,7 +40,7 @@ watch(
 
 <template>
     <nav :aria-label="t(`workspace.markdownOutline.documentOutline`)" class="flex min-h-0 w-full flex-col gap-2">
-        <span :class="ui.sectionLabel(`text-2xs`)" class="shrink-0 pl-3">{{ t(`workspace.words.outline`) }}</span>
+        <span :class="ui.sectionLabel({ size: `xs` })" class="shrink-0 pl-3">{{ t(`workspace.words.outline`) }}</span>
 
         <SearchBar
             v-if="filterable"

@@ -47,7 +47,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                     <h1 class="text-base font-semibold">{{ t(`desktop.closeConfirm.closeIntentic`) }}</h1>
                     <p class="text-2xs text-muted">{{ t(`desktop.closeConfirm.sandboxesKeepRunningEither`) }}</p>
                 </div>
-                <button type="button" :class="ui.iconButton(`-my-0.5 h-7 w-7`)" :aria-label="t(`ui.action.cancel`)" @click="cancel">
+                <button type="button" :class="ui.iconButton({ size: `md` }, `-my-0.5`)" :aria-label="t(`ui.action.cancel`)" @click="cancel">
                     <Icon name="times" />
                 </button>
             </header>

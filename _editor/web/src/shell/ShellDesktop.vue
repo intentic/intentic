@@ -97,7 +97,7 @@ const tileParts = (tile: SectionTile): string[] =>
 const tileLabel = (tile: SectionTile): string => [tile.label, ...tileParts(tile)].join(` · `);
 // The hover: the name alone, or the name as a card's headline over what the tile is carrying. A warning or danger badge
 // lends the headline its dot, since that tone marks a standing state rather than a count.
-const badgeTone = (tone: ViewBadge[`tone`]): TipTone | undefined => (tone === `warning` ? `warn` : tone === `danger` ? `danger` : undefined);
+const badgeTone = (tone: ViewBadge[`tone`]): TipTone | undefined => (tone === `warning` ? `warning` : tone === `danger` ? `danger` : undefined);
 const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
     const parts = [...tileParts(tile), ...(extra === undefined ? [] : [extra])];
     if (parts.length === 0) {
@@ -660,7 +660,7 @@ const wallpapered = useWallpaperedRoute();
                                 // order they are written in, and the one that loses here is the fade this
                                 // control appears with. The default property list covers colour and opacity
                                 // both, which is exactly the pair this button animates.
-                                ui.iconButton(`mr-1 h-5 w-5 rounded text-subtle transition`),
+                                ui.iconButton({ size: `xs`, tone: `subtle` }, `mr-1 transition`),
                                 `opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100`,
                             ]"
                             :aria-label="t(`shell.shellDesktop.keepOnRail`, { label: tile.label })"

@@ -83,8 +83,8 @@ const progress = computed(() => {
                     v-for="action in selection.actions.value"
                     :key="action.verb"
                     size="small"
-                    :severity="action.verb === `remove` ? `danger` : `secondary`"
-                    :text="true"
+                    tier="quiet"
+                    :tone="action.verb === `remove` ? `danger` : undefined"
                     :label="label(action)"
                     :disabled="ops.working.value"
                     v-tooltip.top="hint(action)"
@@ -94,8 +94,7 @@ const progress = computed(() => {
                 </Button>
                 <Button
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :label="t(`ui.action.cancel`)"
                     :disabled="ops.working.value"
                     @click="emit(`cancel`)"

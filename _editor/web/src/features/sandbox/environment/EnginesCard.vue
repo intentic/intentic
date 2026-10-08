@@ -174,7 +174,7 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                 <Button
                     v-if="engine.previous || engine.running.source === `store`"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :loading="isEngineReverting(engine)"
                     :disabled="isEngineBusy(engine) || !canOperate"
                     :label="

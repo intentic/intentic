@@ -513,8 +513,7 @@ const revoke = async (target: string): Promise<void> => {
                                 v-if="rowRole(member) !== 'maintainer'"
                                 :label="t(`sandbox.words.areas`)"
                                 size="small"
-                                severity="secondary"
-                                :text="true"
+                                tier="quiet"
                                 :disabled="busy || grantsUnread !== undefined"
                                 @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
                             />
@@ -522,15 +521,13 @@ const revoke = async (target: string): Promise<void> => {
                                 v-if="member.status !== 'accepted'"
                                 :label="t(`sandbox.sandboxAccess.resend`)"
                                 size="small"
-                                severity="secondary"
-                                :text="true"
+                                tier="quiet"
                                 :disabled="busy"
                                 @click="resend(member.email)"
                             />
                             <Button
                                 size="small"
-                                severity="danger"
-                                :text="true"
+                                tier="quiet" tone="danger"
                                 :disabled="busy"
                                 :aria-label="t(`sandbox.words.revokeAccess`)"
                                 @click="revoke(member.email)"
@@ -570,7 +567,7 @@ const revoke = async (target: string): Promise<void> => {
                                     autocomplete="off"
                                     placeholder="teammate@example.com"
                                     :class="[
-                                        ui.inputSm('min-w-0 flex-1 basis-56'),
+                                        ui.input({ size: `sm` }, 'min-w-0 flex-1 basis-56'),
                                         emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
                                             ? 'ui-field-error-box'
                                             : '',
@@ -663,7 +660,7 @@ const revoke = async (target: string): Promise<void> => {
                     <Button
                         v-if="!confirmingRevoke"
                         :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
-                        severity="danger"
+                        tone="danger"
                         size="small"
                         :disabled="revokingSessions"
                         @click="
@@ -679,15 +676,14 @@ const revoke = async (target: string): Promise<void> => {
                         <span class="mr-auto text-2xs text-subtle">{{ t(`sandbox.sandboxAccess.sureEveryoneWorkingIn`) }}</span>
                         <Button
                             :label="t(`ui.action.cancel`)"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             size="small"
                             :disabled="revokingSessions"
                             @click="confirmingRevoke = false"
                         />
                         <Button
                             :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
-                            severity="danger"
+                            tone="danger"
                             size="small"
                             :loading="revokingSessions"
                             @click="revokeSessions"

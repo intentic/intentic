@@ -211,7 +211,7 @@ const advancedSummary = computed(() => {
                 <button
                     type="button"
                     v-tooltip.top="t(`stepInspector.deleteStep2`)"
-                    :class="ui.iconButton(`mt-1 text-danger`)"
+                    :class="ui.iconButton({ tone: `danger` }, `mt-1`)"
                     :aria-label="t(`stepInspector.deleteStep2`)"
                     @click="emit(`remove`)"
                 >
@@ -252,7 +252,7 @@ const advancedSummary = computed(() => {
                         <div v-for="(field, index) in fields" :key="index" class="flex flex-wrap items-start gap-1.5">
                             <input
                                 :value="field.name"
-                                :class="[ui.inputSm(), `w-24 font-mono`]"
+                                :class="[ui.input({ size: `sm` }), `w-24 font-mono`]"
                                 :placeholder="t(`stepInspector.name`)"
                                 @input="patchField(index, { name: ($event.target as HTMLInputElement).value })"
                             />
@@ -275,20 +275,14 @@ const advancedSummary = computed(() => {
                             </label>
                             <button
                                 type="button"
-                                :class="ui.iconButton(`text-danger`)"
+                                :class="ui.iconButton({ tone: `danger` })"
                                 :aria-label="t(`stepInspector.removeField`)"
                                 @click="setFields(fields.filter((_, at) => at !== index))"
                             >
                                 <Icon name="trash" />
                             </button>
                         </div>
-                        <Button
-                            :label="t(`stepInspector.addField`)"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            @click="setFields([...fields, newField(fields)])"
-                        >
+                        <Button :label="t(`stepInspector.addField`)" size="small" tier="quiet" @click="setFields([...fields, newField(fields)])">
                             <template #icon><Icon name="plus" /></template>
                         </Button>
                     </div>

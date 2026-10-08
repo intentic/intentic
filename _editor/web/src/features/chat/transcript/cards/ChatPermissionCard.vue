@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentReply, ChildMove, ChildRun } from "@intentic/sandbox-contract";
-import { ContextMenu } from "@intentic/ui";
+import { ContextMenu, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -136,8 +136,7 @@ const allowItems = computed<MenuItem[]>(() => [
                 <button
                     v-if="card.program"
                     type="button"
-                    class="ui-chip mt-px max-w-[min(18rem,100%)] shrink-0"
-                    :class="commandOpen && `ui-chip-on`"
+                    :class="ui.chip({ on: commandOpen }, `mt-px max-w-[min(18rem,100%)] shrink-0`)"
                     :aria-expanded="commandOpen"
                     :aria-label="commandOpen ? t(`chat.chatMessageView.hideCommand`) : t(`chat.chatMessageView.showCommand`)"
                     data-command-pill

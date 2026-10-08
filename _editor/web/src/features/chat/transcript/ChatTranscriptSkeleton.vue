@@ -82,7 +82,7 @@ const retry = (): void => {
             </SkeletonSnapshot>
             <p v-if="stalled" class="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 pt-2 text-2xs text-subtle" role="alert">
                 <span>{{ t(`chat.chatTranscriptSkeleton.takingLonger`) }}</span>
-                <Button size="small" severity="secondary" @click="retry">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+                <Button size="small" tier="boring" @click="retry">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
             </p>
             <p v-else-if="slow" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
                 <Icon name="spinner" spin class="text-2xs" />{{ t(`chat.chatTranscriptSkeleton.stillFetchingConversationSandbox`) }}

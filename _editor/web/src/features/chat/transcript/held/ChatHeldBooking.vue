@@ -66,7 +66,7 @@ const sendNow = (): void => {
     <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact">
         <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
             <span v-if="retimable" ref="changeAnchor" class="inline-flex">
-                <Button size="small" severity="secondary" :text="true" :aria-expanded="changing" @click="changing = !changing">{{ t(`chat.chatHeld.change`) }}</Button>
+                <Button size="small" tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{ t(`chat.chatHeld.change`) }}</Button>
             </span>
             <Button size="small" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>

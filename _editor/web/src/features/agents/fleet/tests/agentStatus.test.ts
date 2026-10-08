@@ -473,7 +473,7 @@ describe("a watch held by a command at a prompt", () => {
             elapsed: `58m`,
             hint: {
                 title: `Waiting for input`,
-                tone: `warn`,
+                tone: `warning`,
                 rows: [
                     { label: `Process`, value: AT_PROMPT.program },
                     { label: `Waiting for`, value: `58m` },

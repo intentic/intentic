@@ -94,7 +94,7 @@ const assurances = computed(() => [
                 </div>
                 <!-- A slot is a machine: stated next to the price. -->
                 <p class="mt-1 text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.perHostedSandbox`) }}</p>
-                <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud mt-3 w-full" @click="emit(`checkout`)" />
+                <Button :label="props.subscribeLabel" :loading="props.working" tier="loud" @click="emit(`checkout`)" />
                 <p class="mt-2 text-center text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.paidThroughStripeCancel`) }}</p>
             </div>
         </div>
@@ -119,7 +119,7 @@ const assurances = computed(() => [
             </div>
         </div>
         <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
+            <Button :label="props.subscribeLabel" :loading="props.working" tier="loud" @click="emit(`checkout`)" />
             <!-- Not "leave": moving the workspace to your own machine costs nothing. -->
             <!-- The rung is named, or setup answers with whatever the surface would have picked — which on this link
                  of all links would be a machine on the platform (setupArrival.ts). -->

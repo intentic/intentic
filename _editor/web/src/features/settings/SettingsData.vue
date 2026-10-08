@@ -81,7 +81,7 @@ const confirmDelete = async (): Promise<void> => {
         <RowGroup :label="t(`settings.settingsData.dataPrivacy`)" :equal-rows="!confirmingDelete && !deleteError">
             <Row icon="download" :title="t(`settings.settingsData.exportMyData`)">
                 <template #control>
-                    <Button :label="t(`settings.settingsData.export`)" severity="secondary" size="small" :loading="exporting" @click="exportData" />
+                    <Button :label="t(`settings.settingsData.export`)" tier="boring" size="small" :loading="exporting" @click="exportData" />
                 </template>
             </Row>
             <Row
@@ -91,25 +91,24 @@ const confirmDelete = async (): Promise<void> => {
                 :description="local ? t(`settings.settingsData.deleteFromWorkspace`) : t(`settings.settingsData.permanentlyRemovesAccountShared`)"
             >
                 <template #control>
-                    <Button v-if="local" :label="t(`settings.settingsData.deleteInWorkspace`)" severity="danger" size="small" :loading="handing" @click="deleteInWorkspace">
+                    <Button v-if="local" :label="t(`settings.settingsData.deleteInWorkspace`)" tone="danger" size="small" :loading="handing" @click="deleteInWorkspace">
                         <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
-                    <Button v-else-if="!confirmingDelete" :label="t(`ui.action.delete`)" severity="danger" size="small" @click="confirmingDelete = true" />
+                    <Button v-else-if="!confirmingDelete" :label="t(`ui.action.delete`)" tone="danger" size="small" @click="confirmingDelete = true" />
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">
                         <span class="mr-auto text-2xs text-subtle">{{ t(`settings.settingsData.sureAccessRevokedBefore`) }}</span>
                         <Button
                             :label="t(`ui.action.cancel`)"
-                            severity="secondary"
-                            text
+                            tier="quiet"
                             size="small"
                             :disabled="deleting"
                             @click="confirmingDelete = false"
                         />
                         <Button
                             :label="t(`settings.settingsData.deleteMyAccount`)"
-                            severity="danger"
+                            tone="danger"
                             size="small"
                             :loading="deleting"
                             @click="confirmDelete"

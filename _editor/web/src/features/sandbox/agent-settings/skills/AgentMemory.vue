@@ -36,8 +36,7 @@ onMounted(() => void load());
                 v-if="missing"
                 :label="t(`sandbox.agentMemory.createFile`)"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :loading="saving"
                 @click="createAndOpen"
             >
@@ -49,8 +48,7 @@ onMounted(() => void load());
                 :to="`/workspace/${MEMORY_FILE}`"
                 :label="t(`sandbox.agentMemory.openFile`)"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
             >
                 <template #icon><Icon name="arrow-up-right" /></template>
             </Button>

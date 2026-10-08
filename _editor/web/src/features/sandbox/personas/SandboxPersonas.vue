@@ -366,7 +366,7 @@ const confirmRemove = async (): Promise<void> => {
                         v-if="personas.length > 0 && newName === undefined"
                         :label="t(`sandbox.sandboxPersonas.addPersona`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         @click="startAdd"
                     >
                         <template #icon><Icon name="plus" /></template>
@@ -416,7 +416,7 @@ const confirmRemove = async (): Promise<void> => {
                                 :disabled="!newValid"
                                 @click="submit"
                             />
-                            <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">
+                            <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="cancelAdd">
                                 {{ t(`ui.action.cancel`) }}
                             </button>
                         </div>

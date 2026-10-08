@@ -63,7 +63,7 @@ const sessionEnd = computed(() => (report.state === `waiting` && (report.waiting
                 </span>
                 <Button
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="
                         sessionEnd !== undefined
                             ? t(`setup.desktopSetupProgress.openSetup`)
@@ -75,7 +75,7 @@ const sessionEnd = computed(() => (report.state === `waiting` && (report.waiting
                     @click="showSetup"
                 />
             </div>
-            <button v-if="sessionEnd !== undefined" type="button" :class="ui.linkButton(`self-start text-2xs`)" @click="emit(`elsewhere`)">
+            <button v-if="sessionEnd !== undefined" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" @click="emit(`elsewhere`)">
                 {{ t(`setup.desktopSetupProgress.useHostedInstead`) }}
             </button>
         </template>
@@ -89,7 +89,7 @@ const sessionEnd = computed(() => (report.state === `waiting` && (report.waiting
                 </span>
                 <Button
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="report.state === `failed` ? t(`setup.desktopSetupProgress.seeWhy`) : t(`setup.desktopSetupProgress.openSetup`)"
                     class="ml-2 shrink-0"
                     @click="showSetup"

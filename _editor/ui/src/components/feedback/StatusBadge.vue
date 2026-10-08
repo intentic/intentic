@@ -1,31 +1,18 @@
 <!-- Status pill: shared chrome for active, error, and pending states. -->
 <script lang="ts">
+import { tv } from "tailwind-variants";
+import { toneDot, toneWash } from "../../lib/tone.js";
 import type { StatusVariant } from "./statusBadge.js";
 
 export type { StatusVariant };
 
-const VARIANT: Record<StatusVariant, string> = {
-    success: `bg-success/10 text-success`,
-    danger: `bg-danger/10 text-danger`,
-    warning: `bg-warning/10 text-warning`,
-    info: `bg-info/10 text-info`,
-    neutral: `bg-subtle/10 text-subtle`,
-    primary: `bg-primary-600/10 text-primary-500`,
-};
-
-const DOT: Record<StatusVariant, string> = {
-    success: `bg-success`,
-    danger: `bg-danger`,
-    warning: `bg-warning`,
-    info: `bg-info`,
-    neutral: `bg-subtle`,
-    primary: `bg-primary-500`,
-};
-
-const SIZE: Record<`sm` | `xs`, string> = {
-    sm: `gap-1.5 text-xs`,
-    xs: `gap-1 text-2xs`,
-};
+// The pill and its dot as one recipe: the tone is the kit's (tone.ts), so a badge saying "danger" is the same red as
+// a notice saying it, and the size is the pill's own.
+const badge = tv({
+    slots: { root: `ui-status-pill whitespace-nowrap font-medium lowercase`, dot: `h-1.5 w-1.5 rounded-full` },
+    variants: { size: { sm: { root: `gap-1.5 text-xs` }, xs: { root: `gap-1 text-2xs` } } },
+    defaultVariants: { size: `sm` },
+});
 </script>
 
 <script setup lang="ts">
@@ -43,8 +30,8 @@ const {
 </script>
 
 <template>
-    <span class="ui-status-pill whitespace-nowrap font-medium lowercase" :class="[VARIANT[variant], SIZE[size]]">
-        <span v-if="dot" class="h-1.5 w-1.5 rounded-full" :class="DOT[variant]"></span>
+    <span :class="badge({ size }).root({ class: toneWash(variant) })">
+        <span v-if="dot" :class="badge().dot({ class: toneDot(variant) })"></span>
         <slot>{{ label }}</slot>
     </span>
 </template>

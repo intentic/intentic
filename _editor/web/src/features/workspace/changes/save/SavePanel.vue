@@ -253,7 +253,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     </button>
                     <button
                         type="button"
-                        :class="ui.iconButton(ROW_ACTION, `hover:bg-danger/10 hover:text-danger`)"
+                        :class="ui.iconButton({ tone: `danger` }, ROW_ACTION)"
                         :disabled="changes.actionBusy.value"
                         @click="actions.ask(file)"
                         v-tooltip.left="t(`workspace.savePanel.changes`, { discard: words.discard })"
@@ -319,8 +319,8 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 </p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
-                <Button size="small" severity="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
+                <Button size="small" tier="quiet" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
+                <Button size="small" tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
             </template>
         </Modal>
     </div>

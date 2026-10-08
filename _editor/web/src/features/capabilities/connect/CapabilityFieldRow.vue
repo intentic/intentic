@@ -107,11 +107,11 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ alarm }}
         </span>
-        <!-- Fix messages use an underlined action link. -->
+        <!-- Fix messages end in an action link. -->
         <span v-else-if="urlFix" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ t(`capabilities.capabilityFieldRow.sandboxContainerLocalhostPoints`) }}
-            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="emit('fix')">
+            <button type="button" :class="ui.textButton({ size: `xs` })" @click.prevent="emit('fix')">
                 {{ t(`capabilities.capabilityFieldRow.useHostDockerInternal`) }}
             </button>
         </span>

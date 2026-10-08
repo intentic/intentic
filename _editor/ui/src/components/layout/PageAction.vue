@@ -51,7 +51,7 @@ const tooltip = computed((): TooltipValue => {
         :is="href === undefined ? `button` : `a`"
         v-if="iconOnly"
         :type="href === undefined ? `button` : undefined"
-        :class="ui.iconButton(`h-8 w-8 text-base disabled:pointer-events-none`)"
+        :class="ui.iconButton({ size: `lg` }, `text-base disabled:pointer-events-none`)"
         :disabled="disabled"
         :aria-label="label"
         v-tooltip.bottom="tooltip"
@@ -61,7 +61,7 @@ const tooltip = computed((): TooltipValue => {
     >
         <Icon :name="icon" />
     </component>
-    <Button v-else :label="label" size="small" :severity="primary ? undefined : `secondary`" :disabled="disabled" v-tooltip.bottom="tooltip">
+    <Button v-else :label="label" size="small" :tier="primary ? `accent` : `boring`" :disabled="disabled" v-tooltip.bottom="tooltip">
         <template #icon><Icon :name="icon" /></template>
     </Button>
 </template>

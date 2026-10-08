@@ -26,7 +26,7 @@ const describeRuntime = (level: `net-admin` | `privileged`): EffectRow =>
               icon: `shield`,
               label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`),
               warn: true,
-              tip: { title: t(`capabilities.capabilityEffects.privileged`), tone: `warn`, note: t(`capabilities.capabilityEffects.forItsDocker`) },
+              tip: { title: t(`capabilities.capabilityEffects.privileged`), tone: `warning`, note: t(`capabilities.capabilityEffects.forItsDocker`) },
           }
         : {
               icon: `shield`,
@@ -101,7 +101,7 @@ const DESCRIBE: Describers = {
         icon: `exclamation-triangle`,
         label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),
         warn: true,
-        tip: { title: t(`capabilities.capabilityEffects.runsInApp`), tone: `warn`, note: t(`capabilities.capabilityEffects.trustedOnly`) },
+        tip: { title: t(`capabilities.capabilityEffects.runsInApp`), tone: `warning`, note: t(`capabilities.capabilityEffects.trustedOnly`) },
     }),
     // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a session
     // cookie; both are removed together.

@@ -61,11 +61,11 @@ watch(() => [before, after, at, compare] as const, load, { immediate: true });
         <!-- A pair nothing could draw as one: said, with the readings that can still be had. -->
         <EmptyState v-if="error" tone="danger" :title="error" class="h-full">
             <template #actions>
-                <Button severity="secondary" @click="emit(`text`)">
+                <Button tier="boring" @click="emit(`text`)">
                     <Icon name="robot" class="text-xs" />
                     {{ t(`workspace.compareDiffView.showTextInstead`) }}
                 </Button>
-                <Button severity="secondary" @click="emit(`sides`)">
+                <Button tier="boring" @click="emit(`sides`)">
                     <Icon name="split-columns" class="text-xs" />
                     {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                 </Button>

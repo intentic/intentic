@@ -80,6 +80,11 @@ export const sourceAliases = (): Record<string, string> => ({
     // Failure shape, severity order and duplicate-collapsing as plain data, used by non-rendering composables and
     // their tests; <Notice>/<NoticeStack> still come from the barrel.
     "@intentic/ui/notice": fromRoot("_editor/ui/src/components/feedback/notice.ts"),
+    // The tone vocabulary and the class recipes, DOM-free, for a pure module that builds a class table (a status's
+    // pill, a stance's chip) and is read by a unit test in the node environment.
+    "@intentic/ui/tone": fromRoot("_editor/ui/src/lib/tone.ts"),
+    "@intentic/ui/recipes": fromRoot("_editor/ui/src/lib/ui.ts"),
+    "@intentic/ui/button": fromRoot("_editor/ui/src/components/primitives/button.ts"),
     // The count chip's tone plate and its 99+ cap, read by viewBadge.ts, which registry.test.ts imports in the node
     // environment; through the barrel that would boot useTheme and touch `document` at import.
     "@intentic/ui/count-badge": fromRoot("_editor/ui/src/components/feedback/countBadge.ts"),
@@ -169,6 +174,7 @@ export const sourceAliases = (): Record<string, string> => ({
     // kit. Resolving to the published artifact would make the app ask itself for components it hasn't provided yet.
     "@intentic/extension-ui/names": fromRoot("_shared/extension-ui/names.mjs"),
     "@intentic/extension-ui/format": fromRoot("_shared/extension-ui/src/format.ts"),
+    "@intentic/extension-ui/tone": fromRoot("_shared/extension-ui/src/tone.ts"),
     "@intentic/extension-ui/i18n": fromRoot("_shared/extension-ui/src/i18n.ts"),
     "@intentic/extension-ui/diff": fromRoot("_shared/extension-ui/src/diff.ts"),
     "@intentic/extension-ui/worker": fromRoot("_shared/extension-ui/src/worker.ts"),

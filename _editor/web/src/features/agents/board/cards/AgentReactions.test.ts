@@ -15,7 +15,12 @@ const me = ref<string | undefined>(`ada@example.com`);
 // already in this file's graph never returns.
 jest.mock("@intentic/ui", () => {
     return {
-        ui: { iconButton: () => `` },
+        ui: {
+            iconButton: () => ``,
+            // The chip's own class and lit state, which the page-sized mark is asserted by.
+            chip: (variants?: { on?: boolean }, ...extra: unknown[]) =>
+                [`ui-chip`, variants?.on === true && `ui-chip-on`, ...extra].filter((arg) => typeof arg === `string`).join(` `),
+        },
         // Draws its slot when open, since whether the picker is open — and what it then offers — is half of what this
         // component does; anchoring and placement are the overlay's own business, tested where it lives.
         ResponsiveOverlay: defineComponent({

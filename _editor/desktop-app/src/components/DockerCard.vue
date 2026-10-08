@@ -117,14 +117,14 @@ const canOpen = computed(
             <Button
                 v-if="canOpen"
                 size="small"
-                :severity="hinted ? undefined : `secondary`"
+                :tier="hinted ? `accent` : `boring`"
                 :label="t(`desktop.docker.openDockerDesktop`)"
                 @click="emit(`open`)"
             />
             <Button
                 v-if="!starting && outcome === `notInstalled`"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :label="t(`desktop.docker.getDockerDesktop`)"
                 @click="emit(`install`)"
             />

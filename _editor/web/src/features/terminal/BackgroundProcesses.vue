@@ -84,7 +84,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                 <button
                     v-if="row.running || (row.session && !row.extensionId)"
                     type="button"
-                    :class="ui.iconButton(`hover:bg-content/10 hover:text-danger`)"
+                    :class="ui.iconButton({ tone: `danger` }, `hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="stop(row)"
                     v-tooltip.top="t(`ui.action.stop`)"

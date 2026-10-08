@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DerivedDiff, DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract";
-import { Button, EmptyState, formatElapsed } from "@intentic/ui";
+import { Button, EmptyState, formatElapsed, Notice } from "@intentic/ui";
 import { messageOr, useLatest, useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
@@ -149,14 +149,7 @@ const filename = computed(() => basename(path));
                 <span class="shrink-0 text-subtle">{{ t(`workspace.derivedDiffView.formattingNotShown`) }}</span>
                 <span v-if="changedLabel" class="shrink-0 tabular-nums text-content">{{ changedLabel }}</span>
                 <span class="flex-1"></span>
-                <Button
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    class="shrink-0"
-                    @click="emit(`sides`)"
-                    v-tooltip.bottom="t(`workspace.diffToolbar.wholeVersions`)"
-                >
+                <Button size="small" tier="quiet" class="shrink-0" @click="emit(`sides`)" v-tooltip.bottom="t(`workspace.diffToolbar.wholeVersions`)">
                     <Icon name="split-columns" class="text-[0.7rem]" /> {{ t(`workspace.diffToolbar.beforeAfter`) }}
                 </Button>
             </div>
@@ -165,10 +158,7 @@ const filename = computed(() => basename(path));
                 <Icon name="info-circle" class="shrink-0 text-[0.7rem]" />
                 <span>{{ t(`workspace.derivedDiffView.textSameInBothVersions`) }}</span>
             </div>
-            <div v-if="truncated" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
-                <Icon name="exclamation-triangle" class="shrink-0 text-[0.7rem]" />
-                <span>{{ t(`workspace.derivedDiffView.longDocumentOnlyStart`) }}</span>
-            </div>
+            <Notice v-if="truncated" tone="warning" size="sm" strip>{{ t(`workspace.derivedDiffView.longDocumentOnlyStart`) }}</Notice>
             <!-- Every cap and degradation the conversions hit, shown rather than stored: a dropped style is a change this cannot see. -->
             <ConversionNotes :notes="notes" />
 
@@ -180,7 +170,7 @@ const filename = computed(() => basename(path));
                     </span>
                 </template>
                 <template #actions>
-                    <Button severity="secondary" @click="emit(`sides`)">
+                    <Button tier="boring" @click="emit(`sides`)">
                         <Icon name="split-columns" class="text-xs" />
                         {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                     </Button>
@@ -219,11 +209,11 @@ const filename = computed(() => basename(path));
 
         <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full">
             <template #actions>
-                <Button severity="secondary" @click="load()">
+                <Button tier="boring" @click="load()">
                     <Icon name="refresh" class="text-xs" />
                     {{ t(`ui.action.tryAgain`) }}
                 </Button>
-                <Button severity="secondary" @click="emit(`sides`)">
+                <Button tier="boring" @click="emit(`sides`)">
                     <Icon name="split-columns" class="text-xs" />
                     {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                 </Button>

@@ -130,7 +130,7 @@ const onFieldKey = (event: KeyboardEvent): void => {
             v-if="compact || cover === undefined"
             ref="anchor"
             type="button"
-            :class="compact ? compactClass : ui.iconButton(open ? `bg-overlay text-content` : ``)"
+            :class="compact ? compactClass : ui.iconButton({ on: open })"
             aria-haspopup="dialog"
             :aria-expanded="open"
             :aria-pressed="compact ? cover !== undefined : undefined"
@@ -141,7 +141,7 @@ const onFieldKey = (event: KeyboardEvent): void => {
             <Icon name="book" :class="compact ? `text-xs` : ``" />
         </button>
         <!-- The chosen name, lit, as the one state the home is in that its tiles would not explain; × goes back to them. -->
-        <span v-else class="ui-chip ui-chip-on h-6 cursor-default gap-0 p-0" v-tooltip.bottom="tip">
+        <span v-else :class="ui.chip({ on: true }, `h-6 cursor-default gap-0 p-0`)" v-tooltip.bottom="tip">
             <!-- The anchor is this button, not the chip: a chooser closed without a choice hands the keyboard back to it. -->
             <button
                 ref="anchor"

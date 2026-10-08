@@ -64,7 +64,7 @@ const switchAccount = async (): Promise<void> => {
             >. Ask its owner to grant you access: this clears automatically the moment it's granted.
         </p>
         <template #actions>
-            <Button :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" severity="secondary" @click="switchAccount">
+            <Button :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" tier="boring" @click="switchAccount">
                 <template #icon><Icon name="user" /></template>
             </Button>
         </template>

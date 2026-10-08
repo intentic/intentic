@@ -325,12 +325,12 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
                 <Icon name="history" class="shrink-0 text-xs" />
                 <span class="truncate">{{ t(`onlyOfficeViewer.originalKept`) }}</span>
                 <span aria-hidden="true">·</span>
-                <button type="button" :class="ui.linkButton(`shrink-0 font-medium`)" @click="confirmingRestore = true">
+                <button type="button" :class="ui.textButton(`shrink-0 font-medium`)" @click="confirmingRestore = true">
                     {{ t(`onlyOfficeViewer.restoreOriginal`) }}
                 </button>
             </span>
             <span class="flex-1" />
-            <Button v-if="editOffered" size="small" severity="secondary" :text="true" v-tooltip.bottom="t(`onlyOfficeViewer.editHint`)" @click="edit">
+            <Button v-if="editOffered" size="small" tier="quiet" v-tooltip.bottom="t(`onlyOfficeViewer.editHint`)" @click="edit">
                 <Icon name="pencil" class="text-xs" /> {{ t(`onlyOfficeViewer.edit`) }}
             </Button>
         </div>
@@ -339,9 +339,9 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             <Notice v-if="note.kind === 'conflict'" tone="warning">
                 <span class="block">{{ t(`onlyOfficeViewer.changedOnDisk`) }}</span>
                 <span class="mt-1 flex flex-wrap gap-3">
-                    <button type="button" :class="ui.linkButton(`font-medium`)" @click="settle(`overwrite`)">{{ t(`onlyOfficeViewer.keepMine`) }}</button>
-                    <button type="button" :class="ui.linkButton(`font-medium`)" @click="settle(`copy`)">{{ t(`onlyOfficeViewer.keepBoth`) }}</button>
-                    <button type="button" :class="ui.linkButton(`font-medium`)" @click="settle(`reload`)">{{ t(`onlyOfficeViewer.discardMine`) }}</button>
+                    <button type="button" :class="ui.textButton(`font-medium`)" @click="settle(`overwrite`)">{{ t(`onlyOfficeViewer.keepMine`) }}</button>
+                    <button type="button" :class="ui.textButton(`font-medium`)" @click="settle(`copy`)">{{ t(`onlyOfficeViewer.keepBoth`) }}</button>
+                    <button type="button" :class="ui.textButton(`font-medium`)" @click="settle(`reload`)">{{ t(`onlyOfficeViewer.discardMine`) }}</button>
                 </span>
             </Notice>
             <Notice
@@ -374,7 +374,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
                 <template v-if="problem !== undefined">
                     <Icon name="exclamation-circle" class="shrink-0 text-xs" />
                     <span class="min-w-0 flex-1">{{ problem }}</span>
-                    <Button size="small" severity="secondary" :text="true" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    <Button size="small" tier="quiet" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
                 </template>
                 <template v-else-if="status?.state === 'pulling'">
                     <ProgressRing :value="percent ?? 0" :size="14" :stroke="2" />
@@ -383,7 +383,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
                 <template v-else-if="status?.state === 'not-started'">
                     <Icon name="file-edit" class="shrink-0 text-xs" />
                     <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.textUntilEditor`) }}</span>
-                    <Button size="small" severity="secondary" @click="start">
+                    <Button size="small" tier="boring" @click="start">
                         {{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}
                     </Button>
                 </template>
@@ -404,12 +404,12 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             <template v-if="failure">
                 <Icon name="exclamation-circle" class="text-4xl text-subtle" />
                 <p class="max-w-sm text-sm text-muted">{{ failure }}</p>
-                <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
             </template>
             <template v-else-if="status?.state === 'docker-off'">
                 <Icon name="file-edit" class="text-4xl text-subtle" />
                 <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.onlyofficeDocsRunsContainer`, { detail: status.detail }) }}</p>
-                <a v-bind="capabilitiesLink" :class="ui.linkButton(`mt-1`)">{{ t(`onlyOfficeViewer.openCapabilities`) }}</a>
+                <a v-bind="capabilitiesLink" :class="ui.textButton(`mt-1`)">{{ t(`onlyOfficeViewer.openCapabilities`) }}</a>
             </template>
             <template v-else-if="status?.state === 'not-started'">
                 <Icon name="file-edit" class="text-4xl text-subtle" />
@@ -441,12 +441,12 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             <template v-else-if="status?.state === 'no-address'">
                 <Icon name="exclamation-circle" class="text-4xl text-subtle" />
                 <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.editorNeedsAddressBrowser`) }}</p>
-                <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
             </template>
             <template v-else-if="status?.state === 'error'">
                 <Icon name="exclamation-circle" class="text-4xl text-subtle" />
                 <p class="max-w-sm text-sm text-muted">{{ status.detail }}</p>
-                <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
             </template>
             <template v-else>
                 <Icon name="spinner" spin class="text-4xl text-subtle" />

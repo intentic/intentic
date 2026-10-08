@@ -34,7 +34,7 @@ const emit = defineEmits<{ hostedRollback: [] }>();
         </p>
         <!-- Own block so the column's stretch doesn't draw a small button at full width. -->
         <div v-if="hosted">
-            <Button :label="t(`sandbox.sandboxUpdateCard.rollBackToPrevious`)" size="small" severity="secondary" @click="emit(`hostedRollback`)" />
+            <Button :label="t(`sandbox.sandboxUpdateCard.rollBackToPrevious`)" size="small" tier="boring" @click="emit(`hostedRollback`)" />
         </div>
         <HostRecreate v-else-if="slug" :slug="slug" action="Roll back" />
     </div>

@@ -423,7 +423,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                      waits on them: what agents ask while they work is answered from Needs you, never here. -->
                 <div v-else-if="isEmpty" v-skeleton-source="`approvals.queue`" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
                     <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
-                    <a v-bind="needsLink" :class="ui.linkButton()">{{ t(`approvalsView.seeWhatNeedsYou`) }}</a>
+                    <a v-bind="needsLink" :class="ui.textButton()">{{ t(`approvalsView.seeWhatNeedsYou`) }}</a>
                 </div>
 
                 <div v-else v-skeleton-source="`approvals.queue`" class="flex flex-col gap-6">
@@ -440,7 +440,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip && isPost(item)"
                                     type="button"
-                                    :class="ui.iconButton(`h-8 w-8`, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
+                                    :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
                                     :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
                                     :aria-pressed="edit.isEditing(item)"
                                     v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
@@ -451,7 +451,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton({ size: `lg`, tone: `danger` })"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
                                     v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"
@@ -462,7 +462,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     v-if="canShip"
                                     :label="t(`approvalsView.retry`)"
                                     size="small"
-                                    severity="secondary"
+                                    tier="boring"
                                     :disabled="save.isPending.value"
                                     @click="settled(() => save.mutateAsync({ ...item, status: `approved` }))"
                                 >
@@ -500,7 +500,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             <button
                                 v-if="canShip"
                                 type="button"
-                                :class="ui.linkButton()"
+                                :class="ui.textButton()"
                                 :disabled="save.isPending.value"
                                 @click="approvingAll = true"
                             >
@@ -527,7 +527,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip && isPost(item)"
                                     type="button"
-                                    :class="ui.iconButton(`h-8 w-8`, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
+                                    :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
                                     :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
                                     :aria-pressed="edit.isEditing(item)"
                                     v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
@@ -538,7 +538,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton({ size: `lg`, tone: `danger` })"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
                                     v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"
@@ -604,8 +604,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     v-if="canShip && request.dismissed !== true"
                                     :label="t(`approvalsView.keepOff`)"
                                     size="small"
-                                    severity="secondary"
-                                    :text="true"
+                                    tier="quiet"
                                     :disabled="dismissHooks.isPending.value"
                                     @click="keepHooksOff(request)"
                                 />
@@ -645,8 +644,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     v-if="canShip"
                                     :label="wake.autoRunAt !== undefined ? t(`approvalsView.cancel`) : t(`approvalsView.reject2`)"
                                     size="small"
-                                    severity="secondary"
-                                    :text="true"
+                                    tier="quiet"
                                     :disabled="rejectWake.isPending.value"
                                     :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.cancelItem`, { item: wakeName(wake) }) : t(`approvalsView.reject`, { item: wakeName(wake) })"
                                     @click="dropWake(wake)"
@@ -696,7 +694,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     v-if="canShip"
                                     :label="t(`approvalsView.stop`)"
                                     size="small"
-                                    severity="secondary"
+                                    tier="boring"
                                     :disabled="save.isPending.value"
                                     :aria-label="t(`approvalsView.stopPutBackIn`, { item: headline(item) })"
                                     v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
@@ -739,7 +737,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="ui.iconButton(`hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton({ tone: `danger` })"
                                     :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
                                     v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
                                     @click="rejecting = item"

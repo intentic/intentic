@@ -184,8 +184,7 @@ const add = async (): Promise<void> => {
             <Button
                 v-if="!adding"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :label="t(`sandbox.deviceRunners.addRunner`)"
                 :disabled="busy !== undefined || door.device.online !== true"
                 @click="adding = true"
@@ -200,12 +199,12 @@ const add = async (): Promise<void> => {
                 v-model="asked"
                 type="text"
                 :placeholder="t(`sandbox.deviceRunners.nameEGRog`)"
-                :class="ui.inputSm(`w-44`)"
+                :class="ui.input({ size: `sm` }, `w-44`)"
                 @keydown.enter.prevent="add()"
                 @keydown.esc.prevent="adding = false"
             />
             <Button size="small" :label="t(`ui.action.create`)" :disabled="asked === `` || nameError !== undefined" @click="add()" />
-            <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="adding = false" />
+            <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="adding = false" />
             <span v-if="nameError" class="text-2xs text-danger">{{ nameError }}</span>
         </RowNote>
 
@@ -236,7 +235,7 @@ const add = async (): Promise<void> => {
                     <Button
                         v-if="runner.parity === `outdated` && runner.online"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :label="t(`ui.action.update`)"
                         :disabled="busy !== undefined || door.device.online !== true"
                         @click="run(`update`, runner.id)"
@@ -244,16 +243,14 @@ const add = async (): Promise<void> => {
                     <Button
                         v-if="syncable(runner)"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         :label="syncing === runner.id ? t(`sandbox.deviceRunners.syncing`) : t(`sandbox.deviceRunners.syncSettings`)"
                         :disabled="syncing !== undefined || busy !== undefined"
                         @click="sync(runner.id)"
                     />
                     <Button
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         :label="t(`ui.action.remove`)"
                         :disabled="busy !== undefined || door.device.online !== true"
                         @click="run(`remove`, runner.id)"

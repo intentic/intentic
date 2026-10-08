@@ -94,25 +94,20 @@ const allowOrigin = async (origin: string): Promise<void> => {
 
                 <template v-else>
                     <!-- Refused first: it is the one line here that asks for an action. -->
-                    <div
-                        v-for="probe in refused"
-                        :key="probe.origin"
-                        class="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs"
-                    >
-                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
-                        <span class="min-w-0 flex-1">
-                            <code class="font-mono text-2xs text-content">{{ probe.origin }}</code>
-                            <span class="text-muted">{{ t(`visitorChatInstallDialog.askedTurnedAway`, { lastSeenAt: since(probe.lastSeenAt) }) }}</span>
-                        </span>
-                        <Button
-                            size="small"
-                            severity="secondary"
-                            :label="t(`visitorChatInstallDialog.allow`)"
-                            :loading="adding === probe.origin"
-                            :aria-label="t(`visitorChatInstallDialog.allowToLoadChat`, { origin: probe.origin })"
-                            @click="allowOrigin(probe.origin)"
-                        />
-                    </div>
+                    <Notice v-for="probe in refused" :key="probe.origin" tone="warning">
+                        <code class="font-mono text-2xs text-content">{{ probe.origin }}</code>
+                        <span class="text-muted">{{ t(`visitorChatInstallDialog.askedTurnedAway`, { lastSeenAt: since(probe.lastSeenAt) }) }}</span>
+                        <template #actions>
+                            <Button
+                                size="small"
+                                tier="boring"
+                                :label="t(`visitorChatInstallDialog.allow`)"
+                                :loading="adding === probe.origin"
+                                :aria-label="t(`visitorChatInstallDialog.allowToLoadChat`, { origin: probe.origin })"
+                                @click="allowOrigin(probe.origin)"
+                            />
+                        </template>
+                    </Notice>
 
                     <div v-for="probe in loaded" :key="probe.origin" class="flex items-center gap-2 px-1 text-xs">
                         <Icon name="check-circle" class="shrink-0 text-2xs text-success" />

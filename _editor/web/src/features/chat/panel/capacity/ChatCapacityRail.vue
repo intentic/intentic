@@ -159,7 +159,7 @@ const staleTip = computed((): Tip | undefined => {
                   { label: t(`chat.chatCapacityRail.lastRead`), value: lastReads.length === 0 ? `` : formatAge(Math.min(...lastReads)) },
               ]),
     ];
-    return { title: t(`chat.chatCapacityRail.notReRead`), tone: `warn`, rows };
+    return { title: t(`chat.chatCapacityRail.notReRead`), tone: `warning`, rows };
 });
 
 // Everything the one-line blocked row leaves out: which accounts, what each provider said, and who can fix it.
@@ -189,7 +189,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                 ? t(`chat.chatCapacityRail.fixAdmin`)
                 : t(`chat.chatCapacityRail.fixWait`);
     const names = entry.names.length <= 3 ? entry.names.join(`, `) : entry.count;
-    return { title, tone: `warn`, rows: [{ label: t(`chat.chatCapacityRail.accounts`), value: names }], note };
+    return { title, tone: `warning`, rows: [{ label: t(`chat.chatCapacityRail.accounts`), value: names }], note };
 };
 </script>
 
@@ -212,7 +212,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
             </span>
             <button
                 type="button"
-                :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
+                :class="ui.textButton({ tone: `subtle`, size: `xs` })"
                 :disabled="measuring"
                 :aria-label="remeasureLabel"
                 @click="remeasure"

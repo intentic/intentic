@@ -253,7 +253,7 @@ const startTip = computed((): Tip | undefined => {
             { label: t(`shared.terminal`), value: startSession.value },
             target.installed
                 ? { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installed`) }
-                : { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installFirst`), tone: `warn` },
+                : { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installFirst`), tone: `warning` },
         ],
         note: target.installed ? t(`preview.previewPanel.upInSeconds`) : t(`preview.previewPanel.takesMinutes`),
     };
@@ -361,7 +361,7 @@ watch(
             :label="compact ? undefined : t(`ui.action.stop`)"
             :aria-label="t(`ui.action.stop`)"
             size="small"
-            severity="secondary"
+            tier="boring"
             :disabled="busy"
             @click="act(stop)"
         >
@@ -370,7 +370,7 @@ watch(
         <button
             v-if="target.session"
             type="button"
-            :class="ui.iconButton(`h-7 w-7 rounded-full`)"
+            :class="ui.iconButton({ size: `md`, round: true })"
             :aria-label="t(`preview.previewPanel.openDevServersTerminal`)"
             v-tooltip.bottom="t(`shared.terminal`)"
             @click="terminal.openFocused(target.session!)"
@@ -391,7 +391,7 @@ watch(
         <!-- The list has answered and this app is not on it: a repo removed, a port taken back. -->
         <EmptyState v-else-if="!target" icon="eye-slash" :title="t(`browsers.preview.gone`)" :line="t(`browsers.preview.goneLine`)" class="flex-1">
             <template #actions>
-                <Button :label="t(`browsers.browsers.closeTab`)" size="small" severity="secondary" @click="emit(`close`)" />
+                <Button :label="t(`browsers.browsers.closeTab`)" size="small" tier="boring" @click="emit(`close`)" />
             </template>
         </EmptyState>
 
@@ -424,8 +424,8 @@ watch(
                 </i18n-t>
             </template>
             <template #actions>
-                <Button :label="t(`ui.action.tryAgain`)" size="small" severity="secondary" @click="resolvePreview()" />
-                <Button :as="RouterLink" to="/sandbox/ports" :label="t(`preview.previewPanel.openPorts`)" size="small" severity="secondary" />
+                <Button :label="t(`ui.action.tryAgain`)" size="small" tier="boring" @click="resolvePreview()" />
+                <Button :as="RouterLink" to="/sandbox/ports" :label="t(`preview.previewPanel.openPorts`)" size="small" tier="boring" />
             </template>
         </EmptyState>
 
@@ -456,7 +456,7 @@ watch(
                     <Button
                         :label="forwarding === server.port ? t(`preview.previewPanel.opening`) : t(`shared.preview`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :disabled="forwarding !== undefined"
                         @click="previewServer(server.port)"
                     />
@@ -479,7 +479,7 @@ watch(
                     :disabled="forwarding !== undefined"
                     @click="previewServer(target.job.port)"
                 />
-                <Button :label="t(`ui.action.stop`)" size="small" severity="secondary" :disabled="busy" @click="act(stop)" />
+                <Button :label="t(`ui.action.stop`)" size="small" tier="boring" :disabled="busy" @click="act(stop)" />
             </template>
         </EmptyState>
 
@@ -504,7 +504,7 @@ watch(
                     v-if="target.session"
                     :label="t(`preview.previewPanel.openTerminal`)"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     @click="terminal.openFocused(target.session!)"
                 />
                 <!-- Restart appears only after the wait becomes a verdict. -->

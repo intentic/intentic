@@ -1,6 +1,7 @@
 import type { Directive, DirectiveBinding } from "vue";
 import { placeAnchored, type Side } from "./anchorPlacement.js";
 import { isTip } from "./tipText.js";
+import type { Signal } from "./tone.js";
 
 /* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive.
 
@@ -15,8 +16,12 @@ const ARROW = 4; // px: half the arrow's width, mirrored by the border-width in 
 
 type Modifier = Side | "overflow" | "lines";
 
-/** Colours a tip's headline dot or one of its figures. */
-export type TipTone = "info" | "ok" | "warn" | "danger";
+/** Colours a tip's headline dot or one of its figures: the kit's own tone vocabulary (tone.ts). */
+export type TipTone = Signal;
+
+// `ok` and `warn` are the names this type had before there was one: retired here, still read at runtime because
+// installed extensions built against the old type pass them through the host.
+const toneOf = (tone: TipTone | `ok` | `warn`): Signal => (tone === `ok` ? `success` : tone === `warn` ? `warning` : tone);
 
 /** One fact on a tip card: a word or two, and the figure or name it comes to. */
 export interface TipRow {
@@ -103,7 +108,7 @@ const drawTip = (doc: Document, body: HTMLElement, tip: Tip): void => {
     const head = part(doc, `div`, `ui-tip-head`);
     if (tip.tone !== undefined) {
         const dot = part(doc, `span`, `ui-tip-dot`);
-        dot.dataset[`tone`] = tip.tone;
+        dot.dataset[`tone`] = toneOf(tip.tone);
         head.appendChild(dot);
     }
     head.appendChild(part(doc, `span`, `ui-tip-title`, tip.title));
@@ -118,7 +123,7 @@ const drawTip = (doc: Document, body: HTMLElement, tip: Tip): void => {
             list.appendChild(part(doc, `dt`, ``, row.label));
             const value = part(doc, `dd`, ``, String(row.value));
             if (row.tone !== undefined) {
-                value.dataset[`tone`] = row.tone;
+                value.dataset[`tone`] = toneOf(row.tone);
             }
             list.appendChild(value);
         }

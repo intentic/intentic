@@ -70,8 +70,7 @@ const start = (): Promise<void> =>
                                   : t(`sandbox.words.rebuildNow`)
                         "
                         size="small"
-                        :severity="text ? `secondary` : undefined"
-                        :text="text"
+                        :tier="text ? `quiet` : `accent`"
                         :loading="busy"
                         @click="start"
                     >

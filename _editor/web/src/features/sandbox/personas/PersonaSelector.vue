@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Persona } from "@intentic/sandbox-contract";
 import { personaBoundsWords } from "./personaBounds";
-import { Icon, ui } from "@intentic/ui";
+import { Icon, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, useId } from "vue";
@@ -63,7 +63,7 @@ const rename = createInlineRename(
 
         <button
             type="button"
-            :class="ui.iconButton('absolute left-0.5 top-0.5 size-6 text-subtle hover:text-content')"
+            :class="ui.iconButton({ tone: `subtle` }, `absolute left-0.5 top-0.5`)"
             :aria-label="`${label}, ${t(`sandbox.sandboxPersonas.renamePersona`)}`"
             v-tooltip.top="t(`sandbox.sandboxPersonas.renamePersona`)"
             @click="rename.begin()"
@@ -72,7 +72,7 @@ const rename = createInlineRename(
         </button>
         <button
             type="button"
-            :class="ui.iconButton('absolute right-0.5 top-0.5 size-6 text-subtle hover:text-danger')"
+            :class="ui.iconButton({ tone: `danger` }, 'absolute right-0.5 top-0.5')"
             :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
             :aria-describedby="nameId"
             v-tooltip.top="t(`sandbox.sandboxPersonas.removePersona2`)"
@@ -93,7 +93,7 @@ const rename = createInlineRename(
                 size="1"
                 autocomplete="off"
                 spellcheck="false"
-                :class="ui.inputInline('w-full min-w-0 px-1 text-xs')"
+                :class="ui.input({ size: `inline` }, 'w-full min-w-0 px-1 text-xs')"
                 @keydown.enter.stop.prevent="rename.commit()"
                 @keydown.esc.stop.prevent="rename.cancel()"
                 @blur="rename.blurCommit()"
@@ -101,7 +101,7 @@ const rename = createInlineRename(
             />
             <button
                 type="button"
-                :class="ui.iconButton('size-6')"
+                :class="ui.iconButton()"
                 :aria-label="t(`ui.action.save`)"
                 :disabled="rename.busy"
                 @mousedown.prevent
@@ -110,12 +110,9 @@ const rename = createInlineRename(
                 <Icon name="check" class="text-2xs" />
             </button>
         </div>
-        <span
-            v-if="rename.error !== undefined"
-            :id="errorId"
-            role="alert"
-            class="absolute inset-x-0 top-full z-10 break-words rounded border border-danger/30 bg-card p-2 text-xs text-danger shadow-lg"
-            >{{ rename.error }}</span
-        >
+        <!-- Floats over the tiles below, so the notice sits on an opaque card of its own. -->
+        <div v-if="rename.error !== undefined" class="absolute inset-x-0 top-full z-10 rounded-lg bg-card shadow-lg">
+            <Notice :id="errorId" tone="danger" role="alert" class="break-words">{{ rename.error }}</Notice>
+        </div>
     </div>
 </template>

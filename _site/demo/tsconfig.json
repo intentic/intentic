@@ -21,6 +21,8 @@
             "@intentic/code-read/langs": ["../../_tools/code-read/src/langs.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
             "@intentic/ui/notice": ["../../_editor/ui/src/components/feedback/notice.ts"],
+            "@intentic/ui/tone": ["../../_editor/ui/src/lib/tone.ts"],
+            "@intentic/ui/recipes": ["../../_editor/ui/src/lib/ui.ts"],
             "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
             "@intentic/ui/series": ["../../_editor/ui/src/components/charts/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],

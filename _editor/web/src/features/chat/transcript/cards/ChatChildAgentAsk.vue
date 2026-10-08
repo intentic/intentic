@@ -80,8 +80,7 @@ const choose = async (): Promise<void> => {
             v-if="repointable"
             ref="chip"
             type="button"
-            class="ui-chip max-w-full self-start text-content"
-            :class="{ 'ui-chip-on': staged !== undefined }"
+            :class="ui.chip({ on: staged !== undefined }, `max-w-full self-start text-content`)"
             :disabled="disabled"
             :aria-label="t(`chat.chatChildAgentAsk.change`, { run: line })"
             v-tooltip.top="{ title: t(`chat.chatChildAgentAsk.changeRun`), note: t(`chat.chatChildAgentAsk.modelAccountEffort`) }"
@@ -99,7 +98,13 @@ const choose = async (): Promise<void> => {
         <span v-if="facts" class="text-2xs leading-snug text-subtle">{{ facts }}</span>
         <span v-if="changedFrom" class="flex flex-wrap items-center gap-x-2 text-2xs leading-snug text-muted">
             <span>{{ t(`chat.chatChildAgentAsk.changedFrom`, { run: changedFrom }) }}</span>
-            <button v-if="staged !== undefined" type="button" :class="ui.textAction(`text-2xs`)" :disabled="disabled" @click="emit(`repoint`, undefined)">
+            <button
+                v-if="staged !== undefined"
+                type="button"
+                :class="ui.textButton({ tone: `quiet`, size: `xs` })"
+                :disabled="disabled"
+                @click="emit(`repoint`, undefined)"
+            >
                 {{ t(`chat.chatChildAgentAsk.useAgentsPick`) }}
             </button>
         </span>

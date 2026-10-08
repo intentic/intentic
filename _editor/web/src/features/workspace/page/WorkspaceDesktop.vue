@@ -838,7 +838,7 @@ const includeTip = computed((): Tip => ({
                     <SaveActions v-if="maker && layout.sidebarPanel.value === 'changes'" />
                     <button
                         type="button"
-                        :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
+                        :class="ui.iconButton({ on: layout.sidebarPanel.value === 'history' })"
                         @click="layout.setSidebarPanel('history')"
                         v-tooltip.bottom="{ title: words.restorePoints, note: words.restorePointsHint }"
                         :aria-pressed="layout.sidebarPanel.value === 'history'"
@@ -896,7 +896,8 @@ const includeTip = computed((): Tip => ({
                                     type="button"
                                     :class="
                                         ui.iconButton(
-                                            `h-4 w-4 rounded font-mono text-3xs leading-none text-subtle`,
+                                            { size: `xs`, tone: `subtle` },
+                                            `font-mono text-3xs leading-none`,
                                             toggle.state.value ? `bg-primary-600/20 text-link` : ``,
                                         )
                                     "
@@ -981,7 +982,7 @@ const includeTip = computed((): Tip => ({
                         <button
                             v-if="!contentMode"
                             type="button"
-                            :class="ui.iconButton(`h-auto w-auto shrink-0 rounded-md px-1.5 py-0.5 hover:bg-transparent`)"
+                            :class="ui.iconButton({ size: `xs` }, `shrink-0 hover:bg-transparent`)"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAll`)"
                             :aria-label="t(`workspace.workspaceDesktop.collapseAllFolders`)"
@@ -1068,7 +1069,7 @@ const includeTip = computed((): Tip => ({
                         <!-- The explorer control shows when a split pane is hidden. -->
                         <button
                             type="button"
-                            :class="ui.iconButton(`relative mx-1 h-7 w-7 self-center`)"
+                            :class="ui.iconButton({ size: `md` }, `relative mx-1 self-center`)"
                             @click="toggleSidebar()"
                             v-tooltip.bottom="explorerTooltip"
                             :aria-label="t(`workspace.workspaceDesktop.toggleExplorer`)"
@@ -1085,7 +1086,7 @@ const includeTip = computed((): Tip => ({
                         <button
                             v-if="homeCovered"
                             type="button"
-                            :class="ui.iconButton(`mr-1 h-7 w-7 self-center`)"
+                            :class="ui.iconButton({ size: `md` }, `mr-1 self-center`)"
                             @click="showHome"
                             v-tooltip.bottom="homeTooltip"
                             :aria-label="t(`workspace.workspaceDesktop.showHome`)"

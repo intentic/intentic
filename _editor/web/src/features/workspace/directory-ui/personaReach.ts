@@ -53,7 +53,7 @@ export const lensRefuses = (personas: readonly Persona[], path: string): boolean
 export const reachTip = (name: string, reach: PersonaReach): Tip => {
     const persona = { label: t(`workspace.words.persona`), value: name };
     if (reach.readsNothing) {
-        return { title: t(`workspace.workspaceDesktop.viewing`), tone: `warn`, rows: [persona], note: t(`workspace.personaReach.noFileAccess`) };
+        return { title: t(`workspace.workspaceDesktop.viewing`), tone: `warning`, rows: [persona], note: t(`workspace.personaReach.noFileAccess`) };
     }
     if (reach.folders.length === 0) {
         return { title: t(`workspace.workspaceDesktop.viewing`), rows: [persona, { label: t(`shared.folders`), value: t(`workspace.personaReach.everywhere`) }] };

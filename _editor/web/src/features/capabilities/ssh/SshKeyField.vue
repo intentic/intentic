@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
             <span v-if="fresh && stored" class="text-2xs text-warning">{{ t(`capabilities.sshKeyField.replacesOldKey`) }}</span>
             <span class="flex flex-wrap items-center gap-x-1.5 text-2xs text-muted">
                 {{ t(`capabilities.sshKeyField.privateHalfStays`) }}
-                <button type="button" :class="ui.linkButton(`text-2xs underline`)" :disabled="generating" @click.prevent="generate">
+                <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="generating" @click.prevent="generate">
                     {{ t(`capabilities.sshKeyField.generateNewKey`) }}
                 </button>
             </span>
@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
             <Button
                 :label="stored ? t(`capabilities.sshKeyField.generateNewKey`) : t(`capabilities.sshKeyField.generateKey`)"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :loading="generating"
                 @click="generate"
             >

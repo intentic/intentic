@@ -339,7 +339,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
     <RowGroup :label="providerName">
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
         <template v-if="rows.length > 0 && !signingInHere" #actions>
-            <Button v-for="way in ways" :key="way.via" size="small" severity="secondary" :label="way.label" :disabled="busy" @click="ask(way.via)">
+            <Button v-for="way in ways" :key="way.via" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
@@ -390,8 +390,8 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                 <Button
                     :label="t(`ui.action.disconnect`)"
                     size="small"
-                    severity="danger"
-                    :text="true"
+                    tier="quiet"
+                    tone="danger"
                     :loading="accountBusy === row.busy"
                     @click="row.disconnect()"
                 />
@@ -452,7 +452,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         <!-- One sign-in at a time: said before the press that would end the other one, with the way back to it. -->
         <RowNote v-else-if="otherLive" variant="note" icon="info-circle">
             <span>{{ t(`connect.providerPanel.otherLive`, { other: otherName, provider: providerName }) }}</span>
-            <button type="button" :class="ui.linkButton(`ml-2 text-xs`)" @click="emit(`show`, otherLive)">
+            <button type="button" :class="ui.textButton(`ml-2`)" @click="emit(`show`, otherLive)">
                 {{ t(`connect.providerPanel.showOther`, { other: otherName }) }}
             </button>
         </RowNote>

@@ -12,7 +12,7 @@ const toggle = (event: Event): void => popover.value?.toggle(event);
 </script>
 
 <template>
-    <Button :label="label ?? t(`sharePreview.share`)" size="small" severity="secondary" @click="toggle">
+    <Button :label="label ?? t(`sharePreview.share`)" size="small" tier="boring" @click="toggle">
         <template #icon><Icon name="link" /></template>
     </Button>
     <Popover ref="popover">

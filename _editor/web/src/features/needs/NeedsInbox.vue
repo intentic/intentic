@@ -105,7 +105,7 @@ const titleOf = (conversationId: string): string => agentById(conversationId)?.t
                     <template v-else>
                         <template v-for="item in opened(compact)" :key="item.key">
                             <!-- On a phone the item is a page of its own; the way back names where it goes. -->
-                            <button v-if="compact" type="button" :class="ui.textAction(`mb-4 gap-1`)" @click="back">
+                            <button v-if="compact" type="button" :class="ui.textButton({ tone: `quiet` }, `mb-4`)" @click="back">
                                 <Icon name="arrow-left" class="text-2xs" /> {{ t(`needs.inbox.back`) }}
                             </button>
                             <InboxDetail :item="item" />

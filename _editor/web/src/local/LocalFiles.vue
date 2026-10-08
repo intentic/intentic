@@ -218,7 +218,7 @@ onUnmounted(() => {
                 <!-- The entry picked in the tree, selected in the file manager; with none picked, the folder itself, opened. -->
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-7 w-7`)"
+                    :class="ui.iconButton({ size: `md` })"
                     v-tooltip.bottom="revealTip"
                     :aria-label="`${revealTip.title}: ${revealTip.note}`"
                     @click="askLocalApp(`reveal`, { path: selected })"
@@ -240,7 +240,7 @@ onUnmounted(() => {
                     type="text"
                     :placeholder="t(`workspace.words.searchInFiles`)"
                     :aria-label="t(`workspace.words.searchInFiles`)"
-                    class="ui-field-box ui-field-sm w-full min-w-0 pl-7 pr-[4.75rem]"
+                    class="ui-field-box ui-field-sm w-full min-w-0 pl-7 pr-[5.25rem]"
                     @keydown.esc="clearSearch"
                     @keydown.enter.prevent="openFirstMatch"
                 />
@@ -252,7 +252,8 @@ onUnmounted(() => {
                         type="button"
                         :class="
                             ui.iconButton(
-                                `h-4 w-4 rounded font-mono text-3xs leading-none text-subtle`,
+                                { size: `xs`, tone: `subtle` },
+                                `font-mono text-3xs leading-none`,
                                 toggle.state.value ? `bg-primary-600/20 text-link` : ``,
                             )
                         "
@@ -315,7 +316,7 @@ onUnmounted(() => {
                 <Button
                     class="w-full"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="sandboxLabel"
                     v-tooltip.top="
                         building
@@ -342,7 +343,7 @@ onUnmounted(() => {
                 <template #lead>
                     <button
                         type="button"
-                        :class="ui.iconButton(`mx-1 h-7 w-7 self-center`)"
+                        :class="ui.iconButton({ size: `md` }, `mx-1 self-center`)"
                         v-tooltip.bottom="t(`local.localFiles.toggleFolder`)"
                         :aria-label="t(`local.localFiles.toggleFolder`)"
                         @click="treeShown = !treeShown"
@@ -355,7 +356,7 @@ onUnmounted(() => {
                         v-if="activePath !== undefined"
                         class="mx-1.5 shrink-0 self-center"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :label="t(`local.localFiles.askAgent`)"
                         v-tooltip.bottom="{ title: t(`local.localFiles.askAgent`), note: t(`local.localFiles.askAgentHint`) }"
                         @click="askActive"

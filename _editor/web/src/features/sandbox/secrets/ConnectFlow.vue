@@ -335,7 +335,7 @@ watch(flow, (live) => {
                     readonly
                     :value="flow.code"
                     :aria-label="t(`sandbox.connectFlow.codeLabel`)"
-                    :class="ui.inputInline(`min-w-0 flex-1 font-mono font-semibold tracking-[0.2em]`)"
+                    :class="ui.input({ size: `inline` }, `min-w-0 flex-1 font-mono font-semibold tracking-[0.2em]`)"
                     @focus="codeField?.select()"
                 />
                 <button
@@ -350,7 +350,7 @@ watch(flow, (live) => {
                 <button
                     type="button"
                     :aria-label="t(`sandbox.connectFlow.copyCode`)"
-                    :class="justCopied ? ui.iconButton(`w-auto px-1.5 text-success`) : ui.iconButton(`text-subtle`)"
+                    :class="ui.iconButton({ tone: `subtle` }, justCopied && `w-auto px-1.5 text-success`)"
                     @click="copyCode"
                 >
                     <!-- Keyed by the press, so each one pops its own tick (the checkbox's) rather than leaving the last one standing. -->
@@ -390,7 +390,7 @@ watch(flow, (live) => {
             <p v-if="connectSent" class="flex items-center gap-1.5 text-2xs text-subtle">
                 <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingOn`, { where: watchedOn }) }}
             </p>
-            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="bringItBack">
+            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="bringItBack">
                 {{ t(`sandbox.connectFlow.notThere`, { where: watchedOn }) }}
             </button>
         </template>
@@ -416,7 +416,7 @@ watch(flow, (live) => {
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
-            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="connectSent = true">
+            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="connectSent = true">
                 {{ t(`sandbox.connectFlow.alreadyPasteHere`) }}
             </button>
         </template>
@@ -431,7 +431,7 @@ watch(flow, (live) => {
                     v-model="pasted"
                     name="connectCode"
                     :placeholder="pastePlaceholder"
-                    :class="roomy ? ui.input(`min-w-0 flex-1 font-mono`) : ui.inputSm(`min-w-0 flex-1 font-mono`)"
+                    :class="roomy ? ui.input(`min-w-0 flex-1 font-mono`) : ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
                     @keydown.enter="finish"
                 />
                 <Button
@@ -443,11 +443,11 @@ watch(flow, (live) => {
                 />
             </div>
             <div class="flex flex-wrap items-center gap-x-4">
-                <a :class="ui.linkButton(`text-2xs`)" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+                <a :class="ui.textButton({ size: `xs` })" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
                     {{ t(`sandbox.connectFlow.openAgain`, { destination }) }}<Icon name="external-link" />
                 </a>
                 <!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
-                <button v-if="redirectFlow" type="button" :class="ui.textAction(`text-2xs`)" @click="showDeadEnd = !showDeadEnd">
+                <button v-if="redirectFlow" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="showDeadEnd = !showDeadEnd">
                     <Icon :name="showDeadEnd ? `chevron-down` : `chevron-right`" />{{ t(`sandbox.connectFlow.whatPageLooksLike`) }}
                 </button>
             </div>
@@ -473,7 +473,7 @@ watch(flow, (live) => {
                 </div>
             </div>
             <template v-if="namesTheAccount">
-                <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
+                <button v-if="!namingAccount" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="namingAccount = true">
                     {{ t(`sandbox.connectFlow.nameAccount`) }}
                 </button>
                 <input
@@ -481,7 +481,7 @@ watch(flow, (live) => {
                     v-model="connectLabel"
                     name="accountLabel"
                     :placeholder="t(`sandbox.words.accountName`)"
-                    :class="ui.inputSm(`min-w-0`)"
+                    :class="ui.input({ size: `sm` }, `min-w-0`)"
                 />
             </template>
         </template>

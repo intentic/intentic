@@ -43,11 +43,11 @@ export const memoryTip = (reading: string | undefined): Tip | undefined => {
         }
         return [{ label: label(), value: unit === `gib` ? `${formatFixed(value, 1)} GiB` : formatPercent(value) }];
     });
-    return rows.length === 0 ? undefined : { title: t(`chat.chatHeld.memoryTip.title`), tone: `warn`, rows };
+    return rows.length === 0 ? undefined : { title: t(`chat.chatHeld.memoryTip.title`), tone: `warning`, rows };
 };
 
 /** The "send anyway" press's hover: that it starts now, and the one risk that runs. */
-export const sendAnywayTip = (): Tip => ({ title: t(`chat.chatHeld.startsNow`), tone: `warn`, note: t(`chat.chatHeld.startsNowRisk`) });
+export const sendAnywayTip = (): Tip => ({ title: t(`chat.chatHeld.startsNow`), tone: `warning`, note: t(`chat.chatHeld.startsNowRisk`) });
 
 /**
  * The hold's figures in a few characters, as the notice over the composer says them ("4.9/8.0 GiB"): what is counted

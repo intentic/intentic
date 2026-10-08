@@ -577,15 +577,14 @@ const setProvider = (provider: string): void => {
                                 v-for="option in WORKSPACE_EVENTS"
                                 :key="option.value"
                                 type="button"
-                                class="ui-chip"
-                                :class="form.workspaceEvent === option.value ? `ui-chip-on` : ``"
+                                :class="ui.chip({ on: form.workspaceEvent === option.value })"
                                 :aria-pressed="form.workspaceEvent === option.value"
                                 @click="form.workspaceEvent = option.value"
                             >
                                 {{ option.label }}
                             </button>
                             <!-- Not a choice: the moment this automation already names, which nothing sends any more. -->
-                            <span v-if="retiredEvent !== undefined" data-retired-trigger class="ui-chip ui-chip-on gap-1.5 text-subtle">
+                            <span v-if="retiredEvent !== undefined" data-retired-trigger :class="ui.chip({ on: true }, `gap-1.5 text-subtle`)">
                                 <span class="line-through">{{ retiredEvent.label }}</span>
                                 <span class="text-2xs">{{ t(`automationFields.retired`) }}</span>
                             </span>
@@ -615,8 +614,7 @@ const setProvider = (provider: string): void => {
                                 v-for="source in visibleSources"
                                 :key="source.provider"
                                 type="button"
-                                class="ui-chip"
-                                :class="form.provider === source.provider ? `ui-chip-on` : ``"
+                                :class="ui.chip({ on: form.provider === source.provider })"
                                 :aria-pressed="form.provider === source.provider"
                                 :disabled="!source.available"
                                 @click="setProvider(source.provider)"
@@ -654,8 +652,7 @@ const setProvider = (provider: string): void => {
                                     v-for="option in ACCESS_OPTIONS"
                                     :key="option.value"
                                     type="button"
-                                    class="ui-chip"
-                                    :class="form.access === option.value ? `ui-chip-on` : ``"
+                                    :class="ui.chip({ on: form.access === option.value })"
                                     :aria-pressed="form.access === option.value"
                                     @click="form.access = option.value"
                                 >
@@ -670,8 +667,7 @@ const setProvider = (provider: string): void => {
                                     v-for="option in ANTI_BOT_OPTIONS"
                                     :key="option.value"
                                     type="button"
-                                    class="ui-chip"
-                                    :class="form.antiBot === option.value ? `ui-chip-on` : ``"
+                                    :class="ui.chip({ on: form.antiBot === option.value })"
                                     :aria-pressed="form.antiBot === option.value"
                                     @click="form.antiBot = option.value"
                                 >
@@ -741,8 +737,7 @@ const setProvider = (provider: string): void => {
                             <div class="flex flex-wrap gap-1.5">
                                 <button
                                     type="button"
-                                    class="ui-chip"
-                                    :class="form.eventType === undefined ? `ui-chip-on` : ``"
+                                    :class="ui.chip({ on: form.eventType === undefined })"
                                     :aria-pressed="form.eventType === undefined"
                                     @click="form.eventType = undefined"
                                 >
@@ -752,8 +747,7 @@ const setProvider = (provider: string): void => {
                                     v-for="eventOption in listenerSource.events"
                                     :key="eventOption.value"
                                     type="button"
-                                    class="ui-chip"
-                                    :class="form.eventType === eventOption.value ? `ui-chip-on` : ``"
+                                    :class="ui.chip({ on: form.eventType === eventOption.value })"
                                     :aria-pressed="form.eventType === eventOption.value"
                                     @click="form.eventType = eventOption.value"
                                 >
@@ -801,8 +795,7 @@ const setProvider = (provider: string): void => {
                                 v-for="option in FREQ_OPTIONS"
                                 :key="option.value"
                                 type="button"
-                                class="ui-chip"
-                                :class="schedule.freq === option.value ? `ui-chip-on` : ``"
+                                :class="ui.chip({ on: schedule.freq === option.value })"
                                 :aria-pressed="schedule.freq === option.value"
                                 @click="schedule.freq = option.value"
                             >
@@ -817,8 +810,7 @@ const setProvider = (provider: string): void => {
                                 v-for="day in DAY_OPTIONS"
                                 :key="day.value"
                                 type="button"
-                                class="ui-chip"
-                                :class="schedule.days.includes(day.value) ? `ui-chip-on` : ``"
+                                :class="ui.chip({ on: schedule.days.includes(day.value) })"
                                 :aria-pressed="schedule.days.includes(day.value)"
                                 @click="toggleDay(day.value)"
                             >
@@ -921,7 +913,7 @@ const setProvider = (provider: string): void => {
                                 @change="markTouched(`expiresAt`)"
                             />
                         </label>
-                        <button v-if="form.expiresAt !== ``" type="button" :class="ui.textAction(`text-2xs`)" @click="form.expiresAt = ``">
+                        <button v-if="form.expiresAt !== ``" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="form.expiresAt = ``">
                             {{ t(`automationFields.noEndDate`) }}
                         </button>
                     </div>
@@ -945,8 +937,7 @@ const setProvider = (provider: string): void => {
                         v-for="option in CONDITION_OPTIONS"
                         :key="option.value"
                         type="button"
-                        class="ui-chip"
-                        :class="form.condition === option.value ? `ui-chip-on` : ``"
+                        :class="ui.chip({ on: form.condition === option.value })"
                         :aria-pressed="form.condition === option.value"
                         @click="form.condition = option.value"
                     >
@@ -972,8 +963,7 @@ const setProvider = (provider: string): void => {
                     <div class="flex flex-wrap gap-1.5">
                         <button
                             type="button"
-                            class="ui-chip"
-                            :class="form.npmBy === `range` ? `ui-chip-on` : ``"
+                            :class="ui.chip({ on: form.npmBy === `range` })"
                             :aria-pressed="form.npmBy === `range`"
                             @click="form.npmBy = `range`"
                         >
@@ -981,8 +971,7 @@ const setProvider = (provider: string): void => {
                         </button>
                         <button
                             type="button"
-                            class="ui-chip"
-                            :class="form.npmBy === `tag` ? `ui-chip-on` : ``"
+                            :class="ui.chip({ on: form.npmBy === `tag` })"
                             :aria-pressed="form.npmBy === `tag`"
                             @click="form.npmBy = `tag`"
                         >
@@ -1075,7 +1064,7 @@ const setProvider = (provider: string): void => {
                     <div class="flex flex-wrap items-center gap-2">
                         <Button
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`automationFields.checkNow`)"
                             :loading="check.isPending.value"
                             @click="checkNow"
@@ -1162,7 +1151,7 @@ const setProvider = (provider: string): void => {
                     <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="text-2xs" />
                         <span>{{ t(`automationFields.sStarterSendsDifferent`, { label: staleStarter.label, label2: listenerSource.label }) }}</span>
-                        <button type="button" :class="ui.textAction()" @click="applyStarter">
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="applyStarter">
                             {{ t(`automationFields.useStarter`, { label: listenerSource.label }) }}
                         </button>
                     </p>
@@ -1313,7 +1302,7 @@ const setProvider = (provider: string): void => {
                                     v-for="person in unnamed(rule)"
                                     :key="person.id"
                                     type="button"
-                                    :class="ui.textAction()"
+                                    :class="ui.textButton({ tone: `quiet` })"
                                     v-tooltip.top="person.id"
                                     @click="nameSender(rule, person.id)"
                                 >

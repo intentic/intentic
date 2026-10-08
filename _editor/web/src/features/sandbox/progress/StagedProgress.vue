@@ -122,10 +122,10 @@ const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : f
         <DeviceRunLog v-if="showLog" :lines="lines" :running="live" :empty="emptyLog" :note="logNote" />
 
         <div class="flex flex-wrap items-center gap-x-3">
-            <button type="button" :class="ui.textAction(`text-2xs`)" :aria-expanded="showLog" @click="showLog = !showLog">
+            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :aria-expanded="showLog" @click="showLog = !showLog">
                 <Icon :name="showLog ? `chevron-down` : `chevron-right`" />{{ showLog ? hideLogLabel : showLogLabel }}
             </button>
-            <button v-if="!live" type="button" :class="ui.textAction(`text-2xs`)" @click="$emit(`dismiss`)">
+            <button v-if="!live" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="$emit(`dismiss`)">
                 <Icon name="times" />{{ t(`ui.action.dismiss`) }}
             </button>
             <slot v-if="showLog" name="log-footer" />

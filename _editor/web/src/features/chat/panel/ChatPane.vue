@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Button, FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -507,8 +507,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 <button
                                     v-if="editorChip"
                                     type="button"
-                                    class="ui-chip rounded-lg px-2 py-1.5 text-xs"
-                                    :class="includeEditorContext ? `ui-chip-on` : `border-dashed border-line`"
+                                    :class="
+                                        ui.chip(
+                                            { on: includeEditorContext },
+                                            `rounded-lg px-2 py-1.5 text-xs`,
+                                            !includeEditorContext && `border-dashed border-line`,
+                                        )
+                                    "
                                     @click="includeEditorContext = !includeEditorContext"
                                     :aria-pressed="includeEditorContext"
                                     :aria-label="t(`chat.chatPane.attachEditorContext`)"
@@ -849,7 +854,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         >
                             {{ voiceFailure.message }}
                             <template v-if="voiceFailure.action" #actions>
-                                <Button :as="RouterLink" :to="voiceFailure.action.to" size="small" severity="secondary" :text="true">
+                                <Button :as="RouterLink" :to="voiceFailure.action.to" size="small" tier="quiet">
                                     {{ voiceFailure.action.label }}
                                 </Button>
                             </template>

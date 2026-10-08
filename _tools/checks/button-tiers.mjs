@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// The design system has one action button (Button, four tiers, two sizes) plus five controls deliberately not it
-// (iconButton, linkButton, textAction, overlayChip, .ui-chip); nothing else may draw one by hand. A skin restyles real
+// The design system has one action button (Button, four tiers, two sizes) plus four controls deliberately not it
+// (ui.iconButton, ui.textButton, ui.overlayChip, ui.chip); nothing else may draw one by hand. A skin restyles real
 // Buttons only, so a hand-styled one is inconsistent by construction.
 // 1. A bare <button> with a text size, chrome (border/fill) and side padding: that's an action button, use <Button>.
 // 2. A hand-written disabled fade (disabled:opacity-*): the one disabled state lives in tokens.css.
 // 3. A hardcoded accent (bg-primary-600, text-white) on anything pressable: palette and skins can't reach a literal.
 // 4. A <Button> that restates its own tier's geometry (padding, text size, border, fill, radius, weight) in class.
 // 5. A <Button> in a row's own control cluster (#control/#actions/#meta/#lead) that isn't size="small".
-// 6. A retired spelling: outlined/raised/rounded as props, or severity="warning".
+// 6. A retired spelling: outlined/raised/rounded as props; PrimeVue's own `severity`/`text`/`link`, or a `ui-button-*`
+//    class, where the tier and tone props say it (button.ts is the one place that maps a tier onto PrimeVue).
 // 7. Two <Button> siblings in one element at different sizes.
 // Exceptions: an entry in ALLOWED, keyed by file and exact finding, with a reason; a stale entry is reported.
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID, waiverList } from "./lib/templates.mjs";
@@ -26,10 +27,12 @@ const ICON_BOX_W = /(?:^|\s)(?:[\w@-]+:)*w-\d[\d.]*(?:\s|$)/u;
 
 /** The kit's own controls. A <button> wearing one of these has already made every decision this gate is about. */
 const RECIPES =
-    /ui\.(?:iconButton|linkButton|textAction|addTile|emptyState|overlayChip)\s*\(|(?:^|\s)ui-(?:row-select|chip)(?:-[\w-]+)?(?:\s|$)|\bICON_BUTTON\b|\bROW_ACTION\b/u;
+    /ui\.(?:iconButton|textButton|linkButton|textAction|addTile|emptyState|overlayChip|chip)\s*\(|(?:^|\s)ui-(?:row-select|chip)(?:-[\w-]+)?(?:\s|$)|\bICON_BUTTON\b|\bROW_ACTION\b/u;
 
-/** Retired <Button> props and the severity PrimeVue 4 renamed. */
-const RETIRED = /(?:^|\s):?(?:outlined|raised|rounded)(?:=|[\s>])|severity="warning"/u;
+/** Retired <Button> props: PrimeVue's own look props, which `tier`/`tone` now say. */
+const RETIRED = /(?:^|\s):?(?:outlined|raised|rounded|severity|text|link)(?:=|[\s>/]|$)/u;
+/** The kit's tier classes, which only button.ts may write. */
+const TIER_CLASS = /(?:^|[\s`'"])ui-button-(?:loud|gilded|thumb)(?=[\s`'"]|$)/u;
 
 /** Geometry a call site must not restate on a <Button>: the tier owns all of it. Layout is not geometry. */
 const TIER_GEOMETRY =
@@ -46,7 +49,7 @@ const ALLOWED = new Map([
         `_editor/ui/src/components/sandbox/AgentRunButton.vue`,
         new Map([
             [
-                `['rounded-l-none', text ? 'pl-1 pr-1.5' : 'px-1.5']`,
+                `['rounded-l-none', quiet ? 'pl-1 pr-1.5' : 'px-1.5']`,
                 `A SPLIT BUTTON'S SEAM. Two buttons are welded into one control here, so the pair has to lose the corners and the padding where they meet, or it reads as two buttons that happen to be touching. This is the joint, not a tier being retuned: the tier is whatever the caller passed, and both halves take it.`,
             ],
         ]),
@@ -149,7 +152,7 @@ for (const path of tracked) {
         ) {
             findings.push({
                 at: where,
-                why: `a hand-sized icon affordance: use \`ui.iconButton('h-8 w-8')\`, which is the same control with the coarse-pointer tap target baked in — the thing ninety-odd call sites cannot each be trusted to remember`,
+                why: `a hand-sized icon affordance: use \`ui.iconButton({ size: "lg" })\` (xs 20px, sm 24, md 28, lg 32, xl 40), which is the same control with the coarse-pointer tap target baked in — the thing ninety-odd call sites cannot each be trusted to remember`,
             });
         }
 
@@ -167,7 +170,7 @@ for (const path of tracked) {
         if (pressable && literal !== null && !waived(path, literal[0].trim())) {
             findings.push({
                 at: where,
-                why: `\`${literal[0].trim()}\` pins a control to one step of the palette, so the accent picker and the skin cannot repaint it: use the tier (\`<Button>\` / \`class="ui-button-loud"\`) or the fill tokens (\`--color-primary-fill\` / \`--color-fill-content\`)`,
+                why: `\`${literal[0].trim()}\` pins a control to one step of the palette, so the accent picker and the skin cannot repaint it: use the tier (\`<Button>\` / \`<Button tier="loud">\`) or the fill tokens (\`--color-primary-fill\` / \`--color-fill-content\`)`,
             });
         }
 
@@ -175,7 +178,7 @@ for (const path of tracked) {
             stack.at(-1).buttons.push({
                 at: where,
                 size: /size="small"/u.test(attrs) ? `small` : /(?:^|\s):size=/u.test(attrs) ? `dynamic` : `default`,
-                loud: /ui-button-loud/u.test(classes),
+                loud: /(?:^|\s)(?:tier="loud"|gilded(?:=|[\s>/]|$))/u.test(attrs),
             });
 
             // Rule 4: a call site restating geometry the tier already owns.
@@ -195,11 +198,19 @@ for (const path of tracked) {
             }
 
             // Rule 6: a spelling the design system retired.
-            const retired = attrs.match(RETIRED);
+            // Attribute NAMES only: a bound value may well mention `text` (a prop of the caller's own).
+            const retired = attrs.replace(/"[^"]*"/gu, `""`).match(RETIRED);
             if (retired !== null && !waived(path, retired[0].trim())) {
                 findings.push({
                     at: where,
-                    why: `\`${retired[0].trim()}\` is retired: \`outlined\` was the neutral tier's second spelling (use severity="secondary"), and PrimeVue 4 emits \`warn\` — \`severity="warning"\` matches no rule in primeng.css and paints in the brand colour`,
+                    why: `\`${retired[0].trim()}\` is retired: say what the button IS with \`tier\` (loud, accent — the default —, boring, quiet) and lay a colour on it with \`tone\` (accent, danger, warning, success). \`severity="secondary"\` is \`tier="boring"\`, \`text\` is \`tier="quiet"\`, \`severity="danger"\` is \`tone="danger"\`; \`outlined\` was the neutral tier's second spelling`,
+                });
+            }
+            const tierClass = classes.match(TIER_CLASS);
+            if (tierClass !== null && !waived(path, tierClass[0].trim())) {
+                findings.push({
+                    at: where,
+                    why: `\`${tierClass[0].trim()}\` is a tier written as a class: \`tier="loud"\`, \`gilded\` and \`thumb\` are props, and button.ts is the one place that knows which class each one comes to`,
                 });
             }
         }

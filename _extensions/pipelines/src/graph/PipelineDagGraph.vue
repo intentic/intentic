@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { DagGraph, Icon, ui, type DagNode } from "@intentic/extension-ui";
+import { DagGraph, Icon, toneTint, toneWash, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { jobLabel, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, type StatusTone } from "../statusVisual";
@@ -118,6 +118,12 @@ const fitPadding = computed(() => {
 });
 
 const toneOf = (job: PipelineJob): StatusTone => STATUS_TONE[job.status];
+// Wash behind a job row: its outcome's tone, faintly. A row draws no border of its own (DagGraph owns the card's), so
+// only the tint's fill shows; a status with no outcome leaves the card's fill alone.
+const tintOf = (job: PipelineJob): string => {
+    const tone = toneOf(job).variant;
+    return tone === `neutral` ? `bg-transparent` : toneTint(tone, `soft`);
+};
 
 // Translates between DagGraph's card-id selection and the job-id focus above. A click on a card's own margin pins its
 // first row, not an untraced card.
@@ -164,7 +170,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         v-for="member in node.data.jobs"
                         :key="member.id"
                         class="relative flex items-center gap-2 pl-3 pr-2.5"
-                        :class="toneOf(member.job).tint"
+                        :class="tintOf(member.job)"
                         :style="{ height: `${JOB_ROW_HEIGHT}px` }"
                         @mouseenter="hovered = member.id"
                         @mouseleave="hovered = undefined"
@@ -205,7 +211,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         </span>
                         <span
                             v-if="recurring.get(member.job.name)"
-                            class="shrink-0 rounded bg-danger/10 px-1 text-3xs font-semibold text-danger"
+                            :class="toneWash(`danger`, `shrink-0 rounded px-1 text-3xs font-semibold`)"
                             v-tooltip.top="{
                                 title: t(`tip.failingStreak`),
                                 tone: `danger`,
@@ -227,7 +233,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                     >
                         <button
                             type="button"
-                            :class="ui.iconButton(`h-7 w-7`)"
+                            :class="ui.iconButton({ size: `md` })"
                             :aria-label="t(`pipelineDagGraph.fit`)"
                             v-tooltip.top="t(`pipelineDagGraph.fitAll`)"
                             @click="fitAll()"
@@ -237,7 +243,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <button
                             v-if="!fill"
                             type="button"
-                            :class="ui.iconButton(`h-7 w-7`)"
+                            :class="ui.iconButton({ size: `md` })"
                             :aria-label="t(`pipelineDagGraph.expand`)"
                             v-tooltip.top="t(`pipelineDagGraph.fullScreen`)"
                             @click="$emit(`expand`)"

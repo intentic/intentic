@@ -86,7 +86,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
-                :class="[ui.inputSm('flex-1 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
+                :class="[ui.input({ size: `sm` }, 'flex-1 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
             ></textarea>
             <input
                 v-else
@@ -100,8 +100,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 @keydown.enter="onEnter"
             />
             <Button
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :aria-label="show ? t(`capabilities.words.hideValue`) : t(`capabilities.secretField.showValue`)"
                 @click="show = !show"
             >
@@ -110,7 +109,7 @@ const onEnter = (event: KeyboardEvent): void => {
             <Button v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
                 <template #icon><Icon name="check" /></template>
             </Button>
-            <Button v-if="cancellable" severity="secondary" :text="true" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">
+            <Button v-if="cancellable" tier="quiet" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">
                 <template #icon><Icon name="times" /></template>
             </Button>
         </div>

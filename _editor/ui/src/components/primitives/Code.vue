@@ -151,12 +151,7 @@ watch(
                     class="pointer-events-none absolute inset-x-px bottom-px h-6 rounded-b-md bg-linear-to-t from-canvas to-transparent"
                 ></div>
             </div>
-            <button
-                v-if="toggleable"
-                type="button"
-                :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
-                @click="expanded = !expanded"
-            >
+            <button v-if="toggleable" type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` })" @click="expanded = !expanded">
                 {{ expanded ? t(`ui.action.showLess`) : t(`ui.code.showAll`) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>

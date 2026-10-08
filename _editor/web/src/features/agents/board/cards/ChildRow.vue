@@ -6,7 +6,7 @@ import AgentCardDate from "./AgentCardDate.vue";
 import { markSegments } from "../../../../lib/markSegments";
 import { inProcess, type TrayChild } from "../view/childFold";
 import { childLook } from "./childLook";
-import { formatElapsed } from "@intentic/ui";
+import { formatElapsed, toneWash } from "@intentic/ui";
 import RunFacts from "./RunFacts.vue";
 
 // One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
@@ -81,7 +81,9 @@ const menu = (event: MouseEvent): void => {
                 <RunFacts :run="look.run" columns />
             </span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
-            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
+            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="toneWash(`warning`)">{{
+                look.ask
+            }}</span>
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
                 formatElapsed((now - look.since) / 1000)
             }}</span>

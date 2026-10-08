@@ -136,21 +136,21 @@ const commit = async (): Promise<void> => {
                 @input="patch({ name: ($event.target as HTMLInputElement).value })"
             />
             <!-- Discoverable add: the node handle's `+` and drag-to-add are faster but hidden until hover. -->
-            <Button :label="t(`workflowDesigner.addStep`)" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
+            <Button :label="t(`workflowDesigner.addStep`)" size="small" tier="boring" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
             <span ref="settingsAnchor">
-                <Button :label="t(`workflowDesigner.runSettings`)" size="small" severity="secondary" :text="true" @click="settings?.toggle($event)">
+                <Button :label="t(`workflowDesigner.runSettings`)" size="small" tier="quiet" @click="settings?.toggle($event)">
                     <template #icon><Icon name="sliders-h" /></template>
                 </Button>
             </span>
             <!-- Property of the whole design, like Run settings; the icon tints when a gate is declared. -->
-            <Button :label="t(`workflowDesigner.ciGate`)" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
+            <Button :label="t(`workflowDesigner.ciGate`)" size="small" tier="quiet" @click="gatePanel?.toggle($event)">
                 <template #icon><Icon name="shield" :class="draft.gate !== undefined ? `text-link` : ``" /></template>
             </Button>
             <span class="flex-1"></span>
             <span v-if="faults.length > 0" class="truncate text-2xs text-warning">{{ faults[0] }}</span>
-            <button type="button" :class="ui.linkButton()" @click="emit(`close`)">{{ t(`workflowDesigner.cancel`) }}</button>
+            <button type="button" :class="ui.textButton()" @click="emit(`close`)">{{ t(`workflowDesigner.cancel`) }}</button>
             <Button :label="t(`workflowDesigner.save`)" size="small" :disabled="!ready || save.isPending.value" @click="commit()">
                 <template #icon><Icon name="save" /></template>
             </Button>
@@ -203,8 +203,7 @@ const commit = async (): Promise<void> => {
                                       note: t(`workflowDesigner.sameAgentNeedsOne`),
                                   }
                         "
-                        class="ui-chip"
-                        :class="pickedStep.handoff === `continue` ? `ui-chip-on` : ``"
+                        :class="ui.chip({ on: pickedStep.handoff === `continue` })"
                         :disabled="pickedStep.needs.length !== 1"
                         @click="flipHandoff()"
                     >
@@ -212,7 +211,7 @@ const commit = async (): Promise<void> => {
                     </button>
                     <button
                         type="button"
-                        :class="ui.iconButton(`text-danger`)"
+                        :class="ui.iconButton({ tone: `danger` })"
                         :aria-label="t(`workflowDesigner.removeDependency`)"
                         @click="dropEdge()"
                     >

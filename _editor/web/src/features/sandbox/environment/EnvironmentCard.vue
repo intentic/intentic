@@ -239,8 +239,7 @@ watch(
                     <Button
                         :label="t(`sandbox.environmentCard.reject`)"
                         size="small"
-                        severity="danger"
-                        :text="true"
+                        tier="quiet" tone="danger"
                         :disabled="busy"
                         :loading="busy && decidedAt === `step`"
                         @click="reject"

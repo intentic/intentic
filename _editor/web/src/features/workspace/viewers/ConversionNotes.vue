@@ -27,7 +27,7 @@ watch(
 
 <template>
     <div v-if="notes.length > 0" class="shrink-0 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
-        <button type="button" :class="ui.textAction(`gap-2 text-2xs`)" :aria-expanded="open" @click="open = !open">
+        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :aria-expanded="open" @click="open = !open">
             <Icon :name="open ? `chevron-down` : `chevron-right`" class="shrink-0 text-[0.6rem]" />
             <Icon name="info-circle" class="shrink-0 text-[0.7rem]" />
             <span>{{ t(`workspace.conversionNotes.fromConversion`, { count: notes.length }, notes.length) }}</span>

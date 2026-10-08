@@ -398,8 +398,7 @@ const setPickerOpen = (open: boolean): void => {
                         <!-- The other half of the vocabulary: an empty list means off, so this switches several jobs off in one press. -->
                         <Button
                             size="small"
-                            severity="danger"
-                            text
+                            tier="quiet" tone="danger"
                             :label="t(`sandbox.agentModels.clearModels`)"
                             :disabled="!loaded"
                             @click="clearRoles(block.ids)"
@@ -440,8 +439,7 @@ const setPickerOpen = (open: boolean): void => {
                     <template v-if="row.role.id === ROUTER" #control>
                         <Button
                             size="small"
-                            severity="secondary"
-                            :text="!guidanceSet"
+                            :tier="guidanceSet ? `boring` : `quiet`"
                             :label="t(`sandbox.agentModels.guidance`)"
                             :disabled="!loaded"
                             @click="guidanceOpen = true"

@@ -331,7 +331,7 @@ onMounted(() => {
                     <!-- The shared failure box, squared and set left: every other edge inside this frame is a straight rule. -->
                     <Notice :of="error" class="rounded-none text-left" />
                     <div class="gate-actions">
-                        <Button :label="t(`ui.action.tryAgain`)" severity="secondary" :loading="working" @click="hand" />
+                        <Button :label="t(`ui.action.tryAgain`)" tier="boring" :loading="working" @click="hand" />
                     </div>
                     <!-- Offered with the retry, since retrying alone repeats what just failed (often the platform refusing the token). -->
                     <button type="button" class="escape" v-action="useGooglesOwnPage">{{ t(`auth.desktopAuth.useGooglesOwnPage`) }}</button>
@@ -362,7 +362,7 @@ onMounted(() => {
                         />
                         <Button
                             :label="t(`auth.desktopAuth.useDifferentGoogle`)"
-                            severity="secondary"
+                            tier="boring"
                             class="w-full justify-center"
                             :disabled="working"
                             @click="pickAnother"
@@ -380,7 +380,7 @@ onMounted(() => {
                     <p v-if="spent" class="gate-aside">{{ t(`auth.desktopAuth.signInAgainFromApp`) }}</p>
                     <p v-else class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
                     <div v-if="!spent" class="gate-actions">
-                        <Button :label="t(`auth.words.sendItAgain`)" severity="secondary" :loading="working" @click="hand" />
+                        <Button :label="t(`auth.words.sendItAgain`)" tier="boring" :loading="working" @click="hand" />
                     </div>
                 </template>
 
@@ -418,7 +418,7 @@ onMounted(() => {
                         <div v-if="stallNotice || popupOnly" class="gate-actions">
                             <Button
                                 :label="t(`auth.words.continueOnGooglesPage`)"
-                                :severity="stallNotice ? undefined : `secondary`"
+                                :tier="stallNotice ? `accent` : `boring`"
                                 class="w-full justify-center"
                                 @click="useGooglesOwnPage"
                             >

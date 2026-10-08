@@ -102,7 +102,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                     type="datetime-local"
                     :min="localInputOf(now + SOONEST_SEND_MS)"
                     :max="localInputOf(now + LATEST_SEND_MS)"
-                    :class="[ui.inputSm(), `min-w-0 flex-1`, customTouched && !customOk ? `ui-field-error-box` : ``]"
+                    :class="[ui.input({ size: `sm` }), `min-w-0 flex-1`, customTouched && !customOk ? `ui-field-error-box` : ``]"
                 />
                 <button type="submit" class="composer-ghost h-7 shrink-0 px-2.5 text-2xs font-medium" :disabled="customAt === undefined">
                     {{ t(`chat.sendLater.setTime`) }}
@@ -122,7 +122,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
             type="search"
             :placeholder="t(`chat.sendLater.filter`)"
             :aria-label="t(`chat.sendLater.filter`)"
-            :class="[ui.inputSm(), `mx-2.5 mb-1`]"
+            :class="[ui.input({ size: `sm` }), `mx-2.5 mb-1`]"
         />
         <p v-if="targets.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">{{ t(`chat.sendLater.noAgents`) }}</p>
         <div
@@ -161,7 +161,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
         </div>
         <p v-if="targets.length > 0 && uncommitted" class="flex flex-col items-start gap-1 px-2.5 py-1.5 text-2xs text-subtle">
             <span>{{ t(`chat.sendLater.uncommitted`) }}</span>
-            <button v-if="canShip" type="button" :class="ui.textAction()" @click="upsert(autoVersionRule())">{{ t(`chat.sendLater.saveVersions`) }}</button>
+            <button v-if="canShip" type="button" :class="ui.textButton({ tone: `quiet` })" @click="upsert(autoVersionRule())">{{ t(`chat.sendLater.saveVersions`) }}</button>
         </p>
 
         <!-- The way back to an ordinary send, a row in this list as the run-through menu's is. -->

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Icon, Popover, StatusBadge } from "@intentic/extension-ui";
+import { Icon, Popover, StatusBadge, toneWash } from "@intentic/extension-ui";
+import type { PipelineStatus } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { type PipelineStage, stageLabel } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "../statusVisual";
@@ -27,6 +28,17 @@ const toggleStage = (index: number, event: Event): void => {
     open.value = open.value === index ? undefined : index;
 };
 
+// The stage circle: border + fill + glyph. A status with an outcome is washed in its tone inside a solid ring of it;
+// queued is a dashed ring with nothing inside, since colour here always means an outcome and queued has none yet.
+const CIRCLE: Record<PipelineStatus, string> = {
+    queued: `border-dashed border-muted/60 bg-transparent text-muted`,
+    success: toneWash(`success`, `border-success`),
+    failed: toneWash(`danger`, `border-danger`),
+    running: toneWash(`info`, `border-info`),
+    canceled: `border-subtle/60 bg-subtle/10 text-subtle`,
+    skipped: `border-subtle/60 bg-subtle/10 text-subtle`,
+};
+
 // Hover text: what the stage is called, how it ended, and, when it holds more than the one job its label
 // already names: how many jobs are inside.
 const stageTooltip = (stage: PipelineStage, index: number): string => {
@@ -44,7 +56,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
             <button
                 type="button"
                 class="relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-transform hover:scale-110"
-                :class="STATUS_TONE[stage.status].circle"
+                :class="CIRCLE[stage.status]"
                 v-tooltip.top="stageTooltip(stage, index)"
                 @click="toggleStage(index, $event)"
             >
@@ -92,7 +104,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                             </span>
                             <span
                                 v-if="recurring.get(job.name)"
-                                class="shrink-0 rounded bg-danger/10 px-1 text-2xs font-semibold text-danger"
+                                :class="toneWash(`danger`, `shrink-0 rounded px-1 text-2xs font-semibold`)"
                                 v-tooltip.top="{
                                     title: t(`tip.failingStreak`),
                                     tone: `danger`,

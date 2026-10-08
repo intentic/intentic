@@ -179,7 +179,7 @@ const stateWord = (state: string): string | undefined => {
                 <p v-if="running" class="mt-0.5 text-2xs text-subtle" role="status">{{ now }}</p>
             </div>
             <!-- A run keeps going until it ends by itself or at its limit, so there is nothing to dismiss while it runs. -->
-            <Button v-if="!running" size="small" severity="secondary" :text="true" class="-my-1 shrink-0" @click="emit(`dismiss`)">
+            <Button v-if="!running" size="small" tier="quiet" class="-my-1 shrink-0" @click="emit(`dismiss`)">
                 {{ t(`ui.action.dismiss`) }}
             </Button>
         </div>

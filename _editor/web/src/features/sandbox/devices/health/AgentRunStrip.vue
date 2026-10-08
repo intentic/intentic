@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Code, DeviceRunLog, Icon } from "@intentic/ui";
+import { Button, Code, DeviceRunLog, Icon, toneTint } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type AgentRun, agentRunDetail, agentRunTitle } from "../runners/agentRun";
 import { useT } from "@intentic/ui/i18n";
@@ -27,12 +27,13 @@ const detail = computed(() => agentRunDetail(run) ?? (run.state === `failed` ? r
 const latest = computed(() => (run.state === `running` ? run.lines.at(-1) : undefined));
 const showing = ref(false);
 
-// Spelled out per state, not templated: Tailwind only emits a utility it can see used literally.
+// The two outcomes wear the kit's strong tint (tone.ts), as <DeviceConcern> does; a run still going sits on the
+// page's own surface.
 const SURFACE: Record<AgentRun[`state`], string> = {
     running: `border-line-subtle bg-content/5`,
     waiting: `border-line-subtle bg-content/5`,
-    done: `border-success/40 bg-success/10`,
-    failed: `border-danger/40 bg-danger/10`,
+    done: toneTint(`success`),
+    failed: toneTint(`danger`),
 };
 const GLYPH: Record<AgentRun[`state`], string> = { running: `text-muted`, waiting: `text-muted`, done: `text-success`, failed: `text-danger` };
 const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, failed: `exclamation-triangle` } as const;
@@ -52,8 +53,7 @@ const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, fai
                 <Button
                     v-if="run.lines.length > 0"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :label="showing ? t(`sandbox.agentRun.hideOutput`) : t(`sandbox.agentRun.showOutput`)"
                     :aria-expanded="showing"
                     @click="showing = !showing"
@@ -64,8 +64,7 @@ const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, fai
                 <Button
                     v-if="!busy"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :aria-label="t(`ui.action.dismiss`)"
                     v-tooltip.top="t(`ui.action.dismiss`)"
                     @click="emit(`dismiss`)"

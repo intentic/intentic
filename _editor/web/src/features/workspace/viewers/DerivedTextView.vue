@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, CopyButton, EmptyState, formatElapsed, formatTokens, Markdown, timeAgo } from "@intentic/ui";
+import { Button, CopyButton, EmptyState, formatElapsed, formatTokens, Markdown, timeAgo, toneTint } from "@intentic/ui";
 import { messageOr, useLatest, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { changeEpochOf, derivedEpochOf } from "../changes/live/useWorkspaceLive";
@@ -189,8 +189,7 @@ const emptyMessage = computed(() => {
                 />
                 <Button
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     class="shrink-0"
                     :disabled="deriving"
                     @click="derive(path)"
@@ -199,15 +198,17 @@ const emptyMessage = computed(() => {
                     <Icon :name="deriving ? `spinner` : `refresh`" :spin="deriving" class="text-[0.7rem]" />
                     {{ t(`workspace.derivedTextView.deriveAgain`) }}
                 </Button>
-                <Button v-if="downloadable" size="small" severity="secondary" :text="true" class="shrink-0" @click="emit(`download`)">
+                <Button v-if="downloadable" size="small" tier="quiet" class="shrink-0" @click="emit(`download`)">
                     <Icon name="download" class="text-[0.7rem]" /> {{ t(`ui.action.download`) }}
                 </Button>
             </div>
             <!-- The file moved on under its text. Said plainly, since everything below is then about an older file, and
-                 saying whether a fix is already on its way is the difference between a warning and a chore. -->
+                 saying whether a fix is already on its way is the difference between a warning and a chore. Drawn by hand
+                 rather than as a <Notice strip>, whose glyph cannot spin while the new reading is on its way. -->
             <div
                 v-if="shadow.stale"
-                class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning"
+                class="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-2xs text-warning"
+                :class="toneTint(`warning`, `strong`)"
             >
                 <Icon :name="waiting ? `spinner` : `exclamation-triangle`" :spin="waiting" class="shrink-0 text-[0.7rem]" />
                 <span>
@@ -253,11 +254,11 @@ const emptyMessage = computed(() => {
         <!-- No text yet, which is four different situations: being read, never read, read to nothing, or unreadable here. -->
         <EmptyState v-else :icon="emptyIcon" :spin="waiting" :title="emptyMessage" :line="shadow?.reason ?? ``" class="h-full">
             <template v-if="canDerive || downloadable" #actions>
-                <Button v-if="canDerive" severity="secondary" :disabled="deriving || waiting" @click="derive(path)">
+                <Button v-if="canDerive" tier="boring" :disabled="deriving || waiting" @click="derive(path)">
                     <Icon name="align-left" class="text-xs" />
                     {{ t(`workspace.derivedTextView.renderText`) }}
                 </Button>
-                <Button v-if="downloadable" severity="secondary" @click="emit(`download`)">
+                <Button v-if="downloadable" tier="boring" @click="emit(`download`)">
                     <Icon name="download" class="text-xs" />
                     {{ t(`ui.action.download`) }}
                 </Button>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { DiffStat } from "@intentic/ui";
+import { DiffStat, toneWash } from "@intentic/ui";
 import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
 import { useT } from "@intentic/ui/i18n";
 
@@ -27,10 +27,10 @@ const stat = computed(() => diffStat(props.oldText, props.newText));
 const gutterOf = (row: DiffRow): string => (row.type === `add` ? `+` : row.type === `del` ? `-` : ` `);
 const rowClass = (row: DiffRow): string => {
     if (row.type === `add`) {
-        return `bg-success/10 text-success`;
+        return toneWash(`success`);
     }
     if (row.type === `del`) {
-        return `bg-danger/10 text-danger`;
+        return toneWash(`danger`);
     }
     if (row.type === `skip`) {
         return `text-subtle`;

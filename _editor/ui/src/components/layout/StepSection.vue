@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import type { IconName } from "../../icons/iconSets.js";
 import { useT } from "../../i18n/index.js";
+import { toneInk, toneTint } from "../../lib/tone.js";
 
 const t = useT();
 
@@ -15,7 +16,7 @@ const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: 
             <div class="flex min-w-0 flex-1 items-center gap-2.5">
                 <span
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-medium"
-                    :class="done ? `border-success/40 bg-success/10 text-success` : `border-line bg-canvas text-muted`"
+                    :class="done ? toneTint(`success`, `strong`, toneInk(`success`)) : toneTint(`neutral`, `soft`, `text-muted`)"
                 >
                     <Icon name="check" v-if="done" :aria-label="t(`ui.stepSection.done`, { title })" />
                     <template v-else-if="step !== undefined">{{ step }}</template>

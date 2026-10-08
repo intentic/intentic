@@ -30,7 +30,7 @@ const discardAll = computed(() => `${words.value.discard} ${t(`workspace.savePan
     <button
         v-if="changes.count.value > 0"
         type="button"
-        :class="ui.iconButton(box, `hover:bg-danger/10 hover:text-danger`)"
+        :class="ui.iconButton({ tone: `danger` }, box)"
         :disabled="changes.actionBusy.value || savingNow"
         @click="actions.ask('all')"
         v-tooltip.bottom="{

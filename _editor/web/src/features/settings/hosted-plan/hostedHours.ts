@@ -159,7 +159,7 @@ const subscriberBadge = (state: HostedPlanState): PlanBadge => {
             variant: `warning`,
             detail: {
                 title: HOSTED(),
-                tone: `warn`,
+                tone: `warning`,
                 rows: [{ label: t(`settings.hostedHours.tipEnds`), value: day }],
                 note: t(`settings.hostedHours.tipThenFree`),
             },

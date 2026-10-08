@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, type Tip, ui, useDevice } from "@intentic/ui";
+import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, type Tip, toneTint, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -245,7 +245,7 @@ watch(
         <!-- Panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- Agent requests appear above the prompt they concern. -->
-            <div v-if="help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
+            <div v-if="help" :class="toneTint(`warning`, `strong`, `flex shrink-0 flex-col gap-2 border-b px-3 py-2`)">
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
                     <div class="min-w-0 flex-1 text-xs text-content">
@@ -263,7 +263,7 @@ watch(
                         @keydown.enter="resolveHelp(true)"
                     />
                     <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`chat.words.doneHandBack`) }} </Button>
-                    <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
+                    <Button size="small" tier="boring" class="shrink-0" @click="() => resolveHelp(false)">
                         {{ t(`chat.words.cantHelpNow`) }}
                     </Button>
                 </div>
@@ -370,7 +370,7 @@ watch(
                     }}</template>
                 </template>
                 <template v-if="newTab !== undefined" #actions>
-                    <Button class="pointer-events-auto" :label="t(`terminal.terminalPanel.newTerminal`)" size="small" severity="secondary" @click="newTab()">
+                    <Button class="pointer-events-auto" :label="t(`terminal.terminalPanel.newTerminal`)" size="small" tier="boring" @click="newTab()">
                         <template #icon><Icon name="plus" class="text-2xs" /></template>
                     </Button>
                 </template>
@@ -410,7 +410,7 @@ watch(
                         <Button
                             class="ml-auto"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`terminal.terminalPanel.copyAll`)"
                             @click="copyScrollback"
                         />

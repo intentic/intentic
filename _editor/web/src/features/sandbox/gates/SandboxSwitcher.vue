@@ -11,6 +11,7 @@ import {
     osOptions,
     SandboxLogo,
     SegmentedControl,
+    StatusBadge,
     type Tip,
     type TipRow,
     useOsPreference,
@@ -94,7 +95,7 @@ const switcherTip = computed((): Tip => {
         title: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`),
         rows: [
             { label: t(`sandbox.sandboxSwitcher.runsOn`), value: placement.value?.label ?? `` },
-            availabilityVisual.value.variant === `warning` ? { ...status, tone: `warn` } : status,
+            availabilityVisual.value.variant === `warning` ? { ...status, tone: `warning` } : status,
             { label: t(`sandbox.sandboxSwitcher.inProgress`), value: restarting.value ?? `` },
             { label: t(`sandbox.sandboxSwitcher.needsYou`), value: attention.value.length > 0 ? attention.value.length : `` },
             { label: t(`sandbox.sandboxSwitcher.update`), value: staged ? t(`sandbox.sandboxSwitcher.ready`) : `` },
@@ -518,11 +519,13 @@ const confirmRemove = async (): Promise<void> => {
                 />
                 <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. The
                      active row is never either: its own badge is on the rail, so it reports no count to read. -->
-                <span
+                <StatusBadge
                     v-if="!isActive(option) && answered(option) && attentionFor(option)! > 0"
-                    class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold leading-4 text-warning"
+                    variant="warning"
+                    size="xs"
+                    class="shrink-0 leading-4"
                     v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
-                    >{{ attentionFor(option) }}</span
+                    >{{ attentionFor(option) }}</StatusBadge
                 >
                 <span
                     v-else-if="!isActive(option) && !answered(option)"

@@ -49,7 +49,7 @@ it(`refuses everything for a card with no file access`, () => {
     expect(reach.refuses(`docs`)).toBe(true);
     const blocked = reachTip(`test`, reach);
     expect(blocked.rows).toContainEqual({ label: `Persona`, value: `test` });
-    expect(blocked.tone).toBe(`warn`);
+    expect(blocked.tone).toBe(`warning`);
     expect(blocked).not.toEqual(reachTip(`test`, reachOf(card({ folders: [`docs`] }))));
 });
 

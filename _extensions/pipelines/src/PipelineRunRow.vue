@@ -24,6 +24,7 @@ import {
     SkeletonSnapshot,
     StatusBadge,
     timeAgo,
+    toneTint,
     useAgentRunPick,
     vSkeletonSource,
 } from "@intentic/extension-ui";
@@ -161,7 +162,7 @@ const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
 });
 
 // v-tooltip's card (`Tip` in @intentic/ui), spelled out here: this extension reaches the kit only through extension-ui.
-type TipTone = "info" | "ok" | "warn" | "danger";
+type TipTone = "info" | "success" | "warning" | "danger";
 interface Tip {
     readonly title: string;
     readonly tone?: TipTone | undefined;
@@ -185,7 +186,7 @@ const demoted = computed((): Tip | undefined => {
         return undefined;
     }
     return props.superseded !== undefined
-        ? { title: t(`pipelineRunRow.passedSince`), tone: `ok`, rows: [branch], note: t(`pipelineRunRow.failureIsHistory`) }
+        ? { title: t(`pipelineRunRow.passedSince`), tone: `success`, rows: [branch], note: t(`pipelineRunRow.failureIsHistory`) }
         : { title: t(`pipelineRunRow.newerFailure`), rows: [branch], note: t(`pipelineRunRow.fixThatRun`) };
 });
 // Loud only on the branch's open failure, while no agent is already on it.
@@ -252,9 +253,9 @@ const stanceTone = (kind: string): TipTone | undefined => {
             return `info`;
         case `needs-you`:
         case `ended`:
-            return `warn`;
+            return `warning`;
         case `landed`:
-            return `ok`;
+            return `success`;
         default:
             return undefined;
     }
@@ -373,7 +374,7 @@ const openStartOver = (): void => {
                     class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle hover:text-link"
                     v-tooltip.top="{
                         title: t(`pipelineRunRow.passedAgain`),
-                        tone: `ok`,
+                        tone: `success`,
                         rows: [
                             { label: t(`tip.branch`), value: run.branch },
                             { label: t(`tip.run`), value: `#${superseded.runId}` },
@@ -472,8 +473,7 @@ const openStartOver = (): void => {
                                 ref="startOver"
                                 :label="t(`pipelineRunRow.startOver`)"
                                 size="small"
-                                severity="secondary"
-                                text
+                                tier="quiet"
                                 icon-pos="right"
                                 :loading="busy === actionKey"
                                 :disabled="busy !== undefined"
@@ -487,8 +487,7 @@ const openStartOver = (): void => {
                                 v-else-if="run.status === `failed`"
                                 :label="fixLabel"
                                 :picker="fixModel"
-                                :severity="loud ? undefined : `secondary`"
-                                :text="!loud"
+                                :tier="loud ? `accent` : `quiet`"
                                 :loading="busy === actionKey"
                                 :disabled="busy !== undefined"
                                 :hint="startHint"
@@ -500,8 +499,7 @@ const openStartOver = (): void => {
                             v-if="inFlight"
                             :label="t(`pipelineRunRow.cancel`)"
                             size="small"
-                            severity="secondary"
-                            text
+                            tier="quiet"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
                             @click="emit(`cancel`, run)"
@@ -511,8 +509,7 @@ const openStartOver = (): void => {
                             v-else
                             :label="t(`pipelineRunRow.reRun`)"
                             size="small"
-                            :severity="proven ? undefined : `secondary`"
-                            :text="!proven"
+                            :tier="proven ? `accent` : `quiet`"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
                             v-tooltip.top="proven ? { title: t(`pipelineRunRow.proveTheFix`), note: t(`pipelineRunRow.fixInWorkspace`) } : undefined"
@@ -550,7 +547,9 @@ const openStartOver = (): void => {
                     <span
                         v-for="job in run.failedJobs"
                         :key="job"
-                        class="inline-flex items-center gap-1 rounded-md border border-danger/20 bg-danger/5 px-2 py-1 text-xs font-medium text-danger"
+                        :class="
+                            toneTint(`danger`, `soft`, `inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-danger`)
+                        "
                     >
                         <Icon name="exclamation-circle" class="text-2xs" />
                         {{ job }}

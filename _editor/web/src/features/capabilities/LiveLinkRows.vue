@@ -269,7 +269,7 @@ const items = computed<MenuItem[]>(() => {
                         v-if="row.link && spec.up(row.link)"
                         :label="spec.close()"
                         size="small"
-                        :text="true"
+                        tier="quiet" tone="accent"
                         :loading="busy.has(row.id)"
                         @click="run(row.id, () => close(row.id))"
                     />
@@ -277,7 +277,7 @@ const items = computed<MenuItem[]>(() => {
                         v-else-if="row.link"
                         :label="spec.open()"
                         size="small"
-                        :text="true"
+                        tier="quiet" tone="accent"
                         :disabled="row.link.state === 'unavailable'"
                         :loading="busy.has(row.id)"
                         @click="onOpen(row.id)"
@@ -291,10 +291,9 @@ const items = computed<MenuItem[]>(() => {
                 <div class="mt-2 flex flex-col gap-2">
                     <p v-if="progress[row.id]" class="font-mono text-2xs text-subtle">{{ progress[row.id] }}</p>
                     <!-- The client's own text (a --servercert digest, mount.cifs's advice); preserved verbatim and wrapped, not truncated. -->
-                    <pre
-                        v-if="failures[row.id]"
-                        class="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
-                        >{{ failures[row.id] }}</pre>
+                    <Notice v-if="failures[row.id]" tone="danger">
+                        <pre class="max-h-32 overflow-auto whitespace-pre-wrap font-mono text-2xs">{{ failures[row.id] }}</pre>
+                    </Notice>
                     <div v-if="otpFor === row.id" class="flex items-center gap-2">
                         <!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
                         <input
@@ -306,12 +305,12 @@ const items = computed<MenuItem[]>(() => {
                             @keydown.enter.prevent="onOpen(row.id)"
                         />
                         <Button :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy.has(row.id)" @click="onOpen(row.id)" />
-                        <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" :text="true" @click="otpFor = undefined" />
+                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="otpFor = undefined" />
                     </div>
                     <button
                         v-else-if="wantsCode(row.id)"
                         type="button"
-                        :class="ui.linkButton(`gap-1 text-2xs`)"
+                        :class="ui.textButton({ size: `xs` })"
                         @click="
                             otpFor = row.id;
                             otp = ``;

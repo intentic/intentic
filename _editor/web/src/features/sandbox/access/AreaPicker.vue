@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GrantedRole } from "@intentic/sandbox-contract";
+import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAreas } from "../areas/useAreas";
@@ -72,8 +73,7 @@ const toggle = (id: string): void => {
                 <button
                     v-if="!needsOne"
                     type="button"
-                    class="ui-chip"
-                    :class="picked === undefined ? `ui-chip-on` : ``"
+                    :class="ui.chip({ on: picked === undefined })"
                     :aria-pressed="picked === undefined"
                     :disabled="disabled"
                     @click="emit(`change`, undefined)"
@@ -86,8 +86,7 @@ const toggle = (id: string): void => {
                     :key="area.id"
                     v-tooltip.top="{ title: area.folders.join(`, `), note: area.brief }"
                     type="button"
-                    class="ui-chip"
-                    :class="held.includes(area.id) ? `ui-chip-on` : ``"
+                    :class="ui.chip({ on: held.includes(area.id) })"
                     :aria-pressed="held.includes(area.id)"
                     :disabled="disabled"
                     @click="toggle(area.id)"

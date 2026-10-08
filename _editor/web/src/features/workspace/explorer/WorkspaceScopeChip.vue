@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, Icon, type Tip } from "@intentic/ui";
+import { ContextMenu, Icon, type Tip, toneWash, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -33,7 +33,7 @@ const words = useVocabulary();
 // Whose copy, and what a press does: the name is the fact, the rest one short line.
 const tip = computed((): Tip => ({
     title: broken.value ? t(`workspace.workspaceScopeChip.copyUnreadable`) : t(`workspace.words.privateCopy`),
-    tone: broken.value ? `warn` : undefined,
+    tone: broken.value ? `warning` : undefined,
     rows: [{ label: words.value.Agent, value: title.value }],
     note: broken.value ? t(`workspace.workspaceScopeChip.clickForShared`) : t(`workspace.workspaceScopeChip.readOnlyClickToSwitch`),
 }));
@@ -71,8 +71,7 @@ const items = computed<MenuItem[]>(() => [
     <template v-if="workspaceAgent !== undefined">
         <button
             type="button"
-            class="ui-chip h-6 shrink-0 px-1.5"
-            :class="broken ? `bg-warning/15 text-warning hover:bg-warning/25` : `ui-chip-on`"
+            :class="ui.chip({ on: !broken }, `h-6 shrink-0 px-1.5`, broken && toneWash(`warning`))"
             aria-haspopup="menu"
             :aria-label="ariaLabel"
             v-tooltip.bottom="tip"

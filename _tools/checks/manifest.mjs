@@ -192,6 +192,8 @@ export const CHECKS = [
     { id: "rows", file: "row-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every list draws at its RowGroup's tier" },
     { id: "buttons", file: "button-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every action button is <Button>" },
     { id: "inputs", file: "input-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every field is ui-field-box" },
+    { id: "recipes", file: "recipe-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a kit recipe's variant is chosen by name, never by overriding its classes" },
+    { id: "tones", file: "tone-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a tone at a strength is named in tone.ts, never written as an opacity" },
     { id: "run-settings", file: "run-settings-tier.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "effort, extended thinking and speed are one control" },
     { id: "model-labels", file: "model-labels.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a model is named by its catalog's label, never by falling back to its raw id" },
     { id: "astro-scripts", file: "astro-scripts.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no script tag inside an .astro frontmatter" },

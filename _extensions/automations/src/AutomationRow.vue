@@ -12,6 +12,7 @@ import {
     Icon,
     OverflowActions,
     ToggleSwitch,
+    toneWash,
     type IconName,
     useDevice,
 } from "@intentic/extension-ui";
@@ -98,7 +99,7 @@ const spent = computed<boolean>(() => trigger.value.kind === `once` && !props.au
 type Health = `off` | `on` | `done` | `failed`;
 const TILE: Record<Health, string> = {
     on: `bg-overlay text-muted`,
-    failed: `bg-danger/15 text-danger`,
+    failed: toneWash(`danger`),
     // Finished, not stopped: it keeps the live tile's weight rather than the dimmed one that means somebody switched
     // this off.
     done: `bg-overlay text-subtle`,
@@ -443,7 +444,7 @@ const verbs = computed((): ActionItem[] => [
                 <!-- Destructive and rare, so it hides from the scan on a pointer device, but stays put on touch, where there's no hover. -->
                 <button
                     type="button"
-                    :class="ui.iconButton(`hover:text-danger md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
+                    :class="ui.iconButton({ tone: `danger` }, `md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
                     :aria-label="t(`automationRow.delete`, { id: automation.id })"
                     v-tooltip.top="t(`automationRow.delete2`)"
                     @click="emit(`remove`)"
@@ -478,7 +479,7 @@ const verbs = computed((): ActionItem[] => [
             <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">
                 <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
                     <div class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.prompt`) }}</span>
+                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.prompt`) }}</span>
                         <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
                             {{ automation.prompt }}
                         </p>
@@ -486,7 +487,7 @@ const verbs = computed((): ActionItem[] => [
 
                     <!-- What decides whether a fire goes ahead, and what it saw last time it looked. -->
                     <div v-if="automation.guard || automation.source || watched" class="flex min-w-0 flex-col gap-1">
-                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.check`) }}</span>
+                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.check`) }}</span>
                         <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
                         <span v-else-if="automation.source" class="truncate text-2xs text-muted" v-tooltip.top.overflow="sourceLabel(automation.source)">{{
                             sourceLabel(automation.source)
@@ -505,7 +506,7 @@ const verbs = computed((): ActionItem[] => [
                     </div>
 
                     <div v-if="trigger.kind === `event`" class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.webhook`) }}</span>
+                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.webhook`) }}</span>
                         <!-- The URL carries the door's token; the daemon hands it to a maintainer or owner only, never a viewer. -->
                         <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
                             <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
@@ -518,8 +519,7 @@ const verbs = computed((): ActionItem[] => [
                                 v-if="!confirmingRotate"
                                 :label="t(`automationRow.rotate`)"
                                 size="small"
-                                severity="secondary"
-                                :text="true"
+                                tier="quiet"
                                 :disabled="rotateToken.isPending.value"
                                 v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
                                 @click="confirmingRotate = true"
@@ -531,14 +531,13 @@ const verbs = computed((): ActionItem[] => [
                             <Button
                                 :label="t(`automationRow.cancel`)"
                                 size="small"
-                                severity="secondary"
-                                :text="true"
+                                tier="quiet"
                                 @click="confirmingRotate = false"
                             />
                             <Button
                                 :label="t(`automationRow.rotateToken`)"
                                 size="small"
-                                severity="danger"
+                                tone="danger"
                                 :loading="rotateToken.isPending.value"
                                 @click="rotate"
                             />
@@ -547,7 +546,7 @@ const verbs = computed((): ActionItem[] => [
 
                     <!-- The two settings deciding whether the widget works at all. -->
                     <div v-if="visitorChat" class="flex flex-col gap-1.5">
-                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.visitorChat`) }}</span>
+                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.visitorChat`) }}</span>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                             <span v-if="visitorChat.origins.length > 0">{{
                                 t(`automationRow.onOrigins`, { origins: visitorChat.origins.join(`, `) })
@@ -559,7 +558,7 @@ const verbs = computed((): ActionItem[] => [
                         <!-- Use a glyph in the row and words after the reader opens it. -->
                         <Button
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             class="self-start"
                             :label="t(`automationRow.getEmbedCode`)"
                             :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
@@ -580,7 +579,7 @@ const verbs = computed((): ActionItem[] => [
 
                 <!-- Run history links to transcripts for runs that reached a turn. -->
                 <div class="flex min-w-0 flex-col gap-1">
-                    <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.runs`) }}</span>
+                    <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.runs`) }}</span>
                     <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">{{ t(`automationRow.nothingYetRunNow`) }}</p>
                     <div v-else class="-mx-1 flex max-h-40 flex-col overflow-y-auto">
                         <component

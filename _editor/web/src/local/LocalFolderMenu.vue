@@ -231,7 +231,7 @@ const pickFailure = computed(() => (failure.value?.key === `:folder` ? failure.v
                             }}</span>
                             <button
                                 type="button"
-                                :class="ui.iconButton(`hidden h-5 w-5 rounded text-subtle group-hover:flex group-focus-within:flex`)"
+                                :class="ui.iconButton({ size: `xs`, tone: `subtle` }, `hidden group-hover:flex group-focus-within:flex`)"
                                 :aria-label="t(`local.folderMenu.forget`, { name: nameOf(place.path) })"
                                 v-tooltip.top="{ title: t(`ui.action.remove`), note: t(`local.folderMenu.forgetNote`) }"
                                 @click.stop="forget(place.path)"

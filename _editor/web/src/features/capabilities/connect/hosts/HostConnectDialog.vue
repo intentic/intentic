@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
-import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
+import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom, toneTint } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
@@ -148,13 +148,13 @@ onBeforeUnmount(stop);
             </i18n-t>
 
             <!-- Renamed stays up through the reconnect it causes: the old id goes offline for a moment, which is not a failed pairing. -->
-            <div v-if="renamedTo !== undefined" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
+            <div v-if="renamedTo !== undefined" :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
                 {{ t(`capabilities.hostConnectDialog.named`) }} <b>{{ renamedTo }}</b
                 >{{ t(`capabilities.hostConnectDialog.reconnectsUnderThatName`) }}
             </div>
 
             <template v-else-if="online">
-                <div class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
+                <div :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
                     <b>{{ id }}</b> {{ t(`capabilities.hostConnectDialog.connectedAgentWorkOn`) }}
                 </div>
                 <!-- Offered, not applied: the name is what the agent calls the machine, so the owner says which. -->
@@ -176,7 +176,7 @@ onBeforeUnmount(stop);
                 </div>
             </template>
 
-            <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
+            <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
             <div v-else-if="minting || pairToken === undefined" class="text-sm text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

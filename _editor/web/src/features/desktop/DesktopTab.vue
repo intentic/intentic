@@ -3,7 +3,7 @@
      it moves. No address bar or tabs of its own inside the picture, so every key and click the owner makes while driving
      is the desktop's; who has the wheel is said in the Browsers toolbar while this tab is in front. -->
 <script setup lang="ts">
-import { CopyButton, Icon } from "@intentic/ui";
+import { CopyButton, Icon, toneWash, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, toRef, watch } from "vue";
 import { type DesktopStatus, useDesktopView } from "./useDesktopView";
@@ -116,14 +116,13 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
         <!-- The daemon refuses the agent's desktop tools while the owner holds it; this says so, and lapses when the hold does. -->
         <span
             v-if="view.held.value"
-            class="shrink-0 whitespace-nowrap rounded-md bg-warning/15 px-1.5 py-0.5 text-2xs font-medium text-warning"
+            :class="toneWash(`warning`, `shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-2xs font-medium`)"
             v-tooltip.bottom="{ title: t(`desktop.desktop.heldTitle`), note: t(`desktop.desktop.heldNote`) }"
             >{{ view.driving.value ? t(`desktop.desktop.agentWaits`) : t(`desktop.desktop.heldElsewhere`) }}</span
         >
         <button
             type="button"
-            class="ui-chip shrink-0 px-2.5 py-1 font-medium"
-            :class="view.driving.value ? `ui-chip-on` : `text-content`"
+            :class="ui.chip({ on: view.driving.value }, `shrink-0 px-2.5 py-1 font-medium`, !view.driving.value && `text-content`)"
             :aria-pressed="view.driving.value"
             v-tooltip.bottom="
                 view.driving.value

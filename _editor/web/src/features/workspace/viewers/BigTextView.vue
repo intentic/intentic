@@ -157,8 +157,7 @@ watch(
             <Button
                 v-if="!atEnd"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 class="shrink-0"
                 :disabled="busy"
                 @click="loadMore"
@@ -168,8 +167,7 @@ watch(
             </Button>
             <Button
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 class="shrink-0"
                 :class="following ? `text-primary-500` : ``"
                 @click="toggleFollow"
@@ -181,8 +179,7 @@ watch(
             <Button
                 v-if="size <= RAW_MAX_BYTES"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 class="shrink-0"
                 @click="emit(`download`)"
                 v-tooltip.bottom="t(`workspace.words.wholeFile`)"

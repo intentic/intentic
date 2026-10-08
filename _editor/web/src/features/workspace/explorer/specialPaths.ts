@@ -32,7 +32,7 @@ const RULES: readonly { readonly matches: (path: string) => boolean; readonly ch
         chip: (words) => ({
             label: words.publicChip,
             tone: `warning`,
-            tooltip: { title: words.publicTooltip, tone: `warn`, note: t(`workspace.specialPaths.noSignIn`) },
+            tooltip: { title: words.publicTooltip, tone: `warning`, note: t(`workspace.specialPaths.noSignIn`) },
         }),
     },
     {

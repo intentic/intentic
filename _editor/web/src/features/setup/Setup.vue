@@ -430,8 +430,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         :as="RouterLink"
                         to="/"
                         :label="t(`setup.setup.backToWorkspace`)"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         class="mast-back shrink-0"
                     >
                         <template #icon><Icon name="arrow-left" /></template>
@@ -485,7 +484,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <Button :label="t(`setup.setup.openChat`)" class="w-full justify-center md:w-fit" v-action="openHeld">
                                 <template #icon><Icon name="comments" /></template>
                             </Button>
-                            <button type="button" :class="ui.linkButton(`self-center md:self-auto`)" v-action="addAnother">
+                            <button type="button" :class="ui.textButton(`self-center md:self-auto`)" v-action="addAnother">
                                 {{ t(`setup.setup.addAnotherSandbox`) }}
                             </button>
                         </div>
@@ -550,7 +549,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <span class="mt-0.5 block text-2xs">{{ t(`setup.setup.checkSandboxRunningDomain`) }}</span>
                             <!-- A button rather than <details>: Notice's slot lives inside a <span>, which takes phrasing
                                  content only, and this page already folds by toggle everywhere else. -->
-                            <button v-if="!originHelp" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="originHelp = true">
+                            <button v-if="!originHelp" type="button" :class="ui.textButton({ size: `xs` }, `mt-1`)" @click="originHelp = true">
                                 {{ t(`setup.setup.checkedBothStillNothing`) }}
                             </button>
                             <i18n-t v-else keypath="setup.setup.webOriginMustName" tag="span" class="mt-1 block text-2xs" scope="global">
@@ -621,7 +620,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         <button
                             v-if="provisionOffered"
                             type="button"
-                            :class="ui.linkButton(`text-muted underline hover:text-content`)"
+                            :class="ui.textButton({ tone: `quiet` })"
                             @click="setLane(`provision`)"
                         >
                             {{ created === null ? t(`setup.setup.setOneUpMe`) : t(`setup.setup.getDomainIntenticInstead`) }}
@@ -644,7 +643,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 </Button>
                             </template>
                             <!-- Attach is offered only after platform capabilities load. -->
-                            <button v-if="loaded" type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
+                            <button v-if="loaded" type="button" :class="ui.textButton()" @click="setLane(`attach`)">
                                 {{ t(`setup.setup.alreadyRunningSandboxSomewhere`) }}
                             </button>
                         </template>
@@ -691,7 +690,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 }"
                             />
                         </template>
-                        <button type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
+                        <button type="button" :class="ui.textButton()" @click="setLane(`attach`)">
                             {{ t(`setup.setup.alreadyRunningSandboxSomewhere`) }}
                         </button>
                     </div>
@@ -797,7 +796,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                             <Icon name="spinner" spin class="self-center" /> {{ t(`setup.setup.preparingIntenticDomain`) }}
                                         </span>
                                         <!-- One escape hatch presents the available choices. -->
-                                        <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
+                                        <button type="button" :class="ui.textButton()" @click="reaching = !reaching">
                                             {{ reaching ? t(`setup.setup.keepAddress`) : t(`setup.setup.useDifferentAddress`) }}
                                         </button>
                                     </template>
@@ -824,7 +823,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <!-- Own Cloudflare credentials and the way back share this section. -->
                             <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                    <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
+                                    <button v-if="intenticAvailable" type="button" :class="ui.textButton()" @click="mode = `intentic`">
                                         {{ t(`setup.setup.useIntenticsDomain`) }}
                                     </button>
                                     <InfoHint :label="t(`views.words.whyCloudflareApiToken`)">
@@ -944,7 +943,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     <Button :label="t(`setup.setup.setUpOnMy`)" class="w-full justify-center md:w-fit" @click="chooseMachine(`mine`)">
                                         <template #icon><Icon name="desktop" /></template>
                                     </Button>
-                                    <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
+                                    <button type="button" :class="ui.textButton()" :disabled="hostedBusy" @click="recheckCapacity">
                                         {{ t(`ui.action.checkAgain`) }}
                                     </button>
                                 </div>
@@ -980,7 +979,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
                                 <span>{{ t(`setup.setup.otherWaysToSet2`) }}</span>
-                                <button type="button" :class="ui.linkButton()" @click="showOtherMachines">{{ t(`setup.setup.runOnMyOwn`) }}</button>
+                                <button type="button" :class="ui.textButton()" @click="showOtherMachines">{{ t(`setup.setup.runOnMyOwn`) }}</button>
                             </nav>
                         </template>
 
@@ -1041,12 +1040,12 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 <span>{{ t(`setup.setup.otherWaysToSet2`) }}</span>
                                 <!-- Show alternate setup links only while their rung is folded. -->
                                 <template v-if="otherMachinesFolded">
-                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
+                                    <button type="button" :class="ui.textButton()" @click="showOtherMachines">
                                         {{ t(`setup.setup.useMachineWeHost`) }}
                                     </button>
                                     <span v-if="project === undefined" aria-hidden="true" class="text-subtle">·</span>
                                 </template>
-                                <button v-if="project === undefined" type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
+                                <button v-if="project === undefined" type="button" :class="ui.textButton()" @click="showCommand = !showCommand">
                                     <template v-if="showCommand">{{ t(`setup.setup.hideCommand`) }}</template>
                                     <template v-else-if="desktop">{{ t(`setup.setup.showCommandServer`) }}</template>
                                     <!-- A phone has no terminal: the command it reveals is for a computer, and says so before it is pressed. -->
@@ -1099,7 +1098,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                         :text="selectedCommand"
                                         :label="t(`setup.setup.copyCommand`)"
                                         :stretch="true"
-                                        severity="secondary"
+                                        tier="boring"
                                         @copied="onCopied"
                                     />
                                     <!-- Local development guidance stays folded behind the same gate. -->

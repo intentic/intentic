@@ -220,7 +220,7 @@ const leadOf = (finding: ActivityFinding): { icon: `eye-slash` | `eye` | `times`
                     <template v-if="row.value !== undefined" #control>
                         <!-- A value the shield should have left alone goes on the never-masked list from where it was seen. -->
                         <span v-if="allowed.has(allowKey(row.value))" class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.neverMaskedNow`) }}</span>
-                        <Button v-else size="small" severity="secondary" text :disabled="!ready" @click="emit(`neverMask`, row.value)">{{
+                        <Button v-else size="small" tier="quiet" :disabled="!ready" @click="emit(`neverMask`, row.value)">{{
                             t(`sandbox.agentPrivacyShield.neverMaskThis`)
                         }}</Button>
                     </template>

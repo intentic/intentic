@@ -19,7 +19,13 @@ const back = usePageBack();
                 <!-- The way back and the name never part: a title longer than the whole row truncates here, beside its arrow. -->
                 <div class="flex min-w-0 max-w-full items-center gap-2">
                     <!-- A button rather than a link: where it goes is history, not an address (see pageBack.ts). -->
-                    <button v-if="back" type="button" :class="ui.iconButton(`-ml-1.5 h-8 w-8 shrink-0`)" :aria-label="back.label" @click="back.go()">
+                    <button
+                        v-if="back"
+                        type="button"
+                        :class="ui.iconButton({ size: `lg` }, `-ml-1.5 shrink-0`)"
+                        :aria-label="back.label"
+                        @click="back.go()"
+                    >
                         <Icon name="arrow-left" class="text-base" />
                     </button>
                     <h1 class="min-w-0 truncate text-2xl font-semibold">{{ title }}</h1>

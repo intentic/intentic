@@ -841,8 +841,7 @@ const grab = (event: PointerEvent): void => {
                 <Button
                     v-if="away.offerReland"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :disabled="busy || relanding"
                     v-tooltip.top="{ title: words.landAgain, note: t(`agents.agentCard.landAgainHint`) }"
                     class="shrink-0 whitespace-nowrap"
@@ -871,9 +870,9 @@ const grab = (event: PointerEvent): void => {
                 <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
                 <Button
                     size="small"
-                    severity="success"
+                    tone="success" thumb
                     :disabled="landing || busy"
-                    class="ui-button-thumb self-start whitespace-nowrap"
+                    class="self-start whitespace-nowrap"
                     @click.stop="emit('land')"
                 >
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
@@ -888,7 +887,7 @@ const grab = (event: PointerEvent): void => {
                     }}</span>
                 </p>
                 <template v-else>
-                    <Button size="small" severity="secondary" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="requestLand">
+                    <Button size="small" tier="boring" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="requestLand">
                         <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{
                             requesting ? t(`agents.agentCard.asking`) : words.requestLand
                         }}
@@ -932,7 +931,7 @@ const grab = (event: PointerEvent): void => {
                     <button
                         v-if="resendable"
                         type="button"
-                        :class="ui.textAction('inline-flex shrink-0 gap-1 font-medium')"
+                        :class="ui.textButton({ tone: `quiet` }, 'inline-flex shrink-0 font-medium')"
                         :disabled="resending || busy"
                         v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
                         @click.stop="sendAgain"

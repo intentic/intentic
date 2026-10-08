@@ -119,7 +119,7 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
                 v-for="action in panel?.actions"
                 :key="action.op"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :label="action.label"
                 :loading="ops.agentOp(environment) === action.op"
                 :disabled="ops.working.value || ops.agentOp(environment) !== undefined"

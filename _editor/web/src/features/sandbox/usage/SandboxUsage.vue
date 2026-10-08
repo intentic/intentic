@@ -417,7 +417,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                 t(`sandbox.sandboxUsage.rowsTurns`, { count: tableRows.length, turns: formatCompact(totals.turns) })
                             }}</span>
                         </button>
-                        <button type="button" :class="ui.linkButton(`gap-1 text-2xs`)" :disabled="tableRows.length === 0" @click="exportCsv">
+                        <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="tableRows.length === 0" @click="exportCsv">
                             <Icon name="download" />{{ t(`sandbox.sandboxUsage.exportCsv`) }}
                         </button>
                     </div>

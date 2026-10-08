@@ -52,5 +52,5 @@ export const tooltipFor = (tab: TerminalTab | undefined): TooltipValue => {
     }
     return tab.command === undefined
         ? idleTooltip(tab)
-        : { title: t(`shared.running`), tone: `ok`, rows: [{ label: t(`terminal.stripSegments.command`), value: tab.command }] };
+        : { title: t(`shared.running`), tone: `success`, rows: [{ label: t(`terminal.stripSegments.command`), value: tab.command }] };
 };

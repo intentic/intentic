@@ -197,7 +197,7 @@ const configure = (pin: ModelPin): void => {
                             v-for="mark in pickedMarks"
                             :key="mark.id"
                             type="button"
-                            class="ui-chip ui-chip-on group py-1 pl-1.5 pr-2 text-xs hover:border-danger"
+                            :class="ui.chip({ on: true }, `group py-1 pl-1.5 pr-2 text-xs hover:border-danger`)"
                             :aria-label="t(`sandbox.personaForm.stopSpeakingThrough`, { id: mark.id })"
                             @click="toggleAccount(mark.id)"
                         >
@@ -214,7 +214,7 @@ const configure = (pin: ModelPin): void => {
                         <!-- A persona that speaks nowhere is a fine persona; the button is the whole state, nothing picked yet. -->
                         <button
                             type="button"
-                            :class="ui.linkButton('gap-1 text-xs text-muted hover:text-content')"
+                            :class="ui.textButton({ tone: `quiet` })"
                             :aria-expanded="open"
                             @click="open = !open"
                         >

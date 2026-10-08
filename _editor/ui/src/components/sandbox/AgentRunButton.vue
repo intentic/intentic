@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from "../primitives/Button.vue";
+import type { ButtonTier, ButtonTone } from "../primitives/button.js";
 import { type ComponentPublicInstance, computed, ref } from "vue";
 import Icon from "../primitives/Icon.vue";
 import type { AgentRunPicker } from "../../composables/useAgentRunPick.js";
@@ -14,6 +15,8 @@ const t = useT();
 const {
     label,
     picker,
+    tier = undefined,
+    tone = undefined,
     severity = undefined,
     size = `small`,
     text = false,
@@ -27,8 +30,13 @@ const {
     label: string;
     /* WHAT THIS RUN OPENS ON AND HOW TO RE-POINT IT, whole (useAgentRunPick). */
     picker: AgentRunPicker;
+    /** Both halves' tier (Button's); a `quiet` pair trims its inner edges. */
+    tier?: ButtonTier | undefined;
+    tone?: ButtonTone | undefined;
+    /** @deprecated `tier`/`tone`: what installed extensions built before tiers still pass. */
     severity?: string | undefined;
     size?: string;
+    /** @deprecated `tier="quiet"`. */
     text?: boolean;
     icon?: IconName | undefined;
     loading?: boolean;
@@ -44,6 +52,9 @@ const emit = defineEmits<{ run: [] }>();
 const caret = ref<ComponentPublicInstance>();
 
 const overridden = computed(() => picker.overridden.value);
+// A named tier owns the look; with none, the legacy pair passes through to Button the way it always did.
+const quiet = computed(() => (tier === undefined ? text : tier === `quiet`));
+const look = computed(() => (tier === undefined && tone === undefined ? { severity, text } : { tier, tone }));
 const modelLabel = computed(() => picker.model.value.label);
 
 /* Model, tier, and rate stay together because they describe the click's cost. */
@@ -90,11 +101,10 @@ const openPicker = (): void => {
         <Button
             :label="label"
             :size="size"
-            :severity="severity"
-            :text="text"
+            v-bind="look"
             :loading="loading"
             :disabled="disabled"
-            :class="['rounded-r-none', text ? 'pr-1' : '']"
+            :class="['rounded-r-none', quiet ? 'pr-1' : '']"
             v-tooltip.top="hint"
             @click="emit(`run`)"
         >
@@ -104,10 +114,9 @@ const openPicker = (): void => {
         <Button
             ref="caret"
             :size="size"
-            :severity="severity"
-            :text="text"
+            v-bind="look"
             :disabled="disabled || loading"
-            :class="['rounded-l-none', text ? 'pl-1 pr-1.5' : 'px-1.5']"
+            :class="['rounded-l-none', quiet ? 'pl-1 pr-1.5' : 'px-1.5']"
             :aria-label="t(`ui.agentRunButton.configureStartRun`, { spend })"
             v-tooltip.top="caretHint"
             @click="openPicker"

@@ -6,9 +6,12 @@ import {
     explorerColorClass,
     iconForEntry,
     isTypingTarget,
+    Notice,
     ResizeSeam,
     SegmentedControl,
     type Tip,
+    toneTint,
+    toneWash,
     ui,
     useDevice,
     useExplorerStyle,
@@ -69,7 +72,7 @@ const t = useT();
 const mac = isApplePlatform();
 const reviewedTip = (keys?: string): Tip => ({
     title: t(`agents.agentReviewPanel.reviewed`),
-    tone: `ok`,
+    tone: `success`,
     keys,
     note: t(`agents.agentReviewPanel.clickToUnmark`),
 });
@@ -584,7 +587,6 @@ const openInWorkspace = (): void => {
 
 // Kit's toolbar icon button, plus this panel's own disabled treatment.
 const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
-const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
@@ -619,13 +621,10 @@ const seamWidth = computed<number>({
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-        <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-            <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</p>
-                <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
-            </div>
-        </div>
+        <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">
+            <span class="block font-medium">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</span>
+            <span class="block break-words text-muted">{{ changes.error.value }}</span>
+        </Notice>
 
         <!-- The rows below are a branch, not a checkout, and only here can that be said. Each turn copies what it
              committed on a branch of its own onto that branch, so a copy standing elsewhere is news, not trouble, until
@@ -633,7 +632,7 @@ const seamWidth = computed<number>({
         <div
             v-if="changes.elsewhere.value.length > 0"
             class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border px-2 py-1.5"
-            :class="strandedCount > 0 ? `border-warning/40 bg-warning/10` : `border-info/40 bg-info/10`"
+            :class="toneTint(strandedCount > 0 ? `warning` : `info`, `strong`)"
         >
             <span class="text-2xs font-medium" :class="strandedCount > 0 ? `text-warning` : `text-info`">
                 {{
@@ -655,7 +654,11 @@ const seamWidth = computed<number>({
         </div>
 
         <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
-        <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">
+        <div
+            v-if="resolvingPaths.length > 0"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border px-2 py-1.5"
+            :class="toneTint(`info`, `strong`)"
+        >
             <span class="text-2xs font-medium text-info">{{
                 t(`agents.agentReviewPanel.landedWithFiles`, { count: resolvingPaths.length }, resolvingPaths.length)
             }}</span>
@@ -735,7 +738,7 @@ const seamWidth = computed<number>({
             class="min-h-0 flex-1 p-6"
         >
             <template v-if="remoteName !== undefined" #actions>
-                <Button size="small" severity="secondary" @click="cross">
+                <Button size="small" tier="boring" @click="cross">
                     <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
                 </Button>
             </template>
@@ -782,7 +785,8 @@ const seamWidth = computed<number>({
                                 <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
                                 <span
                                     v-if="group.blocked > 0"
-                                    class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
+                                    class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                    :class="toneWash(`warning`)"
                                 >
                                     <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
                                 </span>
@@ -816,7 +820,8 @@ const seamWidth = computed<number>({
                                         <!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
                                         <span
                                             v-if="bucket.blocked > 0"
-                                            class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
+                                            class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                            :class="toneWash(`warning`)"
                                         >
                                             <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
                                         </span>
@@ -842,7 +847,7 @@ const seamWidth = computed<number>({
                                             file.key === selectedKey
                                                 ? 'bg-primary-600/10'
                                                 : file.blocked !== undefined
-                                                  ? 'bg-warning/5 hover:bg-overlay'
+                                                  ? toneTint(`warning`, `soft`, `hover:bg-overlay`)
                                                   : 'hover:bg-overlay',
                                             // Under a header the rows step in, so the module reads as holding them.
                                             viewOf(group.repo).named ? 'pl-2' : '',
@@ -865,7 +870,8 @@ const seamWidth = computed<number>({
                                             <!-- Blocked files replace the ordinary unlanded marker. -->
                                             <span
                                                 v-if="file.blocked !== undefined"
-                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
+                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                                :class="toneWash(`warning`)"
                                                 v-tooltip.right="reasonCopy()[file.blocked].row"
                                             >
                                                 <Icon :name="reasonCopy()[file.blocked].icon" class="text-2xs" />{{ reasonCopy()[file.blocked].mark }}
@@ -894,7 +900,7 @@ const seamWidth = computed<number>({
                                             type="button"
                                             :class="
                                                 ui.iconButton(
-                                                    `rounded max-md:h-9 max-md:w-9`,
+                                                    { size: mobile ? `lg` : `sm` },
                                                     isViewed(file)
                                                         ? `text-success`
                                                         : `opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100`,
@@ -950,7 +956,8 @@ const seamWidth = computed<number>({
                         <template #badges>
                             <span
                                 v-if="selected.blocked !== undefined"
-                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
+                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill text-2xs font-medium"
+                                :class="toneWash(`warning`)"
                                 v-tooltip.bottom="reasonCopy()[selected.blocked].row"
                             >
                                 <Icon :name="reasonCopy()[selected.blocked].icon" class="text-2xs" />{{ t(`agents.agentReviewPanel.blocked`) }}
@@ -968,7 +975,8 @@ const seamWidth = computed<number>({
                             />
                             <span
                                 v-else-if="mixedLanding && !selected.change.landed"
-                                class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
+                                class="shrink-0 ui-status-pill text-2xs font-medium"
+                                :class="toneWash(`warning`)"
                                 v-tooltip.bottom="t(`agents.agentReviewPanel.awaitingLand`)"
                             >
                                 {{ t(`agents.agentReviewPanel.notLanded`) }}

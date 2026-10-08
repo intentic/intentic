@@ -88,7 +88,7 @@ export const browsersChip = (facts: { readonly sessions: readonly BrowserSession
     const base = { id: `browsers`, label, to: window === undefined ? `/browsers` : `/browsers/${window.name}`, active: facts.here } as const;
     if (helping > 0) {
         const note = t(`shell.shellDesktop.agentNeedsHelp`);
-        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: label, tone: `warn`, note } };
+        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: label, tone: `warning`, note } };
     }
     const open = live > 0 ? t(`shell.shellDesktop.open`, { live }) : undefined;
     return {
@@ -131,7 +131,7 @@ export const portsChip = (facts: { readonly ports: readonly number[]; readonly h
         tone: `warning`,
         active: facts.here,
         aria: `${title}: ${list}`,
-        tip: { title, tone: `warn`, rows: [{ label: t(`shell.shellDesktop.ports`, {}, facts.ports.length), value: list }] },
+        tip: { title, tone: `warning`, rows: [{ label: t(`shell.shellDesktop.ports`, {}, facts.ports.length), value: list }] },
     };
 };
 
@@ -149,6 +149,6 @@ export const vpnChip = (facts: { readonly names: readonly string[]; readonly her
         tone: `success`,
         active: facts.here,
         aria: `${title}: ${names}`,
-        tip: { title, tone: `ok`, rows: [{ label: t(`shell.shellDesktop.tunnels`, {}, facts.names.length), value: names }] },
+        tip: { title, tone: `success`, rows: [{ label: t(`shell.shellDesktop.tunnels`, {}, facts.names.length), value: names }] },
     };
 };

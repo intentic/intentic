@@ -185,7 +185,7 @@ const submit = async (): Promise<void> => {
     <Modal v-model:open="visible" size="md" :header="t(`ui.action.add`)" @hide="reset">
         <!-- STEP 2: the picked want's form. -->
         <template v-if="selected">
-            <button type="button" :class="ui.textAction(`mb-3 gap-1`)" @click="selected = undefined">
+            <button type="button" :class="ui.textButton({ tone: `quiet` }, `mb-3`)" @click="selected = undefined">
                 <Icon name="arrow-left" class="text-2xs" /> {{ t(`ui.action.back`) }}
             </button>
 
@@ -226,7 +226,7 @@ const submit = async (): Promise<void> => {
                     <!-- Names the rule and offers the repair, rather than leaving Add greyed out with nothing said. -->
                     <span v-if="nameError" class="text-xs text-warning">
                         {{ nameError }}
-                        <button v-if="inventoryIdentifier(name)" type="button" :class="ui.textAction(`text-xs`)" @click="useRepairedName">
+                        <button v-if="inventoryIdentifier(name)" type="button" :class="ui.textButton({ tone: `quiet` })" @click="useRepairedName">
                             {{ t(`views.addWantDialog.use`, { name: inventoryIdentifier(name) }) }}
                         </button>
                     </span>

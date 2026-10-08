@@ -10,6 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import {
     Button,
+    type ButtonTier,
     ChangeStatusMark,
     clipboardOf,
     ContextMenu,
@@ -17,9 +18,11 @@ import {
     growTextarea,
     type IconName,
     Modal,
+    Notice,
     timeAgo,
     type Tip,
     type TipRow,
+    toneWash,
     type TooltipValue,
     ui,
     useDevice,
@@ -244,7 +247,7 @@ const draftTip = computed((): Tip | undefined =>
               rows: filterDraftRows.value.map((row) => ({
                   label: row.model ?? row.detail ?? ``,
                   value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
-                  tone: row.status === `failed` ? `warn` : undefined,
+                  tone: row.status === `failed` ? `warning` : undefined,
               })),
           },
 );
@@ -1007,7 +1010,7 @@ const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
 // the width is the verdict's, they earn it only by having something to count; the offer states "no upstream yet" too.
 const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value === `held` && (aheadTotal.value > 0 || behindTotal.value > 0)));
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
-const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
+const syncTier = computed<ButtonTier>(() => (changes.count.value > 0 ? `boring` : `accent`));
 // Names which repos, since the summary beside the button only counts. The replay caveat rides here too
 // — the one thing about this verb a user can be surprised by, now that the per-row pull pill is gone.
 const syncTip = computed((): Tip => ({
@@ -1107,12 +1110,6 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         .filter(([scope]) => scope !== COMMIT_SCOPE && !dirty.value.some((repo) => repo.repo === scope))
         .map(([repo, failure]) => ({ repo, ...failure })),
 );
-
-// A bordered block, not loose coloured text — an error needs a container or it reads as gibberish, not a message.
-const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
-// The same shape one severity down: a heads-up about something that hasn't gone wrong yet, on an action still
-// available.
-const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5`;
 </script>
 
 <template>
@@ -1120,13 +1117,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
 
         <!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
-        <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-            <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.couldntReadChanges`) }}</p>
-                <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
-            </div>
-        </div>
+        <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">
+            <span class="block font-medium">{{ t(`workspace.reviewPanel.couldntReadChanges`) }}</span>
+            <span class="block break-words text-muted">{{ changes.error.value }}</span>
+        </Notice>
 
         <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
@@ -1184,8 +1178,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <!-- The commit action reports progress while stages, hooks, and reads run. -->
                 <Button
                     size="small"
-                    severity="success"
-                    class="ui-button-thumb shrink-0 whitespace-nowrap"
+                    tone="success"
+                    thumb
+                    class="shrink-0 whitespace-nowrap"
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.right="commitTip"
@@ -1198,17 +1193,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </Button>
             </div>
             <!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
-            <div v-if="atRisk.length > 0" :class="WARNING">
-                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
-                <div class="min-w-0 flex-1">
-                    <p class="break-words text-2xs text-warning">
-                        {{ t(`workspace.reviewPanel.agentEditing`, { paths: atRisk.join(`, `), action: commitLabel }, atRisk.length) }}
-                    </p>
+            <Notice v-if="atRisk.length > 0" tone="warning" size="sm">
+                <span class="break-words">
+                    {{ t(`workspace.reviewPanel.agentEditing`, { paths: atRisk.join(`, `), action: commitLabel }, atRisk.length) }}
+                </span>
+                <template v-if="unaffected.length > 0" #actions>
                     <Button
-                        v-if="unaffected.length > 0"
                         size="small"
-                        severity="secondary"
-                        class="mt-1 whitespace-nowrap"
+                        tier="boring"
+                        class="whitespace-nowrap"
                         :disabled="!commitReady"
                         @click="() => runCommit(unaffected)"
                         v-tooltip.right="t(`workspace.reviewPanel.commitsRepos`, { repos: unaffected.map((group) => group.repo).join(`, `) })"
@@ -1216,12 +1209,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         <Icon name="check" class="mr-1 text-2xs" />{{ t(`workspace.reviewPanel.commit`) }}
                         {{ unaffected.length === 1 ? unaffected[0]!.repo : t(`workspace.reviewPanel.otherRepos`, { count: unaffected.length }) }}
                     </Button>
-                </div>
-            </div>
+                </template>
+            </Notice>
             <!-- This warning reports unfinished work after the index has already been frozen. -->
-            <div v-if="unfinished.length > 0" :class="WARNING">
-                <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-warning" />
-                <p class="min-w-0 flex-1 break-words text-2xs text-warning">
+            <Notice v-if="unfinished.length > 0" tone="warning" icon="wave-pulse" size="sm">
+                <span class="break-words">
                     {{
                         t(
                             `workspace.reviewPanel.unfinishedOrigins`,
@@ -1236,27 +1228,21 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             unfinished.length,
                         )
                     }}
-                </p>
-            </div>
+                </span>
+            </Notice>
             <!-- A commit spans every staged repo, so its failure belongs to the box that fired it, message still in the input. -->
-            <div v-if="failureIn(COMMIT_SCOPE)" :class="NOTICE">
-                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-                <div class="min-w-0 flex-1">
-                    <p class="text-2xs font-medium text-danger">{{ failureIn(COMMIT_SCOPE)!.action }}</p>
-                    <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failureIn(COMMIT_SCOPE)!.detail">
-                        {{ failureIn(COMMIT_SCOPE)!.detail }}
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
-                    @click="changes.dismissFailure(COMMIT_SCOPE)"
-                    v-tooltip.right="t(`ui.action.dismiss`)"
-                    :aria-label="t(`workspace.reviewPanel.dismissCommitError`)"
-                >
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </div>
+            <Notice
+                v-if="failureIn(COMMIT_SCOPE)"
+                tone="danger"
+                size="sm"
+                :dismiss-label="t(`workspace.reviewPanel.dismissCommitError`)"
+                @dismiss="changes.dismissFailure(COMMIT_SCOPE)"
+            >
+                <span class="block font-medium">{{ failureIn(COMMIT_SCOPE)!.action }}</span>
+                <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failureIn(COMMIT_SCOPE)!.detail">
+                    {{ failureIn(COMMIT_SCOPE)!.detail }}
+                </span>
+            </Notice>
         </div>
 
         <!-- One block, three states, never two: at rest the sync every repo needs, in flight the run in the button's own
@@ -1295,12 +1281,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <button
                     v-if="outgoing === `held`"
                     type="button"
-                    :class="ui.textAction(`m-0 min-w-0 flex-1 gap-2.5 rounded-md p-1 hover:bg-overlay`)"
+                    :class="ui.textButton({ tone: `quiet`, flush: true }, `min-w-0 flex-1 rounded-md p-1 hover:bg-overlay`)"
                     :aria-label="heldLine"
                     v-tooltip.right="heldTip"
                     @click="pushFlow.reopen"
                 >
-                    <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning" aria-hidden="true">
+                    <span class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="toneWash(`warning`)" aria-hidden="true">
                         <Icon name="exclamation-circle" class="text-base" />
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col gap-1">
@@ -1359,7 +1345,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Button
                     v-if="syncMeta"
                     size="small"
-                    :severity="syncSeverity"
+                    :tier="syncTier"
                     class="shrink-0 whitespace-nowrap"
                     :disabled="changes.actionBusy.value"
                     v-tooltip.bottom="syncTip"
@@ -1371,22 +1357,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- A fetch or push that failed in a repo the list isn't showing; named by repo since it has no row to sit under. -->
-        <div v-for="failure in strayFailures" :key="failure.repo" :class="[NOTICE, 'mx-2 mt-1 shrink-0']">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-            <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</p>
-                <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</p>
-            </div>
-            <button
-                type="button"
-                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
-                @click="changes.dismissFailure(failure.repo)"
-                v-tooltip.right="t(`ui.action.dismiss`)"
-                :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
-            >
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
+        <Notice
+            v-for="failure in strayFailures"
+            :key="failure.repo"
+            tone="danger"
+            size="sm"
+            class="mx-2 mt-1 shrink-0"
+            :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
+            @dismiss="changes.dismissFailure(failure.repo)"
+        >
+            <span class="block font-medium">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</span>
+            <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</span>
+        </Notice>
 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
@@ -1466,12 +1448,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
                 </div>
-                <div :class="[NOTICE, 'mb-1.5']">
-                    <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.couldntReadRepo`) }}</p>
-                        <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</p>
-                    </div>
-                </div>
+                <Notice tone="danger" size="sm" class="mb-1.5">
+                    <span class="block font-medium">{{ t(`workspace.reviewPanel.couldntReadRepo`) }}</span>
+                    <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</span>
+                </Notice>
             </div>
 
             <!-- Committing repositories stay listed but dim while their lock is held. -->
@@ -1536,49 +1516,46 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </div>
 
                 <!-- A failed fetch/pull/push/discard/stage for this repo, under the row that caused it, in git's own words. -->
-                <div v-if="failureIn(group.repo)" :class="[NOTICE, 'mb-1.5 mt-0.5']">
-                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-                    <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-danger">{{ failureIn(group.repo)!.action }}</p>
-                        <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failureIn(group.repo)!.detail">
-                            {{ failureIn(group.repo)!.detail }}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
-                        @click="changes.dismissFailure(group.repo)"
-                        v-tooltip.right="t(`ui.action.dismiss`)"
-                        :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
-                    >
-                        <Icon name="times" class="text-2xs" />
-                    </button>
-                </div>
+                <Notice
+                    v-if="failureIn(group.repo)"
+                    tone="danger"
+                    size="sm"
+                    class="mb-1.5 mt-0.5"
+                    :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
+                    @dismiss="changes.dismissFailure(group.repo)"
+                >
+                    <span class="block font-medium">{{ failureIn(group.repo)!.action }}</span>
+                    <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failureIn(group.repo)!.detail">
+                        {{ failureIn(group.repo)!.detail }}
+                    </span>
+                </Notice>
 
                 <!-- Conflicts come from operations left by an external terminal. -->
-                <div v-if="group.operation" :class="[NOTICE, 'mb-1.5 mt-0.5 border-warning/40 bg-warning/10']">
-                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
-                    <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-warning">{{ t(`workspace.reviewPanel.inProgress`, { operation: group.operation }) }}</p>
-                        <p class="text-2xs text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</p>
-                    </div>
-                    <Button
-                        size="small"
-                        severity="warn"
-                        class="shrink-0"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.abortOperation(group.repo)"
-                        v-tooltip.top="{
-                            title: t(`workspace.reviewPanel.abortOperation`, { operation: group.operation }),
-                            note: t(`workspace.reviewPanel.restorePointFirst`),
-                        }"
-                    >
-                        {{ t(`workspace.reviewPanel.abort`) }}
-                    </Button>
-                </div>
+                <Notice v-if="group.operation" tone="warning" size="sm" class="mb-1.5 mt-0.5">
+                    <span class="block font-medium">{{ t(`workspace.reviewPanel.inProgress`, { operation: group.operation }) }}</span>
+                    <span class="block text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</span>
+                    <template #actions>
+                        <Button
+                            size="small"
+                            tone="warning"
+                            class="shrink-0"
+                            :disabled="changes.actionBusy.value"
+                            @click="changes.abortOperation(group.repo)"
+                            v-tooltip.top="{
+                                title: t(`workspace.reviewPanel.abortOperation`, { operation: group.operation }),
+                                note: t(`workspace.reviewPanel.restorePointFirst`),
+                            }"
+                        >
+                            {{ t(`workspace.reviewPanel.abort`) }}
+                        </Button>
+                    </template>
+                </Notice>
 
                 <!-- Untracked paths shaped like scratch: every stage-everything leaves them out, so Commit all does too. -->
-                <div v-if="group.scratch !== undefined" :class="[NOTICE, 'mb-1.5 mt-0.5 border-border bg-overlay']">
+                <div
+                    v-if="group.scratch !== undefined"
+                    class="mb-1.5 mt-0.5 flex items-start gap-1.5 rounded-md border border-border bg-overlay px-2 py-1.5"
+                >
                     <Icon name="filter" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-content">
@@ -1691,9 +1668,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     <!-- Index verbs stay quieter than file names so repeated rows read as texture. -->
                                     <button
                                         type="button"
-                                        :class="
-                                            ui.iconButton(`h-5 w-5 self-center rounded text-subtle group-hover/file:text-muted max-md:h-8 max-md:w-8`)
-                                        "
+                                        :class="ui.iconButton({ size: mobile ? `lg` : `xs`, tone: `subtle` }, `self-center`)"
                                         :disabled="changes.actionBusy.value"
                                         v-action="() => stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
@@ -1706,7 +1681,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         type="button"
                                         :class="
                                             ui.iconButton(
-                                                `h-5 w-5 self-center rounded opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100`,
+                                                { size: mobile ? `lg` : `xs` },
+                                                `self-center opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100`,
+                                                `max-md:ml-2 max-md:opacity-100`,
                                             )
                                         "
                                         :disabled="changes.actionBusy.value"
@@ -1770,8 +1747,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = undefined" />
-                <Button size="small" severity="danger" :label="t(`ui.action.discard`)" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingDiscard = undefined" />
+                <Button size="small" tone="danger" :label="t(`ui.action.discard`)" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Modal>
 

@@ -267,8 +267,7 @@ watch(
                 <Button
                     v-if="shownRun && !showingGraph"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     class="shrink-0"
                     v-tooltip.bottom="t(`chat.chatPanel.runDiagram`)"
                     :aria-label="t(`chat.chatPanel.backToRunsDiagram`)"
@@ -283,7 +282,7 @@ watch(
                 >
                 <button
                     type="button"
-                    :class="ui.iconButton(`rounded`)"
+                    :class="ui.iconButton()"
                     v-tooltip.bottom="{ title: t(`chat.chatPanel.leaveRun`), note: t(`chat.chatPanel.chatsStayOpen`) }"
                     :aria-label="t(`chat.chatPanel.leaveRun`)"
                     @click="closeRun()"

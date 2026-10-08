@@ -30,9 +30,10 @@ const words = useVocabulary();
     <Button
         v-if="canShip"
         :size="block ? undefined : `small`"
-        severity="success"
+        tone="success"
+        :thumb="block"
         class="shrink-0 whitespace-nowrap"
-        :class="block ? `ui-button-thumb w-full` : ``"
+        :class="block ? `w-full` : ``"
         :disabled="landDisabled"
         @click="emit(`land`)"
         v-tooltip.bottom="landHint"
@@ -46,9 +47,10 @@ const words = useVocabulary();
     <Button
         v-else
         :size="block ? undefined : `small`"
-        severity="secondary"
+        tier="boring"
+        :thumb="block"
         class="shrink-0 whitespace-nowrap"
-        :class="block ? `ui-button-thumb w-full` : ``"
+        :class="block ? `w-full` : ``"
         :disabled="requesting"
         @click="emit(`request`)"
         v-tooltip.bottom="requestHint"

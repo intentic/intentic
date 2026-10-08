@@ -312,8 +312,7 @@ onMounted(progress.recover);
                         <Button
                             v-if="declaredApps.has(app.name)"
                             size="small"
-                            severity="danger"
-                            :text="true"
+                            tier="quiet" tone="danger"
                             :aria-label="t(`views.infraDeclare.removeApp`)"
                             @click="removeEntry(app.name)"
                         >
@@ -340,8 +339,7 @@ onMounted(progress.recover);
                     </div>
                     <Button
                         size="small"
-                        severity="danger"
-                        :text="true"
+                        tier="quiet" tone="danger"
                         :aria-label="t(`views.infraDeclare.removeService`)"
                         @click="removeEntry(tool.name)"
                     >
@@ -381,7 +379,7 @@ onMounted(progress.recover);
         </summary>
         <div class="mt-3">
             <div class="mb-3 flex items-center justify-end">
-                <Button v-if="!showConnect" :label="t(`views.infraDeclare.addServer`)" size="small" severity="secondary" @click="showConnect = true">
+                <Button v-if="!showConnect" :label="t(`views.infraDeclare.addServer`)" size="small" tier="boring" @click="showConnect = true">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -410,23 +408,21 @@ onMounted(progress.recover);
                             v-if="hasGithub"
                             :label="t(`views.infraDeclare.unlink`)"
                             size="small"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             @click="removeEntry('gh')"
                         />
                         <Button
                             v-else-if="hasGitlab"
                             :label="t(`views.infraDeclare.unlink`)"
                             size="small"
-                            severity="secondary"
-                            :text="true"
+                            tier="quiet"
                             @click="removeEntry('gl')"
                         />
                         <template v-else-if="!showGithub && !showGitlab">
-                            <Button :label="t(`views.infraDeclare.linkGithub`)" size="small" severity="secondary" @click="showGithub = true">
+                            <Button :label="t(`views.infraDeclare.linkGithub`)" size="small" tier="boring" @click="showGithub = true">
                                 <template #icon><Icon name="github" /></template>
                             </Button>
-                            <Button :label="t(`views.infraDeclare.linkGitlab`)" size="small" severity="secondary" @click="showGitlab = true">
+                            <Button :label="t(`views.infraDeclare.linkGitlab`)" size="small" tier="boring" @click="showGitlab = true">
                                 <template #icon><Icon name="gitlab" /></template>
                             </Button>
                         </template>
@@ -445,7 +441,7 @@ onMounted(progress.recover);
                         >
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showGithub = false" />
+                        <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showGithub = false" />
                         <Button
                             type="submit"
                             :label="t(`views.infraDeclare.linkGithub`)"
@@ -477,7 +473,7 @@ onMounted(progress.recover);
                         <span class="text-2xs text-subtle">{{ t(`views.infraDeclare.leaveBlankGitlabCom`) }}</span>
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showGitlab = false" />
+                        <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showGitlab = false" />
                         <Button
                             type="submit"
                             :label="t(`views.infraDeclare.linkGitlab`)"
@@ -509,15 +505,14 @@ onMounted(progress.recover);
                         v-if="hasStripe"
                         :label="t(`ui.action.disconnect`)"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         @click="removeEntry('stripe')"
                     />
                     <Button
                         v-else-if="!showStripe"
                         :label="t(`views.infraDeclare.connectStripe`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         @click="showStripe = true"
                     >
                         <template #icon><Icon name="credit-card" /></template>
@@ -533,7 +528,7 @@ onMounted(progress.recover);
                         >
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showStripe = false" />
+                        <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showStripe = false" />
                         <Button
                             type="submit"
                             :label="t(`views.infraDeclare.connectStripe`)"
@@ -565,15 +560,14 @@ onMounted(progress.recover);
                         v-if="hasCloudflare"
                         :label="t(`ui.action.disconnect`)"
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         @click="removeEntry('cf')"
                     />
                     <Button
                         v-else-if="!showCloudflare"
                         :label="t(`views.words.connectCloudflare`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         @click="showCloudflare = true"
                     >
                         <template #icon><Icon name="cloud" /></template>
@@ -584,7 +578,7 @@ onMounted(progress.recover);
 
             <Card v-if="showConnect" class="mb-3 flex flex-col gap-3">
                 <ConnectHost />
-                <Button type="button" class="self-end" :label="t(`ui.action.close`)" severity="secondary" :text="true" @click="showConnect = false" />
+                <Button type="button" class="self-end" :label="t(`ui.action.close`)" tier="quiet" @click="showConnect = false" />
             </Card>
 
             <div class="flex flex-col gap-2.5">
@@ -599,8 +593,7 @@ onMounted(progress.recover);
                     </div>
                     <Button
                         size="small"
-                        severity="danger"
-                        :text="true"
+                        tier="quiet" tone="danger"
                         :aria-label="t(`views.infraDeclare.removeServer`)"
                         @click="removingServer = entry.name"
                     >

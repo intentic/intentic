@@ -132,7 +132,7 @@ const open = computed({
                 <Button :label="t(`ui.action.close`)" @click="cancel" />
             </template>
             <template v-else>
-                <Button severity="secondary" :text="true" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />
+                <Button tier="quiet" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />
                 <Button :label="label" :loading="attaching" :disabled="!ready" @click="attach" />
             </template>
         </template>

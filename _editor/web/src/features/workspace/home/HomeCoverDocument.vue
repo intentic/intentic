@@ -218,14 +218,14 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
                     <p class="pt-2 text-2xs text-subtle">{{ t(`workspace.homeCover.foundBelow`, { count: below.length }, below.length) }}</p>
                     <ul class="flex flex-col items-center gap-0.5">
                         <li v-for="place in below" :key="place.path">
-                            <button type="button" :class="ui.textAction(`min-h-7 gap-1.5 text-xs`)" @click="emit(`reveal`, place.path)">
+                            <button type="button" :class="ui.textButton({ tone: `quiet` }, `min-h-7`)" @click="emit(`reveal`, place.path)">
                                 <Icon name="folder" class="text-2xs text-subtle" aria-hidden="true" />
                                 {{ place.label }}
                             </button>
                         </li>
                     </ul>
                 </template>
-                <button type="button" :class="ui.textAction(`mt-2 text-2xs`)" @click="emit(`exit`)">
+                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `mt-2`)" @click="emit(`exit`)">
                     {{ t(`workspace.homeCover.showAllFiles`) }}
                 </button>
             </div>
@@ -266,13 +266,13 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
                                 : t(`workspace.homeCover.notText`, { name: entry.name })
                         }}
                     </p>
-                    <button type="button" :class="ui.textAction(`text-2xs`)" @click="open">{{ t(`ui.action.open`) }}</button>
+                    <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="open">{{ t(`ui.action.open`) }}</button>
                 </div>
 
                 <!-- The top of a long file is what a cover shows; the rest is the tab's. -->
                 <p v-if="text?.cut === true" class="flex items-center justify-center gap-2 px-6 pb-8 text-2xs text-subtle">
                     {{ t(`workspace.homeCover.cut`, { size: formatBytes(text.shown), name: entry.name }) }}
-                    <button type="button" :class="ui.linkButton(`text-2xs`)" @click="open">{{ t(`workspace.homeCover.openWhole`) }}</button>
+                    <button type="button" :class="ui.textButton({ size: `xs` })" @click="open">{{ t(`workspace.homeCover.openWhole`) }}</button>
                 </p>
             </template>
         </div>

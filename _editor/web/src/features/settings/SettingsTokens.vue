@@ -55,7 +55,7 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
         <RowGroup :label="t(`shared.apiTokens`)">
             <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
                 <template #control>
-                    <Button :label="t(`ui.action.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                    <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
                 </template>
             </Row>
 
@@ -69,7 +69,7 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
                             type="text"
                             autocomplete="off"
                             :placeholder="t(`settings.settingsTokens.labelEGStorefrontSandbox`)"
-                            :class="ui.inputSm(`min-w-48 flex-1`)"
+                            :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                         />
                         <Button
                             type="submit"

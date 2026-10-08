@@ -101,12 +101,12 @@
     }
 
     .ui-tip-dot[data-tone="info"] { background: var(--color-info); }
-    .ui-tip-dot[data-tone="ok"] { background: var(--color-success); }
-    .ui-tip-dot[data-tone="warn"] { background: var(--color-warning); }
+    .ui-tip-dot[data-tone="success"] { background: var(--color-success); }
+    .ui-tip-dot[data-tone="warning"] { background: var(--color-warning); }
     .ui-tip-dot[data-tone="danger"] { background: var(--color-danger); }
     .ui-tip-rows dd[data-tone="info"] { color: var(--color-info); }
-    .ui-tip-rows dd[data-tone="ok"] { color: var(--color-success); }
-    .ui-tip-rows dd[data-tone="warn"] { color: var(--color-warning); }
+    .ui-tip-rows dd[data-tone="success"] { color: var(--color-success); }
+    .ui-tip-rows dd[data-tone="warning"] { color: var(--color-warning); }
     .ui-tip-rows dd[data-tone="danger"] { color: var(--color-danger); }
 
 /* Two stacked triangles, rotated by which edge they hang off: the wider one behind is the body's 1px rim carried across the arrow. */

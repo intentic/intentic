@@ -94,6 +94,18 @@
             "types": "./src/components/sandbox/sandboxResources.ts",
             "default": "./src/components/sandbox/sandboxResources.ts"
         },
+        "./tone": {
+            "types": "./src/lib/tone.ts",
+            "default": "./src/lib/tone.ts"
+        },
+        "./button": {
+            "types": "./src/components/primitives/button.ts",
+            "default": "./src/components/primitives/button.ts"
+        },
+        "./recipes": {
+            "types": "./src/lib/ui.ts",
+            "default": "./src/lib/ui.ts"
+        },
         "./notice": {
             "types": "./src/components/feedback/notice.ts",
             "default": "./src/components/feedback/notice.ts"
@@ -193,6 +205,7 @@
         "primevue": "catalog:",
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",
+        "tailwind-variants": "catalog:",
         "tslib": "catalog:",
         "vue": "catalog:",
         "vue-i18n": "catalog:"

@@ -83,7 +83,7 @@ const tooMany = computed(() => chosen.value.size > BRING_BACK_CAP);
         </p>
         <p v-if="error" class="mt-2 text-xs text-danger">{{ error }}</p>
         <template #footer>
-            <Button severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="open = false" />
+            <Button tier="quiet" :label="t(`ui.action.cancel`)" @click="open = false" />
             <Button
                 :label="t(`local.bringBackReview.bring`, { count: chosen.size }, chosen.size)"
                 :loading="busy"

@@ -138,7 +138,7 @@ const choose = (entry: PickerEntry): void => {
                         <Button
                             :label="t(`ui.action.startOver`)"
                             class="flex-1"
-                            :severity="request.attempt.continuable ? `secondary` : undefined"
+                            :tier="request.attempt.continuable ? `boring` : `accent`"
                             :disabled="!chosen"
                             v-tooltip.top="startOverTip"
                             @click="commitModelPick(`start-over`)"

@@ -40,7 +40,7 @@ const app = createApp({
               h("span", {}, "workspace"),
               h("span", { class: "text-primary-fill" }, "."),
             ]),
-            h("button", { type: "button", class: ui.iconButton("-my-0.5 h-7 w-7"), "aria-label": "Back to your workspace" }, "×"),
+            h("button", { type: "button", class: ui.iconButton({ size: "md" }, "-my-0.5"), "aria-label": "Back to your workspace" }, "×"),
           ]),
           h(
             "p",
@@ -58,8 +58,8 @@ const app = createApp({
           }),
           h("footer", { class: "flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-subtle" }, [
             h("span", { class: "min-w-0 flex-1" }, "Closing this window doesn't stop it — your workspace shows the same progress."),
-            h("button", { type: "button", class: ui.textAction("shrink-0") }, "Stop"),
-            h("button", { type: "button", class: ui.textAction("shrink-0") }, "Show the log"),
+            h("button", { type: "button", class: ui.textButton({ tone: "quiet" }, "shrink-0") }, "Stop"),
+            h("button", { type: "button", class: ui.textButton({ tone: "quiet" }, "shrink-0") }, "Show the log"),
           ]),
         ]),
       ]);

@@ -198,7 +198,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         as="a"
                                         :label="t(`ui.action.open`)"
                                         size="small"
-                                        severity="secondary"
+                                        tier="boring"
                                         :href="d.url"
                                         target="_blank"
                                         rel="noopener"
@@ -210,7 +210,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         as="a"
                                         :label="t(`views.words.komodo`)"
                                         size="small"
-                                        :text="true"
+                                        tier="quiet" tone="accent"
                                         :href="d.komodoDeploymentUrl"
                                         target="_blank"
                                         rel="noopener"
@@ -293,8 +293,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                                     : t(`views.liveStatusView.revealPassword`)
                                             "
                                             size="small"
-                                            severity="secondary"
-                                            :text="true"
+                                            tier="quiet"
                                             @click="toggleAccessReveal(entry.password.key)"
                                         >
                                             <template #icon><Icon :name="revealedAccess.has(entry.password.key) ? `eye-slash` : `eye`" /></template>

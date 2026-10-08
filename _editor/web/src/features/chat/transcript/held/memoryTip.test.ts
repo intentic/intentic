@@ -31,7 +31,7 @@ const figures = (text: string): Record<string, string | number> =>
 it(`names resident, swapped, the limit and what other work holds, apart`, () => {
     const tip = memoryTip(sentence({ usedBytes: 11.5 * GIB, swapBytes: 4.1 * GIB, limitBytes: 12 * GIB }, 6 * GIB));
     expect(tip?.title).toBe(`Memory low`);
-    expect(tip?.tone).toBe(`warn`);
+    expect(tip?.tone).toBe(`warning`);
     expect(Object.fromEntries((tip?.rows ?? []).map((row) => [row.label, row.value]))).toEqual({
         "In RAM": `7.4 GiB`,
         Swapped: `4.1 GiB`,

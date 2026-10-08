@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, FilterBar, Row, RowGroup, RowNote, type Tip, ui } from "@intentic/ui";
+import { Button, FilterBar, Row, RowGroup, RowNote, type Tip, toneRim, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commandLabel, commands } from "../../workbench/commands/useCommands";
 import { rankCommands } from "../../workbench/commands/commandSearch";
@@ -73,7 +73,7 @@ const conflictTip = (row: CommandRow): Tip => {
             const entry = commands.value.find((candidate) => candidate.command === command);
             return entry === undefined ? command : commandLabel(entry);
         });
-    return { title: t(`settings.settingsKeybindings.shortcutClash`), tone: `warn`, rows: [{ label: t(`settings.settingsKeybindings.alsoOn`), value: others.join(`, `) }] };
+    return { title: t(`settings.settingsKeybindings.shortcutClash`), tone: `warning`, rows: [{ label: t(`settings.settingsKeybindings.alsoOn`), value: others.join(`, `) }] };
 };
 
 // Shared so the capture handler and stopRecording can each reference and clear the same listener.
@@ -121,7 +121,7 @@ onUnmounted(stopRecording);
 <template>
     <div class="flex flex-col gap-3">
         <div v-if="hasAnyOverride" class="flex justify-end">
-            <Button size="small" severity="secondary" class="shrink-0" @click="resetKeymap()">
+            <Button size="small" tier="boring" class="shrink-0" @click="resetKeymap()">
                 {{ t(`settings.settingsKeybindings.resetAll`) }}
             </Button>
         </div>
@@ -158,8 +158,8 @@ onUnmounted(stopRecording);
                             </span>
                             <kbd
                                 v-if="row.chord"
-                                class="rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-muted"
-                                :class="{ 'border-warning/50': conflicting(row.chord) }"
+                                class="rounded border px-1.5 py-0.5 font-mono text-muted"
+                                :class="conflicting(row.chord) ? toneRim(`warning`, `strong`, `bg-overlay`) : `border-line bg-overlay`"
                                 >{{ formatChord(row.chord, isMac) }}</kbd
                             >
                             <span v-else>{{ t(`settings.settingsKeybindings.unbound`) }}</span>

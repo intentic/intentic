@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { deliverableKindOf, type WorkspaceFileWindow, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import { Button, CopyButton, EmptyState, type Tip, ui, useDevice } from "@intentic/ui";
+import { Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { extensionOf } from "@intentic/ui/file-format";
@@ -571,8 +571,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="canHideComments"
                 type="button"
-                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
-                :class="hideFileComments ? `ui-chip-on` : ``"
+                :class="ui.chip({ on: hideFileComments }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
                 :aria-pressed="hideFileComments"
                 @click="toggleHideFileComments()"
                 v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
@@ -584,8 +583,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="derivedOffered"
                 type="button"
-                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
-                :class="textWanted ? `ui-chip-on` : ``"
+                :class="ui.chip({ on: textWanted }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
                 :aria-pressed="textWanted"
                 @click="textWanted = !textWanted"
                 v-tooltip.bottom="
@@ -601,8 +599,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="previewOffered"
                 type="button"
-                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
-                :class="previewing ? `ui-chip-on` : ``"
+                :class="ui.chip({ on: previewing }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
                 :aria-pressed="previewing"
                 @click="setHtmlPreviewed(path, !previewing)"
                 v-tooltip.bottom="
@@ -667,7 +664,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="!mobile && canEdit"
                 type="button"
-                :class="ui.iconButton('relative text-muted hover:text-content')"
+                :class="ui.iconButton('relative')"
                 :disabled="!dirtyThis"
                 @click="saveNow()"
                 v-tooltip.bottom="{ title: dirtyThis ? t(`workspace.fileViewer.saveChanges`) : t(`workspace.fileViewer.saved`), keys: saveKeys }"
@@ -683,13 +680,14 @@ const onEditorSave = (value: string): void =>
         </FileBreadcrumb>
 
         <!-- The open file changed on disk under unsaved edits: the buffer is kept; Reload adopts disk (discards edits). -->
-        <div v-if="staleOnDisk" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
-            <Icon name="exclamation-triangle" class="text-[0.7rem]" />
-            <span class="flex-1">{{ t(`workspace.fileViewer.fileChangedOnDisk`) }}</span>
-            <Button size="small" severity="warn" :text="true" @click="reloadFromDisk">
-                <Icon name="refresh" class="text-[0.7rem]" /> {{ t(`workspace.fileViewer.reloadDisk`) }}
-            </Button>
-        </div>
+        <Notice v-if="staleOnDisk" tone="warning" size="sm" strip>
+            {{ t(`workspace.fileViewer.fileChangedOnDisk`) }}
+            <template #actions>
+                <Button size="small" tier="quiet" tone="warning" @click="reloadFromDisk">
+                    <Icon name="refresh" class="text-[0.7rem]" /> {{ t(`workspace.fileViewer.reloadDisk`) }}
+                </Button>
+            </template>
+        </Notice>
 
         <!-- The bytes aren't UTF-8: what shows is their best decoding, and a save would write that back over them. -->
         <div v-if="lossyShown" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">

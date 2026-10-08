@@ -41,7 +41,7 @@ const leave = async (): Promise<void> => {
                 <span class="sr-only">{{ t(`setup.setupAccount.signedInAs`) }}</span>
                 {{ user.email }}
             </span>
-            <Button :label="t(`shell.words.signOut`)" severity="secondary" :text="true" class="shrink-0 text-[0.8125rem]" @click="leave">
+            <Button :label="t(`shell.words.signOut`)" tier="quiet" class="shrink-0 text-[0.8125rem]" @click="leave">
                 <template #icon><Icon name="sign-out" /></template>
             </Button>
         </div>

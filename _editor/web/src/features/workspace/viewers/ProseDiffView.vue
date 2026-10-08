@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
+import { diffMark, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { foldUnchanged, type ProseBlock, proseDiff } from "./proseDiff";
 import { useT } from "@intentic/ui/i18n";
@@ -41,13 +41,7 @@ const blockClass = (block: ProseBlock): string =>
     [
         block.heading === undefined ? `text-sm` : HEADING_CLASS[block.heading]!,
         // A whole paragraph added or dropped wears its mark on the margin too, so it reads as a block event.
-        block.kind === `added`
-            ? `border-l-2 border-success/60 pl-3`
-            : block.kind === `removed`
-              ? `border-l-2 border-danger/60 pl-3`
-              : block.kind === `changed`
-                ? `border-l-2 border-warning/60 pl-3`
-                : `pl-3.5`,
+        block.kind === `same` ? `pl-3.5` : diffMark(block.kind, `rule`, `pl-3`),
     ].join(` `);
 </script>
 
@@ -67,20 +61,14 @@ const blockClass = (block: ProseBlock): string =>
                             {{ block.segments[0]?.text }}
                         </p>
                     </template>
-                    <button v-else type="button" :class="ui.textAction(`pl-3.5 text-2xs italic text-subtle`)" @click="open(run.at)">
+                    <button v-else type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` }, `pl-3.5 italic`)" @click="open(run.at)">
                         {{ t(`workspace.proseDiffView.unchangedParagraphs`, { count: run.count }, run.count) }}
                     </button>
                 </template>
                 <p v-else class="whitespace-pre-wrap" :class="[blockClass(run.block), run.block.kind === `same` ? `text-muted` : ``]">
                     <template v-for="(segment, at) in run.block.segments" :key="at">
-                        <ins
-                            v-if="segment.kind === `added`"
-                            class="rounded-sm bg-success/15 text-content no-underline decoration-success underline decoration-2 underline-offset-2"
-                            >{{ segment.text }}</ins
-                        >
-                        <del v-else-if="segment.kind === `removed`" class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70">{{
-                            segment.text
-                        }}</del>
+                        <ins v-if="segment.kind === `added`" :class="diffMark(`added`, `inline`, `text-content`)">{{ segment.text }}</ins>
+                        <del v-else-if="segment.kind === `removed`" :class="diffMark(`removed`)">{{ segment.text }}</del>
                         <template v-else>{{ segment.text }}</template>
                     </template>
                 </p>

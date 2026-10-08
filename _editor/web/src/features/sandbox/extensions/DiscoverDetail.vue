@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { githubRepoOf, isCurrentSecurityReview } from "@intentic/registry";
-import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
+import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, toneTint } from "@intentic/ui";
 import { computed, ref, useId } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, type InstallOutcome, splitListingName } from "./discoverListing";
 import { useT } from "@intentic/ui/i18n";
@@ -120,7 +120,11 @@ const actionLabel = computed(() => {
             </div>
 
             <!-- The receipt replaces the state line: right after an install, "already installed" would read as a refusal. -->
-            <div v-if="receipt" role="status" class="flex items-start gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs text-content">
+            <div
+                v-if="receipt"
+                role="status"
+                :class="toneTint(`success`, `strong`, `flex items-start gap-2 rounded-lg border px-3 py-2 text-xs text-content`)"
+            >
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
                 <span>
                     {{ receipt }}
@@ -266,15 +270,14 @@ const actionLabel = computed(() => {
         <template #footer>
             <!-- Done: the next place to go, and the way back to browsing. Nothing to install or audit is left to offer. -->
             <template v-if="outcome">
-                <Button :label="t(`ui.action.done`)" severity="secondary" text size="small" @click="open = false" />
+                <Button :label="t(`ui.action.done`)" tier="quiet" size="small" @click="open = false" />
                 <Button :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
             </template>
             <!-- Order follows what's been earned: where the code's been read, Install leads; where it hasn't, the read leads instead. -->
             <Button
                 v-else-if="auditable"
                 :label="auditLeads ? t(`sandbox.discoverDetail.myAgentReadCode`) : t(`sandbox.discoverDetail.readCodeFirst`)"
-                :severity="auditLeads ? undefined : `secondary`"
-                :text="!auditLeads"
+                :tier="auditLeads ? `accent` : `quiet`"
                 size="small"
                 @click="emit(`audit`)"
             >
@@ -287,7 +290,7 @@ const actionLabel = computed(() => {
                 size="small"
                 :loading="installing"
                 :disabled="unaudited && !acknowledged"
-                :severity="auditLeads ? `secondary` : undefined"
+                :tier="auditLeads ? `boring` : `accent`"
                 @click="emit(`install`)"
             />
         </template>

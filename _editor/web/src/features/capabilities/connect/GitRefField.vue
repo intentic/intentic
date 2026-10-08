@@ -160,7 +160,7 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
         <span v-else-if="failure" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ failure }}
-            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="read()">{{ t(`ui.action.tryAgain`) }}</button>
+            <button type="button" :class="ui.textButton({ size: `xs` })" @click.prevent="read()">{{ t(`ui.action.tryAgain`) }}</button>
         </span>
         <span v-else-if="selected && !manual" class="flex items-center gap-1 text-2xs text-muted">
             <Icon name="check-circle" class="text-2xs text-success" />
@@ -168,7 +168,7 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
         </span>
         <span v-else-if="pinnedOnly" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-muted">
             {{ pinnedNote }}
-            <button v-if="pickable" type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="manual = false">
+            <button v-if="pickable" type="button" :class="ui.textButton({ size: `xs` })" @click.prevent="manual = false">
                 {{ t(`capabilities.gitRefField.pickBranchReleaseInstead`) }}
             </button>
         </span>

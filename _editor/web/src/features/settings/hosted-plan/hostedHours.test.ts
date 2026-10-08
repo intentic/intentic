@@ -97,7 +97,7 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(subscriber({ cancelAtPeriodEnd: true }))).toEqual({
             label: `ending`,
             variant: `warning`,
-            detail: { title: `Hosted plan`, tone: `warn`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }], note: `Then the free plan` },
+            detail: { title: `Hosted plan`, tone: `warning`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }], note: `Then the free plan` },
         });
     });
 

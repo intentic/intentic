@@ -231,8 +231,8 @@ const cancel = (): Promise<void> =>
                 />
                 <template v-if="picked === undefined">
                     <p class="text-2xs text-subtle">{{ t(`sandbox.arrivalPanel.pack`) }}</p>
-                    <Button :label="t(`sandbox.arrivalPanel.hermes`)" size="small" severity="secondary" text @click="picked = `hermes`" />
-                    <Button :label="t(`sandbox.arrivalPanel.openclaw`)" size="small" severity="secondary" text @click="picked = `openclaw`" />
+                    <Button :label="t(`sandbox.arrivalPanel.hermes`)" size="small" tier="quiet" @click="picked = `hermes`" />
+                    <Button :label="t(`sandbox.arrivalPanel.openclaw`)" size="small" tier="quiet" @click="picked = `openclaw`" />
                 </template>
             </div>
 
@@ -336,7 +336,7 @@ const cancel = (): Promise<void> =>
                     :disabled="tickedCount === 0"
                     @click="apply"
                 />
-                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="cancel" />
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="cancel" />
             </div>
         </template>
 
@@ -353,7 +353,7 @@ const cancel = (): Promise<void> =>
             <!-- Label is a slot so a failure group can wear its own tone without RowGroup knowing about tones. -->
             <RowGroup v-if="report.failed.length > 0" flat>
                 <template #label
-                    ><span :class="ui.sectionLabel(`text-danger`)">{{ t(`sandbox.arrivalPanel.didntLand`) }}</span></template
+                    ><span :class="ui.sectionLabel({ tone: `danger` })">{{ t(`sandbox.arrivalPanel.didntLand`) }}</span></template
                 >
                 <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />
             </RowGroup>

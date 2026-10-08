@@ -159,7 +159,7 @@ const uid = useId();
                                 :value="form.memoryGib ?? ``"
                                 :placeholder="memoryPlaceholder"
                                 :aria-label="t(`ui.sandboxResourcesDialog.memoryCapInGib`)"
-                                :class="ui.inputSm(`w-28 text-right`)"
+                                :class="ui.input({ size: `sm` }, `w-28 text-right`)"
                                 @input="setCap(`memoryGib`, $event)"
                             />
                             <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.gib`) }}</span>
@@ -191,7 +191,7 @@ const uid = useId();
                                 :value="form.cpus ?? ``"
                                 :placeholder="cpuPlaceholder"
                                 :aria-label="t(`ui.sandboxResourcesDialog.cpuCapInCores`)"
-                                :class="ui.inputSm(`w-28 text-right`)"
+                                :class="ui.input({ size: `sm` }, `w-28 text-right`)"
                                 @input="setCap(`cpus`, $event)"
                             />
                             <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.cores`) }}</span>
@@ -265,12 +265,12 @@ const uid = useId();
         </div>
 
         <template #footer>
-            <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`cancel`)" />
             <!-- Disabled rather than refused: nothing changed, or a cap outside the rails, leaves nothing for the machine to accept. -->
             <Button
                 v-if="canSave"
                 :label="t(`ui.sandboxResourcesDialog.saveForNextRestart`)"
-                severity="secondary"
+                tier="boring"
                 :disabled="!saveReady"
                 @click="emit(`save`, saveShape)"
             />

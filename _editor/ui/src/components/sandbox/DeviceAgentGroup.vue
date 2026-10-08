@@ -74,7 +74,7 @@ const emit = defineEmits<{ run: [op: Op] }>();
                     v-for="action in panel.actions"
                     :key="action.op"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     :label="action.label"
                     :loading="running === action.op"
                     :disabled="busy"

@@ -5,6 +5,7 @@ import Icon from "../primitives/Icon.vue";
 import { createInlineRename } from "../../composables/inlineRename.js";
 import { useT } from "../../i18n/index.js";
 import { placeAnchored } from "../../lib/anchorPlacement.js";
+import { toneRim } from "../../lib/tone.js";
 import { ui } from "../../lib/ui.js";
 
 const t = useT();
@@ -138,7 +139,13 @@ onBeforeUnmount(disarm);
                 size="1"
                 autocomplete="off"
                 spellcheck="false"
-                :class="ui.inputInline(`col-start-1 row-start-1 w-full min-w-0 px-1`, rename.error === undefined ? `` : `ui-field-error-box`)"
+                :class="
+                    ui.input(
+                        { size: `inline` },
+                        `col-start-1 row-start-1 w-full min-w-0 px-1`,
+                        rename.error === undefined ? `` : `ui-field-error-box`,
+                    )
+                "
                 @click.stop
                 @keydown.enter.stop.prevent="rename.commit()"
                 @keydown.esc.stop.prevent="rename.cancel()"
@@ -169,7 +176,7 @@ onBeforeUnmount(disarm);
             <button
                 v-if="rename.editing"
                 type="button"
-                :class="ui.iconButton(`h-5 w-5`)"
+                :class="ui.iconButton({ size: `xs` })"
                 :disabled="rename.busy"
                 :aria-label="t(`ui.action.save`)"
                 v-tooltip.top="{ title: t(`ui.action.save`), keys: t(`ui.keys.enter`) }"
@@ -185,7 +192,7 @@ onBeforeUnmount(disarm);
                 type="button"
                 tabindex="-1"
                 aria-hidden="true"
-                :class="ui.iconButton(`h-5 w-5`)"
+                :class="ui.iconButton({ size: `xs` })"
                 v-tooltip.top="action ?? t(`ui.action.rename`)"
                 @click.stop="rename.begin()"
             >
@@ -193,13 +200,20 @@ onBeforeUnmount(disarm);
             </button>
         </template>
 
-        <!-- Floats: a failure that pushed the page down would move the very thing being renamed. -->
+        <!-- Floats: a failure that pushed the page down would move the very thing being renamed. The danger rim, on an
+             opaque card rather than the tint's own fill, since it lies over whatever is under the field. -->
         <Teleport v-if="rename.error !== undefined && field" :to="field.ownerDocument.body">
             <span
                 ref="chip"
                 role="alert"
                 :style="at"
-                class="fixed z-30 max-w-64 rounded-md border border-danger/30 bg-card px-2 py-1 text-2xs font-normal leading-snug text-danger shadow-md"
+                :class="
+                    toneRim(
+                        `danger`,
+                        `strong`,
+                        `fixed z-30 max-w-64 rounded-md border bg-card px-2 py-1 text-2xs font-normal leading-snug text-danger shadow-md`,
+                    )
+                "
                 >{{ rename.error }}</span
             >
         </Teleport>

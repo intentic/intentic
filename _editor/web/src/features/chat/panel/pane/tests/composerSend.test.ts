@@ -434,7 +434,7 @@ describe(`what intercepts a press`, () => {
 
         expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`hello`);
-        expect(send.sendHint.value).toEqual({ title: t(`chat.chatPane.sandboxBusy`), tone: `warn`, note: t(`chat.chatPane.keepTyping`) });
+        expect(send.sendHint.value).toEqual({ title: t(`chat.chatPane.sandboxBusy`), tone: `warning`, note: t(`chat.chatPane.keepTyping`) });
     });
 
     it(`continues a stopped turn when nothing is typed, leaving the recall ring alone`, async () => {

@@ -41,7 +41,7 @@ const answer = (value: Audience): void => {
         </div>
         <div class="flex flex-wrap gap-2">
             <Button size="small" :label="t(`settings.words.iWriteCode`)" @click="answer('developer')" />
-            <Button size="small" severity="secondary" :label="t(`common.audienceAsk.iDontWriteCode`)" @click="answer('maker')" />
+            <Button size="small" tier="boring" :label="t(`common.audienceAsk.iDontWriteCode`)" @click="answer('maker')" />
         </div>
         <!-- Only a maintainer can write the rules; a collaborator's answer changes their own screen and nothing else. -->
         <label v-if="canShip" class="flex cursor-pointer items-start gap-2 text-2xs text-muted">

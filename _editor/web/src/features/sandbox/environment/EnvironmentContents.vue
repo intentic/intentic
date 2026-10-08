@@ -201,7 +201,7 @@ const expandable = (item: EnvironmentItem): boolean =>
                             <button
                                 v-if="rest(item) !== ``"
                                 type="button"
-                                :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                                :class="ui.textButton({ size: `xs`, tone: `quiet` })"
                                 @click="toggleFull(item.id)"
                             >
                                 {{ full.has(item.id) ? t(`ui.action.showLess`) : t(`sandbox.environmentContents.showMore`) }}
@@ -224,8 +224,8 @@ const expandable = (item: EnvironmentItem): boolean =>
                                 v-if="canRemove(item)"
                                 :label="t(`sandbox.environmentContents.removeFromEnvironment`)"
                                 size="small"
-                                severity="danger"
-                                :text="true"
+                                tier="quiet"
+                                tone="danger"
                                 :disabled="busy"
                                 class="self-start"
                                 @click="emit(`remove`, item)"
@@ -249,8 +249,7 @@ const expandable = (item: EnvironmentItem): boolean =>
                                 :key="item.id"
                                 type="button"
                                 :disabled="item.purpose === undefined"
-                                class="ui-chip py-1 pl-1 pr-2.5"
-                                :class="picked === item.id ? `ui-chip-on` : ``"
+                                :class="ui.chip({ on: picked === item.id }, `py-1 pl-1 pr-2.5`)"
                                 @click="pick(item.id)"
                             >
                                 <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />

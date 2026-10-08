@@ -78,7 +78,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 </span>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
+                    :class="ui.iconButton({ size: `xs`, tone: `subtle` })"
                     :disabled="entry.index === 0"
                     @click="emit(`promote`, entry.index)"
                     v-tooltip.top="t(`sandbox.modelPinList.moveUp`)"

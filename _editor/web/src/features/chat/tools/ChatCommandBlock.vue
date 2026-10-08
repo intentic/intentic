@@ -63,7 +63,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
             <button
                 v-if="lines.length > CLAMP_LINES"
                 type="button"
-                :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                :class="ui.textButton({ size: `xs`, tone: `quiet` })"
                 @click="expanded = !expanded"
             >
                 {{ expanded ? t(`ui.action.showLess`) : t(`chat.chatCommandBlock.showAllLines`, { count: lines.length }) }}

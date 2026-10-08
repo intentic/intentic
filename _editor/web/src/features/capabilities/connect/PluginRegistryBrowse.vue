@@ -119,7 +119,7 @@ const pick = (entry: RegistryEntry): void => {
                             class="shrink-0 text-success"
                             v-tooltip.top="{
                                 title: t(`capabilities.pluginRegistryBrowse.nightlyScan`),
-                                tone: `ok`,
+                                tone: `success`,
                                 rows: [{ label: t(`capabilities.pluginRegistryBrowse.commit`), value: entry.checks?.sha.slice(0, 7) ?? `` }],
                             }"
                         />

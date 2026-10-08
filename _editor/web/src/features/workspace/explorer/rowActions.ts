@@ -76,7 +76,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
                 : checks.adopted
                   ? t(`workspace.rowActions.checksOn`)
                   : t(`workspace.rowActions.checksOff`),
-            tip: checks.changed ? { title: t(`workspace.rowActions.checksPaused`), tone: `warn`, note: t(`workspace.rowActions.changedSinceOn`) } : undefined,
+            tip: checks.changed ? { title: t(`workspace.rowActions.checksPaused`), tone: `warning`, note: t(`workspace.rowActions.changedSinceOn`) } : undefined,
             standing: true,
             run: (): void => sources.openChecks(dir),
         });

@@ -16,13 +16,7 @@ const { tone, icon, to } = defineProps<{
 
 <template>
     <!-- Icon rides in the default slot, not PrimeVue's `#icon` one: a default slot replaces the whole button body. -->
-    <Button
-        :as="to === undefined ? undefined : RouterLink"
-        :to="to"
-        size="small"
-        :severity="tone === `primary` ? undefined : `secondary`"
-        class="ui-button-thumb"
-    >
+    <Button :as="to === undefined ? undefined : RouterLink" :to="to" size="small" :tier="tone === `primary` ? `accent` : `boring`" thumb>
         <Icon v-if="icon" :name="icon" />
         <slot />
     </Button>

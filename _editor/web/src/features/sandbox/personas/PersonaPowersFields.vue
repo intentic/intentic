@@ -225,7 +225,7 @@ const shellCaveat = computed(
                             :key="item.id"
                             type="button"
                             :aria-pressed="granted(group.key, item.id)"
-                            :class="[`ui-chip px-2.5 py-1 text-xs`, granted(group.key, item.id) ? `ui-chip-on font-medium` : ``]"
+                            :class="ui.chip({ on: granted(group.key, item.id) }, `px-2.5 py-1 text-xs`, granted(group.key, item.id) && `font-medium`)"
                             @click="toggleGrant(group.key, item.id, group.kind)"
                         >
                             {{ item.label }}

@@ -40,8 +40,7 @@ const rotate = async (): Promise<void> => {
                 v-if="!confirmingRotate"
                 :label="t(`gateAccess.rotate`)"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :disabled="rotateGateToken.isPending.value"
                 v-tooltip.top="{ title: t(`gateAccess.newToken`), note: t(`gateAccess.oldUrlStops`) }"
                 @click="confirmingRotate = true"
@@ -49,8 +48,8 @@ const rotate = async (): Promise<void> => {
         </div>
         <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
             <span class="mr-auto text-2xs text-subtle">{{ t(`gateAccess.sureEveryPipelineWired`) }}</span>
-            <Button :label="t(`gateAccess.cancel`)" size="small" severity="secondary" :text="true" @click="confirmingRotate = false" />
-            <Button :label="t(`gateAccess.rotateToken`)" size="small" severity="danger" :loading="rotateGateToken.isPending.value" @click="rotate" />
+            <Button :label="t(`gateAccess.cancel`)" size="small" tier="quiet" @click="confirmingRotate = false" />
+            <Button :label="t(`gateAccess.rotateToken`)" size="small" tone="danger" :loading="rotateGateToken.isPending.value" @click="rotate" />
         </div>
         <p class="text-2xs text-subtle">
             {{ t(`gateAccess.postWhatPipelineKnows`) }}

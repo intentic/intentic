@@ -50,7 +50,7 @@ export const startAutoUpdateWatch = (): void => {
             ...(notice.counting && canSteer.value
                 ? {
                       actions: [
-                          { label: t(`sandbox.autoUpdate.notNow`), severity: `secondary` as const, run: () => steer(notNow, t(`sandbox.autoUpdate.couldntChange`)) },
+                          { label: t(`sandbox.autoUpdate.notNow`), tier: `boring` as const, run: () => steer(notNow, t(`sandbox.autoUpdate.couldntChange`)) },
                           { label: t(`sandbox.autoUpdate.updateNow`), run: () => steer(applyNow, t(`sandbox.autoUpdate.couldntUpdate`)) },
                       ],
                   }

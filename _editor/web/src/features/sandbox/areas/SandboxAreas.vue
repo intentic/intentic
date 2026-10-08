@@ -289,7 +289,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                 :label="t(`sandbox.sandboxAreas.areas`)"
             >
                 <template #actions>
-                    <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" severity="secondary" @click="startAdd">
+                    <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
@@ -338,7 +338,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                         <Icon v-if="isOpen(area) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
                         <button
                             type="button"
-                            :class="ui.iconButton('hover:text-danger')"
+                            :class="ui.iconButton({ tone: `danger` })"
                             :aria-label="t(`sandbox.sandboxAreas.deleteArea`)"
                             @click.stop="removing = area"
                         >
@@ -390,7 +390,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                                 @keyup.enter="submit"
                             />
                             <Button :label="t(`ui.action.create`)" size="small" :loading="submitting" :disabled="!newValid" @click="submit" />
-                            <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">
+                            <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="cancelAdd">
                                 {{ t(`ui.action.cancel`) }}
                             </button>
                         </div>

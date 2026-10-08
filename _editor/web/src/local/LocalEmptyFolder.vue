@@ -117,7 +117,7 @@ const pickFolder = async (): Promise<void> => {
                     <Button
                         :label="t(`local.foundProjects.open`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :loading="opening === project.path"
                         :disabled="opening !== undefined && opening !== project.path"
                         @click="openProject(project)"
@@ -128,16 +128,16 @@ const pickFolder = async (): Promise<void> => {
             <p class="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-2xs text-subtle">
                 <Icon name="lock" class="shrink-0" />
                 <span>{{ t(`local.foundProjects.privacy`) }}</span>
-                <button type="button" :class="ui.textAction(`text-2xs`)" @click="hide">{{ t(`local.foundProjects.hide`) }}</button>
+                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="hide">{{ t(`local.foundProjects.hide`) }}</button>
             </p>
 
             <div class="flex flex-col items-center gap-2 border-t border-line pt-4 text-center">
                 <p class="text-xs text-muted">{{ t(`local.foundProjects.orThisFolder`, { name: face?.name ?? `` }) }}</p>
                 <div class="flex flex-wrap items-center justify-center gap-2">
-                    <Button :label="t(`local.emptyFolder.openFolder`)" size="small" severity="secondary" @click="pickFolder">
+                    <Button :label="t(`local.emptyFolder.openFolder`)" size="small" tier="boring" @click="pickFolder">
                         <template #icon><Icon name="folder-open" /></template>
                     </Button>
-                    <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" severity="secondary" @click="askLocalApp(`reveal`)">
+                    <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" tier="boring" @click="askLocalApp(`reveal`)">
                         <template #icon><Icon name="external-link" /></template>
                     </Button>
                 </div>
@@ -160,13 +160,13 @@ const pickFolder = async (): Promise<void> => {
             <Button :label="t(`local.emptyFolder.openFolder`)" size="small" @click="pickFolder">
                 <template #icon><Icon name="folder-open" /></template>
             </Button>
-            <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" severity="secondary" @click="askLocalApp(`reveal`)">
+            <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" tier="boring" @click="askLocalApp(`reveal`)">
                 <template #icon><Icon name="external-link" /></template>
             </Button>
         </template>
         <Notice v-if="failure" tone="danger" class="max-w-md text-2xs">{{ failure }}</Notice>
         <!-- The list put away, and the way back to it: a hide is a preference, not a loss. -->
-        <button v-if="hidden && offered.length > 0" type="button" :class="ui.textAction(`text-2xs`)" @click="unhide">
+        <button v-if="hidden && offered.length > 0" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="unhide">
             {{ t(`local.foundProjects.show`) }}
         </button>
     </EmptyState>

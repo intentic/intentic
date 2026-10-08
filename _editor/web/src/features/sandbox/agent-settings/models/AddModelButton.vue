@@ -15,7 +15,8 @@ const { label, disabled = false } = defineProps<{ label: string; disabled?: bool
     <button
         type="button"
         :class="
-            ui.inputSm(
+            ui.input(
+                { size: `sm` },
                 `touch-target inline-flex w-56 cursor-pointer select-none items-center gap-2 transition-colors max-md:w-36 disabled:cursor-default`,
             )
         "

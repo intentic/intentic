@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip, toneWash } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -500,7 +500,8 @@ const openHistory = (event: Event): void => {
                 </span>
                 <span
                     v-if="attentionCount > 0"
-                    class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 font-semibold text-warning"
+                    class="ui-status-pill flex shrink-0 items-center gap-1 font-semibold"
+                    :class="toneWash(`warning`)"
                     :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
                     v-tooltip.bottom="t(`chat.chatTabs.waiting`, { attentionCount })"
                 >
@@ -578,7 +579,7 @@ const openHistory = (event: Event): void => {
             <!-- The kit's compact secondary tier; the face names who a scoped chat speaks as. -->
             <Button
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :aria-label="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
                 @click="railPersona === undefined ? startAgent() : startAgent(undefined, railPersona.id)"
             >

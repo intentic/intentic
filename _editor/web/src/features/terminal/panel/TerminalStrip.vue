@@ -511,7 +511,7 @@ onBeforeUnmount(() => {
                         v-for="icon in TERMINAL_ICONS"
                         :key="icon"
                         type="button"
-                        :class="ui.iconButton(`h-8 w-8`, terminalMeta(customize.name).icon === icon ? `bg-overlay text-content` : ``)"
+                        :class="ui.iconButton({ on: terminalMeta(customize.name).icon === icon, size: `lg` })"
                         :aria-label="icon"
                         @click="applyCustomize({ icon })"
                     >

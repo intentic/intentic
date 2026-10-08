@@ -84,9 +84,7 @@ const cancelNaming = (): void => {
             :description="current === undefined ? t(`projectsView.everyProjectRepositoryIn`) : t(`projectsView.workingInFilesAgents`, { current })"
         >
             <template v-if="current !== undefined" #actions>
-                <Button size="small" severity="secondary" @click="showAll"
-                    ><Icon name="th-large" class="mr-1" />{{ t(`projectsView.allProjects`) }}</Button
-                >
+                <Button size="small" tier="boring" @click="showAll"><Icon name="th-large" class="mr-1" />{{ t(`projectsView.allProjects`) }}</Button>
             </template>
         </PageHeader>
 
@@ -152,7 +150,7 @@ const cancelNaming = (): void => {
 
                         <!-- The live app is a tab of Browsers, on a phone as on a desktop; /preview is the address every editor answers. -->
                         <div v-if="tile.hasPanel" class="mt-auto border-t border-line-subtle pt-2">
-                            <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"
+                            <a v-bind="linkTo(previewPath(tile.id))" :class="ui.textButton({ flush: true }, `relative z-1`)"
                                 ><Icon name="play" />{{ t(`projectsView.seeRunning`) }}</a
                             >
                         </div>
@@ -192,7 +190,7 @@ const cancelNaming = (): void => {
                             v-model="name"
                             type="text"
                             :disabled="creating.busy.value"
-                            :class="ui.inputSm()"
+                            :class="ui.input({ size: `sm` })"
                             autocomplete="off"
                             @keydown.escape="cancelNaming"
                         />
@@ -204,7 +202,7 @@ const cancelNaming = (): void => {
                                     creating.busy.value ? t(`projectsView.starting`) : t(`projectsView.create`)
                                 }}
                             </Button>
-                            <Button size="small" severity="secondary" :text="true" :label="t(`projectsView.cancel`)" @click="cancelNaming" />
+                            <Button size="small" tier="quiet" :label="t(`projectsView.cancel`)" @click="cancelNaming" />
                         </div>
                     </form>
                 </div>

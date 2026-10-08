@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatCount, SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
+import { diffMark, formatCount, SkeletonSnapshot, toneTint, ui, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef, watch } from "vue";
 import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff } from "./tableDiff";
@@ -59,15 +59,15 @@ const cut = computed(() => [...before, ...after].some((sheet) => sheet.rows.leng
 
 const ROW_CLASS: Record<RowDiff["kind"], string> = {
     same: ``,
-    changed: `bg-warning/5`,
-    added: `bg-success/10`,
-    removed: `bg-danger/10`,
+    changed: toneTint(`warning`, `soft`),
+    added: toneTint(`success`, `strong`),
+    removed: toneTint(`danger`, `strong`),
 };
 const MARK_CLASS: Record<RowDiff["kind"], string> = {
     same: `border-l-2 border-transparent`,
-    changed: `border-l-2 border-warning/60`,
-    added: `border-l-2 border-success/60`,
-    removed: `border-l-2 border-danger/60`,
+    changed: diffMark(`changed`, `rule`),
+    added: diffMark(`added`, `rule`),
+    removed: diffMark(`removed`, `rule`),
 };
 const sheetBadge = (kind: SheetDiff["kind"]): string | undefined =>
     kind === `added` ? t(`workspace.tableDiffView.newSheet`) : kind === `removed` ? t(`workspace.tableDiffView.sheetRemoved`) : undefined;
@@ -141,7 +141,7 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                                         <td :colspan="sheet.columns + 1" class="border-t border-line/60 px-2 py-0.5">
                                             <button
                                                 type="button"
-                                                :class="ui.textAction(`text-2xs italic text-subtle`)"
+                                                :class="ui.textButton({ tone: `subtle`, size: `xs` }, `italic`)"
                                                 @click="open(sheet.name, run.at)"
                                             >
                                                 {{ t(`workspace.tableDiffView.unchangedRows`, { count: run.count }, run.count) }}
@@ -160,9 +160,7 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                                 >
                                     <!-- The row's number in the new version, or the old one's struck through when it is gone; the mark on the margin says which. -->
                                     <td class="px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle" :class="MARK_CLASS[run.row.kind]">
-                                        <del v-if="run.row.kind === `removed`" class="line-through decoration-danger/70">{{
-                                            run.row.beforeLine
-                                        }}</del>
+                                        <del v-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ run.row.beforeLine }}</del>
                                         <template v-else>{{ run.row.afterLine }}</template>
                                     </td>
                                     <td
@@ -171,24 +169,17 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                                         class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap align-top"
                                     >
                                         <template v-if="cell.kind === `changed`">
-                                            <del class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70">{{ cell.before }}</del>
+                                            <del :class="diffMark(`removed`)">{{ cell.before }}</del>
                                             <span class="mx-1 text-subtle">→</span>
-                                            <ins
-                                                class="rounded-sm bg-success/15 text-content no-underline decoration-success underline decoration-2 underline-offset-2"
-                                                >{{ cell.after }}</ins
-                                            >
+                                            <ins :class="diffMark(`added`, `inline`, `text-content`)">{{ cell.after }}</ins>
                                         </template>
-                                        <ins
-                                            v-else-if="cell.kind === `added` && run.row.kind === `changed`"
-                                            class="rounded-sm bg-success/15 no-underline decoration-success underline decoration-2 underline-offset-2"
-                                            >{{ cell.after }}</ins
-                                        >
-                                        <del
-                                            v-else-if="cell.kind === `removed` && run.row.kind === `changed`"
-                                            class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70"
-                                            >{{ cell.before }}</del
-                                        >
-                                        <del v-else-if="run.row.kind === `removed`" class="line-through decoration-danger/70">{{ plain(cell) }}</del>
+                                        <ins v-else-if="cell.kind === `added` && run.row.kind === `changed`" :class="diffMark(`added`)">{{
+                                            cell.after
+                                        }}</ins>
+                                        <del v-else-if="cell.kind === `removed` && run.row.kind === `changed`" :class="diffMark(`removed`)">{{
+                                            cell.before
+                                        }}</del>
+                                        <del v-else-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ plain(cell) }}</del>
                                         <template v-else>{{ plain(cell) }}</template>
                                     </td>
                                     <!-- Pads a short row so the grid's right edge stays straight. -->

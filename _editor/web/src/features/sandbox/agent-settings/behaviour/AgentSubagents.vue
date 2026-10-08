@@ -66,7 +66,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :value="settings?.subagentsAtOnce ?? 20"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.subagentsAtOnce`)"
-                    :class="ui.inputSm('w-20 text-right')"
+                    :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsAtOnce ?? 20, AT_ONCE, (subagentsAtOnce: number) => patch({ subagentsAtOnce }))
@@ -89,7 +89,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :value="settings?.subagentsPerTurn ?? 200"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.subagentsPerConversation`)"
-                    :class="ui.inputSm('w-20 text-right')"
+                    :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsPerTurn ?? 200, PER_TURN, (subagentsPerTurn: number) => patch({ subagentsPerTurn }))
@@ -108,7 +108,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :value="settings?.subagentDepth ?? 3"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.nestingDepth`)"
-                    :class="ui.inputSm('w-20 text-right')"
+                    :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
                     "

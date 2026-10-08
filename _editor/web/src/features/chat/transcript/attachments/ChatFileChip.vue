@@ -229,7 +229,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                     </template>
                 </div>
                 <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">
-                    <Button type="button" size="small" :text="true" class="w-full" @click="opening(open)">
+                    <Button type="button" size="small" tier="quiet" tone="accent" class="w-full" @click="opening(open)">
                         <Icon name="external-link" />
                         {{ t(`chat.chatFileChip.openFile`) }}
                     </Button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
+import { Button, toneWash } from "@intentic/ui";
 import { onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
@@ -48,14 +48,14 @@ onUnmounted(() => {
 <template>
     <main class="flex min-h-dvh items-center justify-center bg-canvas px-4 text-content">
         <section class="flex w-full max-w-sm flex-col items-center gap-4 text-center">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning">
+            <span :class="toneWash(`warning`, `flex h-12 w-12 items-center justify-center rounded-full`)">
                 <Icon name="cloud" class="text-lg" />
             </span>
             <div>
                 <h1 class="text-lg font-semibold">{{ t(`setup.platformUnavailable.intenticIsntReachable`) }}</h1>
                 <p class="mt-1 text-xs text-muted">{{ t(`setup.platformUnavailable.signInNotChanged`) }}</p>
             </div>
-            <Button :label="t(`ui.action.tryAgain`)" severity="secondary" @click="retry" />
+            <Button :label="t(`ui.action.tryAgain`)" tier="boring" @click="retry" />
             <!-- What still works: the sandboxes themselves, opened without intentic. -->
             <DirectSandboxes :focus-url="focusUrl" />
         </section>

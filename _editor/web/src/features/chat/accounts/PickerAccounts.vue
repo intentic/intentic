@@ -171,7 +171,7 @@ const pickAccount = (id: string): void => {
             <!-- One control for age and re-measure: the age is the label, and watching it reset to "just now" is the confirmation that the press worked. -->
             <button
                 type="button"
-                :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
+                :class="ui.textButton({ tone: `subtle`, size: `xs` })"
                 :disabled="measuring"
                 v-tooltip.top="{ title: t(`chat.pickerAccounts.remeasureLimits`), note: t(`chat.pickerAccounts.everyAccount`) }"
                 :aria-label="remeasureLabel"

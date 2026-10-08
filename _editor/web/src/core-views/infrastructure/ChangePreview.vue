@@ -63,7 +63,7 @@ const hasChanges = computed(() => sections.value.length > 0);
             <Button
                 :label="ran && !stale ? t(`views.changePreview.reCheck`) : t(`views.changePreview.previewChanges`)"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :disabled="running"
                 :loading="running"
                 @click="preview.run()"
@@ -108,7 +108,7 @@ const hasChanges = computed(() => sections.value.length > 0);
                 <Icon name="spinner" spin class="shrink-0 text-info" />
                 <span class="truncate">{{ activity ?? t(`views.changePreview.workingOutWhatChange`) }}</span>
             </p>
-            <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" :text="true" @click="preview.cancel()" />
+            <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="preview.cancel()" />
         </div>
 
         <template v-else-if="ran">

@@ -113,7 +113,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                 type="button"
                 :aria-pressed="revealed"
                 v-tooltip.top="revealed ? t(`sandbox.runtimeInstalls.hideDismissed`) : t(`sandbox.runtimeInstalls.showDismissed`)"
-                :class="ui.linkButton(`gap-1 text-2xs font-medium text-subtle hover:text-content`)"
+                :class="ui.textButton({ size: `xs`, tone: `subtle` }, `font-medium`)"
                 @click="revealed = !revealed"
             >
                 <Icon :name="revealed ? `eye` : `eye-slash`" />{{ t(`sandbox.runtimeInstalls.dismissedCount`, { count: dismissed.length }) }}
@@ -168,7 +168,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             v-if="canOperate && entry.step !== undefined && entry.drafted !== true && entry.declined !== true"
                             type="button"
                             :disabled="busy"
-                            :class="ui.linkButton(`gap-1 text-2xs font-medium text-link`)"
+                            :class="ui.textButton({ size: `xs` }, `font-medium`)"
                             @click="decide(entry, `adopt`)"
                         >
                             <Icon name="plus" />{{ t(`sandbox.runtimeInstalls.addToImage`) }}
@@ -176,7 +176,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                         <button
                             v-if="entry.step === undefined && entry.declined !== true"
                             type="button"
-                            :class="ui.linkButton(`gap-1 text-2xs font-medium text-link`)"
+                            :class="ui.textButton({ size: `xs` }, `font-medium`)"
                             @click="startAgent(brief(entry))"
                         >
                             <Icon name="sparkles" />{{ t(`sandbox.runtimeInstalls.askAgentWhereBelongs`) }}
@@ -185,7 +185,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             v-if="canOperate"
                             type="button"
                             :disabled="busy"
-                            :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
+                            :class="ui.textButton({ size: `xs`, tone: `subtle` })"
                             @click="decide(entry, entry.declined === true ? `restore` : `dismiss`)"
                         >
                             <Icon :name="entry.declined === true ? `undo` : `eye-slash`" />{{

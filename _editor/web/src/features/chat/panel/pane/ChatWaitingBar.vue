@@ -123,11 +123,11 @@ const memoryLine = computed(() => {
                         <Button size="small" :disabled="!props.canDrive || replying" @click="emit(`approve`)">
                             {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
                         </Button>
-                        <Button size="small" severity="secondary" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
+                        <Button size="small" tier="boring" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
                             {{ t(`chat.chatWaitingBar.keepPlanning`) }}
                         </Button>
                     </template>
-                    <Button size="small" severity="secondary" :text="true" @click="show">{{ showLabel }}</Button>
+                    <Button size="small" tier="quiet" @click="show">{{ showLabel }}</Button>
                 </span>
             </div>
             <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
@@ -138,8 +138,7 @@ const memoryLine = computed(() => {
                     }}</Button>
                     <Button
                         size="small"
-                        severity="secondary"
-                        :text="true"
+                        tier="quiet"
                         v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: t(`chat.chatWaitingBar.waitHint`) }"
                         @click="leftHeld = holdKey"
                         >{{ t(`chat.chatWaitingBar.wait`) }}</Button

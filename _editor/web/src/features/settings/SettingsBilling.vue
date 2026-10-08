@@ -300,7 +300,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             <Button
                                 :label="cancelling ? t(`settings.settingsBilling.resumeOnStripe`) : t(`settings.settingsBilling.manageOnStripe`)"
                                 size="small"
-                                class="ui-button-loud"
+                                tier="loud"
                                 :loading="working"
                                 @click="open(`portal`)"
                             />
@@ -320,7 +320,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             <Button
                                 :label="t(`settings.settingsBilling.updatePaymentOnStripe`)"
                                 :loading="working"
-                                class="ui-button-loud"
+                                tier="loud"
                                 @click="open(`portal`)"
                             />
                             <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.stripeReportsPlan`, { lapsed }) }}</p>
@@ -353,7 +353,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                 <Icon name="spinner" spin class="text-info" />
                                 {{ t(`settings.settingsBilling.waitingForStripe`) }}
                             </p>
-                            <Button :label="t(`settings.settingsBilling.didntPayAfterAll`)" size="small" severity="secondary" text @click="dropAway" />
+                            <Button :label="t(`settings.settingsBilling.didntPayAfterAll`)" size="small" tier="quiet" @click="dropAway" />
                         </div>
                     </div>
                 </RowNote>
@@ -398,12 +398,12 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                 :to="HOSTED_SETUP"
                                 :label="t(`settings.settingsBilling.startHostedSandbox`)"
                                 size="small"
-                                class="ui-button-loud"
+                                tier="loud"
                             />
                             <Button
                                 :label="t(`settings.settingsBilling.cancelOnStripe`)"
                                 size="small"
-                                severity="secondary"
+                                tier="boring"
                                 :loading="working"
                                 @click="open(`portal`)"
                             />
@@ -452,8 +452,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                         :key="rung.id"
                                         :label="t(`settings.settingsBilling.moveToRung`, { name: rung.name })"
                                         size="small"
-                                        severity="secondary"
-                                        text
+                                        tier="quiet"
                                         :disabled="!canMoveTo(machine, rung)"
                                         :loading="moving === machine.sandboxId"
                                         @click="moveTo(machine.sandboxId, rung.id)"
@@ -488,7 +487,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                         <Button
                             :label="t(`settings.settingsBilling.addSlotAt`, { price: rung.priceUsd })"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :disabled="rung.held >= HOSTED_PLAN_MAX_SLOTS"
                             :loading="slotsWorking"
                             @click="changeSlots(rung.id, rung.held + 1)"
@@ -497,8 +496,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             v-if="rung.held > 0"
                             :label="t(`settings.settingsBilling.removeSlot`)"
                             size="small"
-                            severity="secondary"
-                            text
+                            tier="quiet"
                             :disabled="rung.standing >= rung.held"
                             :loading="slotsWorking"
                             v-tooltip.top="

@@ -74,7 +74,7 @@ const revert = (): Promise<void> => run(() => revertUpdate(extension.id), failed
                 <span>
                     {{ t(`sandbox.extensionUpdatePolicy.previousVersionKept`) }}{{ previous.version !== undefined ? ` (v${previous.version})` : `` }}.
                 </span>
-                <button type="button" :class="ui.textAction(`text-2xs`)" :disabled="busy" @click="revert">
+                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :disabled="busy" @click="revert">
                     <Icon name="undo" />
                     {{ t(`sandbox.extensionUpdatePolicy.revertTo`, { ref: previous.ref.slice(0, 7) }) }}
                 </button>

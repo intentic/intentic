@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toneWash } from "@intentic/ui";
 import RailIcon from "../rail/RailIcon.vue";
 import type { RuntimeChip } from "./runtimeChips";
 import { useRuntimeChips } from "./useRuntimeChips";
@@ -20,8 +21,7 @@ const chipClass = (chip: RuntimeChip): string[] => [
             ? `text-content`
             : `text-muted hover:text-content`,
 ];
-const countClass = (chip: RuntimeChip): string =>
-    chip.tone === `warning` ? `bg-warning/15` : chip.tone === `success` ? `bg-success/15` : `bg-content/10 text-content`;
+const countClass = (chip: RuntimeChip): string => (chip.tone === undefined ? `bg-content/10 text-content` : toneWash(chip.tone));
 </script>
 
 <template>

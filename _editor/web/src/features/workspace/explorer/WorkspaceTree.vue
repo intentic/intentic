@@ -9,6 +9,7 @@ import {
     iconForEntry,
     type IconName,
     type Tip,
+    toneWash,
     useExplorerStyle,
     vAction,
 } from "@intentic/ui";
@@ -427,9 +428,7 @@ defineExpose({ focusTree });
                             <span
                                 v-if="specialChip(row.entry.path, words)"
                                 class="ui-status-pill shrink-0 text-2xs font-medium"
-                                :class="
-                                    specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`
-                                "
+                                :class="toneWash(specialChip(row.entry.path, words)?.tone === `warning` ? `warning` : `neutral`)"
                                 v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
                                 >{{ specialChip(row.entry.path, words)?.label }}</span
                             >

@@ -107,14 +107,14 @@ onMounted(async () => {
                     <Button
                         v-else-if="candidate.state.kind === `failed` && candidate.state.sandboxId !== undefined"
                         :label="t(`ui.action.tryAgain`)"
-                        severity="secondary"
+                        tier="boring"
                         size="small"
                         @click="reconnect(candidate.entry, candidate.state.sandboxId)"
                     />
                     <button
                         v-else-if="candidate.state.kind === `offline` || candidate.state.kind === `shared`"
                         type="button"
-                        :class="ui.linkButton(`text-2xs text-muted`)"
+                        :class="ui.textButton({ size: `xs`, tone: `quiet` })"
                         @click="forget(candidate.entry)"
                     >
                         {{ t(`sandbox.recover.forget`) }}
@@ -129,13 +129,13 @@ onMounted(async () => {
                 <Button
                     v-if="reconnected > 0"
                     :label="t(`sandbox.recover.openWorkspace`)"
-                    :severity="recoverable > 0 ? `secondary` : undefined"
+                    :tier="recoverable > 0 ? `boring` : `accent`"
                     @click="open"
                 />
-                <Button v-if="checked && anyOffline" :label="t(`sandbox.recover.checkAgain`)" severity="secondary" :disabled="busy" @click="check" />
+                <Button v-if="checked && anyOffline" :label="t(`sandbox.recover.checkAgain`)" tier="boring" :disabled="busy" @click="check" />
             </div>
 
-            <RouterLink to="/setup" :class="ui.linkButton(`self-start text-xs text-muted`)">{{ t(`sandbox.recover.setUpNew`) }}</RouterLink>
+            <RouterLink to="/setup" :class="ui.textButton({ tone: `quiet` }, `self-start`)">{{ t(`sandbox.recover.setUpNew`) }}</RouterLink>
         </section>
     </main>
 </template>

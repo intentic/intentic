@@ -4,6 +4,7 @@ import Icon from "../primitives/Icon.vue";
 import { useT } from "../../i18n/index.js";
 import { tipText } from "../../lib/tipText.js";
 import type { Tip } from "../../lib/tooltip.js";
+import { ui } from "../../lib/ui.js";
 
 // The open project as a chip, and the way out of it: one control for every surface the project scope narrows (the
 // file tree, the agents board, an extension's rows), so the shell says "web · 3 hidden" the same way everywhere.
@@ -35,7 +36,7 @@ const hint = computed((): Tip => ({
     <button
         v-if="project !== undefined"
         type="button"
-        class="ui-chip ui-chip-on h-6 shrink-0 px-1.5"
+        :class="ui.chip({ on: true }, `h-6 shrink-0 px-1.5`)"
         :aria-label="tipText(hint)"
         v-tooltip.bottom="hint"
         @click="emit(`clear`)"

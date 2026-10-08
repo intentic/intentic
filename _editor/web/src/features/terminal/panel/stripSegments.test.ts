@@ -40,7 +40,7 @@ describe(`a pill`, () => {
     it.each<[string, TerminalTab | undefined, TooltipValue]>([
         [`nothing for a pill with no tab`, undefined, undefined],
         [`a read-only log view for a process`, tab({ kind: `process`, command: `tail -f` }), { title: `Background process`, note: `Read-only logs` }],
-        [`the running command first`, tab({ kind: `agent`, command: `pnpm test` }), { title: `Running`, tone: `ok`, rows: [{ label: `Command`, value: `pnpm test` }] }],
+        [`the running command first`, tab({ kind: `agent`, command: `pnpm test` }), { title: `Running`, tone: `success`, rows: [{ label: `Command`, value: `pnpm test` }] }],
         [`an AI terminal, finished or not`, tab({ kind: `agent`, running: false }), { title: `AI terminal`, note: `Finished` }],
         [`a job terminal`, tab({ kind: `job` }), `Job terminal`],
         [`a finished shell`, tab({ running: false }), `Finished`],

@@ -8,6 +8,8 @@ import Icon from "../primitives/Icon.vue";
 import MarkdownDocument from "../markdown/MarkdownDocument.vue";
 import ScrollFrame from "../layout/ScrollFrame.vue";
 import StatusBadge from "../feedback/StatusBadge.vue";
+import Notice from "../feedback/Notice.vue";
+import { toneTint } from "../../lib/tone.js";
 
 const { verb, paged = false } = defineProps<{
     /** The note's name, in the frame's header. */
@@ -53,7 +55,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <template #actions>
             <template v-if="editing">
-                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" @click="emit(`cancel`)" />
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="boring" @click="emit(`cancel`)" />
                 <Button :label="t(`ui.action.save`)" size="small" :loading="saving" @click="emit(`save`)">
                     <template #icon><Icon name="save" /></template>
                 </Button>
@@ -64,7 +66,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
                 <CopyButton :text="raw" v-tooltip.top="t(`ui.noteEditor.copyMarkdown`)" />
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-7 w-7`)"
+                    :class="ui.iconButton({ size: `md` })"
                     :aria-label="t(`ui.noteEditor.editNote`)"
                     v-tooltip.top="t(`ui.action.edit`)"
                     @click="emit(`edit`)"
@@ -73,7 +75,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
                 </button>
                 <button
                     type="button"
-                    :class="ui.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
+                    :class="ui.iconButton({ size: `md`, tone: `danger` })"
                     :aria-label="t(`ui.noteEditor.note`, { verb: verb ?? t(`ui.action.delete`) })"
                     v-tooltip.top="verb ?? t(`ui.action.delete`)"
                     @click="confirming = true"
@@ -85,20 +87,20 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <template #strips>
             <slot v-if="!editing" name="strips" />
-            <div v-if="confirming" class="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2.5">
+            <div v-if="confirming" :class="toneTint(`danger`, `strong`, `flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5`)">
                 <span class="text-xs text-danger"><slot name="confirm" /></span>
                 <div class="flex shrink-0 items-center gap-1.5">
-                    <Button :label="t(`ui.noteEditor.keep`)" size="small" severity="secondary" @click="confirming = false" />
+                    <Button :label="t(`ui.noteEditor.keep`)" size="small" tier="boring" @click="confirming = false" />
                     <Button
                         :label="t(`ui.noteEditor.it`, { verb: verb ?? t(`ui.action.delete`) })"
                         size="small"
-                        severity="danger"
+                        tone="danger"
                         :loading="removing"
                         @click="emit(`remove`)"
                     />
                 </div>
             </div>
-            <div v-if="error" class="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">{{ error }}</div>
+            <Notice v-if="error" tone="danger" strip class="px-4">{{ error }}</Notice>
         </template>
 
         <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">{{ t(`ui.status.loading`) }}</p>

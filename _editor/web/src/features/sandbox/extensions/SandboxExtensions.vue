@@ -241,7 +241,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                     </Button>
                     <button
                         type="button"
-                        :class="ui.iconButton(`h-8 w-8`)"
+                        :class="ui.iconButton({ size: `lg` })"
                         :disabled="reloading"
                         v-tooltip.top="t(`sandbox.sandboxExtensions.reloadExtensions`)"
                         v-action="reload"
@@ -252,7 +252,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                 <button
                     v-else
                     type="button"
-                    :class="ui.iconButton(`h-8 w-8`)"
+                    :class="ui.iconButton({ size: `lg` })"
                     :disabled="isFetching"
                     v-tooltip.top="t(`sandbox.sandboxExtensions.refreshRegistry`)"
                     @click="refetch"
@@ -288,14 +288,14 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             <template v-if="updatable > 0">
-                <button v-if="view === `installed`" type="button" :class="ui.linkButton(`text-2xs`)" @click="show(`browse`)">
+                <button v-if="view === `installed`" type="button" :class="ui.textButton({ size: `xs` })" @click="show(`browse`)">
                     {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}
                 </button>
                 <span v-else class="text-content">{{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}</span>
                 ·
             </template>
             {{ t(`sandbox.sandboxExtensions.updatesChecked`) }} {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
-            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" v-action="checkNow">
+            <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="checking" v-action="checkNow">
                 {{ checking ? t(`sandbox.sandboxExtensions.checking`) : t(`sandbox.sandboxExtensions.checkNow`) }}
             </button>
         </p>

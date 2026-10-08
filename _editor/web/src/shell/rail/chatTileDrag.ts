@@ -53,7 +53,7 @@ export const popChatOutAt = (at: ScreenPoint): void => {
         tone: `problem`,
         title: t(`shell.shellDesktop.chatWindowBlocked`),
         detail: t(`shell.shellDesktop.chatWindowBlockedDetail`),
-        actions: [{ label: t(`shell.shellDesktop.openChatWindow`), severity: `primary`, run: () => void floatChatAt(at) }],
+        actions: [{ label: t(`shell.shellDesktop.openChatWindow`), tier: `accent`, run: () => void floatChatAt(at) }],
     });
 };
 

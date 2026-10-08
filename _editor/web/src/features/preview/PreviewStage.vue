@@ -209,7 +209,7 @@ const ROSETTE = { height: `11px`, width: `11px` };
                     :style="[step, STONE]"
                     aria-hidden="true"
                 ></span>
-                <p :class="ui.sectionLabel(`mt-2 truncate px-3 text-center text-2xs`)">{{ caption }}</p>
+                <p :class="ui.sectionLabel({ size: `xs` }, `mt-2 truncate px-3 text-center`)">{{ caption }}</p>
             </template>
         </div>
     </div>

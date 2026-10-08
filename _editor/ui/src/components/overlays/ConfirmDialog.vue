@@ -4,6 +4,7 @@ import { useId } from "vue";
 import Button from "../primitives/Button.vue";
 import type { IconName } from "../../icons/iconSets.js";
 import { useT } from "../../i18n/index.js";
+import { toneWash } from "../../lib/tone.js";
 import Icon from "../primitives/Icon.vue";
 import Modal from "./Modal.vue";
 
@@ -64,10 +65,7 @@ const titleId = useId();
     >
         <template v-if="headerIcon !== undefined" #header="{ titleClass }">
             <div class="flex min-w-0 items-center gap-3">
-                <span
-                    class="grid size-9 shrink-0 place-items-center rounded-full"
-                    :class="destructive ? `bg-danger/10 text-danger` : `bg-primary-600/15 text-primary-500`"
-                >
+                <span :class="toneWash(destructive ? `danger` : `primary`, `grid size-9 shrink-0 place-items-center rounded-full`)">
                     <Icon :name="headerIcon" />
                 </span>
                 <span :id="titleId" :class="titleClass">{{ header }}</span>
@@ -81,14 +79,14 @@ const titleId = useId();
         </ul>
         <slot />
         <template #footer>
-            <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`cancel`)" />
             <!-- A second way to go ahead (do it later, say), drawn a tier below the confirm it sits beside. -->
             <slot name="actions" />
             <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
             <Button
                 :label="confirmLabel"
-                :severity="destructive ? `danger` : undefined"
-                :class="gilded && !destructive ? `ui-button-loud ui-button-gilded` : undefined"
+                :tone="destructive ? `danger` : undefined"
+                :gilded="gilded && !destructive"
                 autofocus
                 :loading="loading"
                 @click="emit(`confirm`)"

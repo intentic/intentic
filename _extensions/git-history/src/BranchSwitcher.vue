@@ -86,13 +86,13 @@ const confirmDelete = async (name: string): Promise<void> => {
         <button
             type="button"
             :disabled="busy"
-            :class="ui.textAction('touch-target inline-flex min-w-0 select-none gap-1 font-medium text-content')"
+            :class="ui.textButton({ tone: `quiet` }, `touch-target inline-flex min-w-0 select-none font-medium`)"
             v-tooltip.bottom="t(`branchSwitcher.branches`)"
             :aria-label="t(`branchSwitcher.branch`)"
             @click="toggle"
         >
             <Icon name="code" class="shrink-0 text-3xs" />
-            <span class="truncate">{{ current?.name ?? t(`branchSwitcher.detached`) }}</span>
+            <span class="truncate text-content">{{ current?.name ?? t(`branchSwitcher.detached`) }}</span>
             <span v-if="current && current.behind > 0" class="shrink-0 text-muted">↓{{ current.behind }}</span>
             <span v-if="current && current.ahead > 0" class="shrink-0 text-muted">↑{{ current.ahead }}</span>
             <Icon name="chevron-down" class="shrink-0 text-4xs" />
@@ -153,8 +153,9 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 type="button"
                                 :class="
                                     ui.iconButton(
-                                        `h-5 w-5 rounded opacity-0 hover:text-danger focus-visible:opacity-100 group-hover/row:opacity-100`,
-                                        armedDelete === branch.name ? `text-danger opacity-100` : ``,
+                                        { size: `xs`, tone: `danger`, on: armedDelete === branch.name },
+                                        `opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100`,
+                                        armedDelete === branch.name ? `opacity-100` : ``,
                                     )
                                 "
                                 :disabled="busy"
@@ -176,7 +177,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">
                                 {{ t(`branchSwitcher.cancel`) }}
                             </button>
-                            <Button size="small" severity="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
+                            <Button size="small" tone="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
                                 {{ forceFor === branch.name ? t(`branchSwitcher.forceDelete`) : t(`branchSwitcher.delete2`) }}
                             </Button>
                         </div>
@@ -204,7 +205,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             @keyup.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />
-                        <Button size="small" severity="secondary" :disabled="busy || newName.trim() === ''" @click="submitCreate">
+                        <Button size="small" tier="boring" :disabled="busy || newName.trim() === ''" @click="submitCreate">
                             {{ t(`branchSwitcher.create`) }}
                         </Button>
                     </div>

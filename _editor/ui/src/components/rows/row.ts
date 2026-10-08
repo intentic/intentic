@@ -1,4 +1,5 @@
 import { computed, inject, provide, type ComputedRef, type InjectionKey } from "vue";
+import { toneInk } from "../../lib/tone.js";
 
 // Row geometry as data, so <DisclosureRow> can build its header mirror from the same numbers the visible
 // header uses, rather than a typed offset (`pl-8`, `pl-9`...) that goes stale the moment an icon changes size.
@@ -52,13 +53,13 @@ export const ROW_TIERS = {
 
 // Lead icon colour by state, said before the sentence is read. `info` is the link colour, not named
 // `link`, since nothing here navigates.
-export const ROW_TONES = {
+export const ROW_TONES: Record<RowTone, string> = {
     default: `text-muted`,
-    danger: `text-danger`,
-    warning: `text-warning`,
-    success: `text-success`,
+    danger: toneInk(`danger`),
+    warning: toneInk(`warning`),
+    success: toneInk(`success`),
     info: `text-link`,
-} as const satisfies Record<RowTone, string>;
+};
 
 // Gap inside a row note's own toggle cluster, tighter than the tier's own gap.
 export const ROW_TOGGLE_GAPS = {

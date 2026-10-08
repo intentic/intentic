@@ -96,7 +96,7 @@ const open = async (entry: RememberedSandbox): Promise<void> => {
                 <Button
                     :label="t(`sandbox.directSandboxes.open`)"
                     size="small"
-                    :severity="liveness[entry.daemonUrl] === `answering` ? undefined : `secondary`"
+                    :tier="liveness[entry.daemonUrl] === `answering` ? `accent` : `boring`"
                     :loading="opening === entry.daemonUrl"
                     :disabled="opening !== undefined"
                     @click="open(entry)"

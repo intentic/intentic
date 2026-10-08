@@ -31,7 +31,7 @@ const loadsTip = computed((): Tip => ({
 }));
 const unauditedTip = computed((): Tip => ({
     title: t(`sandbox.discoverCard.notAudited`),
-    tone: `warn`,
+    tone: `warning`,
     note: t(`sandbox.discoverCard.reviewBeforeInstall`),
 }));
 // The registry's own words for a verified listing where it gave some; ours, cut to what was done, where it did not.

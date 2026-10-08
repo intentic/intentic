@@ -202,7 +202,7 @@ watch(at, async () => {
                 <template v-if="shots.length > 1">
                     <button
                         type="button"
-                        :class="ui.iconButton(`absolute top-1/2 left-2 h-9 w-9 -translate-y-1/2 bg-card/80 shadow-sm`)"
+                        :class="ui.iconButton({ size: `xl` }, `absolute top-1/2 left-2 -translate-y-1/2 bg-card/80 shadow-sm`)"
                         :disabled="index === 0"
                         :aria-label="t(`chat.chatShotViewer.previous`)"
                         @click="go(index - 1)"
@@ -211,7 +211,7 @@ watch(at, async () => {
                     </button>
                     <button
                         type="button"
-                        :class="ui.iconButton(`absolute top-1/2 right-2 h-9 w-9 -translate-y-1/2 bg-card/80 shadow-sm`)"
+                        :class="ui.iconButton({ size: `xl` }, `absolute top-1/2 right-2 -translate-y-1/2 bg-card/80 shadow-sm`)"
                         :disabled="index === shots.length - 1"
                         :aria-label="t(`chat.chatShotViewer.next`)"
                         @click="go(index + 1)"

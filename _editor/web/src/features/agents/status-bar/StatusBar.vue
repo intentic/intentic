@@ -72,7 +72,7 @@ const close = (): void => {
             <section :id="panelId" data-panel="metrics" :aria-labelledby="headingId" class="flex min-w-0 flex-1 flex-col" @keydown.esc.stop="close">
                 <header class="flex h-8 shrink-0 items-center gap-2 pr-1.5 pl-3">
                     <Icon name="server" class="shrink-0 text-2xs text-subtle" />
-                    <h3 :id="headingId" :class="ui.sectionLabelSm(`min-w-0 truncate`)">{{ t(`agents.liveMetrics.sandboxLabel`) }}</h3>
+                    <h3 :id="headingId" :class="ui.sectionLabel({ size: `xs` }, `min-w-0 truncate`)">{{ t(`agents.liveMetrics.sandboxLabel`) }}</h3>
                     <button
                         type="button"
                         :class="ui.iconButton(`ml-auto hover:bg-content/10`)"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Tip } from "@intentic/ui";
+import { type Tip, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { commitPercent } from "./numberInputs";
 import { type Outcome, type ResultRow, type ResultTable, shortfallOf } from "./experimentReadings";
@@ -60,8 +60,8 @@ interface Line {
 // same column on every row; an open row is plain grey words. The chip's padding is pulled back into the gutter so its
 // text still lines up with the column head.
 const MARKS = {
-    lower: `-ml-1.5 rounded-sm bg-success/10 px-1.5 py-px font-medium text-success`,
-    higher: `-ml-1.5 rounded-sm bg-warning/10 px-1.5 py-px font-medium text-warning`,
+    lower: toneWash(`success`, `-ml-1.5 rounded-sm px-1.5 py-px font-medium`),
+    higher: toneWash(`warning`, `-ml-1.5 rounded-sm px-1.5 py-px font-medium`),
     unclear: `text-subtle`,
     early: `text-subtle`,
 } as const satisfies Record<Outcome["kind"], string>;

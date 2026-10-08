@@ -1,9 +1,8 @@
 <!-- One box for every app failure, shaped and ranked by notice.ts. -->
 <script setup lang="ts">
-import { twMerge } from "tailwind-merge";
 import { computed, useAttrs } from "vue";
 import Icon from "../primitives/Icon.vue";
-import { type NoticeModel, NOTICE_ICON, NOTICE_ICON_SIZE, noticeBox, type NoticeSize, type NoticeTone } from "./notice.js";
+import { type NoticeModel, noticeLook, NOTICE_ICON, type NoticeSize, type NoticeTone } from "./notice.js";
 import type { IconName } from "../../icons/iconSets.js";
 import { ui } from "../../lib/ui.js";
 
@@ -11,6 +10,7 @@ const {
     of,
     tone,
     size = `md`,
+    strip = false,
     dismissLabel = ``,
 } = defineProps<{
     /** The data case: a failure the app already turned into a sentence. */
@@ -20,6 +20,8 @@ const {
     // Tone already picks the glyph; pass one only when it carries information the tone alone doesn't.
     icon?: IconName;
     size?: NoticeSize;
+    /** Laid along a pane's top edge rather than standing in it: full width, square, a rule only underneath. */
+    strip?: boolean;
     dismissLabel?: string;
 }>();
 const emit = defineEmits<{ dismiss: [] }>();
@@ -32,14 +34,15 @@ const attrs = useAttrs();
 // `#actions`: the view's own buttons after the sentence, wrapping under it in a narrow column.
 const slots = defineSlots<{ default?: () => unknown; actions?: () => unknown }>();
 // Read at render, not cached: neither attrs nor slots are reactive, and a conditional `#actions` comes and goes.
-const boxClass = (): string => twMerge(noticeBox(shown.value, size, slots.actions !== undefined), attrs[`class`] as string | undefined);
+const look = (): ReturnType<typeof noticeLook> => noticeLook(shown.value, size, slots.actions !== undefined, strip);
+const boxClass = (): string => look().box(attrs[`class`] as string | undefined);
 // `alert` for tones the user must act on, `status` for the one they don't (won't interrupt a screen reader); a caller's own wins.
 const role = computed(() => (attrs[`role`] as string | undefined) ?? (shown.value === `info` ? `status` : `alert`));
 </script>
 
 <template>
     <div v-bind="{ ...attrs, class: undefined }" :class="boxClass()" :role="role">
-        <Icon :name="icon ?? NOTICE_ICON[shown]" class="shrink-0" :class="slots.actions ? `` : NOTICE_ICON_SIZE[size]" aria-hidden="true" />
+        <Icon :name="icon ?? NOTICE_ICON[shown]" :class="look().icon" aria-hidden="true" />
         <!-- With actions beside it, a floor rather than `min-w-0`: the actions wrap under the sentence before it squeezes to a word a line. -->
         <span class="flex-1" :class="slots.actions ? `min-w-[14rem]` : `min-w-0`">
             <span v-if="of !== undefined" class="block">{{ of.title }}</span>
@@ -50,7 +53,7 @@ const role = computed(() => (attrs[`role`] as string | undefined) ?? (shown.valu
             <slot />
         </span>
         <span v-if="slots.actions" class="flex shrink-0 flex-wrap items-center gap-1"><slot name="actions" /></span>
-        <button v-if="of?.action !== undefined" type="button" :class="ui.linkButton(`shrink-0 font-medium`)" @click="of.action.run()">
+        <button v-if="of?.action !== undefined" type="button" :class="ui.textButton(`shrink-0 font-medium`)" @click="of.action.run()">
             {{ of.action.label }}
         </button>
         <button

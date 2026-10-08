@@ -18,7 +18,32 @@ export {
     probePreview,
     probePreviewOnce,
 } from "./lib/portPreview.js";
-export { ui } from "./lib/ui.js";
+export {
+    type ChipVariants,
+    type ClassArg,
+    type IconButtonVariants,
+    type InputVariants,
+    type Recipe,
+    type SectionLabelVariants,
+    type TabVariants,
+    type TextButtonVariants,
+    ui,
+} from "./lib/ui.js";
+export {
+    type DiffMark,
+    diffMark,
+    type Signal,
+    type TintWeight,
+    type Tone,
+    toneDot,
+    toneFill,
+    toneHover,
+    toneInk,
+    tonePlate,
+    toneRim,
+    toneTint,
+    toneWash,
+} from "./lib/tone.js";
 export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.vue";
 export { type AgentRunAttempt, type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
 export { type FixStanceLook, fixStanceLook } from "./composables/fixStanceLook.js";
@@ -42,6 +67,7 @@ export { default as BrandMark } from "./components/brand/BrandMark.vue";
 // PrimeVue's Button wrapped so a press whose handler returns a promise locks the button and shows a working state
 // once the wait outlasts a beat. `v-action` gives hand-styled elements the same behaviour.
 export { default as Button } from "./components/primitives/Button.vue";
+export { type ButtonLook, type ButtonTier, type ButtonTone, primeLook } from "./components/primitives/button.js";
 export { vAction } from "./lib/pressAction.js";
 export { default as Card } from "./components/layout/Card.vue";
 // Git's status letter and the +/- line-count badge for a changed file row, shipped together since they're always

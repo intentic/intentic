@@ -70,10 +70,10 @@ const EXAMPLE = `{
 
         <template #footer>
             <!-- Where the rest of the answer lives: the daemon's own reviews and every other repository's checks. -->
-            <RouterLink to="/sandbox/agent?section=finishing" :class="ui.linkButton(`mr-auto gap-1 text-xs text-muted hover:text-content`)">
+            <RouterLink to="/sandbox/agent?section=finishing" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
                 {{ t(`workspace.directoryChecks.allChecksInSandbox`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-            <Button :label="t(`ui.action.close`)" text size="small" @click="dir = undefined" />
+            <Button :label="t(`ui.action.close`)" tier="quiet" tone="accent" size="small" @click="dir = undefined" />
         </template>
     </Modal>
 </template>

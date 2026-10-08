@@ -55,7 +55,7 @@ const save = (): void => {
 <template>
     <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.skillForm.called`) }}</span>
+            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.called`) }}</span>
             <input
                 :value="name"
                 type="text"
@@ -65,7 +65,7 @@ const save = (): void => {
                 autocorrect="off"
                 :aria-label="t(`sandbox.skillForm.skillName`)"
                 :disabled="disabled || skill !== undefined"
-                :class="ui.inputSm(`font-mono`)"
+                :class="ui.input({ size: `sm` }, `font-mono`)"
                 @input="onName"
             />
             <p v-if="skill !== undefined" class="text-2xs text-subtle">
@@ -76,7 +76,7 @@ const save = (): void => {
 
         <!-- The field most likely to be typed carelessly, and the only one whose carelessness is invisible afterward. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.skillForm.toUse`) }}</span>
+            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.toUse`) }}</span>
             <div class="ui-field-shell px-0.5 py-1" :class="{ 'opacity-50': disabled }">
                 <ProseField
                     v-model="description"
@@ -92,7 +92,7 @@ const save = (): void => {
         </div>
 
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.skillForm.whatShouldDo`) }}</span>
+            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.whatShouldDo`) }}</span>
             <!-- No Write/Preview toggle: markup shows only in the block holding the caret. -->
             <div class="ui-field-shell p-3" :class="{ 'opacity-50': disabled }" style="--prose-measure: 76ch">
                 <MarkdownDocument
@@ -113,7 +113,7 @@ const save = (): void => {
                 :disabled="missing !== undefined || disabled"
                 @click="save"
             />
-            <Button size="small" text :label="t(`ui.action.cancel`)" @click="emit(`cancel`)" />
+            <Button size="small" tier="quiet" tone="accent" :label="t(`ui.action.cancel`)" @click="emit(`cancel`)" />
             <span v-if="missing !== undefined" class="text-2xs text-subtle">{{ missing }}</span>
         </div>
     </div>

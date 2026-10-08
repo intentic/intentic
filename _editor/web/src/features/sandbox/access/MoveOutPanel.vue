@@ -153,7 +153,7 @@ const compare = (event: Event): Promise<void> =>
                 <template #description>
                     <template v-if="host === undefined">
                         {{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}
-                        <RouterLink to="/capabilities/github" :class="ui.linkButton()">{{ t(`sandbox.moveOutPanel.connectGithub`) }}</RouterLink>
+                        <RouterLink to="/capabilities/github" :class="ui.textButton()">{{ t(`sandbox.moveOutPanel.connectGithub`) }}</RouterLink>
                     </template>
                     <template v-else>{{ t(`ui.action.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>
@@ -162,13 +162,13 @@ const compare = (event: Event): Promise<void> =>
                         v-if="!confirmingPublish"
                         :label="t(`ui.action.publish`)"
                         size="small"
-                        severity="secondary"
+                        tier="boring"
                         :disabled="host === undefined"
                         @click="confirmingPublish = true"
                     />
                     <template v-else>
                         <Button :label="t(`ui.action.publish`)" size="small" :loading="publishing" @click="publish" />
-                        <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="confirmingPublish = false" />
+                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirmingPublish = false" />
                     </template>
                 </template>
                 <!-- Shown only at the confirm moment, not as standing prose. -->
@@ -191,7 +191,7 @@ const compare = (event: Event): Promise<void> =>
             <Button
                 :label="packing ? t(`sandbox.moveOutPanel.exportRunning`) : t(`sandbox.moveOutPanel.exportEnvironment`)"
                 size="small"
-                severity="secondary"
+                tier="boring"
                 :disabled="packing !== undefined"
                 @click="exporting = true"
             >
@@ -200,8 +200,7 @@ const compare = (event: Event): Promise<void> =>
             <Button
                 :label="t(`sandbox.moveOutPanel.compareSandboxToml`)"
                 size="small"
-                severity="secondary"
-                text
+                tier="quiet"
                 :loading="comparing"
                 @click="chooseCompare?.click()"
             />
@@ -247,7 +246,7 @@ const compare = (event: Event): Promise<void> =>
                     <button
                         v-if="entry.status !== 'packing'"
                         type="button"
-                        :class="ui.iconButton(`hover:text-danger`)"
+                        :class="ui.iconButton({ tone: `danger` })"
                         :aria-label="t(`sandbox.moveOutPanel.deleteExport`)"
                         v-tooltip.top="t(`ui.action.delete`)"
                         @click="remove(entry.name)"

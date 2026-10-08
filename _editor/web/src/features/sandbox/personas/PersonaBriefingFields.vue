@@ -55,11 +55,7 @@ const showFixtures = ref(false);
         </label>
 
         <div class="flex flex-col gap-1">
-            <button
-                type="button"
-                :class="ui.linkButton('gap-1 self-start text-xs text-muted hover:text-content')"
-                @click="showFixtures = !showFixtures"
-            >
+            <button type="button" :class="ui.textButton({ tone: `quiet` }, 'self-start')" @click="showFixtures = !showFixtures">
                 <Icon :name="showFixtures ? `chevron-down` : `chevron-right`" class="text-2xs" />
                 {{ t(`sandbox.personaBriefingFields.countMoreAlwaysSent`, { count: TURN_BRIEFING_FIXTURES.length }, TURN_BRIEFING_FIXTURES.length) }}
             </button>

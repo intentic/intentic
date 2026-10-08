@@ -1,20 +1,46 @@
-<!-- The app's action button: PrimeVue's, unchanged, plus automatic press-locking when the `@click` handler returns a promise that outlives a beat. -->
+<!-- The app's action button: PrimeVue's, drawn in one of four tiers (button.ts), plus automatic press-locking when the `@click` handler returns a promise that outlives a beat. -->
 <script setup lang="ts">
 import PrimeButton from "primevue/button";
 import { computed, useAttrs, useSlots } from "vue";
 import Icon from "./Icon.vue";
+import { type ButtonTier, type ButtonTone, primeLook } from "./button.js";
 import { usePress } from "../../lib/pressLock.js";
 
 defineOptions({ inheritAttrs: false });
+
+const {
+    tier,
+    tone,
+    gilded = false,
+    thumb = false,
+} = defineProps<{
+    /** What the button IS: `loud` (one per page), `accent` (the default commit action), `boring`, `quiet`. */
+    tier?: ButtonTier;
+    /** A colour laid on the tier: a destructive accent button, a quiet button in the brand colour. */
+    tone?: ButtonTone;
+    /** The loud tier cast in the house gold, for the one action that moves the workspace up a version. */
+    gilded?: boolean;
+    /** A compact button a thumb has to find: 44px tall under a coarse pointer. */
+    thumb?: boolean;
+}>();
 
 const attrs = useAttrs();
 const slots = useSlots();
 const { locked, working, press } = usePress();
 
+// No look named at all is an installed extension's button, built before tiers existed and still passing `severity`/`text`:
+// PrimeVue's own props pass through untouched, exactly as they did. A tier or a tone named here owns them instead.
+const named = computed(() => tier !== undefined || tone !== undefined || gilded || thumb);
+const look = computed(() => primeLook({ tier, tone, gilded, thumb }));
+
 // `onClick` is handled here and must not be forwarded, or PrimeVue would bind it twice and double every press.
 const passthrough = computed(() => {
     const { onClick: _click, disabled: _disabled, loading: _loading, ...rest } = attrs;
-    return rest;
+    if (!named.value) {
+        return rest;
+    }
+    const { severity: _severity, text: _text, class: own, ...kept } = rest;
+    return { ...kept, severity: look.value.severity, text: look.value.text, class: [look.value.class, own] };
 });
 const listener = computed(() => attrs[`onClick`]);
 

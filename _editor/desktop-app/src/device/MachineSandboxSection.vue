@@ -76,7 +76,7 @@ const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.
                 <p v-if="record.name" class="truncate text-2xs text-subtle">{{ record.name }}</p>
                 <p v-if="detail && state !== `waiting`" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ detail }}</p>
             </div>
-            <Button v-if="state === `ready`" size="small" severity="secondary" class="-my-1 shrink-0" :label="t(`desktop.machineSandbox.open`)" @click="open">
+            <Button v-if="state === `ready`" size="small" tier="boring" class="-my-1 shrink-0" :label="t(`desktop.machineSandbox.open`)" @click="open">
                 <template #icon><Icon name="arrow-up-right" /></template>
             </Button>
         </header>
@@ -138,7 +138,7 @@ const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.
             <Button v-if="state === `failed`" size="small" :label="t(`ui.action.tryAgain`)" @click="retryMachine(false)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <button v-if="state === `failed` && record.logPath" type="button" :class="ui.textAction(`shrink-0`)" v-tooltip.top="record.logPath" @click="revealMachineLog">
+            <button v-if="state === `failed` && record.logPath" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" v-tooltip.top="record.logPath" @click="revealMachineLog">
                 {{ t(`desktop.machineSandbox.showLog`) }}
             </button>
             <Button v-if="state === `stopped`" size="small" :label="t(`desktop.machineSandbox.start`)" :loading="machineStarting" @click="startMachine" />

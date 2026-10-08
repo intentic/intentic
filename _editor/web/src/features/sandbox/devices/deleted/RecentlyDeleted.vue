@@ -100,7 +100,7 @@ const restore = async (trashId: string): Promise<void> => {
                     <template #control>
                         <Button
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :label="t(`ui.action.restore`)"
                             :loading="trash.restoring.value === row.id"
                             :disabled="trash.restoring.value !== undefined"

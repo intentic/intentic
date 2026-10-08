@@ -636,12 +636,12 @@ describe(`symlink rows`, () => {
         expect(markerOf(el, `gone`)?.getAttribute(`data-icon`)).toBe(`link-broken`);
         expect(tipOf(markerOf(el, `gone`))).toEqual({
             title: `Broken link`,
-            tone: `warn`,
+            tone: `warning`,
             rows: [{ label: `Target`, value: `../../.agents/skills/gone` }],
         });
         expect(tipOf(markerOf(el, `away`))).toEqual({
             title: `Outside workspace`,
-            tone: `warn`,
+            tone: `warning`,
             rows: [{ label: `Target`, value: `/etc` }],
             note: `Sandbox won't open it`,
         });

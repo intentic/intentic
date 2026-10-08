@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDayMonth } from "@intentic/ui";
+import { formatDayMonth, toneTint, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { AgentHistoryEntry } from "../fleet/useAgentHistory";
@@ -89,7 +89,8 @@ onBeforeUnmount(close);
         <button
             ref="trigger"
             type="button"
-            class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success transition-colors hover:bg-success/25"
+            class="inline-flex shrink-0 items-center gap-1 ui-status-pill font-mono text-2xs font-medium"
+            :class="toneWash(`success`)"
             :aria-expanded="placement !== undefined"
             :aria-label="heading"
             @mouseenter="settle(true, OPEN_DELAY)"
@@ -124,7 +125,7 @@ onBeforeUnmount(close);
                             class="group flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left transition-colors"
                             :class="[
                                 graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay',
-                                commit.sha === current.sha && commits.length > 1 ? 'bg-success/10' : '',
+                                commit.sha === current.sha && commits.length > 1 ? toneTint(`success`, `strong`) : '',
                             ]"
                             :disabled="graphs.get(commit.repo) === undefined"
                             @click="emit('openGraph', commit.repo)"

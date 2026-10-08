@@ -297,7 +297,10 @@ const rungs = computed(() => {
                             <Icon :name="DETAIL_ICON[rung.detail.tone]" :spin="rung.detail.tone === `muted`" class="mt-px shrink-0 text-2xs" />
                             <span class="min-w-0"
                                 >{{ rung.detail.text }}
-                                <RouterLink v-if="rung.detail.tone !== `muted`" to="/capabilities/localmodel" :class="ui.linkButton(`ml-1 text-2xs`)"
+                                <RouterLink
+                                    v-if="rung.detail.tone !== `muted`"
+                                    to="/capabilities/localmodel"
+                                    :class="ui.textButton({ size: `xs` }, `ml-1`)"
                                     >{{ t(`connect.localModelLane.openSettings`) }}<Icon name="arrow-right" class="text-2xs"
                                 /></RouterLink>
                             </span>
@@ -306,7 +309,7 @@ const rungs = computed(() => {
                         <RouterLink
                             v-if="quickJobsOnly(rung.model) && rung.installed?.status.state === `active`"
                             to="/sandbox/agent#models"
-                            :class="ui.linkButton(`text-2xs`)"
+                            :class="ui.textButton({ size: `xs` })"
                         >
                             {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />
                         </RouterLink>
@@ -327,7 +330,7 @@ const rungs = computed(() => {
                                     : t(`connect.localModelLane.gettingReadyPlain`)
                             }}</span>
                             <!-- Leaves the part file: stopping is declining to wait, not throwing away what has arrived. -->
-                            <button type="button" :class="ui.textAction(`shrink-0 text-2xs`)" @click="emit(`stopPrefetch`)">
+                            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="emit(`stopPrefetch`)">
                                 {{ t(`connect.localModelLane.stop`) }}
                             </button>
                         </p>

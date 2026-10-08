@@ -127,8 +127,7 @@ const run = (action: MachineCardAction): void => {
                         v-for="(action, at) in [...actions].reverse()"
                         :key="action"
                         size="small"
-                        :severity="at === actions.length - 1 ? undefined : `secondary`"
-                        :text="at !== actions.length - 1"
+                        :tier="at === actions.length - 1 ? `accent` : `quiet`"
                         :label="label(action)"
                         @click="run(action)"
                     />

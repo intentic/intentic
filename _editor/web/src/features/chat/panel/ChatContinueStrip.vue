@@ -317,8 +317,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 <Button
                     v-if="canReset"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :disabled="!reachable || resetting"
                     v-tooltip.top="resetTip"
                     @click="useLimitReset"
@@ -333,7 +332,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                         <Button
                             v-if="otherModels.length > 0"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :disabled="!reachable || !ready"
                             :aria-expanded="modelsOpen"
                             v-tooltip.top="otherModelHint"
@@ -353,8 +352,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 <Button
                     v-if="hasMenu"
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :disabled="!reachable"
                     :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
                     :aria-expanded="waysOpen"

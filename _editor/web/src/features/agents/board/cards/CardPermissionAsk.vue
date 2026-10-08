@@ -100,8 +100,7 @@ watch(
                 <!-- The chat card's "skip this, keep going": this one call refused, the turn left to carry on without it. -->
                 <Button
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     :disabled="disabled || sending !== undefined"
                     v-tooltip.top="{ title: t(`ui.action.skip`), note: t(`chat.chatMessageView.skipCall`) }"
                     class="whitespace-nowrap"

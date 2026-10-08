@@ -111,7 +111,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <template v-if="section === `jobs`">
             <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
                 {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
-                <RouterLink :to="MODELS_PATH" :class="ui.linkButton(`text-xs`)">
+                <RouterLink :to="MODELS_PATH" :class="ui.textButton()">
                     {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
                 </RouterLink>
             </p>

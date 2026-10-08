@@ -8,9 +8,11 @@ import {
     Icon,
     type MenuItem,
     Modal,
+    Notice,
     SegmentedControl,
     SkeletonSnapshot,
     timeAgo,
+    toneWash,
     ui,
     useLoadingReveal,
     vAction,
@@ -542,7 +544,7 @@ const runPending = async (): Promise<void> => {
                     type="text"
                     :placeholder="t(`gitHistoryTab.filterCommits`)"
                     :aria-label="t(`gitHistoryTab.filterCommitsByMessage`)"
-                    :class="ui.inputSm('w-full min-w-0 pl-7', search ? 'pr-7' : 'pr-2')"
+                    :class="ui.input({ size: `sm` }, 'w-full min-w-0 pl-7', search ? 'pr-7' : 'pr-2')"
                     @keydown.esc="search = ''"
                 />
                 <button
@@ -559,8 +561,7 @@ const runPending = async (): Promise<void> => {
             <Button
                 v-if="undo.label.value"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 class="shrink-0"
                 :disabled="undo.busy.value"
                 @click="runUndo"
@@ -584,27 +585,25 @@ const runPending = async (): Promise<void> => {
         <p v-if="branchState.actionError.value" class="shrink-0 px-3 py-1 text-2xs text-danger">{{ branchState.actionError.value }}</p>
 
         <!-- A halted rebase explains the current HEAD and replay state. -->
-        <div v-if="operation.operation.value" class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
-            <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-warning">{{ t(`gitHistoryTab.inProgress`, { operation: operation.operation.value }) }}</p>
-                <p class="text-2xs text-muted">{{ t(`gitHistoryTab.resolveConflictsInChanges`, { operation: operation.operation.value }) }}</p>
-                <p v-if="operation.actionError.value" class="text-2xs text-danger">{{ operation.actionError.value }}</p>
-            </div>
-            <Button
-                size="small"
-                severity="warn"
-                class="shrink-0"
-                :disabled="operation.busy.value"
-                @click="operation.abort()"
-                v-tooltip.bottom="{
-                    title: t(`gitHistoryTab.abortOperation`, { operation: operation.operation.value }),
-                    note: t(`gitHistoryTab.restorePointSaved`),
-                }"
-            >
-                {{ t(`gitHistoryTab.abort`) }}
-            </Button>
-        </div>
+        <Notice v-if="operation.operation.value" tone="warning" size="sm" strip>
+            <span class="block font-medium">{{ t(`gitHistoryTab.inProgress`, { operation: operation.operation.value }) }}</span>
+            <span class="block text-muted">{{ t(`gitHistoryTab.resolveConflictsInChanges`, { operation: operation.operation.value }) }}</span>
+            <span v-if="operation.actionError.value" class="block text-danger">{{ operation.actionError.value }}</span>
+            <template #actions>
+                <Button
+                    size="small"
+                    tone="warning"
+                    :disabled="operation.busy.value"
+                    @click="operation.abort()"
+                    v-tooltip.bottom="{
+                        title: t(`gitHistoryTab.abortOperation`, { operation: operation.operation.value }),
+                        note: t(`gitHistoryTab.restorePointSaved`),
+                    }"
+                >
+                    {{ t(`gitHistoryTab.abort`) }}
+                </Button>
+            </template>
+        </Notice>
 
         <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. -->
         <div class="min-h-0 flex-1 overflow-auto">
@@ -679,7 +678,7 @@ const runPending = async (): Promise<void> => {
                         <!-- A stash wears its ref as a pill, like a branch or tag; the name is also the handle its verbs take. -->
                         <span
                             v-if="stashBySha.get(commit.sha)"
-                            class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
+                            :class="toneWash(`info`, `shrink-0 rounded px-1 font-mono text-3xs`)"
                             v-tooltip.top="t(`gitHistoryTab.stashedWork`)"
                             >{{ stashBySha.get(commit.sha)!.ref }}</span
                         >
@@ -691,7 +690,7 @@ const runPending = async (): Promise<void> => {
                             v-for="ref in commit.refs.slice(0, 3)"
                             :key="ref"
                             class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
-                            :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
+                            :class="refBadge(ref).tag ? toneWash(`warning`) : `bg-overlay text-muted`"
                             v-tooltip.top="{ title: t(`gitHistoryTab.actions`), keys: t(`gitHistoryTab.rightClick`) }"
                             @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
                             >{{ refBadge(ref).label }}</span
@@ -874,11 +873,11 @@ const runPending = async (): Promise<void> => {
                 <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
+                <Button size="small" tier="quiet" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
                 <Button
                     v-if="pending"
                     size="small"
-                    :severity="ACTIONS[pending.kind].danger ? `warn` : `success`"
+                    :tone="ACTIONS[pending.kind].danger ? `warning` : `success`"
                     :label="actionWords(pending.kind).confirm"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"
                     @click="runPending"

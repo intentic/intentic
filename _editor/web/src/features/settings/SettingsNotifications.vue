@@ -144,7 +144,7 @@ const status = computed(() => {
                 </Row>
                 <Row icon="send" :title="t(`settings.settingsNotifications.sendTest`)">
                     <template #control>
-                        <Button size="small" severity="secondary" @click="sendDesktopTest">
+                        <Button size="small" tier="boring" @click="sendDesktopTest">
                             {{ t(`settings.settingsNotifications.sendTest2`) }}
                         </Button>
                     </template>
@@ -161,7 +161,7 @@ const status = computed(() => {
                 </Row>
                 <Row v-if="enabled" icon="send" :title="t(`settings.settingsNotifications.sendTest`)">
                     <template #control>
-                        <Button size="small" severity="secondary" :disabled="busy" @click="sendTest">
+                        <Button size="small" tier="boring" :disabled="busy" @click="sendTest">
                             {{ t(`settings.settingsNotifications.sendTest2`) }}
                         </Button>
                     </template>

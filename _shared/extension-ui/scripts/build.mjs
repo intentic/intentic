@@ -108,14 +108,16 @@ const SUBPATHS = Object.entries(JSON.parse(readFileSync(join(PKG, `package.json`
     .filter(([key, entry]) => key !== `.` && entry?.[`@intentic/src`] !== undefined)
     .map(([key]) => key.slice(`./`.length));
 
-const exportedNames = (source, fromPattern) => {
+// `runtimeOnly` leaves out type-only names (`export type { … }`, `type X`): a bridge that wrote one as a runtime
+// constant would hand an extension an `undefined` under a type's name.
+const exportedNames = (source, fromPattern, runtimeOnly = false) => {
     const names = new Set();
-    for (const statement of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}\s+from\s+"([^"]+)";?/gu)) {
-        if (!fromPattern.test(statement[2])) {
+    for (const statement of source.matchAll(/export\s+(type\s+)?\{([^}]*)\}\s+from\s+"([^"]+)";?/gu)) {
+        if (!fromPattern.test(statement[3]) || (runtimeOnly && statement[1] !== undefined)) {
             continue;
         }
-        for (const entry of statement[1].split(`,`).map((part) => part.trim())) {
-            if (entry !== ``) {
+        for (const entry of statement[2].split(`,`).map((part) => part.trim())) {
+            if (entry !== `` && !(runtimeOnly && /^type\s/u.test(entry))) {
                 names.add((/^(\w+)\s+as\s+/u.exec(entry)?.[1] ?? entry).replace(/^type\s+/u, ``));
             }
         }
@@ -166,7 +168,9 @@ const walk = (file) => {
         return;
     }
     reachable.add(file);
-    for (const match of readFileSync(file, `utf8`).matchAll(/from\s+"([^"]+)"/gu)) {
+    // `import("…")` too: an inferred type (a recipe's, say) is emitted as an inline import, not a `from` clause, and
+    // a package reached only that way would otherwise ship unnamed and resolve to nothing in a consumer.
+    for (const match of readFileSync(file, `utf8`).matchAll(/(?:from\s+|import\()"([^"]+)"/gu)) {
         const spec = match[1];
         const next = spec.startsWith(`.`) ? resolveRelative(file, spec) : spec.startsWith(`@intentic/ui`) ? resolveUi(spec) : undefined;
         if (next !== undefined) {
@@ -262,7 +266,7 @@ writeFileSync(
 // the barrel can never disagree about what it carries.
 const indexTypes = readFileSync(join(DIST, `types/extension-ui/src/index.d.ts`), `utf8`);
 const subpathCounts = SUBPATHS.map((subpath) => {
-    const names = [...exportedNames(indexTypes, new RegExp(`/${subpath}\\.js$`, `u`))].filter((name) => isIdentifier(name)).toSorted();
+    const names = [...exportedNames(indexTypes, new RegExp(`/${subpath}\\.js$`, `u`), true)].filter((name) => isIdentifier(name)).toSorted();
     writeFileSync(
         join(DIST, `${subpath}.js`),
         [

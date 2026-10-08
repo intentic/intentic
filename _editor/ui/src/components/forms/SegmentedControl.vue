@@ -2,7 +2,9 @@
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
+import { computed } from "vue";
 import { ui } from "../../lib/ui.js";
+import { segmented } from "./segmented.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
 import { tipText } from "../../lib/tipText.js";
 import type { TooltipValue } from "../../lib/tooltip.js";
@@ -75,24 +77,13 @@ const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-ce
 // into the header's own margin instead.
 const underlineTab = (active: boolean): string =>
     ui.tab(active, coarse.value ? `flex min-h-11 items-end` : ``, size === `xs` ? `pb-1.5 text-xs` : `pb-2 text-sm`);
+
+const look = computed(() => segmented({ variant, stretch: variant === `pills` && stretch, size, wrap }));
+const optionClass = (active: boolean): string => (variant === `underline` ? underlineTab(active) : look.value.option({ active }));
 </script>
 
 <template>
-    <div
-        role="tablist"
-        class="flex items-center"
-        :class="[
-            variant === `underline`
-                ? // No track, no fill, no radius, and no inset: the tabs sit on whatever surface hosts them, flush
-                  // with its edge, so a tab's label lines up with the left edge of whatever is stacked under it.
-                  // `gap-4`, because with nothing boxing a tab, the space beside it is all that separates the two.
-                  `gap-4`
-                : stretch
-                  ? [`w-full gap-1 rounded-lg border border-line bg-canvas`, size === `xs` ? `p-0.5` : `p-1`]
-                  : `gap-0.5`,
-            wrap ? `flex-wrap gap-y-1` : ``,
-        ]"
-    >
+    <div role="tablist" :class="look.track()">
         <button
             v-for="option in options"
             :key="option.value"
@@ -101,34 +92,7 @@ const underlineTab = (active: boolean): string =>
             :aria-selected="model === option.value"
             :aria-label="nameOf(option)"
             v-tooltip.bottom="option.markTitle ?? option.title"
-            class="cursor-pointer transition-colors"
-            :class="
-                variant === `underline`
-                    ? underlineTab(model === option.value)
-                    : [
-                          `rounded-md font-medium`,
-                          model === option.value ? `ui-pill-on` : `text-muted hover:text-content`,
-                          // Only the compact pill needs it. The stretch track is already ≥36px and its pills sit edge to
-                          // edge inside a bordered box, so an overlay reaching 44px would spill past that border and
-                          // over the pill beside it: the one shape where a bigger hit area buys a wrong press.
-                          stretch ? `` : `touch-target`,
-                          stretch
-                              ? /* Full-width tracks use size-specific hit heights. */
-                                [
-                                    `flex flex-1 items-center justify-center text-center`,
-                                    size === `xs` ? `min-h-6 px-1.5 text-2xs` : `min-h-9 px-2 text-xs`,
-                                ]
-                              : // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is
-                                // 2.25rem), so a pill that breaks doesn't merely look wrong: it stands taller than the bar
-                                // holding it and than every bar beside it. Only the MARK chip could do this: an icon is an
-                                // atomic inline box, so a line may break before it, where a numeric badge is plain text
-                                // welded to the label with no space to break at. Nowrap also fixes the cause rather than the
-                                // symptom: an unbreakable pill's min-content IS its full width, so the flex row can no
-                                // longer squeeze it narrower than its own label and chip. The stretch variant keeps
-                                // wrapping: it owns a full-width track with room to grow, and its labels are sentences.
-                                [`whitespace-nowrap py-0.5 text-2xs`, size === `xs` ? `px-1.5` : `px-2.5`],
-                      ]
-            "
+            :class="optionClass(model === option.value)"
             @click="model = option.value"
         >
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--

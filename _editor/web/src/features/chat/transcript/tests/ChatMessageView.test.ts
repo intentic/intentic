@@ -139,8 +139,15 @@ jest.mock("@intentic/ui", async () => {
             },
         }),
         // Class-recipe stand-ins return their input unchanged, since this suite asserts structure and text, not the
-        // kit's geometry.
-        ui: { linkButton: (extra: string) => extra, textAction: (extra: string) => extra, iconButton: (extra: string) => extra },
+        // kit's geometry. A chip keeps its own class and lit state, which the run chip is asserted by.
+        ui: {
+            linkButton: (extra: string) => extra,
+            textAction: (extra: string) => extra,
+            iconButton: (extra: string) => extra,
+            textButton: (...args: unknown[]) => args.filter((arg) => typeof arg === `string`).join(` `),
+            chip: (variants?: { on?: boolean }, ...extra: unknown[]) =>
+                [`ui-chip`, variants?.on === true && `ui-chip-on`, ...extra].filter((arg) => typeof arg === `string`).join(` `),
+        },
         // Highlighting never lands in jsdom; returning undefined is the pending-highlight state the block already
         // renders for.
         useHighlighter: () => ({ tokenizeLine: async () => undefined }),

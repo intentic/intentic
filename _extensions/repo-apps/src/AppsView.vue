@@ -10,6 +10,7 @@ import {
     PageHeader,
     SkeletonSnapshot,
     StatusBadge,
+    toneWash,
     useLoadingReveal,
     vSkeletonSource,
     type IconName,
@@ -60,10 +61,10 @@ const BACKEND = computed((): AppKind => ({
     icon: `server`,
     label: t(`appsView.api`),
     tint: `text-primary-500`,
-    pill: `bg-primary-600/10 text-primary-500`,
+    pill: toneWash(`primary`),
     known: true,
 }));
-const FRONTEND = computed((): AppKind => ({ icon: `globe`, label: t(`appsView.web`), tint: `text-info`, pill: `bg-info/10 text-info`, known: true }));
+const FRONTEND = computed((): AppKind => ({ icon: `globe`, label: t(`appsView.web`), tint: `text-info`, pill: toneWash(`info`), known: true }));
 const kindOf = (kind: string | undefined): AppKind => {
     const key = kind?.toLowerCase() ?? ``;
     if (/api|server|backend|service|worker|daemon|gateway|hono|express|fastify|nest/.test(key)) {
@@ -73,7 +74,7 @@ const kindOf = (kind: string | undefined): AppKind => {
         return FRONTEND.value;
     }
     // An unrecognized kind labels itself; no kind at all (a bare `dev` script) leaves the glyph to speak.
-    return { icon: `box`, label: kind, tint: `text-muted`, pill: `bg-subtle/10 text-subtle`, known: false };
+    return { icon: `box`, label: kind, tint: `text-muted`, pill: toneWash(`neutral`), known: false };
 };
 // Decorate each app with its resolved kind so the template binds one value per row (no repeated kindOf calls).
 const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(app.kind) })));
@@ -285,7 +286,7 @@ onMounted(async () => {
                                 :href="app.previewUrl"
                                 target="_blank"
                                 rel="noopener"
-                                :class="ui.iconButton(`h-8 w-8`)"
+                                :class="ui.iconButton({ size: `lg` })"
                                 :aria-label="t(`appsView.openPreviewInNew`, { app: app.app })"
                                 v-tooltip.top="t(`appsView.openPreview`)"
                             >
@@ -293,7 +294,7 @@ onMounted(async () => {
                             </a>
                             <button
                                 type="button"
-                                :class="ui.iconButton(`h-8 w-8`)"
+                                :class="ui.iconButton({ size: `lg` })"
                                 :aria-label="t(`appsView.openTerminal`, { app: app.app })"
                                 v-tooltip.top="t(`appsView.terminal`)"
                                 @click="openFocused(sessionOf(app.app))"
@@ -304,7 +305,7 @@ onMounted(async () => {
                                 v-if="testsOf(app.app).length > 0"
                                 :label="t(`appsView.runTests`)"
                                 size="small"
-                                severity="secondary"
+                                tier="boring"
                                 @click="runTests(`${app.app}__test`, testsOf(app.app))"
                             >
                                 <template #icon><Icon name="bolt" /></template>
@@ -316,7 +317,7 @@ onMounted(async () => {
                                 v-else
                                 :label="t(`appsView.stop`)"
                                 size="small"
-                                severity="secondary"
+                                tier="boring"
                                 :disabled="busy"
                                 @click="act(() => stopApp(app.app))"
                             >
@@ -337,7 +338,7 @@ onMounted(async () => {
                         <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
                             <Icon name="box" class="shrink-0 text-subtle" />
                             <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ name }}</span>
-                            <Button :label="t(`appsView.runTests`)" size="small" severity="secondary" @click="runTests(`${name}__test`, dirs)">
+                            <Button :label="t(`appsView.runTests`)" size="small" tier="boring" @click="runTests(`${name}__test`, dirs)">
                                 <template #icon><Icon name="bolt" /></template>
                             </Button>
                         </div>
@@ -352,7 +353,7 @@ onMounted(async () => {
                             v-if="grouped.libraries.length > 1"
                             :label="t(`appsView.runAll`)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             @click="runTests('all-tests', grouped.libraries)"
                         >
                             <template #icon><Icon name="play" /></template>
@@ -362,7 +363,7 @@ onMounted(async () => {
                         <div v-for="dir in grouped.libraries" :key="dir" class="flex items-center gap-3 px-4 py-2">
                             <Icon name="bolt" class="shrink-0 text-subtle" />
                             <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
-                            <Button :label="t(`appsView.run`)" size="small" severity="secondary" @click="runTests(libSuffix(dir), [dir])">
+                            <Button :label="t(`appsView.run`)" size="small" tier="boring" @click="runTests(libSuffix(dir), [dir])">
                                 <template #icon><Icon name="play" /></template>
                             </Button>
                         </div>

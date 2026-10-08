@@ -151,7 +151,7 @@ const notes = computed((): PreviewNote[] => {
             warn: true,
             tip: {
                 title: t(`workspace.htmlPreview.missingTitle`),
-                tone: `warn`,
+                tone: `warning`,
                 rows,
                 note: unlisted > 0 ? t(`workspace.htmlPreview.missingMore`, { count: unlisted }) : t(`workspace.htmlPreview.missingWhy`),
             },

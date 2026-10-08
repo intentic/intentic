@@ -36,7 +36,7 @@ const nameOf = (member: PresenceMember): string => member.name ?? member.email;
 // Per-avatar, so a stack of three still answers "who is that one", not just "who is here".
 const tooltipFor = (member: PresenceMember): Tip =>
     label === undefined
-        ? { title: nameOf(member), tone: member.idle ? undefined : `ok`, note: `${presenceActivity(member)}${member.idle ? t(`shell.mobileMenu.away`) : ``}` }
+        ? { title: nameOf(member), tone: member.idle ? undefined : `success`, note: `${presenceActivity(member)}${member.idle ? t(`shell.mobileMenu.away`) : ``}` }
         : { title: nameOf(member), note: label };
 const overflowNames = computed(() => members.slice(MAX_AVATARS).map(nameOf).join(`, `));
 </script>

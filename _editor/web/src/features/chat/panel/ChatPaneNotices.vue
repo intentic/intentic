@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, Notice } from "@intentic/ui";
+import { Button, Icon, Notice, toneTint } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
@@ -117,7 +117,7 @@ const activeAccountReauth = computed(() => {
         <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
         <Button
             size="small"
-            :text="true"
+            tier="quiet" tone="accent"
             class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
             @click="restore([activeArchived.id])"
@@ -132,7 +132,7 @@ const activeAccountReauth = computed(() => {
     <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
         {{ hoursNotice }}
         <template v-if="planOffered" #actions>
-            <Button :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
+            <Button :as="RouterLink" to="/settings/billing" size="small" tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
         </template>
     </Notice>
     <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
@@ -148,8 +148,7 @@ const activeAccountReauth = computed(() => {
             <Button
                 v-if="trialUnavailable"
                 size="small"
-                severity="secondary"
-                :text="true"
+                tier="quiet"
                 :disabled="!reachable || streaming"
                 v-tooltip.top="{ title: t(`chat.chatPaneNotices.retryTrial`), note: t(`chat.chatPaneNotices.resumesIfAnswers`) }"
                 @click="retryTrial"
@@ -160,7 +159,14 @@ const activeAccountReauth = computed(() => {
                  arrived at sideways. Standing whenever this strip does, not only once spent — somebody halfway through
                  the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
                  as a button: Ctrl/Cmd-click keeps this conversation. -->
-            <Button :as="RouterLink" :to="MODELS_PATH" size="small" :text="true" v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }">
+            <Button
+                :as="RouterLink"
+                :to="MODELS_PATH"
+                size="small"
+                tier="quiet"
+                tone="accent"
+                v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }"
+            >
                 {{ t(`chat.words.connectAModel`) }}
             </Button>
         </div>
@@ -169,7 +175,8 @@ const activeAccountReauth = computed(() => {
     <RouterLink
         v-if="activeAccountReauth"
         :to="modelsPath({ provider })"
-        class="flex items-start gap-2 rounded-xl border border-warning/40 bg-card px-3 py-2 text-left text-2xs text-warning"
+        class="flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-2xs text-warning"
+        :class="toneTint(`warning`, `strong`)"
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
         <span

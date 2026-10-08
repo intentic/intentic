@@ -198,7 +198,7 @@ const sessionNote = computed(() => {
                             {{ stateOf(requirement.id)?.detail }}
                         </p>
                         <p v-else-if="remedyOf(requirement)" class="text-xs leading-relaxed text-subtle">{{ remedyOf(requirement) }}</p>
-                        <button v-if="requirement.detail" type="button" :class="ui.linkButton()" @click="toggle(requirement.id)">
+                        <button v-if="requirement.detail" type="button" :class="ui.textButton()" @click="toggle(requirement.id)">
                             {{ opened[requirement.id] ? t(`desktop.requirements.hideSteps`) : t(`desktop.requirements.showMeHow`) }}
                         </button>
                     </div>
@@ -228,11 +228,11 @@ const sessionNote = computed(() => {
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The only control when nothing here can act: primary, so a screen with one honest move shows it as one. -->
-            <Button :severity="stuck ? undefined : `secondary`" :text="!stuck" :label="t(`desktop.requirements.checkAgain`)" @click="emit(`recheck`)">
+            <Button :tier="stuck ? `accent` : `quiet`" :label="t(`desktop.requirements.checkAgain`)" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
-            <button v-if="!hideElsewhere" type="button" :class="ui.textAction()" @click="emit(`elsewhere`)">
+            <button v-if="!hideElsewhere" type="button" :class="ui.textButton({ tone: `quiet` })" @click="emit(`elsewhere`)">
                 <Icon name="server" class="shrink-0" />
                 <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
             </button>

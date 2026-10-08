@@ -9,7 +9,7 @@ import { at, blank, classWordsOf, finishFindings, tags, templateSource, template
 /** Design system field classes, spelled as a class or through a `ui.*` recipe. */
 const ON_SYSTEM = /(?:^|\s)(?:ui-field-box|ui-field-shell|field-bare)(?:\s|$)|\bui\.input(?:Sm|Inline)?\s*\(/u;
 // Variants whose box belongs to the caller; `ui-field-shell` is a frame, not a control.
-const CALLER_GEOMETRY = /(?:^|\s)(?:field-bare|ui-field-inline|ui-field-shell)(?:\s|$)|\bui\.inputInline\s*\(/u;
+const CALLER_GEOMETRY = /(?:^|\s)(?:field-bare|ui-field-inline|ui-field-shell)(?:\s|$)|\bui\.inputInline\s*\(|\bui\.input\s*\(\s*\{[^}]*\bsize:\s*[`'"]?\s*inline/u;
 /** An element that IS a field, or is the box drawn around one. Scopes the focus rules off buttons and rows. */
 const FIELDISH = /(?:^|\s)(?:ui-field-box|ui-field-shell|ui-field-lit|ui-field-inline|field-bare)(?:\s|$)/u;
 

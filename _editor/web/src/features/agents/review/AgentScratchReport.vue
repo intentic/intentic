@@ -55,7 +55,7 @@ const labelOf = (repo: string, path: string): string => (repo === `root` ? path 
                 <Button
                     v-if="entry.reason !== 'checkout'"
                     size="small"
-                    severity="secondary"
+                    tier="boring"
                     class="whitespace-nowrap"
                     :disabled="busy || streaming"
                     @click="emit('include', group.repo, [entry.path])"
@@ -65,8 +65,7 @@ const labelOf = (repo: string, path: string): string => (repo === `root` ? path 
                 </Button>
                 <Button
                     size="small"
-                    severity="secondary"
-                    :text="true"
+                    tier="quiet"
                     class="whitespace-nowrap"
                     :disabled="busy || streaming"
                     @click="emit('delete', group.repo, [entry.path])"

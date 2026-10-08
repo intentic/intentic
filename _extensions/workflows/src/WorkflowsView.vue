@@ -366,7 +366,9 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </button>
                             <button
                                 type="button"
-                                :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
+                                :class="
+                                    ui.iconButton({ tone: `danger` }, 'md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')
+                                "
                                 :aria-label="t(`workflowsView.delete`, { name: workflow.name })"
                                 v-tooltip.top="t(`workflowsView.delete2`)"
                                 @click="confirmRemoveId = workflow.id"
@@ -410,7 +412,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         <Button
                             :label="t(`workflowsView.use`)"
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             v-tooltip.top="{ title: t(`workflowsView.opensChat`), note: t(`workflowsView.runsOnceYouSend`) }"
                             @click="loopNow(design)"
                         >
@@ -427,7 +429,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         </button>
                         <button
                             type="button"
-                            :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
+                            :class="ui.iconButton({ tone: `danger` }, 'md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
                             :aria-label="t(`workflowsView.delete`, { name: design.name })"
                             v-tooltip.top="t(`workflowsView.delete2`)"
                             @click="confirmRemoveLoopId = design.id"
@@ -442,7 +444,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">{{ t(`workflowsView.startTemplate`) }}</span>
-                    <button type="button" :class="ui.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
+                    <button type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` }, 'ml-auto')" @click="blank()">
                         {{ t(`workflowsView.startBlank`) }}
                     </button>
                 </div>
@@ -462,7 +464,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </StatusBadge>
                         </template>
                         <template #actions>
-                            <Button :label="t(`workflowsView.useTemplate`)" size="small" severity="secondary" @click="fromTemplate(template)">
+                            <Button :label="t(`workflowsView.useTemplate`)" size="small" tier="boring" @click="fromTemplate(template)">
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
                         </template>

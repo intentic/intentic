@@ -31,7 +31,7 @@ onBeforeUnmount(revoke);
     <object v-if="url" :data="url" type="application/pdf" class="h-full w-full">
         <div class="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
             <p class="text-sm">{{ t(`pdfViewer.pdfCantDisplayedInline`) }}</p>
-            <Button severity="secondary" @click="$emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`pdfViewer.download`) }} </Button>
+            <Button tier="boring" @click="$emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`pdfViewer.download`) }} </Button>
         </div>
     </object>
 </template>

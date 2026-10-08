@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatMoney, Icon, timeAgo, ui, useDevice } from "@intentic/ui";
+import { formatMoney, Icon, timeAgo, toneWash, ui, useDevice } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
@@ -94,7 +94,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span
                 v-if="needsYou"
                 v-tooltip.top="{ title: t(`agents.workflowRunCard.stepWaiting`), note: t(`agents.workflowRunCard.openToAnswer`) }"
-                class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning"
+                class="ui-status-pill shrink-0 text-2xs font-semibold"
+                :class="toneWash(`warning`)"
                 >{{ t(`agents.workflowRunCard.needs`) }}</span
             >
             <button
@@ -144,7 +145,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                     note: t(`agents.workflowRunCard.stepsCutOff`),
                 }"
                 :disabled="stopping"
-                :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle hover:bg-danger/10 hover:text-danger`)"
+                :class="ui.iconButton({ size: `xs`, tone: `danger` }, `shrink-0`)"
                 @click.stop="emit(`stop`)"
             >
                 <Icon :name="stopping ? `spinner` : `stop`" :spin="stopping" class="text-2xs" />

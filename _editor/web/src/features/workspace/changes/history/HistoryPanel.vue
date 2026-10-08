@@ -143,19 +143,13 @@ const confirmRestore = (id: string): void => {
                         <template v-if="confirmRestoreId === snapshot.id">
                             <!-- Not decoration: an open chat is reasoning about these files and must be told they moved. -->
                             <span class="flex-1 text-2xs text-warning">{{ words.restoreConfirm }}</span>
-                            <Button size="small" severity="danger" @click="confirmRestore(snapshot.id)">{{ words.restore }}</Button>
-                            <Button
-                                size="small"
-                                severity="secondary"
-                                :text="true"
-                                :label="t(`ui.action.cancel`)"
-                                @click="confirmRestoreId = undefined"
-                            />
+                            <Button size="small" tone="danger" @click="confirmRestore(snapshot.id)">{{ words.restore }}</Button>
+                            <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="confirmRestoreId = undefined" />
                         </template>
                         <Button
                             v-else
                             size="small"
-                            severity="secondary"
+                            tier="boring"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
                             v-tooltip.right="{ title: t(`workspace.historyPanel.filesOnly`), note: t(`workspace.historyPanel.currentSavedFirst`) }"

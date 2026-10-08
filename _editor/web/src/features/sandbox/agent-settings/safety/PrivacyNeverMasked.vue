@@ -191,7 +191,7 @@ const LIST = `max-h-72 overflow-y-auto`;
                     <span v-else-if="feedback?.kind === `info`" class="text-muted">{{ feedback.text }}</span>
                     <template v-else-if="feedback?.kind === `removed`">
                         <span class="text-muted">{{ t(`sandbox.agentPrivacyShield.neverMaskedRemoved`, { value: feedback.value }) }}</span>
-                        <button type="button" :class="ui.linkButton(`text-2xs`)" @click="undo(feedback)">{{ t(`ui.action.undo`) }}</button>
+                        <button type="button" :class="ui.textButton({ size: `xs` })" @click="undo(feedback)">{{ t(`ui.action.undo`) }}</button>
                     </template>
                     <span v-else-if="listed" class="text-muted">{{ t(`sandbox.agentPrivacyShield.neverMaskedAlready`, { value: query }) }}</span>
                     <span v-else-if="query === ``" class="text-subtle">{{ t(`sandbox.agentPrivacyShield.neverMaskedHint`) }}</span>
@@ -212,7 +212,7 @@ const LIST = `max-h-72 overflow-y-auto`;
                                 autocomplete="off"
                                 spellcheck="false"
                                 :aria-label="t(`sandbox.agentPrivacyShield.neverMaskedEdit`, { value })"
-                                :class="ui.inputSm(`min-w-0 flex-1 font-mono`)"
+                                :class="ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
                                 @keydown.enter.prevent="commitEdit"
                                 @keydown.esc.prevent="cancelEdit"
                                 @blur="commitEdit"
@@ -231,7 +231,7 @@ const LIST = `max-h-72 overflow-y-auto`;
                             >
                                 <button
                                     type="button"
-                                    :class="ui.iconButton(`size-6 text-subtle`)"
+                                    :class="ui.iconButton({ tone: `subtle` })"
                                     :aria-label="t(`sandbox.agentPrivacyShield.neverMaskedEdit`, { value })"
                                     v-tooltip.top="t(`ui.action.edit`)"
                                     @click="startEdit(value)"
@@ -240,7 +240,7 @@ const LIST = `max-h-72 overflow-y-auto`;
                                 </button>
                                 <button
                                     type="button"
-                                    :class="ui.iconButton(`size-6 text-subtle hover:text-danger`)"
+                                    :class="ui.iconButton({ tone: `danger` })"
                                     :aria-label="t(`sandbox.agentPrivacyShield.neverMaskedRemove`, { value })"
                                     v-tooltip.top="t(`ui.action.remove`)"
                                     @click="remove(value)"

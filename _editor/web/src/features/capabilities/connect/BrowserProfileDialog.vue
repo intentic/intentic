@@ -368,7 +368,7 @@ const finish = (): void => {
                 <template #icon><Icon name="check" /></template>
             </Button>
             <template v-else>
-                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="cancel" />
+                <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="cancel" />
                 <Button
                     :label="t(`capabilities.browserProfileDialog.imDone`)"
                     :disabled="status !== 'ready'"

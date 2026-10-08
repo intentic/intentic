@@ -133,24 +133,24 @@ const ruleLine = (rule: BrokerRule): string =>
                 <textarea
                     v-if="editing"
                     v-model="draft"
-                    :class="ui.inputSm('mt-1 w-full resize-y font-mono')"
+                    :class="ui.input({ size: `sm` }, 'mt-1 w-full resize-y font-mono')"
                     rows="8"
                     spellcheck="false"
                     :aria-label="t(`capabilities.secretCredentialPolicy.rulesJson`)"
                 />
                 <p v-if="draftError" class="pt-1 text-2xs text-warning">{{ draftError }}</p>
                 <div class="flex items-center gap-3 pt-1.5">
-                    <button v-if="!editing" type="button" :class="ui.linkButton(`text-2xs`)" @click="editing = true">
+                    <button v-if="!editing" type="button" :class="ui.textButton({ size: `xs` })" @click="editing = true">
                         {{ t(`capabilities.secretCredentialPolicy.editRules`) }}
                     </button>
                     <template v-else>
-                        <button type="button" :class="ui.linkButton(`text-2xs`)" v-action="saveRules">{{ t(`ui.action.save`) }}</button>
-                        <button type="button" :class="ui.linkButton(`text-2xs`)" @click="editing = false">{{ t(`ui.action.cancel`) }}</button>
+                        <button type="button" :class="ui.textButton({ size: `xs` })" v-action="saveRules">{{ t(`ui.action.save`) }}</button>
+                        <button type="button" :class="ui.textButton({ size: `xs` })" @click="editing = false">{{ t(`ui.action.cancel`) }}</button>
                     </template>
                     <button
                         v-if="policy.rulesFrom === `owner` && !editing"
                         type="button"
-                        :class="ui.linkButton(`text-2xs`)"
+                        :class="ui.textButton({ size: `xs` })"
                         v-action="() => save({ rules: null })"
                     >
                         {{ t(`capabilities.secretCredentialPolicy.useConnectorRules`) }}

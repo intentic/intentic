@@ -28,7 +28,7 @@ const showInstructions = ref(false);
             </div>
             <button
                 type="button"
-                :class="ui.linkButton(`mt-2 gap-1 text-2xs text-muted hover:text-content`)"
+                :class="ui.textButton({ size: `xs`, tone: `quiet` }, `mt-2`)"
                 :aria-expanded="showInstructions"
                 @click="showInstructions = !showInstructions"
             >

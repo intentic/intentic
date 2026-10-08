@@ -81,7 +81,13 @@ const memoryLine = computed<string | undefined>(() => {
             <!-- The account whose sign-in refused the push, when connecting it is the fix. -->
             <Button v-if="connectLabel" size="small" :label="connectLabel" @click="connect" />
             <!-- The same push again, hook and all. -->
-            <Button size="small" :severity="connectLabel ? `secondary` : `warn`" :label="t(`ui.action.tryAgain`)" @click="pushFlow.retry" />
+            <Button
+                size="small"
+                :tier="connectLabel ? `boring` : `accent`"
+                :tone="connectLabel ? undefined : `warning`"
+                :label="t(`ui.action.tryAgain`)"
+                @click="pushFlow.retry"
+            />
         </div>
     </div>
 </template>
