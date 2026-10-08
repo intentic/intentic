@@ -47,14 +47,14 @@ const LINE = {
 <template>
     <button
         type="button"
-        class="ui-row-select group flex w-[5.25rem] shrink-0 flex-col items-center gap-2.5 rounded-xl px-2 py-3"
+        class="ui-row-select group relative flex w-[5.75rem] shrink-0 flex-col items-center gap-2 rounded-xl px-2 pb-3 pt-6"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
         @click="emit(`select`)"
     >
-        <!-- Corner labels live above the mark so they never sit on it. -->
-        <div v-if="isFreeTile(tile) || count !== undefined" class="relative h-5 w-full shrink-0">
+        <!-- Corner labels sit in the tile's top padding, so every tile keeps the same layout whether it has them or not. -->
+        <div v-if="isFreeTile(tile) || count !== undefined" class="absolute inset-x-1.5 top-1.5 h-4">
             <span
                 v-if="isFreeTile(tile)"
                 class="absolute left-0 top-0 rounded bg-success/15 px-1 text-[0.6rem] font-medium leading-4 text-success"
