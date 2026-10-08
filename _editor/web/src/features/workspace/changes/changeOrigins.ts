@@ -5,6 +5,7 @@ import {
     type LandedMessageDraft,
     type LandedMessageStep,
     type RepoChanges,
+    UNATTRIBUTED_ORIGIN,
 } from "@intentic/sandbox-contract";
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
@@ -13,10 +14,17 @@ import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
 // Only agents are ever named — an unlanded change carries no origin, and absence is the signal, not a "you" badge.
 
-// The legend's row for unattributed files; not a real agent id, so no session uuid can collide with it.
-export const YOURS = `yours`;
+// The legend's row for unattributed files. The daemon's own name for them, so a scope sent with it resolves to exactly
+// the files this row counts.
+export const YOURS = UNATTRIBUTED_ORIGIN;
 
 export const originsOf = (repo: RepoChanges, path: string): readonly string[] => repo.origins?.[path] ?? [];
+
+// Whether a path is that origin's: a session it landed, or for YOURS a path no session did.
+export const isFrom = (repo: RepoChanges, path: string, id: string): boolean => {
+    const ids = originsOf(repo, path);
+    return id === YOURS ? ids.length === 0 : ids.includes(id);
+};
 
 // One legend entry: an agent with files currently in the tree, and how many.
 export interface OriginSummary {

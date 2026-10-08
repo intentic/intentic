@@ -1,4 +1,4 @@
-import type { GitChange, GitDiffSide, GitScope } from "@intentic/sandbox-contract";
+import { UNATTRIBUTED_ORIGIN, type GitChange, type GitDiffSide, type GitScope } from "@intentic/sandbox-contract";
 
 // What a scope names, resolved against the repository's own status, not a list the caller sent.
 // Sides are the verb's, not the scope's: staging reads the two not yet in the index; a scope narrows, never widens.
@@ -16,8 +16,13 @@ export const UNSTAGEABLE_SIDES: readonly GitDiffSide[] = ["staged"];
 export const DISCARDABLE_SIDES: readonly GitDiffSide[] = ["conflicted", "staged", "unstaged"];
 
 // Whether a landed conversation put this change where it is; both legs of a rename are checked, keyed by path.
-const landedBy = (change: GitChange, origin: string, origins: Readonly<Record<string, readonly string[]>>): boolean =>
-    (origins[change.path] ?? []).includes(origin) || (change.from !== undefined && (origins[change.from] ?? []).includes(origin));
+// The unattributed origin is the complement: no conversation landed either leg.
+const landedBy = (change: GitChange, origin: string, origins: Readonly<Record<string, readonly string[]>>): boolean => {
+    const legs = change.from === undefined ? [change.path] : [change.path, change.from];
+    return origin === UNATTRIBUTED_ORIGIN
+        ? legs.every((path) => (origins[path] ?? []).length === 0)
+        : legs.some((path) => (origins[path] ?? []).includes(origin));
+};
 
 // Paths a scope resolves to, for a verb that moves `sides`; both legs of a rename included, none acts on half a move.
 // Deduplicated: a path staged and edited again is two rows over one file, and a rename's legs can be named twice.

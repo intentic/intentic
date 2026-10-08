@@ -44,6 +44,7 @@ import {
     draftReport,
     draftRunning,
     type DraftReportRow,
+    isFrom,
     landedMessage,
     originHue,
     originsOf,
@@ -177,12 +178,34 @@ const originNote = (id: string): string | undefined => {
 const landedOf = (id: string): LandedMessage | undefined => landedMessage(agentOf(id), originOf(id));
 const originMessage = (id: string): string | undefined => commitMessageOf(landedOf(id));
 
-// One click narrows the list to that session's files and also names the commit after it — two things a user
-// did by hand before. Naming is recorded outside this component (nameCommitAfter), so it's answered even after the
-// panel closes.
-const toggleOrigin = (id: string): void => {
-    originFilter.value = originFilter.value === id ? undefined : id;
-    nameCommitAfter(originFilter.value === YOURS ? undefined : originFilter.value);
+// Every repo holding any of an origin's work, sent as a scope on one side that the daemon resolves against live status.
+// Any side, not just the one moving: a click landing before the rescan from the last move still reaches its files,
+// and a repo with none of them on that side answers with a no-op. A truncated repo is asked too, since its unlisted
+// rows may be that origin's.
+const originTargets = (id: string, side: GitDiffSide): readonly RepoTarget[] =>
+    scannable.value
+        .filter((repo) => truncatedTotal(repo) > 0 || ALL_SIDES.some((held) => repo[held].some((change) => isFrom(repo, change.path, id))))
+        .map((repo) => ({ repo: repo.repo, scope: { side, origin: id } }));
+
+// A chip is the "+" on one origin's work, not a view over it. Lighting it stages that work, clearing it unstages that
+// work again, and moving to another chip swaps one for the other. Staging stays the only selection Commit reads, and
+// the Staged list shows exactly what the commit will take. The lit chip still narrows the list and names the commit,
+// recorded outside this component (nameCommitAfter) so the name holds after the panel closes. Conflicts are left
+// alone: staging one marks it resolved, which no chip should do for the owner.
+const toggleOrigin = async (id: string): Promise<void> => {
+    const was = originFilter.value;
+    const next = was === id ? undefined : id;
+    originFilter.value = next;
+    nameCommitAfter(next === YOURS ? undefined : next);
+    // One after the other: the second batch would be dropped while the first holds the busy span.
+    const out = was === undefined ? [] : originTargets(was, `staged`);
+    if (out.length > 0) {
+        await changes.stageGroups(out, false);
+    }
+    const into = next === undefined ? [] : originTargets(next, `unstaged`);
+    if (into.length > 0) {
+        await changes.stageGroups(into, true);
+    }
 };
 
 // Computed, not read at the click: recomputes as the review updates, so a message drafted seconds after
@@ -272,7 +295,7 @@ const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 const originChipLabel = (id: string, files: number): string => {
     const values = { origin: originLabel(id), count: files };
     const press =
-        originFilter.value === id ? t(`workspace.reviewPanel.clearFilterOn`, values, files) : t(`workspace.reviewPanel.showOnly`, values, files);
+        originFilter.value === id ? t(`workspace.reviewPanel.unstageFrom`, values, files) : t(`workspace.reviewPanel.stageFrom`, values, files);
     const mark = originMark(id)?.label.toLowerCase();
     const note = originDrafting(id)
         ? t(`workspace.reviewPanel.messageBeingWritten`)
@@ -301,11 +324,7 @@ const chipNotice = computed<string | undefined>(() =>
 );
 
 const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
-    if (originFilter.value === undefined) {
-        return true;
-    }
-    const ids = originsOf(repo, change.path);
-    return originFilter.value === YOURS ? ids.length === 0 : ids.includes(originFilter.value);
+    return originFilter.value === undefined || isFrom(repo, change.path, originFilter.value);
 };
 
 // Quiet when the row's only origin is the lit chip (already said by the filter); a file two agents landed
@@ -513,11 +532,10 @@ const byRepo = (rows: readonly Row[]): RepoTarget[] => {
 // index.
 const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.length > 0).map((repo) => repo.repo));
 
-// Fires only when nothing is staged anywhere but there's work to record (VSCode's stage-all-and-commit, made
-// explicit). What it stages follows the origin filter — the whole repo unfiltered, or just that session's scope — as a
-// daemon-resolved scope, not the rows drawn.
-const stagesFirst = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
-const commitAll = computed(() => stagesFirst.value && originFilter.value === undefined);
+// "Commit all": fires only when nothing is staged anywhere, no chip is lit, and there's work to record (VSCode's
+// stage-all-and-commit, made explicit), so every file it takes is on screen. Under a lit chip Commit records the index
+// alone, which the chip itself filled: a stage-first there would take files the list still shows as unstaged.
+const stagesFirst = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0 && originFilter.value === undefined);
 // A scope, not an enumerated list: the daemon resolves which files answer to a side/origin from the repo's own
 // status, so this isn't capped by what the review actually listed (RepoChanges.truncated). Staged is never filtered
 // (sidesByRepo), so its verb moves the whole side it shows.
@@ -528,37 +546,11 @@ const scoped = (repo: string, side?: GitDiffSide): RepoTarget => ({
         ...(originFilter.value !== undefined && side !== `staged` ? { origin: originFilter.value } : {}),
     },
 });
-// Which repos: read off the visible (filtered) rows. What each commits: that session's whole landed scope in
-// the repo, truncated rows included, not just what's drawn.
-const filteredGroups = computed<readonly RepoTarget[]>(() =>
-    scannable.value.filter((repo) => sidesOf(repo).some((section) => section.changes.length > 0)).map((repo) => scoped(repo.repo)),
+// What Commit records, one whole-repo target per repo: the staged repos, or every repo for "Commit all".
+const commitGroups = computed<readonly RepoTarget[]>(() =>
+    stagesFirst.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : stagedRepos.value.map((repo) => ({ repo })),
 );
-// The one shape both `commitRepos` and the AI draft take: an empty target for a whole-repo commit ("Commit
-// all" and plain Commit), a scope for the filtered one.
-const commitGroups = computed<readonly RepoTarget[]>(() => {
-    if (!stagesFirst.value) {
-        return stagedRepos.value.map((repo) => ({ repo }));
-    }
-    return commitAll.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : filteredGroups.value;
-});
 const commitTarget = computed(() => commitGroups.value.map((group) => group.repo));
-const repoIn = (id: string): RepoChanges | undefined => scannable.value.find((repo) => repo.repo === id);
-const truncatedIn = (id: string): number => {
-    const repo = repoIn(id);
-    return repo === undefined ? 0 : truncatedTotal(repo);
-};
-// Distinct paths a repo is showing: a file staged and edited again is two rows over one path.
-const visibleIn = (repo: RepoChanges): number => new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path))).size;
-// Files the filtered shape covers, for the button's label; 0 for every other shape. Counted off the drawn
-// rows, so it's a lower bound wherever the review truncated — `commitCountable` says when to hide the number rather
-// than undercount it.
-const commitFiles = computed(() =>
-    commitGroups.value.reduce((total, group) => {
-        const repo = repoIn(group.repo);
-        return total + (group.scope === undefined ? (group.paths?.length ?? 0) : repo === undefined ? 0 : visibleIn(repo));
-    }, 0),
-);
-const commitCountable = computed(() => !commitGroups.value.some((group) => truncatedIn(group.repo) > 0));
 // Any repo's unresolved conflict blocks the whole button: a commit spans repos sharing one message, and git would
 // refuse mid-batch.
 const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
@@ -574,20 +566,8 @@ const commitReady = computed(
         !changes.actionBusy.value &&
         !commitRunning.value,
 );
-// The count rides the label, since a bare "Commit" over a filtered or hidden list wouldn't say what it covers.
-// Dropped wherever the review truncated, in favor of naming the filter — an undercounted figure is a worse promise than
-// none.
-const commitLabel = computed(() =>
-    commitAll.value
-        ? t(`workspace.reviewPanel.commitAll`)
-        : commitFiles.value === 0
-          ? t(`workspace.reviewPanel.commit`)
-          : commitCountable.value
-            ? t(`workspace.reviewPanel.commitFiles`, { count: commitFiles.value }, commitFiles.value)
-            : filterLabel.value === undefined
-              ? t(`workspace.reviewPanel.commitEverythingInFilter`)
-              : t(`workspace.reviewPanel.commitEverythingFrom`, { origin: filterLabel.value }),
-);
+// The Staged list beside the button already says what a plain Commit covers; only the stage-first press needs a word.
+const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
 // runs, since the readout beside it already names the repos being committed.
@@ -606,32 +586,20 @@ const commitTip = computed((): Tip | undefined => {
             note: t(`workspace.reviewPanel.stageToResolve`),
         };
     }
-    if (commitAll.value) {
+    if (stagesFirst.value) {
         return { title: t(`workspace.reviewPanel.stageAllFirst`), keys, rows: [{ label: t(`shared.changes`), value: changes.count.value }] };
-    }
-    if (commitFiles.value > 0) {
-        return {
-            title: t(`workspace.reviewPanel.filteredCommit`),
-            keys,
-            rows: [
-                { label: t(`workspace.reviewPanel.from`), value: filterLabel.value ?? `` },
-                { label: t(`shared.files`), value: commitCountable.value ? commitFiles.value : `` },
-            ],
-            note: t(`workspace.reviewPanel.nothingElseGoesIn`),
-        };
     }
     return { title: t(`workspace.reviewPanel.commit`), keys, note: stagedRepos.value.length > 1 ? t(`workspace.reviewPanel.onePerRepo`) : undefined };
 });
 
 // Sessions this commit would record, and which are still running — scoped exactly like the button. A
 // warning, not a gate: staging part of an unfinished agent's work is ordinary, and `reset --soft` undoes it.
-const commitOrigins = computed(() =>
-    stagesFirst.value && originFilter.value !== undefined
-        ? legend.value.agents.filter((entry) => entry.id === originFilter.value)
-        : summarizeOrigins(
-              scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
-              commitAll.value ? ALL_SIDES : [`staged`],
-          ).agents,
+const commitOrigins = computed(
+    () =>
+        summarizeOrigins(
+            scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
+            stagesFirst.value ? ALL_SIDES : [`staged`],
+        ).agents,
 );
 const unfinished = computed(() => commitOrigins.value.filter((entry) => originMark(entry.id) !== undefined));
 
@@ -1152,8 +1120,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
-        <!-- Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. Above the
-             box, since a lit chip decides what Commit stages and what its message says, as well as which rows show. -->
+        <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
+             narrows the list to it (toggleOrigin). Above the box, since a lit chip fills the index Commit records and
+             names the message. Disabled while a git action runs, like every other index verb here. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <button
@@ -1166,6 +1135,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     originFilter === entry.id ? 'shrink' : 'shrink-0',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
+                :disabled="changes.actionBusy.value"
                 @click="toggleOrigin(entry.id)"
                 @mouseenter="showOrigins($event, [entry.id])"
                 @mouseleave="hoverCard?.hide()"
@@ -1188,6 +1158,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 type="button"
                 class="ui-chip shrink-0 gap-1 transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
+                :disabled="changes.actionBusy.value"
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
             >

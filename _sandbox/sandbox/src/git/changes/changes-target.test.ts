@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import { UNATTRIBUTED_ORIGIN, type GitChange } from "@intentic/sandbox-contract";
 import { chunkPaths } from "./changes-index.js";
 import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes-target.js";
 
@@ -38,6 +38,17 @@ test("an origin scope keeps only what that conversation landed, either leg of a 
     expect(scopedPaths(sides, DISCARDABLE_SIDES, { side: "unstaged", origin: "agent-b" }, origins)).toEqual(["new.ts"]);
     // No matching attribution resolves to nothing, not a fallback to everyone's work.
     expect(scopedPaths(sides, STAGEABLE_SIDES, { origin: "agent-a" })).toEqual([]);
+});
+
+// The Changes panel's "You" chip sends this; it used to resolve to nothing, so its Stage all, Discard and commit
+// each moved no file at all.
+test("the unattributed origin keeps exactly what no conversation landed, a rename counting only when neither leg was", () => {
+    const origins = { "edited.ts": ["agent-a"], "old.ts": ["agent-a"] };
+    expect(scopedPaths(sides, STAGEABLE_SIDES, { origin: UNATTRIBUTED_ORIGIN }, origins)).toEqual(["new.ts", "merge.ts"]);
+    // `moved.ts` came from a landed path, so it is the agent's work, not the owner's.
+    expect(scopedPaths(sides, UNSTAGEABLE_SIDES, { origin: UNATTRIBUTED_ORIGIN }, origins)).toEqual(["staged.ts"]);
+    // With nothing attributed, every row is the owner's.
+    expect(scopedPaths(sides, STAGEABLE_SIDES, { side: "unstaged", origin: UNATTRIBUTED_ORIGIN })).toEqual(["edited.ts", "new.ts"]);
 });
 
 test("a path listed on two sides at once resolves to one entry", () => {

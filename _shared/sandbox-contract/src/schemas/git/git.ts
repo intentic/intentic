@@ -13,6 +13,10 @@ import { RepoParamSchema } from "../shared.js";
 export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 
+// The origin that names the files no conversation landed: the owner's own edits, a terminal's, anything unattributed.
+// Not a conversation id, so no session uuid can collide with it.
+export const UNATTRIBUTED_ORIGIN = "yours";
+
 // What a bulk git action applies to, never simply a list of paths (unbounded, unlike a review's rows).
 // paths: exactly these, from a list a browser already drew.
 // scope: a description the daemon resolves against live status, so nothing here can be stale.
@@ -26,7 +30,9 @@ export const GitScopeSchema = z.object({
         .string()
         .min(1)
         .optional()
-        .describe("Narrow to the files one conversation landed. Leave it out for everyone's, including your own edits."),
+        .describe(
+            `Narrow to the files one conversation landed, or "${UNATTRIBUTED_ORIGIN}" for the files none landed. Leave it out for everyone's, including your own edits.`,
+        ),
 });
 export type GitScope = z.infer<typeof GitScopeSchema>;
 

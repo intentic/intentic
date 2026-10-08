@@ -12,6 +12,7 @@ import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
+import { nameCommitAfter } from "./commitMessage";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -20,10 +21,13 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // other read decides anything here.
 const held: ((response: GitChanges) => void)[] = [];
 const changes = jest.fn(() => new Promise<GitChanges>((resolve) => held.push(resolve)));
+// The index moves a FROM chip makes; answered at once, since what matters is which scope each one names.
+const stage = jest.fn(() => Promise.resolve({ ok: true as const }));
+const unstage = jest.fn(() => Promise.resolve({ ok: true as const }));
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, stage, unstage } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 
@@ -64,7 +68,14 @@ afterEach(() => {
     queryClient.clear();
     held.length = 0;
     registry.value = [];
+    stage.mockClear();
+    unstage.mockClear();
+    // A lit chip's ask lives at module scope, so one test's click would light the next test's chip.
+    nameCommitAfter(undefined);
 });
+
+const buttonNamed = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(text));
 
 // One roster entry, cut to what the landing line reads: a conversation's status and what to call it.
 const landing = (title: string): AgentSummary => ({
@@ -164,4 +175,40 @@ it(`keeps every staged file on screen under a session's filter, since Commit rec
     expect(el.textContent).not.toContain(`also-mine.ts`);
     expect(el.textContent).toContain(`agent.ts`);
     expect(el.textContent).toContain(`mine.ts`);
+});
+
+// The complaint this answers: a lit chip only filtered the list, while Commit quietly staged that session's files and
+// committed them, files the list still drew under Unstaged. With anything else staged, the chip named the commit after
+// the session and the commit took none of its files. A chip is now the "+" on its session's work.
+it(`stages a session's work when its chip is lit, and unstages it when the chip is cleared`, async () => {
+    const el = await mount();
+    const unstagedTree = (staged: boolean): GitChanges => ({
+        repos: [
+            {
+                repo: `root`,
+                branch: `main`,
+                conflicted: [],
+                staged: staged ? [{ path: `agent.ts`, status: `modified` }] : [],
+                unstaged: [...(staged ? [] : [{ path: `agent.ts`, status: `modified` as const }]), { path: `mine.ts`, status: `modified` }],
+                origins: { "agent.ts": [`a1`] },
+            },
+        ],
+        originAgents: { a1: { title: `Fix sandbox turn cleanup`, provider: `claude` } },
+    });
+    await answer(unstagedTree(false));
+    // Nothing staged and no chip lit: the one-move stage-and-commit, over a list with every file on screen.
+    expect(buttonNamed(el, `Commit all`)).toBeDefined();
+
+    buttonNamed(el, `Fix sandbox turn cleanup`)?.click();
+    await settle();
+    expect(stage).toHaveBeenCalledWith({ repo: `root`, scope: { side: `unstaged`, origin: `a1` } });
+    expect(unstage).not.toHaveBeenCalled();
+    // Under a lit chip Commit records the index, never a stage-first over rows the filter hides.
+    expect(buttonNamed(el, `Commit all`)).toBeUndefined();
+
+    await answer(unstagedTree(true));
+    buttonNamed(el, `Fix sandbox turn cleanup`)?.click();
+    await settle();
+    expect(unstage).toHaveBeenCalledWith({ repo: `root`, scope: { side: `staged`, origin: `a1` } });
+    expect(stage).toHaveBeenCalledTimes(1);
 });
