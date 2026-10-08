@@ -4408,7 +4408,7 @@
             "takeBackAll": "Cofnij wszystkie",
             "title": "Osłona prywatności",
             "tokensGiven": "Wartości z tokenem",
-            "trialNote": "Łączy się przez ten komputer, ale każde zapytanie trafia dalej na platformę Intentic i do dostawcy modelu za nią, więc wysłane do niego dane osobowe opuszczają ten komputer.",
+            "trialNote": "Każde zapytanie trafia do Intentic i dostawcy modelu, więc dane osobowe opuszczają ten komputer.",
             "trustProvider": "Ufaj dostawcy {label}",
             "trusted": "zaufany",
             "trustedIntro": "Zaufany dostawca widzi dane osobowe bez zmian. Gdy osłona jest włączona, każdy inny dostawca dostaje tokeny.",

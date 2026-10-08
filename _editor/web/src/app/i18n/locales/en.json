@@ -4815,7 +4815,7 @@
             "takeBackAll": "Take all back",
             "title": "Privacy shield",
             "tokensGiven": "Values given a token",
-            "trialNote": "Reached through this machine, but every request goes on to Intentic's platform and the model vendor behind it, so personal data sent to it leaves this machine.",
+            "trialNote": "Every request goes on to Intentic and the model vendor, so personal data leaves this machine.",
             "trustProvider": "Trust {label}",
             "trusted": "trusted",
             "trustedIntro": "A trusted provider reads personal data as it is. While the shield is on, every other provider gets tokens.",
