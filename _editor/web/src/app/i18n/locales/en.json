@@ -9104,6 +9104,7 @@
             "yourChangesNameIt": "Your changes -- name this commit yourself",
             "keepingYourMessage": "Keeping your message. Clear the box to use {origin}'s.",
             "writingMessageFor": "Writing a message for {origin}…",
+            "modelWritingFor": "{model} is writing the message…",
             "noMessageFor": "No message written for {origin}"
         },
         "changeRowMenu": {

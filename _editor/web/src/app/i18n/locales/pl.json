@@ -8697,6 +8697,7 @@
             "yourChangesNameIt": "Twoje zmiany — nazwij ten commit samodzielnie",
             "keepingYourMessage": "Zostaje Twoja wiadomość. Wyczyść pole, żeby użyć wiadomości od „{origin}”.",
             "writingMessageFor": "Trwa pisanie wiadomości dla „{origin}”…",
+            "modelWritingFor": "{model} pisze wiadomość…",
             "noMessageFor": "Brak wiadomości dla „{origin}”"
         },
         "changeRowMenu": {

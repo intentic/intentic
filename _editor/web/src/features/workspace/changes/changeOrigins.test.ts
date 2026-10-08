@@ -132,16 +132,22 @@ describe(`chipMessageNotice`, () => {
         expect(chipMessageNotice({ ...state, message: `fix: cascading markers` })).toBeUndefined();
     });
 
-    test(`names whose message is coming, and leaves the step-by-step to the report below`, () => {
+    test(`names the model being asked rather than the origin, which the lit chip under the box already names`, () => {
         const waiting = chipMessageNotice({ ...state, draft: running() });
-        expect(waiting).toContain(state.label);
+        expect(waiting).toMatch(/gemini/i);
+        expect(waiting).not.toContain(state.label);
         expect(waiting).not.toBe(chipMessageNotice(state));
     });
 
-    test(`says the same before any model has been reached: the report below has the phase`, () => {
-        const waiting = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } });
-        expect(waiting).toContain(state.label);
-        expect(waiting).toBe(chipMessageNotice({ ...state, draft: running() }));
+    test(`names no model before one has been reached, nor between a refusal and the next ask`, () => {
+        const reading = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } });
+        const refused = chipMessageNotice({
+            ...state,
+            draft: running([{ provider: `gemini`, model: `gemini-3-flash`, status: `refused`, at: 2_000, ms: 1_000, reason: `quota` }]),
+        });
+        expect(reading).toContain(state.label);
+        expect(reading).not.toMatch(/gemini/i);
+        expect(refused).toBe(reading);
     });
 
     test(`says a sentence is never coming when none was written`, () => {
