@@ -16,6 +16,7 @@ import {
     type LoopState,
     type QueuePause,
     type SubagentStatus,
+    type TurnBreakPolicy,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -1185,11 +1186,14 @@ export const limitBack = (clock: LimitClock): string =>
 // says when it goes, and that it goes in a moment once that instant has passed (the resume pass lets it go on its next
 // beat), which is also what tells a card resting in Active why it is there. One nothing is booked for says when the
 // allowance is back, and nothing once it is: the corner is the ordinary date's again, beside the card's own press.
+// `unbooked` marks a card whose answer to the limit is to go again by itself (`answer`, the conversation's own or the
+// sandbox's) while nothing is booked to: no turn was held to re-run, or the daemon that held it has restarted (one older
+// than limit-hold.ts kept none). Its menu says "Send again" all the same, so the card must say a press is still owed.
 export type LimitCorner =
     | { readonly kind: `moving`; readonly text: string; readonly account: string }
     | { readonly kind: `resend`; readonly text: string; readonly clock?: LimitClock }
-    | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock };
-export const limitCorner = (agent: AgentStanding, now: number): LimitCorner | undefined => {
+    | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock; readonly unbooked?: true };
+export const limitCorner = (agent: AgentStanding, now: number, answer?: TurnBreakPolicy): LimitCorner | undefined => {
     if (!limited(agent)) {
         return undefined;
     }
@@ -1210,7 +1214,10 @@ export const limitCorner = (agent: AgentStanding, now: number): LimitCorner | un
                 : t(`agents.agentCard.resends`, { limitBackAt: clock.text }),
         };
     }
-    return clock === undefined ? undefined : { kind: `back`, clock, text: limitBack(clock) };
+    if (clock === undefined) {
+        return undefined;
+    }
+    return { kind: `back`, clock, text: limitBack(clock), ...(answer !== undefined && answer !== `wait` ? { unbooked: true as const } : {}) };
 };
 
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One

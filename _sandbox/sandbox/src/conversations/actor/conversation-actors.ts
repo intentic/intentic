@@ -7,6 +7,7 @@ import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide
 import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD } from "./conversation-holdings.js";
 import { type Booking, bookingOfItem, NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
+import type { StoredLimitHold } from "./limit-hold.js";
 
 // One actor per conversation, each holding the conversation's state and applying events to it through `decide`, the
 // only writer: an event is applied whole, synchronously, before any effect it named runs, so a claim is one atomic step
@@ -38,6 +39,8 @@ export interface ConversationBooks {
     readonly remove: (ids: readonly string[]) => Promise<void>;
     // The queue onto the conversation's entry, for the next `persist` to write; nothing for one with no entry yet.
     readonly queue: (id: string, queue: TurnQueue) => void;
+    // A spent allowance's unfired hold onto the entry (undefined takes it off), for the next `persist` to write.
+    readonly hold: (id: string, hold: StoredLimitHold | undefined) => void;
 }
 
 // A sent event's answer at once, and again once the effects that outlive the send (a write, a probe) have run, for a
@@ -141,6 +144,7 @@ const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffec
     "session-prompt": (_id, effect) => recordPrompt(effect.sessionId, effect.prompt),
     "conversation-prompt": (id, effect) => recordConversationPrompt(id, effect.prompt),
     "queue-written": (id, effect) => books.queue(id, effect.queue),
+    "hold-written": (id, effect) => books.hold(id, effect.hold),
 });
 
 // Whether a turn on the conversation would be refused as archived, read off the same entry `begin` reads.

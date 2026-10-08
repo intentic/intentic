@@ -8,6 +8,9 @@ import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
 import { activityIcon, limitClosed, limitCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
+import { effectivePolicy } from "../../../chat/run/turnBreak";
+import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
+import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import AgentCardDate from "./AgentCardDate.vue";
 
@@ -39,7 +42,10 @@ const now = computed(() => sandboxNow(tick.value));
 // happened, this says what comes of it: when the allowance is back, or, for a booked resend or move, when or where it
 // goes by itself, which is why a card resting in Active is there (agentStatus.limitCorner). Undefined once nothing is
 // booked and the window is open, or the provider gave no instant; the corner then falls back to the ordinary date.
-const limit = computed(() => limitCorner(props.agent, now.value));
+// The answer to the limit is read whole (this conversation's own, else the sandbox's), as the card's menu reads it, so the
+// corner can say when "Send again" is chosen but nothing is booked to do it.
+const { query: settings } = useSandboxQuery(rpcQuery(`settings.get`));
+const limit = computed(() => limitCorner(props.agent, now.value, effectivePolicy(`limit`, props.agent, settings.data.value)));
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
 // the moment the turn ends. And yields to a spent allowance, so the corner holds ONE clock: a watch firing into a shut
@@ -69,6 +75,7 @@ const limitTip = computed((): Tip | undefined => {
             title: t(`agents.agentStatus.usageLimit`),
             tone: `warn`,
             rows: [provider, { label: t(`agents.agentCard.reopens`), value: formatWhen(corner.clock.at, now.value) }],
+            ...(corner.unbooked === true ? { note: t(`agents.agentCard.resendNotBooked`) } : {}),
         };
     }
     const at = corner.kind === `resend` && corner.clock !== undefined ? [{ label: t(`agents.agentCard.resendsAt`), value: formatWhen(corner.clock.at, now.value) }] : [];
@@ -99,7 +106,13 @@ const coolingTip = computed((): Tip | undefined =>
         <AgentCardDate :at="agent.archivedAt" archived />
     </span>
     <!-- Takes the date's slot: "back in 27m" tells the reader something to plan around, unlike "last active". -->
-    <span v-else-if="limit !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="limitTip">
+    <!-- Amber when "Send again" is the answer but nothing is booked to send it: the press is still the reader's. -->
+    <span
+        v-else-if="limit !== undefined"
+        class="inline-flex shrink-0 items-center gap-1"
+        :class="limit.kind === `back` && limit.unbooked === true ? 'text-warning' : undefined"
+        v-tooltip.top="limitTip"
+    >
         <Icon name="clock" class="shrink-0 text-2xs" />
         <span class="tabular-nums">{{ limit.text }}</span>
     </span>

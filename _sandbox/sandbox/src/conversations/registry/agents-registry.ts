@@ -27,6 +27,7 @@ import { parentOfActor } from "../../auth/principal.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
+import { restoredLimitHold } from "../actor/limit-hold.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
@@ -450,20 +451,28 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
     };
 };
 
-// A spent allowance's hold, booking and move are this process's memory, which a fresh daemon does not have.
-const restored = (entry: PersistedAgent): PersistedAgent =>
-    entry.ending.kind === "limited"
+// A spent allowance's hold, booking and move stand after a restart only where the entry kept the held turn itself
+// (actor/limit-hold.ts), which the boot puts back on the conversation's actor (limit-hold.ts restoreLimitHolds); any
+// other is memory of the process that made it, which a fresh daemon does not have. A kept hold the ending no longer
+// matches (an older build ran a turn since, or it was archived) is taken off rather than read.
+const restored = (entry: PersistedAgent): PersistedAgent => {
+    if (restoredLimitHold(entry) !== undefined) {
+        return entry;
+    }
+    const { limitHold: _stale, ...rest } = entry;
+    return rest.ending.kind === "limited"
         ? {
-              ...entry,
+              ...rest,
               ending: {
                   kind: "limited",
-                  ...opt("failure", entry.ending.failure),
-                  ...opt("resetsAt", entry.ending.resetsAt),
+                  ...opt("failure", rest.ending.failure),
+                  ...opt("resetsAt", rest.ending.resetsAt),
                   held: false,
                   scheduled: false,
               },
           }
-        : entry;
+        : rest;
+};
 
 // A held limit's booking, read again from the answer the resume pass will now give it. The pass asks that answer fresh
 // at the reset (turn-resume.ts breakPolicyFor), so a booking read once at the failure would go on saying whatever was
@@ -1035,6 +1044,13 @@ export const createFleet = (
             const entry = entryOf(id);
             if (entry !== undefined) {
                 replace({ ...entry, queue });
+            }
+        },
+        hold: (id, hold) => {
+            const entry = entryOf(id);
+            if (entry !== undefined) {
+                const { limitHold: _was, ...rest } = entry;
+                replace(hold === undefined ? rest : { ...rest, limitHold: hold });
             }
         },
         // The begun run's row as it changes: still waiting on the write that opens the turn, it goes with that write;

@@ -19,6 +19,7 @@
             "resends": "se reenvía {limitBackAt}",
             "resendsIn": "se reenvía en {limitBackAt}",
             "resendsShortly": "se reenvía en un momento",
+            "resendNotBooked": "«Send again» está elegido, pero no hay nada programado que lo envíe solo: pulsa «Send again» cuando vuelva.",
             "closeAgent": "Cerrar el agente",
             "closeDropsUnsent": "Se pierde el texto sin enviar",
             "closeKeepsRunning": "El turno sigue",

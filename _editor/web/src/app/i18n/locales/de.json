@@ -19,6 +19,7 @@
             "resends": "sendet erneut {limitBackAt}",
             "resendsIn": "sendet erneut in {limitBackAt}",
             "resendsShortly": "sendet gleich erneut",
+            "resendNotBooked": "„Send again“ ist gewählt, aber nichts ist geplant, das es von selbst sendet: Drücke „Send again“, sobald es zurück ist.",
             "closeAgent": "Agent schließen",
             "closeDropsUnsent": "Ungesendeter Text geht verloren",
             "closeKeepsRunning": "Zug läuft weiter",

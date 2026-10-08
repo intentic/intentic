@@ -24,6 +24,7 @@
             "resends": "resends {limitBackAt}",
             "resendsIn": "resends in {limitBackAt}",
             "resendsShortly": "resends in a moment",
+            "resendNotBooked": "Send again is chosen, but nothing is booked to send it by itself: press Send again once it's back.",
             "closeAgent": "Close agent",
             "closeDropsUnsent": "Unsent text is lost",
             "closeKeepsRunning": "Turn keeps running",

@@ -1,6 +1,7 @@
 import { fileRestartResume } from "../system/restart-resume.js";
 import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
+import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
 import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
 import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
@@ -12,6 +13,12 @@ import type { BootPhase } from "./boot-phase.js";
 
 // Every restart is gated and attempt-bounded; a failure leaves the item on the record as interrupted.
 export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase): void => {
+    // First, before anything below can start a turn: a spent allowance's held turn and its booking, kept on the entry.
+    try {
+        restoreLimitHolds(services);
+    } catch (error) {
+        logger.error({ err: error }, "held turns a spent allowance stranded could not be put back, their cards wait for a press");
+    }
     // A spent allowance, a provider outage or a turn that stopped short re-run only on the conversation's own policy.
     const turnResume = createTurnResumeScheduler(services);
     shutdown.push(() => turnResume.stop());

@@ -19,6 +19,7 @@
             "resends": "renvoi {limitBackAt}",
             "resendsIn": "renvoi dans {limitBackAt}",
             "resendsShortly": "renvoi dans un instant",
+            "resendNotBooked": "« Send again » est choisi, mais rien n'est prévu pour l'envoyer tout seul : appuyez sur « Send again » dès son retour.",
             "closeAgent": "Fermer l'agent",
             "closeDropsUnsent": "Texte non envoyé perdu",
             "closeKeepsRunning": "Le tour continue",

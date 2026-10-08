@@ -23,6 +23,7 @@ import { at, CHECK_SETTLES, type JsonObject, mapValue, transform } from "../../s
 import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
+import { StoredLimitHoldSchema } from "../actor/limit-hold.js";
 import { opt } from "../../opt.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
@@ -118,8 +119,8 @@ const EndingSchema = z.discriminatedUnion("kind", [
         failure: z.string().optional(),
         // Epoch seconds the allowance reopens; absent when the provider publishes no instant.
         resetsAt: z.number().optional(),
-        // Held for a press, booked to fire at the reset, and where a booked move takes it: this process's memory, which
-        // the registry clears on load.
+        // Held for a press, booked to fire at the reset, and where a booked move takes it: the registry clears them on load
+        // unless the entry kept the held turn itself (`limitHold`), which the boot puts back on its actor.
         held: z.boolean(),
         scheduled: z.boolean(),
         moving: z.string().optional(),
@@ -216,6 +217,9 @@ export const PersistedAgentSchema = z.object({
     archivedAt: z.number().optional(),
     // What waits for its next turn, as its actor last wrote it (conversation-queue.ts); a restart keeps every word of it.
     queue: TurnQueueSchema.optional(),
+    // The turn a spent allowance holds, unfired, as its actor last wrote it (actor/limit-hold.ts): what lets a booked
+    // resend or move outlive a restart. Read back only while `ending` is still that spent allowance.
+    limitHold: StoredLimitHoldSchema.optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

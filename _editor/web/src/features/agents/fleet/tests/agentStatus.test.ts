@@ -586,6 +586,17 @@ describe("a spent allowance", () => {
         });
     });
 
+    // "Send again" chosen with nothing booked to do it (no turn held, or a daemon that kept none across a restart): the
+    // corner marks the press still owed, which a card answered to wait, or one already booked, never is.
+    it("marks a reset clock whose answer is to go again by itself while nothing is booked", () => {
+        const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
+        expect(limitCorner(soon, NOW, `resend`)).toMatchObject({ kind: `back`, text: `back in 40m`, unbooked: true });
+        expect(limitCorner(soon, NOW, `move`)).toMatchObject({ kind: `back`, unbooked: true });
+        expect(limitCorner(soon, NOW, `wait`)).not.toHaveProperty(`unbooked`);
+        expect(limitCorner(soon, NOW)).not.toHaveProperty(`unbooked`);
+        expect(limitCorner({ ...soon, limitScheduled: true }, NOW, `resend`)).toMatchObject({ kind: `resend` });
+    });
+
     // Nothing booked and the window open: the corner is the ordinary date's again. And a real failure never gets one.
     it("leaves the corner to the date once nothing is waited on", () => {
         expect(limitCorner({ status: `error`, attention: none, ...OPEN }, NOW)).toBeUndefined();

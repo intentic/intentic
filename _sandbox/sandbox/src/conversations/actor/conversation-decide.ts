@@ -23,6 +23,7 @@ import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
+import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
 import {
     type Booking,
     edited,
@@ -148,6 +149,9 @@ export type ConversationEvent =
     | { readonly kind: "resume-dropped" }
     // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go.
     | { readonly kind: "held-fired"; readonly ladder: boolean }
+    // A spent allowance's hold the entry kept across a restart (limit-hold.ts), put back at boot; nothing for a
+    // conversation that already holds a turn or is running one.
+    | { readonly kind: "hold-restored"; readonly held: HeldRecord }
     // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
     | { readonly kind: "ladder-spent" }
     // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
@@ -235,7 +239,9 @@ export type ConversationEffect =
     | { readonly kind: "session-prompt"; readonly sessionId: string; readonly prompt: string }
     | { readonly kind: "conversation-prompt"; readonly prompt: string }
     // The queue onto the entry, for the persist after it to carry.
-    | { readonly kind: "queue-written"; readonly queue: TurnQueue };
+    | { readonly kind: "queue-written"; readonly queue: TurnQueue }
+    // A spent allowance's unfired hold onto the entry (undefined takes it off), for the persist after it to carry.
+    | { readonly kind: "hold-written"; readonly hold: StoredLimitHold | undefined };
 
 // What each event answers; every other event answers nothing.
 interface Replies {
@@ -747,6 +753,10 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             ? unchanged(state, undefined)
             : { state: withResume(state, { held: undefined }), effects: BROADCAST, reply: undefined },
     "held-fired": (state, event) => onHeldFired(state, event.ladder),
+    "hold-restored": (state, event) =>
+        state.resume.held === undefined && state.phase.kind === "idle"
+            ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
+            : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
@@ -802,6 +812,18 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "keep-warm-ended": (state, event, now) => onKeepWarmEnded(state, event, now),
 };
 
+// A spent allowance's hold goes onto the entry whenever it changes, whichever event changed it (a refusal holds it, a
+// pick re-points it, a fire, a new turn or a drop ends it), so a restart finds the booking the owner answered for
+// (limit-hold.ts). Read off the two states rather than told by each handler, so no way of moving a hold can forget it.
+const keepLimitHold = <R>(before: ConversationState, decision: Decision<R>): Decision<R> => {
+    const was = before.resume.held;
+    const is = decision.state.resume.held;
+    if (was === is || (!keptHold(was) && !keptHold(is))) {
+        return decision;
+    }
+    return { ...decision, effects: [...decision.effects, { kind: "hold-written", hold: storedLimitHold(is) }, { kind: "persist" }] };
+};
+
 /* ONE EVENT, APPLIED WHOLE: the next state, the effects in the order they must run, and the sender's answer. */
 export const decide = <E extends ConversationEvent>(
     state: ConversationState,
@@ -809,9 +831,12 @@ export const decide = <E extends ConversationEvent>(
     now: number,
     entry: PersistedAgent | undefined,
 ): Decision<ReplyOf<E>> =>
-    (HANDLERS[event.kind] as unknown as (state: ConversationState, event: E, now: number, entry: PersistedAgent | undefined) => Decision<ReplyOf<E>>)(
+    keepLimitHold(
         state,
-        event,
-        now,
-        entry,
+        (HANDLERS[event.kind] as unknown as (state: ConversationState, event: E, now: number, entry: PersistedAgent | undefined) => Decision<ReplyOf<E>>)(
+            state,
+            event,
+            now,
+            entry,
+        ),
     );

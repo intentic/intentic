@@ -9,6 +9,8 @@ import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent, noPresence
 import type { BeginOutcome, BeginTurn } from "../actor/conversation-decide.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
+import { restoreLimitHolds } from "../actor/limit-hold.js";
+import { pino } from "pino";
 import { type PersistedAgent, type Remover, sqliteAgentsStore, worktreeOf } from "./agents-store.js";
 import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.js";
 import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
@@ -2592,6 +2594,8 @@ describe("one write per fact", () => {
     });
 });
 
+const silent = pino({ level: "silent" });
+
 // The hold a refused turn leaves its conversation's actor, sent ahead of the settle as a turn's exit sends it
 // (settle-turn.ts recordResumes): the card's booking reads it, not the stored ending alone.
 const holdLimit = (conversations: ReturnType<typeof createFleet>["conversations"], id: string): void => {
@@ -2725,8 +2729,10 @@ it("stops reading a spent allowance as booked once its hold is dropped or fired"
     expect([registry.get("fired")?.limitScheduled, registry.get("fired")?.limitMoving]).toEqual([undefined, undefined]);
 });
 
-// A spent allowance's hold, booking and move are memory of the process that made them; the refusal itself persists.
-it("a restarted fleet reads a spent allowance back without the hold, the booking or the move", async () => {
+// A spent allowance's held turn is kept on its entry, so a restart keeps the hold, the booking and the move the owner
+// answered for: the boot puts the hold back on the actor (restoreLimitHolds), and the card reads Active again rather than
+// Attention under a clock nothing would act on (2026-10-07, amber-aspen-lisf).
+it("a restarted fleet keeps a spent allowance's held turn, its booking and its move", async () => {
     const store = memoryStore();
     const { agents: registry, conversations } = createFleet(store, standings(), presences());
     await registry.init();
@@ -2742,28 +2748,93 @@ it("a restarted fleet reads a spent allowance back without the hold, the booking
             held: { ran: true, moving: "acct-2" },
         },
     });
-    holdLimit(conversations, "c1");
+    conversations.send("c1", {
+        kind: "turn-held",
+        held: {
+            input: { conversationId: "c1", prompt: "p", actor: "a@b.c", speaker: { kind: "person", email: "a@b.c" } },
+            reason: "limit",
+            ran: true,
+            reopensAt: 9_000,
+            sessionId: "s-1",
+            move: { account: "acct-2", carry: true },
+        },
+    });
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-    expect(registry.get("c1")).toMatchObject({
+    expect(registry.entry("c1")?.limitHold).toMatchObject({ input: { prompt: "p", actor: "a@b.c" }, reopensAt: 9_000, sessionId: "s-1" });
+
+    const { agents: restarted, conversations: after } = createFleet(store, standings(), presences());
+    await restarted.init();
+    expect(restarted.entry("c1")?.ending).toEqual({ kind: "limited", failure: "spent", resetsAt: 9_000, held: true, scheduled: true, moving: "acct-2" });
+
+    expect(restoreLimitHolds({ agents: restarted, conversations: after, logger: silent })).toBe(1);
+    expect(restarted.get("c1")).toMatchObject({
+        status: "error",
         failureCode: "rate_limit",
         limitResetsAt: 9_000,
         limitHeld: true,
         limitScheduled: true,
         limitMoving: "acct-2",
     });
+    const [stranded] = after.stranded();
+    expect(stranded?.record).toMatchObject({
+        reason: "limit",
+        fired: false,
+        reopensAt: 9_000,
+        sessionId: "s-1",
+        move: { account: "acct-2", carry: true },
+        input: { conversationId: "c1", prompt: "p", actor: "a@b.c", speaker: { kind: "person", email: "a@b.c" } },
+    });
+});
 
-    const { agents: restarted } = createFleet(store, standings(), presences());
+// What the entry keeps follows the hold: its one dispatch, or a drop, takes it off, so a restart after either brings back
+// nothing to fire twice; and a refusal nobody held (no turn to re-run) reads back as before, waiting on a press.
+it("takes a spent allowance's kept hold off its entry once fired or dropped, and restores nothing it never held", async () => {
+    const store = memoryStore();
+    const { agents: registry, conversations } = createFleet(store, standings(), presences());
+    await registry.init();
+    for (const id of ["fired", "dropped", "unheld"]) {
+        await beginTurn(conversations, turn({ conversationId: id }), 1_000);
+        conversations.send(id, {
+            kind: "frame",
+            frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true } },
+        });
+        if (id !== "unheld") {
+            holdLimit(conversations, id);
+        }
+        await conversations.send(id, { kind: "settle" }, 2_000).settled;
+    }
+    expect(registry.entry("fired")?.limitHold).toBeDefined();
+    await conversations.send("fired", { kind: "held-fired", ladder: false }).settled;
+    await conversations.send("dropped", { kind: "resume-dropped" }).settled;
+    expect([registry.entry("fired")?.limitHold, registry.entry("dropped")?.limitHold, registry.entry("unheld")?.limitHold]).toEqual([
+        undefined,
+        undefined,
+        undefined,
+    ]);
+
+    const { agents: restarted, conversations: after } = createFleet(store, standings(), presences());
     await restarted.init();
-    expect(restarted.entry("c1")?.ending).toEqual({ kind: "limited", failure: "spent", resetsAt: 9_000, held: false, scheduled: false });
-    const summary = restarted.get("c1");
-    expect([
-        summary?.status,
-        summary?.failureCode,
-        summary?.limitResetsAt,
-        summary?.limitHeld,
-        summary?.limitScheduled,
-        summary?.limitMoving,
-    ]).toEqual(["error", "rate_limit", 9_000, undefined, undefined, undefined]);
+    expect(restoreLimitHolds({ agents: restarted, conversations: after, logger: silent })).toBe(0);
+    for (const id of ["fired", "dropped", "unheld"]) {
+        expect(restarted.entry(id)?.ending).toEqual({ kind: "limited", failure: "spent", resetsAt: 9_000, held: false, scheduled: false });
+        expect([restarted.get(id)?.limitHeld, restarted.get(id)?.limitScheduled]).toEqual([undefined, undefined]);
+    }
+    expect(after.stranded()).toEqual([]);
+});
+
+// A kept hold an older build left standing under a later turn is not this ending's: it is taken off, never fired.
+it("drops a kept hold whose entry no longer ends in that spent allowance", async () => {
+    const stale = conversationEntry({
+        id: "c1",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        ending: { kind: "idle" },
+        limitHold: { input: { conversationId: "c1", prompt: "p" }, ran: true, reopensAt: 9_000, recordedAt: 1_000 },
+    });
+    const { agents: registry, conversations } = createFleet(memoryStore([stale]), standings(), presences());
+    await registry.init();
+    expect(registry.entry("c1")?.limitHold).toBeUndefined();
+    expect(restoreLimitHolds({ agents: registry, conversations, logger: silent })).toBe(0);
 });
 
 // Each turn runs as the persona it names (turn-premise.ts), so the conversation speaks as its last turn's: one daemon

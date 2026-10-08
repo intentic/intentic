@@ -24,6 +24,7 @@
             "resends": "wyśle ponownie {limitBackAt}",
             "resendsIn": "wyśle ponownie za {limitBackAt}",
             "resendsShortly": "wyśle ponownie za chwilę",
+            "resendNotBooked": "Wybrano „Wyślij ponownie”, ale nic nie jest zaplanowane, by wysłać to samo: naciśnij „Wyślij ponownie”, gdy limit wróci.",
             "closeAgent": "Zamknij agenta",
             "closeDropsUnsent": "Niewysłany tekst przepada",
             "closeKeepsRunning": "Tura trwa dalej",
