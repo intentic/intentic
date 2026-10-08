@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
@@ -27,7 +27,8 @@ interface Wire {
     readonly stills: Uint8Array[];
 }
 
-const launch = async (): Promise<{ context: BrowserContext; profile: string } | undefined> => {
+// `debugging` adds Chromium's DevTools HTTP endpoint beside Playwright's pipe, as the daemon's own browsers have one.
+const launch = async (debugging = false): Promise<{ context: BrowserContext; profile: string } | undefined> => {
     let playwright: typeof import("playwright");
     try {
         playwright = await import("playwright");
@@ -50,7 +51,7 @@ const launch = async (): Promise<{ context: BrowserContext; profile: string } | 
             headless: false,
             viewport: null,
             env: { ...process.env, DISPLAY: display.name },
-            args: ["--no-sandbox", "--disable-dev-shm-usage", ...chromiumWindowArgs(display)],
+            args: ["--no-sandbox", "--disable-dev-shm-usage", ...(debugging ? ["--remote-debugging-port=0"] : []), ...chromiumWindowArgs(display)],
         })
         .catch(() => undefined);
     if (context === undefined) {
@@ -58,6 +59,13 @@ const launch = async (): Promise<{ context: BrowserContext; profile: string } | 
         return undefined;
     }
     return { context, profile };
+};
+
+// The endpoint a launch with --remote-debugging-port=0 wrote into its profile: the port on the first line.
+const endpointOf = async (profile: string): Promise<string> => {
+    const file = join(profile, "DevToolsActivePort");
+    await settle(() => existsSync(file) && readFileSync(file, "utf8").includes("\n"));
+    return `http://127.0.0.1:${readFileSync(file, "utf8").split("\n")[0] ?? ""}`;
 };
 
 // Polls for a condition rather than sleeping a guess; generous but finite, so a regression fails rather than hangs.
@@ -250,6 +258,76 @@ test(
                 await expectResized(view, wire, page, scale);
                 await expectSteered(view, page);
                 expect(errors).toEqual([]);
+            } finally {
+                await view.stop();
+            }
+        } finally {
+            await context.close().catch(() => undefined);
+            rmSync(profile, { recursive: true, force: true });
+        }
+    },
+    { timeout: 120_000 },
+);
+
+/* Several tabs in one window. Every page Playwright attaches to reports itself visible, so a view that asked the pages
+   which was in front always answered the newest: within a second of the owner picking an older tab, the view went back
+   to the newest one, photographed it as the still over the picked tab, at its size (x.com over google.com, 2026-10-08).
+   The tab in front is read off Chromium's own DevTools list instead (front-tab.ts). */
+test(
+    "a picked tab stays the picture, and the view still follows a tab switched behind its back or closed",
+    async () => {
+        const launched = await launch(true);
+        if (launched === undefined) {
+            return; // no browser on this box
+        }
+        const { context, profile } = launched;
+        const wire: Wire = { json: [], tags: [], sizes: [], stills: [] };
+        const sink = {
+            send: (data: string | Uint8Array): void => {
+                if (data instanceof Uint8Array) {
+                    wire.tags.push(data[0] ?? -1);
+                    wire.sizes.push(data.byteLength);
+                } else {
+                    wire.json.push(z.looseObject({}).parse(JSON.parse(data)));
+                }
+            },
+        };
+        try {
+            const endpoint = await endpointOf(profile);
+            const older = context.pages()[0] ?? (await context.newPage());
+            await older.goto("data:text/html,<title>older</title><body style='background:%23fdd'>older</body>");
+            const newer = await context.newPage();
+            await newer.goto("data:text/html,<title>newer</title><body style='background:%23ddf'>newer</body>");
+            const view = await startLiveView(context, DISPLAY_KEY, sink, () => undefined, { endpoint });
+            try {
+                // The newest tab is the one Chromium shows, and so the one the view starts on.
+                await settle(() => readies(wire).length > 0 && view.page() === newer);
+                expect(view.page()).toBe(newer);
+                await view.input({ type: "resize", width: 900, height: 600 });
+                await settle(() => readies(wire).some((ready) => ready.width === 900 * ready.scale));
+                const sized = readies(wire).length;
+
+                // Picked: it stays picked across the follow loop's next ticks.
+                await view.bind(older);
+                const shown: (Page | undefined)[] = [];
+                for (let tick = 0; tick < 30; tick += 1) {
+                    shown.push(view.page());
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- sampling the view over three follow ticks
+                    await settle(() => false, 100);
+                }
+                expect(shown.every((page) => page === older)).toBe(true);
+                // One window, one size: switching tabs restarts no picture at another size.
+                expect(readies(wire).slice(sized).every((ready) => ready.width === 900 * ready.scale && ready.height === 600 * ready.scale)).toBe(true);
+
+                // An agent's own tab switch, which the view hears nothing of, is followed within a tick or two.
+                await newer.bringToFront();
+                await settle(() => view.page() === newer, 5000);
+                expect(view.page()).toBe(newer);
+
+                // The tab in front closing leaves the one Chromium shows next.
+                await newer.close();
+                await settle(() => view.page() === older, 5000);
+                expect(view.page()).toBe(older);
             } finally {
                 await view.stop();
             }

@@ -44,3 +44,13 @@ it("reads a still's scale off the still, for a daemon of either age", () => {
     // Nothing painted yet: no picture to measure against.
     expect(stillScale({ width: 2220 }, { width: 0 })).toBe(1);
 });
+
+// Picking another tab: the sharp still of the tab being left must not stand over the new one until its first frame.
+it("drops the still at once when the picture is about to change wholesale", () => {
+    const sink = videoSink(() => undefined);
+    const still = canvas();
+    sink.attach(canvas(), still);
+    still.style.visibility = `visible`;
+    sink.dropStill();
+    expect(still.style.visibility).toBe(`hidden`);
+});

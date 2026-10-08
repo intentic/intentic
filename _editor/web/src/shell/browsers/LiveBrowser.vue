@@ -5,6 +5,7 @@ import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui } from "@intentic
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, watch } from "vue";
 import { activePageOf } from "../../features/browsers/activePage";
 import { toUrl } from "../../features/browsers/address";
+import { useHeldAddress } from "../../features/browsers/heldAddress";
 import { browsersFront, browsersOpened, browsersPinned, browsersWantPreview, showTab, unpinTab } from "../../workbench/browsers/browsersSurface";
 import { parseTabKey, sameTab, tabKey, type LiveTab, type PinnedTab } from "../../workbench/browsers/browsersPaths";
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
@@ -345,6 +346,12 @@ const activeStripId = computed(() =>
 const pageOf = (stripId: string): BrowserPage | undefined =>
     stripId.startsWith(PAGE) ? pages.value.find((page) => page.id === stripId.slice(PAGE.length)) : undefined;
 
+// Where the keyboard goes once a tab is in front, as a browser puts it: into the page, or into the address bar of a
+// blank one. Left on the strip's button, every shortcut and keystroke went nowhere until the page was clicked.
+const focusPage = (page: BrowserPage | undefined): void => {
+    void nextTick(() => (page === undefined || page.url === `` || page.url === BLANK ? focusAddress() : stageEl.value?.focus()));
+};
+
 const pickStrip = (tab: StripTab): void => {
     if (tab.pinned) {
         showTab(parseTabKey(tab.id));
@@ -358,6 +365,7 @@ const pickStrip = (tab: StripTab): void => {
     const page = pageOf(tab.id);
     if (page !== undefined) {
         pickPage(page);
+        focusPage(page);
     }
 };
 
@@ -371,7 +379,12 @@ const closeStrip = (tab: StripTab): void => {
     }
     const page = pageOf(tab.id);
     if (page !== undefined) {
+        const closingFront = page.id === activePage.value?.id;
         closeTab(page);
+        // The close button goes with its tab, and the keyboard with it; the tab now in front takes it.
+        if (closingFront) {
+            focusPage(activePage.value);
+        }
     }
 };
 
@@ -388,6 +401,10 @@ const pickNeighbour = (step: 1 | -1): void => {
 // The address bar shows the active page's address until the owner types into it; Enter sends what they typed
 // (address.ts decides whether that is an address or a search), Escape puts the page's own back.
 const webAddress = computed(() => activePage.value?.url ?? BLANK);
+
+// What Enter sent the active tab to, said until the tab reports getting there (heldAddress.ts).
+const typed = useHeldAddress(activePage);
+
 const address = computed<string>(() => {
     const tab = front.value;
     if (tab.kind === `preview`) {
@@ -399,7 +416,7 @@ const address = computed<string>(() => {
     if (tab.kind === `app`) {
         return appAddress(windowOf(tab.id), tab.id);
     }
-    return webAddress.value === BLANK ? `` : webAddress.value;
+    return typed.shown.value ?? (webAddress.value === BLANK ? `` : webAddress.value);
 });
 // Where the address bar takes typing: a web page and a live app; the desktop's address is a name, not a place to go.
 const addressEditable = computed(() => front.value.kind === `web` || front.value.kind === `preview`);
@@ -423,13 +440,25 @@ const openOwn = async (url?: string): Promise<void> => {
     lastOpen = url;
     opening.value = true;
     openError.value = undefined;
+    if (url === undefined) {
+        typed.release();
+    } else {
+        typed.hold(url, undefined);
+    }
     showTab({ kind: `web`, session: current.value?.own === true ? current.value.name : namedWindow.value });
     try {
         const opened = await openBrowser(url);
         pendingTab = opened.pageId === undefined ? undefined : { name: opened.name, pageId: opened.pageId, blank: url === undefined };
+        if (opened.pageId === undefined) {
+            // No tab to say it of: the held address has nowhere to stand.
+            typed.release();
+        } else {
+            typed.settle(opened.pageId);
+        }
         showWindow(opened.name);
         takePendingTab();
     } catch (error) {
+        typed.release();
         openError.value = errorMessage(error);
     } finally {
         opening.value = false;
@@ -443,9 +472,9 @@ const takePendingTab = (): void => {
     }
     pendingTab = undefined;
     pickPage(page);
-    if (pending.blank) {
-        void nextTick(focusAddress);
-    }
+    // A blank tab is for typing an address; one opened at an address is for the page, which takes the keyboard as a
+    // browser gives it after Enter (the field it was typed in may be gone with the start page).
+    void nextTick(() => (pending.blank ? focusAddress() : stageEl.value?.focus()));
 };
 watch(pages, takePendingTab);
 
@@ -505,6 +534,7 @@ const submitAddress = (text: string): void => {
         return;
     }
     if (front.value.kind === `web` && current.value !== undefined && interactive.value) {
+        typed.hold(url, activePage.value?.id);
         view.navigate(url);
         stageEl.value?.focus();
         return;

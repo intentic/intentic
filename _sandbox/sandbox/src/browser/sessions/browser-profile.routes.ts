@@ -210,12 +210,18 @@ export const createBrowserProfileRoute = (services: Services) =>
                         send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
                         backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
                     };
-                    view = await startLiveView(ctx, profile, sink, (reason) => {
-                        services.logger.warn({ reason }, "browser-profile stream failed");
-                        if (!closed) {
-                            ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
-                        }
-                    });
+                    view = await startLiveView(
+                        ctx,
+                        profile,
+                        sink,
+                        (reason) => {
+                            services.logger.warn({ reason }, "browser-profile stream failed");
+                            if (!closed) {
+                                ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
+                            }
+                        },
+                        { endpoint: owned.endpoint },
+                    );
                     // Doesn't fail on a slow page; the owner can interact once it paints.
                     await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
                         services.logger.warn({ err }, "browser-profile initial nav");

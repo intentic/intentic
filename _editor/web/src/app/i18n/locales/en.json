@@ -916,7 +916,8 @@
         "launcher": {
             "open": "Open",
             "apps": "Apps",
-            "webDetail": "A page in your own browser"
+            "webDetail": "A page in your own browser",
+            "more": "Apps and desktop"
         },
         "phone": {
             "toggle": "Phone frame",

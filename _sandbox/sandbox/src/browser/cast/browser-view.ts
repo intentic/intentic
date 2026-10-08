@@ -1,6 +1,12 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import type { WSContext } from "hono/ws";
-import { answerBrowserDialog, browserSessionContext, browserSessionDisplayKey, browserSessionPage } from "../sessions/browser-sessions.js";
+import {
+    answerBrowserDialog,
+    browserSessionContext,
+    browserSessionDisplayKey,
+    browserSessionEndpoint,
+    browserSessionPage,
+} from "../sessions/browser-sessions.js";
 import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../../composition.js";
@@ -134,9 +140,15 @@ export const createBrowserViewRoute = (services: Services) =>
                 }
                 try {
                     // Display key decides video vs frames; a headless session has none, so frames answers instead.
-                    view = await startLiveView(context, browserSessionDisplayKey(session) ?? "", sinkOf(ws), (reason) => {
-                        services.logger.warn({ reason }, "browser-view stream failed");
-                    });
+                    view = await startLiveView(
+                        context,
+                        browserSessionDisplayKey(session) ?? "",
+                        sinkOf(ws),
+                        (reason) => {
+                            services.logger.warn({ reason }, "browser-view stream failed");
+                        },
+                        { endpoint: browserSessionEndpoint(session) },
+                    );
                 } catch (err) {
                     services.logger.warn({ err }, "browser-view attach failed");
                     ws.send(JSON.stringify({ type: "error", message: "Couldn't attach to that browser." }));

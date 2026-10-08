@@ -2,6 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
 import { type Device, EmulateMessageSchema, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
+import { frontTab } from "./front-tab.js";
 import { regionsEqual, type Region, type Screen } from "./region.js";
 import {
     applySelect,
@@ -18,7 +19,7 @@ import {
 } from "./screencast.js";
 import { createStillTaker } from "./stills.js";
 import { videoWindow } from "./video-window.js";
-import { encodeVideo, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
+import { encodeVideo, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
 
 // One live browser over one socket; the choice of video vs frames is made once here, not per route. Video grabs the
@@ -136,15 +137,7 @@ const selectFocusedIn = async (page: Page): Promise<boolean> => {
     return false;
 };
 
-// The tab in front: the page whose document is visible. Pages in different windows are all visible, and the newest
-// window is the one on top of a display with no window manager.
-const foregroundOf = async (context: BrowserContext): Promise<Page | undefined> => {
-    const open = context.pages();
-    const visible = await Promise.all(open.map((page) => page.evaluate(() => document.visibilityState === "visible").catch(() => false)));
-    return open.findLast((_, index) => visible[index] === true) ?? open.at(-1);
-};
-
-const startVideoView = (context: BrowserContext, display: Display, sink: Sink, onError: (reason: string) => void): LiveView => {
+const startVideoView = (context: BrowserContext, display: Display, sink: Sink, onError: (reason: string) => void, endpoint: string | undefined): LiveView => {
     const input: XInput = startXInput(display);
     const screen: Screen = { width: display.width, height: display.height };
     let paused = false;
@@ -160,19 +153,15 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
 
     const stills = createStillTaker({
-        // The viewport as the display shows it, unclipped and at the display's own pixels: the same rectangle the video
-        // grabs, scrollbar included. A clip at any other scale makes Chromium re-render the live window at that zoom for
-        // the length of the capture, and the grab filmed it: the page flashed at twice its size whenever a still was
-        // taken (2026-10-01).
+        // The rectangle the video grabs, off the same display at its own pixels: what the picture shows, Chromium's
+        // bubbles and menus over the page included, a phone's screen too. A photograph of the page (CDP) left those
+        // out, so the picture blinked between them, and re-rendered the live window while it was taken.
         capture: async () => {
-            const at = session;
-            // None of a phone: Chromium captures an emulated page by re-rendering it at its own size for the length of
-            // the capture, which the grab films as a flash of the page at another size.
-            if (at === undefined || region === undefined || sizing.phone() !== undefined) {
+            const at = region;
+            if (at === undefined) {
                 return undefined;
             }
-            const shot = await at.send("Page.captureScreenshot", { format: "webp", quality: STILL_QUALITY });
-            return shot.data;
+            return (await grabStill(display, at, STILL_QUALITY))?.toString("base64");
         },
         send: (bytes) => sink.send(encodeFrame({ bytes, format: "webp" })),
     });
@@ -269,11 +258,14 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         }
     };
 
+    // The tab Chromium shows, followed when the picture addresses another: an agent switching tabs, a tab closing. Where
+    // that cannot be read (front-tab.ts), the view keeps the page it addresses, and only one that closed is replaced,
+    // by the newest still open.
     const followFront = async (): Promise<void> => {
         const before = current;
-        const front = await foregroundOf(context);
-        // A page attached while this was asking (a tab just opened) is newer than the answer, which was read off the
-        // pages that existed before it; the next tick asks again.
+        const front = (await frontTab(context, endpoint)) ?? (before === undefined || before.isClosed() ? context.pages().at(-1) : undefined);
+        // A page attached while this was asking (a tab just opened, a tab the owner picked) is newer than the answer,
+        // which was read before it; the next tick asks again.
         if (front === undefined || stopped || current !== before) {
             return;
         }
@@ -569,9 +561,21 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
     };
 };
 
+export interface LiveViewOptions {
+    // The browser's DevTools HTTP endpoint (http://127.0.0.1:<port>): how the video path knows which tab the display
+    // shows (front-tab.ts). Without it the picture follows only what the view itself opens, binds and loses.
+    readonly endpoint?: string | undefined;
+}
+
 // Shows `context` on `sink`, the best way its browser allows. `key` names the display it was allocated under; this only
 // asks whether one exists, since starting one now would put it on a display the browser isn't.
-export const startLiveView = async (context: BrowserContext, key: string, sink: Sink, onError: (reason: string) => void): Promise<LiveView> => {
+export const startLiveView = async (
+    context: BrowserContext,
+    key: string,
+    sink: Sink,
+    onError: (reason: string) => void,
+    options: LiveViewOptions = {},
+): Promise<LiveView> => {
     const display = displayOf(key);
-    return display === undefined ? startFramesView(context, sink, onError) : startVideoView(context, display, sink, onError);
+    return display === undefined ? startFramesView(context, sink, onError) : startVideoView(context, display, sink, onError, options.endpoint);
 };

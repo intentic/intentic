@@ -16,8 +16,8 @@ const { tabs, activeId } = defineProps<{
     activeId: string | undefined;
 }>();
 
-// `open` is the +, handed its own button so a menu can hang off it; `quickOpen` is the strip's double-click, a web tab
-// straight away, as a browser's own strip answers it.
+// `quickOpen` is a web tab straight away, what a browser's + and a double-click on its strip both do; `open` is the
+// launcher's chevron beside the +, handed its own button so a menu can hang off it.
 const emit = defineEmits<{ pick: [tab: StripTab]; close: [tab: StripTab]; open: [anchor: HTMLElement]; quickOpen: [] }>();
 
 const t = useT();
@@ -149,17 +149,27 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
             </TransitionGroup>
         </div>
 
-        <!-- Always here: a browser never hides the way to a new tab, whatever the window in front is doing. It opens the
-             launcher, which offers a web tab first and then everything else this view can show. -->
+        <!-- Always here: a browser never hides the way to a new tab, whatever the window in front is doing. One press
+             is a web tab, as in every browser; the chevron beside it is the launcher, with everything else this view
+             can show (the apps, the desktop). It was the + itself once, which made the commonest press a menu. -->
         <button
             type="button"
             :class="ui.iconButton('h-7 w-7 self-center rounded-full')"
-            aria-haspopup="menu"
             :aria-label="t(`browsers.browsers.newTab`)"
             v-tooltip.bottom="t(`browsers.browsers.newTab`)"
-            @click="emit('open', $event.currentTarget as HTMLElement)"
+            @click="emit('quickOpen')"
         >
             <Icon name="plus" class="text-xs" />
+        </button>
+        <button
+            type="button"
+            :class="ui.iconButton('-ml-1 h-7 w-5 self-center rounded-full')"
+            aria-haspopup="menu"
+            :aria-label="t(`browsers.launcher.more`)"
+            v-tooltip.bottom="t(`browsers.launcher.more`)"
+            @click="emit('open', $event.currentTarget as HTMLElement)"
+        >
+            <Icon name="chevron-down" class="text-3xs" />
         </button>
 
         <!-- The empty run of strip past the last tab: where a double-click opens another, as in any browser. -->
@@ -240,25 +250,11 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
     background: var(--color-line);
 }
 
+/* The hairline after a tab steps aside for the selected tab and the one under the pointer, on either side of it, and
+   after the last tab, where the + follows. */
 .browser-tab:is([data-selected="true"], :hover) .tab-rule,
 .browser-tab:has(+ .browser-tab:is([data-selected="true"], :hover)) .tab-rule,
-.browser-tab:not(:has(+ .browser-tab)) /* The seam between the pins and the web pages: a full-height hairline on the first web page's leading edge, kept even
-   while a neighbour is selected, since it marks a group rather than a gap between two tabs. */
-.browser-tab[data-seam="true"] {
-    margin-left: 0.5rem;
-}
-
-.browser-tab[data-seam="true"]::before {
-    content: "";
-    position: absolute;
-    top: 0.375rem;
-    bottom: 0.375rem;
-    left: -0.3125rem;
-    width: 1px;
-    background: var(--color-line-strong);
-}
-
-.tab-rule {
+.browser-tab:not(:has(+ .browser-tab)) .tab-rule {
     display: none;
 }
 

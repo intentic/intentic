@@ -372,6 +372,11 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         driving,
         cursor,
         bindPage: (pageId) => {
+            // Another tab: the still over the picture is of the one being left (the frames path's img is replaced by
+            // the next frame anyway).
+            if (pinned !== pageId) {
+                video.dropStill();
+            }
             pinned = pageId;
             send({ type: `bind`, pageId });
         },

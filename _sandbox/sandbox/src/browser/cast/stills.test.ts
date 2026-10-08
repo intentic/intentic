@@ -56,7 +56,7 @@ test("real motion after a still paints again, and a fresh still follows the next
     made.reset();
     await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
     expect(sent).toHaveLength(1);
-    // Past the capture's echo window, a loud frame is the page moving.
+    // A loud frame is the page moving.
     await advanceTimersByTimeAsync(300);
     shot.value = "BBBB";
     expect(made.noteFrame(loud)).toBe("paint");
@@ -66,32 +66,42 @@ test("real motion after a still paints again, and a fresh still follows the next
     expect(sent).toEqual([Buffer.from("AAAA", "base64"), Buffer.from("BBBB", "base64")]);
 });
 
-test("frames inside a capture's echo window stay quiet, and an identical capture is neither resent nor repeated", async () => {
+test("an identical look is neither resent nor soon repeated, and a loud frame after a still is always motion", async () => {
     const shot = { value: "AAAA" };
     const { made, capture, sent } = taker(shot);
     made.reset();
     await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
     expect(sent).toHaveLength(1);
-    // The capture re-rasters the page; the grab sees that as motion, which must not undo the still.
-    expect(made.noteFrame(loud)).toBe("quiet");
-    // That echo re-arms one more look, which finds nothing new.
+    // The look after a new still finds nothing new: not sent, and the looking backs off.
     await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
     expect(capture).toHaveBeenCalledTimes(2);
     expect(sent).toHaveLength(1);
-    // Its echo re-arms nothing: only real motion reopens the question.
-    expect(made.noteFrame(loud)).toBe("quiet");
     await advanceTimersByTimeAsync(STILL_IDLE_MS + 1);
-    expect(capture).toHaveBeenCalledTimes(2);
+    expect(capture.mock.calls.length).toBeLessThanOrEqual(3);
+    // A grab of the display moves nothing on it, so a loud frame straight after one is the page moving.
+    expect(made.noteFrame(loud)).toBe("paint");
+    expect(made.noteFrame(quiet)).toBe("paint");
 });
 
-test("input during a capture makes the next loud frame a response, not an echo", async () => {
+test("the pointer coming to rest gets another look: what it lit up replaces the still, which stands meanwhile", async () => {
     const shot = { value: "AAAA" };
-    const { made, sent } = taker(shot);
+    const { made, capture, sent } = taker(shot);
     made.reset();
+    await advanceTimersByTimeAsync(2 * STILL_DELAY_MS + 2);
+    expect(capture).toHaveBeenCalledTimes(2);
+    // The pointer moves over a button, which lights up too little to read as motion.
+    shot.value = "BBBB";
+    for (let step = 0; step < 5; step += 1) {
+        made.noteInput();
+        expect(made.noteFrame(quiet)).toBe("quiet");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the pointer moving, a step at a time
+        await advanceTimersByTimeAsync(STILL_DELAY_MS / 2);
+    }
+    // Still moving: nothing looked at yet.
+    expect(capture).toHaveBeenCalledTimes(2);
     await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
-    expect(sent).toHaveLength(1);
-    made.noteInput();
-    expect(made.noteFrame(loud)).toBe("paint");
+    expect(capture).toHaveBeenCalledTimes(3);
+    expect(sent).toEqual([Buffer.from("AAAA", "base64"), Buffer.from("BBBB", "base64")]);
 });
 
 test("a click or keystroke withdraws the still: its small answer paints, and a fresh still follows the settle", async () => {
@@ -169,4 +179,30 @@ test("stopped takes nothing more", async () => {
     made.stop();
     await advanceTimersByTimeAsync(STILL_IDLE_MS);
     expect(capture).not.toHaveBeenCalled();
+});
+
+test("a still begun before the page changed under it (another tab, a click) is never sent", async () => {
+    let answer: ((value: string) => void) | undefined;
+    const sent: Buffer[] = [];
+    const capture = jest.fn(
+        () =>
+            new Promise<string | undefined>((resolve) => {
+                answer = resolve;
+            }),
+    );
+    const made = createStillTaker({ capture, send: (still) => sent.push(still) });
+    for (const change of [() => made.reset(), () => made.noteAction()]) {
+        made.reset();
+        await advanceTimersByTimeAsync(STILL_DELAY_MS + 1);
+        expect(answer).toEqual(expect.any(Function));
+        // The tab switches (or the owner clicks) while the old page is still being photographed.
+        change();
+        answer?.("AAAA");
+        answer = undefined;
+        await advanceTimersByTimeAsync(0);
+        expect(sent).toEqual([]);
+        // Nothing stands for the page, so the frames that follow paint.
+        expect(made.noteFrame(quiet)).toBe("paint");
+    }
+    made.stop();
 });

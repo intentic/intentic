@@ -649,7 +649,8 @@
         "launcher": {
             "open": "Offen",
             "apps": "Apps",
-            "webDetail": "Eine Seite in deinem eigenen Browser"
+            "webDetail": "Eine Seite in deinem eigenen Browser",
+            "more": "Apps und Desktop"
         },
         "phone": {
             "toggle": "Handyrahmen",

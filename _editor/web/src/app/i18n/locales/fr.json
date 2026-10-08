@@ -651,7 +651,8 @@
         "launcher": {
             "open": "Ouvert",
             "apps": "Apps",
-            "webDetail": "Une page dans votre propre navigateur"
+            "webDetail": "Une page dans votre propre navigateur",
+            "more": "Apps et bureau"
         },
         "phone": {
             "toggle": "Cadre de téléphone",

@@ -25,6 +25,9 @@ export interface VideoSink {
     readonly push: (bytes: Uint8Array, key: boolean, quiet: boolean) => void;
     // A sharp WebP of the page as it stands; shown over the video until the page moves.
     readonly still: (bytes: Uint8Array<ArrayBuffer>) => void;
+    // The picture is about to change wholesale (another tab picked): the still of what was shown goes now, along with
+    // one still decoding, rather than standing over the new tab until its first frame paints.
+    readonly dropStill: () => void;
     // Where to paint; the canvases mount with the component and outlive it, so they connect here, not at
     // construction. `null` is what a template ref holds once its element unmounts, so it is a value this takes.
     readonly attach: (video: HTMLCanvasElement | null, still?: HTMLCanvasElement | null) => void;
@@ -176,6 +179,10 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
                     }
                 })
                 .catch(() => undefined);
+        },
+        dropStill: () => {
+            motion += 1;
+            hideStill();
         },
         attach: (video, still) => {
             // Normalised here, the one door in: everything below reads "no canvas" as undefined, and a template ref

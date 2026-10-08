@@ -1,14 +1,19 @@
-import { CAPTURE_ECHO_FACTOR, CAPTURE_ECHO_MS, STILL_DELAY_MS, STILL_IDLE_MS } from "./screencast.js";
+import { STILL_DELAY_MS, STILL_IDLE_MS } from "./screencast.js";
 
 // A sharp still of the page whenever it settles, over the video path: video is right while something moves and soft
-// while someone reads, so once the encoder has gone quiet a capture of the display's own pixels replaces the picture,
-// and the frames that follow are marked quiet so the client keeps the still until something really moves. Same settle
-// rules as the frames path (screencast.ts), read off the encoder's output instead of the compositor's frames.
+// while someone reads, so once the encoder has gone quiet a grab of the display's own pixels (videocast.ts's grabStill)
+// replaces the picture, and the frames that follow are marked quiet so the client keeps the still until something really
+// moves. Same settle rules as the frames path (screencast.ts), read off the encoder's output instead of the compositor's
+// frames.
 //
-// Size says motion, and it misses the small answers: a typed character, a ticked box. So a click or a keystroke
-// withdraws the still outright (noteAction), and a still that found something new is followed by another look, which
-// is how a page that keeps changing a little (a caret, a countdown) keeps showing it. That second look used to happen
-// by accident: the old 2× capture re-rendered the live window, the grab saw the echo as motion and asked again.
+// Size says motion, and it misses the small answers: a typed character, a ticked box, a button lit by the pointer. So a
+// click or a keystroke withdraws the still outright (noteAction), the pointer coming to rest asks for another look
+// (noteInput), and a still that found something new is followed by one more look, which is how a page that keeps
+// changing a little (a caret, a countdown) keeps showing it.
+//
+// The grab reads the display and changes nothing on it. The page photograph it replaced re-rendered the live window,
+// which the video filmed as motion, so a window after every capture had to be taken for its echo; there is none now,
+// and a loud frame is always the page moving.
 
 // A delta frame of a still page costs x264 a few hundred bytes; anything moving costs kilobytes. Keyframes are never
 // motion: one arrives every second whatever the page does.
@@ -22,16 +27,17 @@ export interface EncodedFrame {
 export const isLoud = (frame: EncodedFrame): boolean => !frame.key && frame.bytes > QUIET_BYTES;
 
 export interface StillTakerOptions {
-    // The 2× WebP of the viewport, base64 as CDP hands it back; undefined when the page could not be photographed.
+    // The WebP of the picture's rectangle as the display shows it, base64; undefined when it could not be grabbed.
     readonly capture: () => Promise<string | undefined>;
     readonly send: (still: Buffer) => void;
-    readonly now?: () => number;
 }
 
 export interface StillTaker {
     // Tells the caller how to tag this frame: `quiet` while a still stands for the page, `paint` otherwise.
     readonly noteFrame: (frame: EncodedFrame) => "paint" | "quiet";
-    // The owner moved the pointer; the next frames are a response, not a capture's own echo.
+    // The owner moved the pointer: what it hovers may have lit up below what reads as motion, so the page is looked at
+    // again once the pointer rests. The still stands meanwhile; withdrawing it on every move would blur the text the
+    // pointer passes over.
     readonly noteInput: () => void;
     // A click or a keystroke: its answer may be too small to read as motion, so the still no longer stands for the
     // page. Frames paint until the page settles and a fresh still is taken.
@@ -43,37 +49,30 @@ export interface StillTaker {
 }
 
 export const createStillTaker = (options: StillTakerOptions): StillTaker => {
-    const now = options.now ?? Date.now;
     let stopped = false;
     let paused = false;
     // A still the client is holding, with nothing having moved since; what makes the frames after it quiet.
     let shown = false;
     let lastStill: string | undefined;
-    // Consecutive captures that found nothing new; exponent of the back-off between them.
+    // Consecutive looks that found nothing new; exponent of the back-off between them.
     let quiet = 0;
-    let capturing = false;
-    let echoUntil = 0;
-    let captureStartedAt = 0;
-    let lastInputAt = 0;
     let timer: NodeJS.Timeout | undefined;
+    // Bumped by whatever makes a grab already under way describe a picture that is gone: motion, another tab or region
+    // (reset), a click or a keystroke (noteAction), a pause. Such a grab lands after the fact, and sent, it stood over the
+    // live picture as the old tab, held there by every quiet frame after it, until something moved (2026-10-08).
+    let generation = 0;
 
     const take = async (): Promise<void> => {
         if (stopped || paused) {
             return;
         }
-        capturing = true;
-        const startedAt = now();
-        captureStartedAt = startedAt;
+        const asked = generation;
         const data = await options.capture().catch(() => undefined);
-        capturing = false;
-        // The capture re-rasters the page, which the grab sees; frames inside this window are its echo, for a duration
-        // scaled by what the capture cost.
-        echoUntil = now() + Math.min(Math.max(CAPTURE_ECHO_MS, (now() - startedAt) * CAPTURE_ECHO_FACTOR), STILL_IDLE_MS);
-        if (data === undefined || stopped || paused) {
+        if (data === undefined || stopped || paused || asked !== generation) {
             return;
         }
         if (data === lastStill) {
-            // Pixel-identical to what the client holds: the frames since were echoes, nothing to send.
+            // Pixel-identical to what the client holds: nothing to send, and the next look waits longer.
             quiet += 1;
             return;
         }
@@ -87,8 +86,20 @@ export const createStillTaker = (options: StillTakerOptions): StillTaker => {
     };
 
     const arm = (): void => {
+        if (stopped || paused) {
+            return;
+        }
         clearTimeout(timer);
         timer = setTimeout(() => void take(), Math.min(STILL_DELAY_MS * 2 ** quiet, STILL_IDLE_MS));
+    };
+
+    // The still no longer stands for the page: frames paint, and a fresh one follows the settle.
+    const withdraw = (): void => {
+        generation += 1;
+        shown = false;
+        lastStill = undefined;
+        quiet = 0;
+        arm();
     };
 
     return {
@@ -96,44 +107,18 @@ export const createStillTaker = (options: StillTakerOptions): StillTaker => {
             if (!isLoud(frame)) {
                 return shown ? "quiet" : "paint";
             }
-            const echo = (capturing || now() < echoUntil) && lastInputAt < captureStartedAt;
-            if (echo) {
-                // Re-armed only while the last capture found something new: once one came back identical, a further
-                // capture would only echo again, and only real motion re-opens the question.
-                if (quiet === 0) {
-                    arm();
-                }
-                return shown ? "quiet" : "paint";
-            }
-            shown = false;
-            lastStill = undefined;
-            quiet = 0;
-            arm();
+            withdraw();
             return "paint";
         },
         noteInput: () => {
-            lastInputAt = now();
-        },
-        noteAction: () => {
-            lastInputAt = now();
-            shown = false;
-            lastStill = undefined;
             quiet = 0;
-            if (!paused && !stopped) {
-                arm();
-            }
+            arm();
         },
-        reset: () => {
-            shown = false;
-            lastStill = undefined;
-            quiet = 0;
-            echoUntil = 0;
-            if (!paused && !stopped) {
-                arm();
-            }
-        },
+        noteAction: withdraw,
+        reset: withdraw,
         setPaused: (next) => {
             paused = next;
+            generation += 1;
             if (next) {
                 clearTimeout(timer);
                 return;
@@ -141,7 +126,6 @@ export const createStillTaker = (options: StillTakerOptions): StillTaker => {
             shown = false;
             lastStill = undefined;
             quiet = 0;
-            echoUntil = 0;
             arm();
         },
         stop: () => {

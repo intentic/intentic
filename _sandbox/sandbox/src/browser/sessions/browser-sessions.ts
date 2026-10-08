@@ -335,6 +335,8 @@ export const adoptBrowserSession = (input: {
     readonly server: string;
     readonly context: BrowserContext;
     readonly shutdown: () => Promise<void>;
+    // Its DevTools port, when it has one: what the view reads the tab in front off (browserSessionEndpoint).
+    readonly port?: number | undefined;
 }): void => {
     const now = Date.now();
     const record: BrowserSessionRecord = {
@@ -343,7 +345,7 @@ export const adoptBrowserSession = (input: {
         shutdown: input.shutdown,
         owner: undefined,
         server: input.server,
-        port: 0,
+        port: input.port ?? 0,
         passkeyStore: undefined,
         startedAt: now,
         activityAt: now,
@@ -431,6 +433,12 @@ export const browserAccountPage = (account: string): Page | undefined => {
 // browser-tools.ts requests a display with.
 // The view route uses it to tell a headed browser (real video) from a headless one; see live-view.ts.
 export const browserSessionDisplayKey = (name: string): string | undefined => sessions.get(name)?.server;
+
+// The session's DevTools HTTP endpoint, the one its attach dialled; undefined for a window adopted without a port.
+export const browserSessionEndpoint = (name: string): string | undefined => {
+    const port = sessions.get(name)?.port;
+    return port === undefined || port <= 0 ? undefined : `http://127.0.0.1:${port}`;
+};
 
 export const browserSessionPage = (name: string, pageId: string): Page | undefined => {
     const record = sessions.get(name);

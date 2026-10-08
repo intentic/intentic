@@ -19,6 +19,9 @@ const CRF = 24;
 const MAX_RATE = "6M";
 const BUF_SIZE = "2M";
 
+// A still that has not come back by then is given up on; the next settle asks again.
+const STILL_TIMEOUT_MS = 3000;
+
 // One access unit (frame) to a viewer; `key` tells VideoDecoder whether this chunk can start a stream, the one thing it
 // can't work out itself.
 export interface VideoFrame {
@@ -223,3 +226,58 @@ export const startVideocast = (display: { readonly name: string }, region: Regio
         },
     };
 };
+
+// One sharp picture of `region` off the display, as WebP at `quality`: the still the video path lays over its picture
+// (stills.ts). Off the display rather than the page (CDP's Page.captureScreenshot) because the display is what the video
+// shows: Chromium's own bubbles and menus drawn over the page (translate, a permission prompt, a password offer, a
+// <select>) are in it, where a photograph of the page alone left them out, and the picture blinked between the two
+// whenever a still came and went (2026-10-08). Reading the display also re-renders nothing, so no frame of the video is
+// the still's own echo. Undefined when ffmpeg could not grab it (gone, no libwebp, a display that died).
+export const grabStill = (display: { readonly name: string }, region: Region, quality: number): Promise<Buffer | undefined> =>
+    new Promise((resolve) => {
+        const chunks: Buffer[] = [];
+        let child: ChildProcess;
+        try {
+            child = spawnAs(
+                { class: "service" },
+                "ffmpeg",
+                [
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "x11grab",
+                    "-draw_mouse",
+                    "0",
+                    "-video_size",
+                    `${region.width}x${region.height}`,
+                    "-i",
+                    `${display.name}.0+${region.x},${region.y}`,
+                    "-frames:v",
+                    "1",
+                    "-c:v",
+                    "libwebp",
+                    "-quality",
+                    String(quality),
+                    "-f",
+                    "webp",
+                    "pipe:1",
+                ],
+                { stdio: ["ignore", "pipe", "ignore"] },
+            );
+        } catch {
+            // allow(silent-catch): no ffmpeg to start is a still not taken; the video stands alone.
+            resolve(undefined);
+            return;
+        }
+        const timer = setTimeout(() => child.kill("SIGKILL"), STILL_TIMEOUT_MS);
+        child.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
+        child.on("error", () => {
+            clearTimeout(timer);
+            resolve(undefined);
+        });
+        child.on("exit", (code) => {
+            clearTimeout(timer);
+            resolve(code === 0 && chunks.length > 0 ? Buffer.concat(chunks) : undefined);
+        });
+    });

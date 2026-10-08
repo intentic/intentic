@@ -916,7 +916,8 @@
         "launcher": {
             "open": "Otwarte",
             "apps": "Aplikacje",
-            "webDetail": "Strona w Twojej własnej przeglądarce"
+            "webDetail": "Strona w Twojej własnej przeglądarce",
+            "more": "Aplikacje i pulpit"
         },
         "phone": {
             "toggle": "Ramka telefonu",

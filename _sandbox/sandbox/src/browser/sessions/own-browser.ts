@@ -48,7 +48,13 @@ const start = async (deps: OwnBrowserDeps): Promise<void> => {
         });
         // Patches residual server tells before the first navigation, as on every other window a person sees.
         await owned.context.addInitScript(stealthInit(fingerprint));
-        adoptBrowserSession({ name: OWN_BROWSER_SESSION, server: OWN_BROWSER_SERVER, context: owned.context, shutdown: owned.close });
+        adoptBrowserSession({
+            name: OWN_BROWSER_SESSION,
+            server: OWN_BROWSER_SERVER,
+            context: owned.context,
+            shutdown: owned.close,
+            port: Number(new URL(owned.endpoint).port),
+        });
     } catch (err) {
         // Nothing is on the display now; a later open starts a fresh one.
         releaseDisplay(OWN_BROWSER_SERVER);

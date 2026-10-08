@@ -2,7 +2,9 @@ import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Browser, BrowserContext } from "playwright";
+import { z } from "zod";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { spawnAs } from "../../workload/workload-class.js";
@@ -41,6 +43,8 @@ export interface OwnerBrowserOptions {
 export interface OwnerBrowser {
     // The profile's own context: the one Chromium opened, not one Playwright made.
     readonly context: BrowserContext;
+    // Its DevTools HTTP endpoint, http://127.0.0.1:<port>: what a video view reads the tab in front off (front-tab.ts).
+    readonly endpoint: string;
     // Closes Chromium gracefully (cookies flushed to the profile), killing it only if it does not exit in time.
     readonly close: () => Promise<void>;
 }
@@ -68,30 +72,70 @@ export const ownerBrowserArgs = (options: Omit<OwnerBrowserOptions, "executableP
 // Chromium on Linux takes its own locale (Intl's default) from LANGUAGE, ignoring --lang; glibc spells it de_DE.
 export const localeEnv = (locale: string): string => locale.replace("-", "_");
 
-// navigator.language(s) and Accept-Language come from the profile's language list, which a person sets in Settings
-// (--accept-lang only reaches a headless browser). Written before each launch so the profile follows its fingerprint,
-// a bound exit's country included. A Preferences file this cannot read is left for Chromium, never written over.
-export const seedLanguages = async (userDataDir: string, languages: readonly string[]): Promise<void> => {
-    const path = join(userDataDir, "Default", "Preferences");
-    let prefs: Record<string, unknown> = {};
-    try {
-        const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-            return;
-        }
-        prefs = parsed as Record<string, unknown>;
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-            return;
-        }
+// Preferences a person sets in Settings, written before each launch so the profile holds them whatever was clicked
+// since. A Preferences file this cannot read is left for Chromium, never written over.
+//
+// navigator.language(s) and Accept-Language come from the profile's language list (--accept-lang only reaches a
+// headless browser), so it follows the fingerprint, a bound exit's country included.
+//
+// Translate's offer is off: the window leaves by the sandbox's own address, so a site answers in that country's
+// language, and Chromium offered to translate nearly every page with a bubble over its top corner. Over a remote
+// picture that bubble is a piece of browser chrome that can't be told from the page and covers it (2026-10-08). Pages
+// cannot see the setting.
+// The two sections written, read as far as this needs them; every other key, in them and beside them, is carried
+// through untouched.
+const PreferencesSchema = z.looseObject({
+    intl: z.looseObject({ accept_languages: z.unknown().optional(), selected_languages: z.unknown().optional() }).optional(),
+    translate: z.looseObject({ enabled: z.unknown().optional() }).optional(),
+});
+
+const readPreferences = async (path: string): Promise<z.infer<typeof PreferencesSchema> | undefined> => {
+    // A profile never started has no file yet, which is a profile with nothing set.
+    const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
+        return {};
     }
-    const intl = typeof prefs["intl"] === "object" && prefs["intl"] !== null ? (prefs["intl"] as Record<string, unknown>) : {};
+    let json: unknown;
+    try {
+        json = JSON.parse(text);
+    } catch {
+        // allow(silent-catch): a file Chromium is mid-way through writing is its own, and left to it.
+        return undefined;
+    }
+    const parsed = PreferencesSchema.safeParse(json);
+    return parsed.success ? parsed.data : undefined;
+};
+
+export const seedPreferences = async (userDataDir: string, languages: readonly string[]): Promise<void> => {
+    const path = join(userDataDir, "Default", "Preferences");
+    // allow(silent-catch): a file that cannot be read (permissions, a directory in its place) is left for Chromium.
+    const prefs = await readPreferences(path).catch(() => undefined);
+    if (prefs === undefined) {
+        return;
+    }
     const wanted = languages.join(",");
-    if (intl["accept_languages"] === wanted && intl["selected_languages"] === wanted) {
+    if (prefs.intl?.accept_languages === wanted && prefs.intl.selected_languages === wanted && prefs.translate?.enabled === false) {
         return;
     }
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ ...prefs, intl: { ...intl, accept_languages: wanted, selected_languages: wanted } }));
+    await writeFile(
+        path,
+        JSON.stringify({
+            ...prefs,
+            intl: { ...prefs.intl, accept_languages: wanted, selected_languages: wanted },
+            translate: { ...prefs.translate, enabled: false },
+        }),
+    );
+};
+
+// Every window starts with only the tab it is opened for. Chromium keeps the last windows' tabs in the profile's
+// Sessions directory, and the --hide-crash-restore-bubble a window needs (no "Restore pages?" bubble over the picture)
+// also tells it to reopen them, unasked, whenever the last run did not end cleanly: and a daemon restarting ends every
+// window uncleanly. The person's own window came back after a sandbox update with every tab it had before beside the
+// one they asked for, the picture on a tab the strip did not select (2026-10-08). Cookies, storage and sign-ins live
+// elsewhere in the profile and stay.
+export const forgetTabs = async (userDataDir: string): Promise<void> => {
+    await rm(join(userDataDir, "Default", "Sessions"), { recursive: true, force: true });
 };
 
 export const parseActivePort = (text: string): number | undefined => {
@@ -170,7 +214,8 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     const portFile = join(options.userDataDir, ACTIVE_PORT_FILE);
     await reapOrphans(options.userDataDir);
     await rm(portFile, { force: true });
-    await seedLanguages(options.userDataDir, options.fingerprint.languages);
+    await forgetTabs(options.userDataDir);
+    await seedPreferences(options.userDataDir, options.fingerprint.languages);
     // Ranked as a service for the OOM killer: after an agent's command, before a turn's runtime.
     const child = spawnAs({ class: "service" }, options.executablePath, ownerBrowserArgs(options), {
         // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
@@ -184,9 +229,10 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
         stdio: "ignore",
     });
     let browser: Browser | undefined;
+    let endpoint: string;
     try {
-        const port = await waitForPort(child, portFile);
-        browser = await playwright.chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+        endpoint = `http://127.0.0.1:${await waitForPort(child, portFile)}`;
+        browser = await playwright.chromium.connectOverCDP(endpoint);
     } catch (err) {
         child.kill("SIGKILL");
         throw err;
@@ -213,5 +259,5 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
         })();
         return closing;
     };
-    return { context, close };
+    return { context, endpoint, close };
 };
