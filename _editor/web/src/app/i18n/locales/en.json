@@ -3765,7 +3765,6 @@
             "showOther": "Show {other}"
         },
         "providerTile": {
-            "runs": "Runs {runs}",
             "signingIn": "Signing in…"
         },
         "hostServers": {

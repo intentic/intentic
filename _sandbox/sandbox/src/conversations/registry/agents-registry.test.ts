@@ -2803,7 +2803,8 @@ it("takes a spent allowance's kept hold off its entry once fired or dropped, and
         }
         await conversations.send(id, { kind: "settle" }, 2_000).settled;
     }
-    expect(registry.entry("fired")?.limitHold).toBeDefined();
+    // Held before either way out, so the cleared ones below were cleared by it rather than never written.
+    expect(registry.entry("fired")?.limitHold).toMatchObject({ reopensAt: 9_000, ran: true });
     await conversations.send("fired", { kind: "held-fired", ladder: false }).settled;
     await conversations.send("dropped", { kind: "resume-dropped" }).settled;
     expect([registry.entry("fired")?.limitHold, registry.entry("dropped")?.limitHold, registry.entry("unheld")?.limitHold]).toEqual([

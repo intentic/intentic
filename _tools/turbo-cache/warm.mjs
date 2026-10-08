@@ -95,23 +95,31 @@ const upload = async (cache, hash, body, durationMs) => {
 };
 
 /** Which of `hashes` the cache holds, asked a few at a time. A hash it could not be asked about counts as not held,
- *  which at worst sends an entry the server then keeps as it was. */
+ *  which at worst sends an entry the server then keeps as it was; how many went unasked, and why, is said once. */
 const heldRemotely = async (cache, hashes) => {
     const held = new Set();
     const queue = [...new Set(hashes)];
+    const unasked = { count: 0, first: undefined };
     const worker = async () => {
         for (let hash = queue.shift(); hash !== undefined; hash = queue.shift()) {
             const response = await fetch(`${cache.url}/v8/artifacts/${hash}?slug=${encodeURIComponent(cache.team)}`, {
                 method: "HEAD",
                 headers: { authorization: `Bearer ${cache.token}` },
                 signal: AbortSignal.timeout(10_000),
-            }).catch(() => undefined);
+            }).catch((error) => {
+                unasked.count++;
+                unasked.first ??= String(error?.message ?? error);
+                return undefined;
+            });
             if (response?.ok) {
                 held.add(hash);
             }
         }
     };
     await Promise.all(Array.from({ length: 8 }, worker));
+    if (unasked.count > 0) {
+        process.stderr.write(`turbo-cache warm: ${unasked.count} cache lookup(s) failed, counted as not held: ${unasked.first}\n`);
+    }
     return held;
 };
 
