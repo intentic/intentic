@@ -1,17 +1,19 @@
 import {
     type AgentHarness,
     type Capability,
+    type PersonalDataClass,
     PRIVACY_REPLACEMENTS_MAX,
     type PrivacyKnownSource,
     type PrivacyKnownValue,
+    type PrivacyLedgerAction,
     type PrivacyShieldPolicy,
     type PrivacyShieldStatus,
 } from "@intentic/sandbox-contract";
 import { detectPersonalData, normalizeAllowed } from "./detect/detect.js";
-import { createMasker, createMaskMemo, type EntityRecognizer, type Masker } from "./masker.js";
+import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker, type Replacement } from "./masker.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";
 import type { PrivacyPolicyStore } from "./privacy-policy.js";
-import { isTrustedProvider, privacyProviders, shieldableRuntime } from "./privacy-trust.js";
+import { gatewayRuntime, isTrustedProvider, privacyProviders, shieldableRuntime } from "./privacy-trust.js";
 import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
@@ -42,6 +44,32 @@ export interface SealedPrompt {
     readonly restore: (text: string) => string;
 }
 
+// One turn on a runtime the gateway does not stand in front of but whose every channel passes the daemon first (privacy
+// `hooks`, agent-runtimes.ts): each channel hands its text here before the model can read it. The policy is read on
+// every call, as the gateway reads it on every request, so a grant made mid-turn opens the rest of it.
+export interface TurnShield {
+    readonly provider: string;
+    readonly conversationId: string | undefined;
+    // Text the model is about to read, as it may read it: masked while the shield masks (tokens `restore` reads back),
+    // as it is while it watches (what it would have masked is logged), as it is while the provider is trusted. `channel`
+    // names where it came from for the log. Throws when masking fails, and the caller withholds the text.
+    readonly mask: (text: string, channel: string) => Promise<string>;
+    // For a read the runtime can only allow or refuse (a file its model opens with its own tool): the kinds of personal
+    // data that refuse it, empty when it may go as it is (nothing found, the shield only watching, the provider trusted).
+    // `refusal` is the log's line for it when it is refused.
+    readonly refuses: (text: string, channel: string, refusal: string) => Promise<readonly PersonalDataClass[]>;
+    // The same for a picture, read on this machine; `unreadable` when it could not be read to be checked, which refuses
+    // it as surely, since it would otherwise go unchecked.
+    readonly refusesImage: (data: Buffer, channel: string) => Promise<readonly PersonalDataClass[] | "unreadable">;
+    // Tokens in what the model wrote back to the values they stand for.
+    readonly restore: (text: string) => string;
+    // Whether masking is in force right now: the shield on and the provider untrusted here. False while it watches.
+    readonly masking: () => Promise<boolean>;
+    // Where the runtime should call an MCP server instead of `url`: the masking proxy, which restores tokens in what the
+    // model sends and masks what the server answers (gateway/mcp-route.ts).
+    readonly mcpUrl: (url: string) => Promise<string>;
+}
+
 export interface PrivacyShield {
     readonly policy: () => Promise<PrivacyShieldPolicy>;
     readonly setPolicy: (policy: PrivacyShieldPolicy) => Promise<void>;
@@ -54,6 +82,9 @@ export interface PrivacyShield {
     // restore that reads tokens in the answer back, when something is. Never refuses: the whole request is in hand.
     // Throws when the policy can't be read or masking fails, which refuses the request rather than sending it as it is.
     readonly seal: (request: SealedRequest) => Promise<SealedPrompt>;
+    // The shield for one turn on a hooked runtime (TurnShield), read by the same reader `seal` reads with; undefined when
+    // there is nothing to read for: the shield is off, the provider is trusted here, or the gateway already covers it.
+    readonly forTurn: (provider: string, harness: AgentHarness, conversationId?: string) => Promise<TurnShield | undefined>;
     // The base URL a runtime should send its model requests to instead of `upstream`; undefined while the shield is off,
     // so a sandbox that never turned it on sends nothing through the daemon.
     readonly baseUrlFor: (session: GatewaySession) => Promise<string | undefined>;
@@ -101,18 +132,45 @@ export interface PrivacyShieldDeps {
 }
 
 export const GATEWAY_PATH = "/privacy/gateway";
+export const MCP_PROXY_PATH = "/privacy/mcp";
 
-// Why a provider the shield cannot cover was turned away. Decided by the runtime alone, before a word of the turn is
-// read, so the sentence says that first: read as a finding (2026-10-02), it sent the owner looking for personal data in
-// a message that held none, when what the shield cannot see is everything such a turn goes on to read.
+// Why a provider on a runtime the shield cannot read at all (an ACP agent, Pi: no gateway, no hooks) was turned away.
+// Decided by the runtime alone, before a word of the turn is read, so the sentence says that first: read as a finding
+// (2026-10-02), it sent the owner looking for personal data in a message that held none, when what the shield cannot
+// see is everything such a turn goes on to read.
 export const unshieldedRefusal = (label: string, inConversation: boolean): string =>
     [
         `The privacy shield turned ${label} away before reading anything: nothing in what you sent was flagged.`,
-        `${label}'s agent sends what it reads (files, command output, session records) to its own servers on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
+        `${label}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
         inConversation
             ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`
             : `Trust it in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`,
     ].join(" ");
+
+// What one read through the shared reader came to: the text as the provider may read it, how to read tokens in its
+// answer back, and what was found (empty when nothing was, or nothing was read for).
+interface Reading {
+    readonly text: string;
+    readonly restore: (text: string) => string;
+    readonly found: readonly Replacement[];
+    readonly counts: ClassCounts;
+}
+
+// The kinds a reading holds, each once, in the order they sit in the text. Read off the spans rather than the counts:
+// a text the memo has seen counts nothing again (masker.ts), and a file opened twice must be refused twice.
+const kindsOf = (spans: readonly { readonly class: PersonalDataClass }[]): PersonalDataClass[] => [...new Set(spans.map((span) => span.class))];
+
+// The counts a refusal is logged with: what this reading holds, whether or not the memo had seen it.
+const countsOf = (spans: readonly { readonly class: PersonalDataClass }[]): ClassCounts => {
+    const counts: Partial<Record<PersonalDataClass, number>> = {};
+    for (const span of spans) {
+        counts[span.class] = (counts[span.class] ?? 0) + 1;
+    }
+    return counts;
+};
+
+// Restoring reads the vault alone and never the policy (masker.ts `restore`); a masker needs one to be built.
+const RESTORE_POLICY: Pick<PrivacyShieldPolicy, "classes" | "allow" | "names"> = { classes: [], allow: [], names: "dictionary" };
 
 // One whole token, in either spelling.
 const WHOLE_TOKEN = new RegExp(`^(?:${TOKEN_SOURCE})$`, "u");
@@ -152,6 +210,137 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             memo,
             recognizer: policy.names === "model" ? await deps.recognizer() : undefined,
         });
+    const record = (fields: {
+        readonly provider: string;
+        readonly conversationId: string | undefined;
+        readonly action: PrivacyLedgerAction;
+        readonly protocol: string;
+        readonly counts: ClassCounts;
+        readonly found: readonly Replacement[];
+        readonly images?: number;
+        readonly detail?: string;
+    }): void => {
+        void deps.ledger
+            .record({
+                at: new Date().toISOString(),
+                ...opt("conversationId", fields.conversationId),
+                provider: fields.provider,
+                trusted: false,
+                action: fields.action,
+                counts: fields.counts,
+                images: fields.images ?? 0,
+                documents: 0,
+                protocol: fields.protocol,
+                ...opt("detail", fields.detail),
+                ...opt("replacements", fields.found.length > 0 ? fields.found.slice(0, PRIVACY_REPLACEMENTS_MAX) : undefined),
+            })
+            // allow(silent-catch): the log is the owner's record of what left, and a write it lost costs the request nothing
+            .catch(() => undefined);
+    };
+    // Where the policy stands for one provider in one conversation, read fresh: whether to mask, or only to watch.
+    const standing = async (provider: string, conversationId: string | undefined) => {
+        const policy = await deps.policyStore.get();
+        const open = policy.mode === "off" || (await trusted(policy, provider, conversationId));
+        return { policy, masking: !open && policy.mode === "on", watching: !open && policy.mode === "watch" };
+    };
+    // THE READER every text bound for a provider the gateway does not stand in front of goes through: a sealed request's
+    // prompt, and each channel of a hooked runtime's turn. Masked while the shield masks, read and logged while it
+    // watches, untouched while it is off or the provider is trusted. `log` says when a reading earns a line: a sealed
+    // request is a request and always does; a channel of a turn speaks often and logs only what it found.
+    const read = async (input: {
+        readonly provider: string;
+        readonly conversationId: string | undefined;
+        readonly text: string;
+        readonly protocol: string;
+        readonly log: "always" | "found";
+    }): Promise<Reading> => {
+        const nothing: Reading = { text: input.text, restore: unchanged, found: [], counts: {} };
+        const { policy, masking, watching } = await standing(input.provider, input.conversationId);
+        if ((!masking && !watching) || input.text === "") {
+            return nothing;
+        }
+        const reading = await masker(policy);
+        const found = masking ? await reading.mask(input.text) : await reading.find(input.text);
+        // The tokens the provider is about to read must be on disk before it reads them, as on the wire.
+        await deps.vault.commit();
+        if (input.log === "always" || found.found.length > 0) {
+            record({ ...input, action: masking ? "masked" : "watched", counts: found.counts, found: found.found });
+        }
+        // Watching sends the text as it came, so nothing in the answer is a token this reading gave out.
+        return masking && "text" in found
+            ? { text: found.text, restore: reading.restore, found: found.found, counts: found.counts }
+            : { ...nothing, found: found.found, counts: found.counts };
+    };
+    const turnShield = (provider: string, conversationId: string | undefined): TurnShield => ({
+        provider,
+        conversationId,
+        mask: async (text, channel) => (await read({ provider, conversationId, text, protocol: `hooks:${channel}`, log: "found" })).text,
+        refuses: async (text, channel, refusal) => {
+            const { policy, masking, watching } = await standing(provider, conversationId);
+            if ((!masking && !watching) || text === "") {
+                return [];
+            }
+            const found = await (await masker(policy)).find(text);
+            if (found.spans.length === 0) {
+                return [];
+            }
+            await deps.vault.commit();
+            record({
+                provider,
+                conversationId,
+                action: masking ? "refused" : "watched",
+                protocol: `hooks:${channel}`,
+                counts: countsOf(found.spans),
+                found: found.found,
+                ...opt("detail", masking ? refusal : undefined),
+            });
+            return masking ? kindsOf(found.spans) : [];
+        },
+        refusesImage: async (data, channel) => {
+            const { policy, masking, watching } = await standing(provider, conversationId);
+            if ((!masking && !watching) || policy.images === "allow") {
+                return [];
+            }
+            const reading = await deps.readers.readImage(data);
+            if (reading === undefined) {
+                if (masking) {
+                    record({
+                        provider,
+                        conversationId,
+                        action: "refused",
+                        protocol: `hooks:${channel}`,
+                        counts: {},
+                        found: [],
+                        images: 1,
+                        detail: "an image read was refused: it could not be read on this machine to be checked",
+                    });
+                }
+                return masking ? "unreadable" : [];
+            }
+            const found = await (await masker(policy)).find(readingText(reading.lines));
+            if (found.spans.length === 0) {
+                return [];
+            }
+            await deps.vault.commit();
+            record({
+                provider,
+                conversationId,
+                action: masking ? "refused" : "watched",
+                protocol: `hooks:${channel}`,
+                counts: countsOf(found.spans),
+                found: found.found,
+                images: 1,
+                ...opt("detail", masking ? "an image read was refused: it shows personal data" : undefined),
+            });
+            return masking ? kindsOf(found.spans) : [];
+        },
+        // Synchronous by contract, so it reads the vault as loaded: forTurn loads it before handing the shield out.
+        restore: (text) => restoreWith(text),
+        masking: async () => (await standing(provider, conversationId)).masking,
+        mcpUrl: async (url) => `${deps.loopbackBase()}${MCP_PROXY_PATH}/${await deps.tokens.sign({ provider, upstream: url, conversationId })}`,
+    });
+    // Restoring needs no policy: a token is looked up in the vault, never trusted for what it says (tokens.ts).
+    const restoreWith = (text: string): string => createMasker({ vault: deps.vault, policy: RESTORE_POLICY, memo, recognizer: undefined }).restore(text);
     return {
         policy: deps.policyStore.get,
         setPolicy: deps.policyStore.set,
@@ -167,6 +356,8 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         },
         admit: async (provider, harness, conversationId) => {
             const policy = await deps.policyStore.get();
+            // A runtime the shield reads by content (the gateway, or its hooks) runs: what it reads is checked as it
+            // reads it. Only one with no seam at all is decided by its runtime, since nothing it reads is ever seen.
             if (policy.mode !== "on" || shieldableRuntime(provider, harness) || (await trusted(policy, provider, conversationId))) {
                 return { allowed: true };
             }
@@ -174,32 +365,20 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             return { allowed: false, reason: unshieldedRefusal(label, conversationId !== undefined) };
         },
         seal: async ({ provider, harness, conversationId, prompt }) => {
-            const policy = await deps.policyStore.get();
             // The gateway masks this runtime's wire as it masks a turn's, so reading it here as well would log it twice.
-            if (policy.mode === "off" || shieldableRuntime(provider, harness) || (await trusted(policy, provider, conversationId))) {
+            if (gatewayRuntime(provider, harness)) {
                 return { prompt, restore: unchanged };
             }
-            const reading = await masker(policy);
-            const masking = policy.mode === "on";
-            const found = masking ? await reading.mask(prompt) : await reading.find(prompt);
-            // The tokens the provider is about to read must be on disk before it reads them, as on the wire.
-            await deps.vault.commit();
-            void deps.ledger
-                .record({
-                    at: new Date().toISOString(),
-                    ...opt("conversationId", conversationId),
-                    provider,
-                    trusted: false,
-                    action: masking ? "masked" : "watched",
-                    counts: found.counts,
-                    images: 0,
-                    documents: 0,
-                    protocol: SEALED_PROTOCOL,
-                    ...opt("replacements", found.found.length > 0 ? found.found.slice(0, PRIVACY_REPLACEMENTS_MAX) : undefined),
-                })
-                // allow(silent-catch): the log is the owner's record of what left, and a write it lost costs the request nothing
-                .catch(() => undefined);
-            return "text" in found ? { prompt: found.text, restore: reading.restore } : { prompt, restore: unchanged };
+            const reading = await read({ provider, conversationId, text: prompt, protocol: SEALED_PROTOCOL, log: "always" });
+            return { prompt: reading.text, restore: reading.restore };
+        },
+        forTurn: async (provider, harness, conversationId) => {
+            const { masking, watching } = await standing(provider, conversationId);
+            if (gatewayRuntime(provider, harness) || (!masking && !watching)) {
+                return undefined;
+            }
+            await deps.vault.load();
+            return turnShield(provider, conversationId);
         },
         baseUrlFor: async (session) => {
             const policy = await deps.policyStore.get();

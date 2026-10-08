@@ -355,10 +355,12 @@ describe(`providerReceives`, () => {
         const watching = policy({ mode: `watch` });
         expect(providerReceives(provider({ id: `claude` }), on)).toBe(`tokens`);
         expect(providerReceives(provider({ id: `codex` }), on)).toBe(`values`);
-        expect(providerReceives(provider({ id: `cursor`, shieldable: false }), on)).toBe(`refused`);
+        // Read through its hooks, Cursor gets tokens like any provider the gateway covers.
+        expect(providerReceives(provider({ id: `cursor` }), on)).toBe(`tokens`);
+        expect(providerReceives(provider({ id: `pi`, shieldable: false }), on)).toBe(`refused`);
         expect(providerReceives(provider({ id: `endpoint/qwen`, local: true }), on)).toBe(`local`);
         expect(providerReceives(provider({ id: `claude` }), watching)).toBe(`watched`);
-        // A runtime the gateway can't sit in front of is neither masked nor watched: it runs as it is.
-        expect(providerReceives(provider({ id: `cursor`, shieldable: false }), watching)).toBe(`values`);
+        // A runtime the shield can't read at all is neither masked nor watched: it runs as it is.
+        expect(providerReceives(provider({ id: `pi`, shieldable: false }), watching)).toBe(`values`);
     });
 });

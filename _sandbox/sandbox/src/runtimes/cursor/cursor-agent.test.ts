@@ -13,6 +13,12 @@ import type { CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { memoryFleet } from "../../testing.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pesel } from "../../privacy/detect/tests/ids.testing.js";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import { tokenOf } from "../../privacy/tokens.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -138,6 +144,97 @@ test("a sealed request asks with no tool, server or setting source, its system p
     expect(prompts).toEqual([`Answer with exactly what is asked.\n\nfix: name the change`]);
     expect(events.filter((event) => event.kind === `delta`)).toEqual([{ kind: `delta`, text: `fix: tree truncation` }]);
     expect(events.at(-1)).toEqual({ kind: `done` });
+});
+
+// THE PRIVACY SHIELD ON A CURSOR TURN (cursor-shield.ts), over the real shield. The reported case (2026-10-08): the
+// composer warned that Cursor would be turned away before a word was written. A turn now runs, read channel by channel.
+describe("a turn the privacy shield reads", () => {
+    const NUMBER = pesel(1985, 3, 14, 4562);
+    const TOKEN = tokenOf("NATIONAL_ID", 1);
+    const shielded = async (spec: Partial<AgentRequest<CursorCredential>["spec"]> = {}, tools: AgentRequest<CursorCredential>["tools"] = {}) => {
+        const privacy = await privacySliceFake({ policy: { mode: "on" } }).privacyShield.forTurn("cursor", "native", "c-1");
+        const base = request();
+        // A folder of its own, so the rules the shield reads before the turn are only what a test writes there.
+        const cwd = mkdtempSync(join(tmpdir(), `cursor-agent-turn-`));
+        return { ...base, spec: { ...base.spec, cwd, ...spec }, tools, hooks: { ...base.hooks, ...(privacy === undefined ? {} : { privacy }) } };
+    };
+    const registered: unknown[] = [];
+    const hooked = (ready: boolean): CursorAgentDeps => ({
+        ...deps(),
+        hooks: unstubbed<CursorHookService>(`hooks`, {
+            ready: () => ready,
+            covers: async () => ready,
+            register: (turn) => {
+                registered.push(turn);
+                return () => {};
+            },
+        }),
+    });
+    beforeEach(() => {
+        registered.length = 0;
+    });
+
+    test("sends the message masked, withholds the tools that read past the shield, proxies MCP, and shows the answer restored", async () => {
+        const prompts: string[] = [];
+        create.mockResolvedValue({
+            agentId: `agent-shielded`,
+            send: async (prompt: string, options: SendOptions) => {
+                prompts.push(prompt);
+                // The model repeats the token it was given, cut across two deltas.
+                options.onDelta?.({ update: { type: `text-delta`, text: `Found ${TOKEN.slice(0, 7)}` } as InteractionUpdate });
+                options.onDelta?.({ update: { type: `text-delta`, text: `${TOKEN.slice(7)}.` } as InteractionUpdate });
+                return { wait: async () => ({ status: `success` }), cancel };
+            },
+            close: () => {},
+        });
+        const turn = await shielded(
+            { prompt: `who has PESEL ${NUMBER}?`, systemAppend: `Be brief.` },
+            { remote: [{ name: `crm`, url: `http://127.0.0.1:8787/mcp/crm`, token: `t` }] as never },
+        );
+        const events = await collect(createCursorAgent(hooked(true))(turn));
+
+        expect(prompts).toEqual([`who has PESEL ${TOKEN}?`]);
+        const options = create.mock.calls[0]?.[0] as AgentOptions;
+        expect(options.disallowedTools).toEqual(expect.arrayContaining([`grep`, `glob`, `ls`, `semSearch`, `webFetch`, `readLints`]));
+        const crm = options.mcpServers?.[`crm`] as { url: string; headers?: Record<string, string> };
+        expect(crm.url).toContain(`/privacy/mcp/`);
+        expect(crm.headers).toEqual({ Authorization: `Bearer t` });
+        expect(events.filter((event) => event.kind === `delta`).map((event) => (event.kind === `delta` ? event.text : ``)).join(``)).toBe(`Found ${NUMBER}.`);
+        // The hooks get the shield, and the instructions carry the note that tells the model what a token is.
+        const hook = registered[0] as { shield?: object; systemAppend?: string };
+        expect(Object.keys(hook)).toContain(`shield`);
+        expect(hook.systemAppend?.startsWith(`Be brief.\n\nPersonal data in this conversation`)).toBe(true);
+    });
+
+    test("watching, withholds none of Cursor's tools and adds no note, while still reading what passes", async () => {
+        create.mockResolvedValue({
+            agentId: `agent-watched`,
+            send: async () => ({ wait: async () => ({ status: `success` }), cancel }),
+            close: () => {},
+        });
+        const privacy = await privacySliceFake({ policy: { mode: "watch" } }).privacyShield.forTurn("cursor", "native", "c-1");
+        const base = await shielded({ prompt: `PESEL ${NUMBER}`, systemAppend: `Be brief.` });
+        await collect(createCursorAgent(hooked(true))({ ...base, hooks: { ...base.hooks, ...(privacy === undefined ? {} : { privacy }) } }));
+        const options = create.mock.calls[0]?.[0] as AgentOptions;
+        expect(options.disallowedTools).toEqual([`askQuestion`]);
+        expect((registered[0] as { systemAppend?: string }).systemAppend).toBe(`Be brief.`);
+    });
+
+    test("is refused before anything starts when the shield's hooks into Cursor are not installed", async () => {
+        const events = await collect(createCursorAgent(hooked(false))(await shielded()));
+        expect(create).not.toHaveBeenCalled();
+        expect(events).toEqual([expect.objectContaining({ kind: `error`, code: `privacy-unshielded` }), { kind: `done` }]);
+    });
+
+    test("is refused, naming the file, when the rules Cursor loads itself hold personal data", async () => {
+        const root = mkdtempSync(join(tmpdir(), `cursor-agent-rules-`));
+        writeFileSync(join(root, `AGENTS.md`), `On-call: PESEL ${NUMBER}`);
+        const events = await collect(createCursorAgent(hooked(true))(await shielded({ cwd: root })));
+        expect(create).not.toHaveBeenCalled();
+        const refusal = events[0];
+        expect(refusal).toMatchObject({ kind: `error`, code: `privacy-instructions` });
+        expect(refusal?.kind === `error` ? refusal.message : ``).toContain(`AGENTS.md holds personal data`);
+    });
 });
 
 const QUESTION = {

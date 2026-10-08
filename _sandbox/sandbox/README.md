@@ -315,11 +315,15 @@ flowchart LR
   is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back, and an animation goes
   as the one frame that was read. A PDF goes as its
   masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
-  credentials, so a resumed or handed-off transcript masks to the same bytes. A runtime the gateway cannot stand in
-  front of (Cursor, ACP agents, Pi) is refused on an untrusted provider (`privacy-unshielded`) before a word is read,
-  which the refusal and the chat's strip above the composer both say; the owner can let a provider read one
-  conversation as it is (the policy's `conversations`, read by the turn's door and the gateway alike) instead of
-  trusting it everywhere. A helper job's sealed request is read whole instead (`privacyShield.seal`): on such a
+  credentials, so a resumed or handed-off transcript masks to the same bytes. Cursor, whose wire is its own, is read
+  through the hooks the daemon owns instead (`runtimes/cursor/cursor-shield.ts`): its prompt and instructions masked,
+  a file read holding personal data refused for the shell, each shell command's output masked through the hook
+  script, the tools that read past both withheld, MCP behind the masking proxy `ALL /privacy/mcp/<session>`, and its
+  tokens restored in the transcript; only personal data in the rules it loads itself (AGENTS.md, `.cursor/rules`)
+  refuses a turn (`privacy-instructions`). A runtime the shield cannot read at all (ACP agents, Pi) is refused on an
+  untrusted provider (`privacy-unshielded`) before a word is read, which the refusal and the chat's strip above the
+  composer both say; the owner can let a provider read one conversation as it is (the policy's `conversations`, read
+  by the turn's door and the gateway alike) instead of trusting it everywhere. A helper job's sealed request is read whole instead (`privacyShield.seal`): on such a
   runtime what its prompt holds is masked here and the answer's tokens restored, and a prompt holding nothing goes as
   it is. Children stay off runners, and a native push or a public
   share carries the kind of data instead of the data: a share's pictures are painted over with it, or left out where

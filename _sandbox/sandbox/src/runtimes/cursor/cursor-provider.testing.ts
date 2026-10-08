@@ -22,6 +22,7 @@ export const cursorSliceFake = () =>
             start: async () => {},
             register: () => () => {},
             ready: () => false,
+            covers: async () => false,
             paths: () => ({ socket: "", script: "", hooks: "" }),
             close: async () => {},
         },

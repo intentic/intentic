@@ -21,9 +21,10 @@ export const PERSONAL_DATA_CLASSES = [
 export const PersonalDataClassSchema = z.enum(PERSONAL_DATA_CLASSES);
 export type PersonalDataClass = z.infer<typeof PersonalDataClassSchema>;
 
-// off: nothing is routed or read. watch: every shieldable turn goes through the gateway, which reads and records what it
-// would have masked and sends everything unchanged. on: untrusted providers get tokens, and a turn that cannot be
-// shielded (a runtime the gateway cannot sit in front of) is refused unless its provider is trusted.
+// off: nothing is routed or read. watch: every shieldable turn is read on its way (the gateway, or a hooked runtime's
+// channels), which records what it would have masked and sends everything unchanged. on: untrusted providers get
+// tokens, and a turn that cannot be read by content at all (a runtime with no gateway and no hooks) is refused unless its
+// provider is trusted.
 export const PrivacyShieldModeSchema = z.enum(["off", "watch", "on"]);
 export type PrivacyShieldMode = z.infer<typeof PrivacyShieldModeSchema>;
 
@@ -103,7 +104,7 @@ export const DEFAULT_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySc
 export const PrivacyProviderSchema = z.object({
     id: z.string().describe("Provider id, as the trusted list names it."),
     label: z.string(),
-    shieldable: z.boolean().describe("Its runtime can be put behind the gateway; one that cannot is refused while the shield is on, unless trusted."),
+    shieldable: z.boolean().describe("The shield can read what its runtime sends by content (through the gateway or the runtime's hooks); one it cannot is refused while the shield is on, unless trusted."),
     local: z.boolean().describe("It runs on this machine, so it is trusted whatever the list says."),
 });
 export type PrivacyProvider = z.infer<typeof PrivacyProviderSchema>;

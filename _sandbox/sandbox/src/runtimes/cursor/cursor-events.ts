@@ -5,6 +5,7 @@ import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { diffContent, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
+import { unshieldedCommand } from "./cursor-hook-script.js";
 
 // Pure mapping of Cursor's InteractionUpdate onto AgentEvent frames; drops updates with no UI meaning instead of
 // passing them through. Reads only the delta stream (`send({ onDelta })`), the richer of two overlapping views of a
@@ -44,6 +45,10 @@ const nameOf = (call: ToolCall): string => {
 // targetDirectory. Kept here rather than widening the shared helper, which shouldn't accumulate every vendor's names.
 const targetOf = (call: ToolCall, cwd: string): string | undefined => {
     const args = call.args as Record<string, unknown>;
+    // A command the privacy shield wrapped is shown as the command the model asked for (cursor-hook-script.ts).
+    if (call.type === "shell" && typeof args["command"] === "string") {
+        return toolTarget({ ...args, command: unshieldedCommand(args["command"]) });
+    }
     const raw = args["path"] ?? args["targetDirectory"] ?? args["filePath"];
     if (typeof raw === "string" && raw !== "") {
         return workspacePath(raw, cwd) ?? raw;

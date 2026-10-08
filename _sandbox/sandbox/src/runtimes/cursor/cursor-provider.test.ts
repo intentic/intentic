@@ -1,3 +1,4 @@
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
@@ -42,6 +43,8 @@ const services = (overrides: Partial<Services> = {}): Services =>
             models: async () => ({ models: [{ id: "composer-2.5", label: "Composer 2.5" }], default: "composer-2.5" }),
         }),
         async *cursorAgent() {},
+        // Off, as on a fresh sandbox: a turn carries no shield.
+        privacyShield: privacySliceFake().privacyShield,
         ...overrides,
     });
 
@@ -109,6 +112,21 @@ test("the daemon's own tools and the workspace's mcp capabilities arrive togethe
 // Absent, not empty: an empty list would still read as "this turn has tools" to anything checking the field.
 test("a sandbox with nothing connected carries no tools field at all", async () => {
     expect((await planned([])).tools.remote).toBeUndefined();
+});
+
+// The privacy shield reads a Cursor turn channel by channel rather than refusing it: the request carries the turn's
+// shield while there is something to read for, and a policy that cannot be read refuses the turn rather than run it unread.
+test("a turn carries the privacy shield while it masks, none while it is off, and is refused when the policy can't be read", async () => {
+    expect((await planned([])).hooks.privacy).toBeUndefined();
+    const masking = await planned([], { privacyShield: privacySliceFake({ policy: { mode: "on" } }).privacyShield });
+    expect(masking.hooks.privacy?.conversationId).toBe("conv-1");
+    const unreadable = unstubbed<Services["privacyShield"]>("privacyShield", {
+        forTurn: async () => {
+            throw new Error("policy unreadable");
+        },
+    });
+    const plan = await planCursorTurn(services({ privacyShield: unreadable }), turn({ conversationId: "conv-1" }), context, []);
+    expect(plan).toMatchObject({ ok: false, code: "privacy-unshielded" });
 });
 
 // Cursor publishes no allowance, so which connection serves follows the refusals this sandbox has collected.

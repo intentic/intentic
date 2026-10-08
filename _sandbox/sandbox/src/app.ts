@@ -66,6 +66,7 @@ import {
     createRunnerTranslatorProxyRoute,
 } from "./runners/runner-credentials.routes.js";
 import { createGatewayRoute } from "./privacy/gateway/gateway-route.js";
+import { createMcpRoute } from "./privacy/gateway/mcp-route.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { createBrowserViewRoute } from "./browser/cast/browser-view.js";
 import { createDesktopViewRoute } from "./desktop/desktop-view.js";
@@ -533,6 +534,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve(
         "ALL /privacy/gateway/{session}/*",
         createGatewayRoute({ shield: services.privacyShield, warn: (message, error) => services.logger.warn({ err: error }, message) }),
+    );
+    // Its sibling for MCP: a hooked runtime's turn (Cursor) calls its MCP servers through here while the shield reads it,
+    // so what a server answers is masked before the model reads it, and tokens in what the model sends are read back.
+    serve(
+        "ALL /privacy/mcp/{session}",
+        createMcpRoute({ shield: services.privacyShield, warn: (message, error) => services.logger.warn({ err: error }, message) }),
     );
     // Control tokens: owner-minted, durable, revocable machine credentials.
     const controlTokens = createControlTokenRoutes(services);

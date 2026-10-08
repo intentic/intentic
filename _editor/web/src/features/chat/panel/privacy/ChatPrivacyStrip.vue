@@ -9,18 +9,21 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "../useChat-view";
 
-// The privacy shield's word on this conversation, above the composer: that its provider would be turned away before the
-// send rather than after it, with the narrow way through (this conversation only), and once that is granted a quiet line
-// that it is, which takes it back. Granting is the owner's alone, as every change to the policy is.
+// The privacy shield's word on this conversation, above the composer, only when a turn is known to be turned away: a
+// runtime it cannot read at all (said before the send rather than after it), or what it found when the last turn was
+// sent (privacyStanding.ts). With it the narrow way through (this conversation only), and once that is granted a quiet
+// line that it is, which takes it back. Granting is the owner's alone, as every change to the policy is.
 
 const t = useT();
 const { conversation, provider, capabilities, queuePaused, lastFailure, resumeQueue, streaming } = usePaneView();
 const { reachable, active } = useSandbox();
 const { status, updatePolicy, isSaving } = usePrivacyShield();
 
-const standing = computed(() => privacyStanding(status.value, provider.value, capabilities.value, conversation.value.conversationId));
+const standing = computed(() => privacyStanding(status.value, provider.value, capabilities.value, conversation.value.conversationId, lastFailure.value));
 const owner = computed(() => active.value?.role === `owner`);
 const failed = ref(false);
+// The refusals a grant answers: a runtime the shield cannot read, and what it found in one it can.
+const PRIVACY_REFUSALS: ReadonlySet<string> = new Set([`privacy-unshielded`, `privacy-instructions`]);
 
 const grant = async (on: boolean): Promise<void> => {
     const now = standing.value;
@@ -36,7 +39,7 @@ const grant = async (on: boolean): Promise<void> => {
         return;
     }
     // A message the refusal held goes now: letting the provider through is what the press was for.
-    if (on && queuePaused.value === `refused` && lastFailure.value?.code === `privacy-unshielded`) {
+    if (on && queuePaused.value === `refused` && PRIVACY_REFUSALS.has(lastFailure.value?.code ?? ``)) {
         await resumeQueue();
     }
 };
@@ -45,8 +48,9 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
 </script>
 
 <template>
-    <Notice v-if="standing?.kind === `refused`" tone="warning" icon="shield" size="sm">
-        {{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}
+    <Notice v-if="standing?.kind === `refused` || standing?.kind === `found`" tone="warning" icon="shield" size="sm">
+        <template v-if="standing.kind === `refused`">{{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}</template>
+        <template v-else>{{ standing.reason ?? t(`chat.chatPaneNotices.privacyFound`, { provider: standing.label }) }}</template>
         <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
         <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
         <template #actions>

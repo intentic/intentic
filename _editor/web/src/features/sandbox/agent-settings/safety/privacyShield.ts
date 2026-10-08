@@ -314,10 +314,10 @@ export const providerMark = (id: string, local: boolean): ProviderMark => {
     return { glyph: isEndpointProvider(id) ? `server` : `sparkles` };
 };
 
-// What a provider is sent under the policy in force, the one fact its row has to make plain: tokens; the values while
-// the shield only watches; the values as they are (trusted, or a runtime the gateway can't cover while it only
-// watches); nothing, since a runtime the gateway can't cover does not run untrusted while it masks; or nothing that
-// leaves, for a model on this machine.
+// What a provider is sent under the policy in force, the one fact its row has to make plain: tokens (through the
+// gateway, or a hooked runtime's channels); the values while the shield only watches; the values as they are (trusted,
+// or a runtime the shield can't read while it only watches); nothing, since a runtime the shield can't read at all
+// does not run untrusted while it masks; or nothing that leaves, for a model on this machine.
 export type ProviderReceives = `tokens` | `watched` | `values` | `refused` | `local`;
 
 export const providerReceives = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): ProviderReceives => {

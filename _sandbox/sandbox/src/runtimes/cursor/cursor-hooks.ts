@@ -1,20 +1,42 @@
 import { createServer, type Server } from "node:http";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
+import { GATE_SCRIPT_NAME, gateScript, hooksJson, shieldedCommand, unshieldedCommand } from "./cursor-hook-script.js";
 
-// Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, and the owner's standing
-// instructions folded onto Cursor's base prompt via beforeSubmitPrompt: the hook is a process this daemon wrote, so it
+// Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, the owner's standing
+// instructions folded onto Cursor's base prompt via beforeSubmitPrompt, and the privacy shield's hand on every file read,
+// tool call and edited file (preToolUse, beforeReadFile, afterFileEdit): the hook is a process this daemon wrote, so it
 // can hold the answer while a card waits on a person, unlike a clocked vendor approval channel.
 // Lives at /etc/cursor/hooks.json, the enterprise layer, not ~/.cursor or the workspace's own.
 
 // Fixed by Cursor, not configurable; the one location no workspace or user can move. The env override is test-only: it
 // points the suite at a temp dir instead of writing a real machine-global file.
 const enterpriseHooksPath = (): string => process.env["INTENTIC_CURSOR_HOOKS_FILE"] ?? "/etc/cursor/hooks.json";
-const GATE_SCRIPT_NAME = "intentic-command-guard.mjs";
+
+// The privacy shield's side of one turn's hooks (cursor-shield.ts builds it), present while the shield reads the turn.
+// Absent, every hook it answers lets the call through untouched.
+export interface CursorHookShield {
+    // A file Cursor's model opens with its own read tool, which can be refused but not changed: the sentence that
+    // refuses it, or undefined to let it through. `image` is the picture's bytes, read where the path means what Cursor
+    // meant; empty when it was too large to read.
+    readonly read: (file: { readonly path: string; readonly content: string | undefined; readonly image: Buffer | undefined }) => Promise<string | undefined>;
+    // A tool call before it runs: refused with a sentence, run with its input changed (tokens read back to their
+    // values), or run as it is. A shell command's wrapping is the service's, which alone knows the script it runs.
+    readonly tool: (call: {
+        readonly tool: string;
+        readonly input: Record<string, unknown>;
+        // What a whole-file write would replace, read where its path means what Cursor meant.
+        readonly existing: string | undefined;
+    }) => Promise<{ readonly refuse: string } | { readonly input: Record<string, unknown> | undefined }>;
+    // What a shielded command printed, as the model may read it. Throws when it cannot be masked.
+    readonly shellOutput: (output: string) => Promise<string>;
+    // An edited file with the tokens in its new lines read back, or undefined when there is nothing to change.
+    readonly edited: (content: string, edits: readonly { readonly old_string: string; readonly new_string: string }[]) => string | undefined;
+}
 
 // One live turn's hook context, registered for as long as the turn runs and looked up by the payload's id. `push` is
 // this turn's own event sink, so a permission card lands in the right conversation.
@@ -29,6 +51,7 @@ export interface CursorGateTurn {
     readonly systemAppend?: string;
     readonly gate: CommandGuard;
     readonly push: (event: AgentEvent) => void;
+    readonly shield?: CursorHookShield;
 }
 
 export interface CursorHookService {
@@ -39,80 +62,15 @@ export interface CursorHookService {
     readonly register: (turn: CursorGateTurn) => () => void;
     // Whether the gate is actually wired, so a turn can report honestly whether its rules are enforced.
     readonly ready: () => boolean;
+    // Whether the hooks file in force names this daemon's script for every hook the privacy shield reads a turn
+    // through (preToolUse, beforeReadFile, afterFileEdit). Read from disk each time: another daemon, or an older build,
+    // can rewrite the file after boot, and a turn the shield reads must not start on hooks that let its reads past.
+    readonly covers: () => Promise<boolean>;
     // The socket, the script naming it, and the hooks file naming the script: the three links invariant.ts re-reads,
     // since another daemon can overwrite any of them after ready.
     readonly paths: () => { readonly socket: string; readonly script: string; readonly hooks: string };
     readonly close: () => Promise<void>;
 }
-
-// Node, not a shell script: it speaks HTTP over a Unix socket, and node, unlike curl, is guaranteed to be in the image.
-// Every failure path answers the harmless verdict silently, since an unregistered call is usually the owner's own
-// manual run: no environment, no added context, and an allowed command.
-const gateScript = (socketPath: string): string =>
-    [
-        `// managed by intentic: overwritten on daemon boot (src/cursor/cursor-hooks.ts).`,
-        `// Asks the daemon for the current turn's environment, its standing instructions, or a command-guard verdict.`,
-        `import { request } from "node:http";`,
-        ``,
-        `const MODES = {`,
-        `    "session-env": { path: "/session-env", fallback: {} },`,
-        `    prompt: { path: "/prompt", fallback: { continue: true } },`,
-        `    gate: { path: "/gate", fallback: { permission: "allow" } },`,
-        `};`,
-        `const mode = MODES[process.argv[2]] ?? MODES.gate;`,
-        `const fallback = () => {`,
-        `    process.stdout.write(JSON.stringify(mode.fallback));`,
-        `    process.exit(0);`,
-        `};`,
-        `const chunks = [];`,
-        `process.stdin.on("data", (chunk) => chunks.push(chunk));`,
-        `process.stdin.on("error", fallback);`,
-        `process.stdin.on("end", () => {`,
-        `    const body = Buffer.concat(chunks);`,
-        `    if (body.length === 0) { fallback(); return; }`,
-        `    const call = request(`,
-        `        {`,
-        `            socketPath: ${JSON.stringify(socketPath)},`,
-        `            path: mode.path,`,
-        `            method: "POST",`,
-        `            headers: { "content-type": "application/json" },`,
-        `        },`,
-        `        (response) => {`,
-        `            const parts = [];`,
-        `            response.on("data", (part) => parts.push(part));`,
-        `            response.on("error", fallback);`,
-        `            response.on("end", () => {`,
-        `                const text = Buffer.concat(parts).toString("utf8");`,
-        `                // Anything but a well-formed answer is treated as no answer at all.`,
-        `                try { JSON.parse(text); } catch { fallback(); return; }`,
-        `                process.stdout.write(text);`,
-        `                process.exit(0);`,
-        `            });`,
-        `        },`,
-        `    );`,
-        `    call.on("error", fallback);`,
-        `    call.end(body);`,
-        `});`,
-        ``,
-    ].join("\n");
-
-// sessionStart projects the turn's env; beforeSubmitPrompt folds the daemon's instructions onto Cursor's base;
-// beforeShellExecution enforces the rulebook. Only the rulebook fails closed: a turn without its environment or its
-// standing instructions is degraded, while a command that outran its rules is the thing this gate exists to stop.
-// afterShellExecution is skipped, its return value is discarded upstream, which is why the secrets axis reads "none".
-const hooksJson = (scriptPath: string): string =>
-    `${JSON.stringify(
-        {
-            version: 1,
-            hooks: {
-                sessionStart: [{ command: `node ${JSON.stringify(scriptPath)} session-env`, failClosed: false }],
-                beforeSubmitPrompt: [{ command: `node ${JSON.stringify(scriptPath)} prompt`, failClosed: false }],
-                beforeShellExecution: [{ command: `node ${JSON.stringify(scriptPath)} gate`, failClosed: true }],
-            },
-        },
-        undefined,
-        4,
-    )}\n`;
 
 // Only the three fields this reads are named; the payload carries more (model, generation_id, workspace roots) and none
 // of it changes the verdict.
@@ -127,7 +85,45 @@ interface TurnScopedRequest {
     readonly conversation_id?: unknown;
 }
 
+// The privacy shield's hooks, each with what the script adds from its side of a mount namespace.
+interface ReadRequest extends TurnScopedRequest {
+    readonly file_path?: unknown;
+    readonly content?: unknown;
+    readonly image_base64?: unknown;
+}
+interface ToolRequest extends TurnScopedRequest {
+    readonly tool_name?: unknown;
+    readonly tool_input?: unknown;
+    readonly existing_content?: unknown;
+}
+interface ShellOutputRequest extends TurnScopedRequest {
+    readonly output?: unknown;
+}
+interface EditedRequest extends TurnScopedRequest {
+    readonly content?: unknown;
+    readonly edits?: unknown;
+}
+
+// Said to the model in place of a shielded command's output when its turn is gone: it ran past the turn that started it.
+const SHELL_OUTPUT_ORPHANED = "[Output withheld by the privacy shield: the turn that ran this command has ended.]\n";
+const SHELL_OUTPUT_FAILED = "[Output withheld: the privacy shield could not mask it.]\n";
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const editsOf = (value: unknown): { old_string: string; new_string: string }[] =>
+    Array.isArray(value)
+        ? value.flatMap((edit) =>
+              isRecord(edit) && typeof edit["new_string"] === "string"
+                  ? [{ old_string: typeof edit["old_string"] === "string" ? edit["old_string"] : "", new_string: edit["new_string"] }]
+                  : [],
+          )
+        : [];
+
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+
+// The hooks the privacy shield reads a Cursor turn through; each must name this daemon's script for a shielded turn to run.
+const SHIELD_HOOKS = ["preToolUse", "beforeReadFile", "afterFileEdit"] as const;
+
+const ENDPOINTS: ReadonlySet<string> = new Set(["/gate", "/session-env", "/prompt", "/read", "/pre-tool", "/shell-output", "/edited"]);
 
 export const createCursorHookService = (socketDir: string, logger: Logger): CursorHookService => {
     const socketPath = join(socketDir, "command-guard.sock");
@@ -155,7 +151,9 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
     };
 
     const verdictFor = async (payload: GateRequest): Promise<{ permission: "allow" | "deny"; agent_message?: string; user_message?: string }> => {
-        const command = asString(payload.command);
+        // preToolUse runs first and may have wrapped the command for the shield: the rules read what the model asked for.
+        const raw = asString(payload.command);
+        const command = raw === undefined ? undefined : unshieldedCommand(raw);
         const turn = turnFor(asString(payload.conversation_id));
         if (command === undefined || turn === undefined) {
             return { permission: "allow" };
@@ -196,6 +194,73 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         return append === undefined || append === "" ? { continue: true } : { continue: true, additional_context: append };
     };
 
+    // The turn a shield hook speaks for, found as the gate finds its turn, since a privacy check that names the wrong
+    // turn errs toward checking. With several turns live and none named, any one the shield reads stands in, so a call
+    // nothing can place is checked rather than waved through; `key` is the turn's own id, for the shell wrapper.
+    const shieldedTurnFor = (conversationId: string | undefined): { key: string; shield: CursorHookShield } | undefined => {
+        const turn = turnFor(conversationId);
+        if (turn !== undefined) {
+            return turn.shield === undefined ? undefined : { key: turn.conversationId, shield: turn.shield };
+        }
+        const any = [...turns.values()].find((each) => each.shield !== undefined);
+        return any?.shield === undefined ? undefined : { key: any.conversationId, shield: any.shield };
+    };
+
+    const readVerdictFor = async (payload: ReadRequest): Promise<{ permission: "allow" | "deny"; user_message?: string }> => {
+        const turn = shieldedTurnFor(asString(payload.conversation_id));
+        const path = asString(payload.file_path);
+        if (turn === undefined || path === undefined) {
+            return { permission: "allow" };
+        }
+        const image = typeof payload.image_base64 === "string" ? Buffer.from(payload.image_base64, "base64") : undefined;
+        const refusal = await turn.shield.read({ path, content: typeof payload.content === "string" ? payload.content : undefined, image });
+        return refusal === undefined ? { permission: "allow" } : { permission: "deny", user_message: refusal };
+    };
+
+    // A tool call on its way: refused, changed, or left alone; a shell command the shield reads is wrapped so the
+    // script runs it and its output is masked before Cursor reads it.
+    const toolVerdictFor = async (payload: ToolRequest): Promise<Record<string, unknown>> => {
+        const turn = shieldedTurnFor(asString(payload.conversation_id));
+        const tool = asString(payload.tool_name);
+        if (turn === undefined || tool === undefined || !isRecord(payload.tool_input)) {
+            return {};
+        }
+        const verdict = await turn.shield.tool({
+            tool,
+            input: payload.tool_input,
+            existing: typeof payload.existing_content === "string" ? payload.existing_content : undefined,
+        });
+        if ("refuse" in verdict) {
+            return { permission: "deny", user_message: verdict.refuse, agent_message: verdict.refuse };
+        }
+        const input = verdict.input ?? payload.tool_input;
+        const command = input["command"];
+        if (tool === "Shell" && typeof command === "string" && command !== "") {
+            return { updated_input: { ...input, command: shieldedCommand(scriptPath, turn.key, unshieldedCommand(command)) } };
+        }
+        return verdict.input === undefined ? {} : { updated_input: verdict.input };
+    };
+
+    // Exact id only: the wrapper names the turn it was made for, and output that outlived its turn is withheld.
+    const shellOutputFor = async (payload: ShellOutputRequest): Promise<{ output: string }> => {
+        const conversationId = asString(payload.conversation_id);
+        const output = typeof payload.output === "string" ? payload.output : "";
+        const shield = conversationId === undefined ? undefined : turns.get(conversationId)?.shield;
+        if (shield === undefined) {
+            return { output: SHELL_OUTPUT_ORPHANED };
+        }
+        return { output: await shield.shellOutput(output) };
+    };
+
+    const editedFor = (payload: EditedRequest): { content?: string } => {
+        const turn = shieldedTurnFor(asString(payload.conversation_id));
+        if (turn === undefined || typeof payload.content !== "string") {
+            return {};
+        }
+        const restored = turn.shield.edited(payload.content, editsOf(payload.edits));
+        return restored === undefined ? {} : { content: restored };
+    };
+
     return {
         start: async () => {
             if (server !== undefined) {
@@ -211,7 +276,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                     return;
                 }
                 const endpoint = request.method === "POST" ? request.url : undefined;
-                if (endpoint !== "/gate" && endpoint !== "/session-env" && endpoint !== "/prompt") {
+                if (endpoint === undefined || !ENDPOINTS.has(endpoint)) {
                     response.writeHead(405).end();
                     return;
                 }
@@ -227,7 +292,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                             payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as GateRequest | TurnScopedRequest;
                         } catch {
                             // The same harmless verdict the script writes when it can't reach this socket at all.
-                            answer(endpoint === "/gate" ? { permission: "allow" } : endpoint === "/prompt" ? { continue: true } : {});
+                            answer(endpoint === "/gate" || endpoint === "/read" ? { permission: "allow" } : endpoint === "/prompt" ? { continue: true } : {});
                             return;
                         }
                         if (endpoint === "/session-env") {
@@ -236,6 +301,40 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                         }
                         if (endpoint === "/prompt") {
                             answer(instructionsFor(payload as TurnScopedRequest));
+                            return;
+                        }
+                        // The shield's own: each fails closed when the shield itself fails, since a read or an output
+                        // that could not be checked is exactly what must not reach the model.
+                        if (endpoint === "/read") {
+                            answer(
+                                await readVerdictFor(payload as ReadRequest).catch((error: unknown) => {
+                                    logger.error({ err: error }, "cursor: the privacy shield could not check a file read, refusing it");
+                                    return { permission: "deny" as const, user_message: `The privacy shield could not check this file (${errorMessage(error)}), so it was not read.` };
+                                }),
+                            );
+                            return;
+                        }
+                        if (endpoint === "/pre-tool") {
+                            answer(
+                                await toolVerdictFor(payload as ToolRequest).catch((error: unknown) => {
+                                    logger.error({ err: error }, "cursor: the privacy shield could not check a tool call, refusing it");
+                                    const reason = `The privacy shield could not check this tool call (${errorMessage(error)}), so it did not run.`;
+                                    return { permission: "deny", user_message: reason, agent_message: reason };
+                                }),
+                            );
+                            return;
+                        }
+                        if (endpoint === "/shell-output") {
+                            answer(
+                                await shellOutputFor(payload as ShellOutputRequest).catch((error: unknown) => {
+                                    logger.error({ err: error }, "cursor: the privacy shield could not mask a command's output, withholding it");
+                                    return { output: SHELL_OUTPUT_FAILED };
+                                }),
+                            );
+                            return;
+                        }
+                        if (endpoint === "/edited") {
+                            answer(editedFor(payload as EditedRequest));
                             return;
                         }
                         // A gate that failed refuses at once, as the hook's failClosed does for a script that never answered.
@@ -277,6 +376,17 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             };
         },
         ready: () => server !== undefined,
+        covers: async () => {
+            if (server === undefined) {
+                return false;
+            }
+            try {
+                const installed = JSON.parse(await readFile(enterpriseHooksPath(), "utf8")) as { hooks?: Record<string, { command?: unknown }[] | undefined> };
+                return SHIELD_HOOKS.every((hook) => (installed.hooks?.[hook] ?? []).some((entry) => typeof entry.command === "string" && entry.command.includes(scriptPath)));
+            } catch {
+                return false;
+            }
+        },
         paths: () => ({ socket: socketPath, script: scriptPath, hooks: enterpriseHooksPath() }),
         close: async () => {
             const running = server;

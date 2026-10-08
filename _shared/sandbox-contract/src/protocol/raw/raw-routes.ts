@@ -182,6 +182,9 @@ export const RAW_ROUTES = {
     // (privacy/gateway/session-token.ts), which names the provider and the only upstream it may forward to. Held open
     // while a model streams its answer.
     "ALL /privacy/gateway/{session}/*": { auth: "door", control: "never", stream: true },
+    // Its sibling for MCP: a hooked runtime's (Cursor's) calls to its turn's MCP servers, on a session signed the same
+    // way, naming the provider and the one server it may forward to. Held open while a server streams its answer.
+    "ALL /privacy/mcp/{session}": { auth: "door", control: "never", stream: true },
     "POST /system/control/tokens": { control: "never" },
     "GET /system/control/tokens": { control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },

@@ -91,11 +91,13 @@ export class TurnFailures {
                 return;
             // Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a
             // turn too big for the model (or a model that can only write one-shot jobs, or one the privacy shield cannot
-            // cover) until another is picked, low memory until the person says go ahead.
+            // cover, or one whose own rules hold personal data) until another is picked or it is let through, low memory
+            // until the person says go ahead. The privacy strip says why above the composer.
             case `unknown-command`:
             case `context-window-too-small`:
             case `model-helper-only`:
             case `privacy-unshielded`:
+            case `privacy-instructions`:
             case `sandbox-memory-low`:
                 return;
             case `session-not-found`:

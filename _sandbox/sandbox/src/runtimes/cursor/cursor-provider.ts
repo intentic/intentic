@@ -64,7 +64,7 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 // What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
 // and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = TurnToolsDeps &
-    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "observedLimits" | "workspace">;
+    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "observedLimits" | "privacyShield" | "workspace">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
 // daemon-wide, unlike Codex's or OpenCode's processes.
@@ -108,6 +108,15 @@ export const planCursorTurn = async (
         extensions: persona.powers.extensions,
     });
     const tools = mounted.tools;
+    // The privacy shield reads this turn channel by channel (cursor-shield.ts); undefined when there is nothing to read
+    // for. A policy that cannot be read refuses the turn, as the gateway refuses a request it cannot read the policy for.
+    let privacy: Awaited<ReturnType<typeof services.privacyShield.forTurn>>;
+    try {
+        privacy = await services.privacyShield.forTurn(input.agent ?? "cursor", "native", input.conversationId);
+    } catch (error) {
+        mounted.release();
+        return { ok: false, code: "privacy-unshielded", message: `The privacy shield's policy could not be read, so this turn was not sent. ${error instanceof Error ? error.message : ""}`.trim() };
+    }
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
@@ -117,6 +126,7 @@ export const planCursorTurn = async (
             ...context.base.hooks,
             // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
             ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
+            ...opt("privacy", privacy),
         },
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold

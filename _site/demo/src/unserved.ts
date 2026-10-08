@@ -118,6 +118,7 @@ export const UNSERVED = {
     "POST /system/runners/credentials/refresh": NOT_THE_EDITORS,
     "ALL /system/runners/translator/*": NOT_THE_EDITORS,
     "ALL /privacy/gateway/{session}/*": NOT_THE_EDITORS,
+    "ALL /privacy/mcp/{session}": NOT_THE_EDITORS,
     "POST /system/authorized-key": NOT_THE_EDITORS,
     "POST /system/sync/report": NOT_THE_EDITORS,
     "DELETE /system/authorized-key": NOT_THE_EDITORS,

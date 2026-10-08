@@ -208,7 +208,7 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   shield's log showed list items, tool descriptions and sentence openings masked across ordinary text. An ordinary word
   is one on the hand-written lists or in [`common-words.ts`](../../_sandbox/sandbox/src/privacy/detect/data/common-words.ts):
   the names the Leipzig corpora of 33 languages write in lowercase, rebuilt by `generate-common-words.mjs` beside it.
-- A runtime it cannot stand in front of (Cursor's own wire, an ACP agent, Pi, Codex on the container's own key) is
+- A runtime it cannot read at all (an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a
   runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data; a share's
@@ -225,6 +225,25 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   first tool result carrying personal data (Cursor's `postToolUse` hook is awaited before a result goes back) was
   considered and not built: unproven against Cursor's own wire, and a conversation about sessions would have tripped it
   anyway.
+- (2026-10-08) Cursor is no longer refused by its runtime: the shield reads it by content, channel by channel, through
+  the hooks the daemon already owns (`privacy: "hooks"` in
+  [`agent-runtimes.ts`](../../_shared/sandbox-contract/src/models/agent-runtimes.ts);
+  [`cursor-shield.ts`](../../_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts)). The prompt, steering and the
+  instructions the daemon hands over are masked before they are sent; Cursor's `beforeReadFile` hook refuses a file
+  that holds personal data (a read can be refused, not changed) and points the model at the shell; `preToolUse` reads
+  tokens in every tool input back to their values and rewrites each shell command to run through the hook script,
+  which hands its output to the daemon to mask a stretch at a time
+  ([`cursor-hook-script.ts`](../../_sandbox/sandbox/src/runtimes/cursor/cursor-hook-script.ts)); the built-in tools
+  that read past both (grep, glob, ls, semantic search, fetch, lints) are withheld; a whole-file write over a file
+  holding personal data is refused, since its result would echo the lines it replaced; `afterFileEdit` reads tokens in
+  an edit's new lines back; every MCP server is reached through a masking proxy,
+  `ALL /privacy/mcp/<session>` ([`mcp-route.ts`](../../_sandbox/sandbox/src/privacy/gateway/mcp-route.ts)); and the
+  transcript shows Cursor's tokens restored. The one thing it can only refuse is what Cursor loads itself (AGENTS.md,
+  `.cursor/rules`): read before the turn, a finding there refuses it (`privacy-instructions`), naming the files, and
+  only then does the strip above the composer speak for Cursor. Both sealed requests and these channels go through one
+  reader (`privacyShield` `seal` and `forTurn`). The strip had warned before a word was written that Cursor would be
+  turned away, which made the shield read as a gate on a provider rather than a guard on data; the reading the
+  2026-10-02 note set aside became buildable once the hooks proved to cover reads, commands and edits.
 - (2026-10-07) A helper job (a title, a commit subject, a verdict) is a sealed request: the turn's own arm and loop with
   `policy.sealed`, no tool, no session, nothing read past its prompt
   ([`sealed-request.ts`](../../_sandbox/sandbox/src/agent/run/sealed/sealed-request.ts)). The shield reads it whole

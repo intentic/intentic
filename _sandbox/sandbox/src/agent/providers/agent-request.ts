@@ -18,6 +18,7 @@ import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { MountedPlugin } from "../../guard/settings-hooks.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
+import type { TurnShield } from "../../privacy/privacy-shield.js";
 import type { HeavyCommands } from "../../workload/heavy-commands.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
@@ -265,6 +266,10 @@ export interface TurnHooks {
     readonly children?: ChildSupervisor;
     // Where a `run_in_background` job's completion is delivered once this turn is gone; absent, it dies with the turn.
     readonly backgroundJobs?: BackgroundJobSeed;
+    // The privacy shield reading this turn channel by channel, on a runtime the gateway can't stand in front of but
+    // whose every channel passes the daemon (privacy `hooks`: Cursor). Absent: nothing to read for (the shield off, the
+    // provider trusted here) or the gateway covers the runtime.
+    readonly privacy?: TurnShield;
 }
 
 export interface AgentRequest<C extends TurnCredential = TurnCredential> {

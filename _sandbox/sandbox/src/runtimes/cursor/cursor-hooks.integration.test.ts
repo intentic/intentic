@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
-import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
+import { createCursorHookService, type CursorHookService, type CursorHookShield } from "./cursor-hooks.js";
+import { shieldedCommand, unshieldedCommand } from "./cursor-hook-script.js";
 
 // Cursor's turn hooks end to end: the generated script runs as a real child process, not a stub. Cursor itself reading
 // /etc/cursor/hooks.json is the one part no test here can drive; the file's content is pinned instead.
@@ -36,7 +37,7 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
 };
 
 // Runs the generated script as Cursor would: a child process, payload on stdin, answer on stdout.
-const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt", payload: unknown): Promise<unknown> => {
+const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt" | "pre-tool" | "read", payload: unknown): Promise<unknown> => {
     const child = execFile("node", [join(dir, "intentic-command-guard.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
     const stdout = await new Promise<string>((settle) => {
@@ -258,7 +259,7 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     const installed = readFileSync(hooksFile, "utf8").trim();
     const parsed = JSON.parse(installed) as { version: number; hooks: Record<string, { command: string; failClosed?: boolean }[]> };
     expect(parsed.version).toBe(1);
-    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeSubmitPrompt", "beforeShellExecution"]);
+    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeSubmitPrompt", "beforeShellExecution", "preToolUse", "beforeReadFile", "afterFileEdit"]);
     expect(parsed.hooks["sessionStart"]?.[0]?.failClosed).toBe(false);
     expect(parsed.hooks["sessionStart"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} session-env`);
     expect(parsed.hooks["beforeSubmitPrompt"]?.[0]?.failClosed).toBe(false);
@@ -267,6 +268,23 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     // to stop, while a turn missing its environment or its instructions is merely degraded.
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.failClosed).toBe(true);
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} gate`);
+    // The privacy shield's two gates fail closed too: a tool call or a file read nobody checked is what they stop.
+    expect(parsed.hooks["preToolUse"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} pre-tool`, failClosed: true });
+    expect(parsed.hooks["beforeReadFile"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} read`, failClosed: true });
+    expect(parsed.hooks["afterFileEdit"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} edited`, failClosed: false });
+});
+
+// A shielded turn runs only on a hooks file that names this daemon's script for every hook the shield reads through:
+// an older build's file, or another daemon's, would let its reads and its commands' output past.
+test("the hooks file covers the privacy shield only while it names this daemon's script for each of its hooks", async () => {
+    const { service: hooks, dir } = await started();
+    expect(await hooks.covers()).toBe(true);
+    const script = join(dir, "intentic-command-guard.mjs");
+    writeFileSync(hooksFile, JSON.stringify({ version: 1, hooks: { beforeShellExecution: [{ command: `node ${JSON.stringify(script)} gate` }] } }));
+    expect(await hooks.covers()).toBe(false);
+    await hooks.close();
+    service = undefined;
+    expect(await hooks.covers()).toBe(false);
 });
 
 test("restarting over a socket a dead daemon left behind still binds", async () => {
@@ -288,4 +306,171 @@ test("retiring an older registration preserves the replacement turn's gate", asy
     });
     retireReplacement();
     expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({ permission: "allow" });
+});
+
+// THE PRIVACY SHIELD'S HOOKS, end to end through the generated script: a stand-in shield that finds a fixed word, so
+// what is tested is the wiring (what reaches the shield, what Cursor is answered), not the detectors.
+const SECRET = "SECRET-VALUE";
+const TOKEN = "\u27e6NATIONAL_ID_1\u27e7";
+const standInShield = (calls: string[] = []): CursorHookShield => ({
+    read: async ({ path, content, image }) => {
+        calls.push(`read ${path} ${image === undefined ? "text" : `image:${image.length}`}`);
+        return content?.includes(SECRET) === true ? `${path} holds personal data.` : undefined;
+    },
+    tool: async ({ tool, input, existing }) => {
+        calls.push(`tool ${tool}${existing === undefined ? "" : " existing"}`);
+        if (tool === "Grep") {
+            return { refuse: "Grep is off." };
+        }
+        const restored = JSON.parse(JSON.stringify(input).replaceAll(TOKEN, SECRET)) as Record<string, unknown>;
+        return { input: JSON.stringify(restored) === JSON.stringify(input) ? undefined : restored };
+    },
+    shellOutput: async (output) => output.replaceAll(SECRET, TOKEN),
+    edited: (content) => (content.includes(TOKEN) ? content.replaceAll(TOKEN, SECRET) : undefined),
+});
+
+// Runs a hook mode with no JSON answer expected (edited) or a raw command line (a wrapped shell command), as Cursor would.
+const runScript = async (args: readonly string[], stdin?: string): Promise<{ stdout: string; code: number | null }> => {
+    const child = execFile("node", args);
+    child.stdin?.end(stdin ?? "");
+    return new Promise((settle) => {
+        let stdout = "";
+        child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+        child.on("close", (code) => settle({ stdout, code }));
+    });
+};
+
+describe("the privacy shield's hooks", () => {
+    test("a turn the shield does not read lets every read and tool call through untouched", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
+        expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: "/work/a.txt", content: SECRET })).toEqual({ permission: "allow" });
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Shell", tool_input: { command: "ls" } })).toEqual({});
+    });
+
+    test("a file holding personal data is refused with the shield's sentence; a clean one goes", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: "/work/a.txt", content: `id: ${SECRET}` })).toEqual({
+            permission: "deny",
+            user_message: "/work/a.txt holds personal data.",
+        });
+        expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: "/work/b.txt", content: "clean" })).toEqual({ permission: "allow" });
+    });
+
+    test("a picture is read by the script, where its path means what Cursor meant, and handed to the shield", async () => {
+        const { service: hooks, dir } = await started();
+        const calls: string[] = [];
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield(calls) });
+        const picture = join(dir, "scan.png");
+        writeFileSync(picture, Buffer.from([1, 2, 3, 4]));
+        expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: picture, content: "" })).toEqual({ permission: "allow" });
+        expect(calls).toEqual([`read ${picture} image:4`]);
+    });
+
+    test("a refused tool is denied in both messages, and a tool's input comes back with its tokens read back", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Grep", tool_input: { pattern: "x" } })).toEqual({
+            permission: "deny",
+            user_message: "Grep is off.",
+            agent_message: "Grep is off.",
+        });
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Read", tool_input: { file_path: `/work/${TOKEN}.txt` } })).toEqual({
+            updated_input: { file_path: `/work/${SECRET}.txt` },
+        });
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Read", tool_input: { file_path: "/work/a.txt" } })).toEqual({});
+    });
+
+    test("a whole-file write carries what it would replace, read by the script", async () => {
+        const { service: hooks, dir } = await started();
+        const calls: string[] = [];
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield(calls) });
+        const target = join(dir, "notes.txt");
+        writeFileSync(target, "old text");
+        await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Write", tool_input: { file_path: target, content: "new" } });
+        await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Write", tool_input: { file_path: join(dir, "fresh.txt"), content: "new" } });
+        expect(calls).toEqual(["tool Write existing", "tool Write"]);
+    });
+
+    test("a shell command is wrapped to run through the script, whose output reaches Cursor masked, with the command's own exit code", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        const answer = (await askHook(dir, "pre-tool", {
+            conversation_id: "agent-1",
+            tool_name: "Shell",
+            tool_input: { command: `echo "id ${TOKEN}"; echo oops >&2; exit 3`, cwd: dir },
+        })) as { updated_input: { command: string; cwd: string } };
+        expect(answer.updated_input.cwd).toBe(dir);
+        const wrapped = answer.updated_input.command;
+        expect(wrapped).not.toContain(SECRET);
+        expect(unshieldedCommand(wrapped)).toBe(`echo "id ${SECRET}"; echo oops >&2; exit 3`);
+        // Run as Cursor's shell would run it: the real value goes into the command, its echo comes back as the token,
+        // stderr folded in where it was printed.
+        const run = await new Promise<{ stdout: string; code: number | null }>((settle) => {
+            const child = execFile("/bin/sh", ["-c", wrapped]);
+            let stdout = "";
+            child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+            child.on("close", (code) => settle({ stdout, code }));
+        });
+        expect(run.stdout).toBe(`id ${TOKEN}\noops\n`);
+        expect(run.code).toBe(3);
+    });
+
+    test("the command gate reads what the model asked for, not the shield's wrapper", async () => {
+        const { service: hooks, dir } = await started();
+        const consulted: string[] = [];
+        const recording: CommandGuard = {
+            enforcing: true,
+            // eslint-disable-next-line require-yield
+            async *consult(command) {
+                consulted.push(command);
+                return { allow: true };
+            },
+        };
+        hooks.register({ conversationId: "agent-1", gate: recording, push: () => {}, shield: standInShield() });
+        const wrapped = shieldedCommand(join(dir, "intentic-command-guard.mjs"), "agent-1", "rm -rf build");
+        await askGate(dir, { command: wrapped, conversation_id: "agent-1", cwd: "/work" });
+        expect(consulted).toEqual(["rm -rf build"]);
+    });
+
+    test("output that outlives its turn is withheld, and a daemon that is gone withholds the rest", async () => {
+        const { service: hooks, dir } = await started();
+        const script = join(dir, "intentic-command-guard.mjs");
+        const orphaned = await runScript([script, "shield", "agent-gone", Buffer.from(`echo ${SECRET}`).toString("base64")]);
+        expect(orphaned.stdout).toContain("the turn that ran this command has ended");
+        expect(orphaned.stdout).not.toContain(SECRET);
+        await hooks.close();
+        service = undefined;
+        const unreachable = await runScript([script, "shield", "agent-1", Buffer.from(`echo ${SECRET}; exit 4`).toString("base64")]);
+        expect(unreachable.stdout).toContain("withheld");
+        expect(unreachable.stdout).not.toContain(SECRET);
+        expect(unreachable.code).toBe(4);
+    });
+
+    test("an edit whose new lines carry tokens is written back with their values, and nothing is answered", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        const file = join(dir, "client.md");
+        writeFileSync(file, `Client: ${TOKEN}\n`);
+        const out = await runScript(
+            [join(dir, "intentic-command-guard.mjs"), "edited"],
+            JSON.stringify({ conversation_id: "agent-1", file_path: file, edits: [{ old_string: "", new_string: `Client: ${TOKEN}` }] }),
+        );
+        expect(out.stdout).toBe("");
+        expect(readFileSync(file, "utf8")).toBe(`Client: ${SECRET}\n`);
+        // An edit with no token never reaches the daemon at all.
+        writeFileSync(file, "plain\n");
+        const plain = await runScript([join(dir, "intentic-command-guard.mjs"), "edited"], JSON.stringify({ conversation_id: "agent-1", file_path: file, edits: [{ old_string: "", new_string: "plain" }] }));
+        expect(plain.stdout).toBe("");
+        expect(readFileSync(file, "utf8")).toBe("plain\n");
+    });
+
+    test("a script that cannot reach the daemon lets reads and tool calls through, as for the owner's own run", async () => {
+        const { service: hooks, dir } = await started();
+        await hooks.close();
+        service = undefined;
+        expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: "/x", content: SECRET })).toEqual({ permission: "allow" });
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Shell", tool_input: { command: "ls" } })).toEqual({});
+    });
 });

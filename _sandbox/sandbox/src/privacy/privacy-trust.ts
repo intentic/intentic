@@ -55,8 +55,12 @@ export const isTrustedProvider = (
     conversationId?: string,
 ): boolean => isLocalProvider(provider, capabilities) || policy.trusted.includes(provider) || trustedInConversation(policy, provider, conversationId);
 
-// Whether a turn on this provider and harness can be put behind the gateway at all.
-export const shieldableRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy === "gateway";
+// Whether a turn on this provider and harness sends its model requests through the gateway, which reads every byte.
+export const gatewayRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy === "gateway";
+
+// Whether the shield can read a turn on this provider and harness by content at all: through the gateway, or through
+// the runtime's own hooks (agent-runtimes.ts `privacy`). One it cannot is the only kind refused by its runtime alone.
+export const shieldableRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy !== "none";
 
 // Every provider this sandbox could run a turn on, for the trusted list: the native ones, then each endpoint, local
 // model and agent the owner connected.

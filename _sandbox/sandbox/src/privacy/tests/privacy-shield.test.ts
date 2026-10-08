@@ -151,47 +151,50 @@ describe("whether a turn may run", () => {
         }
     });
 
-    test("on, a runtime the gateway covers runs whatever its provider, and one it cannot runs only if trusted", async () => {
+    // The reported case (2026-10-08): the composer warned that Cursor would be turned away before a word was written.
+    // A runtime the shield reads by content runs, the gateway's and a hooked one's alike; only one it can't read at all
+    // is decided by its runtime.
+    test("on, a runtime the shield reads (the gateway, or its hooks) runs whatever its provider, and one it can't read runs only if trusted", async () => {
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
         expect(await privacyShield.admit("claude", "native")).toEqual({ allowed: true });
         expect(await privacyShield.admit("codex", "native")).toEqual({ allowed: true });
         expect(await privacyShield.admit("gemini", "native")).toEqual({ allowed: true });
-        expect((await privacyShield.admit("cursor", "native")).allowed).toBe(false);
+        expect(await privacyShield.admit("cursor", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
         expect((await privacyShield.admit("my-acp-agent", "native")).allowed).toBe(false);
         expect((await privacyShield.admit("pi", "native")).allowed).toBe(false);
-        const trusting = privacySliceFake({ policy: { mode: "on", trusted: ["cursor"] } });
-        expect(await trusting.privacyShield.admit("cursor", "native")).toEqual({ allowed: true });
+        const trusting = privacySliceFake({ policy: { mode: "on", trusted: ["pi"] } });
+        expect(await trusting.privacyShield.admit("pi", "native")).toEqual({ allowed: true });
     });
 
     // Decided by the runtime before a word is read, so the refusal must not read as a finding: it once sent the owner
     // looking for personal data in a message that held none.
     test("a refusal says nothing was read, why the runtime is the reason, and where the way on is", async () => {
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
-        const refused = await privacyShield.admit("cursor", "native", "vivid-rowan-moks");
+        const refused = await privacyShield.admit("pi", "native", "vivid-rowan-moks");
         expect(refused.allowed).toBe(false);
         const reason = refused.allowed ? "" : refused.reason;
         expect(reason).toContain("before reading anything");
         expect(reason).toContain("nothing in what you sent was flagged");
-        expect(reason).toContain("Cursor's agent sends what it reads");
-        expect(reason).toContain("Let Cursor read this conversation as it is");
+        expect(reason).toContain("agent reads files and command output on its own");
+        expect(reason).toContain("read this conversation as it is");
         // A turn with no conversation has none to grant, so it is not offered one.
-        const helper = await privacyShield.admit("cursor", "native");
+        const helper = await privacyShield.admit("pi", "native");
         expect(helper.allowed ? "" : helper.reason).not.toContain("this conversation");
     });
 
     test("a grant for one conversation lets the provider run there and nowhere else", async () => {
         const { privacyShield } = privacySliceFake({
-            policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "cursor" }] },
+            policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "pi" }] },
         });
-        expect(await privacyShield.admit("cursor", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
-        expect((await privacyShield.admit("cursor", "native", "smart-moth-pq04")).allowed).toBe(false);
-        expect((await privacyShield.admit("cursor", "native")).allowed).toBe(false);
+        expect(await privacyShield.admit("pi", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
+        expect((await privacyShield.admit("pi", "native", "smart-moth-pq04")).allowed).toBe(false);
+        expect((await privacyShield.admit("pi", "native")).allowed).toBe(false);
         // Granted to one provider, not to whatever the conversation switches to.
-        expect((await privacyShield.admit("pi", "native", "vivid-rowan-moks")).allowed).toBe(false);
+        expect((await privacyShield.admit("my-acp-agent", "native", "vivid-rowan-moks")).allowed).toBe(false);
         // The gateway reads the same grant, so a shieldable provider granted there would be relayed unmasked in it alone.
         const policy = await privacyShield.policy();
-        expect(await privacyShield.trusted(policy, "cursor", "vivid-rowan-moks")).toBe(true);
-        expect(await privacyShield.trusted(policy, "cursor", "smart-moth-pq04")).toBe(false);
+        expect(await privacyShield.trusted(policy, "pi", "vivid-rowan-moks")).toBe(true);
+        expect(await privacyShield.trusted(policy, "pi", "smart-moth-pq04")).toBe(false);
     });
 
     test("a model this machine serves is trusted whatever the list says, and the free trial never is", async () => {
@@ -239,8 +242,8 @@ describe("whether a turn may run", () => {
     });
 });
 
-// A helper's request holds everything its model reads, so the shield reads it rather than refusing the runtime: the
-// rule a turn on Cursor meets (above) is about what such a turn goes on to read, which a sealed request never does.
+// A helper's request holds everything its model reads, so the shield reads it whole; a turn on Cursor is read channel by
+// channel by the same reader (below).
 describe("a sealed request", () => {
     const sealed = (prompt: string, conversationId?: string) => ({ provider: "cursor", harness: "native" as const, prompt, conversationId });
 
@@ -298,6 +301,97 @@ describe("a sealed request", () => {
         });
         expect((await privacyShield.seal(sealed(`PESEL ${PESEL}`, "vivid-rowan-moks"))).prompt).toBe(`PESEL ${PESEL}`);
         expect((await privacyShield.seal(sealed(`PESEL ${PESEL}`, "smart-moth-pq04"))).prompt).toBe(`PESEL ${tokenOf("NATIONAL_ID", 1)}`);
+    });
+});
+
+// A turn on a runtime whose every channel passes the daemon (Cursor): the same reader, one channel at a time.
+describe("a turn the shield reads channel by channel", () => {
+    test("is handed out only while there is something to read for", async () => {
+        expect(await privacySliceFake({ policy: { mode: "off" } }).privacyShield.forTurn("cursor", "native", "c-1")).toBeUndefined();
+        expect(await privacySliceFake({ policy: { mode: "on", trusted: ["cursor"] } }).privacyShield.forTurn("cursor", "native", "c-1")).toBeUndefined();
+        const granted = privacySliceFake({ policy: { mode: "on", conversations: [{ conversationId: "c-1", provider: "cursor" }] } });
+        expect(await granted.privacyShield.forTurn("cursor", "native", "c-1")).toBeUndefined();
+        expect(await granted.privacyShield.forTurn("cursor", "native", "c-2")).toMatchObject({ provider: "cursor", conversationId: "c-2" });
+        // The gateway already reads Claude's wire.
+        expect(await privacySliceFake({ policy: { mode: "on" } }).privacyShield.forTurn("claude", "claude-code", "c-1")).toBeUndefined();
+        expect(await privacySliceFake({ policy: { mode: "watch" } }).privacyShield.forTurn("cursor", "native", "c-1")).toMatchObject({ provider: "cursor" });
+    });
+
+    test("masks what a channel hands it, reads the tokens back, and logs only what it found", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "on" } });
+        const shield = await privacyShield.forTurn("cursor", "native", "c-1");
+        if (shield === undefined) {
+            throw new Error("no shield");
+        }
+        expect(await shield.masking()).toBe(true);
+        expect(await shield.mask("ls -la", "shell")).toBe("ls -la");
+        const token = tokenOf("NATIONAL_ID", 1);
+        expect(await shield.mask(`PESEL ${PESEL}\n`, "shell")).toBe(`PESEL ${token}\n`);
+        expect(shield.restore(`grep ${token} clients.csv`)).toBe(`grep ${PESEL} clients.csv`);
+        await Promise.resolve();
+        expect(privacyLedger.entries).toEqual([
+            expect.objectContaining({ conversationId: "c-1", provider: "cursor", action: "masked", protocol: "hooks:shell", counts: { "national-id": 1 } }),
+        ]);
+    });
+
+    test("refuses a read that holds personal data every time it is asked, and lets a clean one through", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "on" } });
+        const shield = await privacyShield.forTurn("cursor", "native", "c-1");
+        if (shield === undefined) {
+            throw new Error("no shield");
+        }
+        expect(await shield.refuses("export const answer = 42;", "read", "refused")).toEqual([]);
+        expect(await shield.refuses(`pesel: ${PESEL}`, "read", "a file read was refused")).toEqual(["national-id"]);
+        // A text the memo has seen counts nothing new, and must be refused all the same.
+        expect(await shield.refuses(`pesel: ${PESEL}`, "read", "a file read was refused")).toEqual(["national-id"]);
+        await Promise.resolve();
+        expect(privacyLedger.entries.map((entry) => [entry.action, entry.detail])).toEqual([
+            ["refused", "a file read was refused"],
+            ["refused", "a file read was refused"],
+        ]);
+    });
+
+    test("watching, it reads and logs but changes and refuses nothing", async () => {
+        const { privacyShield, privacyLedger } = privacySliceFake({ policy: { mode: "watch" } });
+        const shield = await privacyShield.forTurn("cursor", "native", "c-1");
+        if (shield === undefined) {
+            throw new Error("no shield");
+        }
+        expect(await shield.masking()).toBe(false);
+        expect(await shield.mask(`PESEL ${PESEL}`, "prompt")).toBe(`PESEL ${PESEL}`);
+        expect(await shield.refuses(`PESEL ${PESEL}`, "read", "refused")).toEqual([]);
+        await Promise.resolve();
+        expect(privacyLedger.entries.map((entry) => entry.action)).toEqual(["watched", "watched"]);
+    });
+
+    test("a picture it can't read is refused, one it reads clean goes", async () => {
+        const unreadable = await privacySliceFake({ policy: { mode: "on" } }).privacyShield.forTurn("cursor", "native", "c-1");
+        expect(await unreadable?.refusesImage(Buffer.from("png"), "read")).toBe("unreadable");
+        const clean = await privacySliceFake({
+            policy: { mode: "on" },
+            readers: { ocr: async () => true, readImage: async () => ({ width: 10, height: 10, lines: [] }), readPdf: async () => undefined },
+        }).privacyShield.forTurn("cursor", "native", "c-1");
+        expect(await clean?.refusesImage(Buffer.from("png"), "read")).toEqual([]);
+    });
+
+    test("a grant made mid-turn opens the rest of it", async () => {
+        const slice = privacySliceFake({ policy: { mode: "on" } });
+        const shield = await slice.privacyShield.forTurn("cursor", "native", "c-1");
+        await slice.privacyShield.setPolicy({ ...(await slice.privacyShield.policy()), conversations: [{ conversationId: "c-1", provider: "cursor" }] });
+        expect(await shield?.mask(`PESEL ${PESEL}`, "shell")).toBe(`PESEL ${PESEL}`);
+        expect(await shield?.masking()).toBe(false);
+    });
+
+    test("names an MCP server through the masking proxy, on a signed session the route can read", async () => {
+        const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, loopbackBase: "http://127.0.0.1:9" });
+        const shield = await privacyShield.forTurn("cursor", "native", "c-1");
+        const url = (await shield?.mcpUrl("http://127.0.0.1:8787/mcp/browser")) ?? "";
+        expect(url.startsWith("http://127.0.0.1:9/privacy/mcp/")).toBe(true);
+        expect(await privacyShield.tokens.verify(url.split("/").at(-1) ?? "")).toEqual({
+            provider: "cursor",
+            upstream: "http://127.0.0.1:8787/mcp/browser",
+            conversationId: "c-1",
+        });
     });
 });
 

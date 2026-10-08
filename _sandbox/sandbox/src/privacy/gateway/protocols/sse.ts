@@ -132,3 +132,36 @@ export const sseTransform = (handler: SseHandler): TransformStream<Uint8Array, U
         },
     });
 };
+
+// The same stream with a change that has to wait for something (a masker, a picture reader): events are changed one at a
+// time and in order, the next chunk read only once every event of this one has gone out.
+export const sseAsyncTransform = (change: (event: SseEvent) => Promise<SseEvent>): TransformStream<Uint8Array, Uint8Array> => {
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    let pending: SseEvent[] = [];
+    const parser = createParser((event) => {
+        pending.push(event);
+    });
+    const drain = async (controller: TransformStreamDefaultController<Uint8Array>): Promise<void> => {
+        const events = pending;
+        pending = [];
+        let out = "";
+        for (const event of events) {
+            out += serializeEvent(event.data === undefined ? event : await change(event));
+        }
+        if (out !== "") {
+            controller.enqueue(encoder.encode(out));
+        }
+    };
+    return new TransformStream<Uint8Array, Uint8Array>({
+        transform: async (chunk, controller) => {
+            parser.feed(decoder.decode(chunk, { stream: true }));
+            await drain(controller);
+        },
+        flush: async (controller) => {
+            parser.feed(decoder.decode());
+            parser.end();
+            await drain(controller);
+        },
+    });
+};

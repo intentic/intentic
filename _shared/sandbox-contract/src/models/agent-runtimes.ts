@@ -52,10 +52,13 @@ export interface AgentCapabilities {
     // Whether a credential is masked; "none" is structural, only the Claude Code loop can rewrite a model's read.
     readonly secrets: "masked" | "none";
     // Whether the privacy shield can stand between this loop and its provider: `gateway` when the daemon names the base
-    // URL the loop sends its model requests to (so the gateway reads and masks every byte of them), `none` when the loop
-    // talks to its provider on a wire or a configuration the daemon does not own. A `none` loop on an untrusted provider
-    // is refused while the shield is on.
-    readonly privacy: "gateway" | "none";
+    // URL the loop sends its model requests to (so the gateway reads and masks every byte of them); `hooks` when the wire
+    // is the vendor's own but every channel the model reads through passes the daemon first (the prompt and instructions
+    // it hands over, a hook in front of each file read, a shell whose output the daemon masks, MCP behind the masking
+    // proxy), so the shield reads by content there too; `none` when the loop talks to its provider on a wire or a
+    // configuration the daemon does not own and reads files it never sees. Only a `none` loop on an untrusted provider is
+    // refused while the shield is on.
+    readonly privacy: "gateway" | "hooks" | "none";
 }
 
 // The Claude Code Agent SDK loop, the ceiling every other runtime is measured against: the only one that owns the whole
@@ -234,6 +237,9 @@ export const CURSOR: AgentCapabilities = {
     rulebook: "hooks",
     // none, structurally: its hooks only allow/deny or are discarded, nothing here to substitute a reference into.
     secrets: "none",
-    // Cursor's own RPC to its own servers, which then reach the model: redirectable, not readable.
-    privacy: "none",
+    // Cursor's own RPC to its own servers, so no gateway; but the daemon owns every channel the model reads through:
+    // it hands over the prompt and instructions, its hooks stand before each file read and rewrite each shell command
+    // to mask the output, the tools that read past both (grep, ls, glob, semantic search, fetch, lints) are withheld,
+    // and MCP goes through the masking proxy (runtimes/cursor/cursor-shield.ts).
+    privacy: "hooks",
 };
