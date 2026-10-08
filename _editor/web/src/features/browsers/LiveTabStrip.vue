@@ -3,13 +3,14 @@
      open, and the + rides right after the last, always there. The lifted shape is one piece that slides from tab to tab
      rather than a background that jumps, and a tab grows in as it opens and folds away as it closes. Middle-click closes
      a tab and double-clicking the empty strip opens one, the two gestures a browser's own strip answers to. Pinned tabs
-     (a live app, the desktop, a window on it) lead, set off from the web pages by a hairline. What a tab IS stays the
-     caller's: this draws, it decides nothing. -->
+     (a live app, the desktop, a window on it) lead, set off from the web pages by a hairline. When the web pages come
+     from more than one window, each window's run of tabs opens with its label, as a browser's tab groups do. What a tab
+     IS stays the caller's: this draws, it decides nothing. -->
 <script setup lang="ts">
 import { Icon, ui, vMiddleclick } from "@intentic/ui";
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
-import type { StripTab } from "./stripTab";
+import { stripItems, type StripGroup, type StripTab } from "./stripTab";
 
 const { tabs, activeId } = defineProps<{
     tabs: readonly StripTab[];
@@ -17,8 +18,15 @@ const { tabs, activeId } = defineProps<{
 }>();
 
 // `quickOpen` is a web tab straight away, what a browser's + and a double-click on its strip both do; `open` is the
-// launcher's chevron beside the +, handed its own button so a menu can hang off it.
-const emit = defineEmits<{ pick: [tab: StripTab]; close: [tab: StripTab]; open: [anchor: HTMLElement]; quickOpen: [] }>();
+// launcher's chevron beside the +, handed its own button so a menu can hang off it. `pickGroup` is a window's label,
+// which puts that window in front.
+const emit = defineEmits<{
+    pick: [tab: StripTab];
+    close: [tab: StripTab];
+    pickGroup: [group: StripGroup];
+    open: [anchor: HTMLElement];
+    quickOpen: [];
+}>();
 
 const t = useT();
 
@@ -53,20 +61,26 @@ const follow = (): void => {
     }
 };
 
+// Keeps the selected tab in view, so a crowded strip can't leave the page on screen off it: as tabs come and go, and as
+// the strip narrows under them.
+const reveal = (): void => stripEl.value?.querySelector(SELECTED)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
+
 watch(
     () => [activeId, tabs.map((tab) => tab.id).join(` `)],
     async () => {
         await nextTick();
         follow();
-        // Keeps the selected tab in view, so a crowded strip can't leave the page on screen off it.
-        stripEl.value?.querySelector(SELECTED)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
+        reveal();
     },
 );
 
 let resize: ResizeObserver | undefined;
 onMounted(() => {
     measure();
-    resize = new ResizeObserver(measure);
+    resize = new ResizeObserver(() => {
+        measure();
+        reveal();
+    });
     if (stripEl.value !== undefined) {
         resize.observe(stripEl.value);
     }
@@ -84,13 +98,12 @@ const close = (tab: StripTab): void => {
     }
 };
 
-// The first web page after the pins: where the hairline that sets the two groups apart is drawn.
-const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned === true && tabs[index]?.pinned === false;
+const items = computed(() => stripItems(tabs));
 </script>
 
 <template>
     <!-- The tabs scroll on their own once even their narrowest no longer fit, so the + after them never scrolls away. -->
-    <div class="flex min-w-0 flex-1 items-end">
+    <div class="@container/strip flex min-w-0 flex-1 items-end">
         <div ref="stripEl" role="tablist" class="scrollbar-none relative flex min-w-0 items-end overflow-x-auto overflow-y-hidden px-2">
             <div
                 v-if="indicator"
@@ -100,53 +113,78 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
                 aria-hidden="true"
             />
             <TransitionGroup name="tab">
-                <!-- The tab and its close are siblings, not nested: a button cannot hold one. -->
-                <div
-                    v-for="(tab, index) in tabs"
-                    :key="tab.id"
-                    :data-selected="tab.id === activeId"
-                    :data-seam="seamAt(index)"
-                    class="browser-tab group/tab @container relative flex h-8 w-60 min-w-14 shrink items-center transition-colors"
-                    :class="tab.id === activeId ? 'text-content' : 'text-muted hover:text-content'"
-                    v-middleclick="() => close(tab)"
-                >
+                <template v-for="item in items" :key="item.key">
+                    <!-- A window's label: whose tabs follow, and the one press that puts that window in front. Squeezed, it
+                         keeps enough of its name to tell one window from the next, which is what it is for; on a strip
+                         too narrow to spare that (a side panel), its dot, with the name on hover. -->
                     <button
+                        v-if="item.kind === `label`"
                         type="button"
-                        role="tab"
-                        :aria-selected="tab.id === activeId"
-                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch rounded-t-lg pl-3 pr-1 text-left text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500 @max-[4.5rem]:justify-center @max-[4.5rem]:px-0"
-                        v-tooltip.bottom="tab.note === undefined || tab.note === `` ? undefined : { title: tab.label, note: tab.note }"
-                        @click="emit('pick', tab)"
+                        :data-seam="item.seam"
+                        class="browser-group relative flex h-8 min-w-20 max-w-40 shrink cursor-pointer @max-[36rem]/strip:min-w-6 items-center px-0.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
+                        :aria-label="item.group.note === undefined ? item.group.label : `${item.group.label}, ${item.group.note}`"
+                        v-tooltip.bottom="{ title: item.group.label, note: item.group.note }"
+                        @click="emit('pickGroup', item.group)"
                     >
-                        <!-- Squeezed, a tab gives up what a browser's does: the selected one its glyph and then its title, keeping its
-                             close; the rest their title, keeping the glyph that still says what each is. -->
-                        <Icon
-                            :name="tab.icon"
-                            :spin="tab.spin === true"
-                            class="shrink-0 text-2xs"
-                            :class="[tab.tint, tab.id === activeId && tab.closable ? '@max-[5.5rem]:hidden' : '']"
-                        />
-                        <span class="min-w-0 flex-1 truncate @max-[4.5rem]:hidden">{{ tab.label }}</span>
-                        <span v-if="tab.kind" class="sr-only">, {{ tab.kind }}</span>
+                        <span
+                            class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-2xs font-medium transition-colors"
+                            :class="
+                                item.group.current ? 'bg-content/10 text-content' : 'bg-content/5 text-muted hover:bg-content/10 hover:text-content'
+                            "
+                        >
+                            <span class="size-1.5 shrink-0 rounded-full" :class="item.group.dot" />
+                            <span class="min-w-0 truncate">{{ item.group.label }}</span>
+                        </span>
                     </button>
-                    <button
-                        v-if="tab.closable"
-                        type="button"
-                        :class="
-                            ui.iconButton(
-                                { size: `xs`, round: true },
-                                `mr-1.5 focus-visible:opacity-100`,
-                                tab.id === activeId ? `` : `opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden`,
-                            )
-                        "
-                        :aria-label="t(`browsers.browsers.closeTab`)"
-                        v-tooltip.bottom="t(`browsers.browsers.closeTab`)"
-                        @click="close(tab)"
+                    <!-- The tab and its close are siblings, not nested: a button cannot hold one. -->
+                    <div
+                        v-else
+                        :data-selected="item.tab.id === activeId"
+                        :data-seam="item.seam"
+                        class="browser-tab group/tab @container relative flex h-8 w-60 min-w-14 shrink items-center transition-colors"
+                        :class="item.tab.id === activeId ? 'text-content' : 'text-muted hover:text-content'"
+                        v-middleclick="() => close(item.tab)"
                     >
-                        <Icon name="times" class="text-3xs" />
-                    </button>
-                    <span class="tab-rule" aria-hidden="true" />
-                </div>
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="item.tab.id === activeId"
+                            class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch rounded-t-lg pl-3 pr-1 text-left text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500 @max-[4.5rem]:justify-center @max-[4.5rem]:px-0"
+                            v-tooltip.bottom="
+                                item.tab.note === undefined || item.tab.note === `` ? undefined : { title: item.tab.label, note: item.tab.note }
+                            "
+                            @click="emit('pick', item.tab)"
+                        >
+                            <!-- Squeezed, a tab gives up what a browser's does: the selected one its glyph and then its title, keeping
+                                 its close; the rest their title, keeping the glyph that still says what each is. -->
+                            <Icon
+                                :name="item.tab.icon"
+                                :spin="item.tab.spin === true"
+                                class="shrink-0 text-2xs"
+                                :class="[item.tab.tint, item.tab.id === activeId && item.tab.closable ? '@max-[5.5rem]:hidden' : '']"
+                            />
+                            <span class="min-w-0 flex-1 truncate @max-[4.5rem]:hidden">{{ item.tab.label }}</span>
+                            <span v-if="item.tab.kind" class="sr-only">, {{ item.tab.kind }}</span>
+                        </button>
+                        <button
+                            v-if="item.tab.closable"
+                            type="button"
+                            :class="
+                                ui.iconButton(
+                                    { size: `xs`, round: true },
+                                    `mr-1.5 focus-visible:opacity-100`,
+                                    item.tab.id === activeId ? `` : `opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden`,
+                                )
+                            "
+                            :aria-label="t(`browsers.browsers.closeTab`)"
+                            v-tooltip.bottom="t(`browsers.browsers.closeTab`)"
+                            @click="close(item.tab)"
+                        >
+                            <Icon name="times" class="text-3xs" />
+                        </button>
+                        <span class="tab-rule" aria-hidden="true" />
+                    </div>
+                </template>
             </TransitionGroup>
         </div>
 
@@ -226,13 +264,14 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
     background: color-mix(in srgb, var(--color-card) 55%, transparent);
 }
 
-/* The seam between the pins and the web pages: a full-height hairline on the first web page's leading edge, kept even
-   while a neighbour is selected, since it marks a group rather than a gap between two tabs. */
-.browser-tab[data-seam="true"] {
+/* The seam between two runs (the pins and the web pages, one window's pages and the next's): a full-height hairline on
+   the leading edge of whatever starts the new run, kept even while a neighbour is selected, since it marks a group
+   rather than a gap between two tabs. */
+:is(.browser-tab, .browser-group)[data-seam="true"] {
     margin-left: 0.5rem;
 }
 
-.browser-tab[data-seam="true"]::before {
+:is(.browser-tab, .browser-group)[data-seam="true"]::before {
     content: "";
     position: absolute;
     top: 0.375rem;
@@ -252,10 +291,11 @@ const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned 
 }
 
 /* The hairline after a tab steps aside for the selected tab and the one under the pointer, on either side of it, and
-   after the last tab, where the + follows. */
+   after the last tab of a run, where a seam or the + follows. */
 .browser-tab:is([data-selected="true"], :hover) .tab-rule,
 .browser-tab:has(+ .browser-tab:is([data-selected="true"], :hover)) .tab-rule,
-.browser-tab:not(:has(+ .browser-tab)) .tab-rule {
+.browser-tab:not(:has(+ .browser-tab)) .tab-rule,
+.browser-tab:has(+ [data-seam="true"]) .tab-rule {
     display: none;
 }
 

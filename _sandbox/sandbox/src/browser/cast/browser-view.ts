@@ -25,6 +25,14 @@ export const createBrowserViewRoute = (services: Services) =>
         let unregisterAccess: (() => void) | undefined;
         // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
         let session = "";
+        // Settled once onOpen is done, whichever way it went. Hono hands frames over without waiting for onOpen, and the
+        // client says which tab to show, its box and its device the moment the socket opens: those frames wait for the
+        // view here rather than finding none and being dropped, which left the picture on the agent's tab under a strip
+        // that showed the one picked.
+        let attachedNow: () => void = () => undefined;
+        const attached = new Promise<void>((resolve) => {
+            attachedNow = resolve;
+        });
 
         const cleanup = async (): Promise<void> => {
             if (closed) {
@@ -112,48 +120,58 @@ export const createBrowserViewRoute = (services: Services) =>
             backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
         });
 
+        // Redeems the ticket and attaches the view: onOpen's whole body, apart so onOpen can settle `attached` on every
+        // way out of it.
+        const attach = async (ws: Socket): Promise<void> => {
+            const url = new URL(c.req.url);
+            try {
+                // The agent's browser may be signed in as the owner; taking the wheel is operating, not watching.
+                const caller = redeemTicket(services, url.searchParams, "maintainer");
+                if (caller !== undefined) {
+                    unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                }
+            } catch (err) {
+                services.logger.warn({ err }, "browser-view ticket rejected");
+                ws.close(1008, "unauthorized");
+                return;
+            }
+            session = url.searchParams.get("session") ?? "";
+            // Awaited, not polled: a click can arrive before Chromium's first paint; this resolves once the attach
+            // lands.
+            const context = await browserSessionContext(session);
+            if (closed) {
+                return;
+            }
+            if (context === undefined) {
+                ws.send(JSON.stringify({ type: "error", message: "That browser session is no longer running." }));
+                ws.close(1000, "no session");
+                return;
+            }
+            try {
+                // Display key decides video vs frames; a headless session has none, so frames answers instead.
+                view = await startLiveView(
+                    context,
+                    browserSessionDisplayKey(session) ?? "",
+                    sinkOf(ws),
+                    (reason) => {
+                        services.logger.warn({ reason }, "browser-view stream failed");
+                    },
+                    { endpoint: browserSessionEndpoint(session) },
+                );
+            } catch (err) {
+                services.logger.warn({ err }, "browser-view attach failed");
+                ws.send(JSON.stringify({ type: "error", message: "Couldn't attach to that browser." }));
+                await cleanup();
+                ws.close(1011, "attach failed");
+            }
+        };
+
         return {
             onOpen: async (_event, ws) => {
-                const url = new URL(c.req.url);
                 try {
-                    // The agent's browser may be signed in as the owner; taking the wheel is operating, not watching.
-                    const caller = redeemTicket(services, url.searchParams, "maintainer");
-                    if (caller !== undefined) {
-                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
-                    }
-                } catch (err) {
-                    services.logger.warn({ err }, "browser-view ticket rejected");
-                    ws.close(1008, "unauthorized");
-                    return;
-                }
-                session = url.searchParams.get("session") ?? "";
-                // Awaited, not polled: a click can arrive before Chromium's first paint; this resolves once the attach
-                // lands.
-                const context = await browserSessionContext(session);
-                if (closed) {
-                    return;
-                }
-                if (context === undefined) {
-                    ws.send(JSON.stringify({ type: "error", message: "That browser session is no longer running." }));
-                    ws.close(1000, "no session");
-                    return;
-                }
-                try {
-                    // Display key decides video vs frames; a headless session has none, so frames answers instead.
-                    view = await startLiveView(
-                        context,
-                        browserSessionDisplayKey(session) ?? "",
-                        sinkOf(ws),
-                        (reason) => {
-                            services.logger.warn({ reason }, "browser-view stream failed");
-                        },
-                        { endpoint: browserSessionEndpoint(session) },
-                    );
-                } catch (err) {
-                    services.logger.warn({ err }, "browser-view attach failed");
-                    ws.send(JSON.stringify({ type: "error", message: "Couldn't attach to that browser." }));
-                    await cleanup();
-                    ws.close(1011, "attach failed");
+                    await attach(ws);
+                } finally {
+                    attachedNow();
                 }
             },
             onMessage: async (event, ws) => {
@@ -165,6 +183,13 @@ export const createBrowserViewRoute = (services: Services) =>
                     message = JSON.parse(String(event.data)) as ScreencastClientMessage;
                 } catch {
                     return;
+                }
+                // A ping is answered before attach, so a slow start isn't read as a dead socket; the rest is for the view.
+                if (message.type !== "ping") {
+                    await attached;
+                    if (closed) {
+                        return;
+                    }
                 }
                 // Control first; whatever it does not claim is a pointer or a keystroke for the browser.
                 if (!(await handleControl(message, ws))) {

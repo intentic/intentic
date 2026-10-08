@@ -183,6 +183,7 @@ const samplesOf = (
             runDeviceCommand: { id: host, command: `sync-pause`, sandboxId: `billing-api` },
             openBrowser: { url: `https://example.com` },
             closeBrowser: { name: `smoke` },
+            closeBrowserPage: { name: `smoke`, pageId: `smoke` },
             desktop: undefined,
             subagents: undefined,
             storage: undefined,

@@ -140,6 +140,10 @@ export const BrowsersListSchema = z.object({
 });
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
 export const BrowserNameParamSchema = z.object({ name: z.string().describe("Which browser.") });
+export const BrowserPageParamSchema = z.object({
+    name: z.string().describe("Which browser."),
+    pageId: z.string().describe("Which of its tabs: a page id from the roster."),
+});
 export const OpenBrowserInputSchema = z.object({
     url: z.string().optional().describe("Where the new tab goes. Absent opens a blank tab, the way a browser's own new tab does."),
 });

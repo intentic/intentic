@@ -43,6 +43,26 @@ export const closeBrowser = async (name: string): Promise<void> => {
     }
 };
 
+// One tab of a window not in front, which has no picture socket open to say it on. Dropped from the shared list as the
+// close is issued, like a window's; a refused close puts it back, and the list is re-read either way.
+export const closeBrowserPage = async (name: string, pageId: string): Promise<void> => {
+    try {
+        await optimisticUpdate<BrowsersList, unknown>(
+            browsersKey,
+            (listed) => ({
+                ...listed,
+                sessions: listed.sessions.map((session) =>
+                    session.name === name ? { ...session, pages: session.pages.filter((page) => page.id !== pageId) } : session,
+                ),
+            }),
+            () => sandboxRpc.system.closeBrowserPage({ name, pageId }),
+            { settle: true },
+        );
+    } catch (error) {
+        console.error(`browser ${name}: closing tab ${pageId} failed`, error);
+    }
+};
+
 // A tab in the person's own window, starting the window first when it isn't running; answers where it opened, so the
 // view can go there and put the new tab in front. The list is re-read rather than patched: the daemon pushes the
 // window's arrival anyway, and this keeps the first frame from waiting on that push.

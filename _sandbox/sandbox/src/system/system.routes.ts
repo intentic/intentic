@@ -15,7 +15,7 @@ import { forkedExec } from "@intentic/base/git";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
-import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
+import { browserSessionPage, closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
 import { openOwnBrowser } from "../browser/sessions/own-browser.js";
 import { desktopState } from "../desktop/agent-desktop.js";
 import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
@@ -502,6 +502,14 @@ export const createSystemRoutes = (services: Services) => {
         }),
         closeBrowser: i.closeBrowser.handler(async ({ input }) => {
             await closeBrowserSession(input.name);
+            return { ok: true };
+        }),
+        // Closing what is already gone is the outcome asked for; the roster relists either way, as after a close over
+        // the picture's socket (browser-view.ts).
+        closeBrowserPage: i.closeBrowserPage.handler(async ({ input }) => {
+            await browserSessionPage(input.name, input.pageId)
+                ?.close()
+                .catch(() => undefined);
             return { ok: true };
         }),
         // The sandbox's own desktop: whether it is up and how many windows it has, which never starts it.

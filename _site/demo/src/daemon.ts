@@ -31,7 +31,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
-import { BROWSER_SESSIONS, browserSession, closeOwnBrowser, OWN_SESSION, openOwnBrowser, ownSession, watchOwnBrowser } from "./browser";
+import { BROWSER_SESSIONS, browserSession, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession, watchOwnBrowser } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import {
     automationApprovals,
@@ -840,6 +840,13 @@ export const procedures = {
                 return refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`);
             }
             closeOwnBrowser();
+            return { ok: true };
+        },
+        closeBrowserPage: ({ name, pageId }) => {
+            if (name !== OWN_SESSION) {
+                return refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`);
+            }
+            closeOwnTab(pageId);
             return { ok: true };
         },
         // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no status bar chip

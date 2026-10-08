@@ -111,6 +111,9 @@ class DemoSocket extends EventTarget {
     static readonly CLOSING = 2;
     static readonly CLOSED = 3;
     readyState: number = DemoSocket.CONNECTING;
+    // Frames the app sent from its own `open` handler, before the session below was listening: a server has them by
+    // the time it answers, so they are handed on as soon as it is.
+    private early: string[] | undefined = [];
 
     constructor(
         readonly url: string,
@@ -125,6 +128,11 @@ class DemoSocket extends EventTarget {
             this.readyState = DemoSocket.OPEN;
             this.dispatchEvent(new Event(`open`));
             this.session(this);
+            const early = this.early ?? [];
+            this.early = undefined;
+            for (const data of early) {
+                this.dispatchEvent(new MessageEvent(`client`, { data }));
+            }
         });
     }
 
@@ -138,6 +146,10 @@ class DemoSocket extends EventTarget {
     // App's client frames (input, resize, ping, browser view's bind/pause/resume) re-dispatched as a `client` event so
     // a session can answer them.
     send(data: string): void {
+        if (this.early !== undefined) {
+            this.early.push(data);
+            return;
+        }
         this.dispatchEvent(new MessageEvent(`client`, { data }));
     }
 

@@ -100,6 +100,16 @@ export const closeOwnBrowser = (): void => {
     ownChanged();
 };
 
+/** One tab of the visitor's window closed, over its socket or from the strip while another window is in front. */
+export const closeOwnTab = (pageId: string): void => {
+    const at = own.tabs.findIndex((tab) => tab.id === pageId);
+    own.tabs = own.tabs.filter((tab) => tab.id !== pageId);
+    if (own.active === pageId) {
+        own.active = (own.tabs[at] ?? own.tabs[at - 1])?.id;
+    }
+    ownChanged();
+};
+
 export const ownSession = (now: number): BrowserSession | undefined =>
     own.running
         ? {
@@ -142,12 +152,7 @@ const ownBrowserSession: DemoSession = (socket: DemoSocket) => {
             ownTab(message.url);
             ownChanged();
         } else if (message.type === `closeTab` && message.pageId !== undefined) {
-            const at = own.tabs.findIndex((tab) => tab.id === message.pageId);
-            own.tabs = own.tabs.filter((tab) => tab.id !== message.pageId);
-            if (own.active === message.pageId) {
-                own.active = (own.tabs[at] ?? own.tabs[at - 1])?.id;
-            }
-            ownChanged();
+            closeOwnTab(message.pageId);
         } else if (message.type === `navigate` && message.url !== undefined && active !== undefined) {
             active.url = message.url;
             active.title = titleOf(message.url);

@@ -17,6 +17,7 @@ import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepair
 import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
+    BrowserPageParamSchema,
     BrowsersListSchema,
     OpenBrowserInputSchema,
     OpenBrowserResultSchema,
@@ -252,6 +253,18 @@ export const systemContract = {
                 "Closes one of the agent's browsers. Its next attempt to use that browser then fails as though it had crashed, which is the honest account of somebody pulling the plug.",
         })
         .input(BrowserNameParamSchema)
+        .output(OkSchema),
+    // One tab, closed without watching its window: the Browsers strip shows every window's tabs, and only the window in
+    // front has a picture socket to say a close on.
+    closeBrowserPage: systemRoute
+        .route({
+            method: "DELETE",
+            path: "/system/browsers/{name}/pages/{pageId}",
+            summary: "Close one tab of a browser",
+            description:
+                "Closes one tab of a browser window, as its own close button does. A tab that is already gone answers the same, since gone is what was asked for.",
+        })
+        .input(BrowserPageParamSchema)
         .output(OkSchema),
     // The picture and the hands come over /system/desktop-view; this is whether there is anything on it, and which windows
     // a tab could show alone. Pushed through the `desktop` runtime domain as windows open, close and take the keyboard,
