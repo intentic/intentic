@@ -1228,6 +1228,7 @@
             "fullControl": "Full control",
             "grantControl": "use the mouse and keyboard",
             "grantDestructive": "delete folders and wipe disks",
+            "grantPrograms": "run programs this sandbox sends",
             "grantSandboxes": "manage and remove its sandboxes",
             "grantScreen": "see the screen",
             "grantShell": "run commands",

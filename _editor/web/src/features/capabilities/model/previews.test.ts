@@ -37,9 +37,10 @@ test(`states the grant in one line, from what is allowed`, () => {
             control: `on`,
             sandboxes: `on`,
             destructive: `on`,
+            programs: `on`,
         }),
     ).toBe(
-        `May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes and delete folders and wipe disks.`,
+        `May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes, delete folders and wipe disks and run programs this sandbox sends.`,
     );
 });
 

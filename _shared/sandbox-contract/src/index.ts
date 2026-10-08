@@ -211,6 +211,7 @@ export * from "./schemas/codebase-health.js";
 export * from "./schemas/context-trim.js";
 export * from "./schemas/devices.js";
 export * from "./schemas/project-delivery.js";
+export * from "./schemas/device-artifacts.js";
 export * from "./schemas/engines.js";
 export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";

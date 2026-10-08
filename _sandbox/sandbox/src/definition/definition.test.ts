@@ -186,7 +186,8 @@ describe("a definition from an earlier release", () => {
             {
                 id: "laptop",
                 kind: "device",
-                config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off" },
+                // A switch added since reads as its default: off.
+                config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" },
             },
         ]);
     });

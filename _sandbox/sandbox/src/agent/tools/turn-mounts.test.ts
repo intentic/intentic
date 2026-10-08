@@ -277,3 +277,16 @@ test("a warm session's bearer is known between its turns and reaches nothing the
     expect((await send("billing", token, { body: { jsonrpc: "2.0", id: 1, method: "ping" } })).status).toBe(403);
     expect(extension).not.toHaveBeenCalled();
 });
+
+test("a conversation reaches a device only while one of its live turns mounts it", () => {
+    const mounts = mountsAt();
+    const turn = mounts.lease("conv-a");
+    turn.open({ name: "rog", target: { kind: "device", id: "rog" } });
+    expect(mounts.reaches("conv-a", { kind: "device", id: "rog" })).toBe(true);
+    // Another conversation, another computer, or the same name as another kind of peer reaches nothing.
+    expect(mounts.reaches("conv-b", { kind: "device", id: "rog" })).toBe(false);
+    expect(mounts.reaches("conv-a", { kind: "device", id: "omen" })).toBe(false);
+    expect(mounts.reaches("conv-a", { kind: "phone", id: "rog" })).toBe(false);
+    turn.release();
+    expect(mounts.reaches("conv-a", { kind: "device", id: "rog" })).toBe(false);
+});

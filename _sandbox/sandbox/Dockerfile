@@ -590,6 +590,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/privacy /usr/local/bin/privacy
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
 # spawns nothing itself and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
+# The devices command the device skills teach: carry a program built here to one of the owner's connected computers,
+# for that computer's app_start to run. Same shape as wallet: it relays through the daemon, which holds it to the
+# computers the turn reaches; the computer decides whether it may run anything at all.
+COPY --chmod=755 _sandbox/sandbox/bin/devices /usr/local/bin/devices
 # The offloaded-command wrapper (src/offload/): put in front of a heavy line whose kind the owner sends to a runner on
 # one of their machines, by the Bash hook and the check after landing. It snapshots the tree, relays the run through the
 # daemon, brings back what the command changed, and runs the line here when the runner cannot take it.

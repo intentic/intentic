@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { arch, hostname, platform, release, type } from "node:os";
 import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
-import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
@@ -98,7 +98,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
         // the agent's own (the loopback catch, landed work delivered into an attached folder) always, since this build
         // answers both.
-        features: [...features, DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY],
+        features: [...features, DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY, DEVICE_FEATURE_PROGRAMS],
     };
     // Why that list is short, when the ic under it could not be brought up to date.
     if (stale !== undefined) {
@@ -141,7 +141,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Home: ${facts.home}`,
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
-            `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}`,
+            `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

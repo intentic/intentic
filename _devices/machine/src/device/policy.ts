@@ -81,7 +81,7 @@ export const assertPath = async (
 // Throws unless the named switch is on. One message shape for all of them, naming the card's own label.
 export const assertScope = (
     scopes: DeviceScopes,
-    scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "destructive",
+    scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "destructive" | "programs",
 ): void => {
     if (scopes[scope] === "on") {
         return;
@@ -93,6 +93,7 @@ export const assertScope = (
         control: "Use the mouse and keyboard",
         sandboxes: "Manage sandboxes on this device",
         destructive: "Run destructive commands",
+        programs: "Run programs this sandbox sends",
     }[scope];
     throw new ScopeError(`Refused: "${label}" is switched off for this device. Turn it on in its capability card to allow this.`);
 };

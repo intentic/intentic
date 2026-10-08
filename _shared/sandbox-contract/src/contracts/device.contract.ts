@@ -7,6 +7,7 @@ import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
+import { StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
 // client. No `.route()`: the procedure path is the address, not HTTP. Every input is strict (devices.ts says why). `mcp` stays opaque (`z.unknown()`) so a machine
@@ -36,4 +37,8 @@ export const deviceContract = {
     // daemon calls it, after a land, and only on an agent advertising `project-delivery`; the machine refuses a folder
     // that did not opt into delivery, takes a restore point first, and never writes over an edit of the owner's own.
     deliverProject: oc.input(ProjectDeliverySchema).output(ProjectDeliveryResultSchema),
+    // A program this sandbox built, carried in chunks into the machine's own runs folder (schemas/device-artifacts.ts).
+    // Only the daemon calls it, for the agent's `devices push`, and only on an agent advertising `programs`; the machine
+    // refuses every op unless "Run programs this sandbox sends" is on.
+    stageArtifact: oc.input(StageArtifactSchema).output(StageArtifactResultSchema),
 };

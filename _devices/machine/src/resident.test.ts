@@ -6,7 +6,7 @@ const link = (url: string, token = `token-for-${url}`): HostLink => ({
     sandboxUrl: url,
     id: `device-for-${url}`,
     token,
-    scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off" },
+    scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" },
 });
 
 // A stand-in socket per dial, recording whether it was closed: the test reads which sandboxes are being dialled.

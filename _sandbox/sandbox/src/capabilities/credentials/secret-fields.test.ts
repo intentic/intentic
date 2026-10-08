@@ -141,6 +141,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
                 control: "off",
                 sandboxes: "off",
                 destructive: "off",
+                programs: "off",
                 roots: "/home/me/code",
             },
         },

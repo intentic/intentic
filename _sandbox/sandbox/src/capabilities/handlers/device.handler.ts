@@ -41,6 +41,7 @@ export const deviceHandler = peerHandler<DeviceConfig>({
         control: host.control,
         sandboxes: host.sandboxes,
         destructive: host.destructive,
+        programs: host.programs,
         ...(host.roots !== undefined ? { roots: host.roots } : {}),
     }),
 });

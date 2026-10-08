@@ -13,7 +13,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "off",
     sandboxes: "off",
-    destructive: "off",
+    destructive: "off", programs: "off",
     roots: "/tmp",
     ...overrides,
 });
@@ -38,7 +38,7 @@ test("a destructive command outside the roots is refused for what it does, not f
 });
 
 test("turning the switch on lets the same command through", async () => {
-    const result = await runCommand({ command: "rm -rf /tmp/intentic-shell-test-absent" }, scopes({ destructive: "on" }));
+    const result = await runCommand({ command: "rm -rf /tmp/intentic-shell-test-absent" }, scopes({ destructive: "on", programs: "off" }));
     expect(result.exitCode).toBe(0);
 });
 

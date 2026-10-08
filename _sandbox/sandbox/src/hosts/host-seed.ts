@@ -22,6 +22,7 @@ export const SETUP_HOST_SCOPES = {
     control: "off",
     sandboxes: "on",
     destructive: "off",
+    programs: "off",
 } as const;
 
 // The machine's name in the UI, from the reported hostname; normalized as a person would write it, and never empty

@@ -1225,6 +1225,7 @@
             "fullControl": "Pełna kontrola",
             "grantControl": "używać myszy i klawiatury",
             "grantDestructive": "usuwać foldery i czyścić dyski",
+            "grantPrograms": "uruchamiać programy wysłane z sandboxa",
             "grantSandboxes": "zarządzać sandboxami na nim i je usuwać",
             "grantScreen": "widzieć ekran",
             "grantShell": "uruchamiać polecenia",

@@ -284,7 +284,7 @@ export const parseCuaWindows = (result: ToolResult): WindowInfo[] =>
         }
         const { pid, window_id: windowId, title, app_name: app, bounds, z_index: stacking } = row.data;
         // The driver lists frontmost first (z_index 0), which is the best reading of focus it gives.
-        return [{ id: windowKey(pid, windowId), title, app, bounds, focused: stacking === 0 }];
+        return [{ id: windowKey(pid, windowId), title, app, bounds, focused: stacking === 0, pid }];
     });
 
 // Roles that take text, which set_value writes; AT-SPI, AX and UIA spell them differently.

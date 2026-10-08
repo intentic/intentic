@@ -12,7 +12,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on",
+    destructive: "on", programs: "off",
     ...overrides,
 });
 
@@ -70,6 +70,10 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "android_shell",
         "android_install",
         "android_logcat",
+        "app_start",
+        "app_status",
+        "app_logs",
+        "app_stop",
         "list_sandboxes",
         "manage_sandbox",
         "swap_sandbox",
@@ -213,6 +217,8 @@ test("every tool says what a call can do to the device", async () => {
         "android_screenshot",
         "android_ui_elements",
         "android_logcat",
+        "app_status",
+        "app_logs",
         "list_sandboxes",
         "sandbox_logs",
         "diagnose_sandbox",
@@ -230,6 +236,7 @@ test("every tool says what a call can do to the device", async () => {
         "android_act",
         "android_shell",
         "android_install",
+        "app_start",
         "remove_sandbox",
     ]);
 });
@@ -306,7 +313,7 @@ test("describe names the shell, the home and the boundary: what the agent needs 
 
 // Decided on this machine before adb or a phone is looked for, so these hold on a computer with neither.
 test("the Android tools answer a switched-off scope, or a command that would lose something, as a readable refusal", async () => {
-    const shell = await call("android_shell", { command: "pm uninstall com.example.app" }, scopes({ destructive: "off" }));
+    const shell = await call("android_shell", { command: "pm uninstall com.example.app" }, scopes({ destructive: "off", programs: "off" }));
     expect(shell.isError).toBe(true);
     expect(shell.text).toMatch(/^Refused: on the phone this command would uninstall an app, and "Run destructive commands" is switched off/);
     const driven = await call("android_act", { action: "home" }, scopes({ control: "off" }));

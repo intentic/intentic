@@ -19,7 +19,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on",
+    destructive: "on", programs: "off",
     ...overrides,
 });
 
@@ -281,7 +281,7 @@ test("typed text is sent so the phone types exactly it, and what it cannot type 
     await phone.android.act({ action: "type", text: "it's 50% done\n" }, scopes({ screen: "off" }));
     expect(sent(phone)).toEqual([`-s ${SERIAL} shell input text 'it'\\''s%s50%%sdone' && input keyevent 66`]);
     const before = phone.calls.length;
-    await expect(phone.android.act({ action: "type", text: "rm -rf ~\n" }, scopes({ destructive: "off" }))).rejects.toThrow(
+    await expect(phone.android.act({ action: "type", text: "rm -rf ~\n" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
         /Typing a command is running it, so the same switch decides/,
     );
     await expect(phone.android.act({ action: "type", text: "naïve" }, scopes())).rejects.toThrow(/plain ASCII only/);
@@ -348,14 +348,14 @@ test("android_shell runs on the phone, and refuses what would lose something unl
     );
     expect(await phone.android.shell({ command: "sleep 999", timeoutMs: 5_000 }, scopes())).toContain("The command was stopped after 5s");
     const before = phone.calls.length;
-    await expect(phone.android.shell({ command: "pm uninstall com.example.app" }, scopes({ destructive: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "pm uninstall com.example.app" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
         'Refused: on the phone this command would uninstall an app, and "Run destructive commands" is switched off for this device.',
     );
     // The shared classifier and the phone's own list name a recursive delete once.
-    await expect(phone.android.shell({ command: "rm -rf /sdcard/Download/old" }, scopes({ destructive: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "rm -rf /sdcard/Download/old" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
         /would delete files recursively, and "Run destructive commands"/,
     );
-    await expect(phone.android.shell({ command: "settings put system screen_off_timeout 10" }, scopes({ destructive: "off" }))).rejects.toThrow(
+    await expect(phone.android.shell({ command: "settings put system screen_off_timeout 10" }, scopes({ destructive: "off", programs: "off" }))).rejects.toThrow(
         ScopeError,
     );
     await expect(phone.android.shell({ command: "input keyevent 26" }, scopes())).rejects.toThrow(/^Refused: input keyevent 26 \(KEYCODE_POWER\)/);

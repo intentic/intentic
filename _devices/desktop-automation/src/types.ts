@@ -35,6 +35,8 @@ export interface WindowInfo {
     readonly app: string;
     readonly bounds: Rect;
     readonly focused: boolean;
+    // The process that owns it, where the platform says: how a program the agent started finds its own windows.
+    readonly pid?: number;
 }
 
 // One monitor, in the same pixels as everything else. On a multi-monitor desktop these tile the frame, with gaps

@@ -113,6 +113,7 @@ export const parseWindowsJson = (json: string): WindowInfo[] => {
                     height: Number(record["height"] ?? 0),
                 },
                 focused: record["focused"] === true,
+                ...(typeof record["pid"] === "number" && record["pid"] > 0 ? { pid: record["pid"] } : {}),
             },
         ];
     });

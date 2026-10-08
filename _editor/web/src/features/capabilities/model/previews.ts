@@ -29,7 +29,7 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
 
 // Switch keys carried by a host tile (mirrors HOST_SCOPE_FIELDS); order matches how the sentence
 // names them.
-const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`] as const;
+const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`, `programs`] as const;
 type HostSwitch = (typeof HOST_SWITCHES)[number];
 
 // Built when read, so the sentence follows the language picked after boot.
@@ -40,6 +40,7 @@ const grantWords = (): Readonly<Record<HostSwitch, string>> => ({
     control: t(`capabilities.previews.grantControl`),
     sandboxes: t(`capabilities.previews.grantSandboxes`),
     destructive: t(`capabilities.previews.grantDestructive`),
+    programs: t(`capabilities.previews.grantPrograms`),
 });
 
 export interface HostPreset {
@@ -48,23 +49,23 @@ export interface HostPreset {
     readonly grants: Readonly<Record<HostSwitch, `on` | `off`>>;
 }
 
-// Even "Full control" leaves destructive off: no preset hands over the machine's own files, only the sandboxes
-// on it, which `sandboxes` covers to the point of deleting them.
+// Even "Full control" leaves destructive and programs off: no preset hands over the machine's own files, only the
+// sandboxes on it, which `sandboxes` covers to the point of deleting them; nor runs a program the sandbox built.
 export const hostPresets = (): readonly HostPreset[] => [
     {
         key: `observe`,
         label: t(`capabilities.previews.observe`),
-        grants: { shell: `off`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off` },
+        grants: { shell: `off`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off`, programs: `off` },
     },
     {
         key: `operate`,
         label: t(`capabilities.previews.operate`),
-        grants: { shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off` },
+        grants: { shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off`, programs: `off` },
     },
     {
         key: `full`,
         label: t(`capabilities.previews.fullControl`),
-        grants: { shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, destructive: `off` },
+        grants: { shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, destructive: `off`, programs: `off` },
     },
 ];
 

@@ -9,7 +9,7 @@ import { runCommand } from "./shell.js";
 // command is harmless, and whatever one leaves running is killed by the test that started it.
 
 const root = mkdtempSync(join(tmpdir(), "device-shell-"));
-const grant: DeviceScopes = { shell: "on", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", roots: root };
+const grant: DeviceScopes = { shell: "on", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off", roots: root };
 
 afterAll(() => {
     rmSync(root, { recursive: true, force: true });

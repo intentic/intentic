@@ -24,7 +24,7 @@ const grant = (roots: string): DeviceScopes => ({
     screen: "off",
     control: "off",
     sandboxes: "off",
-    destructive: "off",
+    destructive: "off", programs: "off",
     roots,
 });
 

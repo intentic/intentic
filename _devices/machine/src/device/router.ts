@@ -7,6 +7,8 @@ import { readGrant, tolerantDeviceContract } from "./grant.js";
 import { calling } from "./indicator.js";
 import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
+import { ScopeError } from "./policy.js";
+import { stageArtifact } from "./tools/artifacts.js";
 import { hostFacts } from "./tools/describe.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import { machineReport } from "../sync/report.js";
@@ -216,5 +218,19 @@ export const createHostRouter = (runtime: HostRuntime) => {
             catchLoopback(input, signal, (message) => runtime.log(`${runtime.sandboxUrl}: ${message}`)),
         ),
         deliverProject: os.deliverProject.handler(async ({ input }) => await deliverOverLink(runtime, input)),
+        // A program the sandbox built, carried in pieces into this sandbox's runs folder (tools/artifacts.ts). Behind
+        // "Run programs this sandbox sends", read per piece; only a commit is audited, since a build is fifty pieces.
+        stageArtifact: os.stageArtifact.handler(async ({ input }) => {
+            try {
+                const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);
+                if (input.op === "commit" || (input.op === "have" && result.path !== undefined)) {
+                    void audit({ tool: "stageArtifact", ok: true, detail: `${input.op} ${input.name} → ${result.path ?? ""}` });
+                }
+                return result;
+            } catch (error) {
+                void audit({ tool: "stageArtifact", ok: false, detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}` });
+                throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
+            }
+        }),
     });
 };

@@ -256,6 +256,16 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         hint: "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
     },
     {
+        key: "programs",
+        label: "Run programs this sandbox sends",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "A program built in the sandbox (a Windows .exe, an app folder) is copied to this computer and started, watched and stopped by the agent. It runs as you, with your files and network.",
+    },
+    {
         key: "roots",
         label: "Folders it may touch",
         optional: true,

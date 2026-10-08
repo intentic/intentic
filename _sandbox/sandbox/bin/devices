@@ -1,0 +1,185 @@
+#!/usr/bin/env node
+// The in-sandbox devices command: carry a program this sandbox built to one of the owner's connected computers, so the
+// device's own tools (app_start, app_status, app_logs, app_stop) can run it there (schemas/device-artifacts.ts).
+//
+// It reads the bytes HERE, in this shell's own view of /work, which is the conversation's own checkout during an
+// isolated turn: the build that goes is the one this agent made. The daemon only relays them over the device link, held
+// to the computers this turn's tools reach; the computer files them under its runs folder, one folder per content hash,
+// and refuses all of it unless its "Run programs this sandbox sends" switch is on.
+//
+// node:http rather than fetch: the upload streams from disk with back-pressure, and a 100 MB build over a tunnel takes
+// longer than undici's default timeouts like.
+
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createReadStream, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { request } from "node:http";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
+
+const COMMAND = "devices";
+const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
+const USAGE = `devices — carry a program built here to one of the owner's connected computers
+
+  devices push <device> <path> [--name <name>]
+      Copy a file (an .exe, an installer, a zip) or a whole folder (a build output with its DLLs) to <device>, the
+      computer's name as its tools are mounted (mcp__<device>__…). It lands in that computer's runs folder, under a
+      folder named for its content, and the path printed is what to give mcp__<device>__app_start as its program
+      (for a folder: the folder; start the .exe inside it). The same build pushed again is not sent twice.
+      --name   what to file it under there (default: the file or folder name); letters, digits, . - _
+
+Exit 0: pushed; the last line is the path on the computer. Exit 1: refused (the computer is offline, this turn does not
+reach it, its agent is too old, or "Run programs this sandbox sends" is off on its card): say so and carry on. Exit 2:
+misuse or a transport failure.`;
+
+const die = (message, code = 2) => {
+    // Agents discard stderr, so a failure must survive on the stream they read.
+    process.stdout.write(`${COMMAND}: ${message}\n`);
+    process.exit(code);
+};
+
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`no daemon token at ${TOKEN_PATH}: is the intentic daemon running in this container?`);
+    }
+};
+
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.error === "string") {
+            return parsed.error;
+        }
+        if (typeof parsed?.message === "string") {
+            return parsed.message;
+        }
+    } catch {
+        // allow(silent-catch): not JSON, the raw text is all there is.
+    }
+    return text || "the daemon did not say why";
+};
+
+const hashOf = (path) =>
+    new Promise((done, fail) => {
+        const hash = createHash("sha256");
+        createReadStream(path)
+            .on("data", (chunk) => hash.update(chunk))
+            .on("error", fail)
+            .on("end", () => done(hash.digest("hex")));
+    });
+
+const post = (path, file) =>
+    new Promise((done, fail) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method: "POST" }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => done({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", fail);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        req.setHeader("content-type", "application/octet-stream");
+        if (file === undefined) {
+            req.end();
+            return;
+        }
+        req.setHeader("content-length", String(statSync(file).size));
+        createReadStream(file).on("error", fail).pipe(req);
+    });
+
+const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+const push = async (args) => {
+    let name;
+    const rest = [];
+    for (let index = 0; index < args.length; index += 1) {
+        if (args[index] === "--name") {
+            name = args[index + 1];
+            index += 1;
+            if (name === undefined) {
+                die("--name needs a value");
+            }
+        } else if (args[index].startsWith("--")) {
+            die(`unknown option ${args[index]}`);
+        } else {
+            rest.push(args[index]);
+        }
+    }
+    const [device, source] = rest;
+    if (device === undefined || source === undefined || rest.length > 2) {
+        die(`push takes a device and a path\n\n${USAGE}`);
+    }
+    const absolute = resolve(source);
+    let stats;
+    try {
+        stats = statSync(absolute);
+    } catch {
+        die(`nothing at ${absolute}`);
+    }
+    const own = basename(absolute);
+    const filed = name ?? own.replace(/[^A-Za-z0-9._-]/g, "-").replace(/^[^A-Za-z0-9]+/, "");
+    if (!NAME.test(filed)) {
+        die(`"${filed}" cannot name a folder there: pass --name with letters, digits, . - _ (64 at most)`);
+    }
+    let file = absolute;
+    let kind = "file";
+    let scratch;
+    if (stats.isDirectory()) {
+        // A folder travels as one tar, packed here and unpacked there; `tar` is on every computer the agent runs on.
+        scratch = mkdtempSync(join(tmpdir(), "devices-push-"));
+        file = join(scratch, `${filed}.tar`);
+        const packed = spawnSync("tar", ["-cf", file, "-C", absolute, "."], { encoding: "utf8" });
+        if (packed.status !== 0) {
+            die(`could not pack ${absolute}: ${packed.stderr.trim() || `tar exited ${packed.status}`}`);
+        }
+        kind = "tar";
+    } else if (!stats.isFile()) {
+        die(`${absolute} is neither a file nor a folder`);
+    }
+    try {
+        const size = statSync(file).size;
+        const sha256 = await hashOf(file);
+        const fileName = kind === "tar" ? `${filed}.tar` : own;
+        const query = new URLSearchParams({ name: filed, kind, file: fileName, size: String(size), sha256 });
+        const route = `/devices/${encodeURIComponent(device)}/artifacts`;
+        const probed = await post(`${route}?${query}&probe=1`);
+        if (probed.status < 200 || probed.status >= 300) {
+            die(refusalOf(probed.text), 1);
+        }
+        const known = JSON.parse(probed.text);
+        const answer = typeof known.path === "string" ? probed : await post(`${route}?${query}`, file);
+        if (answer.status < 200 || answer.status >= 300) {
+            die(refusalOf(answer.text), 1);
+        }
+        const pushed = JSON.parse(answer.text);
+        const megabytes = (size / 1024 / 1024).toFixed(1);
+        process.stdout.write(
+            `${pushed.reused ? `${device} already had this build (${megabytes} MB, sha256 ${sha256.slice(0, 12)}); nothing was sent.` : `Pushed ${megabytes} MB to ${device} (sha256 ${sha256.slice(0, 12)}).`}\n` +
+                `${kind === "tar" ? "Unpacked into" : "Saved as"}: ${pushed.path}\n`,
+        );
+    } finally {
+        if (scratch !== undefined) {
+            rmSync(scratch, { recursive: true, force: true });
+        }
+    }
+};
+
+const [verb, ...args] = process.argv.slice(2);
+if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help") {
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(verb === undefined ? 2 : 0);
+}
+if (verb === "push") {
+    await push(args);
+} else {
+    die(`unknown command "${verb}"\n\n${USAGE}`);
+}

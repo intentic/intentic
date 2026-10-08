@@ -15,7 +15,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on",
+    destructive: "on", programs: "off",
     ...overrides,
 });
 
@@ -177,11 +177,11 @@ test("keys that lock or leave the desktop are refused whatever the switches say,
 
 test("typing a command that deletes needs the destructive switch, as running it would; prose does not", async () => {
     const { desktop, calls } = fakeDesktop();
-    await expect(act(desktop, { action: "type", text: "rm -rf ~/projects\n" }, scopes({ destructive: "off" }), indicator())).rejects.toThrow(
+    await expect(act(desktop, { action: "type", text: "rm -rf ~/projects\n" }, scopes({ destructive: "off", programs: "off" }), indicator())).rejects.toThrow(
         /Run destructive commands/,
     );
     expect(calls).toEqual([]);
-    await act(desktop, { action: "type", text: "Please remove the old projects folder." }, scopes({ destructive: "off" }), indicator());
+    await act(desktop, { action: "type", text: "Please remove the old projects folder." }, scopes({ destructive: "off", programs: "off" }), indicator());
     await act(desktop, { action: "type", text: "rm -rf ~/projects\n" }, scopes(), indicator());
     expect(calls).toEqual(["type Please remove the old projects folder.", "type rm -rf ~/projects\n"]);
 });

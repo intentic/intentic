@@ -12,6 +12,7 @@ test("a device connected by setup may manage sandboxes and do nothing else", () 
         control: "off",
         sandboxes: "on",
         destructive: "off",
+        programs: "off",
     });
 });
 

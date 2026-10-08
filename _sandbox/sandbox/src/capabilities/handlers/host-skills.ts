@@ -41,6 +41,9 @@ the ones you need). Then:
 | \`mcp__\${id}__android_shell\` | Run a command in the phone's own shell (\`adb shell\`): \`am start\`, \`pm list packages\`, \`dumpsys\`. |
 | \`mcp__\${id}__android_install\` | Install an APK from this machine onto the phone. |
 | \`mcp__\${id}__android_logcat\` | The tail of the phone's log, narrowed to one app, tag or priority: where a crash's stack trace is. |
+| \`mcp__\${id}__app_start\` | Start a program and keep it running after the call (an app to look at), its output logged; answers a run id, or how it fell over if it did at once. |
+| \`mcp__\${id}__app_status\` | What you started here, running and ended, and the builds you pushed; with an id, that run's windows and exit code in words. |
+| \`mcp__\${id}__app_logs\` / \`app_stop\` | What a run printed; stop it with everything it started. |
 | \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
 | \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
 | \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
@@ -195,6 +198,24 @@ Things that will bite you:
   before you click anything consequential, exactly as you would before deleting a file.
 - **If \`device\` says the permission is off**, that is the owner's decision. Ask for the switch on a card,
   \`capabilities request \${id} --set control=on --why "…"\`, and do not look for another route in.
+
+## Running a program you built in the sandbox
+
+A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, not there:
+
+1. Build it in the sandbox (a cross-compile: \`cargo xwin build --target x86_64-pc-windows-msvc\`, \`dotnet publish -r win-x64\`,
+   \`GOOS=windows go build\`), then from the sandbox shell: \`devices push \${id} <the .exe, or its whole output folder>\`.
+   It prints the path it landed at on this machine. The same build pushed twice is not sent twice, and each build
+   gets its own folder, so a running copy is never overwritten.
+2. \`app_start\` with that path (for a folder, the .exe inside it). It answers a run id, or, when the program dies at
+   once, its exit code in words (a DLL not found, a 32/64-bit mismatch) and its last output.
+3. \`app_status <id>\` lists its windows: pass a window id to \`screenshot\` and \`ui_elements\` to look at it and drive it.
+   \`app_logs\` reads what it printed. \`app_stop\` ends it with every process it started; do that when you are done.
+
+\`devices push\` and starting a pushed program need this device's "Run programs this sandbox sends" switch, which is
+off unless the owner turned it on: a refusal names it, and the way on is \`capabilities request \${id} --set programs=on
+--why "…"\`. Starting any other program here needs "Run commands". A program you started runs as the owner, with their
+files and network: it is their machine, so start what you built to test, not anything else.
 
 ## An Android phone on this machine
 

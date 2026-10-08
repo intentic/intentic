@@ -29,6 +29,7 @@ import { createSyncRoutes } from "./hosts/desktop-sync.routes.js";
 import { createSyncSshRoute } from "./hosts/desktop-sync-ssh.js";
 import { createSandboxesRoutes } from "./sandboxes/sandboxes.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
+import { createDeviceArtifactRoutes } from "./hosts/device-artifacts.routes.js";
 import { createFleetRoutes } from "./conversations/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
@@ -461,6 +462,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("GET /fleet", fleetRoutes.list);
     serve("POST /fleet/message", fleetRoutes.message);
     serve("GET /fleet/{handle}", fleetRoutes.show);
+
+    // The `devices push` CLI: a program built here, carried to one of the owner's computers to run there.
+    serve("POST /devices/{name}/artifacts", createDeviceArtifactRoutes(services).push);
 
     // Realtime-listener control for an extension's gateway process: reconciles via /state, POSTs inbound events to
     // /dispatch, reports failures/status.

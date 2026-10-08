@@ -46,6 +46,8 @@ import {
     swapSandbox,
 } from "./tools/sandboxes.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
+import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs.js";
+import { calling } from "./indicator.js";
 import { MACHINE_VERSION } from "../version.js";
 
 // The tool surface of a connected device, served by sandbox-contract's peer-mcp-server (dispatch, schema-once
@@ -94,6 +96,9 @@ const confirmingLook = async (said: string, scopes: DeviceScopes): Promise<Recor
     }
     return { content: [{ type: "text", text: said }, ...(await shotContent(shot, "the same part of the screen as before"))], isError: false };
 };
+
+// The sandbox this call came from, which owns the programs it starts here: the router sets it around every MCP message.
+const callerSandbox = (): string => calling.getStore()?.sandboxUrl ?? "local";
 
 // One browser handle for the process's life: cheap, holds no socket until used, but remembers which tab the
 // agent is working on so a sequence of calls reads as one session.
@@ -535,6 +540,52 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         }),
         run: async ({ serial, lines, package: app, tag, priority }, scopes) =>
             textResult(await android.logcat({ serial, lines, package: app, tag, priority }, scopes)),
+    }),
+    tool({
+        name: "app_start",
+        description:
+            'Start a program on this device and keep it running after the call returns: an app to look at, click through and read the output of, which run_command (it waits, and stops the command at its deadline) is wrong for. Pass the path `devices push <this device> <build>` printed in the sandbox shell, or the program inside a pushed folder; a program the sandbox pushed needs this device\'s "Run programs this sandbox sends" switch, any other program "Run commands". Its stdout and stderr go to a log of its own (app_logs). A program that falls over within a second or two is answered with its exit code, said in words (a missing DLL, an architecture mismatch), and its last output. Answers with the run id the other app_* tools take.',
+        effect: "destructive",
+        input: z.object({
+            program: required.describe("A full path (a pushed build, or any program on this device), or a bare name found on its PATH."),
+            args: z.array(z.string()).max(100).optional().describe("Arguments, each passed as is, with no shell between."),
+            cwd: required.optional().describe("Working directory. Default: the program's own folder."),
+            env: z.record(z.string(), z.string()).optional().describe("Environment variables to set on top of the agent's own."),
+            name: required.optional().describe("What to call this run in app_status. Default: the program's name."),
+        }),
+        run: async (request, scopes) => textResult(await startApp(request, scopes, callerSandbox())),
+    }),
+    tool({
+        name: "app_status",
+        description:
+            "The programs this sandbox started on this device, running and ended, and the builds it pushed here. With an id: that run's state, how it ended (exit code in words), the windows it and the processes it started have open (ids for screenshot, ui_elements, focus_window), and its last output.",
+        effect: "read",
+        input: z.object({ id: required.optional().describe("A run id from app_start. Omit for the list.") }),
+        run: async ({ id }, scopes) => textResult(await appStatus(id, scopes, callerSandbox(), desktop)),
+    }),
+    tool({
+        name: "app_logs",
+        description: "What a program started with app_start printed (stdout and stderr together), from its end. A GUI program often prints nothing; its exit code is in app_status.",
+        effect: "read",
+        input: z.object({
+            id: required.describe("The run id from app_start."),
+            lines: z
+                .int()
+                .positive()
+                .max(MAX_APP_LOG_LINES)
+                .default(DEFAULT_APP_LOG_LINES)
+                .describe(`How many lines from the end. Default ${DEFAULT_APP_LOG_LINES}, maximum ${MAX_APP_LOG_LINES}.`),
+            grep: required.optional().describe("Only lines matching this regular expression (case-insensitive)."),
+        }),
+        run: async ({ id, lines, grep }, scopes) => textResult(await appLogs(id, lines, grep, scopes, callerSandbox())),
+    }),
+    tool({
+        name: "app_stop",
+        description:
+            "Stop a program started with app_start, together with every process it started. It is asked to close first, as its close button would, and forced after five seconds; `force` skips the asking.",
+        effect: "write",
+        input: z.object({ id: required.describe("The run id from app_start."), force: z.boolean().default(false) }),
+        run: async ({ id, force }, scopes) => textResult(await appStop(id, force, scopes, callerSandbox())),
     }),
     tool({
         name: "list_sandboxes",

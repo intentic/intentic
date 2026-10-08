@@ -15,7 +15,7 @@ let commands: typeof import("./commands.js");
 let config: typeof import("./config.js");
 const ensured = jest.fn<(log: (message: string) => void) => Promise<void>>();
 
-const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off" };
+const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" };
 
 const link = (url: string) => ({ sandboxUrl: url, id: `device-for-${url}`, token: `token-for-${url}`, scopes });
 

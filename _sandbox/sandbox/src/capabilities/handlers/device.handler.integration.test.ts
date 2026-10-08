@@ -53,6 +53,7 @@ const laptop: Capability = {
         control: "off",
         sandboxes: "off",
         destructive: "off",
+        programs: "off",
     },
 };
 const skillPath = (root: string): string => join(root, ".agents", "skills", "my-laptop", "SKILL.md");
@@ -107,6 +108,7 @@ test("echoConfig renders the grant back and host holds no manifest secret", () =
         control: "off",
         sandboxes: "off",
         destructive: "off",
+        programs: "off",
     });
     expect(secretField(laptop, new Map())).toBeUndefined();
 });

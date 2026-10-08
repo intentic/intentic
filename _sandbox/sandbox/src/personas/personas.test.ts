@@ -34,6 +34,7 @@ const device = (id: string): Capability => ({
         control: "off",
         sandboxes: "off",
         destructive: "off",
+        programs: "off",
     },
 });
 const mcp = (id: string): Capability => ({ id, kind: "mcp", config: { url: "https://a/mcp" } });

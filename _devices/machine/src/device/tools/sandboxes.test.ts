@@ -33,7 +33,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on",
+    destructive: "on", programs: "off",
     ...overrides,
 });
 

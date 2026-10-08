@@ -14,7 +14,7 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    destructive: "on",
+    destructive: "on", programs: "off",
     ...overrides,
 });
 
@@ -76,7 +76,7 @@ test("refs hold until the next listing, and acting needs the control switch and,
         ScopeError,
     );
     await expect(
-        actOnElement(fake.desktop, { element: old, action: "set_value", value: "rm -rf ~\n" }, scopes({ destructive: "off" }), refs, indicator()),
+        actOnElement(fake.desktop, { element: old, action: "set_value", value: "rm -rf ~\n" }, scopes({ destructive: "off", programs: "off" }), refs, indicator()),
     ).rejects.toThrow(/Run destructive commands/);
     await listElements(fake.desktop, {}, scopes(), refs, new FrameLog());
     await expect(actOnElement(fake.desktop, { element: old, action: "set_value", value: "x" }, scopes(), refs, indicator())).rejects.toThrow(

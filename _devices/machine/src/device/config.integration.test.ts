@@ -15,7 +15,7 @@ const scopes = (shell: DeviceScopes["shell"]): DeviceScopes => ({
     screen: "off",
     control: "off",
     sandboxes: "off",
-    destructive: "off",
+    destructive: "off", programs: "off",
 });
 
 const link = (url: string, id: string, shell: DeviceScopes["shell"] = "off") => ({

@@ -124,6 +124,9 @@ export const RAW_ROUTES = {
     "GET /fleet": { agent: true },
     "POST /fleet/message": { agent: true },
     "GET /fleet/{handle}": { agent: true },
+    // The `devices push` CLI: a program the agent built, carried to one of the owner's computers in chunks; held to the
+    // devices the calling conversation's turn mounts, and refused by the machine itself unless "Run programs" is on.
+    "POST /devices/{name}/artifacts": { agent: true, control: "never" },
     // An extension gateway's realtime-listener control: /state hands back its connectors' stored credentials, so only the
     // extension token of the extension declaring that `listener.provider` reaches them, checked in the handler too.
     "GET /listeners/{provider}/state": { floor: "maintainer", panel: false, control: "never" },

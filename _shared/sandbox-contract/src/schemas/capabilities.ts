@@ -215,6 +215,10 @@ export const DeviceScopesSchema = z.object({
     // Its own switch under `shell`, default off while `shell` defaults on: a laptop has no disposable image to recreate
     // from.
     destructive: hostScope.default("off"),
+    // Its own switch, default off: receiving a program this sandbox built (`devices push`) and running it under the
+    // agent's supervision (app_start). Narrower than `shell` in what it reaches and wider in what it trusts: the program
+    // is the sandbox's, not one already on the machine.
+    programs: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });

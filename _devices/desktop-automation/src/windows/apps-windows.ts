@@ -84,7 +84,7 @@ $callback = [IntenticWin+EnumWindowsProc] {
   $items.Add([pscustomobject]@{
     id = [string]($h.ToInt64()); title = $text.ToString(); app = $app;
     x = ($r.Left - $left); y = ($r.Top - $top); width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top);
-    focused = ($h -eq $fg)
+    focused = ($h -eq $fg); pid = [int]$processId
   });
   return $true
 };

@@ -113,7 +113,7 @@ describe("contributionEntry", () => {
             skill: "skills/windows/SKILL.md",
         };
         const keys = contributionEntry(pack).fields.map((field) => field.key);
-        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "destructive", "roots"]);
+        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "destructive", "programs", "roots"]);
     });
 
     // Renders the pinned discriminator, then the manifest's own answers, then the core credential pair every browser

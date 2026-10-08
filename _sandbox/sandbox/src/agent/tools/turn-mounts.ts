@@ -79,6 +79,9 @@ export interface LeaseOptions {
 export interface TurnMounts {
     readonly lease: (conversationId?: string, options?: LeaseOptions) => TurnLease;
     readonly resolve: (token: string | undefined, name: string) => MountReach;
+    // Whether a live turn of this conversation holds a mount on exactly this target: how a shell route the agent calls
+    // (not its MCP door) is held to what the turn was planned to reach, persona and all.
+    readonly reaches: (conversationId: string, target: { readonly kind: "device" | "webext" | "phone"; readonly id: string }) => boolean;
     readonly closeAll: () => void;
 }
 
@@ -249,6 +252,21 @@ export const createTurnMounts = (deps: {
                 target = lease.targets.get(name) ?? target;
             }
             return target === undefined ? { refused: "unleased" } : { target, conversationId: mount.conversationId };
+        },
+        reaches: (conversationId, wanted) => {
+            for (const mount of mounts.values()) {
+                if (mount.conversationId !== conversationId) {
+                    continue;
+                }
+                for (const lease of mount.leases.values()) {
+                    for (const target of lease.targets.values()) {
+                        if ((target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         },
         closeAll: () => {
             // Deleting the entry being visited is safe for a Map iterator.
