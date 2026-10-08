@@ -102,6 +102,9 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         <li>
             <strong>WSL2 or its Windows features are off</strong>: turned on for you (Windows asks for permission), then your PC restarts. The
             desktop app saves the setup and picks it up again after the restart; from a terminal, run the same command once you are back.
+            The restart is an ordinary one: a program with unsaved work gets to ask about it first, and if you cancel, the setup waits
+            until you restart. If the app shows "can't reach the internet" right after you sign in, it keeps trying by itself while
+            Wi-Fi connects.
         </li>
         <li>
             <strong>Docker Desktop isn't installed</strong>: installed for you. The installer is downloaded straight from docker.com, with

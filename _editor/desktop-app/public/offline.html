@@ -1,0 +1,244 @@
+<!doctype html>
+<!--
+    The workspace that cannot be reached (src-tauri/src/offline.rs sends a page window here when its navigation fails
+    for a network reason). Local content in a window that has no app commands: it can only navigate, so it checks
+    for the workspace by asking for it, goes back the moment it answers, and closes through the same intentic://
+    link the workspace's own title bar uses. The window wears the platform's frame while this is up.
+-->
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Intentic</title>
+        <style>
+            @font-face {
+                font-family: "Public Sans";
+                src: url("/fonts/public-sans-100-900-latin-ext.woff2") format("woff2");
+                font-weight: 100 900;
+            }
+            :root {
+                color-scheme: light dark;
+                --canvas: #f7f7f5;
+                --content: #1c1c1a;
+                --subtle: #6b6b66;
+                --line: #dcdcd6;
+                --link: #2f5bd8;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --canvas: #161615;
+                    --content: #ececea;
+                    --subtle: #9a9a94;
+                    --line: #33332f;
+                    --link: #8aa6ff;
+                }
+            }
+            html,
+            body {
+                height: 100%;
+                margin: 0;
+            }
+            body {
+                display: grid;
+                place-items: center;
+                background: var(--canvas);
+                color: var(--content);
+                font: 14px/1.5 "Public Sans", system-ui, sans-serif;
+            }
+            main {
+                max-width: 26rem;
+                padding: 2rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+            h1 {
+                font-size: 1.125rem;
+                font-weight: 600;
+                margin: 0;
+            }
+            p {
+                margin: 0;
+                color: var(--subtle);
+            }
+            .status {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-size: 0.8125rem;
+                font-variant-numeric: tabular-nums;
+            }
+            .dot {
+                width: 0.5rem;
+                height: 0.5rem;
+                border-radius: 50%;
+                background: var(--link);
+                animation: pulse 1.6s ease-in-out infinite;
+            }
+            @keyframes pulse {
+                50% {
+                    opacity: 0.25;
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .dot {
+                    animation: none;
+                }
+            }
+            .actions {
+                display: flex;
+                gap: 0.5rem;
+                margin-top: 0.5rem;
+            }
+            button {
+                font: inherit;
+                padding: 0.4rem 0.9rem;
+                border-radius: 0.375rem;
+                border: 1px solid var(--line);
+                background: transparent;
+                color: var(--content);
+                cursor: pointer;
+            }
+            button.primary {
+                background: var(--link);
+                border-color: var(--link);
+                color: #fff;
+            }
+            button:focus-visible {
+                outline: 2px solid var(--link);
+                outline-offset: 2px;
+            }
+            code {
+                font-size: 0.75rem;
+                color: var(--subtle);
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1 id="title"></h1>
+            <p id="body"></p>
+            <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="status"></span></div>
+            <div class="actions">
+                <button id="retry" class="primary" type="button"></button>
+                <button id="close" type="button"></button>
+            </div>
+            <code id="detail"></code>
+        </main>
+        <script>
+            (function () {
+                // The reader's language among the app's catalogs; English for the rest.
+                var words = {
+                    en: {
+                        title: "Intentic can't reach the internet",
+                        body: "Your workspace lives online, and this computer can't reach it right now. This often happens for a minute after a restart, while Wi-Fi connects.",
+                        trying: "Trying again in {s} s",
+                        checking: "Checking...",
+                        retry: "Try now",
+                        close: "Close",
+                    },
+                    pl: {
+                        title: "Intentic nie ma połączenia z internetem",
+                        body: "Twoje miejsce pracy jest w sieci, a ten komputer nie może się z nim teraz połączyć. Zdarza się to często przez minutę po ponownym uruchomieniu, zanim połączy się Wi-Fi.",
+                        trying: "Kolejna próba za {s} s",
+                        checking: "Sprawdzam...",
+                        retry: "Spróbuj teraz",
+                        close: "Zamknij",
+                    },
+                    de: {
+                        title: "Intentic erreicht das Internet nicht",
+                        body: "Dein Arbeitsbereich ist online, und dieser Computer erreicht ihn gerade nicht. Das passiert oft eine Minute nach einem Neustart, solange sich das WLAN verbindet.",
+                        trying: "Neuer Versuch in {s} s",
+                        checking: "Wird geprüft...",
+                        retry: "Jetzt versuchen",
+                        close: "Schließen",
+                    },
+                    fr: {
+                        title: "Intentic n'arrive pas à joindre Internet",
+                        body: "Votre espace de travail est en ligne, et cet ordinateur ne peut pas le joindre pour l'instant. Cela arrive souvent pendant une minute après un redémarrage, le temps que le Wi-Fi se connecte.",
+                        trying: "Nouvel essai dans {s} s",
+                        checking: "Vérification...",
+                        retry: "Réessayer",
+                        close: "Fermer",
+                    },
+                    es: {
+                        title: "Intentic no puede conectarse a internet",
+                        body: "Tu espacio de trabajo está en línea y este equipo no puede alcanzarlo ahora mismo. Suele pasar durante un minuto después de reiniciar, mientras se conecta el Wi-Fi.",
+                        trying: "Nuevo intento en {s} s",
+                        checking: "Comprobando...",
+                        retry: "Intentar ahora",
+                        close: "Cerrar",
+                    },
+                };
+                var lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+                var t = words[lang] || words.en;
+                document.documentElement.lang = words[lang] ? lang : "en";
+
+                var query = new URLSearchParams(location.search);
+                var to = query.get("to") || "";
+                // Only ever back to a web page: this page is the app's own origin, and a script URL here would run in it.
+                var target = /^https?:\/\//i.test(to) ? to : "";
+                var status = query.get("status") || "";
+
+                document.getElementById("title").textContent = t.title;
+                document.getElementById("body").textContent = t.body;
+                document.getElementById("retry").textContent = t.retry;
+                document.getElementById("close").textContent = t.close;
+                document.getElementById("detail").textContent = status;
+                var said = document.getElementById("status");
+
+                // A no-cors request settles when the server answers at all and fails when nothing does: an answer is
+                // all this needs to know, and the page that answers is the one to go back to.
+                var EVERY = 5;
+                var left = EVERY;
+                var checking = false;
+                function check() {
+                    if (!target || checking) return;
+                    checking = true;
+                    said.textContent = t.checking;
+                    var gave = false;
+                    var timer = setTimeout(function () {
+                        gave = true;
+                        checking = false;
+                        left = EVERY;
+                        tick();
+                    }, 8000);
+                    fetch(target, { mode: "no-cors", cache: "no-store" }).then(
+                        function () {
+                            if (gave) return;
+                            clearTimeout(timer);
+                            location.replace(target);
+                        },
+                        function () {
+                            if (gave) return;
+                            clearTimeout(timer);
+                            checking = false;
+                            left = EVERY;
+                            tick();
+                        },
+                    );
+                }
+                function tick() {
+                    if (checking) return;
+                    said.textContent = t.trying.replace("{s}", String(left));
+                }
+                setInterval(function () {
+                    if (checking) return;
+                    left -= 1;
+                    if (left <= 0) {
+                        check();
+                    } else {
+                        tick();
+                    }
+                }, 1000);
+                window.addEventListener("online", check);
+                document.getElementById("retry").addEventListener("click", check);
+                document.getElementById("close").addEventListener("click", function () {
+                    location.href = "intentic://window?do=close";
+                });
+                tick();
+                document.getElementById("retry").focus();
+            })();
+        </script>
+    </body>
+</html>

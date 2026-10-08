@@ -6,9 +6,11 @@ mod badge;
 mod commands;
 mod fix;
 mod found;
+mod launch;
 mod local;
 mod machine_sandbox;
 mod notice;
+mod offline;
 mod project;
 mod scripts;
 mod setup_link;
@@ -91,6 +93,9 @@ const fn opening(
 }
 
 pub fn run() {
+    // Before anything else: a stuck copy is cleared before the single-instance plugin would wait on it, and this
+    // launch writes down how far it gets (launch.rs).
+    launch::begin();
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         // Rust-side opening only. The plugin's default injects a click listener into EVERY webview that takes
@@ -193,6 +198,8 @@ pub fn run() {
             agents::machine_agents,
         ])
         .setup(|app| {
+            // The plugins are up, the single-instance handoff among them: this launch is the copy that runs.
+            launch::reached(launch::Stage::Ready);
             app.manage(state::AppState::load(app.handle())?);
             app.manage(auth::PendingAuth::default());
             app.manage(update::UpdateState::default());
@@ -276,6 +283,11 @@ pub fn run() {
                     }
                 }
             }
+            if !app.webview_windows().is_empty() {
+                launch::reached(launch::Stage::Window);
+            }
+            // What earlier launches left to report (a launch that never showed a window, a panic), sent off this thread.
+            launch::send_reports(app.handle());
             // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
             // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
             machine_sandbox::start(app.handle());
@@ -315,6 +327,8 @@ pub fn run() {
             }
         }
         RunEvent::Exit => {
+            // Quitting is not stalling: a launch that ends here is not reported, wherever it got to.
+            launch::reached(launch::Stage::Exited);
             // A setup of this computer's sandbox under way is stopped with all it started, and run again next launch.
             machine_sandbox::before_exit();
             // Nothing the app put up can be answered once it has gone.

@@ -477,6 +477,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         Ok(window) => {
             crate::webview_sync::watch(&window);
             crate::shown::watch(&window);
+            // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
+            crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
             // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
             settle_background(&window, app.state::<AppState>().ui_mode());
             let handle = app.clone();
@@ -636,11 +638,18 @@ fn page_window<'a>(
                     });
                     return false;
                 }
-                if stays_in_webview(url, &origin) {
+                // The app's own page for a workspace that cannot be reached (offline.rs), which sends the window here.
+                if stays_in_webview(url, &origin) || crate::offline::is_offline_page(url) {
                     return true;
                 }
                 open_in_browser(&app, url.as_str());
                 false
+            }
+        })
+        // Something on screen: this launch has reached the reader, even if what it shows is an error.
+        .on_page_load(|_, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                crate::launch::reached(crate::launch::Stage::Shown);
             }
         })
         // A `window.open`: the page floating one of its own panels gets a window of this app's (its browser
@@ -729,6 +738,8 @@ fn show_floating(
         Ok(window) => {
             crate::webview_sync::watch(&window);
             crate::shown::watch(&window);
+            // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
+            crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
             let handle = app.clone();
             let own = label.clone();
             window.on_window_event(move |event| match event {
@@ -820,7 +831,10 @@ pub fn show_files_window(
             let app = app.clone();
             move |window, payload| match payload.event() {
                 PageLoadEvent::Started => page_started(window.label()),
-                PageLoadEvent::Finished => crate::local::page_loaded(&app, window.label()),
+                PageLoadEvent::Finished => {
+                    crate::launch::reached(crate::launch::Stage::Shown);
+                    crate::local::page_loaded(&app, window.label())
+                }
             }
         })
         .on_navigation({

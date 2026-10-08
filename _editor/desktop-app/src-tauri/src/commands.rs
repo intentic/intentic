@@ -470,15 +470,9 @@ pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
         eprintln!("intentic: could not register the after-restart resume; the setup is saved and will resume when this app is next opened.");
     }
     // `/l` signs the session out and `/r` takes the machine down; both end with a sign-in, which is the only
-    // event either of these requirements is actually waiting for. No `/t` on a sign-out — `shutdown /l` does
-    // not accept one, and there is nothing to warn a machine about that is not going down.
-    let (verb, ended) = match how {
-        SessionEnd::Restart => (
-            vec!["/r", "/t", "10", "/c", "intentic: finishing Docker setup"],
-            "restart",
-        ),
-        SessionEnd::SignOut => (vec!["/l"], "sign out"),
-    };
+    // event either of these requirements is actually waiting for. See [`session_end_args`] for why the restart
+    // carries no countdown.
+    let (verb, ended) = session_end_args(how);
     let done = std::process::Command::new("shutdown.exe")
         .args(&verb)
         .creation_flags(CREATE_NO_WINDOW)
@@ -490,6 +484,24 @@ pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
     Err(format!(
         "Windows refused the {ended}. Do it yourself and open Intentic again - your setup is saved."
     ))
+}
+
+/* NEVER A FORCED RESTART: the reader's other programs get to ask about their unsaved work. */
+// This was `/r /t 10`, a ten-second warning. But `shutdown` documents that ANY timeout above 0 implies `/f`, which
+// closes running programs without warning: a reader's unsaved document in another program was closed unasked, and so
+// was this app with its webview mid-write. A user reported Intentic dead after exactly such a restart (2026-10-08).
+// With `/t 0` Windows ends the session the way its own Restart button does: programs are asked, one with unsaved work
+// can hold the restart, and Windows says so on screen. The setup is parked and RunOnce is set before this runs, so a
+// restart the reader puts off resumes whenever it does happen. `/l` takes no timeout and is never forced.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn session_end_args(how: SessionEnd) -> (Vec<&'static str>, &'static str) {
+    match how {
+        SessionEnd::Restart => (
+            vec!["/r", "/t", "0", "/c", "intentic: finishing Docker setup"],
+            "restart",
+        ),
+        SessionEnd::SignOut => (vec!["/l"], "sign out"),
+    }
 }
 
 /// Only Windows ever asks for this: no step of the Unix install needs a new session to take effect.
@@ -1057,6 +1069,24 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /* `shutdown` documents that any `/t` above 0 implies `/f`: a forced restart closes the reader's unsaved work. */
+    #[test]
+    fn the_restart_never_forces_programs_closed() {
+        let (restart, _) = session_end_args(SessionEnd::Restart);
+        assert!(restart.contains(&"/r"));
+        assert!(!restart.contains(&"/f"), "{restart:?}");
+        let timeout = restart
+            .iter()
+            .position(|arg| *arg == "/t")
+            .map(|at| restart[at + 1]);
+        assert!(
+            timeout.is_none() || timeout == Some("0"),
+            "a timeout above 0 is a forced restart: {restart:?}"
+        );
+        let (sign_out, _) = session_end_args(SessionEnd::SignOut);
+        assert_eq!(sign_out, vec!["/l"]);
+    }
 
     /// The run contract's own record of the prefix (`@intentic/sandbox-run`), which `ic` and its TypeScript are held
     /// to as well, so the copy above cannot drift from the containers it finds.
