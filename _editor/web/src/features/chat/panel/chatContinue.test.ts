@@ -423,7 +423,6 @@ it(`says nothing on a chat whose turn finished`, async () => {
     expect(composerText()).not.toContain(`Enter to continue`);
 });
 
-const statusRow = (): string => document.querySelector<HTMLAnchorElement>(`a[href="/sandbox/agent"]`)?.textContent ?? ``;
 const sendButton = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`)!;
 // State a healthy workspace passes through often: the reconnect ladder's first rung is about a second.
 const retrying = (sinceMsAgo: number): void => {
@@ -444,13 +443,11 @@ it(`says nothing about a reconnect short enough to heal itself`, async () => {
     useChat().active.value.draft.value = `hello`;
     await mountPanel();
 
-    expect(statusRow()).toContain(`online · Manage`);
     expect(sendButton().disabled).toBe(false);
 
     retrying(1_000);
     await settle();
 
-    expect(statusRow()).toContain(`online · Manage`);
     expect(composerText()).not.toContain(`The sandbox is busy`);
     expect(sendButton().disabled).toBe(true);
 });
@@ -464,7 +461,6 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
 
     // No diagnosis has seen this sandbox alive, so the wait is named as one: busy is only for a sandbox seen alive
     // (availability.test.ts tells the two apart).
-    expect(statusRow()).toContain(`not responding · Manage`);
     expect(sendButton().disabled).toBe(true);
 });
 

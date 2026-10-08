@@ -12,10 +12,7 @@ import { cacheAlive, cacheCooling, keptWarm } from "../../agents/fleet/prompt-ca
 import { useAgents } from "../../agents/fleet/useAgents";
 import { formatRemaining, formatReset, planHeadroom, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
-import { sandboxAvailabilityVisual } from "../../sandbox/overview/availability";
-import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailability";
 import { useRole } from "../../../client/sandbox/useRole";
-import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import UsageMeter from "../session/UsageMeter.vue";
@@ -38,13 +35,6 @@ const { block, hint } = defineProps<{
 const { isGuest } = useRole();
 const { contextUsage, provider, account, model, conversation } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
-
-// The sandbox's state as a reader should see it, not raw `reachable`: the liveness stream reconnects for ordinary
-// reasons every minute or two, so a fast retry reads as `stale` and stays looking live (availability.ts) instead
-// of flashing "busy". Send still gates on raw `reachable`.
-const { hasSnapshot } = useWorkspaceTree();
-const availability = useSandboxAvailability(hasSnapshot);
-const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 
 // Per-conversation context-window fill: a ring that warns as the chat approaches auto-compaction.
 const contextRing = computed(() => {
@@ -157,20 +147,20 @@ const usageChip = computed(() => {
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
+        <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. -->
+        <ChatToolCallsToggle />
         <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
-        <span v-if="block !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
+        <span v-if="block !== undefined" class="flex min-w-0 flex-1 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
             <span class="truncate">{{ block }}</span>
         </span>
-        <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
-        <!-- ONE LINE, EVERY READOUT WHOLE: on a phone each one used to break inside itself ("1 job / running", "online · / Manage")
+        <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
+        <!-- ONE LINE, EVERY READOUT WHOLE: on a phone each one used to break inside itself ("1 job / running")
              and the row stood two lines tall. There the readouts a tap explains keep only their mark (the cache opens its
-             panel, the meter its page), and the sandbox's state drops the word naming where it links. -->
-        <div class="ml-auto flex items-center gap-3 whitespace-nowrap">
+             panel, the meter its page). -->
+        <div class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
-            <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle); joins the other readouts under the composer. -->
-            <ChatToolCallsToggle />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
             <template v-if="cacheChip !== undefined && card !== undefined">
                 <button
@@ -202,18 +192,6 @@ const usageChip = computed(() => {
                 <UsageMeter :headroom="usageChip.headroom"
                     ><span v-if="!mobile" class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
                 >
-            </RouterLink>
-            <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
-            <!-- Except for a guest, which may not open either page. Whether the box is answering is still its business —
-                 it is why a message would not send — so the state stays and only the door goes. -->
-            <span v-if="isGuest" class="inline-flex items-center gap-1">
-                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
-                {{ availabilityVisual.label }}
-            </span>
-            <RouterLink v-else to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-                <!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
-                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
-                {{ mobile ? availabilityVisual.label : `${availabilityVisual.label} ${t(`chat.chatPaneStatus.manage`)}` }}
             </RouterLink>
         </div>
     </div>
