@@ -26,7 +26,8 @@ export interface RuntimeChip {
     readonly active: boolean;
     /** The accessible name: the label, then what the hover card says. */
     readonly aria: string;
-    readonly tip: Tip;
+    /** A hover card when the chip alone does not say enough; omitted when the label and badge already do. */
+    readonly tip?: Tip;
 }
 
 const spoken = (...parts: readonly (string | undefined)[]): string => parts.filter((part) => part !== undefined && part !== ``).join(`, `);
@@ -66,7 +67,6 @@ export const previewChip = (facts: { readonly healthy: number; readonly here: bo
         ...(facts.healthy > 0 ? { count: facts.healthy } : {}),
         active: facts.here,
         aria: spoken(facts.label, running),
-        tip: running === undefined ? { title: facts.label } : { title: facts.label, note: running },
     };
 };
 
@@ -88,14 +88,13 @@ export const browsersChip = (facts: { readonly sessions: readonly BrowserSession
     const base = { id: `browsers`, label, to: window === undefined ? `/browsers` : `/browsers/${window.name}`, active: facts.here } as const;
     if (helping > 0) {
         const note = t(`shell.shellDesktop.agentNeedsHelp`);
-        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: label, tone: `warning`, note } };
+        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note) };
     }
     const open = live > 0 ? t(`shell.shellDesktop.open`, { live }) : undefined;
     return {
         ...base,
         ...(live > 0 ? { count: live } : {}),
         aria: spoken(label, open),
-        tip: open === undefined ? { title: label } : { title: label, note: open },
     };
 };
 
