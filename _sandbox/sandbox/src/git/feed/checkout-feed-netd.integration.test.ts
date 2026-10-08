@@ -31,20 +31,26 @@ beforeAll(async () => {
     }
     runDir = await mkdtemp(join(tmpdir(), "intentic-feed-netd-"));
     netd = spawn(NETD, ["--run-dir", runDir, "--", "sleep", "3600"], { stdio: "ignore", env: { ...process.env, NETD_LOG: "warn" } });
-    const deadline = Date.now() + 10_000;
-    while (!existsSync(join(runDir, "netd.sock"))) {
-        if (Date.now() > deadline) {
-            throw new Error("netd never opened its control socket");
+    // The socket file appears at bind(), a moment before netd listen()s on it, so a dial in between is refused rather
+    // than missing: dial until one is taken, as netd's own test harness does, not until the file exists.
+    const dial = async (deadline: number): Promise<NetdLink> => {
+        try {
+            return await connectNetd({
+                path: join(runDir, "netd.sock"),
+                answer: () => Promise.reject(new Error("not asked here")),
+                onTunnel: () => undefined,
+                onClose: () => undefined,
+                onFault: () => undefined,
+            });
+        } catch (error) {
+            if (Date.now() > deadline) {
+                throw new Error("netd never took a connection on its control socket", { cause: error });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return dial(deadline);
         }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    link = await connectNetd({
-        path: join(runDir, "netd.sock"),
-        answer: () => Promise.reject(new Error("not asked here")),
-        onTunnel: () => undefined,
-        onClose: () => undefined,
-        onFault: () => undefined,
-    });
+    };
+    link = await dial(Date.now() + 10_000);
     link.tell({ kind: "hello", build: "test", pid: process.pid });
     useCheckoutFeed(netdCheckoutFeed(link));
 });

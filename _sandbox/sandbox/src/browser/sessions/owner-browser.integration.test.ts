@@ -1,12 +1,13 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { z } from "zod";
 import { ensureDisplay, releaseDisplay } from "../cast/display.js";
 import type { BrowserFingerprint } from "./fingerprint.js";
-import { isOwnerWindow, launchOwnerBrowser, OWNER_WINDOW_FLAG, type OwnerBrowser } from "./owner-browser.js";
+import { isOwnerWindow, launchOwnerBrowser, OWNER_WINDOW_FLAG, type OwnerBrowser, seedPreferences } from "./owner-browser.js";
 
 // The owner's sign-in window as the route starts it: a plain Chromium process that Playwright attaches to. Checks
 // that what a launch used to set by CDP emulation (clock, language, Accept-Language) now comes from the process,
@@ -120,4 +121,55 @@ test("only the marked browser process on that profile counts as an owner's windo
     expect(isOwnerWindow([...browser, "--type=renderer"], profile)).toBe(false);
     expect(isOwnerWindow(["--remote-debugging-port=41000", `--user-data-dir=${profile}`], profile)).toBe(false);
     expect(isOwnerWindow(browser, "/work/.intentic/local/browser/y")).toBe(false);
+});
+
+// What a window's profile holds before Chromium starts on it: the fingerprint's languages, and no translate offer to
+// cover the picture. Whatever else the person set stays theirs.
+
+const profiles: string[] = [];
+afterAll(() => {
+    for (const dir of profiles) {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+// A profile directory, with a Preferences file holding `prefs` written as given (a string is written raw).
+const profileWith = (raw?: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), "owner-prefs-"));
+    profiles.push(dir);
+    if (raw !== undefined) {
+        mkdirSync(join(dir, "Default"), { recursive: true });
+        writeFileSync(join(dir, "Default", "Preferences"), raw);
+    }
+    return dir;
+};
+
+const preferencesOf = (dir: string) => z.looseObject({}).parse(JSON.parse(readFileSync(join(dir, "Default", "Preferences"), "utf8")));
+
+test("a fresh profile gets the languages and no translate offer", async () => {
+    const fresh = profileWith();
+    await seedPreferences(fresh, ["pl-PL", "pl", "en"]);
+    expect(preferencesOf(fresh)).toEqual({
+        intl: { accept_languages: "pl-PL,pl,en", selected_languages: "pl-PL,pl,en" },
+        translate: { enabled: false },
+    });
+});
+
+test("a used profile keeps everything the person set beside them", async () => {
+    const used = profileWith(JSON.stringify({ intl: { accept_languages: "en", other: 1 }, translate: { enabled: true, keep: "x" }, session: { restore_on_startup: 1 } }));
+    await seedPreferences(used, ["en-US", "en"]);
+    expect(preferencesOf(used)).toEqual({
+        intl: { accept_languages: "en-US,en", selected_languages: "en-US,en", other: 1 },
+        translate: { enabled: false, keep: "x" },
+        session: { restore_on_startup: 1 },
+    });
+});
+
+test("a Preferences file it cannot read is left for Chromium", async () => {
+    for (const raw of ["{not json", JSON.stringify({ intl: "not a section" })]) {
+        const broken = profileWith(raw);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- two files, one at a time
+        await seedPreferences(broken, ["en"]);
+        expect(readFileSync(join(broken, "Default", "Preferences"), "utf8")).toBe(raw);
+    }
 });

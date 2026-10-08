@@ -197,7 +197,7 @@ it(`stages a session's work when its chip is lit, and unstages it when the chip 
     });
     await answer(unstagedTree(false));
     // Nothing staged and no chip lit: the one-move stage-and-commit, over a list with every file on screen.
-    expect(buttonNamed(el, `Commit all`)).toBeDefined();
+    expect(buttonNamed(el, `Commit all`)).toBeInstanceOf(HTMLButtonElement);
 
     buttonNamed(el, `Fix sandbox turn cleanup`)?.click();
     await settle();
