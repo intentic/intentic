@@ -27,3 +27,41 @@ export const toUrl = (typed: string): string | undefined => {
     }
     return `${SEARCH_URL}${encodeURIComponent(text)}`;
 };
+
+// How the address bar draws an address while nobody is editing it: the scheme dropped (the padlock says it instead),
+// and the host apart from the rest, so a lookalike domain is the part the eye lands on. Undefined for anything without
+// a host (`about:blank`, `data:`, `file:`), which is shown as written.
+export interface AddressParts {
+    readonly host: string;
+    readonly rest: string;
+}
+
+const WEB_SCHEMES = new Set([`https:`, `http:`]);
+
+const parsed = (address: string): URL | undefined => {
+    try {
+        return new URL(address);
+    } catch {
+        // allow(silent-catch): not an address at all (empty, a bare word) has no parts to draw.
+        return undefined;
+    }
+};
+
+export const addressParts = (address: string): AddressParts | undefined => {
+    const url = parsed(address);
+    if (url === undefined || url.host === `` || !WEB_SCHEMES.has(url.protocol)) {
+        return undefined;
+    }
+    // A bare root reads as the site itself, the way a browser shows `example.com` rather than `example.com/`.
+    const path = url.pathname === `/` && url.search === `` && url.hash === `` ? `` : url.pathname;
+    return { host: url.host, rest: `${path}${url.search}${url.hash}` };
+};
+
+// The padlock: secure over https, flagged over plain http, and nothing at all where the question doesn't arise.
+export const securityOf = (address: string): `secure` | `insecure` | undefined => {
+    const url = parsed(address);
+    if (url === undefined || url.host === ``) {
+        return undefined;
+    }
+    return url.protocol === `https:` ? `secure` : url.protocol === `http:` ? `insecure` : undefined;
+};
