@@ -1,5 +1,5 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { jobLabel, jobLineage, pipelineDag, pipelineStages, stageOfNode } from "./pipelineDag";
+import { jobLineage, jobName, pipelineDag, pipelineStages, stageOfNode } from "./pipelineDag";
 
 // Pins how a run's job graph draws: node/edge shape from declared dependencies (falling back to time overlap), and that
 // clustering groups jobs without losing per-job counts.
@@ -202,11 +202,12 @@ describe(`pipelineDag draws a declared run as GitHub does`, () => {
     });
 });
 
-describe(`jobLabel`, () => {
-    it(`shortens a job two calls deep the way GitHub does, and leaves the rest alone`, () => {
-        expect(jobLabel(`release / windows-verify / smoke`)).toBe(`release / … / smoke`);
-        expect(jobLabel(`verify-core / verify`)).toBe(`verify-core / verify`);
-        expect(jobLabel(`quick`)).toBe(`quick`);
+describe(`jobName`, () => {
+    it(`splits a called workflow's job into the calls it came through and its own name, and leaves the rest alone`, () => {
+        expect(jobName(`release / windows-verify / smoke`)).toEqual({ caller: `release / windows-verify`, title: `smoke` });
+        expect(jobName(`verify-core / verify`)).toEqual({ caller: `verify-core`, title: `verify` });
+        expect(jobName(`quick`)).toEqual({ caller: undefined, title: `quick` });
+        expect(jobName(`e2e (chromium)`)).toEqual({ caller: undefined, title: `e2e (chromium)` });
     });
 });
 

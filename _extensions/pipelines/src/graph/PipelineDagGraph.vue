@@ -2,15 +2,27 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
 import { DagGraph, Icon, toneTint, toneWash, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { jobLabel, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
-import { CARD_MAX_WIDTH, columnWidths, estimateText, jobMeta, type MeasureText, META_LINE, NAME_LINE, nameLines, rowHeight } from "./cardSize";
-import { formatDuration, STATUS_TONE, type StatusTone } from "../statusVisual";
+import { jobName, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
+import {
+    CALLER_LINE,
+    CARD_MAX_WIDTH,
+    columnWidths,
+    estimateText,
+    jobStatusLine,
+    type MeasureText,
+    NAME_LINE,
+    rowHeight,
+    STATUS_LINE,
+} from "./cardSize";
+import { RANK_SEP_MIN, READABLE_ZOOM, spreadColumns } from "./spread";
+import { STATUS_TONE, type StatusTone } from "../statusVisual";
 import { t } from "../i18n.js";
 
 // Job graph: one card per group of identically-wired jobs, so parallel jobs sharing every edge collapse into one set of
-// arrows. Below `readableZoom` the canvas stops shrinking rather than crop or blur past legibility. Hover traces one
-// job's card through the run; a click pins it. The job name itself is a link out to that job's page on the forge, so
-// the pin stays on the plain click everywhere else in the row.
+// arrows. A long run is short of width and has height to spare, so a row stacks its lines (see cardSize) and the
+// frame's width goes to the gutters between columns, not to margins (see spread). Hover traces one job's card through
+// the run; a click pins it. The job name itself is a link out to that job's page on the forge, so the pin stays on the
+// plain click everywhere else in the row.
 
 const {
     stages,
@@ -41,25 +53,26 @@ const pin = (id: string): void => {
 
 const dag = computed(() => pipelineDag(stages, focus.value));
 
-// Costs multiply across columns and stacked rows, so these stay tighter than a text card's padding; a list of jobs
-// doesn't need a paragraph's air. A card's width is its column's widest name, a row's height its lines (see cardSize).
 // Split over the card's two ends, so a single-job card isn't text jammed against its border.
 const CARD_PADDING_Y = 12;
-// Layout spacing: between columns and between stacked cards; the band-height calc below counts both in too. The column
-// gutter only has to hold an elbow's two turns, each half the gutter from a card, so it stays narrow: on a long run it
-// is paid once per column.
-const RANK_SEP = 32;
+// Between stacked cards in one column.
 const NODE_SEP = 24;
+// The frame's own margin, px on every side: only enough that a card does not touch the band's border.
+const PAD_PX = 16;
+// Tallest the inline band grows; a run taller than this at its width's zoom is shrunk to fit it.
+const MAX_BAND = 640;
 
 const root = ref<HTMLElement>();
 const containerWidth = ref<number>(0);
+const containerHeight = ref<number>(0);
 let resizeObserver: ResizeObserver | undefined;
 
 // Measures with a hidden probe wearing the rows' own classes, so weight, size and tabular figures are whatever the
 // stylesheet says rather than a copy of it; remembered per string, and redone once webfonts land, since a fallback face
 // measures a different width.
 const PROBE_CLASS: Record<Parameters<MeasureText>[1], string> = {
-    label: `text-2xs font-medium leading-tight`,
+    label: `text-2xs font-medium`,
+    caller: `text-3xs`,
     meta: `text-3xs tabular-nums`,
     badge: `text-3xs font-semibold`,
 };
@@ -71,7 +84,6 @@ const measure = computed<MeasureText>(() => {
         return estimateText;
     }
     const probe = document.createElement(`span`);
-    probe.className = `pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap`;
     const known = new Map<string, number>();
     return (text, size) => {
         const key = `${size}:${text}`;
@@ -89,12 +101,12 @@ const measure = computed<MeasureText>(() => {
     };
 });
 
-// Recomputed when a hover rebuilds the dag, to the same widths, so the layout signature holds and nothing reflows.
+// Recomputed when a hover rebuilds the dag, to the same sizes, so the layout signature holds and nothing reflows.
 const widths = computed(() => columnWidths(dag.value.nodes, recurring, measure.value));
 const widthOf = (nodeId: string): number => widths.value.get(stageOfNode(nodeId)) ?? CARD_MAX_WIDTH;
-// A row's height in its card, which the template sets too, so the box dagre places is the box the rows fill.
-const heightOf = (nodeId: string, job: PipelineJob): number => rowHeight(job, recurring, widthOf(nodeId), measure.value);
-// A card is its rows: dagre is told this per node rather than being handed one size for all of them.
+// A row's height in its card, which the template sets too, so the box the layout places is the box the rows fill.
+const heightOf = (nodeId: string, job: PipelineJob): number => rowHeight(job, widthOf(nodeId), measure.value);
+// A card is its rows: the layout is told this per node rather than being handed one size for all of them.
 const cardHeight = (node: DagNode<PipelineJobCluster>): number =>
     node.data.jobs.reduce((sum, member) => sum + heightOf(node.id, member.job), CARD_PADDING_Y);
 
@@ -102,10 +114,31 @@ const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
     dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node) })),
 );
 
-// Inline band height matches the diagram's rendered height at its fitted zoom, plus padding; never excess whitespace
-// around a shallow run.
-const PAD_X = 0.04;
-const PAD_Y_PX = 16;
+// The tallest column, cards and the gaps between them: what the band's height and the zoom are measured against.
+const contentHeight = computed(() => {
+    const columns = new Map<number, number>();
+    for (const node of dag.value.nodes) {
+        const stage = stageOfNode(node.id);
+        const stacked = columns.get(stage);
+        columns.set(stage, stacked === undefined ? cardHeight(node) : stacked + NODE_SEP + cardHeight(node));
+    }
+    return Math.max(...columns.values(), 0);
+});
+
+// Zoom and column gutter, solved together for the frame. Top to bottom has no gutter to spread: it keeps the narrowest.
+const spread = computed(() => {
+    if (direction === `TB`) {
+        return { zoom: 1, rankSep: RANK_SEP_MIN, cropped: false };
+    }
+    const width = containerWidth.value || 1000;
+    return spreadColumns({
+        cardsWidth: [...widths.value.values()].reduce((sum, columnWidth) => sum + columnWidth, 0),
+        columns: widths.value.size,
+        contentHeight: contentHeight.value,
+        frameWidth: Math.max(100, width - 2 * PAD_PX),
+        frameHeight: Math.max(100, (fill ? containerHeight.value || 600 : MAX_BAND) - 2 * PAD_PX),
+    });
+});
 
 onMounted(() => {
     void document.fonts?.ready.then(() => {
@@ -113,10 +146,12 @@ onMounted(() => {
     });
     if (root.value) {
         containerWidth.value = root.value.clientWidth;
+        containerHeight.value = root.value.clientHeight;
         if (typeof ResizeObserver !== `undefined`) {
             resizeObserver = new ResizeObserver(([entry]) => {
                 if (entry) {
                     containerWidth.value = entry.contentRect.width;
+                    containerHeight.value = entry.contentRect.height;
                 }
             });
             resizeObserver.observe(root.value);
@@ -128,50 +163,20 @@ onBeforeUnmount(() => {
     resizeObserver?.disconnect();
 });
 
-const bandHeight = computed(() => {
-    const columns = new Map<number, number>();
-    for (const node of dag.value.nodes) {
-        const stage = stageOfNode(node.id);
-        const stacked = columns.get(stage);
-        columns.set(stage, stacked === undefined ? cardHeight(node) : stacked + NODE_SEP + cardHeight(node));
-    }
-    const contentHeight = Math.max(...columns.values(), 0);
-    if (contentHeight === 0) {
-        return 72;
-    }
-    const columnCount = columns.size;
-    const contentWidth = [...widths.value.values()].reduce((sum, width) => sum + width, 0) + Math.max(0, columnCount - 1) * RANK_SEP;
+// Inline band height is the picture's height at its zoom plus the margins and the band's 1px borders; never excess
+// whitespace around a shallow run.
+const bandHeight = computed(() =>
+    contentHeight.value === 0 ? 72 : Math.min(MAX_BAND, Math.ceil(contentHeight.value * spread.value.zoom + 2 * PAD_PX + 2)),
+);
 
-    const availableWidth = Math.max(100, (containerWidth.value || 1000) * (1 - 2 * PAD_X));
-    const fitZoom = contentWidth > 0 ? Math.min(1, availableWidth / contentWidth) : 1;
-
-    const LEGIBLE_FIT = 0.45;
-    const READABLE_ZOOM = 0.8;
-    const activeZoom = fitZoom >= LEGIBLE_FIT ? fitZoom : READABLE_ZOOM;
-
-    const renderedHeight = contentHeight * activeZoom;
-    // Taller than a one-line row needed: a long run now spends height where it used to spend width.
-    return Math.min(600, Math.ceil(renderedHeight + 2 * PAD_Y_PX));
-});
-
+// Margins as the fraction of the frame DagGraph takes them in: the same PAD_PX whatever the frame's size.
 const fitPadding = computed(() => {
-    if (fill) {
-        return { x: PAD_X, y: 0.04 };
-    }
-    const padY = Math.max(0.01, PAD_Y_PX / bandHeight.value);
-    return { x: PAD_X, y: padY };
+    const width = containerWidth.value || 1000;
+    const height = fill ? containerHeight.value || 600 : bandHeight.value - 2;
+    return { x: Math.min(0.2, PAD_PX / width), y: Math.min(0.2, PAD_PX / height) };
 });
 
 const toneOf = (job: PipelineJob): StatusTone => STATUS_TONE[job.status];
-const hasMetaLine = (job: PipelineJob): boolean => {
-    const meta = jobMeta(job, recurring);
-    return meta.streak !== undefined || meta.duration !== undefined;
-};
-// The icon sits on the name's first line, wherever the row's lines centre it: half the row's spare height down.
-const iconTop = (nodeId: string, job: PipelineJob): number => {
-    const lines = nameLines(job, widthOf(nodeId), measure.value) * NAME_LINE + (hasMetaLine(job) ? META_LINE : 0);
-    return (heightOf(nodeId, job) - lines) / 2 + (NAME_LINE - 14) / 2;
-};
 // Wash behind a job row: its outcome's tone, faintly. A row draws no border of its own (DagGraph owns the card's), so
 // only the tint's fill shows; a status with no outcome leaves the card's fill alone.
 const tintOf = (job: PipelineJob): string => {
@@ -205,13 +210,13 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
             :nodes="sizedNodes"
             :edges="dag.edges"
             :node-width="CARD_MAX_WIDTH"
-            :node-height="28 + CARD_PADDING_Y"
-            :rank-sep="RANK_SEP"
+            :node-height="CARD_PADDING_Y + NAME_LINE + STATUS_LINE"
+            :rank-sep="spread.rankSep"
             :node-sep="NODE_SEP"
             edge-shape="elbow"
             :direction="direction"
             :magnify="false"
-            :readable-zoom="0.8"
+            :readable-zoom="READABLE_ZOOM"
             :min-zoom="0.15"
             :fit-padding="fitPadding"
         >
@@ -223,7 +228,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                     <div
                         v-for="member in node.data.jobs"
                         :key="member.id"
-                        class="relative flex items-center gap-1.5 pl-2.5 pr-2"
+                        class="relative flex flex-col justify-center pl-2.5 pr-2"
                         :class="tintOf(member.job)"
                         :style="{ height: `${heightOf(node.id, member.job)}px` }"
                         @mouseenter="hovered = member.id"
@@ -232,56 +237,61 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                     >
                         <!-- Per row, not per card: one failed job among passing ones is exactly what a reader looks for. -->
                         <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="toneOf(member.job).bar"></span>
-                        <Icon
-                            :name="toneOf(member.job).icon"
-                            class="shrink-0 self-start text-sm"
-                            :style="{ marginTop: `${iconTop(node.id, member.job)}px` }"
-                            :spin="toneOf(member.job).spin"
-                            :class="toneOf(member.job).text"
-                        />
-                        <!-- Name on top, wrapping rather than widening the card; what qualifies it on a line beneath. A long run is
-                             short of width and has height to spare, so the row spends the height. -->
-                        <div class="flex min-w-0 flex-1 flex-col">
-                            <!-- One size below body text: at the larger size, a long run's names wrapped past two lines. -->
-                            <!-- The name alone is the link, so the rest of the row keeps the click that traces this job through the run. -->
-                            <a
-                                v-if="member.job.webUrl"
-                                :href="member.job.webUrl"
-                                target="_blank"
-                                rel="noopener"
-                                draggable="false"
-                                class="line-clamp-2 break-words rounded-xs text-2xs font-medium leading-tight underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
-                                :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
-                                v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: member.job.name }] }"
-                                @click.stop
-                            >
-                                {{ jobLabel(member.job.name) }}
-                            </a>
-                            <!-- No page of its own: a job the workflow declares that the run never reported, as GitHub draws it. -->
+                        <!-- The calls a called workflow's job came through, above its own name rather than before it. -->
+                        <span
+                            v-if="jobName(member.job.name).caller"
+                            class="truncate text-3xs text-subtle"
+                            :style="{ lineHeight: `${CALLER_LINE}px` }"
+                        >
+                            {{ jobName(member.job.name).caller }}
+                        </span>
+                        <!-- One size below body text; wraps rather than widening the card, and the whole name is on its tooltip. -->
+                        <!-- The name alone is the link, so the rest of the row keeps the click that traces this job through the run. -->
+                        <a
+                            v-if="member.job.webUrl"
+                            :href="member.job.webUrl"
+                            target="_blank"
+                            rel="noopener"
+                            draggable="false"
+                            class="line-clamp-2 break-words rounded-xs text-2xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
+                            :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
+                            :style="{ lineHeight: `${NAME_LINE}px` }"
+                            v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: member.job.name }] }"
+                            @click.stop
+                        >
+                            {{ jobName(member.job.name).title }}
+                        </a>
+                        <!-- No page of its own: a job the workflow declares that the run never reported, as GitHub draws it. -->
+                        <span
+                            v-else
+                            class="line-clamp-2 break-words text-2xs font-medium"
+                            :class="member.job.status === `failed` ? `text-danger` : `text-content`"
+                            :style="{ lineHeight: `${NAME_LINE}px` }"
+                            v-tooltip.top="jobName(member.job.name).caller ? member.job.name : undefined"
+                        >
+                            {{ jobName(member.job.name).title }}
+                        </span>
+                        <!-- Status under the name, not before it: the icon's column was width a long run is short of. -->
+                        <span class="flex items-center gap-1 whitespace-nowrap" :style="{ height: `${STATUS_LINE}px` }">
+                            <Icon
+                                :name="toneOf(member.job).icon"
+                                class="shrink-0 text-xs"
+                                :spin="toneOf(member.job).spin"
+                                :class="toneOf(member.job).text"
+                                v-tooltip.top="toneOf(member.job).label"
+                            />
                             <span
-                                v-else
-                                class="line-clamp-2 break-words text-2xs font-medium leading-tight"
-                                :class="member.job.status === `failed` ? `text-danger` : `text-content`"
-                                v-tooltip.top="jobLabel(member.job.name) === member.job.name ? undefined : member.job.name"
+                                v-if="jobStatusLine(member.job, recurring).streak"
+                                :class="toneWash(`danger`, `rounded px-1 text-3xs font-semibold`)"
+                                v-tooltip.top="{
+                                    title: t(`tip.failingStreak`),
+                                    tone: `danger`,
+                                    rows: [{ label: t(`tip.runs`), value: jobStatusLine(member.job, recurring).streak ?? `` }],
+                                }"
+                                >×{{ jobStatusLine(member.job, recurring).streak }}</span
                             >
-                                {{ jobLabel(member.job.name) }}
-                            </span>
-                            <span v-if="hasMetaLine(member.job)" class="flex items-center gap-1.5 whitespace-nowrap leading-snug">
-                                <span
-                                    v-if="jobMeta(member.job, recurring).streak"
-                                    :class="toneWash(`danger`, `rounded px-1 text-3xs font-semibold`)"
-                                    v-tooltip.top="{
-                                        title: t(`tip.failingStreak`),
-                                        tone: `danger`,
-                                        rows: [{ label: t(`tip.runs`), value: jobMeta(member.job, recurring).streak ?? `` }],
-                                    }"
-                                    >×{{ jobMeta(member.job, recurring).streak }}</span
-                                >
-                                <span v-if="jobMeta(member.job, recurring).duration" class="text-3xs tabular-nums text-subtle">
-                                    {{ jobMeta(member.job, recurring).duration }}
-                                </span>
-                            </span>
-                        </div>
+                            <span class="text-3xs tabular-nums text-subtle">{{ jobStatusLine(member.job, recurring).text }}</span>
+                        </span>
                     </div>
                 </div>
             </template>

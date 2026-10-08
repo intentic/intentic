@@ -107,13 +107,18 @@ export const stageLabel = (stage: PipelineStage, index: number): string => {
     return stage.jobs.length === 1 && only !== undefined ? only.name : t(`pipelineDag.step`, { n: index + 1 });
 };
 
-// A job two calls deep or more is named the way GitHub names it on a card: the outermost call, an ellipsis, the job
-// itself (`release / … / smoke`); the whole name stays on its tooltip.
-export const jobLabel = (name: string): string => {
+// A job of a called workflow (`release / linux-build`) is drawn as two lines, not one: the job's own name, and above it,
+// smaller, the calls it was reached through (`release`, or `release / device-android` two calls deep). The prefix is
+// what makes a long run's names long, and a graph that is short of width has height to spare.
+export interface JobName {
+    readonly caller: string | undefined;
+    readonly title: string;
+}
+
+export const jobName = (name: string): JobName => {
     const parts = name.split(` / `);
-    const first = parts[0];
-    const last = parts.at(-1);
-    return parts.length > 2 && first !== undefined && last !== undefined ? `${first} / … / ${last}` : name;
+    const title = parts.at(-1) ?? name;
+    return parts.length > 1 && title !== `` ? { caller: parts.slice(0, -1).join(` / `), title } : { caller: undefined, title: name };
 };
 
 // Positional node id, not name-based: matrix legs and reruns can repeat a job name, colliding as an id.
