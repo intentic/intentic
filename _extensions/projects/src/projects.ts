@@ -169,5 +169,6 @@ export const accentOf = (id: string): FigureAccent => {
 // Where a tile opens once the project is the shell's scope: the workspace, which roots itself at the open project.
 export const WORKSPACE_PATH = `/workspace`;
 
-// Where See it opens: the Preview area on this repository's own target (previewModel.repoTargetId).
+// Where See it opens: this repository's live app (previewModel.repoTargetId). The old /preview address rather than
+// Browsers' own, since an editor older than the move answers only that one and a newer one redirects it to the tab.
 export const previewPath = (id: string): string => `/preview?target=${encodeURIComponent(`repo:${id}`)}`;

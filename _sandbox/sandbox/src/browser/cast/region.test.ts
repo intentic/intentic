@@ -1,4 +1,4 @@
-import { MIN_VIEWPORT, regionOf, regionsEqual, windowBoundsFor, type WindowGeometry } from "./region.js";
+import { MIN_VIEWPORT, phoneRegionOf, regionOf, regionsEqual, windowBoundsFor, type WindowGeometry } from "./region.js";
 
 // The grab region is arithmetic over what the page reports; wrong arithmetic is a picture of the toolbar, or a click
 // that lands 87 px above where it was aimed, neither of which errors.
@@ -74,5 +74,34 @@ describe("windowBoundsFor", () => {
 
     test("fractional sizes from a layout are rounded, not truncated", () => {
         expect(windowBoundsFor({ width: 999.6, height: 600.4 }, geometry(), SCREEN)).toMatchObject({ width: 1000, height: 687 });
+    });
+});
+
+// While a phone is emulated the page reports the phone, so the picture is placed from the window's bounds and the
+// chrome measured before. The bounds below are what Chromium 1243 answered when asked for a 370 px viewport at the
+// screen's bottom-right corner: it keeps the left edge and will not go narrower than 500, so the window hangs off the
+// screen's right edge by the difference.
+describe("phoneRegionOf", () => {
+    const phone = { width: 370, height: 800 };
+
+    test("the picture is the fitted device at the viewport's top-left corner, below the toolbar", () => {
+        expect(phoneRegionOf({ left: 2190, top: 713, width: 500, height: 887 }, geometry(), phone, SCREEN)).toEqual({ x: 2190, y: 800, width: 370, height: 800, scale: 1 });
+    });
+
+    // Where Chromium moved the window instead, its wider viewport holds more than the device: the picture holds the device alone.
+    test("a viewport wider or taller than the device is cut to the device", () => {
+        expect(phoneRegionOf({ left: 2000, top: 600, width: 500, height: 1000 }, geometry(), phone, SCREEN)).toEqual({ x: 2000, y: 687, width: 370, height: 800, scale: 1 });
+    });
+
+    test("a viewport smaller than the device is all of the picture there is, even and on the screen", () => {
+        expect(phoneRegionOf({ left: 2300, top: 900, width: 261, height: 887 }, geometry(), phone, SCREEN)).toEqual({ x: 2300, y: 987, width: 260, height: 612, scale: 1 });
+    });
+
+    test("at 2× every edge is twice the display's pixels", () => {
+        expect(phoneRegionOf({ left: 100, top: 10, width: 500, height: 887 }, geometry({ dpr: 2 }), phone, SCREEN)).toEqual({ x: 200, y: 194, width: 740, height: 1406, scale: 2 });
+    });
+
+    test("bounds CDP left out are read as the window the geometry describes", () => {
+        expect(phoneRegionOf({}, geometry(), phone, SCREEN)).toEqual({ x: 1280, y: 807, width: 370, height: 792, scale: 1 });
     });
 });

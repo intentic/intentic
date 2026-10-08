@@ -17,7 +17,7 @@ export interface ClaimedLink {
 
 // Rings what a claimed link opened, once it is drawn: a link whose tab was already in front changed nothing on screen,
 // and one in an agent's reply was clicked twelve times running. The main area when it is what shows the thing (a lent
-// tab, the preview while the reader stands on /preview), else the side panel. Asked of the document the press came
+// tab, Browsers while the reader stands on /browsers), else the side panel. Asked of the document the press came
 // from, since a popped-out chat draws its own side panel.
 const pointAtClaimed = (view: string, doc: Document): void => {
     void afterPaint().then(() => {

@@ -7,8 +7,7 @@ import { stopJob } from "../agents/fleet/useAgents-actions";
 import { usePorts } from "../sandbox/environment/usePorts";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { usePublicOutbox } from "../workspace/push/usePublicOutbox";
-import { addressTarget, appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "./previewModel";
-import { previewAddress } from "./previewSurface";
+import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "./previewModel";
 
 // The live list. `active` gates the per-monorepo apps fan-out while the panel is mounted (same economy as
 // useWorkspaceApps); panels/outbox ride reads the shell holds. No clock: the daemon's runtime push invalidates panels
@@ -43,7 +42,6 @@ export function usePreviewTargets(active: Ref<boolean>) {
             (appsQuery.data.value ?? []).flatMap(({ repo, apps }) => appTargets(repo, apps)),
             portTargets(offered.value),
             publicTarget(publicFiles.value),
-            addressTarget(previewAddress.value),
         ),
     );
 

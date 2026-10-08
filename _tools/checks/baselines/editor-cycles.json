@@ -6,8 +6,6 @@
     "features/agents -> features/extensions": "",
     "features/agents -> features/sandbox": "",
     "features/agents -> features/workspace": "",
-    "features/browsers -> features/capabilities": "",
-    "features/browsers -> features/chat": "",
     "features/browsers -> features/sandbox": "",
     "features/capabilities -> features/agents": "",
     "features/capabilities -> features/browsers": "",

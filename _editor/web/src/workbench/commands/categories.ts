@@ -14,7 +14,7 @@ export const WORKSPACE = `Workspace`;
 export const TERMINAL = `Terminal`;
 export const CHAT = `Chat`;
 export const SIDE_PANEL = `Side Panel`;
-export const PREVIEW = `Preview`;
+export const BROWSERS = `Browsers`;
 export const AGENTS = `Agents`;
 export const ACCOUNT = `Account`;
 
@@ -36,8 +36,8 @@ export const categoryLabel = (category: string): string => {
             return t(`shared.chat`);
         case SIDE_PANEL:
             return t(`shell.commandCategories.sidePanel`);
-        case PREVIEW:
-            return t(`shared.preview`);
+        case BROWSERS:
+            return t(`shared.browsers`);
         case AGENTS:
             return t(`shared.agents`);
         case ACCOUNT:

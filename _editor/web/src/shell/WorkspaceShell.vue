@@ -7,7 +7,8 @@ import { watchDeviceReturns } from "../features/sandbox/devices/useDeviceReturns
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "../workbench/window/mainWindow";
 import { openInWorkspace, openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
-import { openPreviewBeside } from "../features/preview/previewSurface";
+import { openBrowsersBeside } from "../workbench/browsers/browsersSurface";
+import { parseTabKey } from "../workbench/browsers/browsersPaths";
 import { revealSideView } from "../workbench/side/sideViews";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
@@ -40,8 +41,8 @@ const route = useRoute();
 useMainWindow((errand) => {
     if (errand.kind === `file`) {
         void (errand.home === true ? openInWorkspace : openWorkspaceRef)(errand.path, errand.line, errand.scope);
-    } else if (errand.kind === `preview`) {
-        openPreviewBeside(router, errand.target);
+    } else if (errand.kind === `browsers`) {
+        openBrowsersBeside(router, errand.tab === undefined ? undefined : parseTabKey(errand.tab));
     } else if (errand.kind === `side`) {
         revealSideView(errand.view, errand.input, { keep: errand.keep });
     } else {

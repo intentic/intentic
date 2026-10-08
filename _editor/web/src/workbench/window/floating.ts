@@ -3,7 +3,7 @@ import { desktopApp, raiseOwnWindow, widenOwnWindow } from "../../app/environmen
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
-// A floating panel (chat, terminal, preview) is a real window at /floating/<panel> (FloatingSection.vue); every window
+// A floating panel (chat, terminal, browsers) is a real window at /floating/<panel> (FloatingSection.vue); every window
 // derives `floats`/`here`/`shows` from the claims it hears. A claim is alive while its window holds the claim's Web Lock:
 // the window says `here` only once it holds that lock, every window that hears it queues on it, and the browser drops
 // it with the realm (a close, a crash, a kill, a reload), granting it to them at that moment, so nothing polls. A
@@ -12,7 +12,7 @@ import { uuid } from "../../lib/uuid";
 // between two realms while a closed window's panel comes home in a moment. Duplicates resolve oldest-claim-wins. Where
 // Web Locks are unavailable (a plain-http origin) or refused, the claim beats instead and a silent one expires.
 
-export type FloatingPanel = `chat` | `terminal` | `preview`;
+export type FloatingPanel = `chat` | `terminal` | `browsers`;
 
 // Resolved against BASE_URL, not root-absolute: this build can be served under a path prefix.
 const floatingPath = (panel: FloatingPanel): string => `${import.meta.env.BASE_URL}floating/${panel}`;

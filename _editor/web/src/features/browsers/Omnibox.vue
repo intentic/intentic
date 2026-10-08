@@ -3,7 +3,7 @@
      as the kit's AddressField: while nobody is typing, the scheme folds into the padlock and the host stands out from
      the path; the moment somebody clicks, the whole address comes back, selected, ready to be typed over. -->
 <script setup lang="ts">
-import { CopyButton, Icon } from "@intentic/ui";
+import { CopyButton, Icon, type IconName } from "@intentic/ui";
 import { computed, nextTick, ref } from "vue";
 import { addressParts, securityOf } from "./address";
 
@@ -14,6 +14,7 @@ const {
     copyLabel,
     secureLabel,
     insecureLabel,
+    kind,
 } = defineProps<{
     // The page's own address; empty for a blank page. Typing never changes it, the caller does after `submit`.
     value: string;
@@ -24,6 +25,8 @@ const {
     // What the padlock says on hover: the page is private, or it travels in the clear.
     secureLabel?: string;
     insecureLabel?: string;
+    // What the address is of, where it is not a web page (`desktop://`, `app://`): drawn in the padlock's place.
+    kind?: IconName | undefined;
 }>();
 
 // `cancel` is Escape: the caller puts the keyboard back on the page.
@@ -43,8 +46,16 @@ const dressed = computed(() => !focused.value && parts.value !== undefined);
 
 // The glyph at the front says what Enter will do: a search while typing or on a blank page, otherwise how private the
 // page is.
-const glyph = computed(() =>
-    focused.value || value === `` ? `search` : security.value === `secure` ? `lock` : security.value === `insecure` ? `unlock` : `globe`,
+const glyph = computed<IconName>(() =>
+    kind !== undefined
+        ? kind
+        : focused.value || value === ``
+          ? `search`
+          : security.value === `secure`
+            ? `lock`
+            : security.value === `insecure`
+              ? `unlock`
+              : `globe`,
 );
 
 // Focusing selects the whole address, so a click then Ctrl+C copies it, and typing replaces it.

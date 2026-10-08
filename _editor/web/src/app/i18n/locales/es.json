@@ -640,6 +640,35 @@
             "fixStepHandBack": "Resuelve ese paso en la página y luego devuelve el control.",
             "starting": "Iniciando tu navegador…",
             "startCaption": "Tu navegador se ejecuta en este sandbox: las páginas cargan por su red y donde inicies sesión seguirás conectado."
+        },
+        "area": {
+            "inOwnWindow": "Navegadores está en su propia ventana",
+            "bringBackHere": "Traerlo aquí",
+            "bringBackToFill": "Tráelo para que ocupe esta vista, o mantén tus apps y ventanas junto a tu código en otra pantalla."
+        },
+        "preview": {
+            "gone": "Esta app ya no se sirve",
+            "goneLine": "Su servidor de desarrollo o puerto reenviado ya no aparece. Vuelve a iniciarla o cierra esta pestaña."
+        },
+        "app": {
+            "closed": "Esta ventana se ha cerrado"
+        },
+        "launcher": {
+            "open": "Abierta",
+            "apps": "Apps",
+            "webDetail": "Una página en tu propio navegador"
+        },
+        "phone": {
+            "toggle": "Marco de teléfono",
+            "note": "A tamaño de teléfono"
+        },
+        "window": {
+            "dock": "Traer de vuelta a esta ventana",
+            "popOut": "Mover a su propia ventana"
+        },
+        "kind": {
+            "app": "app en vivo",
+            "window": "ventana en el escritorio"
         }
     },
     "capabilities": {
@@ -1989,7 +2018,6 @@
             "agentWaits": "El agente espera",
             "authFailed": "No se pudo autorizar la vista del escritorio ({reason}). Reintentando.",
             "connecting": "Iniciando el escritorio…",
-            "connectingShort": "Conectando…",
             "emptyNote": "Cuando un agente abre un programa con sus herramientas de escritorio, su ventana aparece aquí y puedes tomar el control para usarlo tú.",
             "emptyTitle": "No hay nada abierto en este escritorio",
             "emptyYourself": "Para abrir uno tú mismo, define esto en una terminal y luego inicia el programa ahí:",
@@ -1998,7 +2026,6 @@
             "heldElsewhere": "Tomado en otra ventana",
             "heldNote": "Hasta 20 segundos después de tu entrada",
             "heldTitle": "Herramientas del agente en pausa",
-            "live": "En vivo",
             "openTerminal": "Abrir terminal",
             "reconnecting": "Reconectando…",
             "refused": "Solo un mantenedor de este sandbox puede abrir su escritorio.",
@@ -2050,55 +2077,33 @@
         }
     },
     "preview": {
-        "previewArea": {
-            "bringBackHere": "Tráela de vuelta aquí",
-            "bringBackToFill": "Tráela de vuelta para llenar este hueco, o deja la aplicación junto a tu código en otra pantalla.",
-            "previewInOwnWindow": "Tu app en vivo está en su propia ventana"
-        },
         "previewModel": {
             "port": "Puerto {port}",
             "publicSite": "Sitio público"
         },
         "previewPanel": {
             "addressAnswersElsewhere": "{url} responde desde algún sitio que no es el proxy de vista previa de este sandbox: puede que su nombre aún se esté propagando, o que este sandbox no publique ningún nombre de host de vista previa.",
-            "addressToPreview": "Dirección que previsualizar",
             "app": "App",
-            "appToPreview": "Qué aplicación previsualizar",
-            "copyAddress": "Copiar dirección",
             "deps": "Dependencias",
             "devServer": "Servidor de desarrollo",
             "devServerStopped": "Su servidor de desarrollo se detuvo.",
-            "dockBack": "Volver a acoplar",
-            "dockPreviewBack": "Volver a acoplar la vista previa",
-            "forwardedPorts": "Puertos reenviados",
-            "go": "Ir",
             "installed": "Instaladas",
             "installFirst": "Instalar antes",
             "labelIsntRunning": "{label} no está en marcha.",
             "leftRunningForYou": "Un agente dejó este servidor en marcha para ti: {label}.",
-            "localhost3000AnyAddress": "localhost:3000, o cualquier dirección",
-            "movePreviewIntoOwn": "Mover la vista previa a su propia ventana",
-            "newTab": "Nueva pestaña",
-            "newWindow": "Nueva ventana",
             "noDevServerToStart": "No tiene ningún servidor de desarrollo que este panel pueda iniciar: ni panel {operator} ni script {dev} en su raíz. Todo lo que arranque desde un terminal aparece en «Puertos reenviados».",
-            "nothingToPreviewYet": "Todavía no hay nada que previsualizar.",
             "openDevServersTerminal": "Abrir el terminal de este servidor de desarrollo",
-            "openInNewTab": "Abrir {label} en una pestaña nueva",
             "openPorts": "Abrir los puertos",
             "openTerminal": "Abrir su terminal",
             "opening": "Abriendo…",
-            "otherAddress": "Otra dirección",
             "phone": "Teléfono",
             "phoneToFramePreview": "En qué teléfono enmarcar la vista previa",
             "preparingPreview": "Preparando la vista previa…",
             "preview2": "Vista previa de {label}",
-            "previewAddress": "Previsualizar una dirección",
             "previewAddressDoesntReach": "Esta dirección de vista previa no llega a tu sandbox.",
-            "previewAnotherAddress": "Previsualizar otra dirección",
             "previewingItForwardsPort": "Previsualizarlo reenvía su puerto, lo que lo publica en una dirección que cualquiera con el enlace puede abrir. La vista Puertos lista cada reenvío y permite retirarlo.",
             "previewingOneForwardsPort": "Previsualizar uno reenvía su puerto, lo que lo publica en una dirección que puede abrir cualquiera con el enlace. La vista Puertos lista todos los reenvíos y los retira.",
             "readingWhatPreviewed": "Leyendo qué se puede previsualizar…",
-            "reloadPreview": "Recargar la vista previa",
             "repo": "Repo",
             "serversOnOwnPorts": "{label} tiene {count} servidor de desarrollo en un puerto propio, así que una sola dirección de vista previa no puede representarlo. Elige el que quieras: | {label} tiene {count} servidores de desarrollo en puertos propios, así que una sola dirección de vista previa no puede representarlo. Elige el que quieras:",
             "startDevServerIn": "Inicia un servidor de desarrollo en un repositorio, o pide al agente que construya una aplicación: su vista previa en vivo aparece aquí en cuanto responda.",

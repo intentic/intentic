@@ -79,8 +79,25 @@ export interface BrowserView {
     readonly find: () => void;
     // The picture box's size in CSS px; the daemon sizes the browser window so the viewport is exactly that.
     readonly requestSize: (width: number, height: number) => void;
+    // Renders the page as a phone would (its CSS viewport, a touch screen, its user agent), or as itself again with
+    // none. While a device is set, the device decides the picture's size and `requestSize` waits.
+    readonly emulate: (device: EmulatedDevice | undefined) => void;
     // Answers the dialog the session lists; `text` is a prompt's reply.
     readonly answerDialog: (accept: boolean, text?: string) => void;
+}
+
+// What `emulate` asks the daemon to render as: a phone's CSS viewport in portrait, as a touch screen, under its UA.
+export interface EmulatedDevice {
+    readonly width: number;
+    readonly height: number;
+    readonly mobile: boolean;
+    readonly userAgent?: string | undefined;
+}
+
+export interface BrowserViewOptions {
+    // Whether anyone can see the picture (its tab in front, its view not parked): the daemon stops sending frames while
+    // not, as it does for a hidden document, and resumes one frame away.
+    readonly visible?: Ref<boolean>;
 }
 
 // Authenticated wss URL, or undefined if unreachable/not signed in; base and token are read together after the
@@ -97,7 +114,7 @@ const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
 
 // Follows `name` as the view switches browsers; a change tears the old socket down and opens a new one, with
 // nothing to preserve across the switch.
-export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
+export const useBrowserView = (name: Ref<string | undefined>, options: BrowserViewOptions = {}): BrowserView => {
     const frame = ref<string | undefined>();
     const status = ref<string | undefined>(t(`browsers.browserView.connecting`));
     const driving = ref(false);
@@ -123,6 +140,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     let boxSize: Size | undefined;
     let askedSize: Size | undefined;
     let resizeTimer: number | undefined;
+    // The device the page is rendered as, re-said on every reconnect like the pin; none is the page as itself.
+    let device: EmulatedDevice | undefined;
 
     // The live socket below; declared ahead so every verb can say something on it. The daemon pongs every ping, and a
     // still page sends no frames, so its silence clock is the plain one.
@@ -130,7 +149,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const copy = selectionCopy(send);
 
     const askSize = (): void => {
-        if (kind.value !== `video` || boxSize === undefined || sameSize(boxSize, askedSize)) {
+        if (device !== undefined || kind.value !== `video` || boxSize === undefined || sameSize(boxSize, askedSize)) {
             return;
         }
         askedSize = boxSize;
@@ -241,8 +260,11 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     // A background or unmounted-but-alive view would otherwise keep pulling every frame down the tunnel to nothing
     // visible. The daemon holds the binding and pin across a pause, so resuming is one frame away, not a reconnect.
-    const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
+    const syncVisibility = (): void => send({ type: document.hidden || options.visible?.value === false ? `pause` : `resume` });
     document.addEventListener(`visibilitychange`, syncVisibility);
+    if (options.visible !== undefined) {
+        watch(options.visible, syncVisibility);
+    }
 
     const live = useLiveSocket<string>({
         mint: async () => {
@@ -263,6 +285,9 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             askedSize = undefined;
             if (pinned !== undefined) {
                 send({ type: `bind`, pageId: pinned });
+            }
+            if (device !== undefined) {
+                send({ type: `emulate`, device });
             }
             // A newly (re)opened socket starts out streaming; the daemon can't know otherwise until told.
             syncVisibility();
@@ -285,6 +310,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             pinned = undefined;
             rawKeys = false;
             askedSize = undefined;
+            // Each window is its own; the next one starts as itself, and the caller says again if it should not.
+            device = undefined;
             frame.value = undefined;
             driving.value = false;
             // A decoder holds state for the stream it was built for; the next browser's `ready` builds a new one.
@@ -430,6 +457,27 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             boxSize = size;
             window.clearTimeout(resizeTimer);
             resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
+        },
+        emulate: (next) => {
+            const same =
+                next === device ||
+                (next !== undefined &&
+                    device !== undefined &&
+                    next.width === device.width &&
+                    next.height === device.height &&
+                    next.mobile === device.mobile &&
+                    next.userAgent === device.userAgent);
+            if (same) {
+                return;
+            }
+            device = next;
+            send(next === undefined ? { type: `emulate` } : { type: `emulate`, device: next });
+            // Back to itself, the page is sized to the box again: the daemon has the box it had before, but asking is
+            // what a fresh box is, so the last one asked is forgotten.
+            if (next === undefined) {
+                askedSize = undefined;
+                askSize();
+            }
         },
         answerDialog: (accept, text) => send(text === undefined ? { type: `dialog`, accept } : { type: `dialog`, accept, text }),
     };

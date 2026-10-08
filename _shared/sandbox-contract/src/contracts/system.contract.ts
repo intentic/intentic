@@ -253,15 +253,16 @@ export const systemContract = {
         })
         .input(BrowserNameParamSchema)
         .output(OkSchema),
-    // The picture and the hands come over /system/desktop-view; this is whether there is anything on it. Pushed through
-    // the `desktop` runtime domain as windows open and close, never polled.
+    // The picture and the hands come over /system/desktop-view; this is whether there is anything on it, and which windows
+    // a tab could show alone. Pushed through the `desktop` runtime domain as windows open, close and take the keyboard,
+    // and as their titles change while a view is open; never polled by the client.
     desktop: systemRoute
         .route({
             method: "GET",
             path: "/system/desktop",
             summary: "The sandbox's own desktop",
             description:
-                "Whether the sandbox's desktop is up, which display it is, and how many windows are open on it. The live picture of it comes over a separate socket; this says whether there is anything to see.",
+                "Whether the sandbox's desktop is up, which display it is, and which windows are open on it. The live picture of it, or of one window on it, comes over a separate socket; this says whether there is anything to see.",
         })
         .output(DesktopStateSchema),
     // In-process and spawned alike: the board draws each under the card of the conversation that started it, and a chat

@@ -51,7 +51,8 @@ export const terminalChip = (facts: {
 
 /**
  * The live app, while something answers. A repo that merely has an operator panel, or files in the outbox, is somewhere
- * to start one from (the palette, the Project page, the chat that started it), not something running.
+ * to start one from (the palette, the Project page, the chat that started it), not something running. A press opens
+ * Browsers on the app most worth seeing (`?preview`, BrowsersArea.vue), since the live app is a tab there.
  */
 export const previewChip = (facts: { readonly healthy: number; readonly here: boolean; readonly label: string }): RuntimeChip | undefined => {
     if (facts.healthy === 0 && !facts.here) {
@@ -61,7 +62,7 @@ export const previewChip = (facts: { readonly healthy: number; readonly here: bo
     return {
         id: `preview`,
         label: facts.label,
-        to: `/preview`,
+        to: `/browsers?preview`,
         ...(facts.healthy > 0 ? { count: facts.healthy } : {}),
         active: facts.here,
         aria: spoken(facts.label, running),
@@ -81,7 +82,10 @@ export const browsersChip = (facts: { readonly sessions: readonly BrowserSession
         return undefined;
     }
     const label = t(`shared.browsers`);
-    const base = { id: `browsers`, label, to: `/browsers`, active: facts.here } as const;
+    // To a web window by name, since a bare /browsers reopens whatever tab was in front, a live app as like as not: the
+    // one asking for help, else the one that moved last.
+    const window = facts.sessions.find((session) => session.help !== undefined) ?? facts.sessions.find((session) => session.running);
+    const base = { id: `browsers`, label, to: window === undefined ? `/browsers` : `/browsers/${window.name}`, active: facts.here } as const;
     if (helping > 0) {
         const note = t(`shell.shellDesktop.agentNeedsHelp`);
         return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: label, tone: `warn`, note } };
@@ -95,7 +99,7 @@ export const browsersChip = (facts: { readonly sessions: readonly BrowserSession
     };
 };
 
-/** The sandbox's own desktop, while a window is open on it: an empty screen has nothing to watch. */
+/** The sandbox's own desktop, while a window is open on it: an empty screen has nothing to watch. Its tab in Browsers. */
 export const desktopChip = (facts: { readonly windows: number; readonly here: boolean }): RuntimeChip | undefined => {
     if (facts.windows === 0 && !facts.here) {
         return undefined;
@@ -105,7 +109,7 @@ export const desktopChip = (facts: { readonly windows: number; readonly here: bo
     return {
         id: `desktop`,
         label,
-        to: `/desktop`,
+        to: `/browsers/desktop`,
         ...(facts.windows > 0 ? { count: facts.windows } : {}),
         active: facts.here,
         aria: spoken(label, open),

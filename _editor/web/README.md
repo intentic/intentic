@@ -39,8 +39,8 @@ flowchart LR
   which the query cache does not, and a sign-out clears both. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
-  frames missed while disconnected. Terminals, the browser view and the desktop view (`/desktop`, the sandbox's own
-  screen, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
+  frames missed while disconnected. Terminals, the browser view and the desktop view (the sandbox's own screen, or one
+  window on it, which a maintainer can take over) use WebSockets opened with a short-lived ticket (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`). Each of them, and a connected account's browser window, rides one
   live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
   ladder that starts over when the sandbox answers again.
@@ -135,13 +135,28 @@ flowchart LR
   the next one replaces unless kept. "Open in …" moves it into its home. The chat whose home is the side is the
   panel's lower part, under the tabs. A popped-out chat has a panel of its own, right of the chat where its checklist
   and usage strip stand while it is empty; "Open in …" from there goes to the main window, and a popped-out terminal
-  or preview hands its references to the main window's panel. A phone has no side panel: there every reference
+  or Browsers hands its references to the main window's panel. A phone has no side panel: there every reference
   navigates as before. A file peek reads the copy it names (`VIEW_SCOPE`)
   without switching the Workspace's scope, and never edits, since the Workspace may hold the same path unsaved.
   _2026-09-29: peeks stack above the chat rather than sharing tabs with it. A tab would hide the chat that linked to
   the file, and typing to an agent while its preview updates needs both on screen. References from the side panel's
   own chat open beside, not in the main area as a side chat does in an IDE: that would let one click replace the
   section the rail picked._
+- **Browsers.** Everything live the sandbox shows is a tab of one view at `/browsers` (`shell/browsers/`): the live
+  apps its dev servers and forwarded ports serve, framed straight from them in the reader's own browser
+  (`features/preview/PreviewTab.vue`); the windows of its own Chromium, streamed (`features/browsers/`); and its
+  desktop and each window on that desktop, streamed and cropped to the window (`features/desktop/DesktopTab.vue`,
+  addressed `desktop://` and `app://<program>`). The strip leads with the reader's pins (apps, desktop, windows), set off
+  by a hairline from the web pages of the window in front; what a tab is shows in its glyph and the glyph's colour (a
+  live app's eye is green while it answers, blue while it starts), never a word beside its title. The + opens a
+  launcher of all of it, and the start page offers the same. The toolbar is the browser's, with whatever the tab in
+  front owns teleported into it (an app's Start and Stop, the hand on the desktop), and a phone frame for an app or a
+  web page (`emulate` on the browser's socket). The view is one panel per window above the router
+  (`shell/window/PoppablePanels.vue`), moved between `/browsers`, a side panel tab and a window of its own, never
+  rebuilt: parked, a framed app keeps its state and the streams pause. Its state (pins, the tab in front, opening one
+  beside) is `workbench/browsers/`, which any feature may call; a tab's key is the route's tail (`browsersPaths.ts`).
+  _2026-10-08: the Preview and Desktop views became tabs of Browsers. Both had been a screen of their own for one kind
+  of live thing, with a picker standing in for tabs; `/preview` and `/desktop` redirect to their tabs._
 - **The browser tab.** `shell/browser-tab/` (its chimes and preferences in `workbench/browser-tab/`) shows the fleet's
   news to a reader who is looking elsewhere. One mark at
   a time, the first that holds: `(2)` for what needs you (the Agents tile's own count), `Offline` when the sandbox is
@@ -196,6 +211,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | Word | Means |
 | --- | --- |
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`workbench/window/panelSlots.ts`) |
+| pin | A Browsers tab that is the reader's own rather than a web page of the window in front: a live app, the desktop, a window on it (`workbench/browsers/browsersSurface.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). On a phone, the metrics alone at the Agents board's foot |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
@@ -206,7 +222,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else |
 | side panel | The desktop shell's right-hand column: what the reader opened beside the section the rail put in the main area, one tab each, stacked over the chat when the chat's home is the side (`shell/side/`). Not the Workspace's second editor pane, which is its companion pane |
-| side view | What one side panel tab shows for one input: the core's file and preview, or an extension's (`workbench/side/sideViews.ts`) |
+| side view | What one side panel tab shows for one input: the core's file and Browsers, or an extension's (`workbench/side/sideViews.ts`) |
 | page | A self-contained HTML document the agent showed in a chat (`show_page`), or asked the reader to answer on (`ask_page`), drawn inline in a sealed frame in the chat's own theme (`features/chat/transcript/pages/`). Its scripts run, with no network and no reach into the app; what it asks of the app (its height, a link, words for the composer, an answer) goes over the MCP Apps bridge (`pageBridge.ts`) and is acted on only after the reader's own press. A connected MCP server's app is drawn the same way. Not "artifact", not "widget" |
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 

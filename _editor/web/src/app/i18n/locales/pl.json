@@ -900,6 +900,35 @@
             "fixStepHandBack": "Napraw ten krok na stronie, potem oddaj sterowanie.",
             "starting": "Uruchamianie Twojej przeglądarki…",
             "startCaption": "Twoja przeglądarka działa w tym sandboksie: strony ładują się przez jego sieć, a to, do czego się zalogujesz, pozostaje zalogowane."
+        },
+        "area": {
+            "inOwnWindow": "Przeglądarki są w osobnym oknie",
+            "bringBackHere": "Przywróć tutaj",
+            "bringBackToFill": "Przywróć je, by wypełniły ten widok, albo trzymaj aplikacje i okna obok kodu na drugim ekranie."
+        },
+        "preview": {
+            "gone": "Ta aplikacja nie jest już serwowana",
+            "goneLine": "Jej serwer deweloperski ani przekierowany port nie są już na liście. Uruchom ją ponownie albo zamknij tę kartę."
+        },
+        "app": {
+            "closed": "To okno zostało zamknięte"
+        },
+        "launcher": {
+            "open": "Otwarte",
+            "apps": "Aplikacje",
+            "webDetail": "Strona w Twojej własnej przeglądarce"
+        },
+        "phone": {
+            "toggle": "Ramka telefonu",
+            "note": "W rozmiarze telefonu"
+        },
+        "window": {
+            "dock": "Przywróć do tego okna",
+            "popOut": "Przenieś do osobnego okna"
+        },
+        "kind": {
+            "app": "aplikacja na żywo",
+            "window": "okno na pulpicie"
         }
     },
     "capabilities": {
@@ -3780,7 +3809,6 @@
             "agentWaits": "Agent czeka",
             "authFailed": "Nie udało się autoryzować widoku pulpitu ({reason}). Ponawiam.",
             "connecting": "Uruchamianie pulpitu…",
-            "connectingShort": "Łączenie…",
             "emptyNote": "Gdy agent otworzy program narzędziami pulpitu, jego okno pojawi się tutaj, a Ty możesz przejąć sterowanie i z niego skorzystać.",
             "emptyTitle": "Na tym pulpicie nic nie jest otwarte",
             "emptyYourself": "Aby otworzyć program samodzielnie, ustaw to w terminalu, a potem uruchom w nim program:",
@@ -3789,7 +3817,6 @@
             "heldElsewhere": "Przejęty w innym oknie",
             "heldNote": "Do 20 sekund po Twoim ruchu",
             "heldTitle": "Narzędzia agenta wstrzymane",
-            "live": "Na żywo",
             "openTerminal": "Otwórz terminal",
             "reconnecting": "Ponowne łączenie…",
             "refused": "Tylko opiekun tego sandboksa może otworzyć jego pulpit.",
@@ -3915,55 +3942,33 @@
             "pixel7": "Pixel 7",
             "pixel8Pro": "Pixel 8 Pro"
         },
-        "previewArea": {
-            "bringBackHere": "Przywróć tutaj",
-            "bringBackToFill": "Przywróć go, żeby wypełnił to miejsce, albo zostaw aplikację obok kodu na drugim ekranie.",
-            "previewInOwnWindow": "Twoja aplikacja na żywo jest w osobnym oknie"
-        },
         "previewModel": {
             "port": "Port {port}",
             "publicSite": "Witryna publiczna"
         },
         "previewPanel": {
             "addressAnswersElsewhere": "{url} odpowiada skądś, co nie jest proxy podglądu tego sandboxa: jego nazwa może się jeszcze propagować albo ten sandbox w ogóle nie publikuje nazw hostów podglądu.",
-            "addressToPreview": "Adres do podglądu",
             "app": "Aplikacja",
-            "appToPreview": "Którą aplikację podglądać",
-            "copyAddress": "Kopiuj adres",
             "deps": "Zależności",
             "devServer": "Serwer dev",
             "devServerStopped": "Jego serwer deweloperski się zatrzymał.",
-            "dockBack": "Zadokuj z powrotem",
-            "dockPreviewBack": "Zadokuj podgląd z powrotem",
-            "forwardedPorts": "Przekierowane porty",
-            "go": "Idź",
             "installed": "Zainstalowane",
             "installFirst": "Najpierw instalacja",
             "labelIsntRunning": "{label} nie działa.",
             "leftRunningForYou": "Agent zostawił ten serwer uruchomiony dla ciebie: {label}.",
-            "localhost3000AnyAddress": "localhost:3000 albo dowolny adres",
-            "movePreviewIntoOwn": "Przenieś podgląd do osobnego okna",
-            "newTab": "Nowa karta",
-            "newWindow": "Nowe okno",
             "noDevServerToStart": "Nie ma serwera deweloperskiego, który ten panel mógłby uruchomić: brak panelu {operator} i brak skryptu {dev} w jego katalogu głównym. Cokolwiek uruchomi z terminala, pojawi się w „Przekierowanych portach”.",
-            "nothingToPreviewYet": "Nie ma jeszcze czego podglądać.",
             "openDevServersTerminal": "Otwórz terminal tego serwera deweloperskiego",
-            "openInNewTab": "Otwórz {label} w nowej karcie",
             "openPorts": "Otwórz porty",
             "openTerminal": "Otwórz jego terminal",
             "opening": "Otwieranie…",
-            "otherAddress": "Inny adres",
             "phone": "Telefon",
             "phoneToFramePreview": "W jakim telefonie oprawić podgląd",
             "preparingPreview": "Przygotowywanie podglądu…",
             "preview2": "Podgląd: {label}",
-            "previewAddress": "Podejrzyj adres",
             "previewAddressDoesntReach": "Ten adres podglądu nie dociera do Twojego sandboxa.",
-            "previewAnotherAddress": "Podejrzyj inny adres",
             "previewingItForwardsPort": "Podgląd przekierowuje jego port, co publikuje go pod adresem, który może otworzyć każdy z linkiem. Widok Porty pokazuje wszystkie przekierowania i pozwala je cofnąć.",
             "previewingOneForwardsPort": "Podgląd przekierowuje port, co publikuje go pod adresem, który otworzy każdy, kto ma link. Widok Porty wymienia każde przekierowanie i je cofa.",
             "readingWhatPreviewed": "Odczytywanie, co da się podejrzeć…",
-            "reloadPreview": "Odśwież podgląd",
             "repo": "Repo",
             "serversOnOwnPorts": "{label} ma uruchomiony {count} serwer deweloperski na własnym porcie, więc jeden adres podglądu nie może go zastąpić. Wybierz ten, o który Ci chodzi: | {label} ma uruchomione {count} serwery deweloperskie na własnych portach, więc jeden adres podglądu nie może ich zastąpić. Wybierz ten, o który Ci chodzi: | {label} ma uruchomionych {count} serwerów deweloperskich na własnych portach, więc jeden adres podglądu nie może ich zastąpić. Wybierz ten, o który Ci chodzi:",
             "startDevServerIn": "Uruchom serwer deweloperski w repozytorium albo poproś agenta, żeby zbudował aplikację: jej podgląd na żywo pojawi się tutaj, gdy tylko odpowie.",
@@ -3992,8 +3997,7 @@
             "startingOverdue": "Serwer deweloperski uruchamia się już {waited} i wciąż nie odpowiada, a poprawny start nigdy tyle nie trwa. Terminal pokazuje, na co czeka; zwykle pomaga ponowne uruchomienie.",
             "exited": "Serwer deweloperski zakończył działanie, zanim cokolwiek zaserwował. Przyczynę znajdziesz w jego terminalu.",
             "addressSilent": "Serwer deweloperski działa, ale adres podglądu nie odpowiedział od {waited}: publiczny adres tego sandboxa może jeszcze nie być trasowany. Terminal pokazuje serwer na żywo.",
-            "addressSlow": "Adres długo nie odpowiada: terminal pokazuje serwer deweloperski na żywo.",
-            "full": "Pełny"
+            "addressSlow": "Adres długo nie odpowiada: terminal pokazuje serwer deweloperski na żywo."
         }
     },
     "router": {

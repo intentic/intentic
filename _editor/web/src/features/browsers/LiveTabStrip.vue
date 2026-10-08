@@ -2,24 +2,23 @@
      runs into the toolbar under it, the others sit on the strip with a hairline between them, each shrinks as more
      open, and the + rides right after the last, always there. The lifted shape is one piece that slides from tab to tab
      rather than a background that jumps, and a tab grows in as it opens and folds away as it closes. Middle-click closes
-     a tab and double-clicking the empty strip opens one, the two gestures a browser's own strip answers to. What a tab
-     IS stays the caller's: this draws, it decides nothing. -->
+     a tab and double-clicking the empty strip opens one, the two gestures a browser's own strip answers to. Pinned tabs
+     (a live app, the desktop, a window on it) lead, set off from the web pages by a hairline. What a tab IS stays the
+     caller's: this draws, it decides nothing. -->
 <script setup lang="ts">
-import type { BrowserPage } from "@intentic/sandbox-contract";
 import { Icon, ui, vMiddleclick } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
+import type { StripTab } from "./stripTab";
 
-const { pages, activeId, closable } = defineProps<{
-    pages: readonly BrowserPage[];
+const { tabs, activeId } = defineProps<{
+    tabs: readonly StripTab[];
     activeId: string | undefined;
-    // Whether a tab may be closed from here: not while an agent is driving the window, nor on a page that isn't a real
-    // tab yet (the start page's).
-    closable: boolean;
-    label: (page: BrowserPage) => string;
 }>();
 
-const emit = defineEmits<{ pick: [page: BrowserPage]; close: [page: BrowserPage]; open: [] }>();
+// `open` is the +, handed its own button so a menu can hang off it; `quickOpen` is the strip's double-click, a web tab
+// straight away, as a browser's own strip answers it.
+const emit = defineEmits<{ pick: [tab: StripTab]; close: [tab: StripTab]; open: [anchor: HTMLElement]; quickOpen: [] }>();
 
 const t = useT();
 
@@ -55,7 +54,7 @@ const follow = (): void => {
 };
 
 watch(
-    () => [activeId, pages.map((page) => page.id).join(` `)],
+    () => [activeId, tabs.map((tab) => tab.id).join(` `)],
     async () => {
         await nextTick();
         follow();
@@ -79,11 +78,14 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(frame);
 });
 
-const close = (page: BrowserPage): void => {
-    if (closable) {
-        emit(`close`, page);
+const close = (tab: StripTab): void => {
+    if (tab.closable) {
+        emit(`close`, tab);
     }
 };
+
+// The first web page after the pins: where the hairline that sets the two groups apart is drawn.
+const seamAt = (index: number): boolean => index > 0 && tabs[index - 1]?.pinned === true && tabs[index]?.pinned === false;
 </script>
 
 <template>
@@ -100,38 +102,45 @@ const close = (page: BrowserPage): void => {
             <TransitionGroup name="tab">
                 <!-- The tab and its close are siblings, not nested: a button cannot hold one. -->
                 <div
-                    v-for="page in pages"
-                    :key="page.id"
-                    :data-selected="page.id === activeId"
+                    v-for="(tab, index) in tabs"
+                    :key="tab.id"
+                    :data-selected="tab.id === activeId"
+                    :data-seam="seamAt(index)"
                     class="browser-tab group/tab @container relative flex h-8 w-60 min-w-14 shrink items-center transition-colors"
-                    :class="page.id === activeId ? 'text-content' : 'text-muted hover:text-content'"
-                    v-middleclick="() => close(page)"
+                    :class="tab.id === activeId ? 'text-content' : 'text-muted hover:text-content'"
+                    v-middleclick="() => close(tab)"
                 >
                     <button
                         type="button"
                         role="tab"
-                        :aria-selected="page.id === activeId"
+                        :aria-selected="tab.id === activeId"
                         class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch rounded-t-lg pl-3 pr-1 text-left text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500 @max-[4.5rem]:justify-center @max-[4.5rem]:px-0"
-                        v-tooltip.bottom="page.url === `` ? undefined : { title: label(page), note: page.url }"
-                        @click="emit('pick', page)"
+                        v-tooltip.bottom="tab.note === undefined || tab.note === `` ? undefined : { title: tab.label, note: tab.note }"
+                        @click="emit('pick', tab)"
                     >
-                        <!-- Squeezed, a tab gives up what a browser's does: the selected one its globe and then its title, keeping its
-                             close; the rest their title, keeping the globe that still tells them apart from empty strip. -->
-                        <Icon name="globe" class="shrink-0 text-2xs" :class="page.id === activeId && closable ? '@max-[5.5rem]:hidden' : ''" />
-                        <span class="min-w-0 flex-1 truncate @max-[4.5rem]:hidden">{{ label(page) }}</span>
+                        <!-- Squeezed, a tab gives up what a browser's does: the selected one its glyph and then its title, keeping its
+                             close; the rest their title, keeping the glyph that still says what each is. -->
+                        <Icon
+                            :name="tab.icon"
+                            :spin="tab.spin === true"
+                            class="shrink-0 text-2xs"
+                            :class="[tab.tint, tab.id === activeId && tab.closable ? '@max-[5.5rem]:hidden' : '']"
+                        />
+                        <span class="min-w-0 flex-1 truncate @max-[4.5rem]:hidden">{{ tab.label }}</span>
+                        <span v-if="tab.kind" class="sr-only">, {{ tab.kind }}</span>
                     </button>
                     <button
-                        v-if="closable"
+                        v-if="tab.closable"
                         type="button"
                         :class="
                             ui.iconButton(
                                 'mr-1.5 h-5 w-5 rounded-full focus-visible:opacity-100',
-                                page.id === activeId ? '' : 'opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden',
+                                tab.id === activeId ? '' : 'opacity-0 group-hover/tab:opacity-100 @max-[5.5rem]:hidden',
                             )
                         "
                         :aria-label="t(`browsers.browsers.closeTab`)"
                         v-tooltip.bottom="t(`browsers.browsers.closeTab`)"
-                        @click="close(page)"
+                        @click="close(tab)"
                     >
                         <Icon name="times" class="text-3xs" />
                     </button>
@@ -140,19 +149,21 @@ const close = (page: BrowserPage): void => {
             </TransitionGroup>
         </div>
 
-        <!-- Always here: a browser never hides the way to a new tab, whatever the window in front is doing. -->
+        <!-- Always here: a browser never hides the way to a new tab, whatever the window in front is doing. It opens the
+             launcher, which offers a web tab first and then everything else this view can show. -->
         <button
             type="button"
             :class="ui.iconButton('h-7 w-7 self-center rounded-full')"
+            aria-haspopup="menu"
             :aria-label="t(`browsers.browsers.newTab`)"
             v-tooltip.bottom="t(`browsers.browsers.newTab`)"
-            @click="emit('open')"
+            @click="emit('open', $event.currentTarget as HTMLElement)"
         >
             <Icon name="plus" class="text-xs" />
         </button>
 
         <!-- The empty run of strip past the last tab: where a double-click opens another, as in any browser. -->
-        <div class="min-w-4 flex-1 self-stretch" @dblclick="emit('open')" />
+        <div class="min-w-4 flex-1 self-stretch" @dblclick="emit('quickOpen')" />
 
         <!-- The strip's far end, where a browser keeps its list of everything open. -->
         <slot name="end" />
@@ -204,6 +215,22 @@ const close = (page: BrowserPage): void => {
     background: color-mix(in srgb, var(--color-card) 55%, transparent);
 }
 
+/* The seam between the pins and the web pages: a full-height hairline on the first web page's leading edge, kept even
+   while a neighbour is selected, since it marks a group rather than a gap between two tabs. */
+.browser-tab[data-seam="true"] {
+    margin-left: 0.5rem;
+}
+
+.browser-tab[data-seam="true"]::before {
+    content: "";
+    position: absolute;
+    top: 0.375rem;
+    bottom: 0.375rem;
+    left: -0.3125rem;
+    width: 1px;
+    background: var(--color-line-strong);
+}
+
 .tab-rule {
     position: absolute;
     top: 0.5rem;
@@ -215,7 +242,23 @@ const close = (page: BrowserPage): void => {
 
 .browser-tab:is([data-selected="true"], :hover) .tab-rule,
 .browser-tab:has(+ .browser-tab:is([data-selected="true"], :hover)) .tab-rule,
-.browser-tab:not(:has(+ .browser-tab)) .tab-rule {
+.browser-tab:not(:has(+ .browser-tab)) /* The seam between the pins and the web pages: a full-height hairline on the first web page's leading edge, kept even
+   while a neighbour is selected, since it marks a group rather than a gap between two tabs. */
+.browser-tab[data-seam="true"] {
+    margin-left: 0.5rem;
+}
+
+.browser-tab[data-seam="true"]::before {
+    content: "";
+    position: absolute;
+    top: 0.375rem;
+    bottom: 0.375rem;
+    left: -0.3125rem;
+    width: 1px;
+    background: var(--color-line-strong);
+}
+
+.tab-rule {
     display: none;
 }
 

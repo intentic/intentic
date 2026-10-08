@@ -57,7 +57,9 @@ afterEach(() => {
     }
 });
 
-const opened = async (): Promise<{
+const opened = async (
+    options: Parameters<typeof useDesktopView>[1] = {},
+): Promise<{
     view: ReturnType<typeof useDesktopView>;
     sockets: FakeSocket[];
     wire: () => readonly object[];
@@ -74,7 +76,7 @@ const opened = async (): Promise<{
     );
     const scope = effectScope();
     scopes.push(scope);
-    const view = scope.run(() => useDesktopView(ref(`sbx-a`)))!;
+    const view = scope.run(() => useDesktopView(ref(`sbx-a`), options))!;
     // connect() awaits the ticket before it constructs anything.
     await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]!.open();
@@ -86,6 +88,34 @@ test("dials the desktop's own route and tells it whether anyone is looking", asy
     const { wire } = await opened();
     expect(socketUrl).toHaveBeenCalledWith(`/system/desktop-view`);
     expect(wire()).toEqual([{ type: `resume` }]);
+});
+
+test("one window's tab dials that window, and ends when the daemon says it has closed", async () => {
+    const { view, wire, sockets } = await opened({ window: `0x1a00003` });
+    expect(socketUrl).toHaveBeenLastCalledWith(`/system/desktop-view`, { window: `0x1a00003` });
+
+    view.takeOver();
+    sockets[0]!.deliver({ type: `gone` });
+
+    expect(view.status.value).toEqual({ kind: `gone` });
+    expect(view.driving.value).toBe(false);
+    // Nothing more goes to a window that is not there.
+    view.onKeyDown(press(`a`));
+    expect(wire().at(-1)).toEqual({ type: `control`, driving: true });
+});
+
+test("out of sight, the picture pauses and a hold taken here is handed back", async () => {
+    const visible = ref(true);
+    const { view, wire } = await opened({ visible });
+    view.takeOver();
+
+    visible.value = false;
+    await waitFor(() => expect(wire().at(-1)).toEqual({ type: `control`, driving: false }));
+    expect(wire().slice(-2)).toEqual([{ type: `pause` }, { type: `control`, driving: false }]);
+    expect(view.driving.value).toBe(false);
+
+    visible.value = true;
+    await waitFor(() => expect(wire().at(-1)).toEqual({ type: `resume` }));
 });
 
 test("a watcher's clicks and keys never reach the desktop", async () => {

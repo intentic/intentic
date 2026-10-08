@@ -14,13 +14,13 @@ export const chatFullSlot = shallowRef<HTMLElement | null>(null);
 // so the composer of a chat with nowhere to be is still on screen.
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
 export const chatBarSlot = shallowRef<HTMLElement | null>(null);
-// Preview's full-area home, published by the /preview section; outranks the side panel's, so standing on /preview
-// always shows it there.
+// The Browsers view's full-area home, published by the /browsers section; outranks the side panel's, so standing on
+// /browsers always shows it there.
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
-export const previewSlot = shallowRef<HTMLElement | null>(null);
-// Preview's home beside the section, published by its tab in the side panel (shell/side/SidePreview.vue).
+export const browsersSlot = shallowRef<HTMLElement | null>(null);
+// Its home beside the section, published by its tab in the side panel (shell/side/SideBrowsers.vue).
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
-export const sidePreviewSlot = shallowRef<HTMLElement | null>(null);
+export const sideBrowsersSlot = shallowRef<HTMLElement | null>(null);
 // allow(module-state): a DOM slot a mounted surface publishes for a panel to teleport into
 export const terminalSlot = shallowRef<HTMLElement | null>(null);
 

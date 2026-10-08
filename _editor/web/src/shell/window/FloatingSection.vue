@@ -1,4 +1,4 @@
-<!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/preview). -->
+<!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/browsers). -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -10,11 +10,11 @@ import { useKeybindings } from "../../workbench/commands/useKeybindings";
 import { useShellCommands } from "../commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../../workbench/window/floating";
 import { sendLinkToMainWindow } from "../../workbench/window/mainWindow";
-import { markPreviewOpened } from "../../features/preview/previewSurface";
+import { markBrowsersOpened } from "../../workbench/browsers/browsersSurface";
 import { ACTIVE_KEY } from "../../lib/activeSandbox";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useLayout } from "../../workbench/window/useLayout";
-import { chatFullSlot, previewSlot, terminalSlot } from "../../workbench/window/panelSlots";
+import { browsersSlot, chatFullSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { uiLength } from "../../workbench/window/uiScale";
 import { registerCoreSideViews } from "../side/coreSideViews";
 import { sideDocked } from "../../workbench/side/sideTabs";
@@ -33,19 +33,19 @@ const t = useT();
 const titles = (): Record<FloatingPanel, string> => ({
     chat: `Intentic · ${t(`shared.chat`)}`,
     terminal: `Intentic · ${t(`shared.terminal`)}`,
-    preview: `Intentic · ${t(`shared.preview`)}`,
+    browsers: `Intentic · ${t(`shared.browsers`)}`,
 });
 watchEffect(() => {
     document.title = titles()[panel];
 });
 
-// Two of the three are conditional surfaces in the main window (terminal open/closed, preview looked-at-or-not);
+// Two of the three are conditional surfaces in the main window (terminal open/closed, browsers looked-at-or-not);
 // standing in this window IS the ask, or a floating window would publish a slot nothing ever mounts into.
 if (panel === `terminal`) {
     layout.setTerminalOpen(true);
 }
-if (panel === `preview`) {
-    markPreviewOpened();
+if (panel === `browsers`) {
+    markBrowsersOpened();
 }
 
 // The window going away once its claim has let go. A browser ignores `window.close()` for a window the script didn't
@@ -114,7 +114,7 @@ const layoutStyle = computed(() => ({
 }));
 
 const slot = useTemplateRef(`slot`);
-const dockRef = computed(() => (panel === `chat` ? chatFullSlot : panel === `terminal` ? terminalSlot : previewSlot));
+const dockRef = computed(() => (panel === `chat` ? chatFullSlot : panel === `terminal` ? terminalSlot : browsersSlot));
 onMounted(() => {
     dockRef.value.value = slot.value;
 });

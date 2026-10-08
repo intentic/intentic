@@ -2,8 +2,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { Socket } from "node:net";
 import { createInterface } from "node:readline";
+import { exec } from "@intentic/base/git";
 import { type Desktop, DesktopError, desktop } from "@intentic/desktop-automation";
-import type { DesktopState } from "@intentic/sandbox-contract";
+import type { DesktopState, DesktopWindow } from "@intentic/sandbox-contract";
 import { adoptDisplay, type Display, displayOf, ensureDisplay } from "../browser/cast/display.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
@@ -44,42 +45,68 @@ const startWindowManager = (display: Display): void => {
     managers.set(display.name, child);
 };
 
-/* What is on the desktop: how many windows, off the window manager's client list (_NET_CLIENT_LIST on the root, the list
-   wmctrl reads). Watched rather than polled: `xprop -spy` prints the list once when it starts and again each time it
-   changes, so the rail tile and the view hear of a window as it opens or closes, and an idle desktop costs one sleeping
-   process. It is what tells an empty desktop, which is all black, from a picture that never arrived. */
+/* What is on the desktop: which windows, off the window manager's client list (_NET_CLIENT_LIST on the root, the list
+   wmctrl reads), and which of them has the keyboard (_NET_ACTIVE_WINDOW). Watched rather than polled: `xprop -spy`
+   prints both once when it starts and again each time either changes, so the rail tile and the view hear of a window as
+   it opens, closes or takes the focus, and an idle desktop costs one sleeping process. It is what tells an empty desktop,
+   which is all black, from a picture that never arrived. */
 
-// The count in one line of the spy, one id per window ("…: window id # 0x400024, 0x400031"), none on an empty desktop.
-// Undefined for anything else, "not found" included: a display with no window manager on it has no list to count.
-export const clientCount = (line: string): number | undefined => {
+// The ids one line of the spy names ("…: window id # 0x400024, 0x400031"), as numbers, none on an empty desktop. Numbers
+// because the spy spells an id 0x400024 and wmctrl 0x00400024. Undefined for anything else, "not found" included: a
+// display with no window manager on it has no list to read.
+export const clientIds = (line: string): readonly number[] | undefined => {
     const list = /^_NET_CLIENT_LIST\(WINDOW\): window id #(.*)$/.exec(line.trim());
-    return list === null ? undefined : (list[1]?.match(/0x[0-9a-f]+/gi) ?? []).length;
+    return list === null ? undefined : (list[1]?.match(/0x[0-9a-f]+/gi) ?? []).map(Number);
+};
+
+export const clientCount = (line: string): number | undefined => clientIds(line)?.length;
+
+// The window with the keyboard, off the same spy; 0 when none has it, undefined for a line about something else.
+export const activeWindow = (line: string): number | undefined => {
+    const active = /^_NET_ACTIVE_WINDOW\(WINDOW\): window id # (0x[0-9a-f]+)/i.exec(line.trim());
+    return active?.[1] === undefined ? undefined : Number(active[1]);
 };
 
 const XPROP = "/usr/bin/xprop";
 
-let windows: number | undefined;
+let clients: readonly number[] | undefined;
+let active: number | undefined;
 let watcher: ChildProcess | undefined;
+
+const sameIds = (left: readonly number[] | undefined, right: readonly number[]): boolean =>
+    left !== undefined && left.length === right.length && left.every((id, index) => id === right[index]);
 
 const watchWindows = (display: Display): void => {
     if (watcher !== undefined || !existsSync(XPROP)) {
         return;
     }
-    const child = spawn(XPROP, ["-root", "-spy", "_NET_CLIENT_LIST"], { env: { ...process.env, DISPLAY: display.name }, stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn(XPROP, ["-root", "-spy", "_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW"], {
+        env: { ...process.env, DISPLAY: display.name },
+        stdio: ["ignore", "pipe", "ignore"],
+    });
     watcher = child;
     createInterface({ input: child.stdout }).on("line", (line) => {
-        const count = clientCount(line);
-        if (count !== undefined && count !== windows) {
-            windows = count;
+        const ids = clientIds(line);
+        if (ids !== undefined) {
+            if (!sameIds(clients, ids)) {
+                clients = ids;
+                publishRuntimeChange("desktop");
+            }
+            return;
+        }
+        const focus = activeWindow(line);
+        if (focus !== undefined && focus !== active) {
+            active = focus;
             publishRuntimeChange("desktop");
         }
     });
-    // Its display gone (or the spy itself), the count is nobody's: the next start of the desktop watches afresh.
+    // Its display gone (or the spy itself), the list is nobody's: the next start of the desktop watches afresh.
     child.on("error", () => undefined);
     child.on("exit", () => {
         if (watcher === child) {
             watcher = undefined;
-            windows = undefined;
+            clients = undefined;
+            active = undefined;
             publishRuntimeChange("desktop");
         }
     });
@@ -87,6 +114,101 @@ const watchWindows = (display: Display): void => {
     child.unref();
     if (child.stdout instanceof Socket) {
         child.stdout.unref();
+    }
+};
+
+// Whether the window manager still lists this window: undefined while there is no list to ask (the spy has not spoken
+// yet, or there is no window manager), which is not the same as gone.
+export const windowListed = (id: string): boolean | undefined => (clients === undefined ? undefined : clients.includes(Number(id)));
+
+const screenOn = (display: Display): Desktop => desktop({ env: { ...process.env, DISPLAY: display.name } });
+
+// Each window as the contract names it, read the way the agent's list_windows reads it. Undefined where there is no
+// window manager to ask, or no wmctrl to ask it with.
+const readList = async (display: Display): Promise<DesktopWindow[] | undefined> => {
+    try {
+        const windows = await screenOn(display).windows();
+        return windows.map(({ id, app, title, focused }) => ({ id, app, title, focused }));
+    } catch {
+        // allow(silent-catch): a desktop with no window manager, or no wmctrl, has no list to give; `list` is then absent.
+        return undefined;
+    }
+};
+
+/* A title changes on the window, not on the root, so the spy never hears of it. While somebody has the view open the
+   list is read again every few seconds instead, and a change is pushed like any other; with nobody looking nothing
+   polls, and the next look reads it fresh anyway. */
+
+const RELIST_MS = 2_500;
+
+// The list as last answered or pushed, as one string, so a read that finds the same list says nothing.
+let told: string | undefined;
+let viewers = 0;
+let relister: ReturnType<typeof setInterval> | undefined;
+
+const relist = async (): Promise<void> => {
+    const display = displayOf(DESKTOP_KEY);
+    if (display === undefined) {
+        return;
+    }
+    const list = await readList(display);
+    const said = list === undefined ? undefined : JSON.stringify(list);
+    if (said !== undefined && said !== told) {
+        told = said;
+        publishRuntimeChange("desktop");
+    }
+};
+
+// One open desktop view, for as long as the returned release is not called.
+export const desktopWatched = (): (() => void) => {
+    viewers += 1;
+    if (relister === undefined) {
+        relister = setInterval(() => void relist(), RELIST_MS);
+        relister.unref();
+    }
+    let released = false;
+    return () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        viewers -= 1;
+        if (viewers === 0) {
+            clearInterval(relister);
+            relister = undefined;
+        }
+    };
+};
+
+// Where one window is on the screen right now, off `xwininfo -id` ("Absolute upper-left X:  51", "Width: 300"): its
+// inside, without the frame the window manager draws, the same rectangle list_windows reports. Undefined for output
+// that does not say.
+export const windowPlace = (output: string): { x: number; y: number; width: number; height: number } | undefined => {
+    const field = (name: string): number | undefined => {
+        const found = new RegExp(`^\\s*${name}:\\s*(-?\\d+)\\s*$`, "m").exec(output);
+        return found?.[1] === undefined ? undefined : Number(found[1]);
+    };
+    const x = field("Absolute upper-left X");
+    const y = field("Absolute upper-left Y");
+    const width = field("Width");
+    const height = field("Height");
+    return x === undefined || y === undefined || width === undefined || height === undefined ? undefined : { x, y, width, height };
+};
+
+const XWININFO = "/usr/bin/xwininfo";
+// A display that stopped answering must not hold the view's next look forever.
+const PLACE_TIMEOUT_MS = 3_000;
+
+// One window's place, or "gone" once X itself says there is no such window. Undefined when the read failed for any
+// other reason (no xwininfo, a slow display): the caller keeps what it had and asks again.
+export const readWindowPlace = async (display: Display, id: string): Promise<ReturnType<typeof windowPlace> | "gone"> => {
+    try {
+        const { stdout } = await exec(XWININFO, ["-id", id], { env: { ...process.env, DISPLAY: display.name }, timeout: PLACE_TIMEOUT_MS });
+        return windowPlace(stdout);
+    } catch (error) {
+        const said = error instanceof Error && "stderr" in error ? String(error.stderr) : "";
+        // allow(silent-catch): any failure but "no such window" is a read to retry, said by the undefined answer.
+        return /No such window|BadWindow|Bad Drawable/i.test(said) ? "gone" : undefined;
     }
 };
 
@@ -104,7 +226,7 @@ export const agentDesktop = async (): Promise<AgentDesktop> => {
     if (before?.name !== display.name) {
         publishRuntimeChange("desktop");
     }
-    return { display, screen: desktop({ env: { ...process.env, DISPLAY: display.name } }) };
+    return { display, screen: screenOn(display) };
 };
 
 // Asked once per daemon life: after that a desktop this process does not know of is one nobody has started.
@@ -122,7 +244,18 @@ export const desktopState = async (): Promise<DesktopState> => {
         return { running: false };
     }
     watchWindows(display);
-    return { running: true, display: display.name, ...(windows === undefined ? {} : { windows }) };
+    const state: DesktopState = { running: true, display: display.name };
+    if (clients !== undefined) {
+        state.windows = clients.length;
+    }
+    const list = await readList(display);
+    if (list !== undefined) {
+        state.list = list;
+        // The spy may not have spoken yet on a desktop just started or adopted; the list has, and counts the same windows.
+        state.windows ??= list.length;
+        told = JSON.stringify(list);
+    }
+    return state;
 };
 
 /* Who holds the desktop. The owner takes it by driving it from their view, and holds it until they hand it back or

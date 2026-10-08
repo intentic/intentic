@@ -52,13 +52,13 @@ const { claimFloating, createFloatingSurface, floatingOwner, floatingWindowPanel
 const size = () => ({ width: 800, height: 600 });
 
 // The note a floating window beats out; `since` (claim start) is what settles a race between two of them.
-const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
+const here = (panel: `chat` | `terminal` | `browsers`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
 
 // What a floating window's pagehide says, for a reload and a close alike.
-const unloading = (panel: `chat` | `terminal` | `preview`, id: string) => ({ kind: `unloading` as const, panel, id });
+const unloading = (panel: `chat` | `terminal` | `browsers`, id: string) => ({ kind: `unloading` as const, panel, id });
 
 // What a reload's successor says from index.html's first script, before any of the app has loaded; a close has none.
-const booting = (panel: `chat` | `terminal` | `preview`) => ({ kind: `booting` as const, panel });
+const booting = (panel: `chat` | `terminal` | `browsers`) => ({ kind: `booting` as const, panel });
 
 // A surface's dock reactions, held in a scope the way PoppablePanels holds them.
 const watchDocks = (surface: ReturnType<typeof createFloatingSurface>) => {
@@ -146,7 +146,7 @@ afterEach(async () => {
 
 describe(`a panel nobody floats`, () => {
     it(`is drawn by this window and offers to open one`, () => {
-        const surface = createFloatingSurface(`preview`, size);
+        const surface = createFloatingSurface(`browsers`, size);
         const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }) as unknown as Window);
         stubGlobal(`open`, open);
 
@@ -157,7 +157,7 @@ describe(`a panel nobody floats`, () => {
         surface.open();
 
         // A route of the app, not a standalone page: the window boots a copy of the app and renders the panel there.
-        expect(open.mock.calls[0]?.[0]).toBe(`/floating/preview`);
+        expect(open.mock.calls[0]?.[0]).toBe(`/floating/browsers`);
         expect(open.mock.calls[0]?.[2]).toContain(`popup=1`);
     });
 
@@ -748,7 +748,7 @@ describe(`the first script of a window booting at a panel's address`, () => {
         expect(boot(`/floating/chat`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`chat`) }]);
         // Served under a path prefix, and with the trailing slash the router also takes.
         expect(boot(`/app/floating/terminal/`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`terminal`) }]);
-        expect(boot(`/floating/preview`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`preview`) }]);
+        expect(boot(`/floating/browsers`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`browsers`) }]);
         expect([boot(`/`), boot(`/agents`), boot(`/floating/files`), boot(`/floating/chat/more`)]).toEqual([[], [], [], []]);
     });
 

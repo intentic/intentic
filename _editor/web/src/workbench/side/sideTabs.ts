@@ -16,7 +16,7 @@ export type SideInput = Readonly<Record<string, string | number | boolean>>;
 export interface SideTab {
     // `view` and `input` together, so opening the same thing twice finds the tab it already has.
     readonly id: string;
-    // A built-in side view (`file`, `preview`) or an extension's, as `<extension id>/<side view id>`.
+    // A built-in side view (`file`, `browsers`) or an extension's, as `<extension id>/<side view id>`.
     readonly view: string;
     readonly input: SideInput;
 }
@@ -127,7 +127,7 @@ watch(serialized, (json) => {
 });
 
 // Whether this window has a side panel to open things in: the desktop shell of a main window, or a popped-out chat's
-// window (FloatingSection.vue). A phone, and a popped-out terminal or preview, have none, and a reference there does
+// window (FloatingSection.vue). A phone, and a popped-out terminal or Browsers, have none, and a reference there does
 // what it did before the panel existed.
 // allow(module-state): whether the desktop shell is mounted in this window, which no sandbox switch changes
 export const sideDocked = ref(false);

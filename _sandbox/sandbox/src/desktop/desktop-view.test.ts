@@ -1,5 +1,5 @@
 import type { XInput } from "../browser/cast/xinput.js";
-import { DesktopViewMessageSchema, desktopChord, replayPointer } from "./desktop-view.js";
+import { DesktopViewMessageSchema, desktopChord, replayPointer, windowParam, windowRegion } from "./desktop-view.js";
 
 /* The owner's hands on the sandbox desktop: what each event from the editor's view becomes on the X display. */
 
@@ -28,6 +28,51 @@ test("pointer events land on the pixel they name, one press per down, and an unm
     replayPointer(input, { type: "mouse", action: "wheel", x: 1, y: 1, deltaY: 120 });
     replayPointer(input, { type: "mouse", action: "down", x: Number.NaN, y: 3 });
     expect(calls).toEqual(["move 10,21", "down 5,5 0", "up 5,5 0", "down 5,5 0", "up 5,5 0", "wheel 1,1 0,120"]);
+});
+
+test("on one window's view a pointer event is moved from the picture onto the window", () => {
+    const { input, calls } = recorder();
+    const origin = { x: 300, y: 120 };
+    replayPointer(input, { type: "mouse", action: "move", x: 0, y: 0 }, origin);
+    replayPointer(input, { type: "mouse", action: "down", x: 10.4, y: 20.6, button: 2 }, origin);
+    replayPointer(input, { type: "mouse", action: "wheel", x: 5, y: 5, deltaY: -120 }, origin);
+    replayPointer(input, { type: "mouse", action: "up", x: Number.NaN, y: 3 }, origin);
+    expect(calls).toEqual(["move 300,120", "down 310,141 2", "wheel 305,125 0,-120"]);
+});
+
+describe("a window's picture", () => {
+    const screen = { width: 1280, height: 800 };
+
+    it("is the window's inside where it lies wholly on the screen", () => {
+        expect(windowRegion({ x: 51, y: 78, width: 300, height: 100 }, screen)).toEqual({ x: 51, y: 78, width: 300, height: 100, scale: 1 });
+    });
+
+    // libx264 refuses an odd width or height in yuv420p: the picture loses the window's last column or row instead.
+    it("is even in both directions, a pixel short of an odd window", () => {
+        expect(windowRegion({ x: 10, y: 10, width: 301, height: 99 }, screen)).toEqual({ x: 10, y: 10, width: 300, height: 98, scale: 1 });
+    });
+
+    it("is the part on the screen of a window hanging off any edge", () => {
+        expect(windowRegion({ x: -40, y: -10, width: 200, height: 100 }, screen)).toEqual({ x: 0, y: 0, width: 160, height: 90, scale: 1 });
+        expect(windowRegion({ x: 1200, y: 700, width: 300, height: 300 }, screen)).toEqual({ x: 1200, y: 700, width: 80, height: 100, scale: 1 });
+        expect(windowRegion({ x: 0, y: 0, width: 1920, height: 1080 }, screen)).toEqual({ x: 0, y: 0, width: 1280, height: 800, scale: 1 });
+    });
+
+    // Something the encoder will take, rather than a 0×0 grab ffmpeg refuses.
+    it("is still a 2×2 picture of a window wholly off the screen or of no size", () => {
+        expect(windowRegion({ x: 2000, y: 2000, width: 100, height: 100 }, screen)).toEqual({ x: 1278, y: 798, width: 2, height: 2, scale: 1 });
+        expect(windowRegion({ x: 100, y: 100, width: 0, height: 0 }, screen)).toEqual({ x: 100, y: 100, width: 2, height: 2, scale: 1 });
+        expect(windowRegion({ x: -500, y: 10, width: 100, height: 100 }, screen)).toEqual({ x: 0, y: 10, width: 2, height: 100, scale: 1 });
+    });
+});
+
+test("the window a view asks for is an X window id, or no window at all", () => {
+    expect(windowParam(new URLSearchParams("ticket=t"))).toBeUndefined();
+    expect(windowParam(new URLSearchParams("ticket=t&window=0x00400020"))).toBe("0x00400020");
+    expect(windowParam(new URLSearchParams("window=4194336"))).toBe("4194336");
+    expect(windowParam(new URLSearchParams("window="))).toBe("invalid");
+    expect(windowParam(new URLSearchParams("window=-root"))).toBe("invalid");
+    expect(windowParam(new URLSearchParams("window=0x4000201234"))).toBe("invalid");
 });
 
 test("keys arrive in xdotool's names with their modifiers", () => {

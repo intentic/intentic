@@ -3,25 +3,25 @@ import { isLockedWorkspacePath, type PortSummary } from "@intentic/sandbox-contr
 import { explorerColorClass, iconForEntry, useExplorerStyle } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { z } from "zod";
+import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useAgents } from "../../features/agents/fleet/useAgents";
 import { loopbackPreviewTarget } from "../../features/preview/previewModel";
-import { markPreviewOpened, openPreview, PREVIEW_SIDE_VIEW, previewSelectedId, selectPreviewTarget } from "../../features/preview/previewSurface";
+import { BROWSERS_SIDE_VIEW, browsersFront, markBrowsersOpened, openBrowsers, showTab } from "../../workbench/browsers/browsersSurface";
+import { browsersPath, parseTabKey, tabKey, type LiveTab } from "../../workbench/browsers/browsersPaths";
 import { openInWorkspace } from "../../features/workspace/files/refs/openFileRef";
 import { PORTS } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { router } from "../../router";
 import { handOffToMainWindow } from "../../workbench/window/mainWindow";
-import { previewSlot } from "../../workbench/window/panelSlots";
+import { browsersSlot } from "../../workbench/window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
 import { registerSideView } from "../../workbench/side/sideViews";
 
-// What the preview's tab names it by: the app, server or page it shows, read off the target's id, since the live target
-// list is the panel's to fetch. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`.
-const targetName = (id: string | undefined): string | undefined => {
-    if (id === undefined) {
-        return undefined;
-    }
+// What the side tab names the view by: the app, server or page in front, read off the tab itself, since the live lists
+// are the view's to fetch. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`; a web window or a
+// window on the desktop says nothing more than the view's own name.
+const targetName = (id: string): string | undefined => {
     const at = id.indexOf(`:`);
     const kind = id.slice(0, at);
     const rest = id.slice(at + 1);
@@ -37,8 +37,11 @@ const targetName = (id: string | undefined): string | undefined => {
 // The ports the shell already holds (usePorts, at the rail), read at the click rather than fetched for it.
 const heldPorts = (): readonly PortSummary[] => queryClient.getQueryData<{ readonly ports: readonly PortSummary[] }>(PORTS.of())?.ports ?? [];
 
-// What a claimed link hands the preview: the target it names, which the one tab then shows.
-const PreviewInputSchema = z.object({ target: z.string().min(1).optional() });
+const frontName = (tab: LiveTab): string | undefined =>
+    tab.kind === `preview` ? targetName(tab.id) : tab.kind === `desktop` ? t(`shared.desktop`) : undefined;
+
+// What a claimed link hands the view: the tab it names (a live app's, by its key), which the one side tab then shows.
+const BrowsersInputSchema = z.object({ tab: z.string().min(1).optional() });
 
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
 // chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
@@ -80,44 +83,50 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         component: async () => (await import(`./SideFile.vue`)).default,
     });
 
-    // One tab, since a window draws one preview panel: its own picker says which app it shows.
-    const preview = registerSideView({
-        id: PREVIEW_SIDE_VIEW,
+    // One tab, since a window draws one Browsers view: its own strip says what is in front.
+    const browsers = registerSideView({
+        id: BROWSERS_SIDE_VIEW,
         owner: `builtin`,
         get label() {
-            return words.value.preview;
+            return t(`shared.browsers`);
         },
         describe: () => {
-            const name = targetName(previewSelectedId.value);
-            return { title: name === undefined ? words.value.preview : `${words.value.preview} · ${name}`, icon: `eye`, tip: { title: words.value.preview, note: name } };
+            const label = t(`shared.browsers`);
+            const front = browsersFront.value;
+            const name = frontName(front);
+            return {
+                title: name === undefined ? label : `${label} · ${name}`,
+                icon: front.kind === `preview` ? `eye` : front.kind === `web` ? `browsers` : `screen`,
+                tip: { title: label, note: name },
+            };
         },
-        // From a popped-out chat, the app's own window goes to its Preview; this one has no section to go to.
+        // From a popped-out chat, the app's own window goes to its Browsers; this one has no section to go to.
         home: () => ({
-            label: words.value.preview,
+            label: t(`shared.browsers`),
             open: () => {
-                if (!handOffToMainWindow({ kind: `route`, path: `/preview` })) {
-                    openPreview(router);
+                if (!handOffToMainWindow({ kind: `route`, path: browsersPath(browsersFront.value) })) {
+                    openBrowsers(router);
                 }
             },
         }),
         claim: (url) => {
             const target = loopbackPreviewTarget(url, heldPorts());
-            return target === undefined ? undefined : { target };
+            return target === undefined ? undefined : { tab: tabKey({ kind: `preview`, id: target }) };
         },
-        // Selects the target a claimed link named, and keeps the one tab a window's one preview panel has.
+        // Brings the tab a claimed link named to front, and keeps the one side tab a window's one view has.
         kept: true,
         opening: (input) => {
-            const target = PreviewInputSchema.safeParse(input).data?.target;
-            if (target !== undefined) {
-                selectPreviewTarget(target);
+            const key = BrowsersInputSchema.safeParse(input).data?.tab;
+            if (key !== undefined) {
+                showTab(parseTabKey(key));
             }
-            markPreviewOpened();
+            markBrowsersOpened();
             return {};
         },
-        component: async () => (await import(`./SidePreview.vue`)).default,
-        // Standing on /preview, the section draws the one preview panel; the tab steps aside until the reader leaves.
-        lent: () => previewSlot.value !== null,
+        component: async () => (await import(`./SideBrowsers.vue`)).default,
+        // Standing on /browsers, the section draws the one view; the side tab steps aside until the reader leaves.
+        lent: () => browsersSlot.value !== null,
     });
 
-    return [file, preview];
+    return [file, browsers];
 };

@@ -900,6 +900,35 @@
             "fixStepHandBack": "Fix that step in the page, then hand back.",
             "starting": "Starting your browser…",
             "startCaption": "Your browser runs in this sandbox: pages load over its network, and what you sign into stays signed in."
+        },
+        "area": {
+            "inOwnWindow": "Browsers is in its own window",
+            "bringBackHere": "Bring it back here",
+            "bringBackToFill": "Bring it back to fill this one, or keep your apps and windows beside your code on another screen."
+        },
+        "preview": {
+            "gone": "This app isn't served any more",
+            "goneLine": "Its dev server or forwarded port is no longer listed. Start it again, or close this tab."
+        },
+        "app": {
+            "closed": "This window has closed"
+        },
+        "launcher": {
+            "open": "Open",
+            "apps": "Apps",
+            "webDetail": "A page in your own browser"
+        },
+        "phone": {
+            "toggle": "Phone frame",
+            "note": "At a phone's size"
+        },
+        "window": {
+            "dock": "Bring back into this window",
+            "popOut": "Move into its own window"
+        },
+        "kind": {
+            "app": "live app",
+            "window": "window on the desktop"
         }
     },
     "capabilities": {
@@ -3780,7 +3809,6 @@
             "agentWaits": "Agent waiting",
             "authFailed": "Couldn't authorize the desktop view ({reason}). Retrying.",
             "connecting": "Starting the desktop…",
-            "connectingShort": "Connecting…",
             "emptyNote": "When an agent opens a program with its desktop tools, its window shows up here, and you can take over to use it yourself.",
             "emptyTitle": "Nothing is open on this desktop",
             "emptyYourself": "To open one yourself, set this in a terminal, then start the program there:",
@@ -3789,7 +3817,6 @@
             "heldElsewhere": "Held in another window",
             "heldNote": "Until 20 seconds after input",
             "heldTitle": "Agent's tools paused",
-            "live": "Live",
             "openTerminal": "Open terminal",
             "reconnecting": "Reconnecting…",
             "refused": "Only a maintainer of this sandbox can open its desktop.",
@@ -4322,55 +4349,33 @@
             "pixel7": "Pixel 7",
             "pixel8Pro": "Pixel 8 Pro"
         },
-        "previewArea": {
-            "bringBackHere": "Bring it back here",
-            "bringBackToFill": "Bring it back to fill this one, or keep the app beside your code on another screen.",
-            "previewInOwnWindow": "Your live app is in its own window"
-        },
         "previewModel": {
             "port": "Port {port}",
             "publicSite": "Public site"
         },
         "previewPanel": {
             "addressAnswersElsewhere": "{url} answers from somewhere that isn't this sandbox's preview proxy: its name may still be propagating, or this sandbox publishes no preview hostnames at all.",
-            "addressToPreview": "Address to preview",
             "app": "App",
-            "appToPreview": "Which app to preview",
-            "copyAddress": "Copy address",
             "deps": "Dependencies",
             "devServer": "Dev server",
             "devServerStopped": "Its dev server stopped.",
-            "dockBack": "Dock back",
-            "dockPreviewBack": "Dock the preview back",
-            "forwardedPorts": "Forwarded ports",
-            "go": "Go",
             "installed": "Installed",
             "installFirst": "Install first",
             "labelIsntRunning": "{label} isn't running.",
             "leftRunningForYou": "An agent left this server running for you: {label}.",
-            "localhost3000AnyAddress": "localhost:3000, or any address",
-            "movePreviewIntoOwn": "Move the preview into its own window",
-            "newTab": "New tab",
-            "newWindow": "New window",
             "noDevServerToStart": "It has no dev server this panel can start: no {operator} panel and no {dev} script at its root. Anything it runs from a terminal shows up under Forwarded ports.",
-            "nothingToPreviewYet": "Nothing to preview yet.",
             "openDevServersTerminal": "Open this dev server's terminal",
-            "openInNewTab": "Open {label} in a new tab",
             "openPorts": "Open Ports",
             "openTerminal": "Open its terminal",
             "opening": "Opening…",
-            "otherAddress": "Other address",
             "phone": "Phone",
             "phoneToFramePreview": "Which phone to frame the preview in",
             "preparingPreview": "Preparing the preview…",
             "preview2": "{label} preview",
-            "previewAddress": "Preview an address",
             "previewAddressDoesntReach": "This preview address doesn't reach your sandbox.",
-            "previewAnotherAddress": "Preview another address",
             "previewingItForwardsPort": "Previewing it forwards its port, which publishes it at an address anyone with the link can open. The Ports view lists every forward and takes them back.",
             "previewingOneForwardsPort": "Previewing one forwards its port, which publishes it at an address anyone with the link can open. The Ports view lists every forward and takes them back.",
             "readingWhatPreviewed": "Reading what can be previewed…",
-            "reloadPreview": "Reload the preview",
             "repo": "Repo",
             "serversOnOwnPorts": "{label} is running {count} dev server on a port of its own, so one preview address can't stand for it. Pick the one you mean: | {label} is running {count} dev servers on ports of their own, so one preview address can't stand for it. Pick the one you mean:",
             "startDevServerIn": "Start a dev server in a repository, or ask the agent to build an app: its live preview appears here the moment it answers.",
@@ -4399,8 +4404,7 @@
             "startingOverdue": "Its dev server has been starting for {waited} without answering, which a working start never takes. Its terminal shows what it is waiting on; restarting it is the usual fix.",
             "exited": "Its dev server exited before it served anything. Its terminal has the reason.",
             "addressSilent": "Its dev server is up, but its preview address has not answered in {waited}: this sandbox's public address may not be routing yet. Its terminal shows the server live.",
-            "addressSlow": "The address is taking a while to answer: its terminal shows the dev server live.",
-            "full": "Full"
+            "addressSlow": "The address is taking a while to answer: its terminal shows the dev server live."
         }
     },
     "router": {

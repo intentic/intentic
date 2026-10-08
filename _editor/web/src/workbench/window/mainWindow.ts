@@ -22,8 +22,9 @@ export type MainWindowErrand =
           readonly home?: boolean;
       }
     | { readonly kind: `route`; readonly path: string }
-    // The running app, on a target or the one last shown: beside the main window's section, or its own route.
-    | { readonly kind: `preview`; readonly target: string | undefined }
+    // A Browsers tab (a live app, a web window, the desktop), by its key, or where the view was: beside the main window's
+    // section, or its own route.
+    | { readonly kind: `browsers`; readonly tab: string | undefined }
     // A side view on an input (an extension's run, a CI run), from a popped-out window with no side panel of its own.
     | { readonly kind: `side`; readonly view: string; readonly input: SideInput; readonly keep: boolean };
 

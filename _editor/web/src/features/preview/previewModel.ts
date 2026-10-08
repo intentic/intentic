@@ -7,12 +7,11 @@ import { t } from "@intentic/ui/i18n";
 // - app: one app inside a monorepo, from the per-repo /apps routes
 // - port: a forwarded port, from /ports
 // - public: the outbox's served page, no process
-// - address: whatever the user typed
 
-export type PreviewKind = `repo` | `app` | `port` | `public` | `address`;
+export type PreviewKind = `repo` | `app` | `port` | `public`;
 
 export interface PreviewTarget {
-    // `repo:<repo>` | `app:<repo>/<app>` | `port:<n>` | `public` | `address`; what the switcher stores.
+    // `repo:<repo>` | `app:<repo>/<app>` | `port:<n>` | `public`; what a Browsers tab's key carries.
     readonly id: string;
     readonly kind: PreviewKind;
     // What the switcher row says: the app's name, the repo's, the port, or "Public site".
@@ -31,7 +30,7 @@ export interface PreviewTarget {
     readonly healthy: boolean;
     // tmux session for this target's dev server, daemon's or a user's; Terminal shows only when set.
     readonly session: string | undefined;
-    // Whether Start/Stop apply; a port, the public page, and a typed address own no process.
+    // Whether Start/Stop apply; a port and the public page own no process.
     readonly startable: boolean;
     // What Start costs (installed) and a running target's progress (launch); undefined/true where nothing starts.
     readonly installed: boolean;
@@ -169,51 +168,12 @@ export const publicTarget = (files: readonly PublicFile[]): PreviewTarget | unde
           };
 };
 
-export const ADDRESS_TARGET_ID = `address`;
-
-// Escape hatch for a URL nothing here discovered: a staging URL, another route, another box. A bare host is treated as
-// https; anything unparseable yields no target rather than a guess.
-export const addressTarget = (typed: string | undefined): PreviewTarget | undefined => {
-    const trimmed = typed?.trim() ?? ``;
-    if (trimmed === ``) {
-        return undefined;
-    }
-    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`;
-    let url: URL;
-    try {
-        url = new URL(withScheme);
-        // allow(silent-catch): A malformed user-entered URL is refused as a preview target.
-    } catch {
-        return undefined;
-    }
-    if (url.protocol !== `http:` && url.protocol !== `https:`) {
-        return undefined;
-    }
-    return {
-        id: ADDRESS_TARGET_ID,
-        kind: `address`,
-        label: url.host,
-        detail: url.pathname === `/` ? undefined : url.pathname,
-        repo: undefined,
-        app: undefined,
-        url: url.toString(),
-        servers: [],
-        running: true,
-        healthy: true,
-        session: undefined,
-        startable: false,
-        installed: true,
-        launch: undefined,
-    };
-};
-
-// Whole list in reading order: repos (apps replacing their monorepo's root row), ports, outbox page, typed address.
+// Whole list in reading order: repos (apps replacing their monorepo's root row), ports, outbox page.
 export const mergeTargets = (
     repos: readonly PreviewTarget[],
     apps: readonly PreviewTarget[],
     ports: readonly PreviewTarget[],
     outbox: PreviewTarget | undefined,
-    address: PreviewTarget | undefined,
 ): PreviewTarget[] => {
     const detailed = new Set(apps.flatMap((app) => (app.repo === undefined ? [] : [app.repo])));
     const perRepo = repos.flatMap((repo) => {
@@ -222,7 +182,7 @@ export const mergeTargets = (
         }
         return apps.filter((app) => app.repo === repo.repo);
     });
-    return [...perRepo, ...ports, ...(outbox === undefined ? [] : [outbox]), ...(address === undefined ? [] : [address])];
+    return [...perRepo, ...ports, ...(outbox === undefined ? [] : [outbox])];
 };
 
 // Which target the panel shows:
@@ -241,14 +201,14 @@ export const pickTarget = (targets: readonly PreviewTarget[], selectedId: string
             return ofRepo;
         }
     }
-    const servers = targets.filter((target) => target.kind !== `public` && target.kind !== `address`);
+    const servers = targets.filter((target) => target.kind !== `public`);
     return servers.find((target) => target.healthy) ?? servers.find((target) => target.running) ?? servers[0] ?? targets[0];
 };
 
 // The status bar's half: same builders as the panel, minus the apps fan-out, so the chip never promises what the panel
-// can't show. Typed address doesn't count; it's a bookmark, not evidence.
+// can't show.
 export const barTargets = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): PreviewTarget[] =>
-    mergeTargets(repoTargets(panels), [], portTargets(ports), publicTarget(publicFiles), undefined);
+    mergeTargets(repoTargets(panels), [], portTargets(ports), publicTarget(publicFiles));
 
 // How many previewable things are actually answering right now: the status bar's count, and whether its chip shows.
 export const previewHealthyCount = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): number =>

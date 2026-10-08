@@ -44,7 +44,7 @@ import { railFrame } from "./rail/railFrame";
 import { presenceOthers } from "../workbench/presence/usePresence";
 import { usePanels } from "../features/extensions/usePanels";
 import { appTargetId } from "../features/preview/previewModel";
-import { openPreviewOnFirstVisit } from "../features/preview/previewSurface";
+import { openPreviewOnFirstVisit } from "../workbench/browsers/browsersSurface";
 import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
 import { useChanges } from "../features/workspace/changes/useChanges";
 import { pushBadge } from "../features/workspace/push/pushBadge";
@@ -159,7 +159,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
 
-// Opens the seeded starter site on a box's very first landing (previewSurface's once-only flag), waiting
+// Opens the seeded starter site on a box's very first landing (browsersSurface.ts's once-only flag), waiting
 // for /panels to actually name it rather than a timer. Desktop only: a phone has one surface to give up.
 watch(
     panels,

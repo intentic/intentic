@@ -5,7 +5,8 @@ import { detectActivations, extensionPath } from "../../workbench/views/registry
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../../features/extensions/usePanels";
-import { openPreview } from "../../features/preview/previewSurface";
+import { openBrowsers, openPreview } from "../../workbench/browsers/browsersSurface";
+import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { DELETED_PATH, DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
 import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../client/sandbox/useRole";
@@ -27,7 +28,7 @@ interface NavCommand {
     readonly icon?: string | undefined;
     /** Where it goes. */
     readonly to: string;
-    /** How it goes, for the one destination that has to be opened rather than navigated to. */
+    /** How it goes, for a destination that has to be opened rather than navigated to. */
     readonly run?: () => void;
 }
 
@@ -50,17 +51,28 @@ export function useNavigationCommands(): void {
     ]);
     const guestless = computed<readonly NavCommand[]>(() => [
         { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
-        // Marks the preview as opened on the way, which a bare push would not.
-        { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
-        // Its tile leaves the rail when nothing is running; the palette is how you get back to a finished session.
-        { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
+        // The live app is a tab of Browsers now; this lands on the one most worth seeing, opening the view on the way, which
+        // a bare push would not.
+        { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/browsers`, run: () => openPreview(router) },
+        { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `browsers`, to: `/browsers`, run: () => openBrowsers(router) },
         { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
         // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
         ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
         // The account's deleted sandboxes, at the board's foot; for every member, as the restore is the account's own.
         { command: `view.deletedSandboxes`, title: t(`sandbox.recentlyDeleted.paletteTitle`), category: GO_TO, icon: `trash`, to: DELETED_PATH },
         // The daemon lets only a maintainer open the sandbox's desktop, since driving it is operating the sandbox.
-        ...(canShip.value ? [{ command: `view.desktop`, title: t(`shared.desktop`), category: GO_TO, icon: `screen`, to: `/desktop` }] : []),
+        ...(canShip.value
+            ? [
+                  {
+                      command: `view.desktop`,
+                      title: t(`shared.desktop`),
+                      category: GO_TO,
+                      icon: `screen`,
+                      to: browsersPath({ kind: `desktop` }),
+                      run: () => openBrowsers(router, { kind: `desktop` }),
+                  },
+              ]
+            : []),
     ]);
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a

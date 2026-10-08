@@ -96,8 +96,16 @@ export type ScreencastClientMessage =
     | { readonly type: "stop" }
     | { readonly type: "newTab"; readonly url?: string }
     | { readonly type: "closeTab"; readonly pageId: string }
-    // The client's picture box in CSS px; the daemon sizes the browser window so the viewport is exactly that.
+    // The client's picture box in CSS px; the daemon sizes the browser window so the viewport is exactly that. Ignored
+    // while a device is emulated (the device decides the size), but remembered and applied once it is not.
     | { readonly type: "resize"; readonly width: number; readonly height: number }
+    // Renders the page this view shows, and any it shows after, as a device (emulation.ts): its CSS size, `mobile` for
+    // the meta viewport, touch, and a user agent when given. Without `device`, back to the browser itself. Answered by
+    // a fresh `ready` with the picture's new size. Checked at the view (EmulateMessageSchema), not trusted as typed.
+    | {
+          readonly type: "emulate";
+          readonly device?: { readonly width: number; readonly height: number; readonly mobile: boolean; readonly userAgent?: string };
+      }
     // Answers the JavaScript dialog the session lists (browser-sessions.ts); `text` is a prompt's reply.
     | { readonly type: "dialog"; readonly accept: boolean; readonly text?: string }
     // Tab backgrounded or route left; stops encoding and sending rather than pushing frames at a hidden `<img>`
@@ -375,6 +383,16 @@ export const cursorReporter = (send: (cursor: string) => void): ((session: CDPSe
     };
 };
 
+// What a view puts on each page it streams and takes off again (a phone, emulation.ts), and whether a settled page is
+// worth a sharp still: a still is clipped to the fixed viewport, which says nothing true of a page dressed as a device.
+export interface ScreencastHooks {
+    // A page's session, once it is bound and sized and before its first frame.
+    readonly bound?: (session: CDPSession, page: Page) => Promise<void>;
+    // The same, before it is let go: rebound elsewhere, or the view stopping.
+    readonly unbinding?: (session: CDPSession, page: Page) => Promise<void>;
+    readonly sharp?: () => boolean;
+}
+
 // A live view of one browser context: the CDP session currently streaming, rebound as pages open and close. `attached`
 // is where input frames are dispatched, so mouse/keyboard follow the page on screen.
 export interface Screencast {
@@ -393,7 +411,7 @@ export interface Screencast {
 
 // Streams one of a context's pages, following the newest page by default (an OAuth popup, or an agent-opened tab). Once
 // the user explicitly binds a page it's pinned, and only that page closing releases the pin.
-export const startScreencast = async (context: BrowserContext, onFrame: (frame: ScreencastFrame) => void): Promise<Screencast> => {
+export const startScreencast = async (context: BrowserContext, onFrame: (frame: ScreencastFrame) => void, hooks: ScreencastHooks = {}): Promise<Screencast> => {
     let attached: CDPSession | undefined;
     let stopped = false;
     let paused = false;
@@ -417,7 +435,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // via captureScreenshot's own argument rather than page zoom, so the agent's own devicePixelRatio and srcset are
     // untouched.
     const still = async (session: CDPSession): Promise<void> => {
-        if (stopped || paused || session !== attached) {
+        if (stopped || paused || session !== attached || hooks.sharp?.() === false) {
             return;
         }
         // Clip is in document coordinates, not viewport; a stale scroll offset gets a blank image back from Chromium.
@@ -466,6 +484,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             return;
         }
         pinned ||= pin;
+        const previous = attached === undefined || boundTo === undefined ? undefined : { session: attached, page: boundTo };
         boundTo = target;
         clearTimeout(stillTimer);
         // A new page's first frames are nobody's echo; the previous page's sharp frame says nothing about this one's
@@ -473,6 +492,8 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         echoUntil = 0;
         lastStill = undefined;
         quiet = 0;
+        // allow(silent-catch): a page already closed has nothing left to take off.
+        await (previous === undefined ? undefined : hooks.unbinding?.(previous.session, previous.page).catch(() => undefined));
         try {
             await attached?.detach();
         } catch {
@@ -504,6 +525,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         });
         // Normalizes the window so client coordinates (VIEW_WIDTH x VIEW_HEIGHT) map 1:1 even for a smaller popup.
         await target.setViewportSize({ width: VIEW_WIDTH, height: VIEW_HEIGHT }).catch(() => {});
+        // After the size, which the view's own overrides replace.
+        // allow(silent-catch): a page that closed under its binding is followed by the next one, which is dressed then.
+        await hooks.bound?.(session, target).catch(() => undefined);
         if (paused) {
             // Bound but silent while hidden; resume's first frame from Chromium is the current surface, so nothing is
             // missed.
@@ -568,6 +592,10 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             stopped = true;
             clearTimeout(stillTimer);
             context.off("page", follow);
+            if (attached !== undefined && boundTo !== undefined) {
+                // allow(silent-catch): a page or browser already gone has nothing left to take off.
+                await hooks.unbinding?.(attached, boundTo).catch(() => undefined);
+            }
             try {
                 await attached?.detach();
             } catch {

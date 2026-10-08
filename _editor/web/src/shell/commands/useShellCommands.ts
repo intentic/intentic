@@ -1,11 +1,11 @@
 import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { CHAT, GO_TO, PREVIEW, TERMINAL } from "../../workbench/commands/categories";
+import { BROWSERS, CHAT, GO_TO, TERMINAL } from "../../workbench/commands/categories";
 import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
 import { chatOnRail, toggleChatFloating, toggleChatHome } from "../../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../../features/chat/panel/chatFloating";
-import { togglePreviewFloating, usePreviewFloating } from "../../features/preview/previewFloating";
+import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
@@ -22,7 +22,7 @@ export function useShellCommands(): void {
     const { canShip } = useRole();
     const chat = useChatFloating();
     const terminalFloat = useTerminalFloating();
-    const previewFloat = usePreviewFloating();
+    const browsersFloat = useBrowsersFloating();
     const { isOpen, mode } = useQuickOpen();
 
     let disposables: readonly Disposable[] = [];
@@ -111,13 +111,13 @@ export function useShellCommands(): void {
             // The window toggle whose title says which way the press goes; the jump to its area is a destination
             // (useNavigationCommands), like every other area's.
             {
-                command: `preview.toggleFloating`,
+                command: `browsers.toggleFloating`,
                 get title(): string {
-                    return previewFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
+                    return browsersFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
                 },
-                category: PREVIEW,
+                category: BROWSERS,
                 icon: `external-link`,
-                handler: () => togglePreviewFloating(),
+                handler: () => toggleBrowsersFloating(),
             },
         ];
         // Object.assign, not a spread: a spread would read (and freeze) the two dynamic title getters above.

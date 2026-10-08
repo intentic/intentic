@@ -13,7 +13,7 @@
         <script>
             (function () {
                 try {
-                    var popped = /\/floating\/(chat|terminal|preview)\/?$/.exec(location.pathname);
+                    var popped = /\/floating\/(chat|terminal|browsers)\/?$/.exec(location.pathname);
                     if (popped !== null) new BroadcastChannel("intentic.floating").postMessage({ kind: "booting", panel: popped[1] });
                 } catch (e) {}
             })();

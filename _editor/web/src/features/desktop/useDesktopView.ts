@@ -8,8 +8,9 @@ import { useLiveSocket, webSocketChannel } from "../../client/session/liveSocket
 import { socketUrl } from "../sandbox/session/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
-// display into a canvas, and, once the owner takes over, their pointer and keys back onto it. One desktop per sandbox,
-// so the only thing followed is which sandbox is active; nothing reaches the desktop until the owner takes over.
+// display, or of one window on it, into a canvas, and, once the owner takes over, their pointer and keys back onto it.
+// One desktop per sandbox, so the only thing followed is which sandbox is active; nothing reaches the desktop until the
+// owner takes over.
 
 // The desktop's size (agent-desktop.ts DESKTOP_SIZE), assumed only until `ready` says.
 const DESKTOP_WIDTH = 1280;
@@ -24,7 +25,7 @@ const CLOSE_REFUSED = 1008;
 
 // What to say while there is no picture; the view words it. `detail` is the failure's own sentence.
 export type DesktopStatus =
-    | { readonly kind: `connecting` | `reconnecting` | `unreachable` | `waiting` | `unsupported` | `refused` }
+    | { readonly kind: `connecting` | `reconnecting` | `unreachable` | `waiting` | `unsupported` | `refused` | `gone` }
     | { readonly kind: `authFailed` | `failed`; readonly detail: string };
 
 // Everything this view says to the daemon.
@@ -89,9 +90,18 @@ const holdClock = (held: Ref<boolean>): HoldClock => {
     };
 };
 
+export interface DesktopViewOptions {
+    // One window on the desktop, by its id (DesktopWindow.id): the picture is that window alone, following it as it
+    // moves, and the view ends with `gone` once it closes. Absent for the whole display.
+    readonly window?: string | undefined;
+    // Whether anyone can see the picture (its tab in front, its view not parked): the daemon stops grabbing the display
+    // while not, as it does for a hidden document, and a hold taken here is handed back.
+    readonly visible?: Ref<boolean>;
+}
+
 // Follows `sandbox` (any value that changes when the active sandbox does): a change tears the socket down and dials
 // the new one's desktop. Undefined dials nothing.
-export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView => {
+export const useDesktopView = (sandbox: Ref<string | undefined>, options: DesktopViewOptions = {}): DesktopView => {
     const status = ref<DesktopStatus | undefined>({ kind: `connecting` });
     const width = ref(DESKTOP_WIDTH);
     const height = ref(DESKTOP_HEIGHT);
@@ -140,6 +150,11 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
             status.value = { kind: canDecodeVideo() ? `waiting` : `unsupported` };
         } else if (message.type === `held`) {
             hold.set(message.owner === true);
+        } else if (message.type === `gone`) {
+            // The window this view was of has closed; there is nothing left to dial.
+            live.end();
+            driving.value = false;
+            status.value = { kind: `gone` };
         } else if (message.type === `error`) {
             // The desktop could not start; dialling again would only ask the same question.
             live.end();
@@ -158,11 +173,23 @@ export const useDesktopView = (sandbox: Ref<string | undefined>): DesktopView =>
     };
 
     // Nobody is looking: the daemon stops grabbing the display until the view is visible again.
-    const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
+    const seen = (): boolean => !document.hidden && options.visible?.value !== false;
+    const syncVisibility = (): void => send({ type: seen() ? `resume` : `pause` });
     document.addEventListener(`visibilitychange`, syncVisibility);
+    if (options.visible !== undefined) {
+        watch(options.visible, (visible) => {
+            syncVisibility();
+            // Out of sight is out of hand: a hold nobody can see is the agent kept waiting for nothing.
+            if (!visible && driving.value) {
+                driving.value = false;
+                send({ type: `control`, driving: false });
+            }
+        });
+    }
+    const windowId = options.window;
 
     const live = useLiveSocket<string, Outgoing>({
-        mint: () => socketUrl(`/system/desktop-view`),
+        mint: () => (windowId === undefined ? socketUrl(`/system/desktop-view`) : socketUrl(`/system/desktop-view`, { window: windowId })),
         open: webSocketChannel({ text: handleJson, binary: takePicture }),
         onMintFailed: (error) => {
             status.value = { kind: `authFailed`, detail: errorMessage(error) };

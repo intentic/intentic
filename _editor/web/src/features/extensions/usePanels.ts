@@ -41,7 +41,7 @@ export function usePanels() {
         isLoading: query.isLoading,
         start,
         stop,
-        // Re-fetch on demand, for PreviewPanel.vue's wait on a start whose push notification got dropped.
+        // Re-fetch on demand, for PreviewTab.vue's wait on a start whose push notification got dropped.
         invalidate,
     };
 }

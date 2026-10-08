@@ -59,6 +59,31 @@ export const regionOf = (geometry: WindowGeometry, screen: Screen): Region => {
     return { x, y, width: even(width), height: even(height), scale };
 };
 
+// The picture while a phone is emulated on the page (emulation.ts). The page then reports the phone rather than its
+// window (innerWidth is the device's, screenX 0), so the viewport is placed from the window's bounds as CDP reads them
+// and the chrome measured before the phone went on; and the picture is the part of the viewport the shrunk device is
+// drawn in, its top-left corner. That keeps the picture to the device alone even where Chromium will not make a window
+// as narrow as a phone (about 500 px with its toolbar).
+export const phoneRegionOf = (
+    bounds: { readonly left?: number; readonly top?: number; readonly width?: number; readonly height?: number },
+    geometry: WindowGeometry,
+    device: { readonly width: number; readonly height: number },
+    screen: Screen,
+): Region => {
+    const scale = scaleOf(geometry);
+    const chromeWidth = Math.max(0, geometry.outerWidth - geometry.innerWidth);
+    const chromeHeight = Math.max(0, geometry.outerHeight - geometry.innerHeight);
+    const left = bounds.left ?? geometry.screenX;
+    const top = bounds.top ?? geometry.screenY;
+    const viewportWidth = (bounds.width ?? geometry.outerWidth) - chromeWidth;
+    const viewportHeight = (bounds.height ?? geometry.outerHeight) - chromeHeight;
+    const x = clamp(Math.round(left * scale), 0, screen.width - 2);
+    const y = clamp(Math.round((top + chromeHeight) * scale), 0, screen.height - 2);
+    const width = clamp(Math.round(Math.min(device.width, viewportWidth) * scale), 2, screen.width - x);
+    const height = clamp(Math.round(Math.min(device.height, viewportHeight) * scale), 2, screen.height - y);
+    return { x, y, width: even(width), height: even(height), scale };
+};
+
 export const regionsEqual = (left: Region, right: Region): boolean =>
     left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height && left.scale === right.scale;
 

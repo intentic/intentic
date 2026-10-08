@@ -31,7 +31,7 @@ const { useWorkspaceTabs } = await import("../../workspace/tabs/useWorkspaceTabs
 const { useHome } = await import("../../workspace/home/useHome");
 const { useLayout } = await import("../../../workbench/window/useLayout");
 const { changeEpochOf, markWorkspaceChanged } = await import("../../workspace/changes/live/useWorkspaceLive");
-const { markPreviewOpened, previewOpened } = await import("../../preview/previewSurface");
+const { markBrowsersOpened, browsersOpened } = await import("../../../workbench/browsers/browsersSurface");
 const { presenceOthers, setPresenceUsers } = await import("../../../workbench/presence/usePresence");
 const { useAgents } = await import("../../agents/fleet/useAgents");
 const { archived, setAgents } = await import("../../agents/fleet/useAgents-registry");
@@ -65,7 +65,7 @@ const fillWorkspace = (): void => {
     useHome().pick(`src`, `dir`);
     useLayout().setTerminalOpen(true);
     markWorkspaceChanged([`src/app.ts`]);
-    markPreviewOpened();
+    markBrowsersOpened();
 };
 
 // What each of those stores reads as now, in the order filled.
@@ -79,7 +79,7 @@ const workspaceReading = () => ({
     terminalOpen: useLayout().terminalOpen.value,
     // Whether the file reads as changed: epochs are one counter every change shares, so its value says nothing here.
     changed: changeEpochOf(`src/app.ts`) > 0,
-    preview: previewOpened.value,
+    browsers: browsersOpened.value,
 });
 
 beforeEach(async () => {
@@ -109,7 +109,7 @@ it(`starts every workspace store over when the workspace is replaced under the s
         home: `src`,
         terminalOpen: true,
         changed: true,
-        preview: true,
+        browsers: true,
     });
     expect(workspaceReading()).toEqual({
         draft: ``,
@@ -120,7 +120,7 @@ it(`starts every workspace store over when the workspace is replaced under the s
         home: ``,
         terminalOpen: false,
         changed: false,
-        preview: false,
+        browsers: false,
     });
 });
 

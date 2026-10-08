@@ -466,6 +466,48 @@ test("the picture box's size is asked of the daemon once it settles, and only wh
     expect(wire().filter((message) => (message as { type?: string }).type === `resize`)).toHaveLength(1);
 });
 
+test("a page framed as a phone is sized by the phone, and back to itself is sized by the box again", async () => {
+    const { view, wire, socket } = await connected();
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 800, scale: 1, codec: `avc1.42C028` });
+    const resizes = (): unknown[] => wire().filter((message) => (message as { type?: string }).type === `resize`);
+    const phone = { width: 393, height: 852, mobile: true, userAgent: `iPhone` };
+
+    view.emulate(phone);
+    view.emulate({ ...phone });
+    expect(wire().filter((message) => (message as { type?: string }).type === `emulate`)).toEqual([{ type: `emulate`, device: phone }]);
+
+    // The box moving under a phone asks nothing: the device decides the picture's size.
+    view.requestSize(900, 600);
+    await new Promise((settle) => setTimeout(settle, 300));
+    expect(resizes()).toHaveLength(0);
+
+    view.emulate(undefined);
+    expect(wire()).toContainEqual({ type: `emulate` });
+    expect(resizes()).toEqual([{ type: `resize`, width: 900, height: 600 }]);
+});
+
+test("a picture nobody can see is paused, and resumed the moment it can be", async () => {
+    const sockets: FakeSocket[] = [];
+    stubGlobal(
+        `WebSocket`,
+        class extends FakeSocket {
+            constructor() {
+                super();
+                sockets.push(this);
+            }
+        },
+    );
+    const visible = ref(true);
+    effectScope().run(() => useBrowserView(ref(`browser-abc12345`), { visible }));
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const wire = (): unknown[] => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown);
+
+    visible.value = false;
+    await waitFor(() => expect(wire().at(-1)).toEqual({ type: `pause` }));
+    visible.value = true;
+    await waitFor(() => expect(wire().at(-1)).toEqual({ type: `resume` }));
+});
+
 // On the video path a webp is the settled page's sharp still, laid over the canvas; it must never reach the <img>
 // the frames path uses, which would show it beside the video.
 test("a still on the video path goes to the canvas, not the img", async () => {

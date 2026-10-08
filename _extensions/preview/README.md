@@ -21,7 +21,7 @@ flowchart LR
   an agent included.
 - The same tab lists conversations shared as pages: Update re-takes the snapshot behind an existing link, and
   removing a share takes the page down.
-- The dev-server Preview area is core editor code in
+- The live app is a tab of the core Browsers view, built from
   [../../_editor/web/src/features/preview](../../_editor/web/src/features/preview); this extension only adds the
   two hub tabs.
 

@@ -4,6 +4,8 @@ import { useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useBrowsersQuery } from "../../features/browsers/browsersQuery";
+import { browsersFront } from "../../workbench/browsers/browsersSurface";
+import type { LiveTab } from "../../workbench/browsers/browsersPaths";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePanels } from "../../features/extensions/usePanels";
 import { previewHealthyCount } from "../../features/preview/previewModel";
@@ -31,6 +33,8 @@ export interface RuntimeChips {
 export function useRuntimeChips(): RuntimeChips {
     const route = useRoute();
     const here = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
+    // The live app, the web windows and the desktop are tabs of one view: each chip is lit while its kind is in front.
+    const inFront = (...kinds: readonly LiveTab[`kind`][]): boolean => here(`/browsers`) && kinds.includes(browsersFront.value.kind);
 
     const { canShip } = useRole();
     const { maker } = useAudience();
@@ -58,12 +62,12 @@ export function useRuntimeChips(): RuntimeChips {
                 : undefined,
             previewChip({
                 healthy: previewHealthyCount(panels.value, forwarded.value, publicFiles.value),
-                here: here(`/preview`),
+                here: inFront(`preview`),
                 label: words.value.preview,
             }),
-            browsersChip({ sessions: browsers.value, here: here(`/browsers`) }),
+            browsersChip({ sessions: browsers.value, here: inFront(`web`) }),
             // The daemon lets nobody below maintainer drive the desktop.
-            canShip.value ? desktopChip({ windows: windows.value ?? 0, here: here(`/desktop`) }) : undefined,
+            canShip.value ? desktopChip({ windows: windows.value ?? 0, here: inFront(`desktop`, `app`) }) : undefined,
             portsChip({ ports: forwarded.value.map((entry) => entry.port), here: here(`/sandbox/ports`) }),
             vpnChip({
                 names: vpnLinks.value.filter((link) => link.state === `connected`).map((link) => link.id),

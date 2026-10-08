@@ -2,10 +2,11 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
+import { z } from "zod";
 import { chromiumWindowArgs, DISPLAY_HEIGHT, DISPLAY_WIDTH, ensureDisplay, releaseDisplay } from "./display.js";
 import { startLiveView, type LiveReady, type LiveView } from "./live-view.js";
 import { readRegion } from "./region.js";
-import { FRAME_WEBP } from "./screencast.js";
+import { FRAME_JPEG, FRAME_WEBP } from "./screencast.js";
 import { QUIET_BYTES } from "./stills.js";
 import { FRAME_H264_DELTA, FRAME_H264_DELTA_QUIET, FRAME_H264_KEY, FRAME_H264_KEY_QUIET } from "./videocast.js";
 
@@ -159,6 +160,59 @@ const expectSteered = async (view: LiveView, page: Page): Promise<void> => {
 
 afterAll(() => releaseDisplay(DISPLAY_KEY));
 
+/* A phone on the view (emulation.ts). The page is a phone's screen with a mark in each corner and a button near the
+   bottom: a click in the picture's pixels must land on what it was aimed at through the shrinking, and the corner marks
+   (6 CSS px, smaller than any border or chrome the picture could wrongly hold) are only hit if the picture is the
+   device's screen to the pixel. */
+
+const PHONE = { width: 390, height: 844, mobile: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148" } as const;
+
+const PHONE_PAGE = `data:text/html,${encodeURIComponent(
+    "<meta name=viewport content='width=device-width,initial-scale=1'><title>phone</title>" +
+        "<body style='margin:0;background:#fff'>" +
+        "<div id=tl style='position:fixed;left:0;top:0;width:6px;height:6px;background:#0a0'></div>" +
+        "<div id=br style='position:fixed;right:0;bottom:0;width:6px;height:6px;background:#0a0'></div>" +
+        "<button id=go style='position:absolute;left:300px;top:700px;width:80px;height:60px'>go</button>" +
+        "<script>addEventListener('mousedown', (event) => { document.title = (event.target.id || 'page') + ' ' + event.clientX + ',' + event.clientY; });</script>",
+)}`;
+
+interface Seen {
+    readonly width: number;
+    readonly height: number;
+    readonly touch: number;
+    readonly agent: string;
+}
+
+const seen = (page: Page): Promise<Seen> =>
+    page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight, touch: navigator.maxTouchPoints, agent: navigator.userAgent }));
+
+// A press and release at a point of the picture, and what the page says was under it.
+const tap = async (view: LiveView, page: Page, x: number, y: number): Promise<string> => {
+    await page.evaluate(() => {
+        document.title = "";
+    });
+    await view.input({ type: "mouse", action: "down", x, y, button: 0, buttons: 1, clickCount: 1 });
+    await view.input({ type: "mouse", action: "up", x, y, button: 0, buttons: 0, clickCount: 1 });
+    await settle(() => false, 400);
+    return await page.title();
+};
+
+const fitOf = (ready: LiveReady | undefined): number => (ready === undefined ? 1 : ready.height / ready.scale / PHONE.height);
+
+// Taps the two corner marks and the button, in the picture's own pixels: each must name what it hit.
+const expectAimed = async (view: LiveView, page: Page, ready: LiveReady): Promise<void> => {
+    const fit = fitOf(ready);
+    const width = ready.width / ready.scale;
+    const height = ready.height / ready.scale;
+    expect(await tap(view, page, 2 * ready.scale, 2 * ready.scale)).toMatch(/^tl /);
+    expect(await tap(view, page, (width - 2) * ready.scale, (height - 2) * ready.scale)).toMatch(/^br /);
+    const button = await tap(view, page, 340 * fit * ready.scale, 730 * fit * ready.scale);
+    expect(button).toMatch(/^go \d+,\d+$/);
+    const [x = 0, y = 0] = button.slice(3).split(",").map(Number);
+    expect(Math.abs(x - 340)).toBeLessThanOrEqual(2);
+    expect(Math.abs(y - 730)).toBeLessThanOrEqual(2);
+};
+
 test(
     "the picture is the page's viewport, sharpened once it settles without the display feeling it, resized and steered from the client",
     async () => {
@@ -202,6 +256,164 @@ test(
         } finally {
             await context.close().catch(() => undefined);
             rmSync(profile, { recursive: true, force: true });
+        }
+    },
+    { timeout: 120_000 },
+);
+
+test(
+    "a phone on the video path is the device's screen alone, shrunk to fit, aimed through the shrinking, and gone when asked or when the view stops",
+    async () => {
+        const launched = await launch();
+        if (launched === undefined) {
+            return; // no browser on this box
+        }
+        const { context, profile } = launched;
+        const wire: Wire = { json: [], tags: [], sizes: [], stills: [] };
+        const sink = {
+            send: (data: string | Uint8Array): void => {
+                if (data instanceof Uint8Array) {
+                    wire.tags.push(data[0] ?? -1);
+                } else {
+                    wire.json.push(z.looseObject({}).parse(JSON.parse(data)));
+                }
+            },
+        };
+        try {
+            const page = context.pages()[0] ?? (await context.newPage());
+            await page.goto(PHONE_PAGE);
+            const view = await startLiveView(context, DISPLAY_KEY, sink, () => undefined);
+            try {
+                await settle(() => readies(wire).length > 0);
+                await view.input({ type: "resize", width: 900, height: 600 });
+                await settle(() => readies(wire).some((ready) => ready.width === 900 * (ready.scale ?? 1)));
+                const desktop = await seen(page);
+                expect([desktop.width, desktop.height, desktop.touch]).toEqual([900, 600, 0]);
+
+                // On: the page is the device, and the picture is it whole, shrunk to the 800 px the picture has.
+                const before = readies(wire).length;
+                await view.input({ type: "emulate", device: PHONE });
+                await settle(() => readies(wire).length > before);
+                const phone = readies(wire).at(-1);
+                if (phone === undefined) {
+                    throw new Error("no ready after the phone went on");
+                }
+                const fit = 800 / 844;
+                expect(phone).toMatchObject({ kind: "video", width: Math.round(390 * fit) * phone.scale - ((Math.round(390 * fit) * phone.scale) % 2), height: 800 * phone.scale });
+                expect(await seen(page)).toEqual({ width: 390, height: 844, touch: 5, agent: PHONE.userAgent });
+                await expectAimed(view, page, phone);
+
+                // The client's box is remembered while the device decides, not obeyed.
+                const settled = readies(wire).length;
+                await view.input({ type: "resize", width: 1000, height: 700 });
+                expect(readies(wire).length).toBe(settled);
+                expect((await seen(page)).width).toBe(390);
+
+                // Off: every override gone, and the window is the last box asked for.
+                await view.input({ type: "emulate" });
+                await settle(() => readies(wire).some((ready, index) => index >= settled && ready.width === 1000 * ready.scale));
+                expect(readies(wire).at(-1)).toMatchObject({ width: 1000 * phone.scale, height: 700 * phone.scale });
+                const back = await seen(page);
+                expect([back.width, back.height, back.touch]).toEqual([1000, 700, 0]);
+                expect(back.agent).toBe(desktop.agent);
+
+                // On again, then the socket goes: the agent's next look finds the browser as it was.
+                // A second device replaces the first whole, the user agent with it.
+                await view.input({ type: "emulate", device: { width: 412, height: 915, mobile: true } });
+                expect(await seen(page)).toEqual({ width: 412, height: 915, touch: 5, agent: desktop.agent });
+            } finally {
+                await view.stop();
+            }
+            await settle(() => false, 400);
+            const after = await seen(page);
+            expect(after.width).toBeGreaterThan(400);
+            expect(after.touch).toBe(0);
+        } finally {
+            await context.close().catch(() => undefined);
+            rmSync(profile, { recursive: true, force: true });
+        }
+    },
+    { timeout: 120_000 },
+);
+
+// A JPEG's size off its first start-of-frame marker.
+const jpegSize = (bytes: Uint8Array): PixelSize | undefined => {
+    const view = Buffer.from(bytes);
+    for (let at = 2; at + 9 < view.length; ) {
+        if (view[at] !== 0xff) {
+            return undefined;
+        }
+        const marker = view[at + 1] ?? 0;
+        if (marker >= 0xc0 && marker <= 0xc2) {
+            return { width: view.readUInt16BE(at + 7), height: view.readUInt16BE(at + 5) };
+        }
+        at += 2 + view.readUInt16BE(at + 2);
+    }
+    return undefined;
+};
+
+// The frames path: a browser with no display, photographed by its compositor. CDP input is in the picture's pixels
+// whatever the scale, and the fixed viewport Playwright set comes back when the phone comes off.
+test(
+    "a phone on the frames path is announced at its fitted size, aimed in the picture's pixels, and taken off again",
+    async () => {
+        let playwright: typeof import("playwright");
+        try {
+            playwright = await import("playwright");
+        } catch {
+            return; // the package isn't installed
+        }
+        const executablePath = playwright.chromium.executablePath();
+        if (!existsSync(executablePath)) {
+            return; // installed, but the binary isn't on disk
+        }
+        const browser = await playwright.chromium.launch({ headless: true, executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+        try {
+            const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+            const page = await context.newPage();
+            await page.goto(PHONE_PAGE);
+            const wire: Wire = { json: [], tags: [], sizes: [], stills: [] };
+            // Each motion frame's size, in the order they came.
+            const frames: (PixelSize | undefined)[] = [];
+            const sink = {
+                send: (data: string | Uint8Array): void => {
+                    if (!(data instanceof Uint8Array)) {
+                        wire.json.push(z.looseObject({}).parse(JSON.parse(data)));
+                    } else if (data[0] === FRAME_JPEG) {
+                        frames.push(jpegSize(data.slice(1)));
+                    }
+                },
+            };
+            const view = await startLiveView(context, "no-display-here", sink, () => undefined);
+            try {
+                expect(readies(wire)).toEqual([{ type: "ready", kind: "frames", width: 1280, height: 800, scale: 1 }]);
+                const before = frames.length;
+                await view.input({ type: "emulate", device: PHONE });
+                expect(readies(wire).at(-1)).toEqual({ type: "ready", kind: "frames", width: 370, height: 800, scale: 1 });
+                // The frames are the device's screen and nothing else, at the size the `ready` gave.
+                await settle(() => frames.slice(before).some((size) => size?.width === 370));
+                expect(frames.slice(before).at(-1)).toEqual({ width: 370, height: 800 });
+                expect(await seen(page)).toEqual({ width: 390, height: 844, touch: 5, agent: PHONE.userAgent });
+                const phone = readies(wire).at(-1);
+                if (phone === undefined) {
+                    throw new Error("no ready after the phone went on");
+                }
+                await expectAimed(view, page, phone);
+                // Anything but an emulate of the right shape is dropped.
+                // As the route reads it: parsed off the socket and handed on unchecked.
+                const malformed: Parameters<LiveView["input"]>[0] = JSON.parse(`{"type":"emulate","device":{"width":"wide","height":10,"mobile":true}}`);
+                await view.input(malformed);
+                expect((await seen(page)).width).toBe(390);
+                await view.input({ type: "emulate" });
+                expect(readies(wire).at(-1)).toEqual({ type: "ready", kind: "frames", width: 1280, height: 800, scale: 1 });
+                expect(await seen(page)).toMatchObject({ width: 1280, height: 800, touch: 0 });
+                await view.input({ type: "emulate", device: PHONE });
+            } finally {
+                await view.stop();
+            }
+            expect(await seen(page)).toMatchObject({ width: 1280, height: 800, touch: 0 });
+        } finally {
+            await browser.close().catch(() => undefined);
         }
     },
     { timeout: 120_000 },

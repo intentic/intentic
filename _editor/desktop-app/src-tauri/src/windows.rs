@@ -2235,11 +2235,11 @@ mod floating_tests {
         // Served under a path, the panel is under that path too.
         assert_eq!(
             floating_panel(
-                &origin("https://example.dev/app/floating/preview"),
+                &origin("https://example.dev/app/floating/browsers"),
                 &origin("https://example.dev/app/")
             )
             .as_deref(),
-            Some("preview")
+            Some("browsers")
         );
     }
 
@@ -2266,7 +2266,7 @@ mod floating_tests {
     fn a_floating_window_is_labelled_and_titled_after_its_panel() {
         assert_eq!(floating_label("chat"), "floating-chat");
         assert_eq!(floating_title("chat"), "Intentic · Chat");
-        assert_eq!(floating_title("preview"), "Intentic · Preview");
+        assert_eq!(floating_title("browsers"), "Intentic · Browsers");
     }
 }
 

@@ -1,6 +1,5 @@
 import type { PortSummary, PublicFile, PanelSummary } from "@intentic/sandbox-contract";
 import {
-    addressTarget,
     appTargets,
     frameSandbox,
     loopbackPreviewTarget,
@@ -111,7 +110,6 @@ describe(`frameSandbox`, () => {
         expect(frameSandbox(`repo`)).toBeUndefined();
         expect(frameSandbox(`app`)).toBeUndefined();
         expect(frameSandbox(`port`)).toBeUndefined();
-        expect(frameSandbox(`address`)).toBeUndefined();
         expect(frameSandbox(`public`)).toContain(`allow-scripts`);
         expect(frameSandbox(`public`)).not.toContain(`allow-same-origin`);
     });
@@ -136,33 +134,22 @@ describe(`portTargets`, () => {
     });
 });
 
-describe(`addressTarget`, () => {
-    it(`takes a bare host as https, keeps an explicit scheme, and refuses what is not an address`, () => {
-        expect(addressTarget(`example.dev`)?.url).toBe(`https://example.dev/`);
-        expect(addressTarget(` http://localhost:3000/app `)?.url).toBe(`http://localhost:3000/app`);
-        expect(addressTarget(`example.dev/pricing`)?.detail).toBe(`/pricing`);
-        expect(addressTarget(undefined)).toBeUndefined();
-        expect(addressTarget(`   `)).toBeUndefined();
-        expect(addressTarget(`javascript:alert(1)`)).toBeUndefined();
-    });
-});
-
 describe(`mergeTargets`, () => {
     const monorepo = repoTargets([panel({ repo: `mono`, monorepo: true, healthy: true })]);
 
     it(`keeps a monorepo's own row when it has no apps`, () => {
-        expect(mergeTargets(monorepo, [], [], undefined, undefined).map((target) => target.id)).toEqual([`repo:mono`]);
+        expect(mergeTargets(monorepo, [], [], undefined).map((target) => target.id)).toEqual([`repo:mono`]);
         expect(barTargets([panel({ repo: `mono`, monorepo: true, healthy: true })], [], []).map((target) => target.id)).toEqual([`repo:mono`]);
     });
 
     it(`replaces it with its apps once it has some: one row per thing, never a vague row beside precise ones`, () => {
         const apps = appTargets(`mono`, [{ app: `web`, running: true, healthy: true, installed: true }]);
-        expect(mergeTargets(monorepo, apps, [], undefined, undefined).map((target) => target.id)).toEqual([`app:mono/web`]);
+        expect(mergeTargets(monorepo, apps, [], undefined).map((target) => target.id)).toEqual([`app:mono/web`]);
     });
 
-    it(`orders the workspace's own rows after the repos, address last`, () => {
-        const merged = mergeTargets(monorepo, [], portTargets([port({})]), publicTarget([file({})]), addressTarget(`example.dev`));
-        expect(merged.map((target) => target.id)).toEqual([`repo:mono`, `port:3000`, `public`, `address`]);
+    it(`orders the workspace's own rows after the repos`, () => {
+        const merged = mergeTargets(monorepo, [], portTargets([port({})]), publicTarget([file({})]));
+        expect(merged.map((target) => target.id)).toEqual([`repo:mono`, `port:3000`, `public`]);
     });
 });
 

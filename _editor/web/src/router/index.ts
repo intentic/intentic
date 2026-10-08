@@ -42,6 +42,7 @@ import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
+import { browsersPath, previewRedirect } from "../workbench/browsers/browsersPaths";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -177,10 +178,6 @@ export const openInPage = async (path: string): Promise<void> => {
 // menu's contents on the rail, so a desktop hit lands on the workspace instead.
 const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
 
-// Full-screen chat is the desktop's alone: the mobile shell's chat is the agent route (a conversation is its chat
-// surface there), so a mobile hit lands on the fleet those live behind.
-const desktopOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? `/agents` : true);
-
 // /chat on a phone is the Chat tab: the active conversation's own screen. The store is imported at the press, not
 // at module load, so the router does not pull the chat's whole graph into every first paint.
 const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
@@ -259,13 +256,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../features/sandbox/recovery/Recover.vue`),
     },
     {
-        // A floating panel's own window (chat, terminal or preview), no shell around it, nothing to navigate. Guarded
+        // A floating panel's own window (chat, terminal or browsers), no shell around it, nothing to navigate. Guarded
         // like the shell; the path enumerates the three panels, an unknown one falls through.
-        path: `/floating/:panel(chat|terminal|preview)`,
+        path: `/floating/:panel(chat|terminal|browsers)`,
         name: `floating`,
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/window/FloatingSection.vue`),
     },
+    // The live app's own window until it became a tab of Browsers (2026-10-08); a desktop app that remembers one still
+    // asks for it here.
+    { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;
         // otherwise requireSetup redirects to /setup, so all shell navigation is blocked until setup completes.
@@ -296,15 +296,9 @@ const routes: RouteRecordRaw[] = [
                 beforeEnter: [chatEntry],
                 component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`), undefined, { mobile: `skip` }),
             },
-            // The live app preview's full-window home, same arrangement as the chat route. Desktop only: the mobile
-            // shell mounts no poppable panels, and a phone opens the preview URL directly.
-            {
-                path: `preview`,
-                name: `preview`,
-                meta: { title: () => t(`shared.preview`) },
-                beforeEnter: [desktopOnly],
-                component: asyncView(() => import(`../features/preview/PreviewArea.vue`), undefined, { mobile: `skip` }),
-            },
+            // The live app's home until it became a tab of Browsers (2026-10-08). Kept for the links an older build, an
+            // extension's "See it" or a bookmark still open: `?target=` names the app, and lands on its tab.
+            { path: `preview`, redirect: (to) => previewRedirect(to.query[`target`]) },
             {
                 path: `agents`,
                 name: `agents`,
@@ -386,21 +380,18 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.workspace`) },
                 component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
             },
-            // The session is in the URL so a reload reopens the same browser; optional, since the rail tile links to
-            // the bare path and the view picks the most recently active one.
+            // Everything live the sandbox shows: its browser windows, the apps it serves, its desktop and the windows on it,
+            // as tabs of one view. The tab in front is in the URL so a reload reopens it (browsersSurface.ts's keys: a
+            // window's session name, `preview:<target>`, `desktop`, `app:<window>`); optional, since a bare /browsers
+            // opens on whatever was in front last. A target id holds a slash (`app:shop/web`), hence the open pattern.
             {
-                path: `browsers/:session?`,
+                path: `browsers/:tab(.*)?`,
                 name: `browsers`,
                 meta: { title: () => t(`shared.browsers`) },
-                component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
+                component: asyncView(() => import(`../shell/browsers/BrowsersArea.vue`)),
             },
-            // The sandbox's own desktop, the one the agent's desktop tools drive; one per sandbox, so no parameter.
-            {
-                path: `desktop`,
-                name: `desktop`,
-                meta: { title: () => t(`shared.desktop`) },
-                component: asyncView(() => import(`../features/desktop/Desktop.vue`)),
-            },
+            // The sandbox's own desktop was a view of its own until it became a tab of Browsers (2026-10-08).
+            { path: `desktop`, redirect: browsersPath({ kind: `desktop` }) },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,

@@ -149,8 +149,18 @@ export const OpenBrowserResultSchema = z.object({
     pageId: z.string().optional().describe("The tab it opened, once the window has it. Absent when the tab had not appeared in time."),
 });
 export type OpenBrowserResult = z.infer<typeof OpenBrowserResultSchema>;
+// One window on the sandbox's desktop, as its window manager lists it. The id is what /system/desktop-view takes as
+// `window` to stream that window alone, and what the agent's own desktop tools name it by.
+export const DesktopWindowSchema = z.object({
+    id: z.string().describe("The window, as the desktop's window manager names it. Open a picture of it alone by passing this to the desktop view."),
+    app: z.string().describe("The program it belongs to, as the system names it (`xterm`, `Code`), not what a person calls it."),
+    title: z.string().describe("What its title bar says. Empty for a window that has none."),
+    focused: z.boolean().describe("Whether it has the keyboard: typing on the desktop goes to this window."),
+});
+export type DesktopWindow = z.infer<typeof DesktopWindowSchema>;
 // The sandbox's own desktop (desktop/agent-desktop.ts): one screen, so a state rather than a roster. `windows` is what
-// tells an empty desktop from a broken picture of one, and what puts its tile on the rail.
+// tells an empty desktop from a broken picture of one, and what puts its tile on the rail; `list` is what each of them
+// is, for a tab that shows one window alone.
 export const DesktopStateSchema = z.object({
     running: z
         .boolean()
@@ -162,6 +172,10 @@ export const DesktopStateSchema = z.object({
         .nonnegative()
         .optional()
         .describe("How many windows are open on it. None is an empty desktop. Absent while it is not running, or when it has no window manager to ask."),
+    list: z
+        .array(DesktopWindowSchema)
+        .optional()
+        .describe("Each window open on it, absent when it is not running or has no window manager to ask."),
 });
 export type DesktopState = z.infer<typeof DesktopStateSchema>;
 // A subagent is any agent another agent started, and every surface shows one the same way whichever mechanism started

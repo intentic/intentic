@@ -127,3 +127,11 @@ const PHONE_KEY = `intentic-preview-phone`;
 
 export const storedPhoneId = (): string => storedValue(PHONE_KEY) ?? DEFAULT_PHONE_ID;
 export const storePhoneId = (id: string): void => storeValue(PHONE_KEY, id);
+
+// What a page in the sandbox's own browser is told it runs on while framed as a phone (useBrowserView's `emulate`): the
+// make's own mobile browser, since a site that sniffs for a phone looks for that and not for a viewport. A framed live
+// app needs none: it runs in the reader's own browser, which says what it is.
+const SAFARI_IOS = `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1`;
+const CHROME_ANDROID = `Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36`;
+
+export const phoneUserAgent = (phone: PhoneModel): string => (phone.brand === `Apple` ? SAFARI_IOS : CHROME_ANDROID);

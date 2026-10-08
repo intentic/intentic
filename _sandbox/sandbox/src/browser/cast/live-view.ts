@@ -1,7 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
-import { readRegion, regionsEqual, resizeWindow, windowBoundsFor, type Region, type Screen, type WindowGeometry } from "./region.js";
+import { type Device, EmulateMessageSchema, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
+import { regionsEqual, type Region, type Screen } from "./region.js";
 import {
     applySelect,
     cursorReporter,
@@ -11,13 +12,12 @@ import {
     readSelection,
     startScreencast,
     STILL_QUALITY,
-    VIEW_HEIGHT,
-    VIEW_WIDTH,
     type MouseMessage,
     type Screencast,
     type ScreencastClientMessage,
 } from "./screencast.js";
 import { createStillTaker } from "./stills.js";
+import { videoWindow } from "./video-window.js";
 import { encodeVideo, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
 
@@ -28,6 +28,12 @@ import { startXInput, type XInput } from "./xinput.js";
 //
 // The chrome is the client's (tabs, address bar, navigation), fed by the session and steered by the messages below;
 // the picture carries the page alone.
+//
+// Or a phone (emulation.ts), on either path: the picture is then the device's screen alone, shrunk to fit VIEW_WIDTH ×
+// VIEW_HEIGHT, announced by a fresh `ready` of that size, and a pointer event in the picture's pixels still lands on what
+// it was aimed at (Chromium maps input through the same scale it draws with). The client's box is ignored while the
+// device decides the size, and asked again when the phone comes off. Taken off when the view stops, whatever the
+// client did.
 
 // Socket-shaped, so this module never imports hono. Both routes hand it their `ws`. `backlog` is what the socket holds
 // unsent, the one number that says a viewer's link is slower than the picture.
@@ -67,8 +73,12 @@ const BACKLOG_LIMIT = 256 * 1024;
 // How often the shown page is checked for having gone behind another tab or changed shape; the picture itself is the
 // display, so only the cursor, keys and stills are ever this late.
 const FOLLOW_MS = 1000;
-// Chromium applies window bounds asynchronously; the geometry is re-read after this.
-const RESIZE_SETTLE_MS = 200;
+
+// The device an emulate asks for, undefined to take it off, or "invalid" for a frame of any other shape, which is dropped.
+const askedDevice = (message: ScreencastClientMessage): Device | undefined | "invalid" => {
+    const parsed = EmulateMessageSchema.safeParse(message);
+    return parsed.success ? parsed.data.device : "invalid";
+};
 
 type Steer = Extract<ScreencastClientMessage, { type: "navigate" | "back" | "forward" | "reload" | "stop" }>;
 
@@ -143,7 +153,6 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     let current: Page | undefined;
     let session: CDPSession | undefined;
     let region: Region | undefined;
-    let geometry: WindowGeometry | undefined;
     let cast: Videocast | undefined;
     // Frames are being dropped until a keyframe finds the socket drained; see BACKLOG_LIMIT.
     let dropping = false;
@@ -157,7 +166,9 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         // taken (2026-10-01).
         capture: async () => {
             const at = session;
-            if (at === undefined || region === undefined) {
+            // None of a phone: Chromium captures an emulated page by re-rendering it at its own size for the length of
+            // the capture, which the grab films as a flash of the page at another size.
+            if (at === undefined || region === undefined || sizing.phone() !== undefined) {
                 return undefined;
             }
             const shot = await at.send("Page.captureScreenshot", { format: "webp", quality: STILL_QUALITY });
@@ -207,22 +218,27 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
 
     // Re-reads where the shown page's viewport is; a change (a resize, fullscreen, a popup's own chrome) restarts the
     // grab there. Nothing changes while the read fails, since a page mid-navigation still occupies the same window.
-    const refit = async (): Promise<void> => {
+    // `fresh` restarts it even unchanged (video-window.ts).
+    const refit = async (fresh = false): Promise<void> => {
         const page = current;
         if (page === undefined || stopped) {
             return;
         }
-        const read = await readRegion(page, screen);
-        if (read === undefined || current !== page) {
+        const worn = sizing.phone();
+        const next = await sizing.measure(page);
+        // A read begun before a phone went on or came off describes the other picture.
+        if (next === undefined || current !== page || sizing.phone() !== worn) {
             return;
         }
-        geometry = read.geometry;
-        if (region !== undefined && regionsEqual(region, read.region)) {
+        if (!fresh && region !== undefined && regionsEqual(region, next)) {
             return;
         }
-        region = read.region;
+        region = next;
         run();
     };
+
+    // The window's size and the phone, if the owner asked for one.
+    const sizing = videoWindow({ screen, shown: () => (current === undefined || session === undefined ? undefined : { page: current, session }), refit });
 
     const attach = async (page: Page): Promise<void> => {
         if (stopped || current === page) {
@@ -232,6 +248,10 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         selectFocused = false;
         const previous = session;
         session = undefined;
+        // The phone follows the view: off the page it leaves, onto the one it shows next.
+        if (previous !== undefined) {
+            await sizing.leaving(previous);
+        }
         await previous?.detach().catch(() => undefined);
         const next = await context.newCDPSession(page).catch(() => undefined);
         if (next === undefined) {
@@ -244,7 +264,9 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         session = next;
         // The previous page's still says nothing about this one; the same region keeps its stream.
         stills.reset();
-        await refit();
+        if (!(await sizing.arrived())) {
+            await refit();
+        }
     };
 
     const followFront = async (): Promise<void> => {
@@ -281,7 +303,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         if (paused || stopped) {
             return;
         }
-        void followFront().then(refit);
+        void followFront().then(() => refit());
     }, FOLLOW_MS);
 
     const probeSelect = (): void => {
@@ -294,17 +316,6 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
                 selectFocused = focused;
             }
         });
-    };
-
-    // Sizes the window so the viewport is what the client's box holds, then re-reads where that put the viewport.
-    const resize = async (size: { readonly width: number; readonly height: number }): Promise<void> => {
-        const at = session;
-        if (at === undefined || geometry === undefined || !Number.isFinite(size.width) || !Number.isFinite(size.height)) {
-            return;
-        }
-        await resizeWindow(at, windowBoundsFor(size, geometry, screen)).catch(() => undefined);
-        await new Promise((resolve) => setTimeout(resolve, RESIZE_SETTLE_MS));
-        await refit();
     };
 
     const mouse = (message: MouseMessage): void => {
@@ -322,8 +333,9 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         pointer(input, message, at);
         if (message.action === "move" && session !== undefined) {
             // Fire-and-forget and throttled, so the cursor shape never blocks the next input; the page is asked in its
-            // own CSS pixels.
-            reportCursor(session, message.x / at.scale, message.y / at.scale);
+            // own CSS pixels, a phone's shrinking undone.
+            const shrunk = at.scale * (sizing.phone()?.fit ?? 1);
+            reportCursor(session, message.x / shrunk, message.y / shrunk);
         } else if (message.action === "up") {
             probeSelect();
         }
@@ -376,7 +388,13 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             } else if (message.type === "text" || message.type === "key") {
                 await keys(message);
             } else if (message.type === "resize") {
-                await resize(message);
+                // The window is sized to the client's box, then the picture refits to it; a phone defers the box.
+                await sizing.resize(message);
+            } else if (message.type === "emulate") {
+                const asked = askedDevice(message);
+                if (asked !== "invalid") {
+                    await sizing.emulate(asked);
+                }
             } else if (message.type === "newTab") {
                 const page = await openTab(context, message.url);
                 if (page !== undefined) {
@@ -397,6 +415,8 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             cast = undefined;
             stills.stop();
             input.stop();
+            // The phone was this socket's, not the browser's: the agent's own next use finds the page as it was.
+            await sizing.stop();
             const open = session;
             session = undefined;
             await open?.detach().catch(() => undefined);
@@ -444,10 +464,48 @@ export const chordOf = (message: { readonly key: string; readonly ctrl?: boolean
 };
 
 const startFramesView = async (context: BrowserContext, sink: Sink, onError: (reason: string) => void): Promise<LiveView> => {
-    const cast: Screencast = await startScreencast(context, (frame) => sink.send(encodeFrame(frame)));
+    // The phone the owner asked for, while they ask: put on every page the screencast binds, taken off every page it
+    // lets go. CDP input is in the picture's pixels whatever the scale, so only the page-side reads below are rescaled.
+    let phone: Phone | undefined;
+    const cast: Screencast = await startScreencast(context, (frame) => sink.send(encodeFrame(frame)), {
+        bound: async (session) => {
+            if (phone !== undefined) {
+                await putPhoneOn(session, phone);
+            }
+        },
+        unbinding: async (session, page) => {
+            if (phone !== undefined) {
+                await takePhoneOff(session, page);
+            }
+        },
+        sharp: () => phone === undefined,
+    });
     // Cursor shape is asked for here, since a compositor surface has none; reported as it changes.
     const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
-    sink.send(JSON.stringify({ type: "ready", kind: "frames", width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: 1 } satisfies LiveReady));
+    // The picture's size: the fixed viewport (VIEW_WIDTH × VIEW_HEIGHT), or the fitted phone, which is exactly what
+    // Chromium's frames of it measure.
+    const announce = (): void => {
+        const size = phone?.size ?? PHONE_BOX;
+        sink.send(JSON.stringify({ type: "ready", kind: "frames", width: size.width, height: size.height, scale: 1 } satisfies LiveReady));
+    };
+    announce();
+    const emulate = async (asked: Device | undefined): Promise<void> => {
+        const session = cast.attached();
+        const page = cast.page();
+        if (asked === undefined) {
+            if (phone === undefined) {
+                return;
+            }
+            phone = undefined;
+            // allow(silent-catch): a page that closed while dressed has nothing left to take off.
+            await (session === undefined || page === undefined ? undefined : takePhoneOff(session, page).catch(() => undefined));
+        } else {
+            phone = phoneFor(asked, PHONE_BOX);
+            // allow(silent-catch): a page that closed under the phone is followed by the next one, which is dressed then.
+            await (session === undefined ? undefined : putPhoneOn(session, phone).catch(() => undefined));
+        }
+        announce();
+    };
     // A pointer or keystroke to the page's CDP session, and what the surface owes after it.
     const dispatch = async (message: ScreencastClientMessage): Promise<void> => {
         const session = cast.attached();
@@ -460,15 +518,22 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
         if (message.type !== "mouse") {
             return;
         }
+        const fit = phone?.fit ?? 1;
         if (message.action === "move") {
-            // Fire-and-forget and throttled, so the cursor shape never blocks the next input.
-            reportCursor(session, message.x, message.y);
+            // Fire-and-forget and throttled, so the cursor shape never blocks the next input; asked in the page's own
+            // CSS pixels, a phone's shrinking undone.
+            reportCursor(session, message.x / fit, message.y / fit);
         } else if (message.action === "up") {
             // A click may open a drop-down no frame shows, since Chromium draws it outside the page.
             const page = cast.page();
             // allow(silent-catch): a page that closed under the click has no drop-down to show, so none is sent.
             const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
-            sink.send(JSON.stringify({ type: "select", menu: menu ?? null }));
+            // Anchored in the picture's pixels, which a phone shrinks from the page's.
+            const placed =
+                menu === undefined
+                    ? null
+                    : { ...menu, rect: { x: menu.rect.x * fit, y: menu.rect.y * fit, width: menu.rect.width * fit, height: menu.rect.height * fit } };
+            sink.send(JSON.stringify({ type: "select", menu: placed }));
         }
     };
     return {
@@ -478,6 +543,11 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
         input: async (message: ScreencastClientMessage) => {
             if (message.type === "newTab") {
                 await openTab(context, message.url);
+            } else if (message.type === "emulate") {
+                const asked = askedDevice(message);
+                if (asked !== "invalid") {
+                    await emulate(asked);
+                }
             } else if (isSteer(message)) {
                 steer(cast.page(), message);
             } else if (message.type !== "resize") {

@@ -25,7 +25,7 @@ export interface SideHome {
 }
 
 export interface SideViewEntry {
-    // A core side view's own name (`file`, `preview`), or `<extension id>/<side view id>`.
+    // A core side view's own name (`file`, `browsers`), or `<extension id>/<side view id>`.
     readonly id: string;
     // `builtin`, or the extension that registered it; an extension's go when it deactivates.
     readonly owner: string;
@@ -38,14 +38,14 @@ export interface SideViewEntry {
     // A link this side view can show instead of the browser opening it: the input it would open for `url`, or
     // undefined. Asked only when a link is followed, so it may parse, but it never fetches.
     readonly claim?: ((url: string) => SideInput | undefined) | undefined;
-    // What the tab keeps of an input it is opened on, after acting on the rest: the preview selects the target a claimed
+    // What the tab keeps of an input it is opened on, after acting on the rest: Browsers brings to front the tab a claimed
     // link names and keeps its one tab. Absent, the tab keeps the input as given.
     readonly opening?: (input: SideInput) => SideInput;
     // Opened kept, never as a peek: a live thing (the running app) the next link followed must not replace.
     readonly kept?: true;
     // Rendered with `input` (and `jump`, for a view that scrolls to a line) bound.
     readonly component: () => Promise<Component>;
-    // Whether the main area is showing this very thing right now (the preview while you stand on /preview): its tab
+    // Whether the main area is showing this very thing right now (Browsers while you stand on /browsers): its tab
     // steps aside until the main area lets go of it, rather than showing an empty frame.
     readonly lent?: () => boolean;
 }
@@ -112,7 +112,7 @@ export const claimLink = (url: string): { readonly view: string; readonly input:
 // in the app's own window, from a popped-out panel with none; in its home otherwise (a phone). Answers whether it could
 // be shown at all, so a claimed link that can't be shows as the link it was.
 export const revealSideView = (view: string, input: SideInput, options: OpenBesideOptions = {}): boolean => {
-    // Before `opening`, which acts on this window's own state (the preview's target), the errand being the other's.
+    // Before `opening`, which acts on this window's own state (the tab Browsers has in front), the errand being the other's.
     if (!sideDocked.value && handOffToMainWindow({ kind: `side`, view, input, keep: options.keep === true })) {
         return true;
     }

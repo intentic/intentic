@@ -7,7 +7,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { portTargetId } from "../../../preview/previewModel";
-import { openPreviewBeside } from "../../../preview/previewSurface";
+import { openPreviewBeside } from "../../../../workbench/browsers/browsersSurface";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";

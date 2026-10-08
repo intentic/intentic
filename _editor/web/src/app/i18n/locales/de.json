@@ -633,6 +633,35 @@
             "fixStepHandBack": "Erledige diesen Schritt auf der Seite und gib dann zurück.",
             "starting": "Dein Browser startet…",
             "startCaption": "Dein Browser läuft in dieser Sandbox: Seiten laden über ihr Netz, und wo du dich anmeldest, bleibst du angemeldet."
+        },
+        "area": {
+            "inOwnWindow": "Browser ist in einem eigenen Fenster",
+            "bringBackHere": "Hierher zurückholen",
+            "bringBackToFill": "Hol es zurück, um diese Ansicht zu füllen, oder behalte deine Apps und Fenster auf einem anderen Bildschirm neben deinem Code."
+        },
+        "preview": {
+            "gone": "Diese App wird nicht mehr bereitgestellt",
+            "goneLine": "Ihr Dev-Server oder weitergeleiteter Port ist nicht mehr gelistet. Starte sie erneut oder schließe diesen Tab."
+        },
+        "app": {
+            "closed": "Dieses Fenster wurde geschlossen"
+        },
+        "launcher": {
+            "open": "Offen",
+            "apps": "Apps",
+            "webDetail": "Eine Seite in deinem eigenen Browser"
+        },
+        "phone": {
+            "toggle": "Handyrahmen",
+            "note": "In Handygröße"
+        },
+        "window": {
+            "dock": "In dieses Fenster zurückholen",
+            "popOut": "In ein eigenes Fenster verschieben"
+        },
+        "kind": {
+            "app": "Live-App",
+            "window": "Fenster auf dem Desktop"
         }
     },
     "capabilities": {
@@ -1979,7 +2008,6 @@
             "agentWaits": "Agent wartet",
             "authFailed": "Die Desktop-Ansicht konnte nicht autorisiert werden ({reason}). Neuer Versuch.",
             "connecting": "Desktop wird gestartet…",
-            "connectingShort": "Verbinde…",
             "emptyNote": "Wenn ein Agent mit seinen Desktop-Werkzeugen ein Programm öffnet, erscheint dessen Fenster hier, und du kannst übernehmen, um es selbst zu bedienen.",
             "emptyTitle": "Auf diesem Desktop ist nichts geöffnet",
             "emptyYourself": "Um selbst eines zu öffnen, setze dies in einem Terminal und starte das Programm dort:",
@@ -1988,7 +2016,6 @@
             "heldElsewhere": "In einem anderen Fenster übernommen",
             "heldNote": "Bis 20 Sekunden nach Ihrer Eingabe",
             "heldTitle": "Agent-Werkzeuge pausiert",
-            "live": "Live",
             "openTerminal": "Terminal öffnen",
             "reconnecting": "Verbinde erneut…",
             "refused": "Nur ein Maintainer dieser Sandbox kann ihren Desktop öffnen.",
@@ -2042,54 +2069,32 @@
         }
     },
     "preview": {
-        "previewArea": {
-            "bringBackHere": "Hierher zurückholen",
-            "bringBackToFill": "Holen Sie sie zurück, um diese Fläche zu füllen, oder lassen Sie die App auf einem anderen Bildschirm neben Ihrem Code.",
-            "previewInOwnWindow": "Ihre Live-App ist in einem eigenen Fenster"
-        },
         "previewModel": {
             "publicSite": "Öffentliche Website"
         },
         "previewPanel": {
             "addressAnswersElsewhere": "{url} antwortet von irgendwo, das nicht der Vorschau-Proxy dieser Sandbox ist: der Name wird vielleicht noch verteilt, oder diese Sandbox veröffentlicht überhaupt keine Vorschau-Hostnamen.",
-            "addressToPreview": "Adresse für die Vorschau",
             "app": "App",
-            "appToPreview": "Welche App in der Vorschau",
-            "copyAddress": "Adresse kopieren",
             "deps": "Abhängigkeiten",
             "devServer": "Dev-Server",
             "devServerStopped": "Ihr Dev-Server ist gestoppt.",
-            "dockBack": "Zurück andocken",
-            "dockPreviewBack": "Vorschau zurück andocken",
-            "forwardedPorts": "Weitergeleitete Ports",
-            "go": "Los",
             "installed": "Installiert",
             "installFirst": "Erst installieren",
             "labelIsntRunning": "{label} läuft nicht.",
             "leftRunningForYou": "Ein Agent hat diesen Server für dich laufen lassen: {label}.",
-            "localhost3000AnyAddress": "localhost:3000, oder eine beliebige Adresse",
-            "movePreviewIntoOwn": "Die Vorschau in ein eigenes Fenster verschieben",
-            "newTab": "Neuer Tab",
-            "newWindow": "Neues Fenster",
             "noDevServerToStart": "Es hat keinen Dev-Server, den dieses Panel starten kann: kein {operator}-Panel und kein {dev}-Skript in seinem Wurzelverzeichnis. Was es aus einem Terminal startet, taucht unter „Weitergeleitete Ports“ auf.",
-            "nothingToPreviewYet": "Noch nichts für die Vorschau.",
             "openDevServersTerminal": "Das Terminal dieses Dev-Servers öffnen",
-            "openInNewTab": "{label} in neuem Tab öffnen",
             "openPorts": "Ports öffnen",
             "openTerminal": "Sein Terminal öffnen",
             "opening": "Wird geöffnet…",
-            "otherAddress": "Andere Adresse",
             "phone": "Telefon",
             "phoneToFramePreview": "In welchem Telefon die Vorschau gerahmt wird",
             "preparingPreview": "Die Vorschau wird vorbereitet…",
             "preview2": "Vorschau von {label}",
-            "previewAddress": "Eine Adresse in der Vorschau",
             "previewAddressDoesntReach": "Diese Vorschau-Adresse erreicht Ihre Sandbox nicht.",
-            "previewAnotherAddress": "Eine andere Adresse in der Vorschau",
             "previewingItForwardsPort": "Die Vorschau leitet seinen Port weiter und veröffentlicht ihn unter einer Adresse, die jeder mit dem Link öffnen kann. Die Ansicht Ports listet jede Weiterleitung und nimmt sie zurück.",
             "previewingOneForwardsPort": "Eine Vorschau leitet ihren Port weiter und veröffentlicht ihn damit an einer Adresse, die jeder mit dem Link öffnen kann. Die Ports-Ansicht listet jede Weiterleitung auf und nimmt sie zurück.",
             "readingWhatPreviewed": "Es wird gelesen, was sich in der Vorschau zeigen lässt…",
-            "reloadPreview": "Vorschau neu laden",
             "repo": "Repo",
             "serversOnOwnPorts": "{label} betreibt {count} Dev-Server auf einem eigenen Port, deshalb kann keine einzelne Vorschau-Adresse dafür stehen. Wählen Sie den, den Sie meinen: | {label} betreibt {count} Dev-Server auf eigenen Ports, deshalb kann keine einzelne Vorschau-Adresse dafür stehen. Wählen Sie den, den Sie meinen:",
             "startDevServerIn": "Starten Sie einen Dev-Server in einem Repository, oder bitten Sie den Agenten, eine App zu bauen: ihre Live-Vorschau erscheint hier, sobald sie antwortet.",

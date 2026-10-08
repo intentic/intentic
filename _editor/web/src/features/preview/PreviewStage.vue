@@ -6,7 +6,17 @@ import { phoneOuterSize, phoneScale, type PhoneModel } from "./phoneModels";
 
 // One DOM shape serves both modes because the slot holds a LIVE iframe: moving it between two v-if branches would
 // reload the app under preview on every switch, losing whatever state the reviewer had built up in it.
-const { phone } = defineProps<{ phone?: PhoneModel | undefined }>();
+const {
+    phone,
+    clipGutter = true,
+    backdrop = `bg-white`,
+} = defineProps<{
+    phone?: PhoneModel | undefined;
+    // Whether the slot holds a document with its own scrollbar to clip (an iframe); a streamed picture has none.
+    clipGutter?: boolean;
+    // What shows behind the slot where it does not cover the screen: a page's white, or a stream's dark.
+    backdrop?: string;
+}>();
 
 // The handset is scaled to whatever the pane can hold, so the pane's size is a measurement, not a media query: this
 // panel is a resizable pane and a floating window, never the viewport.
@@ -29,7 +39,7 @@ const measureGutter = (): number => {
 };
 
 onMounted(() => {
-    gutter.value = measureGutter();
+    gutter.value = clipGutter ? measureGutter() : 0;
     const element = pane.value;
     if (element === undefined || typeof ResizeObserver === `undefined`) {
         return;
@@ -131,7 +141,7 @@ const ROSETTE = { height: `11px`, width: `11px` };
                     :class="phone ? `bg-overlay shadow-lg ring-1 ring-line-strong` : `h-full w-full`"
                 >
                     <!-- The aperture's own rule, which is what makes the bezel read as cut rather than as a margin. -->
-                    <div :style="screenStyle" class="relative overflow-hidden bg-white" :class="phone ? `ring-1 ring-line-strong` : `h-full w-full`">
+                    <div :style="screenStyle" class="relative overflow-hidden" :class="[backdrop, phone ? `ring-1 ring-line-strong` : `h-full w-full`]">
                         <slot :frame="frame" />
 
                         <template v-if="phone">

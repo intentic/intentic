@@ -635,6 +635,35 @@
             "fixStepHandBack": "Réglez cette étape dans la page, puis rendez la main.",
             "starting": "Démarrage de votre navigateur…",
             "startCaption": "Votre navigateur tourne dans ce sandbox : les pages passent par son réseau, et vos connexions y restent ouvertes."
+        },
+        "area": {
+            "inOwnWindow": "Navigateurs est dans sa propre fenêtre",
+            "bringBackHere": "Le ramener ici",
+            "bringBackToFill": "Ramenez-le pour remplir cette vue, ou gardez vos apps et fenêtres à côté de votre code sur un autre écran."
+        },
+        "preview": {
+            "gone": "Cette app n'est plus servie",
+            "goneLine": "Son serveur de développement ou son port redirigé n'est plus listé. Relancez-la ou fermez cet onglet."
+        },
+        "app": {
+            "closed": "Cette fenêtre a été fermée"
+        },
+        "launcher": {
+            "open": "Ouvert",
+            "apps": "Apps",
+            "webDetail": "Une page dans votre propre navigateur"
+        },
+        "phone": {
+            "toggle": "Cadre de téléphone",
+            "note": "À la taille d'un téléphone"
+        },
+        "window": {
+            "dock": "Ramener dans cette fenêtre",
+            "popOut": "Déplacer dans sa propre fenêtre"
+        },
+        "kind": {
+            "app": "app en direct",
+            "window": "fenêtre sur le bureau"
         }
     },
     "capabilities": {
@@ -1980,7 +2009,6 @@
             "agentWaits": "L'agent attend",
             "authFailed": "Impossible d'autoriser la vue du bureau ({reason}). Nouvelle tentative.",
             "connecting": "Démarrage du bureau…",
-            "connectingShort": "Connexion…",
             "emptyNote": "Quand un agent ouvre un programme avec ses outils de bureau, sa fenêtre apparaît ici, et vous pouvez prendre la main pour l'utiliser vous-même.",
             "emptyTitle": "Rien n'est ouvert sur ce bureau",
             "emptyYourself": "Pour en ouvrir un vous-même, définissez ceci dans un terminal, puis lancez-y le programme :",
@@ -1989,7 +2017,6 @@
             "heldElsewhere": "Pris dans une autre fenêtre",
             "heldNote": "Jusqu'à 20 secondes après votre saisie",
             "heldTitle": "Outils de l'agent en pause",
-            "live": "En direct",
             "openTerminal": "Ouvrir le terminal",
             "reconnecting": "Reconnexion…",
             "refused": "Seul un mainteneur de ce sandbox peut ouvrir son bureau.",
@@ -2041,54 +2068,32 @@
         }
     },
     "preview": {
-        "previewArea": {
-            "bringBackHere": "La ramener ici",
-            "bringBackToFill": "Ramenez-la pour remplir cet espace, ou gardez l'application à côté de votre code sur un autre écran.",
-            "previewInOwnWindow": "Votre app en direct est dans sa propre fenêtre"
-        },
         "previewModel": {
             "publicSite": "Site public"
         },
         "previewPanel": {
             "addressAnswersElsewhere": "{url} répond depuis un endroit qui n'est pas le proxy d'aperçu de ce sandbox : son nom est peut-être encore en cours de propagation, ou ce sandbox ne publie aucun nom d'hôte d'aperçu.",
-            "addressToPreview": "Adresse à prévisualiser",
             "app": "App",
-            "appToPreview": "Quelle application prévisualiser",
-            "copyAddress": "Copier l’adresse",
             "deps": "Dépendances",
             "devServer": "Serveur de dev",
             "devServerStopped": "Son serveur de développement s'est arrêté.",
-            "dockBack": "Réancrer",
-            "dockPreviewBack": "Réancrer l'aperçu",
-            "forwardedPorts": "Ports transférés",
-            "go": "Aller",
             "installed": "Installées",
             "installFirst": "À installer",
             "labelIsntRunning": "{label} ne tourne pas.",
             "leftRunningForYou": "Un agent a laissé ce serveur en marche pour toi : {label}.",
-            "localhost3000AnyAddress": "localhost:3000, ou n'importe quelle adresse",
-            "movePreviewIntoOwn": "Déplacer l'aperçu dans sa propre fenêtre",
-            "newTab": "Nouvel onglet",
-            "newWindow": "Nouvelle fenêtre",
             "noDevServerToStart": "Il n'a aucun serveur de développement que ce panneau puisse démarrer : ni panneau {operator}, ni script {dev} à sa racine. Tout ce qu'il lance depuis un terminal apparaît sous « Ports transférés ».",
-            "nothingToPreviewYet": "Rien à prévisualiser pour l'instant.",
             "openDevServersTerminal": "Ouvrir le terminal de ce serveur de développement",
-            "openInNewTab": "Ouvrir {label} dans un nouvel onglet",
             "openPorts": "Ouvrir les ports",
             "openTerminal": "Ouvrir son terminal",
             "opening": "Ouverture…",
-            "otherAddress": "Autre adresse",
             "phone": "Téléphone",
             "phoneToFramePreview": "Dans quel téléphone encadrer l'aperçu",
             "preparingPreview": "Préparation de l'aperçu…",
             "preview2": "Aperçu de {label}",
-            "previewAddress": "Prévisualiser une adresse",
             "previewAddressDoesntReach": "Cette adresse d'aperçu n'atteint pas votre sandbox.",
-            "previewAnotherAddress": "Prévisualiser une autre adresse",
             "previewingItForwardsPort": "L'aperçu redirige son port, ce qui le publie à une adresse que n'importe qui avec le lien peut ouvrir. La vue Ports liste chaque redirection et permet de la retirer.",
             "previewingOneForwardsPort": "En prévisualiser un transfère son port, ce qui le publie à une adresse que quiconque a le lien peut ouvrir. La vue Ports liste chaque transfert et les reprend.",
             "readingWhatPreviewed": "Lecture de ce qui peut être prévisualisé…",
-            "reloadPreview": "Recharger l'aperçu",
             "repo": "Dépôt",
             "serversOnOwnPorts": "{label} fait tourner {count} serveur de développement sur un port qui lui est propre : une seule adresse d'aperçu ne peut donc pas le représenter. Choisissez celui que vous visez : | {label} fait tourner {count} serveurs de développement sur des ports qui leur sont propres : une seule adresse d'aperçu ne peut donc pas les représenter. Choisissez celui que vous visez :",
             "startDevServerIn": "Démarrez un serveur de développement dans un dépôt, ou demandez à l'agent de construire une application : son aperçu en direct apparaît ici dès qu'elle répond.",

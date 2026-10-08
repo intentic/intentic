@@ -150,8 +150,8 @@ const cancelNaming = (): void => {
                         <p v-if="tile.summary !== ``" class="line-clamp-2 min-h-8 text-xs text-muted">{{ tile.summary }}</p>
                         <p v-else class="min-h-8 text-xs text-subtle">{{ t(`projectsView.noDescriptionInReadme`) }}</p>
 
-                        <!-- Desktop widths only: the phone's shell mounts no preview panel, and its router sends /preview to the board. -->
-                        <div v-if="tile.hasPanel" class="mt-auto hidden border-t border-line-subtle pt-2 md:block">
+                        <!-- The live app is a tab of Browsers, on a phone as on a desktop; /preview is the address every editor answers. -->
+                        <div v-if="tile.hasPanel" class="mt-auto border-t border-line-subtle pt-2">
                             <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"
                                 ><Icon name="play" />{{ t(`projectsView.seeRunning`) }}</a
                             >

@@ -5,15 +5,16 @@ import { useChatFloating } from "../../features/chat/panel/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { chatOnRail } from "../../features/chat/panel/chatPanelLayout";
-import { previewOpened,PREVIEW_SIDE_VIEW } from "../../features/preview/previewSurface";
-import { usePreviewFloating } from "../../features/preview/previewFloating";
+import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workbench/browsers/browsersSurface";
+import { browsersPath } from "../../workbench/browsers/browsersPaths";
+import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
-import PreviewPanel from "../../features/preview/PreviewPanel.vue";
+import LiveBrowser from "../browsers/LiveBrowser.vue";
 import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
-import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, sidePreviewSlot, terminalSlot } from "../../workbench/window/panelSlots";
+import { browsersSlot, chatBarSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { tabsOfView } from "../../workbench/side/sideTabs";
 
-// The three poppable panels (chat, terminal, preview), mounted once per window, above the router. Each is
+// The three poppable panels (chat, terminal, browsers), mounted once per window, above the router. Each is
 // teleported to wherever it belongs (its section, the side panel, a floating window's slot, or a parking stage) — a
 // move, never a rebuild. Which window draws which is one read of `shows`: this window is the panel's floating window, or
 // nobody is.
@@ -21,7 +22,7 @@ import { tabsOfView } from "../../workbench/side/sideTabs";
 const chat = useChatFloating();
 const terminalFloat = useTerminalFloating();
 const terminal = useTerminalPanel();
-const preview = usePreviewFloating();
+const browsers = useBrowsersFloating();
 const router = useRouter();
 
 // Offscreen, not display:none: a zero-size box would zero the terminal's PTY grid and scroll anchor.
@@ -36,8 +37,9 @@ const chatTarget = computed(() => chatFullSlot.value ?? (chatOnRail.value ? (cha
 // The side panel draws its own edge and seam around the chat, as it does around everything it holds.
 const inBar = computed(() => chatTarget.value === chatBarSlot.value);
 const terminalTarget = computed(() => terminalSlot.value ?? park);
-// Its section, then its tab in the side panel, then parked, where the live iframe keeps its own state.
-const previewTarget = computed(() => previewSlot.value ?? sidePreviewSlot.value ?? park);
+// Its section, then its tab in the side panel, then parked, where a live app keeps its own state and the streams pause.
+const browsersTarget = computed(() => browsersSlot.value ?? sideBrowsersSlot.value ?? park);
+const browsersParked = computed(() => browsersTarget.value === park);
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
 chat.onDocked(() => {
@@ -45,10 +47,10 @@ chat.onDocked(() => {
         void router.push(`/chat`);
     }
 });
-// A preview with a tab in the side panel comes back to it, beside wherever the reader is.
-preview.onDocked(() => {
-    if (previewOpened.value && router.currentRoute.value.name !== `preview` && tabsOfView(PREVIEW_SIDE_VIEW).length === 0) {
-        void router.push(`/preview`);
+// The view with a tab in the side panel comes back to it, beside wherever the reader is.
+browsers.onDocked(() => {
+    if (browsersOpened.value && router.currentRoute.value.name !== `browsers` && tabsOfView(BROWSERS_SIDE_VIEW).length === 0) {
+        void router.push(browsersPath(browsersFront.value));
     }
 });
 </script>
@@ -69,8 +71,8 @@ preview.onDocked(() => {
             @close="terminal.setOpen(false)"
         />
     </Teleport>
-    <!-- Mounts once opened, then stays; parked, the iframe keeps the previewed app alive between looks. -->
-    <Teleport :to="previewTarget">
-        <PreviewPanel v-if="previewOpened && preview.shows.value" />
+    <!-- Mounts once opened, then stays; parked, a framed app keeps its state between looks and the live pictures pause. -->
+    <Teleport :to="browsersTarget">
+        <LiveBrowser v-if="browsersOpened && browsers.shows.value" :parked="browsersParked" />
     </Teleport>
 </template>
