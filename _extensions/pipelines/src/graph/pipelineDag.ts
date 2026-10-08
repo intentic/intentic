@@ -107,6 +107,15 @@ export const stageLabel = (stage: PipelineStage, index: number): string => {
     return stage.jobs.length === 1 && only !== undefined ? only.name : t(`pipelineDag.step`, { n: index + 1 });
 };
 
+// A job two calls deep or more is named the way GitHub names it on a card: the outermost call, an ellipsis, the job
+// itself (`release / … / smoke`); the whole name stays on its tooltip.
+export const jobLabel = (name: string): string => {
+    const parts = name.split(` / `);
+    const first = parts[0];
+    const last = parts.at(-1);
+    return parts.length > 2 && first !== undefined && last !== undefined ? `${first} / … / ${last}` : name;
+};
+
 // Positional node id, not name-based: matrix legs and reruns can repeat a job name, colliding as an id.
 const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageIndex}:${jobIndex}`;
 
@@ -219,7 +228,8 @@ interface JobNode {
 }
 
 // Jobs sharing exactly the same incoming/outgoing edges join one card, since identical edges mean identical lines
-// through the run. Signature is the sorted endpoint sets (focus-independent); a card's id is its first member's job id.
+// through the run; a matrix's legs only ever share one with each other. Signature is the sorted endpoint sets
+// (focus-independent); a card's id is its first member's job id.
 interface JobCards {
     // First-appearance order, i.e. stage order.
     readonly cards: readonly { readonly id: string; readonly cluster: PipelineJobCluster }[];
@@ -232,15 +242,16 @@ const jobCards = (jobs: readonly JobNode[], links: readonly JobLink[]): JobCards
     // Edges the graph will draw; a dropped edge must not split two otherwise-identical jobs into different cards.
     const drawn = links.filter((link) => present.has(link.from) && present.has(link.to));
     const endpoints = (ids: readonly string[]): string => [...new Set(ids)].toSorted().join(`,`);
-    const signatureOf = (id: string): string => {
-        const waitedOn = endpoints(drawn.filter((link) => link.to === id).map((link) => link.from));
-        const opened = endpoints(drawn.filter((link) => link.from === id).map((link) => link.to));
-        return `${waitedOn}|${opened}`;
+    const signatureOf = (entry: JobNode): string => {
+        const waitedOn = endpoints(drawn.filter((link) => link.to === entry.id).map((link) => link.from));
+        const opened = endpoints(drawn.filter((link) => link.from === entry.id).map((link) => link.to));
+        // A matrix's legs share a card of their own, never one with another job wired the same way, as on GitHub.
+        return `${entry.job.matrix ?? ``}#${waitedOn}|${opened}`;
     };
 
     const bySignature = new Map<string, JobNode[]>();
     for (const entry of jobs) {
-        const signature = signatureOf(entry.id);
+        const signature = signatureOf(entry);
         bySignature.set(signature, [...(bySignature.get(signature) ?? []), entry]);
     }
 
@@ -273,6 +284,77 @@ const cardLinks = (links: readonly JobLink[], cardOf: ReadonlyMap<string, string
     });
 };
 
+// GitHub's own drawing of a declared run, reproduced card for card: the rule below was read off GitHub's run pages, and
+// sorts every column of twenty repositories' runs the way GitHub did. Within a column, cards sort by
+// 1. their parents in the column just before, by place there, nearest the bottom compared first, fewer parents first
+//    on a tie, so a card sits under the last card it waits on;
+// 2. then the more cards waiting on them, the higher;
+// 3. then GitHub's own key for a card, `needs|deps` (a matrix's `needs|-name-|deps`), compared code unit by code unit.
+const compareText = (one: string, other: string): number => (one < other ? -1 : one > other ? 1 : 0);
+
+const compareParents = (one: readonly number[], other: readonly number[]): number => {
+    for (let index = 0; index < Math.max(one.length, other.length); index += 1) {
+        const left = one[index];
+        const right = other[index];
+        if (left === undefined || right === undefined) {
+            return left === undefined ? (right === undefined ? 0 : -1) : 1;
+        }
+        if (left !== right) {
+            return left - right;
+        }
+    }
+    return 0;
+};
+
+const githubOrder = (cards: JobCards[`cards`], links: readonly JobLink[]): Map<string, number> => {
+    const parents = new Map<string, string[]>();
+    const children = new Map<string, Set<string>>();
+    for (const link of links) {
+        parents.set(link.to, [...(parents.get(link.to) ?? []), link.from]);
+        children.set(link.from, new Set([...(children.get(link.from) ?? []), link.to]));
+    }
+    // GitHub keys a job by its id in the workflow, a matrix's legs by the matrix job's, once; a name stands in where the
+    // workflow was not read.
+    const idOf = (job: PipelineJob): string => job.declaredId ?? job.name;
+    const byName = new Map(cards.flatMap((card) => card.cluster.jobs.map((member) => [member.job.name, member.job] as const)));
+    const keyOf = (card: (typeof cards)[number]): string => {
+        const [first] = card.cluster.jobs;
+        const needs = (first?.job.needs ?? []).flatMap((name) => {
+            const job = byName.get(name);
+            return job === undefined ? [] : [idOf(job)];
+        });
+        const members = new Set(card.cluster.jobs.map((member) => member.job.name));
+        const waiting = new Set(
+            cards.flatMap((other) =>
+                other.cluster.jobs.filter((member) => (member.job.needs ?? []).some((name) => members.has(name))).map((member) => idOf(member.job)),
+            ),
+        );
+        // Jobs of this file first, then jobs of called ones (`caller.job`), each alphabetical.
+        const deps = [...waiting].toSorted((one, other) => Number(one.includes(`.`)) - Number(other.includes(`.`)) || compareText(one, other));
+        const matrix = first?.job.matrix === undefined ? `` : `-${idOf(first.job)}-|`;
+        return `${[...new Set(needs)].join(`&`)}|${matrix}${deps.join(`&`)}`;
+    };
+
+    const columns = new Map<number, (typeof cards)[number][]>();
+    for (const card of cards) {
+        const column = stageOfNode(card.id);
+        columns.set(column, [...(columns.get(column) ?? []), card]);
+    }
+    const place = new Map<string, number>();
+    for (const column of [...columns.keys()].toSorted((one, other) => one - other)) {
+        const above = (id: string): number[] =>
+            (parents.get(id) ?? [])
+                .filter((parent) => stageOfNode(parent) === column - 1)
+                .map((parent) => place.get(parent) ?? 0)
+                .toSorted((one, other) => other - one);
+        const ordered = (columns.get(column) ?? [])
+            .map((card) => ({ card, above: above(card.id), waiting: children.get(card.id)?.size ?? 0, key: keyOf(card) }))
+            .toSorted((one, other) => compareParents(one.above, other.above) || other.waiting - one.waiting || compareText(one.key, other.key));
+        ordered.forEach((entry, index) => place.set(entry.card.id, index));
+    }
+    return place;
+};
+
 // Focused card's line reshaped for the view: lit cards, edge keys, and before/after as job counts, not card counts,
 // since a card can hold several jobs.
 export interface PipelineTrace {
@@ -303,9 +385,12 @@ const linkEdge = (link: JobLink, clusterById: ReadonlyMap<string, PipelineJobClu
 export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): PipelineDag => {
     // Positional ids first; everything below derives from the links they address.
     const jobs = stages.flatMap((stage, stageIndex) => stage.jobs.map((job, jobIndex): JobNode => ({ id: jobNodeId(stageIndex, jobIndex), job })));
-    const jobLinks = declaredLinks(stages) ?? stageJoinLinks(stages);
+    const declared = declaredLinks(stages);
+    const jobLinks = declared ?? stageJoinLinks(stages);
     const { cards, cardOf } = jobCards(jobs, jobLinks);
     const links = cardLinks(jobLinks, cardOf);
+    // A declared run is drawn exactly as GitHub draws it; stages and waves have no such picture to match.
+    const order = declared === undefined ? undefined : githubOrder(cards, links);
 
     // Trace walks over cards, so a job-level focus first resolves to the card holding it.
     const focusCard = focus === undefined ? undefined : cardOf.get(focus);
@@ -321,6 +406,7 @@ export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): P
     const nodes = cards.map((card): DagNode<PipelineJobCluster> => ({
         id: card.id,
         data: card.cluster,
+        ...(order === undefined ? {} : { order: order.get(card.id) ?? 0 }),
         // No `tooltip`: the card's popup renders above it, over neighbours whose lighting/fading answers the hover.
         ...(trace !== undefined && !trace.cards.has(card.id) ? { dimmed: true } : {}),
     }));

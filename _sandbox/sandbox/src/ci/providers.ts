@@ -3,7 +3,7 @@ import { githubHeaders } from "../capabilities/cli/git-access.js";
 import { plainText } from "@intentic/base/plain-text";
 import type { CiProject } from "./projects.js";
 import { z } from "zod";
-import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
+import { remoteWorkflow, resolveRun, type RunJob, workflowCalls } from "./workflowGraph.js";
 
 // Both vendors' pipeline APIs behind one client shape (CiClient), keyed off the account a project mapped to; the vendor
 // branch exists exactly once. `fetch` is injectable for tests; failures throw with the vendor's status and body tail, and a
@@ -304,15 +304,38 @@ const githubJobLists = jobLists<GithubJob>((jobs) => jobs.length > 0 && jobs.eve
 // the moment its job fails rather than when the whole run does.
 const GITHUB_HOOK_EVENTS = ["workflow_run", "workflow_job"];
 
+// One job of the drawn graph: a reported job with its declared wiring, or a job only the workflow declares, which links
+// to the job its call was reported as when there is one.
+const graphJob = (job: RunJob, reported: readonly PipelineJob[]): PipelineJob => {
+    const own = job.reported === undefined ? undefined : reported[job.reported];
+    const standIn = job.standIn === undefined ? undefined : reported[job.standIn];
+    const base: PipelineJob = own ?? { name: job.name, status: job.status, ...(standIn?.webUrl === undefined ? {} : { webUrl: standIn.webUrl }) };
+    return {
+        ...base,
+        ...(job.needs === undefined ? {} : { needs: [...job.needs] }),
+        ...(job.declaredId === undefined ? {} : { declaredId: job.declaredId }),
+        ...(job.matrix === undefined ? {} : { matrix: job.matrix }),
+    };
+};
+
+// Called workflow files read for one run's graph, at most.
+const CALLED_FILES_READ = 40;
+
 const githubClient = (fetchFn: FetchFn): CiClient => {
-    // Resolves the run's workflow file at its exact sha, not HEAD, so an old run isn't drawn with the wrong graph.
-    // Undefined, never a throw, for any legitimate empty case; the graph is enrichment only.
-    const fileAt = async (project: CiProject, path: string, ref: string): Promise<string | undefined> => {
+    // Resolves the run's workflow file at its exact sha, not HEAD, so an old run isn't drawn with the wrong graph; a
+    // file of another repository is read from it, at the ref its call pins. Undefined, never a throw, for any
+    // legitimate empty case; the graph is enrichment only.
+    const fileAt = async (project: CiProject, path: string, ref: string, repo = project.project): Promise<string | undefined> => {
         // `.raw` hands back the file itself; the default json media type would wrap it in base64.
-        const file = await fetchFn(githubApi(project, `/contents/${path}?ref=${ref}`), {
+        const file = await fetchFn(`${project.account.apiBase}/repos/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
             headers: { ...githubHeaders(project.account.token), Accept: "application/vnd.github.raw" },
         });
         return file.ok ? await file.text() : undefined;
+    };
+    // A called file by the key workflowCalls named it with: a path in the run's repository, or another's call.
+    const calledFile = (project: CiProject, key: string, ref: string): Promise<string | undefined> => {
+        const remote = remoteWorkflow(key);
+        return remote === undefined ? fileAt(project, key, ref) : fileAt(project, remote.path, remote.ref, remote.repo);
     };
     const workflowSource = async (project: CiProject, runId: number): Promise<WorkflowSource | undefined> => {
         const cacheKey = runKey(project, runId);
@@ -335,18 +358,19 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         }
         const called = new Map<string, string>();
         const asked = new Set([run.path]);
-        let frontier = localWorkflowCalls(root);
-        while (frontier.length > 0) {
-            const wanted = [...new Set(frontier)].filter((path) => !asked.has(path));
-            for (const path of wanted) {
-                asked.add(path);
+        let frontier = workflowCalls(root);
+        // However a ring of repositories is wired, a run's graph is not worth more reads than this.
+        while (frontier.length > 0 && asked.size <= CALLED_FILES_READ) {
+            const wanted = [...new Set(frontier)].filter((key) => !asked.has(key)).slice(0, CALLED_FILES_READ + 1 - asked.size);
+            for (const key of wanted) {
+                asked.add(key);
             }
-            const fetched = await Promise.all(wanted.map(async (path) => [path, await fileAt(project, path, ref)] as const));
+            const fetched = await Promise.all(wanted.map(async (key) => [key, await calledFile(project, key, ref)] as const));
             frontier = [];
-            for (const [path, source] of fetched) {
+            for (const [key, source] of fetched) {
                 if (source !== undefined) {
-                    called.set(path, source);
-                    frontier.push(...localWorkflowCalls(source));
+                    called.set(key, source);
+                    frontier.push(...workflowCalls(source, key));
                 }
             }
         }
@@ -397,29 +421,18 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 return step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step, steps };
             }),
         // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
-        // fetched alongside the job list, not after; unreadable, jobs go out as before.
+        // fetched alongside the job list, not after; unreadable, jobs go out as listed. Readable, the list is the run's
+        // graph as GitHub draws it: every declared job, the ones not reported yet (or never) included, in its order.
         allJobs: async (project, runId) => {
             const [listed, workflow] = await Promise.all([
                 githubJobLists.read(fetchFn, runKey(project, runId), listJobs(project, runId, "github all jobs")),
                 workflowSource(project, runId),
             ]);
-            const needs =
-                workflow === undefined
-                    ? undefined
-                    : resolveNeeds(
-                          workflow.root,
-                          listed.map((job) => job.name),
-                          workflow.called,
-                      );
-            return listed.map((job) => {
+            const reported = listed.map((job) => {
                 const status = githubStatus(job.status, job.conclusion);
                 const started = epoch(job.started_at);
                 const completed = epoch(job.completed_at);
                 const result: PipelineJob = { name: job.name, status };
-                const declared = needs?.get(job.name);
-                if (declared !== undefined) {
-                    result.needs = declared;
-                }
                 if (job.html_url !== null) {
                     result.webUrl = job.html_url;
                 }
@@ -435,6 +448,8 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 }
                 return result;
             });
+            const graph = workflow === undefined ? undefined : resolveRun(workflow.root, reported, workflow.called);
+            return graph === undefined ? reported : graph.map((job) => graphJob(job, reported));
         },
         jobLog: (project, jobId, maxBytes) => logOf(project, jobId, maxBytes),
         // A re-run makes the run's jobs anew, so the list kept for it no longer describes it.
@@ -576,7 +591,12 @@ export interface GitlabPipelineHook {
         readonly url?: string;
     };
     // `id` and `default_branch` are the forge's word on the project (main-line.ts), not on the run.
-    readonly project: { readonly id?: number; readonly path_with_namespace: string; readonly web_url: string; readonly default_branch?: string | null };
+    readonly project: {
+        readonly id?: number;
+        readonly path_with_namespace: string;
+        readonly web_url: string;
+        readonly default_branch?: string | null;
+    };
     readonly commit?: { readonly title?: string };
     // The hook is the one gitlab path that hands us an avatar outright, no /avatar lookup needed.
     readonly user?: { readonly name?: string; readonly username?: string; readonly avatar_url?: string };

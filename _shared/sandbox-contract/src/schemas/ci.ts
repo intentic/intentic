@@ -76,6 +76,16 @@ export const PipelineJobSchema = z.object({
         .describe(
             "Which jobs in this run it declared it waits on: the real shape of the pipeline. Absent means nothing could be read, which is different from an empty list, which is the claim that it waits on nothing.",
         ),
+    declaredId: z
+        .string()
+        .optional()
+        .describe(
+            "The job's id in its workflow file, with a called workflow's job under its caller as `caller.job`. Present where the workflow could be read; it is what the forge orders its own drawing of the run by.",
+        ),
+    matrix: z
+        .string()
+        .optional()
+        .describe("The matrix job this is one leg of, by that job's name. Legs of one matrix are drawn together, apart from every other job."),
     startedAt: z.number().optional().describe("When it began, in milliseconds. Absent while it is queued."),
     finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
     durationSeconds: z.number().optional().describe("How long it took."),

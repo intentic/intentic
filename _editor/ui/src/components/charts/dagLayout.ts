@@ -15,6 +15,9 @@ export interface DagNode<T = unknown> {
     // Per-node size override for dagre, not the default nodeWidth/nodeHeight; e.g. a card sized by its rows.
     readonly width?: number;
     readonly height?: number;
+    // Place within its column, 0 first. Set on every node, it replaces the layout's own crossing pass, for a caller
+    // that must reproduce one exact picture (a forge's own drawing of a run); set on some, it is ignored.
+    readonly order?: number;
 }
 
 export interface DagEdge {
@@ -49,7 +52,7 @@ export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonl
     [
         options.direction,
         `${options.rankSep ?? RANK_SEP}/${options.nodeSep ?? NODE_SEP}`,
-        nodes.map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}`).join(`,`),
+        nodes.map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}#${node.order ?? ``}`).join(`,`),
         edges.map((edge) => `${edge.from}>${edge.to}`).join(`,`),
     ].join(`|`);
 
@@ -246,25 +249,63 @@ const turnPoints = (
     return turns;
 };
 
-export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): DagPlacement => {
-    const graph = new graphlib.Graph();
+// Caller-ordered layout: each column is a dependency depth, stacked from the same top edge in the nodes' own `order`,
+// one gap between cards; columns as wide as their widest card, centred on it. No dagre: nothing here is left to choose.
+const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<string, number>, options: DagLayoutOptions): PlacedNode[] => {
+    const horizontal = options.direction === `LR`;
     const rankSep = options.rankSep ?? RANK_SEP;
     const nodeSep = options.nodeSep ?? NODE_SEP;
+    const byColumn = new Map<number, DagNode<never>[]>();
+    for (const node of nodes) {
+        const column = columns.get(node.id) ?? 0;
+        byColumn.set(column, [...(byColumn.get(column) ?? []), node]);
+    }
+    // Along the flow: a card's width in LR, its height in TB.
+    const thicknessOf = (node: DagNode<never>): number => (horizontal ? boxOf(node, options).width : boxOf(node, options).height);
+    const placed: PlacedNode[] = [];
+    let start = 0;
+    for (const column of [...byColumn.keys()].toSorted((one, other) => one - other)) {
+        const members = (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0));
+        const thickness = Math.max(...members.map(thicknessOf));
+        let next = 0;
+        for (const node of members) {
+            const box = boxOf(node, options);
+            const offset = start + (thickness - thicknessOf(node)) / 2;
+            placed.push({ id: node.id, at: horizontal ? { x: offset, y: next } : { x: next, y: offset }, ...box });
+            next += (horizontal ? box.height : box.width) + nodeSep;
+        }
+        start += thickness + rankSep;
+    }
+    return placed;
+};
+
+export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): DagPlacement => {
+    const rankSep = options.rankSep ?? RANK_SEP;
+    const nodeSep = options.nodeSep ?? NODE_SEP;
+    const horizontal = options.direction === `LR`;
+    const ids = new Set(nodes.map((node) => node.id));
+    const drawn = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+    const columns = columnsOf(nodes, drawn);
+    if (nodes.length > 0 && nodes.every((node) => node.order !== undefined)) {
+        const placed = placeInOrder(nodes, columns, options);
+        return {
+            nodes: new Map(placed.map((entry): [string, DagPoint] => [entry.id, entry.at])),
+            lanes: turnPoints(edges, new Map(placed.map((entry): [string, PlacedNode] => [entry.id, entry])), horizontal, rankSep, nodeSep),
+        };
+    }
+
+    const graph = new graphlib.Graph();
     graph.setGraph({ rankdir: options.direction, nodesep: nodeSep, ranksep: rankSep });
     graph.setDefaultEdgeLabel(() => ({}));
-    const ids = new Set(nodes.map((node) => node.id));
     for (const node of nodes) {
         graph.setNode(node.id, boxOf(node, options));
     }
-    const drawn = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
     // Sets each edge's `minlen` to its column span, forcing simplex onto the depth order; crossing stays dagre's.
-    const columns = columnsOf(nodes, drawn);
     for (const edge of drawn) {
         graph.setEdge(edge.from, edge.to, { minlen: Math.max(1, (columns.get(edge.to) ?? 0) - (columns.get(edge.from) ?? 0)) });
     }
     layout(graph);
 
-    const horizontal = options.direction === `LR`;
     const placed = nodes.map((node): PlacedNode => {
         const at = graph.node(node.id);
         return { id: node.id, at: { x: at.x, y: at.y }, ...boxOf(node, options) };

@@ -2,7 +2,7 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
 import { DagGraph, Icon, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
+import { jobLabel, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, type StatusTone } from "../statusVisual";
 import { t } from "../i18n.js";
 
@@ -192,14 +192,16 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: member.job.name }] }"
                             @click.stop
                         >
-                            {{ member.job.name }}
+                            {{ jobLabel(member.job.name) }}
                         </a>
+                        <!-- No page of its own: a job the workflow declares that the run never reported, as GitHub draws it. -->
                         <span
                             v-else
                             class="min-w-0 flex-1 truncate text-2xs font-medium leading-tight"
                             :class="member.job.status === `failed` ? `text-danger` : `text-content`"
+                            v-tooltip.top="jobLabel(member.job.name) === member.job.name ? undefined : member.job.name"
                         >
-                            {{ member.job.name }}
+                            {{ jobLabel(member.job.name) }}
                         </span>
                         <span
                             v-if="recurring.get(member.job.name)"

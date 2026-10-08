@@ -15,7 +15,8 @@ flowchart LR
   from the daemon's `ci` procedures, which keep them fresh from vendor webhooks and backfill when stale.
 - The tile appears only when a GitHub or GitLab `cli` capability is connected. The board shows the open project's
   repositories, ranks them by how loudly they ask (`src/repoStandings.ts`) and draws each run's jobs as a layered graph
-  (`src/graph/pipelineDag.ts`).
+  (`src/graph/pipelineDag.ts`). A GitHub run is drawn the way GitHub's own run page draws it: the same columns, cards and
+  order, with every job the workflow declares, including the ones the run has not reported yet or never ran.
 - A failing main-line branch is one incident block at the head of its repository's runs
   (`src/fixes/MainFailureBanner.vue`). Its header says the branch, since when and which jobs, who has it (a pill that
   opens the agent) and the one press, then one sentence on where the fix stands and the reader's move, read off the
@@ -46,7 +47,7 @@ flowchart LR
 - [src/PipelinesView.vue](src/PipelinesView.vue) — the board: repository picker, failing main lines, run rows.
 - [src/ciStreaks.ts](src/ciStreaks.ts) — when a branch counts as failing, the rule behind the badge.
 - [src/fixes/mainFailures.ts](src/fixes/mainFailures.ts) — a failing main line and its one fix agent, joined by the fixer's own id.
-- [src/graph/pipelineDag.ts](src/graph/pipelineDag.ts) — a run's flat job list turned into layers.
+- [src/graph/pipelineDag.ts](src/graph/pipelineDag.ts) — a run's flat job list turned into layers, cards and GitHub's order.
 
 ## Commands
 

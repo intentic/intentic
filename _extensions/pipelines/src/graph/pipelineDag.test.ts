@@ -1,5 +1,5 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { jobLineage, pipelineDag, pipelineStages } from "./pipelineDag";
+import { jobLabel, jobLineage, pipelineDag, pipelineStages, stageOfNode } from "./pipelineDag";
 
 // Pins how a run's job graph draws: node/edge shape from declared dependencies (falling back to time overlap), and that
 // clustering groups jobs without losing per-job counts.
@@ -31,6 +31,184 @@ const declaredRun = pipelineStages([
     declared(`images`, [`verify-core / verify`], 40_000),
     declared(`release`, [`images`, `changes`], 50_000),
 ]);
+
+// The real run of intentic's CI that GitHub drew one way and this graph another (run 37802381002), as the sandbox now
+// serves it: every job the workflow declares, the ones the run never reported included.
+const intenticRun: PipelineJob[] = (
+    [
+        [`changes`, `success`, []],
+        [`preflight`, `success`, []],
+        [`quick`, `failed`, [`changes`, `preflight`]],
+        [`migrations`, `success`, [`changes`, `preflight`]],
+        [`ci-base`, `success`, [`changes`]],
+        [`ci-desktop`, `success`, [`changes`, `ci-base`]],
+        [`verify-core / verify`, `success`, [`preflight`, `ci-base`]],
+        [`verify-platform / verify`, `success`, [`preflight`]],
+        [`verify-providers`, `success`, [`preflight`]],
+        [`verify-clocks`, `success`, [`preflight`, `ci-base`]],
+        [`verify-machine`, `success`, [`preflight`, `ci-base`]],
+        [`perf-instr`, `success`, [`changes`, `preflight`]],
+        [`perf-browser`, `success`, [`changes`, `preflight`]],
+        [`local-face`, `failed`, [`changes`, `preflight`]],
+        [`desktop-check`, `success`, [`changes`, `preflight`, `ci-base`, `ci-desktop`]],
+        [`ic-check`, `success`, [`changes`, `preflight`, `ci-base`, `ci-desktop`]],
+        [`netd-check`, `failed`, [`changes`, `preflight`, `ci-base`, `ci-desktop`]],
+        [`desktop-verify`, `skipped`, [`changes`, `preflight`, `ci-base`, `ci-desktop`]],
+        [`desktop-windows-build`, `skipped`, [`changes`, `preflight`, `ci-base`, `ci-desktop`]],
+        [`e2e-billing`, `success`, [`changes`, `preflight`]],
+        [`e2e-signin`, `success`, [`changes`, `preflight`]],
+        [`e2e-hermetic`, `skipped`, [`preflight`]],
+        [
+            `images`,
+            `skipped`,
+            [
+                `changes`,
+                `preflight`,
+                `verify-machine`,
+                `netd-check`,
+                `verify-core / verify`,
+                `release / device-android / build`,
+                `release / device-android / release`,
+            ],
+        ],
+        [
+            `images-dry`,
+            `skipped`,
+            [
+                `changes`,
+                `preflight`,
+                `verify-machine`,
+                `netd-check`,
+                `verify-core / verify`,
+                `release / device-android / build`,
+                `release / device-android / release`,
+            ],
+        ],
+        [
+            `images-arm64`,
+            `skipped`,
+            [
+                `changes`,
+                `preflight`,
+                `verify-machine`,
+                `netd-check`,
+                `verify-core / verify`,
+                `release / device-android / build`,
+                `release / device-android / release`,
+            ],
+        ],
+        [`images-merge`, `skipped`, [`images`, `images-arm64`]],
+        [`images-platform`, `skipped`, [`changes`, `preflight`, `migrations`, `e2e-billing`, `e2e-signin`, `netd-check`, `verify-platform / verify`]],
+        [
+            `desktop-verify-windows / smoke`,
+            `skipped`,
+            [`desktop-windows-build`, `release / device-android / build`, `release / device-android / release`],
+        ],
+        [`release / device-android / build`, `skipped`, [`release / plan`, `release / publish`]],
+        [`release / device-android / release`, `skipped`, [`release / plan`, `release / publish`]],
+        [`release / images-amd64`, `skipped`, [`release / plan`]],
+        [`release / linux-build`, `skipped`, [`release / plan`]],
+        [
+            `release / plan`,
+            `skipped`,
+            [`preflight`, `verify-providers`, `verify-machine`, `netd-check`, `ci-base`, `ci-desktop`, `verify-core / verify`],
+        ],
+        [
+            `release / publish`,
+            `skipped`,
+            [`release / plan`, `release / sandbox-arm64`, `release / images-amd64`, `release / linux-build`, `release / windows-verify / smoke`],
+        ],
+        [`release / sandbox-arm64`, `skipped`, [`release / plan`]],
+        [`release / windows-build`, `skipped`, [`release / plan`]],
+        [`release / windows-verify / smoke`, `skipped`, [`release / plan`, `release / windows-build`]],
+    ] as const
+).map(([name, status, needs]) => ({ name, status, needs: [...needs], declaredId: name.split(` / `).join(`.`) }));
+
+// Columns of cards, each card its job names in row order, top to bottom.
+const columnsOf = (jobs: readonly PipelineJob[]): string[][][] => {
+    const dag = pipelineDag(pipelineStages(jobs));
+    const columns = new Map<number, { order: number; names: string[] }[]>();
+    for (const node of dag.nodes) {
+        const column = stageOfNode(node.id);
+        columns.set(column, [...(columns.get(column) ?? []), { order: node.order ?? -1, names: node.data.jobs.map((member) => member.job.name) }]);
+    }
+    return [...columns.keys()]
+        .toSorted((one, other) => one - other)
+        .map((column) => (columns.get(column) ?? []).toSorted((one, other) => one.order - other.order).map((card) => card.names));
+};
+
+describe(`pipelineDag draws a declared run as GitHub does`, () => {
+    it(`places every card of a real run in GitHub's column, at GitHub's place, with GitHub's rows`, () => {
+        // Read off GitHub's own page for the run.
+        expect(columnsOf(intenticRun)).toEqual([
+            [[`preflight`], [`changes`]],
+            [
+                [`verify-platform / verify`],
+                [`verify-providers`],
+                [`e2e-hermetic`],
+                [`ci-base`],
+                [`migrations`, `e2e-billing`, `e2e-signin`],
+                [`quick`, `perf-instr`, `perf-browser`, `local-face`],
+            ],
+            [[`ci-desktop`], [`verify-core / verify`, `verify-machine`], [`verify-clocks`]],
+            [[`netd-check`], [`desktop-windows-build`], [`desktop-check`, `ic-check`, `desktop-verify`]],
+            [[`release / plan`], [`images-platform`]],
+            [[`release / images-amd64`, `release / linux-build`, `release / sandbox-arm64`], [`release / windows-build`]],
+            [[`release / windows-verify / smoke`]],
+            [[`release / publish`]],
+            [[`release / device-android / build`, `release / device-android / release`]],
+            [[`images`, `images-arm64`], [`images-dry`], [`desktop-verify-windows / smoke`]],
+            [[`images-merge`]],
+        ]);
+    });
+
+    it(`gives every card a place in its column, so the layout draws that order rather than its own`, () => {
+        expect(pipelineDag(pipelineStages(intenticRun)).nodes.every((node) => node.order !== undefined)).toBe(true);
+        // Stages and waves carry no picture to reproduce: those keep the layout's own ordering.
+        expect(pipelineDag(stageRun).nodes.every((node) => node.order === undefined)).toBe(true);
+    });
+
+    it(`keeps a matrix's legs in a card of their own, ahead of plain jobs wired the same way`, () => {
+        const leg = (name: string): PipelineJob => ({ name, status: `success`, needs: [`build`], declaredId: `e2e`, matrix: `e2e` });
+        const plain = (name: string): PipelineJob => ({ name, status: `success`, needs: [`build`], declaredId: name });
+        const run = [plain(`build`), plain(`lint`), leg(`e2e (chromium)`), leg(`e2e (firefox)`), plain(`docs`)].map((job, index) =>
+            index === 0 ? { ...job, needs: [] } : job,
+        );
+        // GitHub keys a matrix `build|-e2e-|`, a plain card `build|`: the plain card's key is the shorter, so it sorts first
+        // when both lead nowhere.
+        expect(columnsOf(run)).toEqual([
+            [[`build`]],
+            [
+                [`lint`, `docs`],
+                [`e2e (chromium)`, `e2e (firefox)`],
+            ],
+        ]);
+    });
+
+    it(`puts a card under the last card it waits on, and the card more jobs wait on higher`, () => {
+        const job = (name: string, needs: string[]): PipelineJob => ({ name, status: `success`, needs, declaredId: name });
+        const run = [
+            job(`a`, []),
+            job(`b`, []),
+            // Waits on the bottom root only: below everything waiting on the top one.
+            job(`only-b`, [`b`]),
+            job(`both`, [`a`, `b`]),
+            job(`only-a`, [`a`]),
+            // Nothing waits on `only-a`; `feeds` has a dependent, so it rises above it.
+            job(`feeds`, [`a`]),
+            job(`next`, [`feeds`]),
+        ];
+        expect(columnsOf(run)).toEqual([[[`a`], [`b`]], [[`feeds`], [`only-a`], [`only-b`], [`both`]], [[`next`]]]);
+    });
+});
+
+describe(`jobLabel`, () => {
+    it(`shortens a job two calls deep the way GitHub does, and leaves the rest alone`, () => {
+        expect(jobLabel(`release / windows-verify / smoke`)).toBe(`release / … / smoke`);
+        expect(jobLabel(`verify-core / verify`)).toBe(`verify-core / verify`);
+        expect(jobLabel(`quick`)).toBe(`quick`);
+    });
+});
 
 describe(`pipelineStages`, () => {
     it(`layers a declared run by dependency depth, not by when things happened to start`, () => {

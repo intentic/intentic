@@ -63,8 +63,23 @@ describe(`layoutSignature`, () => {
             edges: [{ ...edge(`a`, `b`), dimmed: true, dashed: true, accent: `text-warning`, kind: `dev` }],
         };
         expect(sig(drawn.nodes, drawn.edges)).toBe(sig(plain.nodes, plain.edges));
-        const place = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]) => layoutDag(nodes as readonly DagNode<never>[], edges, options);
+        const place = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]) =>
+            layoutDag(nodes as readonly DagNode<never>[], edges, options);
         expect(place(drawn.nodes, drawn.edges)).toEqual(place(plain.nodes, plain.edges));
+    });
+
+    it(`notices a caller-fixed order, which moves cards within their column`, () => {
+        expect(
+            sig([
+                { ...node(`a`), order: 0 },
+                { ...node(`b`), order: 1 },
+            ]),
+        ).not.toBe(
+            sig([
+                { ...node(`a`), order: 1 },
+                { ...node(`b`), order: 0 },
+            ]),
+        );
     });
 
     it(`still changes when the count changes, which is what it replaced`, () => {
@@ -163,6 +178,29 @@ describe(`layoutDag`, () => {
     it(`still turns once for a hop to the next column, which has nothing to avoid`, () => {
         const placed = place([node(`a`), node(`b`)], [edge(`a`, `b`)]);
         expect(placed.lanes.get(laneKey(`a`, `b`))).toHaveLength(1);
+    });
+
+    // A forge draws a run its own way; a caller reproducing that picture fixes every card's place, and the layout keeps
+    // it exactly, even where its own pass would have chosen otherwise.
+    it(`stacks each column in the caller's order when every node carries one`, () => {
+        const ordered = (id: string, order: number): DagNode<undefined> => ({ ...node(id), order });
+        // `dead` above `feeder` is the opposite of what the layout's own pass picks (see above).
+        const placed = place(
+            [ordered(`root`, 0), ordered(`dead`, 0), ordered(`feeder`, 1), ordered(`tail`, 0)],
+            [edge(`root`, `dead`), edge(`root`, `feeder`), edge(`feeder`, `tail`)],
+        );
+        expect(topOf(placed, `dead`)).toBe(0);
+        expect(topOf(placed, `feeder`)).toBe(options.nodeHeight + 28);
+        // Columns are still dependency depth, one card's width and one gap apart.
+        expect(columnOf(placed, `root`)).toBe(0);
+        expect(columnOf(placed, `feeder`)).toBe(options.nodeWidth + 88);
+        expect(columnOf(placed, `tail`)).toBe(2 * (options.nodeWidth + 88));
+    });
+
+    it(`ignores an order only some nodes carry, rather than half-applying it`, () => {
+        const nodes = [node(`root`), { ...node(`dead`), order: 1 }, { ...node(`feeder`), order: 0 }, node(`tail`)];
+        const edges = [edge(`root`, `dead`), edge(`root`, `feeder`), edge(`feeder`, `tail`)];
+        expect(place(nodes, edges)).toEqual(place([node(`root`), node(`dead`), node(`feeder`), node(`tail`)], edges));
     });
 
     it(`still lays out a graph with a cycle in it`, () => {
