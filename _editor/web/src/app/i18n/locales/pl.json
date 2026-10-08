@@ -9910,16 +9910,16 @@
             "showInFileManager": "Pokaż w menedżerze plików"
         },
         "foundProjects": {
-            "title": "Wróć do swoich projektów",
-            "lead": "Foldery, w których pracujesz na tym komputerze: z Claude Code, z Codexem albo w swoim edytorze. Otwórz jeden, żeby zobaczyć tutaj jego pliki.",
-            "openedHere": "Otwierany tu wcześniej",
+            "title": "Ostatnie projekty",
+            "onWindows": "Windows",
             "inWsl": "WSL · {distro}",
             "hasSandbox": "Ma sandbox",
-            "open": "Otwórz",
-            "privacy": "Znalezione w historii tego komputera. Nic stąd nie wychodzi.",
-            "hide": "Nie pokazuj ich",
-            "show": "Pokaż foldery znalezione na tym komputerze",
-            "orThisFolder": "Folder {name} jest pusty. Otwórz inny folder albo włóż pliki do tego."
+            "usedWith": "Używany w",
+            "lastUsed": "Ostatnio używany",
+            "openedHere": "Otwierany tu wcześniej",
+            "privacy": "Znalezione w historii narzędzi na tym komputerze. Nic stąd nie wychodzi.",
+            "hide": "Ukryj tę listę",
+            "show": "Pokaż ostatnie projekty"
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",

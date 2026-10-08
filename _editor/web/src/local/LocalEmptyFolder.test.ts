@@ -81,18 +81,23 @@ afterEach(() => {
     delete window.__INTENTIC_LOCAL_HOST__;
 });
 
-const rows = (el: HTMLElement): string[] => [...el.querySelectorAll(`[data-test="found-projects"] li`)].map((row) => row.textContent ?? ``);
+const rows = (el: HTMLElement): string[] => [...el.querySelectorAll(`[data-test="found-project"]`)].map((row) => row.textContent ?? ``);
+const rowButtons = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`[data-test="found-project"] button`)];
 
-it(`offers the folders opened here and the ones the tools found, never the folder it shows`, async () => {
+it(`offers the folders opened here and the ones the tools found, by where they live, never the folder it shows`, async () => {
     const { el, unmount } = await mount(hostWith(FOUND));
     const offered = rows(el);
     expect(offered).toHaveLength(2);
-    expect(offered[0]).toContain(`shop`);
-    expect(offered[0]).toContain(`Opened here before`);
-    expect(offered[0]).toContain(`Has a sandbox`);
-    expect(offered[1]).toContain(`/home/ada/api`);
-    expect(offered[1]).toContain(`WSL · Ubuntu`);
-    expect(offered[1]).toContain(`Codex, Claude Code`);
+    // The distro's folder was used more recently, so its group comes first; each says where it is, short.
+    expect(offered[0]).toContain(`api`);
+    expect(offered[0]).toContain(`~`);
+    expect(offered[0]).not.toContain(`wsl.localhost`);
+    expect(offered[1]).toContain(`shop`);
+    expect(offered[1]).toContain(`~\\code`);
+    expect(offered[1]).toContain(`Has a sandbox`);
+    const labels = [...el.querySelectorAll(`[data-test="found-projects"] section`)].map((group) => group.textContent ?? ``);
+    expect(labels[0]).toContain(`WSL · Ubuntu`);
+    expect(labels[1]).toContain(`Windows`);
     expect(el.textContent).toContain(`Nothing leaves it.`);
     unmount();
 });
@@ -100,7 +105,7 @@ it(`offers the folders opened here and the ones the tools found, never the folde
 it(`opens the folder pressed in this window's place, by the path this computer opens it at`, async () => {
     const host = hostWith(FOUND);
     const { el, unmount } = await mount(host);
-    [...el.querySelectorAll<HTMLButtonElement>(`[data-test="found-projects"] li button`)][1]?.click();
+    rowButtons(el)[0]?.click();
     await nextTick();
     expect(host.point).toHaveBeenCalledWith(`\\\\wsl.localhost\\Ubuntu\\home\\ada\\api`);
     unmount();
@@ -111,22 +116,22 @@ it(`says where a folder could not be opened, on its own row`, async () => {
         throw new Error(`api isn't there any more.`);
     }));
     const { el, unmount } = await mount(host);
-    [...el.querySelectorAll<HTMLButtonElement>(`[data-test="found-projects"] li button`)][1]?.click();
+    rowButtons(el)[0]?.click();
     // The refusal settles a task later, then renders.
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
-    expect(rows(el)[1]).toContain(`api isn't there any more.`);
+    expect(rows(el)[0]).toContain(`api isn't there any more.`);
     unmount();
 });
 
 it(`stops offering them once told to, and keeps the way back`, async () => {
     const first = await mount(hostWith(FOUND));
-    const hide = [...first.el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Don't show these`));
+    const hide = [...first.el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Hide this list`));
     hide?.click();
     await nextTick();
     expect(rows(first.el)).toHaveLength(0);
     expect(first.el.textContent).toContain(`This folder is empty`);
-    expect(first.el.textContent).toContain(`Show the folders found on this computer`);
+    expect(first.el.textContent).toContain(`Show recent projects`);
     first.unmount();
     // A later launch remembers.
     const again = await mount(hostWith(FOUND));
@@ -141,6 +146,6 @@ it(`leaves a folder window, and a computer with nothing to offer, as the empty f
     folderWindow.unmount();
     const bare = await mount({ ...hostWith({ providers: [], projects: [] }), places: async () => [] });
     expect(rows(bare.el)).toHaveLength(0);
-    expect(bare.el.textContent).not.toContain(`Show the folders found`);
+    expect(bare.el.textContent).not.toContain(`Show recent projects`);
     bare.unmount();
 });

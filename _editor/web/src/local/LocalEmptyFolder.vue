@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { Button, EmptyState, freshness, Notice, StatusBadge, ui } from "@intentic/ui";
+import { Button, EmptyState, formatDate, formatDateTime, formatDayMonth, Notice, RowGroup, StatusBadge, type Tip, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref } from "vue";
 import { askLocalApp, localFace } from "../app/environments/local";
 import { localHost, NOTHING_FOUND } from "../app/environments/localHost";
-import { type OfferedProject, offeredProjects, toolNames } from "./foundProjects";
+import { type OfferedProject, offeredProjects, type ProjectPlace, projectPlaces, toolNames, whereOf } from "./foundProjects";
 
 // WHAT AN EMPTY FOLDER SAYS, in the pane its documents would open in: first of all the folder the app starts in
 // (`~/intentic/local`), which is empty on every first launch. In the main window that first launch offers the folders
 // this computer already works in instead: the ones opened here before, then the ones its AI tools and editors name
 // (the app's found.rs, read on this computer and sent nowhere), each opened in this window's place as "Open a folder…"
-// opens one. Below them, or alone when there is nothing to offer, what the folder is and the ways to fill it. Nothing
-// about sandboxes or agents: the rail's foot has that, and an opened folder has "Work on this with an agent".
+// opens one. One short row per folder, grouped by where it lives (Windows, each WSL distro), so two folders that read
+// alike are never confused; where it came from rides the row's tip. When there is nothing to offer, or the reader put
+// the list away, what the folder is and the ways to fill it. Nothing about sandboxes or agents: the rail's foot has
+// that, and an opened folder has "Work on this with an agent".
 
 const t = useT();
 const face = localFace();
@@ -56,10 +58,38 @@ const unhide = (): void => {
     hidden.value = false;
 };
 
-// Where a row came from, as one line: opened here, or the tools that worked in it, and when last.
-const origin = (project: OfferedProject): string => {
-    const from = project.openedHere ? t(`local.foundProjects.openedHere`) : toolNames(project.sources);
-    return project.at === undefined ? from : `${from} · ${freshness(project.at)}`;
+const places = computed(() => projectPlaces(offered.value));
+// A lone list of this computer's own folders needs no heading; anything in a distro says which one.
+const labelled = computed(() => places.value.length > 1 || places.value.some((place) => place.wsl !== undefined));
+const placeLabel = (place: ProjectPlace): string =>
+    place.wsl === undefined ? t(`local.foundProjects.onWindows`) : t(`local.foundProjects.inWsl`, { distro: place.wsl });
+
+const DAY_MS = 86_400_000;
+// When a folder was last used, at column width: relative inside the week ("4m ago", "3d ago"), then the day, with the
+// year only when it is not this one.
+const when = (at: number): string => {
+    if (Date.now() - at < 7 * DAY_MS) {
+        return timeAgo(at, { days: true });
+    }
+    return new Date(at).getFullYear() === new Date().getFullYear() ? formatDayMonth(at) : formatDate(at);
+};
+
+// The rest of a row, on hover: the whole path, the tools that worked in it, and the exact moment.
+const tipOf = (project: OfferedProject): Tip => ({
+    title: project.shown,
+    rows: [
+        ...(project.sources.length > 0 ? [{ label: t(`local.foundProjects.usedWith`), value: toolNames(project.sources) }] : []),
+        ...(project.at === undefined ? [] : [{ label: t(`local.foundProjects.lastUsed`), value: formatDateTime(project.at) }]),
+    ],
+    note: project.openedHere ? t(`local.foundProjects.openedHere`) : undefined,
+});
+
+// Up and Down walk the rows, across the groups, as they do in any list.
+const list = ref<HTMLElement | undefined>(undefined);
+const step = (by: number): void => {
+    const rows = [...(list.value?.querySelectorAll<HTMLButtonElement>(`[data-found-row]`) ?? [])];
+    const at = rows.findIndex((row) => row === document.activeElement);
+    rows[Math.min(Math.max(at + by, 0), rows.length - 1)]?.focus();
 };
 
 const opening = ref<string | undefined>(undefined);
@@ -89,60 +119,49 @@ const pickFolder = async (): Promise<void> => {
 </script>
 
 <template>
-    <div v-if="offering" class="flex h-full flex-col items-center overflow-y-auto px-6 py-10">
-        <div class="flex w-full max-w-xl flex-col gap-4">
-            <div class="flex flex-col items-center gap-1.5 text-center">
-                <span class="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-600/10 text-link">
-                    <Icon name="folder-open" class="text-2xl" />
-                </span>
-                <p class="text-base font-semibold text-content">{{ t(`local.foundProjects.title`) }}</p>
-                <p class="max-w-md text-xs text-muted">{{ t(`local.foundProjects.lead`) }}</p>
-            </div>
+    <div v-if="offering" class="flex h-full flex-col items-center overflow-y-auto px-6 py-12">
+        <div class="flex w-full max-w-2xl flex-col gap-6">
+            <header class="flex items-center justify-between gap-4 px-1">
+                <h1 class="text-lg font-semibold text-content">{{ t(`local.foundProjects.title`) }}</h1>
+                <Button :label="t(`local.emptyFolder.openFolder`)" size="small" tier="boring" @click="pickFolder">
+                    <template #icon><Icon name="folder-open" /></template>
+                </Button>
+            </header>
+            <Notice v-if="failure" tone="danger" class="text-2xs">{{ failure }}</Notice>
 
-            <ul class="flex flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-canvas" data-test="found-projects">
-                <li v-for="project in offered" :key="project.path" class="flex items-center gap-3 px-3 py-2.5">
-                    <Icon :name="project.sandbox ? `robot` : `folder`" class="shrink-0 text-muted" />
-                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span class="flex min-w-0 items-center gap-1.5">
-                            <span class="truncate text-sm font-medium text-content">{{ project.name }}</span>
-                            <span v-if="project.wsl" class="shrink-0 rounded bg-overlay px-1 py-px text-[0.6rem] text-subtle">{{
-                                t(`local.foundProjects.inWsl`, { distro: project.wsl })
-                            }}</span>
-                            <StatusBadge v-if="project.sandbox" variant="success" size="xs" class="shrink-0" :label="t(`local.foundProjects.hasSandbox`)" />
-                        </span>
-                        <span class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom="project.path">{{ project.shown }}</span>
-                        <span class="truncate text-2xs text-muted">{{ origin(project) }}</span>
-                        <span v-if="rowFailure?.path === project.path" class="text-2xs text-danger">{{ rowFailure.message }}</span>
+            <div ref="list" class="flex flex-col gap-6" data-test="found-projects" @keydown.down.prevent="step(1)" @keydown.up.prevent="step(-1)">
+                <RowGroup v-for="place in places" :key="place.wsl ?? ``" :label="labelled ? placeLabel(place) : undefined">
+                    <div v-for="project in place.projects" :key="project.path" data-test="found-project">
+                        <button
+                            type="button"
+                            data-found-row
+                            class="ui-row-select group flex w-full items-center gap-3 px-4 py-2.5 text-left disabled:cursor-default"
+                            :disabled="opening !== undefined && opening !== project.path"
+                            v-tooltip.bottom="tipOf(project)"
+                            @click="openProject(project)"
+                        >
+                            <Icon :name="project.sandbox ? `robot` : `folder`" class="shrink-0 text-lg text-subtle group-hover:text-muted" />
+                            <span class="flex min-w-0 flex-1 items-baseline gap-2.5">
+                                <span class="max-w-[65%] shrink-0 truncate text-sm font-medium text-content">{{ project.name }}</span>
+                                <span class="min-w-0 truncate text-xs text-subtle">{{ whereOf(project) }}</span>
+                            </span>
+                            <StatusBadge v-if="project.sandbox" variant="success" size="xs" class="-my-1 shrink-0" :label="t(`local.foundProjects.hasSandbox`)" />
+                            <span v-if="project.at !== undefined" class="shrink-0 text-2xs tabular-nums text-subtle">{{ when(project.at) }}</span>
+                            <Icon v-if="opening === project.path" name="spinner" spin class="shrink-0 text-xs text-muted" />
+                            <Icon v-else name="chevron-right" class="shrink-0 text-2xs text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+                        </button>
+                        <p v-if="rowFailure?.path === project.path" class="pr-4 pb-2.5 pl-11.5 text-2xs text-danger">{{ rowFailure.message }}</p>
                     </div>
-                    <Button
-                        :label="t(`local.foundProjects.open`)"
-                        size="small"
-                        tier="boring"
-                        :loading="opening === project.path"
-                        :disabled="opening !== undefined && opening !== project.path"
-                        @click="openProject(project)"
-                    />
-                </li>
-            </ul>
-
-            <p class="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-2xs text-subtle">
-                <Icon name="lock" class="shrink-0" />
-                <span>{{ t(`local.foundProjects.privacy`) }}</span>
-                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="hide">{{ t(`local.foundProjects.hide`) }}</button>
-            </p>
-
-            <div class="flex flex-col items-center gap-2 border-t border-line pt-4 text-center">
-                <p class="text-xs text-muted">{{ t(`local.foundProjects.orThisFolder`, { name: face?.name ?? `` }) }}</p>
-                <div class="flex flex-wrap items-center justify-center gap-2">
-                    <Button :label="t(`local.emptyFolder.openFolder`)" size="small" tier="boring" @click="pickFolder">
-                        <template #icon><Icon name="folder-open" /></template>
-                    </Button>
-                    <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" tier="boring" @click="askLocalApp(`reveal`)">
-                        <template #icon><Icon name="external-link" /></template>
-                    </Button>
-                </div>
-                <Notice v-if="failure" tone="danger" class="max-w-md text-2xs">{{ failure }}</Notice>
+                </RowGroup>
             </div>
+
+            <footer class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-1 text-2xs text-subtle">
+                <span class="flex items-center gap-1.5">
+                    <Icon name="lock" class="shrink-0" />
+                    {{ t(`local.foundProjects.privacy`) }}
+                </span>
+                <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="hide">{{ t(`local.foundProjects.hide`) }}</button>
+            </footer>
         </div>
     </div>
 

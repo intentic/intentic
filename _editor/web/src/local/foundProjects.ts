@@ -54,7 +54,19 @@ const keyOf = (path: string): string => {
 const nameOf = (path: string): string => path.split(/[\\/]/u).findLast((segment) => segment !== ``) ?? path;
 
 // `\\wsl.localhost\<distro>\…` and the older `\\wsl$\<distro>\…`: a folder of a distro, reached from Windows.
-const wslOf = (path: string): string | undefined => /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/iu.exec(path)?.[1];
+const WSL_PATH = /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)(.*)$/iu;
+const wslOf = (path: string): string | undefined => WSL_PATH.exec(path)?.[1];
+
+// How a folder reads: a distro's as the distro spells it (`/home/ada/api`), whichever of the two a tool recorded (a
+// Windows tool run in a distro's folder records the `\\wsl.localhost` one), and a drive path with its own slashes, since
+// tools write `C:/Users/…` and `C:\Users\…` alike.
+const shownOf = (path: string, shown: string): string => {
+    const distro = WSL_PATH.exec(shown);
+    if (distro !== null) {
+        return (distro[2] ?? ``).replaceAll(`\\`, `/`) || `/`;
+    }
+    return /^[a-z]:[\\/]/iu.test(shown) ? shown.replaceAll(`/`, `\\`) : shown || path;
+};
 
 // The app keeps `openedAt` as Unix seconds, epoch milliseconds or an ISO instant (localHost.ts `LocalPlace`).
 const epochMs = (openedAt: number | string): number | undefined => {
@@ -90,7 +102,7 @@ export const offeredProjects = (
         }
         offered.set(key, {
             path: place.path,
-            shown: place.path,
+            shown: shownOf(place.path, place.path),
             name: nameOf(place.path),
             openedHere: true,
             sources: [],
@@ -112,27 +124,69 @@ export const offeredProjects = (
             here === undefined
                 ? {
                       path: project.path,
-                      shown: project.shown,
+                      shown: shownOf(project.path, project.shown),
                       name: project.name,
                       openedHere: false,
                       sources: project.sources,
                       at,
-                      wsl: project.wsl ?? undefined,
+                      wsl: project.wsl ?? wslOf(project.path),
                       git: project.git,
                       sandbox: project.sandbox,
                   }
                 : {
                       ...here,
-                      shown: project.shown,
+                      shown: shownOf(project.path, project.shown),
                       sources: project.sources,
                       at: newest(here.at, at),
-                      wsl: here.wsl ?? project.wsl ?? undefined,
+                      wsl: here.wsl ?? project.wsl ?? wslOf(project.path),
                       git: project.git,
                       sandbox: here.sandbox || project.sandbox,
                   },
         );
     }
     return [...offered.values()].slice(0, limit);
+};
+
+/** The folders of one place: this computer's own (`wsl` undefined), or one WSL distro's. */
+export interface ProjectPlace {
+    readonly wsl: string | undefined;
+    readonly projects: readonly OfferedProject[];
+}
+
+// Newest first; a folder no list dated goes last.
+const newer = (left: number | undefined, right: number | undefined): number => (right ?? 0) - (left ?? 0);
+
+/**
+ * The offered folders by where they live, since `/home/ada/api` in a distro and `C:\Users\ada\api` are two folders that
+ * read alike: each place newest first, and the place used most recently on top.
+ */
+export const projectPlaces = (offered: readonly OfferedProject[]): ProjectPlace[] => {
+    const places = new Map<string, OfferedProject[]>();
+    for (const project of offered) {
+        const key = project.wsl ?? ``;
+        places.set(key, [...(places.get(key) ?? []), project]);
+    }
+    return [...places.values()]
+        .map((projects) => projects.toSorted((left, right) => newer(left.at, right.at)))
+        .map((projects) => ({ wsl: projects[0]?.wsl, projects }))
+        .toSorted((left, right) => newer(left.projects[0]?.at, right.projects[0]?.at));
+};
+
+// A home folder, spelled the way each system does: `/home/ada`, `/root`, `/Users/ada`, `C:\Users\ada`.
+const HOME = /^(?:\/home\/[^/]+|\/root|\/Users\/[^/]+|[a-z]:\\Users\\[^\\]+)(?=$|[\\/])/iu;
+
+/**
+ * Where a folder sits, short: its parent with the home folder as `~` (`~/repositories` for `/home/ada/repositories/api`),
+ * since the row already names the folder itself. The whole path when its last part is not the name it goes by.
+ */
+export const whereOf = (project: Pick<OfferedProject, `shown` | `name`>): string => {
+    const separator = project.shown.includes(`\\`) && !project.shown.startsWith(`/`) ? `\\` : `/`;
+    const trimmed = project.shown.length > 1 ? project.shown.replace(/[\\/]+$/u, ``) : project.shown;
+    const cut = trimmed.lastIndexOf(separator);
+    const folder = cut === -1 || trimmed.slice(cut + 1) !== project.name ? trimmed : trimmed.slice(0, cut) || separator;
+    // A drive's root keeps its separator (`D:\`), which `slice` just took off.
+    const where = /^[a-z]:$/iu.test(folder) ? `${folder}\\` : folder;
+    return where.replace(HOME, `~`);
 };
 
 /** The sandbox providers found signed in here, in the order found, for a page that names them. */

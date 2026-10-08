@@ -4022,16 +4022,16 @@
             "showInFileManager": "Show in file manager"
         },
         "foundProjects": {
-            "title": "Pick up where you left off",
-            "lead": "Folders you have worked in on this computer, with Claude Code, Codex or your editor. Open one to see its files here.",
-            "openedHere": "Opened here before",
+            "title": "Recent projects",
+            "onWindows": "Windows",
             "inWsl": "WSL · {distro}",
             "hasSandbox": "Has a sandbox",
-            "open": "Open",
-            "privacy": "Found in this computer's own history. Nothing leaves it.",
-            "hide": "Don't show these",
-            "show": "Show the folders found on this computer",
-            "orThisFolder": "{name} is empty. Open another folder, or put files in this one."
+            "usedWith": "Used with",
+            "lastUsed": "Last used",
+            "openedHere": "Opened here before",
+            "privacy": "Found in your tools' history on this computer. Nothing leaves it.",
+            "hide": "Hide this list",
+            "show": "Show recent projects"
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",
