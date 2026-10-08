@@ -119,3 +119,54 @@ it(`still sends No as a bare denial, the one that stops the turn`, () => {
 
     expect(sent).toEqual([{ kind: `permission`, decision: `deny` }]);
 });
+
+// The command rides the sentence's own line as a pill naming its first line, and either half opens it.
+describe(`the command a request holds`, () => {
+    const holding = {
+        title: `Run this on omen?`,
+        explain: `The safety judge is turned off, so this was decided by the standing rule alone.`,
+        program: { text: `adb shell rm -rf /sdcard/Download/old\nadb reboot`, language: `bash`, truncated: false, spans: [] },
+    } as const;
+    const pill = (element: HTMLElement): HTMLButtonElement => element.querySelector<HTMLButtonElement>(`[data-command-pill]`)!;
+    const shown = (element: HTMLElement): boolean => element.querySelector(`pre`) !== null;
+    const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it(`sits beside the sentence, naming the command's first line, closed`, () => {
+        const card = mount({ ...holding, program: { ...holding.program, spans: [] } });
+        const sentence = card.querySelector(`[data-permission-sentence]`)!;
+        expect(sentence.textContent).toBe(holding.explain);
+        expect(pill(card).parentElement).toBe(sentence.parentElement);
+        expect(pill(card).textContent?.trim()).toBe(`adb shell rm -rf /sdcard/Download/old`);
+        expect(pill(card).getAttribute(`aria-label`)).toBe(`Show the command`);
+        expect(shown(card)).toBe(false);
+    });
+
+    it(`opens and closes from the pill`, async () => {
+        const card = mount({ ...holding, program: { ...holding.program, spans: [] } });
+        pill(card).click();
+        await tick();
+        expect(shown(card)).toBe(true);
+        expect(pill(card).getAttribute(`aria-expanded`)).toBe(`true`);
+        pill(card).click();
+        await tick();
+        expect(shown(card)).toBe(false);
+    });
+
+    it(`opens from a press on the sentence too`, async () => {
+        const card = mount({ ...holding, program: { ...holding.program, spans: [] } });
+        card.querySelector<HTMLElement>(`[data-permission-sentence]`)!.click();
+        await tick();
+        expect(shown(card)).toBe(true);
+    });
+
+    it(`stands alone when there is no sentence, and a sentence alone opens nothing`, async () => {
+        expect(mount({ ...holding, explain: undefined, program: { ...holding.program, spans: [] } }).querySelector(`[data-permission-sentence]`)).toBeNull();
+        app?.unmount();
+        document.body.innerHTML = ``;
+        const plain = mount({ explain: holding.explain });
+        expect(plain.querySelector(`[data-command-pill]`)).toBeNull();
+        plain.querySelector<HTMLElement>(`[data-permission-sentence]`)!.click();
+        await tick();
+        expect(shown(plain)).toBe(false);
+    });
+});

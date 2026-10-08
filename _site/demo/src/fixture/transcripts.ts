@@ -4,6 +4,7 @@ import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE, SEPTEMBER_PAGE, SEPT
 import {
     API_MAIN_FIXER_ID,
     HELD_AGENT_ID,
+    KEY_EXPIRE_PROGRAM,
     REVIEW_AGENT_ID,
     SOFT_DELETES_JOBS,
     SOFT_E2E_JOB,
@@ -464,7 +465,6 @@ const WEBHOOK_TESTS: AgentTranscript = {
 // The helper parked on a permission (fleet.ts `sub-keen-moth-5r8t`): a host guard card it already got past with a
 // conversation-wide yes, frozen as such, and the one waiting now, whose Allow carries the wider yeses behind its caret.
 const EARLIER_SEND = `curl -s -u "{{secret:stripe/secret-key}}:" https://api.stripe.com/v1/api_keys | jq -r '.data[].id'`;
-const WAITING_SEND = `K="{{secret:stripe/secret-key}}"; for id in $(cat old-keys.txt); do curl -s -u "$K:" -X POST https://api.stripe.com/v1/api_keys/$id/expire; done`;
 const KEY_ROTATION: AgentTranscript = {
     sessionId: `ses_sub-keen-moth-5r8t`,
     messages: [
@@ -490,7 +490,7 @@ const KEY_ROTATION: AgentTranscript = {
                 title: `Send stripe/secret-key where its host guard can't check?`,
                 displayName: `Send secret`,
                 explain: `stripe/secret-key's host guard lets it go unasked only to api.stripe.com, and where this command sends it cannot be read from it: it runs \`for\`, and where that sends things is not in the command's text.`,
-                program: { text: WAITING_SEND, language: `bash`, truncated: false, spans: [{ start: 3, end: 31 }] },
+                program: KEY_EXPIRE_PROGRAM,
                 alwaysLabel: `Allow stripe/secret-key anywhere in this conversation`,
                 status: `pending`,
             },

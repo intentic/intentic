@@ -348,7 +348,12 @@ const onPark = (state: ConversationState, turn: TurnRuntime, event: ParkFrame): 
     if (running === undefined || running.stopping !== undefined) {
         return { state: { ...state, turn }, effects: lead, reply: undefined };
     }
-    const card = { requestId: event.requestId, kind: event.kind, ...opt("ask", askOf(event)) };
+    const card = {
+        requestId: event.requestId,
+        kind: event.kind,
+        ...opt("ask", askOf(event)),
+        ...opt("program", event.kind === "permission" ? event.program : undefined),
+    };
     const at = running.parked.findIndex((held) => held.requestId === card.requestId);
     const parked = at === -1 ? [...running.parked, card] : running.parked.map((held, index) => (index === at ? card : held));
     return { state: { ...state, phase: withParked(running, parked), turn }, effects: [...lead, { kind: "broadcast" }], reply: undefined };

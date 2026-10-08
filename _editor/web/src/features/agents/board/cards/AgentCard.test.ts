@@ -3,7 +3,7 @@
 // fact as soon as the agent has it, not only when a turn ends.
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, ProgramAsk } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "../laneDrop";
@@ -455,6 +455,38 @@ it(`offers the permission its turn waits on, with what it asks`, () => {
     expect(textButton(card, `Skip`)).not.toBeUndefined();
     // A sandbox too old to say which request waits leaves the drill-in to the chat as the one way.
     expect(textButton(mount(asking), `Allow once`)).toBeUndefined();
+});
+
+// Nobody should allow a command they have not seen: a pointer resting on the card raises it, a touch or a press does not.
+it(`shows the command a permission holds to a pointer resting on the card`, async () => {
+    jest.useFakeTimers();
+    const program: ProgramAsk = { text: `adb shell rm -rf /sdcard/Download/old`, language: `bash`, truncated: false, spans: [] };
+    const card = mount({ ...ready(`awaiting`), attention: { ...NO_ATTENTION, permission: true }, permissionAsk: { requestId: `p1`, ask: `Run this on omen?`, program } });
+    const root = card.querySelector<HTMLElement>(`.session-card`)!;
+    // jsdom lays nothing out, and the look closes rather than point at a card of no size.
+    root.getBoundingClientRect = () => DOMRect.fromRect({ x: 100, y: 100, width: 480, height: 160 });
+    const peek = (): HTMLElement | null => document.body.querySelector(`[data-command-peek]`);
+
+    root.dispatchEvent(new PointerEvent(`pointerenter`, { pointerType: `touch` }));
+    await advanceTimersByTimeAsync(1_000);
+    expect(peek()).toBeNull();
+
+    root.dispatchEvent(new PointerEvent(`pointerenter`, { pointerType: `mouse` }));
+    await advanceTimersByTimeAsync(1_000);
+    expect(peek()?.textContent).toContain(program.text);
+
+    root.dispatchEvent(new PointerEvent(`pointerdown`, { pointerType: `mouse` }));
+    await nextTick();
+    expect(peek()).toBeNull();
+});
+
+// A request about no program has nothing to show, and raises nothing however long the pointer stays.
+it(`raises nothing over a permission that holds no program`, async () => {
+    jest.useFakeTimers();
+    const card = mount({ ...ready(`awaiting`), attention: { ...NO_ATTENTION, permission: true }, permissionAsk: { requestId: `p1`, ask: `WebFetch` } });
+    card.querySelector<HTMLElement>(`.session-card`)!.dispatchEvent(new PointerEvent(`pointerenter`, { pointerType: `mouse` }));
+    await advanceTimersByTimeAsync(1_000);
+    expect(document.body.querySelector(`[data-command-peek]`)).toBeNull();
 });
 
 // The steady state (nothing missing) says nothing; announcing it would cost a line on nearly every card.

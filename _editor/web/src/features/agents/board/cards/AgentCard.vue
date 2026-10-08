@@ -373,6 +373,8 @@ const dated = computed(() => props.agent.archivedAt !== undefined || (!working.v
 const reactable = computed(() => !unregistered(props.agent.status));
 // The strip lives in the summary row and the press that opens its picker in the header, so the header reaches it here.
 const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`reactionsStrip`);
+// The card's own element: the permission row raises the held command off its hover.
+const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
 // empty strip.
 // One wrapping line (stats left, press and time right) rather than two rows, so a lane fits more cards.
@@ -588,6 +590,7 @@ const grab = (event: PointerEvent): void => {
 
 <template>
     <div
+        ref="cardRoot"
         role="button"
         tabindex="0"
         :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
@@ -801,7 +804,7 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!-- A permission its turn waits on, answered here: the reply floor is a collaborator's, as in the chat. -->
-            <CardPermissionAsk v-if="canReview" :agent="agent" :disabled="busy" />
+            <CardPermissionAsk v-if="canReview" :agent="agent" :disabled="busy" :card="cardRoot ?? undefined" />
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">

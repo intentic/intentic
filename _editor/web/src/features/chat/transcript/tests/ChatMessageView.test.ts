@@ -662,12 +662,13 @@ describe(`ChatMessageView permission card`, () => {
         const element = mount(held());
         expect(element.querySelector(`pre`)).toBeNull();
 
-        const toggle = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`));
+        // A pill naming the command's first line, labelled for what a press does.
+        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-label="Show the command"]`);
         expect(toggle?.getAttribute(`aria-expanded`)).toBe(`false`);
         toggle?.click();
         await nextTick();
         expect(program(element)).toEqual({ all: COMMAND, marked: [`.env.production`] });
-        expect(element.textContent).toContain(`Hide the command`);
+        expect(toggle?.getAttribute(`aria-label`)).toBe(`Hide the command`);
     });
 
     it(`offers no fragment chips standing in for a reason`, () => {
@@ -684,7 +685,7 @@ describe(`ChatMessageView permission card`, () => {
 
     it(`says when the program was shortened`, async () => {
         const element = mount(held({ program: { text: `cat .env`, language: `bash`, truncated: true, spans: [] } }));
-        [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`))?.click();
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Show the command"]`)?.click();
         await nextTick();
         expect(element.textContent).toContain(`Shortened for this block`);
     });

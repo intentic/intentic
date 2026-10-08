@@ -7,6 +7,7 @@ import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakS
 import { KeepWarmSchema } from "./keep-warm.js";
 import { AgentNeedSchema } from "./needs.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
+import { ProgramAskSchema } from "../events/requests.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
 
@@ -496,6 +497,9 @@ export const AgentSummarySchema = z.object({
         .object({
             requestId: z.string().describe("Which request this is: the id an answer to it names."),
             ask: z.string().describe("What it asks to do, on one line: the runtime's own sentence, else the tool's short name."),
+            program: ProgramAskSchema.optional().describe(
+                "The program it is holding, as its own request shows it, so the card can show what would run before anyone answers. Absent on a request about no program.",
+            ),
         })
         .optional()
         .describe(

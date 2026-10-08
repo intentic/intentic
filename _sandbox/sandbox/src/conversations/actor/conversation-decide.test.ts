@@ -278,6 +278,31 @@ const rows: readonly Row[] = [
         effects: BROADCAST,
     },
     {
+        name: "a permission holding a program parks with it, for the card's look at what would run",
+        from: running(),
+        event: frame({
+            kind: "permission",
+            requestId: "p-1",
+            toolName: "Bash",
+            title: "Run this on omen?",
+            program: { text: "pnpm build", language: "bash", truncated: false, spans: [] },
+        }),
+        to: running(
+            {
+                parked: [
+                    {
+                        requestId: "p-1",
+                        kind: "permission",
+                        ask: "Run this on omen?",
+                        program: { text: "pnpm build", language: "bash", truncated: false, spans: [] },
+                    },
+                ],
+            },
+            { lastAt: NOW },
+        ),
+        effects: BROADCAST,
+    },
+    {
         name: "a permission with no sentence parks under its short phrase, else its bare tool name",
         from: running({ parked: [{ requestId: "p-1", kind: "permission", ask: "Read file" }] }),
         event: frame({ kind: "permission", requestId: "p-2", toolName: "WebFetch" }),

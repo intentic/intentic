@@ -64,6 +64,14 @@ export const SOFT_DELETES_JOBS = (now: number) =>
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false } as const;
 
+// The program the key-rotation helper is parked on: its transcript's waiting card and its board card show the same one.
+export const KEY_EXPIRE_PROGRAM = {
+    text: `K="{{secret:stripe/secret-key}}"; for id in $(cat old-keys.txt); do curl -s -u "$K:" -X POST https://api.stripe.com/v1/api_keys/$id/expire; done`,
+    language: `bash`,
+    truncated: false,
+    spans: [{ start: 3, end: 31 }],
+} satisfies NonNullable<NonNullable<AgentSummary[`permissionAsk`]>[`program`]>;
+
 // A child another conversation spawned: its own branch and worktree like any agent, `startedBy` naming its parent, and
 // the parent's owner and account inherited.
 const spawned = (parent: string, id: string, over: Omit<Partial<AgentSummary>, `id`> & Pick<AgentSummary, `title` | `status` | `updatedAt`>): AgentSummary => ({
@@ -126,6 +134,7 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         title: `Rotate the Stripe test keys`,
         status: `awaiting`,
         attention: { ...NO_ATTENTION, permission: true },
+        permissionAsk: { requestId: `perm_keys_expire`, ask: `Send stripe/secret-key where its host guard can't check?`, program: KEY_EXPIRE_PROGRAM },
         updatedAt: now - 20_000,
         seenAt: now - minutes(1),
         costUsd: 0.01,

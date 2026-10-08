@@ -1,4 +1,4 @@
-import type { AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentWatch, ProgramAsk } from "@intentic/sandbox-contract";
 import { awaitingWake, type ConversationState, idleConversation, type ParkedCard } from "./conversation-state.js";
 import { type QueuedItem, scheduled } from "./conversation-queue.js";
 import { conversationStatus, permissionAskOf } from "./conversation-status.js";
@@ -76,6 +76,12 @@ describe("the permission a card can answer", () => {
             { requestId: "p-2", kind: "permission", ask: "Read file" },
         ]);
         expect(permissionAskOf(state)).toEqual({ requestId: "p-1", ask: "Run `pnpm build`?" });
+    });
+
+    test("carries the program it holds, so the card can show what would run", () => {
+        const program: ProgramAsk = { text: "adb shell rm -rf /sdcard/Download/old", language: "bash", truncated: false, spans: [] };
+        const state = parkedOn([{ requestId: "p-1", kind: "permission", ask: "Run this on rog?", program }]);
+        expect(permissionAskOf(state)).toEqual({ requestId: "p-1", ask: "Run this on rog?", program });
     });
 
     test("is none while only other cards wait, nor once a stop is unwinding, nor with no turn", () => {

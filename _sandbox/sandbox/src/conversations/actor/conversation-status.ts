@@ -1,4 +1,5 @@
 import type { AgentStatus, ParkKind, WaitingPermission } from "@intentic/sandbox-contract";
+import { opt } from "../../opt.js";
 import type { LandStanding } from "../land/standing.js";
 import type { EndingStatus } from "../registry/agents-store.js";
 import { awaitingWake, type ConversationState, type StopEnding } from "./conversation-state.js";
@@ -44,5 +45,5 @@ export const permissionAskOf = (state: ConversationState | undefined): WaitingPe
         return undefined;
     }
     const card = state.phase.parked.find((parked) => parked.kind === "permission");
-    return card === undefined ? undefined : { requestId: card.requestId, ask: card.ask ?? "" };
+    return card === undefined ? undefined : { requestId: card.requestId, ask: card.ask ?? "", ...opt("program", card.program) };
 };

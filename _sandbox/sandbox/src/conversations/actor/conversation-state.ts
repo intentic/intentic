@@ -1,4 +1,4 @@
-import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, TodoItem, TurnProof, TurnReach } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, ProgramAsk, TodoItem, TurnProof, TurnReach } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
@@ -17,6 +17,8 @@ export interface ParkedCard {
     readonly kind: ParkKind;
     // A permission's one line, what the card can offer an answer to without the transcript (AgentSummary.permissionAsk).
     readonly ask?: string;
+    // The program a permission holds, already an excerpt where it ran long, so the card can show it on a hover.
+    readonly program?: ProgramAsk;
 }
 
 // A live turn. Cards park only here, and each leaves by its own `resolved` frame, a stop, or the settle.
