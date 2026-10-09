@@ -1095,21 +1095,21 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <!-- The push in flight, in the place its button left: the run's clock, or what just went out. -->
                 <span
                     v-else-if="outgoing === `flow`"
-                    class="flex min-w-0 flex-1 basis-28 items-center gap-1.5"
+                    class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted"
                     v-tooltip.right="mobile ? undefined : stageTip"
                 >
                     <span :class="LEAD">
                         <Icon
                             :name="pushFlow.running.value ? `spinner` : `check-circle`"
                             :spin="pushFlow.running.value"
-                            class="text-2xs"
                             :class="pushFlow.running.value ? `text-link` : `text-success`"
                         />
                     </span>
-                    <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
-                        <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
+                    <span v-if="mobile && stageHint" class="flex min-w-0 flex-1 flex-col">
+                        <span class="truncate whitespace-nowrap">{{ stageLine }}</span>
+                        <span class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
                     </span>
+                    <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap">{{ stageLine }}</span>
                 </span>
                 <!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
                 <span
