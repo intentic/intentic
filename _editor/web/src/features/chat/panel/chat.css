@@ -85,7 +85,7 @@
     padding: 0.125rem 0.25rem;
     color: var(--color-subtle);
     background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
-    transition: color 120ms ease;
+    transition: color var(--motion-hover);
 }
 .chat-prompt-toggle:hover {
     color: var(--color-content);
@@ -276,7 +276,7 @@
     white-space: nowrap;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: color 120ms ease-out;
+    transition: color var(--motion-hover);
 }
 .chat-spine-node:hover {
     color: var(--color-content);
@@ -328,7 +328,7 @@
     border-radius: 9999px;
     background: color-mix(in oklab, var(--wash-ink) var(--wash-depth), transparent);
     cursor: pointer;
-    transition: background-color 160ms ease-out;
+    transition: background-color var(--motion-hover);
 }
 .chat-spine-wash:hover {
     --wash-depth: 5%;
@@ -649,9 +649,9 @@
     cursor: pointer;
     border: 1px solid transparent;
     transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
+        background-color var(--motion-hover),
+        color var(--motion-hover),
+        border-color var(--motion-hover);
 }
 .chat-tab:hover {
     background: color-mix(in srgb, var(--color-content) 6%, transparent);
@@ -834,8 +834,8 @@
     color: var(--color-muted);
     cursor: pointer;
     transition:
-        background-color 0.15s,
-        color 0.15s;
+        background-color var(--motion-hover),
+        color var(--motion-hover);
 }
 .composer-ghost:hover {
     background: color-mix(in srgb, var(--color-content) 8%, transparent);
@@ -858,9 +858,9 @@
 .composer-toggle {
     border: 1px solid var(--color-line);
     transition:
-        background-color 0.15s,
-        border-color 0.15s,
-        color 0.15s;
+        background-color var(--motion-hover),
+        border-color var(--motion-hover),
+        color var(--motion-hover);
 }
 .composer-toggle.composer-active {
     border-color: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
@@ -906,8 +906,8 @@
     border-radius: var(--radius-sm);
     background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 10%, transparent));
     transition:
-        background-color 0.15s,
-        filter 0.15s;
+        background-color var(--motion-hover),
+        filter var(--motion-hover);
 }
 /* A lit rung sets --effort-rung-fill, so it keeps its colour here and only brightens; an unlit one takes the darker default. */
 .composer-effort-seg:hover::before {
@@ -947,8 +947,8 @@
     color: var(--color-primary-fill);
     cursor: pointer;
     transition:
-        background-color 0.15s,
-        opacity 0.15s;
+        background-color var(--motion-hover),
+        opacity var(--motion-hover);
 }
 .composer-send:hover {
     background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);

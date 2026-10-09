@@ -162,7 +162,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                     <Icon
                         v-if="!disabled"
                         name="chevron-right"
-                        class="shrink-0 text-subtle transition-transform group-hover:text-muted"
+                        class="shrink-0 text-subtle transition group-hover:text-muted"
                         :class="[chevronSize, open ? `rotate-90` : ``]"
                         aria-hidden="true"
                     />

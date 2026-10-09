@@ -304,8 +304,8 @@ onUnmounted(() => {
     justify-content: center;
     color: var(--color-muted);
     transition:
-        background-color 120ms ease,
-        color 120ms ease;
+        background-color var(--motion-hover),
+        color var(--motion-hover);
 }
 
 .window-control:hover {

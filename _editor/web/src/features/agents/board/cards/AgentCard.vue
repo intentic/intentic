@@ -504,7 +504,7 @@ const reviewCard = (): void => {
 // Hover fill is an ink tint, not `bg-overlay`: these glyphs sit ON the card.
 // A surface-named fill would vanish on a selected card (whose own fill is that overlay) and in the light scheme, where
 // overlay equals card.
-const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-content/10 hover:text-content`;
+const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-content/10 hover:text-content`;
 // Hidden until the card is hovered or one of them is focused, since at rest they are forty cards of glyphs; a phone has
 // no hover, so what it keeps of them (one ⋯, or a lone press) stays drawn, quieter than the ink around it.
 const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);

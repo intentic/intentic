@@ -291,9 +291,9 @@
 /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. */
     [data-skin="sanctum"] .p-button {
         transition:
-            box-shadow 0.18s ease-out,
-            background-color 0.18s ease-out,
-            border-color 0.18s ease-out;
+            box-shadow var(--motion-hover),
+            background-color var(--motion-hover),
+            border-color var(--motion-hover);
     }
 
     [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)) {

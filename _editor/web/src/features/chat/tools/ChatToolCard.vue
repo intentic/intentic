@@ -241,7 +241,7 @@ const openSubagent = (event: MouseEvent): void => {
             <button
                 v-if="agentTerminal && surface.watchTerminal"
                 type="button"
-                class="shrink-0 transition-opacity hover:text-content"
+                class="shrink-0 transition hover:text-content"
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
                 v-tooltip.top="t(`chat.words.watchTerminal`)"
                 :aria-label="t(`chat.words.watchTerminal`)"
@@ -253,7 +253,7 @@ const openSubagent = (event: MouseEvent): void => {
             <button
                 v-if="agentBrowser && surface.watchBrowser"
                 type="button"
-                class="shrink-0 transition-opacity hover:text-content"
+                class="shrink-0 transition hover:text-content"
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
                 v-tooltip.top="t(`chat.chatToolCard.watchBrowser`)"
                 :aria-label="t(`chat.chatToolCard.watchBrowser`)"

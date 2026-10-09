@@ -29,6 +29,9 @@ const accent = {
 
 const custom = {
     semantic: {
+        // Every Aura component's hover and focus fade (buttons, menu and list items, tabs) reads this one token; Aura's
+        // 0.2s made PrimeVue a beat slower than the app's own rows and chips. motion.css owns the figure.
+        transitionDuration: `var(--motion-quick)`,
         primary: ramp(`primary`),
         colorScheme: {
             light: {

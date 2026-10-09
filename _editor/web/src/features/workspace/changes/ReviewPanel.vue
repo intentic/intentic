@@ -909,9 +909,6 @@ const syncSummary = computed<string>(() => {
     const spread = syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repos`, { count: syncRepos.value.length }, syncRepos.value.length) : ``;
     return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
 });
-const syncRepoSpread = computed(() =>
-    syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repoCount`, { count: syncRepos.value.length }, syncRepos.value.length) : undefined,
-);
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
 // question, which is also why useChanges exports no one-repo push.
 
@@ -1123,16 +1120,14 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 >
                     {{ chipNotice }}
                 </span>
-                <!-- What the sync button can't carry: a branch with no upstream to count against, and how many repos the
-                     press spans. Context, not a reason, so it gives way to the buttons rather than wrapping them. -->
+                <!-- What the sync button can't carry: a branch with no upstream to count against. Context, not a reason, so
+                     it gives way to the buttons rather than wrapping them. How many repos a press spans is the button's
+                     tooltip's to say, not a line of its own. -->
                 <span
-                    v-else-if="outgoing === `offer` && ((behindTotal === 0 && aheadTotal === 0) || syncRepoSpread !== undefined)"
+                    v-else-if="outgoing === `offer` && behindTotal === 0 && aheadTotal === 0"
                     class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle"
                 >
-                    <span v-if="behindTotal === 0 && aheadTotal === 0" class="truncate whitespace-nowrap">
-                        {{ t(`workspace.reviewPanel.noUpstreamYet`) }}
-                    </span>
-                    <span v-if="syncRepoSpread !== undefined" class="truncate whitespace-nowrap">{{ syncRepoSpread }}</span>
+                    <span class="truncate whitespace-nowrap">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
                 </span>
                 <span v-else class="flex-1"></span>
                 <div class="ml-auto flex shrink-0 items-center gap-1">
@@ -1306,7 +1301,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
+                class="ui-chip min-w-0 max-w-full gap-1"
                 :class="[
                     originFilter === entry.id ? ['shrink', originHue(entry.id).chip] : 'shrink-0',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
@@ -1344,7 +1339,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <button
                 v-if="legend.yours > 0"
                 type="button"
-                class="ui-chip shrink-0 gap-1 transition-opacity"
+                class="ui-chip shrink-0 gap-1"
                 :class="originFilter === YOURS ? 'ui-chip-on' : originFilter !== undefined ? 'opacity-40' : ''"
                 :disabled="changes.actionBusy.value"
                 :aria-pressed="originFilter === YOURS"

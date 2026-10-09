@@ -1408,10 +1408,10 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
     border: 1px solid var(--rule);
     background: var(--plate);
     transition:
-        border-color 0.22s ease,
-        background-color 0.22s ease,
-        box-shadow 0.22s ease,
-        transform 0.22s ease;
+        border-color var(--motion-hover),
+        background-color var(--motion-hover),
+        box-shadow var(--motion-hover),
+        transform var(--motion-hover);
 }
 /* The plate with a little of the page's own metal worked into it, so the step is the same size in both dresses. */
 .rung:hover:not(:disabled) {
@@ -1454,7 +1454,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
     width: 0.5rem;
     height: 0.5rem;
     color: var(--ink-subtle);
-    transition: color 0.22s ease;
+    transition: color var(--motion-hover);
 }
 /* Second of the page's three ember spends: a glow mark, not a fill, the whole difference between chosen and not. */
 .rung-on .rung-name {

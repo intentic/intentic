@@ -223,7 +223,7 @@ watch(
                     />
                     <Icon
                         name="times"
-                        class="absolute rounded text-[0.6rem] opacity-0 transition-opacity hover:text-content"
+                        class="absolute rounded text-[0.6rem] opacity-0 transition hover:text-content"
                         :class="tab.kind === 'file' && isDirty(tab.path) ? 'group-hover:opacity-100' : 'group-hover:opacity-60'"
                     />
                 </span>

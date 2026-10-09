@@ -521,7 +521,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <button
                 v-if="editable"
                 type="button"
-                class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition-opacity hover:bg-overlay hover:text-content"
+                class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition hover:bg-overlay hover:text-content"
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
                 v-tooltip.right="{ title: t(`chat.chatMessageView.editMessageShort`), note: t(`chat.chatMessageView.replacesWhatFollows`) }"
                 :aria-label="t(`chat.words.editMessage`)"

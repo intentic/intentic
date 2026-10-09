@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
                         >
                             <Icon
                                 name="times"
-                                class="absolute rounded text-[0.6rem] opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                                class="absolute rounded text-[0.6rem] opacity-0 transition hover:text-content group-hover:opacity-60"
                             />
                         </span>
                     </div>

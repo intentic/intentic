@@ -60,7 +60,7 @@ watch(
                 :key="row.index"
                 :data-outline-row="row.index"
                 type="button"
-                class="block w-full cursor-pointer border-l py-1 pr-2 text-left text-xs leading-snug transition-[color,border-color] duration-[90ms] ease-out hover:text-content focus-visible:border-primary-500 focus-visible:text-content focus-visible:outline-none"
+                class="block w-full cursor-pointer border-l py-1 pr-2 text-left text-xs leading-snug transition-colors hover:text-content focus-visible:border-primary-500 focus-visible:text-content focus-visible:outline-none"
                 :class="row.index === active ? `border-link text-content` : `border-transparent text-subtle`"
                 :style="{ paddingLeft: inset(row.heading) }"
                 :aria-current="row.index === active ? `true` : undefined"

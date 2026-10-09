@@ -9770,7 +9770,6 @@
             "commitCount": "{count} commit | {count} commits",
             "thisBranch": "this branch",
             "whatAcrossRepos": "{what} across {count} repo | {what} across {count} repos",
-            "repoCount": "{count} repo | {count} repos",
             "unstageFrom": "Unstage {count} file from {origin} | Unstage {count} files from {origin}",
             "stageFrom": "Stage {count} file from {origin} | Stage {count} files from {origin}",
             "messageBeingWritten": "its commit message is being written",

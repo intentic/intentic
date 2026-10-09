@@ -298,9 +298,9 @@
         font-size: var(--text-base);
         line-height: var(--text-base--line-height);
         transition:
-            border-color 0.12s ease-out,
-            box-shadow 0.12s ease-out,
-            background-color 0.12s ease-out;
+            border-color var(--motion-hover),
+            box-shadow var(--motion-hover),
+            background-color var(--motion-hover);
     }
 
     @media (width >= 48rem) {
@@ -378,8 +378,8 @@
         border: 1px solid var(--ui-field-line);
         background: var(--color-canvas);
         transition:
-            border-color 0.12s ease-out,
-            box-shadow 0.12s ease-out;
+            border-color var(--motion-hover),
+            box-shadow var(--motion-hover);
     }
 
     .ui-field-shell:hover {

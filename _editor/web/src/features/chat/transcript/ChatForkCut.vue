@@ -248,7 +248,7 @@ const open = (event: Event): void => {
     <div class="relative z-[6] -mt-1 h-0">
         <button
             type="button"
-            class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
+            class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition hover:bg-overlay hover:text-content"
             :class="[
                 forks.length > 0 ? `text-link opacity-100` : `text-subtle`,
                 // Lit by a hover over the answer above it, its own hover or focus (`.chat-fork-mark` in chat.css).

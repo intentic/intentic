@@ -16,11 +16,19 @@
 @theme {
     /* The house curve: fast out of the gate, a long settle. Tailwind's `ease-smooth`. */
     --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    /* What a bare `transition`, `transition-colors` or `transition-opacity` runs on when no `duration-*`/`ease-*` names
+       its own: the hover's answer, on the house curve, rather than Tailwind's stock 150ms and its own curve. */
+    --default-transition-duration: var(--motion-quick);
+    --default-transition-timing-function: var(--ease-smooth);
 }
 
 :root {
     /* A hover's answer, a fold closing. */
     --motion-quick: 150ms;
+    /* THE HOVER FADE, as one shorthand value: `transition: background-color var(--motion-hover), color var(--motion-hover)`.
+       Every surface that takes a fill, an ink or an edge under the pointer fades into it on this, so a row, a chip, a
+       tab and a button all answer at the same pace; a hand-written 0.1s here and 0.2s there is what made them disagree. */
+    --motion-hover: var(--motion-quick) var(--ease-smooth);
     /* A surface arriving. */
     --motion-base: 200ms;
     /* A figure growing to its value: long enough for the eye to follow the bar to where it stops. */
@@ -52,6 +60,20 @@
         transition-duration: 0s !important;
         transition-delay: 0s !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/* A hover's fill fades in, never snaps, wherever it was written. A Tailwind `hover:bg-*` (or `hover:text-*`,
+   `hover:border-*`, and their `group-hover:` forms) on an element that names no transition of its own used to land on
+   the first frame; this gives every such element the hover fade. Zero specificity and the earliest layer, so any
+   `transition-*` the element does name wins outright — which is also the trap: `transition-opacity` or
+   `transition-transform` alone narrows the element to that one property and its hover fill snaps again. An element
+   that fades or turns AND takes a hover colour names `transition` (Tailwind's, which covers both), not the narrow one. */
+@layer base {
+    :where([class*="hover:bg-"], [class*="hover:text-"], [class*="hover:border-"]) {
+        transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+        transition-duration: var(--motion-quick);
+        transition-timing-function: var(--ease-smooth);
     }
 }
 

@@ -9203,7 +9203,6 @@
             "commitCount": "{count} commit | {count} commity | {count} commitów",
             "thisBranch": "ta gałąź",
             "whatAcrossRepos": "{what} w {count} repozytorium | {what} w {count} repozytoriach | {what} w {count} repozytoriach",
-            "repoCount": "{count} repozytorium | {count} repozytoria | {count} repozytoriów",
             "unstageFrom": "Usuń z indeksu {count} plik od „{origin}” | Usuń z indeksu {count} pliki od „{origin}” | Usuń z indeksu {count} plików od „{origin}”",
             "stageFrom": "Dodaj do indeksu {count} plik od „{origin}” | Dodaj do indeksu {count} pliki od „{origin}” | Dodaj do indeksu {count} plików od „{origin}”",
             "messageBeingWritten": "wiadomość commita jest w trakcie pisania",

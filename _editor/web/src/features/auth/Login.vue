@@ -325,7 +325,7 @@ watch(
     font-size: 0.75rem;
     color: var(--ink-subtle);
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: color var(--motion-hover);
 }
 .escape:hover {
     color: var(--ink);

@@ -377,8 +377,8 @@
     font-size: var(--text-2xs);
     color: var(--color-muted);
     transition:
-        color 0.15s,
-        border-color 0.15s;
+        color var(--motion-hover),
+        border-color var(--motion-hover);
 }
 .md-code-copy:hover {
     color: var(--color-content);

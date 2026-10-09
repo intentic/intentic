@@ -479,7 +479,7 @@ defineExpose({ focusTree });
                                 :key="action.id"
                                 :name="action.icon"
                                 aria-hidden="true"
-                                class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
+                                class="shrink-0 cursor-pointer text-2xs text-subtle transition hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
                                 :class="restingClass(action, row.entry.path)"
                                 v-tooltip.right="action.tip ?? action.tooltip"
                                 @click.stop="runAction(row.entry, action)"

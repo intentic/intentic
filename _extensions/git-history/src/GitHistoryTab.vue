@@ -633,7 +633,7 @@ const runPending = async (): Promise<void> => {
                 <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
                     <button
                         type="button"
-                        class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left transition-opacity"
+                        class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left"
                         :class="{ 'ui-row-select-on': commit.sha === openSha, 'opacity-40': dimmed(row.color) }"
                         :style="{ height: `${ROW_H}px` }"
                         @click="toggle(commit.sha)"

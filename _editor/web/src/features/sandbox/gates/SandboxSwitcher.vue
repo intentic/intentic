@@ -550,13 +550,13 @@ const confirmRemove = async (): Promise<void> => {
                     name="undo"
                     @click.stop="askRollBack(option)"
                     v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.rollBack`), note: t(`sandbox.sandboxSwitcher.undoLastUpdate`) }"
-                    class="shrink-0 text-xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                    class="shrink-0 text-xs opacity-0 transition hover:text-content group-hover:opacity-60"
                 />
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
                     v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                    class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
+                    class="shrink-0 text-xs opacity-0 transition hover:text-danger group-hover:opacity-60"
                 />
             </button>
 
@@ -594,7 +594,7 @@ const confirmRemove = async (): Promise<void> => {
                         name="trash"
                         @click.prevent.stop="askRemove(option)"
                         v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                        class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
+                        class="shrink-0 text-xs opacity-0 transition hover:text-danger group-hover:opacity-60"
                     />
                 </RouterLink>
             </template>

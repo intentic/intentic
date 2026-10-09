@@ -136,7 +136,7 @@
 @layer components {
     .ui-row-select {
         cursor: pointer;
-        transition: background-color 0.1s;
+        transition: background-color var(--motion-hover);
     }
 
 /* Light re-answers this in the accent, for the reason `--ui-hover-wash` gives: 5% of the ink on paper is 1.06:1 against the card under it. */
@@ -200,9 +200,10 @@
         background: color-mix(in srgb, var(--color-content) 6%, transparent);
         cursor: pointer;
         transition:
-            background-color 0.12s,
-            color 0.12s,
-            border-color 0.12s;
+            background-color var(--motion-hover),
+            color var(--motion-hover),
+            border-color var(--motion-hover),
+            opacity var(--motion-hover);
     }
 
 /* NOT the accent wash the rail and the rows take in light, and the reason is the chip's own resting plate: it already carries 6% of the ink. */
@@ -269,7 +270,7 @@
         min-height: var(--ui-doc-min);
         max-height: var(--ui-doc-max);
         overflow: auto;
-        transition: background-color 0.12s ease-out;
+        transition: background-color var(--motion-hover);
     }
 
 /* A BORDERLESS SURFACE LIGHTS ITS GROUND, because it has no edge to move — `ui-field-lit`'s rule, applied to the one
@@ -284,7 +285,7 @@
 /* Search rows share the filter-field layout. */
 @layer components {
     .ui-search-row {
-        transition: background-color 0.12s ease-out;
+        transition: background-color var(--motion-hover);
     }
 
     .ui-search-row:focus-within {
@@ -304,7 +305,7 @@
         scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
 /* The .scrollbar-stable gutter, baked in rather than opted into — here it is what lets the whisper stay a whisper. */
         scrollbar-gutter: stable;
-        transition: scrollbar-color 0.15s ease-out;
+        transition: scrollbar-color var(--motion-hover);
     }
 
     .ui-softscroll:hover {

@@ -402,7 +402,7 @@ html[data-frameless] .entry {
         color: var(--ink);
         background: rgba(20, 14, 10, 0.72);
         border-image-source: var(--house-cartouche);
-        transition: color 0.22s ease;
+        transition: color var(--motion-hover, 150ms ease-out);
     }
 /* The lit frame, stacked and faded in. */
     .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link))::before {

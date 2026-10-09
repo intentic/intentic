@@ -262,8 +262,8 @@ const fit = (): void => void flow.value?.fitView(FIT);
     box-shadow: 0 0 0 2px var(--color-canvas);
     opacity: 0;
     transition:
-        opacity 120ms,
-        background-color 120ms;
+        opacity var(--motion-hover),
+        background-color var(--motion-hover);
 }
 .dag-editor .group\/node:hover .vue-flow__handle,
 .dag-editor .vue-flow__handle.connectionindicator:hover {

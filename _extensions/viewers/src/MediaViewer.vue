@@ -605,8 +605,8 @@ watch(
     border-radius: 0.375rem;
     font-size: 0.8rem;
     transition:
-        color 120ms,
-        background-color 120ms;
+        color var(--motion-hover),
+        background-color var(--motion-hover);
 }
 .media-btn:hover {
     background-color: color-mix(in srgb, currentColor 15%, transparent);
