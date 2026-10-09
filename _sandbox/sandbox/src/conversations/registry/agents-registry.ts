@@ -224,11 +224,12 @@ const reportedFailure = (
 
 // The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
 // menu and the chat's control read them together.
-const postures = (held: Postures): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy">> => ({
+const postures = (held: Postures): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy" | "memoryPolicy">> => ({
     ...opt("autoLand", held.autoLand),
     ...opt("limitPolicy", held.limit),
     ...opt("outagePolicy", held.outage),
     ...opt("stopPolicy", held.stopped),
+    ...opt("memoryPolicy", held.memory),
 });
 
 // How many different emoji one conversation may carry. Bounded by kinds, not by presses: a hundred people agreeing is
@@ -612,7 +613,7 @@ export interface AgentsRegistry {
     // Set/clear the autoLand override (null inherits the sandbox setting); read at turn completion, so a mid-turn flip
     // holds only this turn's work.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
-    // Same grammar as `setAutoLand`, once for all three endings: read by the resume pass after the turn has already
+    // Same grammar as `setAutoLand`, once for every ending: read by the resume pass after the turn has already
     // died, so arming it mid-unwind is the ordinary case, and a limit's press is often made on a card whose turn died
     // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read.
     // `effective` is the answer the pass will now read (this one, or the sandbox's it inherits on null); a held limit's
@@ -1372,7 +1373,7 @@ export const createFleet = (
                 return undefined;
             }
             // Same as `setAutoLand`: null strips the key, since absent is the only state that means inherit. Only the
-            // named ending's key moves; the other two carry through untouched.
+            // named ending's key moves; the others carry through untouched.
             return amend(id, (entry) => {
                 const { [ending]: _cleared, ...held } = entry.postures;
                 return {

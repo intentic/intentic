@@ -10,6 +10,7 @@ import {
     LimitPolicySchema,
     profileOf,
     RetryPolicySchema,
+    RoomPolicySchema,
     SessionOwnerSchema,
     type TurnProfile,
     TurnProofSchema,
@@ -136,6 +137,7 @@ const PosturesSchema = z.object({
     limit: LimitPolicySchema.optional(),
     outage: RetryPolicySchema.optional(),
     stopped: RetryPolicySchema.optional(),
+    memory: RoomPolicySchema.optional(),
 });
 export type Postures = z.infer<typeof PosturesSchema>;
 

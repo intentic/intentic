@@ -1,8 +1,9 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { IconStub } from "@intentic/ui/testing";
-import { computed, createApp, h, nextTick } from "vue";
+import { computed, createApp, h, nextTick, ref } from "vue";
 import { type AgentStanding, NO_ATTENTION } from "../../../../agents/fleet/agentStatus";
+import * as agentsOriginal from "../../../../agents/fleet/useAgents";
 import * as sessionsOriginal from "../../../run/useChat-sessions";
 
 // What waits on the reader, pinned over the composer: the card the agent is parked on, before and after this window drew
@@ -10,6 +11,15 @@ import * as sessionsOriginal from "../../../run/useChat-sessions";
 
 const retryHydrate = jest.fn();
 jest.mock("../../../run/useChat-sessions", () => ({ ...sessionsOriginal, retryHydrate }));
+
+// This conversation's own answer to the memory wall, as the roster carries it; absent, the wall's default (send once
+// memory frees up) answers, since the sandbox's settings are not loaded here.
+const memoryOverride = ref<`wait` | `resend` | undefined>();
+const realUseAgents = agentsOriginal.useAgents;
+jest.mock("../../../../agents/fleet/useAgents", () => ({
+    ...agentsOriginal,
+    useAgents: () => ({ ...realUseAgents(), agentById: () => (memoryOverride.value === undefined ? undefined : { memoryPolicy: memoryOverride.value }) }),
+}));
 
 const { Conversation } = await import("../../../session/conversation");
 const { conversationView, PANE_VIEW } = await import("../../useChat-view");
@@ -44,6 +54,7 @@ const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement) => {
 };
 
 afterEach(() => {
+    memoryOverride.value = undefined;
     unmount?.();
     unmount = undefined;
     retryHydrate.mockClear();
@@ -141,7 +152,7 @@ describe(`a message held for low memory`, () => {
         const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE });
         await nextTick();
 
-        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
+        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Send anyway`, `Wait`]]);
         bar.press(`Send anyway`);
         // Only what the hold kept, as the held line's own press: a booking beside it stays on its time.
         expect(resume.mock.calls).toEqual([[[`m-1`]]]);
@@ -149,6 +160,21 @@ describe(`a message held for low memory`, () => {
         bar.press(`Wait`);
         await nextTick();
         expect(bar.rows()).toEqual([]);
+    });
+
+    // Where the chat's answer is to wait for a press, the bar promises nothing goes by itself.
+    it(`says only held where the chat waits for a press`, async () => {
+        memoryOverride.value = `wait`;
+        const chat = new Conversation(`c1`);
+        chat.queue.value = {
+            items: [{ id: `m-1`, text: `make it pass antivirus`, voice: `person`, queuedAt: 1_000, revision: 1 }],
+            revision: 1,
+            paused: `refused`,
+        };
+        const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE });
+        await nextTick();
+
+        expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
     });
 
     // The held message's own line under it says the same hold with the same press: on screen, it is the one, and the bar
@@ -183,7 +209,7 @@ describe(`a message held for low memory`, () => {
             scroller.dispatchEvent(new Event(`scroll`));
             await new Promise((done) => requestAnimationFrame(() => done(undefined)));
             await nextTick();
-            expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB)`, `Send anyway`, `Wait`]]);
+            expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Send anyway`, `Wait`]]);
         } finally {
             scroller.remove();
         }

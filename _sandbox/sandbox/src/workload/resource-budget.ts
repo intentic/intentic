@@ -96,6 +96,10 @@ export interface ResourceBudget {
     // Whether any reading in the last few minutes had no room for work nobody waits on: why a runtime died, read off
     // what the sampler already saw rather than a verdict taken now.
     readonly shortRecently: (windowMs?: number) => Promise<boolean>;
+    // Since when (ms) every reading has had room for a person's turn, unbroken up to one taken now; undefined while that
+    // one has none. How long memory has stayed free, which a hold waiting for room reads before it lets anything go
+    // (turn-resume.ts, releaseRoomHolds): one good sample between two short ones is not memory calming down.
+    readonly roomSince: () => Promise<number | undefined>;
     readonly stop: () => void;
 }
 
@@ -247,8 +251,8 @@ export const createResourceBudget = ({
         return judged;
     };
 
-    const personHasRoom = (taken: { readonly at: number; readonly reading: MemoryReading }): boolean =>
-        judge(taken.reading, { workload: "agentRuntime", attended: true, reservedBytes: localHeld(taken.at) }).verdict === "run";
+    const personHasRoom = (taken: { readonly at: number; readonly reading: MemoryReading }, reservedBytes = localHeld(taken.at)): boolean =>
+        judge(taken.reading, { workload: "agentRuntime", attended: true, reservedBytes }).verdict === "run";
 
     const admit = async (request: AdmitRequest): Promise<Admission> => {
         const startedAt = now();
@@ -325,6 +329,24 @@ export const createResourceBudget = ({
                     taken.at >= at - windowMs &&
                     judge(taken.reading, { workload: "agentRuntime", attended: false, reservedBytes: 0 }).verdict !== "run",
             );
+        },
+        // Every reading is judged against what admitted work holds now, so work let go a moment ago counts against the
+        // whole run of readings rather than only the newest.
+        roomSince: async () => {
+            const taken = await reading();
+            const reserved = localHeld(taken.at);
+            if (!personHasRoom(taken, reserved)) {
+                return undefined;
+            }
+            let since = taken.at;
+            for (let index = recent.length - 1; index >= 0; index -= 1) {
+                const earlier = recent[index];
+                if (earlier === undefined || !personHasRoom(earlier, reserved)) {
+                    break;
+                }
+                since = Math.min(since, earlier.at);
+            }
+            return since;
         },
         stop: () => clearInterval(timer),
     };

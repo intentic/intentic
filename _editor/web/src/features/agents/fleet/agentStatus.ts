@@ -1200,6 +1200,15 @@ export const limitCorner = (agent: AgentStanding, now: number, answer?: TurnBrea
     return { kind: `back`, clock, text: limitBack(clock), ...(answer !== undefined && answer !== `wait` ? { unbooked: true as const } : {}) };
 };
 
+/**
+ * A low-memory hold's corner, the limit's twin (limitCorner): once the conversation's answer to the memory wall is to send
+ * it when memory frees up, the card says it goes by itself, so a card resting in Attention reads as waiting, not stuck.
+ * Only while the person's words wait in its queue, which is the hold the card can see; undefined on a hold left for a press.
+ */
+export const memoryCorner = (agent: AgentStanding, answer: TurnBreakPolicy): string | undefined =>
+    // A refusal's hold stands only while a message it holds still waits (conversation-queue.ts, `next`).
+    memoryHeld(agent) && agent.queue?.paused === `refused` && answer !== `wait` ? t(`agents.agentCard.sendsWhenRoom`) : undefined;
+
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One
 // definition, since the chat's own watch row asks the same question about the same conversation.
 export const soonestWatch = (agent: AgentStanding): AgentWatch | undefined =>

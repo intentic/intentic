@@ -22,6 +22,7 @@ import {
     limitBack,
     limitCorner,
     limitCountdown,
+    memoryCorner,
     memoryHeld,
     onlyOwnerCanAnswer,
     promptHeldJob,
@@ -1002,6 +1003,16 @@ describe("a message held for low memory", () => {
         expect(attentionReason(broken)).toBe(`Error`);
         expect(agentStandingMeta(broken)).toEqual(agentStatusMeta(`error`));
         expect(memoryHeld({ status: `idle`, failureCode: `sandbox-memory-low` })).toBe(false);
+    });
+
+    // The limit's twin: a card whose words go by themselves once memory frees up says so, rather than reading stuck.
+    it("says in its corner that the words go by themselves, only while they wait and the answer is to send", () => {
+        const waiting: AgentStanding = { ...held, queue: { paused: `refused` } };
+        expect(memoryCorner(waiting, `resend`)).toBe(`sends when memory frees`);
+        expect(memoryCorner(waiting, `wait`)).toBeUndefined();
+        // Nothing of a person's waits in its queue: the corner can promise nothing about it.
+        expect(memoryCorner(held, `resend`)).toBeUndefined();
+        expect(memoryCorner({ status: `error`, attention: none, failureCode: `harness-crash`, queue: { paused: `refused` } }, `resend`)).toBeUndefined();
     });
 });
 

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
-import { LimitPolicySchema, RetryPolicySchema } from "./turn-break.js";
+import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
@@ -451,6 +451,11 @@ export const SandboxSettingsSchema = z.object({
     // The posture that used to live only in a browser tab; moving it here is what lets it fire with nothing open.
     stopPolicy: RetryPolicySchema.default("wait").describe(
         "What happens to a turn that stopped short with nothing to repair — a hung runtime, a crashed harness. `wait` holds it for a press. `retry` re-runs the held turn on a short ladder, standing down after three tries that got nowhere rather than looping forever.",
+    ),
+    // The one ending that defaults to going by itself: nothing ran, so sending it once there is room spends nothing twice,
+    // and it is what the person meant when they pressed Send.
+    memoryPolicy: RoomPolicySchema.default("resend").describe(
+        "What happens to a message the sandbox held because it was short of memory: nothing ran, so nothing was spent. `resend` sends it by itself once memory has stayed free for a while, one held conversation at a time. `wait` holds it until somebody presses Send anyway. The sandbox-wide default; any one conversation can say otherwise.",
     ),
     limitMoveCarryUnder: z
         .number()

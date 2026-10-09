@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
-import { messageOr, useNow } from "@intentic/ui/async";
+import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
@@ -10,7 +10,7 @@ import { modelLabelFor, modelOptionsFor } from "../accounts/providerCatalog";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
 import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
-import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/turnBreak";
+import TurnBreakQuestion from "./TurnBreakQuestion.vue";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
@@ -38,7 +38,7 @@ const { conversation, connected, pickUp, provider, model, account, accounts, sel
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
-const { agentById, setBreakPolicy } = useAgents();
+const { agentById } = useAgents();
 
 // The clock runs only while something on screen counts down: a reset, a breaker's next try, a booked rung.
 const counting = computed(() => props.visible && pickUp.value !== undefined && (pickUp.value.readyAt !== undefined || pickUp.value.nextAt !== undefined));
@@ -126,67 +126,31 @@ const fallback = computed(() =>
 // Said only where another account is connected, the one case the move would have been offered.
 const outdated = computed(() => ending.value === `limit` && accountsOutdated.value && accounts.value.length > 1);
 
-// The one question, and this conversation's current answer to it. Read through the same fold every other surface uses
-// (this agent's override, else the sandbox-wide policy), so the card, the settings row and this control cannot
-// disagree about what is armed.
-const answers = computed(() =>
-    ending.value === undefined || !isTurnBreak(ending.value)
-        ? []
-        : breakAnswers(ending.value, fallback.value === undefined ? undefined : fallbackLabel(fallback.value)),
-);
-// Each pill's hover: its own name and the one consequence that tells it from the others.
-const answerOptions = computed(() =>
-    answers.value.map((answer) => ({ label: answer.label, value: answer.value, icon: answer.icon, title: { title: answer.label, note: answer.brief } })),
-);
-
-// Held while a write is in flight, so the pill moves under the finger rather than after the round trip; cleared either
-// way, so a refused write snaps back to what the daemon actually holds.
-const pending = ref<TurnBreakPolicy>();
-// Why the last answer didn't save; about that question only, so a new ending starts without it.
-const answerRefused = ref<string>();
-watch(ending, () => {
-    answerRefused.value = undefined;
-});
-const answer = computed<TurnBreakPolicy>({
-    get: () =>
-        pending.value ??
-        (ending.value === undefined || !isTurnBreak(ending.value)
-            ? `wait`
-            : effectivePolicy(ending.value, agentById(conversation.value.conversationId), settings.value)),
-    set: (next) => void choose(next),
-});
-const choose = async (next: TurnBreakPolicy): Promise<void> => {
-    const wall = ending.value;
-    if (wall === undefined || !isTurnBreak(wall) || !reachable.value) {
-        return;
-    }
-    pending.value = next;
-    answerRefused.value = undefined;
-    try {
-        // Writing the sandbox's own answer clears the override instead of freezing a copy of a default this
-        // conversation would then quietly stop following.
-        await setBreakPolicy(conversation.value.conversationId, wall, next === sandboxPolicy(wall, settings.value) ? null : next);
-        // The outage is the one ending with a second party already retrying it: this window has to start (or stop)
-        // watching for the run the daemon brings back, or a resumed turn streams into nothing.
-        conversation.value.failures.watchOutage(next === `retry`);
-        // The daemon books a move only as a refusal lands, so choosing it afterwards would otherwise just leave the turn
-        // waiting for the reset under a pill that says "Move": the answer promises a move at once, so this one moves now,
-        // keeping the session by the daemon's own rule (sibling-account.ts bookLimitMove).
-        if (next === `move` && wall === `limit` && fallback.value !== undefined && pickUp.value?.held?.moving === undefined) {
-            void continueOnFallback(carriesOnMove.value);
-        }
-    } catch (error) {
-        // Left as it stands: a control that moved on a failed write would claim an automation nobody armed. The snap
-        // back alone is easy to miss, so the card says why.
-        answerRefused.value = messageOr(error, t(`chat.chatContinueStrip.answerNotSaved`));
-    } finally {
-        pending.value = undefined;
-    }
-};
+// The one question, asked through the control every wall shares (TurnBreakQuestion): a flagged turn has none, since the
+// person picks each time.
+const breakWall = computed(() => (ending.value === undefined || !isTurnBreak(ending.value) ? undefined : ending.value));
+const fallbackName = computed(() => (fallback.value === undefined ? undefined : fallbackLabel(fallback.value)));
 
 // What that answer will actually do, and when. Absent while the answer is `wait`, where the selected pill has already
 // said it and a line repeating it is the second strip all over again.
-const nextLine = computed(() => (pickUp.value === undefined ? undefined : pickUpNext(pickUp.value, answer.value, now.value)));
+const describeNext = (policy: TurnBreakPolicy): string | undefined => (pickUp.value === undefined ? undefined : pickUpNext(pickUp.value, policy, now.value));
+
+// What only this card can do once an answer is saved.
+const chosen = (next: TurnBreakPolicy): void => {
+    const wall = breakWall.value;
+    if (wall === undefined) {
+        return;
+    }
+    // The outage is the one ending with a second party already retrying it: this window has to start (or stop) watching
+    // for the run the daemon brings back, or a resumed turn streams into nothing.
+    conversation.value.failures.watchOutage(next === `retry`);
+    // The daemon books a move only as a refusal lands, so choosing it afterwards would otherwise just leave the turn
+    // waiting for the reset under a pill that says "Move": the answer promises a move at once, so this one moves now,
+    // keeping the session by the daemon's own rule (sibling-account.ts bookLimitMove).
+    if (next === `move` && wall === `limit` && fallback.value !== undefined && pickUp.value?.held?.moving === undefined) {
+        void continueOnFallback(carriesOnMove.value);
+    }
+};
 
 // The only control here that changes whether a press can work, rather than when: reopens the account's five-hour
 // window on demand (once a week), leaving the weekly pool alone. Asked about the conversation's own account pick
@@ -364,21 +328,15 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
             </div>
         </div>
         <!-- The one question. Exactly one answer is selected, so nothing on this card can promise two automations. -->
-        <div v-if="answerOptions.length > 1" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span class="shrink-0 text-subtle">{{ t(`chat.turnBreak.next`) }}</span>
-            <SegmentedControl
-                v-model="answer"
-                :options="answerOptions"
-                size="xs"
-                :wrap="true"
-                :aria-label="t(`chat.turnBreak.nextQuestion`)"
-                class="shrink-0"
-                :class="{ 'pointer-events-none opacity-60': !reachable || !connected }"
-            />
-            <!-- What that answer does, and when: one clock, stated once, on the line the answer sits on. -->
-            <span v-if="nextLine !== undefined" class="min-w-0 flex-1 text-subtle">{{ nextLine }}</span>
-        </div>
-        <span v-if="answerRefused !== undefined" role="alert" class="text-2xs text-danger">{{ answerRefused }}</span>
+        <TurnBreakQuestion
+            v-if="breakWall !== undefined"
+            :ending="breakWall"
+            :conversation-id="conversation.conversationId"
+            :account="fallbackName"
+            :describe="describeNext"
+            :disabled="!connected"
+            @chosen="chosen"
+        />
         <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
         <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->

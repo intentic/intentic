@@ -58,7 +58,8 @@
             "couldntSendLandRequest": "Nie udało się wysłać prośby o scalenie.",
             "askedToLand": "{name} prosi o scalenie tego",
             "couldntSendAgain": "Nie udało się wysłać tego ponownie.",
-            "couldntRename": "Nie udało się zmienić nazwy agenta."
+            "couldntRename": "Nie udało się zmienić nazwy agenta.",
+            "sendsWhenRoom": "wyśle, gdy zwolni się pamięć"
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",
@@ -3392,7 +3393,13 @@
             "whenNear": "{wait}",
             "resetUnknown": "czas odnowienia nieznany",
             "goesNever": "Nic nie wyśle tego samo: dostawca nie podał czasu odnowienia. Kontynuuj próbuje ponownie.",
-            "coolingDown": "Kontynuuj będzie dostępne za minutę"
+            "coolingDown": "Kontynuuj będzie dostępne za minutę",
+            "memoryEnding": "Mało pamięci w sandboxie",
+            "resendMemory": "Wyślij, gdy zwolni się pamięć",
+            "resendMemoryBrief": "Wyśle, gdy zwolni się pamięć",
+            "resendMemoryNote": "Sama wyśle wiadomość, gdy pamięć sandboxa pozostanie wolna przez pół minuty, po jednym wstrzymanym czacie naraz.",
+            "waitMemoryNote": "Nic nie zostanie wysłane za Ciebie. Wiadomość czeka tutaj, aż ktoś kliknie „Wyślij mimo to”.",
+            "goesWhenRoom": "Ruszy sama, gdy zwolni się pamięć"
         },
         "chatWaitingBar": {
             "planWaiting": "Plan czeka na Twoją zgodę",
@@ -3407,7 +3414,9 @@
             "heldMemory": "Wstrzymane: w sandboxie kończy się pamięć",
             "heldMemoryShare": "Wstrzymane: w sandboxie kończy się pamięć ({share})",
             "wait": "Poczekaj",
-            "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć."
+            "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć.",
+            "sendsWhenRoom": "wyśle się, gdy zwolni się pamięć",
+            "waitHintRoom": "Wyśle się po zwolnieniu pamięci"
         },
         "sendLater": {
             "title": "Wyślij później",
@@ -4213,7 +4222,8 @@
             "keepWarmMinTokensLabel": "Minimalny kontekst, w tokenach",
             "keepWarmReserve": "Zostaw tyle limitu wolnego",
             "keepWarmReserveNote": "Odświeżanie ustaje, gdy którykolwiek limit zużywany przez model konta jest pełniejszy niż 100% minus ta wartość.",
-            "keepWarmReserveLabel": "Wolny limit, w procentach"
+            "keepWarmReserveLabel": "Wolny limit, w procentach",
+            "memoryPolicyNote": "Co się dzieje z wiadomością, którą sandbox wstrzymał, bo kończyła się pamięć. Nic się nie uruchomiło, więc wysłanie jej po zwolnieniu pamięci niczego nie wydaje dwa razy."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Nie udało się odczytać, co deklarują repozytoria.",

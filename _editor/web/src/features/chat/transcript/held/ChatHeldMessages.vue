@@ -2,7 +2,9 @@
 import { Button, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../panel/useChat-view";
+import { memoryNext } from "../../run/turnBreak";
 import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
@@ -11,7 +13,7 @@ import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
 import { sendAnywayTip } from "./memoryTip";
 
-/* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
+/* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 
 defineProps<{
     // The quick bar's composer, with no transcript above it: each message on one line (ChatHeldBubble).
@@ -19,7 +21,7 @@ defineProps<{
 }>();
 
 const t = useT();
-const { waiting, streaming, resumeQueue, bookedGroups } = usePaneView();
+const { conversation, waiting, streaming, resumeQueue, bookedGroups } = usePaneView();
 const { held, notice, reason, detail } = useHeldQueue();
 
 // The one press, worded for what it overrides: a warning it goes past, a refusal it tries again, a stop it undoes. All
@@ -62,6 +64,11 @@ const press = computed((): HeldPress => {
                     <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
                 </span>
             </ChatHeldStatus>
+            <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip): wait for the
+                 press, or send it by itself once memory has stayed free for a while. -->
+            <div v-if="reason === `memory`" class="flex flex-col gap-1 text-2xs text-muted" :class="compact ? `items-start` : `items-end`">
+                <TurnBreakQuestion ending="memory" :conversation-id="conversation.conversationId" :describe="memoryNext" :end="!compact" />
+            </div>
         </template>
         <ChatHeldBooking v-for="group in bookedGroups" :key="group.ids.join(` `)" :group="group" :compact="compact" />
     </div>

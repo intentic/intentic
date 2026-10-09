@@ -3,7 +3,7 @@ import { LandingDeliverySchema } from "./project-delivery.js";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
-import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
+import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
 import { AgentNeedSchema } from "./needs.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
@@ -362,6 +362,7 @@ export const AgentSummarySchema = z.object({
     limitPolicy: LimitPolicySchema.optional(),
     outagePolicy: RetryPolicySchema.optional(),
     stopPolicy: RetryPolicySchema.optional(),
+    memoryPolicy: RoomPolicySchema.optional(),
     // A collaborator's ask to land (collaborators can't merge themselves); cleared by whichever merge or discard
     // answers it.
     landRequested: z
@@ -907,9 +908,11 @@ export const AgentUnsentSchema = z.object({
 // verbs is how the surfaces drifted apart in the first place.
 export const AgentBreakPolicySchema = z.object({
     id: z.string().min(1).describe("Which conversation."),
-    ending: TurnBreakSchema.describe("Which wall this answers for: a spent usage limit, a provider outage, or a turn that stopped short."),
+    ending: TurnBreakSchema.describe(
+        "Which wall this answers for: a spent usage limit, a provider outage, a turn that stopped short, or a message the sandbox held because it was short of memory.",
+    ),
     policy: TurnBreakPolicySchema.nullable().describe(
-        "What happens next for that ending. `wait` holds the turn for a press; `retry` re-runs it on a bounded ladder (outage, stop); `resend` sends it again at the published reset and `move` also tries another account with room (limit only). An answer the ending does not allow is refused. Null clears the override and goes back to following the sandbox-wide policy, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
+        "What happens next for that ending. `wait` holds the turn for a press; `retry` re-runs it on a bounded ladder (outage, stop); `resend` sends it again at the published reset (limit) or once memory frees up (memory), and `move` also tries another account with room (limit only). An answer the ending does not allow is refused. Null clears the override and goes back to following the sandbox-wide policy, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
     ),
 });
 export const AgentFileDiffQuerySchema = z.object({

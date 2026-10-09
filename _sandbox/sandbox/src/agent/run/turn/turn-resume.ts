@@ -235,7 +235,16 @@ export const breakPolicyFor = async (
 // The sandbox-wide answer, which a conversation with no answer of its own inherits.
 export const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, ending: TurnBreak): Promise<TurnBreakPolicy> => {
     const settings = await services.sandboxSettings.get();
-    return ending === "limit" ? settings.limitPolicy : ending === "outage" ? settings.outagePolicy : settings.stopPolicy;
+    switch (ending) {
+        case "limit":
+            return settings.limitPolicy;
+        case "outage":
+            return settings.outagePolicy;
+        case "memory":
+            return settings.memoryPolicy;
+        default:
+            return settings.stopPolicy;
+    }
 };
 
 // `fresh` drops a session that holds only one unanswered message, for a record-seeded handoff instead of replaying
@@ -432,7 +441,8 @@ const fireAuthResume: Rung["fire"] = async (services, held) => {
     }
 };
 
-// A door hold has no rung: whether a turn goes past the wall that stopped it is a person's call, not a clock's.
+// A door hold has no rung: whether a turn goes past the wall that stopped it is a person's call, not a clock's. The one
+// door a moment's wait clears by itself, low memory, is let go on its own answer once there is room (releaseRoomHolds).
 const RUNGS: { readonly [R in HeldReason]?: Rung } = {
     // On no policy; the deadline comes before the in-flight gate, since a wedged attempt is exactly what it must catch.
     auth: {
@@ -584,6 +594,70 @@ const releaseBooked = async (services: Services, now: number): Promise<void> => 
     }
 };
 
+// How long memory must stay free before a hold waiting for room lets anything go: one good reading between two short ones
+// is not memory calming down, and a turn let go into it is refused again, with a second notice in its chat.
+export const ROOM_SETTLE_MS = 30_000;
+
+// What a low-memory refusal left waiting: a person's words, held in the conversation's queue (turn-admission.ts,
+// handBack), or a turn the sandbox kept whole at the door (`door`), and since when.
+type RoomHold =
+    | { readonly conversationId: string; readonly since: number; readonly kind: "queue" }
+    | { readonly conversationId: string; readonly since: number; readonly kind: "door"; readonly held: HeldRecord };
+
+// Whether the turn a conversation last tried was turned away because the sandbox was short of memory: the one refusal at
+// the door that a moment's wait clears by itself. The card reads the same ending (agentStatus.ts, memoryHeld).
+const memoryRefused = (services: Pick<Services, "agents">, conversationId: string): boolean => {
+    const ending = services.agents.entry(conversationId)?.ending;
+    return ending?.kind === "failed" && ending.code === "sandbox-memory-low";
+};
+
+// Every low-memory hold, longest waiting first, one per conversation.
+const roomHolds = (services: Pick<Services, "agents" | "conversations">): readonly RoomHold[] => {
+    const queues = services.conversations.refused().map(({ conversationId, since }): RoomHold => ({ conversationId, since, kind: "queue" }));
+    const doors = services.conversations
+        .stranded()
+        .flatMap(({ conversationId, record }): RoomHold[] =>
+            record.reason === "door" && !record.fired ? [{ conversationId, since: record.recordedAt, kind: "door", held: record }] : [],
+        );
+    const held = [...queues, ...doors].filter((hold) => memoryRefused(services, hold.conversationId)).sort((a, b) => a.since - b.since);
+    return held.filter((hold, index) => held.findIndex((other) => other.conversationId === hold.conversationId) === index);
+};
+
+// Lets one low-memory hold go, once memory has stayed free for ROOM_SETTLE_MS, and only where the conversation's answer to
+// the memory wall is to send it then. One a pass, longest waiting first: the next is judged on a reading that counts the
+// room the first one took (resource-budget.ts reservations), where letting them all go into one good reading would have
+// every one of them refused again at once. Its words go out as the ordinary turn they would have been; the sandbox's
+// kept turn runs as itself, as its press would run it.
+const releaseRoomHolds = async (services: Services, now: number): Promise<void> => {
+    const holds = roomHolds(services);
+    if (holds.length === 0) {
+        return;
+    }
+    let next: RoomHold | undefined;
+    for (const hold of holds) {
+        if (breakArmed(await breakPolicyFor(services, hold.conversationId, "memory"))) {
+            next = hold;
+            break;
+        }
+    }
+    if (next === undefined) {
+        return;
+    }
+    const since = await services.resources.roomSince();
+    if (since === undefined || now - since < ROOM_SETTLE_MS) {
+        return;
+    }
+    const { conversationId } = next;
+    services.logger.info({ conversationId, kind: next.kind, waitedMs: now - next.since }, "resume pass: memory freed up, a held message goes out");
+    if (next.kind === "door") {
+        await dispatch(false)(services, next.held, undefined, now);
+        return;
+    }
+    const ids = waitingOf(services.conversations.queued(conversationId)).map((item) => item.id);
+    services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
+    await services.turns.drain(conversationId);
+};
+
 /** The soonest instant a scheduled send is booked for (ms), or 0 for none: a wake the machine must not sleep through. */
 export const nextBookedSendAt = (services: Pick<Services, "conversations">): number => {
     const instants = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
@@ -612,6 +686,11 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
             }
         }
         await releaseBooked(services, now);
+        try {
+            await releaseRoomHolds(services, now);
+        } catch (error) {
+            services.logger.error({ err: error }, "resume pass: a low-memory hold could not be let go, the next pass tries again");
+        }
     };
     const tick = (now: number = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
 

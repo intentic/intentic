@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { type KeepWarmSettings, KeepWarmSettingsSchema, type LimitPolicy, type RetryPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import {
+    type KeepWarmSettings,
+    KeepWarmSettingsSchema,
+    type LimitPolicy,
+    type RetryPolicy,
+    type RoomPolicy,
+    type TurnBreak,
+    type TurnBreakPolicy,
+} from "@intentic/sandbox-contract";
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -10,7 +18,8 @@ import { useT } from "@intentic/ui/i18n";
 // The standing answer to each ending's one question, in the same words the chat asks it in (chat/run/turnBreak.ts).
 // One answer per row, never a set of switches over the same wall: two independent booleans over a spent allowance
 // spelled a fourth posture ("move, else hold") nobody would choose, and left every surface guessing which of them was
-// the one in force. Every ending starts at `wait`: a re-run spends the owner's allowance on a turn already sent once.
+// the one in force. Every ending that ran something starts at `wait`: a re-run spends the owner's allowance on a turn
+// already sent once. Low memory starts at `resend`: nothing ran, so sending it once there is room spends nothing twice.
 
 const t = useT();
 
@@ -25,6 +34,7 @@ const rowsFor = (ending: TurnBreak) =>
 const limitRows = rowsFor(`limit`);
 const outageRows = rowsFor(`outage`);
 const stoppedRows = rowsFor(`stopped`);
+const memoryRows = rowsFor(`memory`);
 
 const limitPolicy = computed<TurnBreakPolicy>({
     get: () => settings.value?.limitPolicy ?? `wait`,
@@ -37,6 +47,10 @@ const outagePolicy = computed<TurnBreakPolicy>({
 const stopPolicy = computed<TurnBreakPolicy>({
     get: () => settings.value?.stopPolicy ?? `wait`,
     set: (value) => patch({ stopPolicy: value as RetryPolicy }),
+});
+const memoryPolicy = computed<TurnBreakPolicy>({
+    get: () => settings.value?.memoryPolicy ?? `resend`,
+    set: (value) => patch({ memoryPolicy: value as RoomPolicy }),
 });
 
 // 0 is a real value (never carry); an emptied field clamps to the bound rather than falling back to the saved
@@ -119,6 +133,13 @@ const setAutomationFailureLimit = (event: Event): void => {
         <Row icon="pause" :title="breakLabel(`stopped`)" :description="t(`sandbox.agentRecovery.stopPolicyNote`)">
             <template #control>
                 <SegmentedControl v-model="stopPolicy" :options="stoppedRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
+            </template>
+        </Row>
+
+        <!-- The door, not an ending: a message the sandbox held because memory was short, which nothing ran. -->
+        <Row icon="cpu" :title="breakLabel(`memory`)" :description="t(`sandbox.agentRecovery.memoryPolicyNote`)">
+            <template #control>
+                <SegmentedControl v-model="memoryPolicy" :options="memoryRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
             </template>
         </Row>
 

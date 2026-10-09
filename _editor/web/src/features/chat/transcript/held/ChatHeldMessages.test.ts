@@ -7,6 +7,7 @@ import { type AgentStanding, NO_ATTENTION } from "../../../agents/fleet/agentSta
 import { conversationView, PANE_VIEW } from "../../panel/useChat-view";
 import { Conversation } from "../../session/conversation";
 import type { ChatMessage } from "../transcript";
+import * as useSandboxOriginal from "../../../../client/sandbox/useSandbox";
 
 // A message the sandbox held is drawn where the reader looks for what they just sent: their own prompt, with its
 // picture, over ONE line that says it did not go out, why, and the one press that sends it. The notice, the bar and
@@ -33,6 +34,21 @@ jest.mock("../../../sandbox/devices/useSelfResources", () => ({
         applying: ref(false),
         apply: async () => undefined,
     }),
+}));
+
+// This conversation's own answer to the memory wall, as the roster carries it, and the writer its question calls. The
+// sandbox's settings are not loaded, so the wall's own default answers for it (turnBreak.ts).
+const memoryOverride = ref<`wait` | `resend` | undefined>();
+const setBreakPolicy = jest.fn(async () => undefined);
+jest.mock("../../../agents/fleet/useAgents", () => ({
+    useAgents: () => ({ agentById: () => (memoryOverride.value === undefined ? undefined : { memoryPolicy: memoryOverride.value }), setBreakPolicy }),
+}));
+jest.mock("../../../sandbox/overview/useSandboxSettings", () => ({ useSandboxSettings: () => ({ settings: computed(() => undefined) }) }));
+// Reachable, so the question can be answered: the state the press and the answer are both about.
+const realUseSandbox = useSandboxOriginal.useSandbox;
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
+    ...useSandboxOriginal,
+    useSandbox: () => ({ ...realUseSandbox(), reachable: computed(() => true) }),
 }));
 
 const { default: ChatHeldMessages } = await import("./ChatHeldMessages.vue");
@@ -123,6 +139,8 @@ const settled = async (): Promise<void> => {
 };
 
 afterEach(() => {
+    memoryOverride.value = undefined;
+    setBreakPolicy.mockClear();
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -222,6 +240,56 @@ describe(`a message the sandbox held for low memory`, () => {
         expect(element.querySelectorAll(`img`)).toHaveLength(1);
         expect(element.textContent).toContain(`plan.md`);
         expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
+    });
+});
+
+// The answers to the memory wall, as the segmented control draws them: role="tab", one selected at a time.
+const answerPills = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button[role="tab"]`)];
+const armedAnswer = (element: HTMLElement): string | undefined =>
+    answerPills(element)
+        .find((pill) => pill.getAttribute(`aria-selected`) === `true`)
+        ?.textContent?.trim();
+
+// What happens next, asked under the held line as a spent allowance's card asks it: the same control, the same words.
+describe(`what happens next to a message held for low memory`, () => {
+    it(`asks it under the line, sending once memory frees up unless the chat said to wait`, async () => {
+        const element = mount(chatHolding({ items: [held()], paused: `refused` }));
+        await nextTick();
+
+        expect(answerPills(element).map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Send when memory frees`]);
+        expect(armedAnswer(element)).toBe(`Send when memory frees`);
+        expect(element.textContent).toContain(`Goes by itself once memory frees up`);
+        app?.unmount();
+
+        memoryOverride.value = `wait`;
+        const waiting = mount(chatHolding({ items: [held()], paused: `refused` }));
+        await nextTick();
+        expect(armedAnswer(waiting)).toBe(`Wait for me`);
+        expect(waiting.textContent).not.toContain(`Goes by itself`);
+    });
+
+    // The sandbox's own answer is no override: writing it clears the chat's, so the chat keeps following the sandbox.
+    it(`writes this chat's own answer, and clears it when it is the sandbox's`, async () => {
+        const element = mount(chatHolding({ items: [held()], paused: `refused` }));
+        await nextTick();
+
+        answerPills(element)
+            .find((pill) => pill.textContent?.trim() === `Wait for me`)!
+            .click();
+        await settled();
+        expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, `wait`);
+
+        answerPills(element)
+            .find((pill) => pill.textContent?.trim() === `Send when memory frees`)!
+            .click();
+        await settled();
+        expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, null);
+    });
+
+    it(`asks nothing under a hold memory did not make`, async () => {
+        const stopped = mount(chatHolding({ items: [held({ attachments: [] })], paused: `stopped` }, [...SENT, { id: 3, role: `notice`, text: `Stopped.` }]));
+        await nextTick();
+        expect(answerPills(stopped)).toHaveLength(0);
     });
 });
 

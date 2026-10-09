@@ -5,13 +5,13 @@ import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
 
-import { RESUME_NOTES, type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentEvent, RESUME_NOTES, type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
-import { createTurnResumeScheduler } from "../run/turn/turn-resume.js";
+import { createTurnResumeScheduler, ROOM_SETTLE_MS } from "../run/turn/turn-resume.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../../runtimes/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../runtimes/claude/claude-seat-check.testing.js";
 
@@ -710,6 +710,102 @@ describe("the conversation's queue", () => {
         await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
         expect(prompts[1]).toContain("fix the tests\n\ngo ahead");
         expect(await queueOf(client, "conv-go")).toMatchObject({ items: [] });
+    });
+});
+
+// The one refusal at the door that a moment's wait clears by itself: the conversation's answer to the memory wall says
+// whether its held words go once memory has stayed free (the sandbox-wide default) or wait for a press.
+describe("a message held because the sandbox was short of memory", () => {
+    // Every conversation's first turn is turned away for memory; any later one runs.
+    const refusedOnce = (prompts: string[], code: Extract<AgentEvent, { kind: "error" }>["code"] = "sandbox-memory-low") => {
+        const tried = new Set<string>();
+        return services({
+            async *agent(request) {
+                prompts.push(request.spec.prompt);
+                const conversationId = request.spec.conversationId ?? "";
+                if (!tried.has(conversationId)) {
+                    tried.add(conversationId);
+                    yield { kind: "error", code, message: "Refused at the door." };
+                }
+                yield { kind: "done" };
+            },
+        });
+    };
+    const settled = (): number => Date.now() + ROOM_SETTLE_MS + 1_000;
+
+    it("goes by itself once memory has stayed free for a while, and not on the first good reading", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts);
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-room", isolated: true, messageId: "m-room" });
+        await waitFor(async () => expect(await queueOf(client, "conv-room")).toMatchObject({ items: [{ id: "m-room" }], paused: "refused" }), SETTLES);
+        const pass = createTurnResumeScheduler(daemon);
+
+        await pass.tick(Date.now());
+        expect(prompts).toHaveLength(1);
+
+        await pass.tick(settled());
+        await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("fix the pipeline");
+        await waitFor(async () => expect(await queueOf(client, "conv-room")).toMatchObject({ items: [] }), SETTLES);
+    });
+
+    it("waits for a press where the conversation's answer is to wait", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts);
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-wait", isolated: true, messageId: "m-wait" });
+        await waitFor(async () => expect(await queueOf(client, "conv-wait")).toMatchObject({ paused: "refused" }), SETTLES);
+        await client.agents.breakPolicy({ id: "conv-wait", ending: "memory", policy: "wait" });
+        expect((await client.agents.list()).agents.find((agent) => agent.id === "conv-wait")?.memoryPolicy).toBe("wait");
+
+        await createTurnResumeScheduler(daemon).tick(settled());
+        expect(prompts).toHaveLength(1);
+        expect(await queueOf(client, "conv-wait")).toMatchObject({ items: [{ id: "m-wait" }], paused: "refused" });
+    });
+
+    it("leaves a refusal memory does not clear for its press", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts, "model-unavailable");
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-model", isolated: true, messageId: "m-model" });
+        await waitFor(async () => expect(await queueOf(client, "conv-model")).toMatchObject({ paused: "refused" }), SETTLES);
+
+        await createTurnResumeScheduler(daemon).tick(settled());
+        expect(prompts).toHaveLength(1);
+    });
+
+    it("lets one conversation go a pass, the longest waiting first", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts);
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "first in line", conversationId: "conv-first", isolated: true, messageId: "m-first" });
+        await runAgentTurn(client, { prompt: "second in line", conversationId: "conv-second", isolated: true, messageId: "m-second" });
+        await waitFor(async () => expect(await queueOf(client, "conv-second")).toMatchObject({ paused: "refused" }), SETTLES);
+        const pass = createTurnResumeScheduler(daemon);
+
+        await pass.tick(settled());
+        await waitFor(() => expect(prompts).toHaveLength(3), SETTLES);
+        expect(prompts[2]).toContain("first in line");
+        expect(await queueOf(client, "conv-second")).toMatchObject({ items: [{ id: "m-second" }], paused: "refused" });
+
+        await waitFor(() => expect(daemon.conversations.running("conv-first")).toBe(false), SETTLES);
+        await pass.tick(settled());
+        await waitFor(() => expect(prompts).toHaveLength(4), SETTLES);
+        expect(prompts[3]).toContain("second in line");
+    });
+
+    it("runs a turn the sandbox kept at the door once memory has stayed free", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts);
+        expect(await daemon.turns.say({ voice: "sandbox", turn: { prompt: "The watch fired.", conversationId: "conv-kept" } })).toMatchObject({
+            delivered: "started",
+        });
+        await waitFor(() => expect(daemon.conversations.state("conv-kept")?.resume.held?.reason).toBe("door"), SETTLES);
+
+        await createTurnResumeScheduler(daemon).tick(settled());
+        await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("The watch fired.");
     });
 });
 

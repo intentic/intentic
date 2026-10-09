@@ -245,6 +245,42 @@ test("a death certificate reads what the sampler saw in the last few minutes, no
     expect(await budget.shortRecently()).toBe(false);
 });
 
+// What a hold waiting for room reads: memory calming down is room on every reading since, not one good sample.
+test("room for a person's turn is dated from the first of an unbroken run of readings that had it", async () => {
+    let reading = box(10, 9.5);
+    let now = 0;
+    const budget = budgetOf(
+        () => reading,
+        () => now,
+    );
+    expect(await budget.roomSince()).toBeUndefined();
+    reading = box(10, 4);
+    now = 10_000;
+    expect(await budget.roomSince()).toBe(10_000);
+    now = 20_000;
+    expect(await budget.roomSince()).toBe(10_000);
+    // One short reading between breaks the run: the room counts again from the reading after it.
+    reading = box(10, 9.5);
+    now = 30_000;
+    expect(await budget.roomSince()).toBeUndefined();
+    reading = box(10, 4);
+    now = 40_000;
+    expect(await budget.roomSince()).toBe(40_000);
+});
+
+test("work admitted since counts against every reading in the run, so it can leave no room at all", async () => {
+    let now = 0;
+    const budget = budgetOf(
+        () => box(10, 8.5),
+        () => now,
+    );
+    expect(await budget.roomSince()).toBe(0);
+    now = 2_000;
+    expect((await budget.admit({ ...person("ada"), owner: "a" })).verdict).toBe("run");
+    now = 4_000;
+    expect(await budget.roomSince()).toBeUndefined();
+});
+
 // Where no daemon answers (CI, a plain checkout), the scripts apply the same formula; it must give the same verdict.
 test.each([
     ["roomy", box(16, 4)],

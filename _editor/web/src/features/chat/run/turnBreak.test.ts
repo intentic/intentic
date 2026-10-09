@@ -1,5 +1,5 @@
 import { TURN_BREAK_POLICIES } from "@intentic/sandbox-contract";
-import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "./turnBreak";
+import { breakAnswers, breakLabel, effectivePolicy, memoryNext, sandboxPolicy } from "./turnBreak";
 
 // One question per ending, in one vocabulary. These pin the two things every surface depends on: which answer is in
 // force for a conversation, and which answers an ending may even be asked.
@@ -15,6 +15,13 @@ describe(`effectivePolicy`, () => {
         expect(effectivePolicy(`limit`, undefined, { limitPolicy: `resend` })).toBe(`resend`);
         expect(effectivePolicy(`limit`, {}, {})).toBe(`wait`);
         expect(effectivePolicy(`outage`, undefined, undefined)).toBe(`wait`);
+    });
+
+    // Nothing ran behind a low-memory hold, so its default is to send once there is room, as the sandbox's settings say.
+    it(`sends a low-memory hold by itself unless somebody said to wait`, () => {
+        expect(effectivePolicy(`memory`, undefined, undefined)).toBe(`resend`);
+        expect(effectivePolicy(`memory`, { memoryPolicy: `wait` }, { memoryPolicy: `resend` })).toBe(`wait`);
+        expect(effectivePolicy(`memory`, {}, { memoryPolicy: `wait` })).toBe(`wait`);
     });
 
     // The distinction a three-state override exists for: the card writing the sandbox's own value CLEARS the override
@@ -49,9 +56,26 @@ describe(`breakAnswers`, () => {
 });
 
 it(`names every ending, so the settings rows and the card's menu ask in the chat's words`, () => {
-    expect([breakLabel(`limit`), breakLabel(`outage`), breakLabel(`stopped`)]).toEqual([
+    expect([breakLabel(`limit`), breakLabel(`outage`), breakLabel(`stopped`), breakLabel(`memory`)]).toEqual([
         `Usage limit spent`,
         `Provider outage`,
         `Turn stopped short`,
+        `Sandbox memory low`,
     ]);
+});
+
+describe(`the memory wall`, () => {
+    // The same two answers as a spent allowance's, said about what a held message waits for: room, not a reset.
+    it(`offers waiting or sending once memory frees up, in its own words`, () => {
+        const answers = breakAnswers(`memory`);
+        expect(answers.map((answer) => answer.value)).toEqual([...TURN_BREAK_POLICIES.memory]);
+        expect(answers.map((answer) => answer.label)).toEqual([`Wait for me`, `Send when memory frees`]);
+        expect(answers[1]?.brief).toBe(`Sends once memory frees up`);
+        expect(breakAnswers(`memory`, `second@b.c`).map((answer) => answer.value)).toEqual([`wait`, `resend`]);
+    });
+
+    it(`says what an armed answer will do, and nothing for one that waits`, () => {
+        expect(memoryNext(`resend`)).toBe(`Goes by itself once memory frees up`);
+        expect(memoryNext(`wait`)).toBeUndefined();
+    });
 });

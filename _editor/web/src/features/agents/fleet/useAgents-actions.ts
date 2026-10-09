@@ -56,6 +56,9 @@ const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Pa
     if (ending === `limit`) {
         return { limitPolicy: policy === `retry` ? undefined : policy };
     }
+    if (ending === `memory`) {
+        return { memoryPolicy: policy === `wait` || policy === `resend` ? policy : undefined };
+    }
     const retry = policy === `retry` || policy === `wait` ? policy : undefined;
     return ending === `outage` ? { outagePolicy: retry } : { stopPolicy: retry };
 };

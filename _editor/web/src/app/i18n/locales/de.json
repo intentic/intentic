@@ -44,7 +44,8 @@
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer",
             "movingTo": "wechselt zu {account}",
             "stopCommand": "Befehl stoppen",
-            "stopCommandNote": "Damit die Arbeit landet."
+            "stopCommandNote": "Damit die Arbeit landet.",
+            "sendsWhenRoom": "sendet, sobald Speicher frei ist"
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",
@@ -1887,7 +1888,8 @@
             "resendBrief": "Sendet, sobald Kontingent zurück",
             "retryOutageBrief": "Wiederholt beim Ausfall",
             "retryStoppedBrief": "Stoppt nach 3 Versuchen",
-            "waitBrief": "Nichts wird gesendet"
+            "waitBrief": "Nichts wird gesendet",
+            "resendMemoryBrief": "Sendet, sobald Speicher frei ist"
         },
         "chatAgentStatus": {
             "label": "Was die Erweiterungen des Agenten anzeigen"

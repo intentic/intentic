@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { retryHydrate } from "../../run/useChat-sessions";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
+import { useMemoryAnswer } from "../../transcript/held/memoryAnswer";
 import { memoryShare, sendAnywayTip } from "../../transcript/held/memoryTip";
 import { usePaneView } from "../useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
@@ -95,9 +96,12 @@ const lineSeen = useHeldLineSeen(root, holdKey);
 const memoryShown = computed(() => holdKey.value !== undefined && holdKey.value !== leftHeld.value && !lineSeen.value);
 // Lets go only the messages the hold kept, as the line's own press does: a booking beside them stays on its time.
 const sendHeld = (): Promise<void> => resumeQueue(waiting.value.map((message) => message.id));
+// Whether the sandbox sends it by itself once memory frees up, so the bar never calls stuck what is about to go.
+const { sendsItself } = useMemoryAnswer();
 const memoryLine = computed(() => {
     const share = memoryShare(detail.value);
-    return share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });
+    const held = share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });
+    return sendsItself.value ? `${held} · ${t(`chat.chatWaitingBar.sendsWhenRoom`)}` : held;
 });
 </script>
 
@@ -139,7 +143,7 @@ const memoryLine = computed(() => {
                     <Button
                         size="small"
                         tier="quiet"
-                        v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: t(`chat.chatWaitingBar.waitHint`) }"
+                        v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: sendsItself ? t(`chat.chatWaitingBar.waitHintRoom`) : t(`chat.chatWaitingBar.waitHint`) }"
                         @click="leftHeld = holdKey"
                         >{{ t(`chat.chatWaitingBar.wait`) }}</Button
                     >

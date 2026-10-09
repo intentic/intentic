@@ -156,6 +156,8 @@ jest.mock("@intentic/ui", async () => {
         SandboxResourcesDialog: vue.defineComponent({ render: () => undefined }),
         // The permission card's "allow wider" menu; which rows it offers is that card's own suite.
         ContextMenu: vue.defineComponent({ render: () => undefined }),
+        // A held turn's "what happens next" (TurnBreakQuestion); which answers it offers is the held line's own suite.
+        SegmentedControl: vue.defineComponent({ render: () => undefined }),
         browserOwnsClick: () => false,
         clipboardOf: () => undefined,
         parseLoopbackLink: (uri: string) => {

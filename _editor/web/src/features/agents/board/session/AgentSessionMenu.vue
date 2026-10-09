@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { effectiveAutoLand, landedAway, limited, unregistered, writingNow } from "../../fleet/agentStatus";
+import { effectiveAutoLand, landedAway, limited, memoryHeld, unregistered, writingNow } from "../../fleet/agentStatus";
 import AgentReactions from "../cards/AgentReactions.vue";
-import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
+import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
@@ -86,21 +86,31 @@ const toggleAutoLand = async (): Promise<void> => {
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
 };
 
-// Shown only on a card actually waiting on a spent allowance, unlike the always-present hold toggle. One question with
-// one answer, exactly as the chat asks it (ChatContinueStrip), so a card and an open transcript cannot describe the
-// same conversation differently. Same three-state grammar as the hold toggle: choosing the sandbox's own value clears
-// the override rather than freezing a copy of it.
-const limitedCard = computed(() => {
+// Shown only on a card actually held at a wall that takes a standing answer: a spent allowance, or a message held because
+// memory was short. One question with one answer, exactly as the chat asks it (ChatContinueStrip, ChatHeldMessages), so
+// a card and an open transcript cannot describe the same conversation differently. Same three-state grammar as the hold
+// toggle: choosing the sandbox's own value clears the override rather than freezing a copy of it.
+const heldWall = computed((): `limit` | `memory` | undefined => {
     const agent = agentById(agentId);
-    return agent !== undefined && limited(agent) ? agent : undefined;
+    if (agent === undefined) {
+        return undefined;
+    }
+    if (limited(agent)) {
+        return `limit`;
+    }
+    return memoryHeld(agent) ? `memory` : undefined;
 });
-const limitAnswer = computed(() => effectivePolicy(`limit`, agentById(agentId), sandboxSettings.value));
+const wallAnswer = computed(() => (heldWall.value === undefined ? undefined : effectivePolicy(heldWall.value, agentById(agentId), sandboxSettings.value)));
 // Every row is a press, so the answers are rows: one per option, the current one marked. No `move` row without a named
 // account to move to — the card cannot see the sibling with room, so the chat's own control owns that choice.
-const limitRows = computed(() => breakAnswers(`limit`).filter((answer) => answer.value !== `move`));
-const chooseLimit = async (policy: TurnBreakPolicy): Promise<void> => {
+const wallRows = computed(() => (heldWall.value === undefined ? [] : breakAnswers(heldWall.value).filter((answer) => answer.value !== `move`)));
+const chooseWall = async (policy: TurnBreakPolicy): Promise<void> => {
+    const wall = heldWall.value;
+    if (wall === undefined) {
+        return;
+    }
     emit(`selected`);
-    await setBreakPolicy(agentId, `limit`, policy === sandboxPolicy(`limit`, sandboxSettings.value) ? null : policy);
+    await setBreakPolicy(agentId, wall, policy === sandboxPolicy(wall, sandboxSettings.value) ? null : policy);
 };
 
 // The sandbox's own length, not a choice here: the chat's status bar and the card's corner offer the finer one.
@@ -254,26 +264,26 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 }}</span>
             </span>
         </button>
-        <!-- What happens next for a spent allowance, shown only on a card actually waiting on one: one question, one
-             answer, the same words the chat uses. -->
-        <template v-if="limitedCard !== undefined">
-            <span class="px-2.5 pt-2 pb-1 text-2xs text-subtle">{{ t(`chat.turnBreak.limitEnding`) }}</span>
+        <!-- What happens next at the wall this card is held at, shown only on a card actually waiting on one: one question,
+             one answer, the same words the chat uses. -->
+        <template v-if="heldWall !== undefined">
+            <span class="px-2.5 pt-2 pb-1 text-2xs text-subtle">{{ breakLabel(heldWall) }}</span>
             <button
-                v-for="row in limitRows"
+                v-for="row in wallRows"
                 :key="row.value"
                 type="button"
                 :class="ITEM"
                 :disabled="archived"
-                :aria-pressed="limitAnswer === row.value"
-                @click="chooseLimit(row.value)"
+                :aria-pressed="wallAnswer === row.value"
+                @click="chooseWall(row.value)"
             >
                 <Icon
-                    :name="limitAnswer === row.value ? 'check' : row.icon"
+                    :name="wallAnswer === row.value ? 'check' : row.icon"
                     class="mt-0.5 text-xs"
-                    :class="limitAnswer === row.value ? 'text-link' : 'text-subtle'"
+                    :class="wallAnswer === row.value ? 'text-link' : 'text-subtle'"
                 />
                 <span class="flex min-w-0 flex-col">
-                    <span class="text-sm md:text-xs" :class="limitAnswer === row.value ? 'text-link' : 'text-content'">{{ row.label }}</span>
+                    <span class="text-sm md:text-xs" :class="wallAnswer === row.value ? 'text-link' : 'text-content'">{{ row.label }}</span>
                     <span class="text-2xs text-subtle">{{ row.note }}</span>
                 </span>
             </button>

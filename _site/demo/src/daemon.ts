@@ -647,7 +647,7 @@ const setBreakPolicy = ({ id, ending, policy }: SandboxHandlerInput<`agents`, `b
     if (policy !== null && !isTurnBreakPolicy(ending, policy)) {
         return agentAnswer(undefined);
     }
-    const key = ending === `limit` ? `limitPolicy` : ending === `outage` ? `outagePolicy` : `stopPolicy`;
+    const key = { limit: `limitPolicy`, outage: `outagePolicy`, stopped: `stopPolicy`, memory: `memoryPolicy` }[ending];
     return agentAnswer(patchAgent(id, { [key]: policy ?? undefined }));
 };
 

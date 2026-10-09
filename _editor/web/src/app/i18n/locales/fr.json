@@ -44,7 +44,8 @@
             "waitingMaintainer": "{landAsk} : en attente d'un mainteneur",
             "movingTo": "passage à {account}",
             "stopCommand": "Arrêter la commande",
-            "stopCommandNote": "Pour intégrer le travail."
+            "stopCommandNote": "Pour intégrer le travail.",
+            "sendsWhenRoom": "envoi quand la mémoire se libère"
         },
         "agentConflictReport": {
             "agentWriting": "L'agent écrit",
@@ -1887,7 +1888,8 @@
             "resendBrief": "Envoie au retour du quota",
             "retryOutageBrief": "Réessaie pendant la panne",
             "retryStoppedBrief": "S'arrête après 3 essais",
-            "waitBrief": "Rien n'est envoyé"
+            "waitBrief": "Rien n'est envoyé",
+            "resendMemoryBrief": "Envoie quand la mémoire se libère"
         },
         "chatAgentStatus": {
             "label": "Ce qu'affichent les extensions de l'agent"

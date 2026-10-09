@@ -5,7 +5,7 @@ import { recordConversationPrompt, recordPrompt } from "../../sessions/transcrip
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD } from "./conversation-holdings.js";
-import { type Booking, bookingOfItem, NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
+import { type Booking, bookingOfItem, holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
 import type { StoredLimitHold } from "./limit-hold.js";
 
@@ -90,6 +90,9 @@ export interface ConversationActors {
     // Every person's scheduled send waiting in a queue, one per message, with what it waits for: what the resume pass lets
     // go when that comes. Read off the actors, which every conversation with anything waiting has once boot has drained the queues it kept.
     readonly booked: () => readonly Booked[];
+    // Every queue a refusal at the door holds with a message still waiting, oldest wait first: what the resume pass lets go
+    // when the wall that turned it away comes down (a low-memory hold whose answer is to send once there is room).
+    readonly refused: () => readonly Refused[];
     // One kind of what conversations hold beside their state, each conversation's share on its actor.
     readonly holdings: <V>(kind: Holding<V>) => Holdings<V>;
     // What still holds anything of this conversation's, by name: its actor, a stranded record, a holding's item held by
@@ -104,6 +107,12 @@ export interface Booked {
     // The booked message's id, which the release names, so only it goes and every other booking keeps its time.
     readonly id: string;
     readonly booking: Booking;
+}
+
+// A queue held by a refusal at the door, and since when its oldest waiting message has waited (ms).
+export interface Refused {
+    readonly conversationId: string;
+    readonly since: number;
 }
 
 export interface Stranded {
@@ -163,6 +172,18 @@ const bookedIn =
                 return booking === undefined ? [] : [{ conversationId, id: item.id, booking }];
             }),
         );
+
+const refusedIn =
+    (actors: ReadonlyMap<string, Actor>) =>
+    (): readonly Refused[] =>
+        [...actors]
+            .flatMap(([conversationId, { state }]) => {
+                const waiting = waitingOf(state.queue);
+                return holdOf(state.queue) !== "refused" || waiting.length === 0
+                    ? []
+                    : [{ conversationId, since: Math.min(...waiting.map((item) => item.queuedAt)) }];
+            })
+            .sort((a, b) => a.since - b.since);
 
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();
@@ -304,6 +325,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
                 return record === undefined ? [] : [{ conversationId, record }];
             }),
         booked: bookedIn(actors),
+        refused: refusedIn(actors),
         holdings: holdings.holdings,
         traces: (id) => [...(actors.has(id) ? ["actor"] : []), ...(strandedOrder.has(id) ? ["stranded"] : []), ...holdings.traces(id)],
         dispose: async (ids) => {

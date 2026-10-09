@@ -7,20 +7,23 @@
 
 import { z } from "zod";
 
-// The three endings that leave finished work behind a live session and can be picked back up. Spelled exactly as
-// `TurnEndingSchema.reason` spells them, so the ending a surface reads and the question it asks are one word. A restart
-// is handled apart (SandboxSettings.autoResumeOnRestart): nobody is watching a restart, so it has no in-chat question.
-export const TurnBreakSchema = z.enum(["limit", "outage", "stopped"]);
+// The walls a turn can stop at that take a standing answer. The first three end a turn that leaves finished work behind
+// a live session, spelled exactly as `TurnEndingSchema.reason` spells them, so the ending a surface reads and the
+// question it asks are one word. `memory` is the door: the sandbox too short of memory to start the turn at all, which
+// holds the message (or the turn the sandbox kept) until a press or room comes back. A restart is handled apart
+// (SandboxSettings.autoResumeOnRestart): nobody is watching a restart, so it has no in-chat question.
+export const TurnBreakSchema = z.enum(["limit", "outage", "stopped", "memory"]);
 export type TurnBreak = z.infer<typeof TurnBreakSchema>;
 
-// Every ending that leaves a held turn behind: the three above, plus the provider's safety classifier stopping a turn
-// partway. That one has no standing answer and never re-runs by itself: the person picks, each time, between the same
-// model again and another one (2026-09-30, the owner's call over an automatic model switch).
-export const HeldEndingSchema = z.enum([...TurnBreakSchema.options, "flagged"]);
+// Every ending that leaves a held turn behind: a spent allowance, an outage, a turn that stopped short, plus the
+// provider's safety classifier stopping a turn partway. That one has no standing answer and never re-runs by itself: the
+// person picks, each time, between the same model again and another one (2026-09-30, the owner's call over an automatic
+// model switch). A low-memory hold is no ending: nothing ran, so it is never one of these.
+export const HeldEndingSchema = z.enum(["limit", "outage", "stopped", "flagged"]);
 export type HeldEnding = z.infer<typeof HeldEndingSchema>;
 
 /** Whether this ending takes a standing answer (turn-break policy), which `flagged` never does. */
-export const isTurnBreak = (ending: HeldEnding): ending is TurnBreak => ending !== "flagged";
+export const isTurnBreak = (ending: HeldEnding): ending is Exclude<HeldEnding, "flagged"> => ending !== "flagged";
 
 // `move` implies `resend`: an account with room is tried at once, and the reset appointment stands as its fallback.
 // There is deliberately no "move, else hold" — a reader willing to spend a second account is willing to wait.
@@ -31,6 +34,11 @@ export type LimitPolicy = z.infer<typeof LimitPolicySchema>;
 export const RetryPolicySchema = z.enum(["wait", "retry"]);
 export type RetryPolicy = z.infer<typeof RetryPolicySchema>;
 
+// The memory wall's two answers: hold for a press, or send once the sandbox has room again. Nothing ran, so sending it
+// then spends nothing twice.
+export const RoomPolicySchema = z.enum(["wait", "resend"]);
+export type RoomPolicy = z.infer<typeof RoomPolicySchema>;
+
 // One answer, whichever ending asked. Read against the ending: only `limit` can be `move`.
 export const TurnBreakPolicySchema = z.enum(["wait", "resend", "move", "retry"]);
 export type TurnBreakPolicy = z.infer<typeof TurnBreakPolicySchema>;
@@ -40,6 +48,7 @@ export const TURN_BREAK_POLICIES: Readonly<Record<TurnBreak, readonly TurnBreakP
     limit: ["wait", "resend", "move"],
     outage: ["wait", "retry"],
     stopped: ["wait", "retry"],
+    memory: ["wait", "resend"],
 };
 
 /** Whether this ending may be answered this way; the one gate every writer goes through. */

@@ -58,7 +58,8 @@
             "couldntSendLandRequest": "Couldn't send the land request.",
             "askedToLand": "{name} asked to land this",
             "couldntSendAgain": "Couldn't send that again.",
-            "couldntRename": "Couldn't rename the agent."
+            "couldntRename": "Couldn't rename the agent.",
+            "sendsWhenRoom": "sends when memory frees"
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
@@ -3279,7 +3280,13 @@
             "whenNear": "{wait}",
             "resetUnknown": "reset time unknown",
             "goesNever": "Nothing resends it by itself: the provider gave no reset time. Continue tries again.",
-            "coolingDown": "Continue opens again in a minute"
+            "coolingDown": "Continue opens again in a minute",
+            "memoryEnding": "Sandbox memory low",
+            "resendMemory": "Send when memory frees",
+            "resendMemoryBrief": "Sends once memory frees up",
+            "resendMemoryNote": "Sends the message by itself once the sandbox's memory has stayed free for half a minute, one held chat at a time.",
+            "waitMemoryNote": "Nothing is sent for you. The message waits here until somebody presses Send anyway.",
+            "goesWhenRoom": "Goes by itself once memory frees up"
         },
         "words": {
             "connectAModel": "Connect a model",
@@ -3407,7 +3414,9 @@
             "heldMemory": "Held: sandbox memory is low",
             "heldMemoryShare": "Held: sandbox memory is low ({share})",
             "wait": "Wait",
-            "waitHint": "Held until you send"
+            "waitHint": "Held until you send",
+            "sendsWhenRoom": "sends once memory frees up",
+            "waitHintRoom": "Still sends when memory frees"
         },
         "sendLater": {
             "title": "Send later",
@@ -4620,7 +4629,8 @@
             "keepWarmMinTokensLabel": "Minimum context, in tokens",
             "keepWarmReserve": "Leave this much allowance free",
             "keepWarmReserveNote": "Refreshing stops once any limit the account's model spends is fuller than 100% minus this.",
-            "keepWarmReserveLabel": "Allowance kept free, in percent"
+            "keepWarmReserveLabel": "Allowance kept free, in percent",
+            "memoryPolicyNote": "What happens to a message the sandbox held because its memory was low. Nothing ran, so sending it once memory frees up spends nothing twice."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Couldn't read what the repositories declare.",

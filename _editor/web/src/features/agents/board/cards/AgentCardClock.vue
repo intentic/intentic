@@ -6,7 +6,7 @@ import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, limitClosed, limitCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, limitClosed, limitCorner, memoryCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import { effectivePolicy } from "../../../chat/run/turnBreak";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
@@ -46,12 +46,18 @@ const now = computed(() => sandboxNow(tick.value));
 // corner can say when "Send again" is chosen but nothing is booked to do it.
 const { query: settings } = useSandboxQuery(rpcQuery(`settings.get`));
 const limit = computed(() => limitCorner(props.agent, now.value, effectivePolicy(`limit`, props.agent, settings.data.value)));
+// The same corner for a message held because memory was short, once its answer is to send it when memory frees up: no
+// instant to count to, so it says the condition it waits for. Never beside a limit's: the card is held by one or the other.
+const memory = computed(() => (limit.value !== undefined ? undefined : memoryCorner(props.agent, effectivePolicy(`memory`, props.agent, settings.data.value))));
+const memoryTip = computed((): Tip => ({ title: t(`agents.agentStatus.heldMemory`), tone: `info`, note: t(`agents.agentCard.noPressNeeded`) }));
+// Whichever hold speaks in the corner: what the watch, the cache and the date yield it to.
+const holding = computed(() => limit.value !== undefined || memory.value !== undefined);
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
 // the moment the turn ends. And yields to a spent allowance, so the corner holds ONE clock: a watch firing into a shut
 // window runs nothing (turn-admission holds its words back), so the reset is the next moment the card can move, and
 // the watch's countdown comes back with its Stop press once the limit has had its say.
-const watch = computed(() => (props.working || limit.value !== undefined ? undefined : watchLine(props.agent, now.value)));
+const watch = computed(() => (props.working || holding.value ? undefined : watchLine(props.agent, now.value)));
 // Takes the watch's place when what the watch waits on is a command at a prompt: its countdown promised a wake that the
 // command's exit would bring, and that exit will not come by itself. Amber, and its Stop always shown rather than on
 // hover, since this is the card's one way forward.
@@ -88,9 +94,9 @@ const limitTip = computed((): Tip | undefined => {
 });
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
-const cooling = computed(() => (watch.value !== undefined || limit.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
+const cooling = computed(() => (watch.value !== undefined || holding.value ? undefined : cacheCooling(props.agent, now.value)));
 // A hold outranks the cooling clock in that corner: it is the answer to the question the cooling chip asks.
-const warm = computed(() => (watch.value !== undefined || limit.value !== undefined || props.working ? undefined : warmMark(props.agent)));
+const warm = computed(() => (watch.value !== undefined || holding.value || props.working ? undefined : warmMark(props.agent)));
 // Either cache mark's hover, closed by what pressing it does, since the press is this corner's own.
 const warmTip = computed((): Tip | undefined =>
     warm.value === undefined ? undefined : { ...warm.value.hint, note: t(`agents.promptCache.clickToChange`) },
@@ -115,6 +121,11 @@ const coolingTip = computed((): Tip | undefined =>
     >
         <Icon name="clock" class="shrink-0 text-2xs" />
         <span class="tabular-nums">{{ limit.text }}</span>
+    </span>
+    <!-- A message held for memory that goes by itself once memory frees up: the condition it waits for, in the date's slot. -->
+    <span v-else-if="memory !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="memoryTip">
+        <Icon name="clock" class="shrink-0 text-2xs" />
+        <span>{{ memory }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
     <button
