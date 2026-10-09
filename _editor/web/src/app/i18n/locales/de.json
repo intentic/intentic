@@ -3987,6 +3987,10 @@
             "group": "Seiten im Chat",
             "title": "Mit Seiten antworten",
             "description": "Diagramme, Tabellen und Wahlseiten im Chat. Aus: keine Werkzeuge."
+        },
+        "agentOffload": {
+            "intro": "Tests, Typprüfungen und volle Checks laufen auf einem Runner auf deinem Rechner statt hier; Ausgabe und geänderte Dateien synchronisieren zurück, oder laufen hier, wenn er offline oder ausgelastet ist.",
+            "noRunners": " Noch kein Runner — einen unter {devices} → Rechner → Runner hinzufügen."
         }
     },
     "settings": {

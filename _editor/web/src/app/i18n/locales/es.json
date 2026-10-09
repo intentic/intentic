@@ -4003,6 +4003,10 @@
             "group": "Páginas en el chat",
             "title": "Responder con páginas",
             "description": "Gráficos, tablas y elección en el chat. Desactivado: sin herramientas."
+        },
+        "agentOffload": {
+            "intro": "Ejecuta tests, comprobaciones de tipos y checks completos en un runner en tu máquina en lugar de aquí; la salida y los archivos modificados se sincronizan, o se ejecutan aquí si está desconectada u ocupada.",
+            "noRunners": " Aún no hay runner: añade uno en {devices} → máquina → Runners."
         }
     },
     "settings": {

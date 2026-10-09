@@ -6486,7 +6486,7 @@
         },
         "agentOffload": {
             "here": "Ten sandbox",
-            "intro": "Testy, sprawdzanie typów i pełne kontrole mogą działać na runnerze na jednej z Twoich maszyn zamiast tutaj, obok każdej rozmowy. Kod jedzie w obecnym stanie, wyjście spływa z powrotem, a każdy plik zmieniony przez polecenie wraca razem z nim. Maszyna, która śpi albo jest zajęta, oddaje pracę temu sandboxowi.",
+            "intro": "Uruchamiaj testy, sprawdzanie typów i pełne kontrole na runnerze na swojej maszynie zamiast tutaj; wynik i zmienione pliki wracają, a gdy maszyna jest offline lub zajęta, praca zostaje tutaj.",
             "kindBunTest": "Testy (bun test)",
             "kindBunTestDetail": "bun test oraz własny runner testów każdego pakietu.",
             "kindCustomDetail": "Polecenia pasujące do {pattern}",
@@ -6503,7 +6503,7 @@
             "lastRunFailed": "Ostatnio: {command}, kod wyjścia {code}",
             "lastRunGoing": "Teraz działa: {command}",
             "lastRunPassed": "Ostatnio: {command}, przeszło",
-            "noRunners": "Żadna z Twoich maszyn nie ma jeszcze runnera: dodaj go przez {devices} → maszyna → Runnery.",
+            "noRunners": " Nie masz jeszcze runnera — dodaj go w {devices} → maszyna → Runnery.",
             "runnerGone": "Runner „{runner}” nie jest już skonfigurowany, więc to działa tutaj.",
             "runnerOffline": "Teraz offline: praca wysłana tutaj działa w tym sandboxie, dopóki nie wróci",
             "runnerOnline": "Połączony",

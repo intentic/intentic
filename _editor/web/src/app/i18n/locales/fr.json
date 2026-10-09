@@ -3982,6 +3982,10 @@
             "group": "Pages dans le chat",
             "title": "Répondre avec des pages",
             "description": "Graphiques, tableaux et choix dans le chat. Désactivé : pas d'outils."
+        },
+        "agentOffload": {
+            "intro": "Lancez tests, vérifications de types et contrôles complets sur un runner sur votre machine plutôt qu'ici ; la sortie et les fichiers modifiés se synchronisent, ou s'exécutent ici si la machine est hors ligne ou occupée.",
+            "noRunners": " Pas encore de runner — ajoutez-en un via {devices} → machine → Runners."
         }
     },
     "settings": {
