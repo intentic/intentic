@@ -461,7 +461,7 @@ fn apply(
         "docker-users" => {
             "allowing this account to use Docker (Windows will ask for permission)..."
         }
-        "docker-running" => "starting Docker Desktop (accept its welcome screen if one appears)...",
+        "docker-running" => "starting Docker Desktop in the system tray...",
         "docker-linux-containers" => "switching Docker to Linux containers...",
         _ => "preparing Docker...",
     };

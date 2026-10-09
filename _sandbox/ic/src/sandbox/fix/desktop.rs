@@ -288,7 +288,7 @@ pub fn with_autostart(text: &str) -> Option<String> {
 }
 
 /// Temp-then-rename, like every file ic writes: Docker Desktop reading it mid-write must see one whole file.
-fn write_beside(path: &Path, text: &str) -> std::result::Result<(), String> {
+pub(crate) fn write_beside(path: &Path, text: &str) -> std::result::Result<(), String> {
     use std::io::Write;
     let dir = path.parent().ok_or("no folder to write in")?;
     let mut tmp = tempfile::NamedTempFile::new_in(dir).map_err(|err| err.to_string())?;
@@ -318,7 +318,7 @@ pub fn wait_engine(limit: Duration) -> Done {
         if !hinted && started.elapsed() >= Duration::from_secs(75) {
             hinted = true;
             crate::ui::progress(
-                "Docker Desktop may be asking you something: look at its window for a welcome, sign-in or update screen",
+                "Docker Desktop may be asking you something: open it from its whale icon in the system tray and look for a sign-in or update screen",
             );
         }
         if said.elapsed() >= Duration::from_secs(20) {

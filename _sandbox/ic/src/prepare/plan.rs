@@ -527,7 +527,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             "docker-running",
             "Docker Desktop running",
             "Docker Desktop is not running.",
-            "We will start it and wait for its engine to come up. If it shows a welcome screen, accept it.",
+            "We will start it in the system tray, without its welcome screens, and wait for its engine to come up.",
             Action::Fix,
         ));
     } else if let Some(os) = facts.docker_server_os.as_deref() {

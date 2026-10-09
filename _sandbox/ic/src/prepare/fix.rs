@@ -405,10 +405,77 @@ fn start_docker_desktop_script(known: &str) -> String {
 /// Exit code of [`START_DOCKER_DESKTOP`] when nothing on its list exists.
 const NOT_FOUND: i32 = 2;
 
+/* A FIRST START THAT STAYS IN THE TRAY. Docker Desktop's first start opens its dashboard in front of everything, on
+its onboarding: a survey, then an offer to sign in, neither of which a sandbox needs. Every later start goes to the
+tray by itself, because "Open Docker Dashboard when Docker Desktop starts" is off by default. The installer has no
+flag for this (`--accept-license` covers only the licence), but Docker reads both answers from its per-user settings
+file at startup: `DisplayedOnboarding` (the onboarding has been shown) and `OpenUIOnStartupDisabled` (that checkbox).
+So setup writes them before the first start. Only on a first start: an install whose onboarding has run is left
+exactly as its owner set it. The file is written from here as UTF-8 without a BOM, because Docker rejects a BOM,
+replaces the file and shows the first-run dialog anyway (getmonoceros/workbench#119 is that bug, from a PowerShell
+5.1 `Set-Content`). */
+
+/// Docker Desktop's `settings-store.json` with its first-run screens answered: `DisplayedOnboarding` on, and
+/// `OpenUIOnStartupDisabled` on unless somebody already chose. `existing` is the file's text, None when there is no
+/// file yet. Answers None when there is nothing to write: the onboarding has already run (its owner's settings
+/// stand), or the text is not a JSON object (Docker's to read, not ours to rewrite). Pure.
+pub fn quiet_first_start(existing: Option<&str>) -> Option<String> {
+    let mut value = match existing {
+        Some(text) => serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?,
+        None => serde_json::Value::Object(serde_json::Map::new()),
+    };
+    let settings = value.as_object_mut()?;
+    if settings.get("DisplayedOnboarding") == Some(&serde_json::Value::Bool(true)) {
+        return None;
+    }
+    settings.insert("DisplayedOnboarding".to_string(), true.into());
+    settings
+        .entry("OpenUIOnStartupDisabled")
+        .or_insert(true.into());
+    serde_json::to_string_pretty(&value).ok()
+}
+
+/// [`quiet_first_start`] on this account's Docker Desktop settings, before Docker is started. Best effort: a start
+/// that would have shown the onboarding still starts, so a failure here is a note in the log and nothing more.
+#[cfg(windows)]
+fn keep_first_start_in_tray() {
+    let Some(dir) =
+        std::env::var_os("APPDATA").map(|dir| std::path::Path::new(&dir).join("Docker"))
+    else {
+        return;
+    };
+    let store = dir.join("settings-store.json");
+    let existing = match std::fs::read_to_string(&store) {
+        Ok(text) => Some(text),
+        // Docker Desktop 4.34 and older keep `settings.json` and newer ones migrate it on their first start; a
+        // `settings-store.json` written beside it would be read in its place and lose everything it holds.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if dir.join("settings.json").exists() {
+                return;
+            }
+            None
+        }
+        Err(_) => return,
+    };
+    let Some(text) = quiet_first_start(existing.as_deref()) else {
+        return;
+    };
+    let written = std::fs::create_dir_all(&dir)
+        .map_err(|error| error.to_string())
+        .and_then(|()| crate::sandbox::fix::desktop::write_beside(&store, &text));
+    match written {
+        Ok(()) => crate::ui::note("Docker Desktop will start in the system tray, without its welcome screens."),
+        Err(error) => crate::ui::note(&format!(
+            "Docker Desktop's first-start settings were not written ({error}); it may open its welcome screen."
+        )),
+    }
+}
+
 /// Start Docker Desktop. Not elevated: it is a desktop app, and starting it as administrator gives its engine
 /// a different user's context than the one that will use it.
 #[cfg(windows)]
 pub fn start_docker_desktop(facts: &Facts) -> Fixed {
+    keep_first_start_in_tray();
     let output = shell::run(&start_docker_desktop_script(&facts.docker_desktop_path));
     if output.ok {
         return Ok(Done::Now);
@@ -450,7 +517,7 @@ pub fn wait_for_daemon() -> Fixed {
             hinted = true;
             /* Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to sign in — and it does it in its OWN window. */
             super::progress(
-                "Docker Desktop may be asking you something: look at its window for a welcome or sign-in screen. A first start also just takes a couple of minutes",
+                "Docker Desktop may be asking you something: open it from its whale icon in the system tray and look for a sign-in or update screen. A first start also just takes a couple of minutes",
             );
         }
         if said.elapsed() >= Duration::from_secs(20) {
@@ -465,7 +532,7 @@ pub fn wait_for_daemon() -> Fixed {
     // Not a failure of ours, and the remedy is a human one: Docker Desktop asks for a licence acceptance and
     // sometimes a sign-in on its first run, and until somebody answers that, no engine appears.
     Err(Trouble::Failed(
-        "Docker Desktop was started, but its engine has not come up after five minutes. Look at the Docker Desktop window: it may be waiting for you to accept its terms or skip a sign-in. Once it says the engine is running, choose Check again.".to_string(),
+        "Docker Desktop was started, but its engine has not come up after five minutes. Open it from its whale icon in the system tray: it may be waiting for you to accept its terms or skip a sign-in. Once it says the engine is running, choose Check again.".to_string(),
     ))
 }
 
@@ -640,6 +707,57 @@ mod tests {
         assert!(script.contains(intentic_docker_host::desktop_app::LOCATE));
         assert!(!script.contains('%'), "every placeholder filled: {script}");
         assert!(script.is_ascii());
+    }
+
+    #[test]
+    fn a_first_start_is_told_to_skip_the_onboarding_and_stay_in_the_tray() {
+        let fresh: serde_json::Value =
+            serde_json::from_str(&quiet_first_start(None).expect("no file yet is a first start"))
+                .unwrap();
+        assert_eq!(fresh["DisplayedOnboarding"], true);
+        assert_eq!(fresh["OpenUIOnStartupDisabled"], true);
+
+        // What the installer left (the licence it accepted, the backend) is kept beside the two answers.
+        let installed = quiet_first_start(Some(
+            r#"{"LicenseTermsVersion": 2, "WslEngineEnabled": true, "DisplayedOnboarding": false}"#,
+        ))
+        .expect("an onboarding not yet shown");
+        let installed: serde_json::Value = serde_json::from_str(&installed).unwrap();
+        assert_eq!(installed["LicenseTermsVersion"], 2);
+        assert_eq!(installed["WslEngineEnabled"], true);
+        assert_eq!(installed["DisplayedOnboarding"], true);
+        assert_eq!(installed["OpenUIOnStartupDisabled"], true);
+    }
+
+    #[test]
+    fn a_dashboard_somebody_asked_for_stays_asked_for() {
+        let chosen = quiet_first_start(Some(r#"{"OpenUIOnStartupDisabled": false}"#)).unwrap();
+        let chosen: serde_json::Value = serde_json::from_str(&chosen).unwrap();
+        assert_eq!(chosen["OpenUIOnStartupDisabled"], false);
+        assert_eq!(chosen["DisplayedOnboarding"], true);
+    }
+
+    #[test]
+    fn an_install_that_has_run_before_is_left_alone() {
+        // omen's file, abridged: onboarding done, the dashboard setting never touched. Nothing to write.
+        assert_eq!(
+            quiet_first_start(Some(
+                r#"{"AutoStart": true, "DisplayedOnboarding": true, "SettingsVersion": 46}"#
+            )),
+            None
+        );
+        assert_eq!(quiet_first_start(Some("not json")), None);
+        assert_eq!(quiet_first_start(Some("[1, 2]")), None);
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_read_past_and_never_written() {
+        let text = quiet_first_start(Some("\u{feff}{\"LicenseTermsVersion\": 2}")).unwrap();
+        assert!(
+            !text.starts_with('\u{feff}'),
+            "Docker rejects a BOM: {text}"
+        );
+        assert!(text.contains("\"LicenseTermsVersion\": 2"));
     }
 
     #[test]
