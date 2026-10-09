@@ -128,7 +128,7 @@ const brief = (entry: EnvironmentRecurring): string =>
             @update:open="toggle(entry.tool)"
         >
             <template #lead="{ mark }">
-                <BrandMark
+                <BrandMark plain
                     :size="mark"
                     :name="entry.tool"
                     :logo="runtimeInstallVisual(entry.tool, entry.kind).logo"

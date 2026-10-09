@@ -142,7 +142,7 @@ const expandable = (item: EnvironmentItem): boolean =>
                 >
                     <!-- Idle marks an entry the recipe has but the container doesn't yet, readable even without color. -->
                     <template #lead="{ mark }">
-                        <BrandMark
+                        <BrandMark plain
                             :size="mark"
                             :name="item.name"
                             :logo="environmentVisual(item).logo"
@@ -252,7 +252,7 @@ const expandable = (item: EnvironmentItem): boolean =>
                                 :class="ui.chip({ on: picked === item.id }, `py-1 pl-1 pr-2.5`)"
                                 @click="pick(item.id)"
                             >
-                                <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
+                                <BrandMark plain :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
                                 <span class="font-medium">{{ item.name }}</span>
                                 <span
                                     v-if="item.tools[0]?.version !== undefined"

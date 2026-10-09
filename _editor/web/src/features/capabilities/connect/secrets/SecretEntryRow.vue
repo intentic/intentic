@@ -196,7 +196,7 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
     <DisclosureRow class="@container" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
             <!-- The only non-text element, findable without reading (accounts differing only in a last character). -->
-            <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
+            <BrandMark plain :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
         </template>
 
         <template #title>

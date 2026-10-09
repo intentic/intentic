@@ -133,7 +133,7 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
 
         <Row v-for="engine in engines" v-else :key="engine.id">
             <template #lead="{ mark }">
-                <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
+                <BrandMark plain :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
             </template>
             <template #title>
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">

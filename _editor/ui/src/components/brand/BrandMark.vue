@@ -1,4 +1,4 @@
-<!-- A thing, in a rounded square: <Avatar>'s counterpart for non-people (capabilities, extensions, registry entries). -->
+<!-- A thing, in a rounded square (or, under `plain`, just its glyph): <Avatar>'s counterpart for non-people (capabilities, extensions, registry entries). -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { artSrc, type Brand, brandUrl, loadBrand } from "./brandMark.js";
@@ -14,6 +14,7 @@ const {
     icon,
     idle = false,
     flush = false,
+    plain = false,
 } = defineProps<{
     /** Pixels, like <Avatar>; under `flush` the box is the container's, and this only scales what's inside it. */
     size: number;
@@ -29,6 +30,8 @@ const {
     idle?: boolean;
     /** A band filling one edge, not a badge on the container: no rounding, no border, stretched to fit. */
     flush?: boolean;
+    /** Just the glyph, in the text's neutral gray: no box, no border, no brand plate or colour. For quiet lists where the name carries the row. */
+    plain?: boolean;
 }>();
 
 const drawing = computed(() => artSrc(art));
@@ -65,9 +68,9 @@ watch(
         :class="[
             idle ? `opacity-50 grayscale` : ``,
             // Both belong to the badge shape only: a flush mark is inside a border that is already drawn.
-            flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
+            plain ? (drawing === undefined ? `` : size >= 28 ? `rounded-lg` : `rounded-md`) : flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
             /* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border and whose corners). */
-            drawing !== undefined ? `` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
+            drawing !== undefined ? `` : plain ? `text-muted` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
             // Stretched to the container and held square, rather than sized here: the height belongs to
@@ -90,7 +93,7 @@ watch(
         <!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
         <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
         <template v-else-if="brand === undefined">
-            <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
+            <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * (plain ? 0.625 : 0.5)}px` }" />
             <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
                 {{ initials }}
             </span>
@@ -98,7 +101,8 @@ watch(
         <!-- The fetched SVG is masked with the configured brand colour. -->
         <span
             v-else
-            class="brand-mark absolute"
+            class="absolute"
+            :class="plain ? `bg-current` : `brand-mark`"
             :style="{
                 width: `${size * 0.625}px`,
                 height: `${size * 0.625}px`,

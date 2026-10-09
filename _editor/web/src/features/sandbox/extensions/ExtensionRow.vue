@@ -205,7 +205,7 @@ const source = computed<{ words: string; mark?: string }>(() => {
     <DisclosureRow class="@container" body="drawer" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
             <!-- Dimmed and desaturated when off, so the mark goes quiet with the rest of the row. -->
-            <BrandMark
+            <BrandMark plain
                 :size="mark"
                 :name="manifest.name"
                 :art="manifest.art"

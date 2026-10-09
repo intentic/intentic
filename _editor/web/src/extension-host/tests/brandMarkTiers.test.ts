@@ -15,6 +15,7 @@ interface MarkProps {
     readonly logo?: string;
     readonly icon?: string;
     readonly flush?: boolean;
+    readonly plain?: boolean;
 }
 
 // No network, ever: the brand tier fetches, and a suite that reached a CDN would be slow when it worked and failing on a
@@ -75,5 +76,13 @@ describe(`BrandMark tiers`, () => {
         const box = host.firstElementChild;
         expect(box?.className).toContain(`border-line`);
         expect(box?.className, `a glyph needs the plate a drawing would have replaced`).toContain(`bg-content/5`);
+    });
+
+    it(`draws just the glyph in neutral gray when plain, with no border or plate around it`, async () => {
+        const host = await mount({ name: `intentic.example`, icon: `sparkles`, plain: true });
+        const box = host.firstElementChild;
+        expect(box?.className).not.toContain(`border`);
+        expect(box?.className).not.toContain(`bg-content/5`);
+        expect(box?.className).toContain(`text-muted`);
     });
 });

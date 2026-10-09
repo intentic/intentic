@@ -52,7 +52,7 @@ const unavailableTip = computed(() =>
         @click="emit(`open`)"
     >
         <div class="flex w-full items-start gap-2.5">
-            <BrandMark
+            <BrandMark plain
                 :size="28"
                 :name="listing.entry.name"
                 :art="listing.entry.art"
