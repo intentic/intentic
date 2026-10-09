@@ -241,6 +241,7 @@ const samplesOf = (
             delete: { path: `web/smoke.txt` },
             restore: { trashed: `smoke` },
             repos: undefined,
+            health: { repo: `web` },
             search: { query: `checkout` },
         },
         git: {
