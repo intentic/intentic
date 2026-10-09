@@ -65,18 +65,21 @@ export const summarizeOrigins = (
 export interface OriginHue {
     readonly text: string;
     readonly chip: string;
+    // The legend chip once it is lit (it stages and narrows to that work): a denser plate of the same hue with an edge
+    // drawn in it, so on and off differ in fill, outline and weight at once rather than by one small glyph.
+    readonly chipOn: string;
 }
 
 // Full class strings, never interpolated: Tailwind's scanner only sees literals.
 export const ORIGIN_HUES: readonly OriginHue[] = [
-    { text: `text-file-code`, chip: `bg-file-code/15 text-file-code` },
-    { text: `text-file-style`, chip: `bg-file-style/15 text-file-style` },
-    { text: `text-file-config`, chip: `bg-file-config/15 text-file-config` },
-    { text: `text-file-data`, chip: `bg-file-data/15 text-file-data` },
-    { text: `text-file-image`, chip: `bg-file-image/15 text-file-image` },
-    { text: `text-file-doc`, chip: `bg-file-doc/15 text-file-doc` },
-    { text: `text-file-shell`, chip: `bg-file-shell/15 text-file-shell` },
-    { text: `text-file-archive`, chip: `bg-file-archive/15 text-file-archive` },
+    { text: `text-file-code`, chip: `bg-file-code/15 text-file-code`, chipOn: `bg-file-code/30 border-file-code/70 text-file-code` },
+    { text: `text-file-style`, chip: `bg-file-style/15 text-file-style`, chipOn: `bg-file-style/30 border-file-style/70 text-file-style` },
+    { text: `text-file-config`, chip: `bg-file-config/15 text-file-config`, chipOn: `bg-file-config/30 border-file-config/70 text-file-config` },
+    { text: `text-file-data`, chip: `bg-file-data/15 text-file-data`, chipOn: `bg-file-data/30 border-file-data/70 text-file-data` },
+    { text: `text-file-image`, chip: `bg-file-image/15 text-file-image`, chipOn: `bg-file-image/30 border-file-image/70 text-file-image` },
+    { text: `text-file-doc`, chip: `bg-file-doc/15 text-file-doc`, chipOn: `bg-file-doc/30 border-file-doc/70 text-file-doc` },
+    { text: `text-file-shell`, chip: `bg-file-shell/15 text-file-shell`, chipOn: `bg-file-shell/30 border-file-shell/70 text-file-shell` },
+    { text: `text-file-archive`, chip: `bg-file-archive/15 text-file-archive`, chipOn: `bg-file-archive/30 border-file-archive/70 text-file-archive` },
 ];
 
 export const originHue = (id: string): OriginHue => {
