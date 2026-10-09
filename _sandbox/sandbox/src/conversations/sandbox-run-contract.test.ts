@@ -10,7 +10,11 @@ const REPO_ROOT = repoRoot(import.meta.url);
 
 // Signature of a hand-rolled run: workspace volume mounted at /work; closers span every mount dialect.
 const WORK_MOUNT = /(?::\/work["'`\s\\]|:\/work$)/m;
-const STARTS_CONTAINER = /docker run |image: /;
+// `image:` is compose's key, so it counts only in YAML: elsewhere it is a field or a parameter (drop_copy.rs's
+// `image: &str`, the image its tar helper borrows), not a container being started.
+const STARTS_CONTAINER = /docker run /;
+const COMPOSE_IMAGE = /^[\s-]*image: /m;
+const YAML = /\.ya?ml$/;
 
 // An import of the contract is the guarantee: the splice is checked by that consumer's own unit tests.
 const CONTRACT = /@intentic\/sandbox-run/;
@@ -72,7 +76,7 @@ test("no file in the repo hand-rolls a sandbox container run: TS composes from t
     const sources = await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8").catch(() => "")] as const));
 
     for (const [file, content] of sources) {
-        if (!WORK_MOUNT.test(content) || !STARTS_CONTAINER.test(content)) {
+        if (!WORK_MOUNT.test(content) || !(STARTS_CONTAINER.test(content) || (YAML.test(file) && COMPOSE_IMAGE.test(content)))) {
             continue;
         }
         const rel = file.slice(REPO_ROOT.length + 1);

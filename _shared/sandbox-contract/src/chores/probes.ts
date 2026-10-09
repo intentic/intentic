@@ -86,7 +86,6 @@ const STANDALONE_DIRS =
     `sed -n -e 's|/\\*\\*[[:space:]]*$||' -e 's|^[[:space:]]*-[[:space:]]*!\\([^[:space:]#]*\\).*$|\\1|p'`;
 
 // The line that opens one standalone package's report, as JSON so a guard can still read the stream with `jq -s`.
-const STANDALONE_KEY = `standalone`;
 const STANDALONE_LINE = /^\{"standalone":"([^"]*)"\}$/;
 
 // Runs `measure` against each standalone package in a scratch copy, never in place: `--lockfile-only` would write
@@ -97,7 +96,7 @@ const STANDALONE_LINE = /^\{"standalone":"([^"]*)"\}$/;
 const standaloneCommand = (measure: string): string =>
     `${STANDALONE_DIRS} | while IFS= read -r dir; do ` +
     `[ -f "$dir/package.json" ] || continue; ` +
-    `printf '{"${STANDALONE_KEY}":"%s"}\\n' "$dir"; ` +
+    `printf '{"standalone":"%s"}\\n' "$dir"; ` +
     `scratch=$(mktemp -d) || continue; ` +
     `for file in package.json pnpm-lock.yaml package-lock.json .npmrc; do [ -f "$dir/$file" ] && cp "$dir/$file" "$scratch/"; done; ` +
     `( cd "$scratch" && { [ -f pnpm-lock.yaml ] || { [ -f package-lock.json ] && pnpm import >/dev/null 2>&1; } || ` +

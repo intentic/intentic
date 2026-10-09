@@ -252,7 +252,8 @@ it(`reveals that press with the card's other actions, by fading rather than by a
     const press = buttonLabelled(mount(ready(`landed`)), `Add reaction`)!;
     expect(press.className).toContain(`opacity-0`);
     expect(press.className).toContain(`group-hover:opacity-100`);
-    expect(press.className).toContain(`transition-opacity`);
+    // Tailwind's whole `transition`, which fades the opacity and the hover fill alike (see app/hoverFade.test.ts).
+    expect(press.className.split(/\s+/)).toContain(`transition`);
     expect(press.className).not.toContain(`hidden`);
 });
 

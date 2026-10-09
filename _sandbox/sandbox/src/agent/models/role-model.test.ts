@@ -133,6 +133,8 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
         cards: unstubbed<Services[`cards`]>(`cards`, {}),
         // An answer settles what its provider last refused, as a turn's first words do.
         providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {} }),
+        // ...and reopens the model it benched, as the same first words do.
+        modelCooldowns: unstubbed<Services[`modelCooldowns`]>(`modelCooldowns`, { clear: async () => {} }),
         logger: unstubbed<Services[`logger`]>(`logger`, { debug: () => {} }),
         // Records each rung's timing under its model name for the walk's perf trace.
         perf: unstubbed<Services[`perf`]>(`perf`, { record: (op, ms, fields, failed) => void timed.push({ op, ms, fields, failed }) }),
