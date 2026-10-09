@@ -49,7 +49,14 @@ const viewTile = (view: LocalView): Tile => {
 };
 
 // Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them.
-const tiles = computed<readonly Tile[]>(() => [{ section: `workspace`, to: `/workspace`, label: t(`shared.files`) }, ...host.views.map(viewTile)]);
+// Agents second, from the first launch where the app can set this PC up (agents/LocalAgents.vue); a view the app routes
+// without a tile (Repair, opened from where it is needed) is left off the rail.
+const agentsTile = (): readonly Tile[] => (host.onboarding === undefined ? [] : [{ section: `agents`, to: `/agents`, label: t(`shared.agents`) }]);
+const tiles = computed<readonly Tile[]>(() => [
+    { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
+    ...agentsTile(),
+    ...host.views.filter((view) => view.inRail !== false).map(viewTile),
+]);
 
 // Prefix match, as the sandbox shell's: a file path under /workspace keeps its tile lit.
 const isActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);

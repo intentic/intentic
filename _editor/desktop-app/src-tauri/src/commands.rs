@@ -79,6 +79,7 @@ fn app_env_with(version: &str, ic: Option<std::path::PathBuf>) -> Vec<(String, S
     if let Some(ic) = ic {
         env.push(("INTENTIC_IC_PATH".into(), ic.to_string_lossy().into_owned()));
     }
+    env.extend(scripts::engine_env_pairs());
     env
 }
 

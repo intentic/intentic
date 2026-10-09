@@ -36,6 +36,7 @@ mod checks;
 mod cloudflare;
 mod contract;
 mod docker;
+mod engine;
 mod fetch;
 mod health;
 mod image_cache;
@@ -95,6 +96,40 @@ enum Command {
     /// The sandbox image, ahead of Docker
     #[command(subcommand)]
     Image(ImageCommand),
+    /// The intentic container engine on Windows (WSL distro + dockerd)
+    Engine {
+        #[command(subcommand)]
+        command: Option<EngineCommand>,
+    },
+}
+
+#[derive(Subcommand)]
+enum EngineCommand {
+    /// Download the engine payload into `%USERPROFILE%\.intentic\engine-cache\` ahead of setup
+    Fetch,
+    /// Whether the engine is installed and running (`--json` for the desktop app)
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import the WSL distro, generate TLS, and start the engine
+    Install,
+    /// Start the engine and wait until it answers
+    Start {
+        #[arg(long)]
+        quiet: bool,
+    },
+    /// Stop the engine (`wsl --terminate intentic-engine`)
+    Stop,
+    /// Stop the engine without removing it (same as stop today)
+    Hold,
+    /// Fetch newer docker binaries into the running distro and restart
+    Update,
+    /// Unregister the WSL distro and remove the engine record
+    Remove {
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -631,6 +666,7 @@ enum DeviceCommand {
 }
 
 fn main() {
+    engine::adopt();
     #[cfg(windows)]
     docker::adopt_program_folder();
     let cli = Cli::parse();
@@ -857,6 +893,17 @@ fn main() {
             yes: yes || std::env::var("INSTALL_DOCKER").as_deref() == Ok("1"),
             dry_run,
         }),
+        Command::Engine { command } => match command {
+            None => engine::default_action(),
+            Some(EngineCommand::Fetch) => engine::run_fetch(),
+            Some(EngineCommand::Status { json }) => engine::run_status(json),
+            Some(EngineCommand::Install) => engine::run_install(),
+            Some(EngineCommand::Start { quiet }) => engine::run_start(quiet),
+            Some(EngineCommand::Stop) => engine::run_stop(),
+            Some(EngineCommand::Hold) => engine::run_hold(),
+            Some(EngineCommand::Update) => engine::run_update(),
+            Some(EngineCommand::Remove { yes }) => engine::run_remove(yes),
+        },
     };
     if let Err(util::Fail(message)) = result {
         ui::error(&message);

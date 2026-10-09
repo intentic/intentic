@@ -30,9 +30,12 @@ flowchart LR
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
-  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then This device
-  (`/device`), and at the foot the sandbox shell's own account control (who is signed in, Settings, Sign out), or the
-  sign-in in the default browser until there is an account. Settings open in the window itself (`#/settings`), and
+  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then **Agents**
+  (`/agents`, from first launch while this PC is set up), then This device (`/device`), and at the foot the sandbox
+  shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until there
+  is an account. The **first task** the reader writes on Agents is kept in `first-task.json` under the app config dir,
+  announced on `desktop://first-task`, attached to this computer's sandbox when it is ready, and opened in the workspace
+  with `?task=`; the workspace answers on `intentic://first-task?do=sent|failed&id=…`. Settings open in the window itself (`#/settings`), and
   signing out leaves it on its folder. The sandboxes and the account are what the workspace last told the app: its
   switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
   them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
@@ -595,9 +598,39 @@ granted that token. With no app behind the page, its commands are answered by a 
 Tauri's own IPC mock), for a machine picked by `?machine=fresh|host|setup`: a first launch, one hosting two sandboxes,
 or one mid-setup.
 
+## First launch on Windows (2026-10-09)
+
+At launch the app runs a read-only `ic docker prepare --dry-run` and streams the result to every local window as
+`desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on the Agents view; rows are
+labelled in the desktop app's i18n (`desktop.onboarding.rows.*`), not in Rust.
+
+A few seconds after the first launch, on an unmetered connection, the app prefetches what agents need: `ic engine fetch`
+then `ic image prefetch`, parsing both with the same `intentic-prefetch:` markers (`prefetch.rs`). The reader can pause
+it from Agents; a metered connection waits until unmetered or the reader starts it anyway. The office editor download
+(`sidecar.rs` `prefetch-office`) waits until that prefetch is `done` or `failed`.
+
+"Set up this PC", the `/device` setup flow, and a folder's "Work on this with an agent" when Docker is not ready all
+run the same consenting setup: `ic docker prepare --yes` with `INSTALL_DOCKER=1` (`onboarding_set_up`). When the PC is
+ready and someone is signed in, `machine_sandbox.rs` makes this computer's sandbox as before; until then the machine
+card waits on the PC setup and offers a hosted machine when this PC cannot run a sandbox.
+
+Restarts use `/r /t 0` only — never a timed `/t` above zero, because Windows then implies `/f` and force-closes unsaved
+work elsewhere (`commands.rs` `end_session`). A restart the reader schedules (`in10Minutes`, `later`) is parked in
+`~/.intentic/onboarding-pc-parked.json` and resumed on the next launch.
+
+Product events from the first launch (`onboarding_launched`, `onboarding_check`, `onboarding_prefetch`,
+`onboarding_setup`, `onboarding_cloud`) are sent from `src/onboarding/pc.ts` through `analytics.ts`, keyed to the
+install id; reasons are scrubbed with `installTelemetry.ts` `scrubReason`.
+
 ```sh
 pnpm --filter @intentic/desktop-app tauri:dev        # the close question's page on :47146, workspace from INTENTIC_APP_URL
 pnpm --filter @intentic/desktop-app dev:local        # the local face on :47147, proxied under :47146's /files
 pnpm --filter @intentic/desktop-app check:rust       # rustfmt, clippy, cargo test
 pnpm --filter @intentic/desktop-app stage:downloads  # local installers into _site/site/public/desktop/
 ```
+
+## Repair
+
+Repair is an agent that runs in this app on the reader's PC, outside every sandbox. It can run read-only checks (`ic sandbox doctor`, `ic engine status`, `ic docker prepare --dry-run`, sandbox list/logs, setup transcript) and, after the reader taps **Allow**, mutating fixes (`ic sandbox fix`, `ic engine start`, sandbox restart/rollback). It has no shell and cannot edit project files.
+
+Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**Repair**), or `intentic://repair?slug=…&from=…&reason=…`. The web route is `/repair` in the local shell; Rust lives in `src-tauri/src/repair/`, TypeScript in `src/repair.ts`.

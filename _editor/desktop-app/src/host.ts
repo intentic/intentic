@@ -2,7 +2,10 @@ import { t } from "@intentic/ui/i18n";
 import { type LocalFace, localFace } from "@intentic/web/local";
 import type { LocalHost, LocalMachineAction, LocalProjectHost, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
+import { track } from "./analytics";
 import { readAccount, signOutAccount, updateAccount } from "./account";
+import { onboardingHost } from "./onboarding";
+import { repairHost } from "./repair";
 import {
     foundOnMachine,
     homeFacts,
@@ -90,8 +93,15 @@ const PROJECT: LocalProjectHost = {
         return preview.kind === `new` ? { ...preview, machine: machineStateOf(preview.machine) } : preview;
     },
     attach: async (names) => {
-        const attached = await projectAttach(names);
-        return attached.kind === `queued` ? `queued` : `opened`;
+        try {
+            const attached = await projectAttach(names);
+            const outcome = attached.kind === `queued` ? `queued` : `opened`;
+            track(`project_attach`, { outcome });
+            return outcome;
+        } catch (error) {
+            track(`project_attach`, { outcome: `failed` });
+            throw error;
+        }
     },
     machine: computed(() => machineOf(machineSandbox.value)),
     folder: computed(() => folderOf(machineSandbox.value, folderPath())),
@@ -127,6 +137,8 @@ export const nativeHost = (): LocalHost => ({
     updateAccount: (change) => updateAccount(change),
     signOut: () => signOutAccount(),
     project: PROJECT,
+    onboarding: onboardingHost(),
+    repair: repairHost(),
 });
 
 /**

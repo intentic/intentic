@@ -17,6 +17,23 @@ pub const MIN_BUILD: u32 = 19044;
 pub const MIN_FREE_GIB: u64 = 5;
 pub const TIGHT_FREE_GIB: u64 = 15;
 
+/// Under this much physical RAM a sandbox cannot run here. An "8 GB" PC reports about 7.8 GiB and passes.
+pub const MIN_MEMORY_BYTES: u64 = 7 * 1024 * 1024 * 1024;
+
+/// Docker Desktop's installer, from the direct download route (measured ~600 MB).
+pub const DOCKER_DESKTOP_DOWNLOAD_BYTES: u64 = 600 * 1024 * 1024;
+
+/// Compressed sandbox image size when the cache cannot be read cheaply (release `stable`, measured ~1.88 GB).
+pub const SANDBOX_IMAGE_ESTIMATE_BYTES: u64 = 1_880 * 1024 * 1024;
+
+/// Rough setup minutes per requirement id (estimates for the summary only).
+const MINUTES_WSL_FEATURES: u32 = 8;
+const MINUTES_WSL_KERNEL: u32 = 5;
+const MINUTES_DOCKER_DESKTOP: u32 = 12;
+const MINUTES_ENGINE: u32 = 10;
+const MINUTES_ENGINE_START: u32 = 2;
+const MINUTES_DOCKER_RUNNING: u32 = 4;
+
 /// Everything the probe reads, plus the three docker facts the caller fills from [`crate::docker`]. One
 /// struct rather than two, so a test case is one literal and the classifier has one input.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -75,11 +92,22 @@ pub struct Facts {
     pub in_docker_users_group: bool,
     /// Free space on the system drive, whole GiB. None when the drive would not answer.
     pub free_gib: Option<u64>,
+    /// Physical RAM from `Win32_ComputerSystem.TotalPhysicalMemory`. None when it would not answer.
+    pub memory_bytes: Option<u64>,
+    /// Logical processors. None when they would not answer.
+    pub cpus: Option<u32>,
+    /// Windows in S mode (`SkuPolicyRequired` = 1). None when the registry would not answer.
+    pub windows_s_mode: Option<bool>,
     /// `USERNAME` — the short form, for prose.
     pub user: String,
     /// `whoami`, i.e. `DOMAIN\user`. What a group membership has to be spelled with, and read HERE rather
     /// than inside the elevated helper that uses it: that one may be running as a different account entirely.
     pub user_qualified: String,
+
+    /// Tests pin the engine choice without touching the process environment (parallel-safe).
+    #[cfg(test)]
+    #[serde(skip)]
+    pub test_engine: Option<crate::engine::Kind>,
 
     // ---- filled by the caller from crate::docker, not by the probe ----
     pub docker_cli: bool,
@@ -90,6 +118,11 @@ pub struct Facts {
     pub docker_denied: bool,
     /// `docker version --format {{.Server.Os}}` — `windows` here is Docker Desktop in Windows-container mode.
     pub docker_server_os: Option<String>,
+    /// Intentic engine on this PC (`facts::read`, once per probe). Ignored when sandboxes use Docker Desktop.
+    #[serde(default)]
+    pub engine_installed: bool,
+    #[serde(default)]
+    pub engine_running: bool,
 }
 
 /// Whether the daemon's refusal (see `crate::docker::daemon_refusal`) is the engine turning THIS ACCOUNT away
@@ -340,6 +373,35 @@ pub fn restart_requirement() -> Requirement {
     )
 }
 
+/// Which container engine this PC's sandboxes use, from the probe and [`crate::engine::choose`].
+pub fn chosen_engine(facts: &Facts) -> crate::engine::Kind {
+    #[cfg(test)]
+    if let Some(kind) = facts.test_engine {
+        return kind;
+    }
+    let docker_installed = !facts.docker_desktop_path.is_empty();
+    if cfg!(windows) {
+        crate::engine::choose(docker_installed)
+    } else if docker_installed {
+        crate::engine::Kind::DockerDesktop
+    } else {
+        // Cross-built tests exercise the Windows plan on Linux runners; there is no Native path there.
+        crate::engine::Kind::Intentic
+    }
+}
+
+/// The `"admin"` and `"ours"` fields on each `intentic-requirement:` line.
+pub fn requirement_admin_ours(requirement: &Requirement) -> (bool, bool) {
+    let ours = matches!(requirement.id, "engine" | "engine-start") || requirement.action.ours();
+    let admin = requirement.action == Action::FixElevated;
+    (admin, ours)
+}
+
+/// WSL2 must be working (and any feature restart finished) before our engine can be installed.
+pub fn engine_blocked_on_wsl(facts: &Facts) -> bool {
+    !wsl_ready(facts) || facts.servicing_reboot_pending
+}
+
 /* Read top to bottom: the early returns are not shortcuts, they are the DEPENDENCY ORDER. */
 pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     let mut found = Vec::new();
@@ -393,6 +455,35 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             "Processor features",
             "This processor lacks a feature Docker's Linux engine requires (Second Level Address Translation).",
             "Docker cannot run on this PC. Run your sandbox on a machine we host instead.",
+            Action::Unsupported,
+        ));
+        found.extend(disk(facts));
+        return found;
+    }
+    if facts
+        .memory_bytes
+        .is_some_and(|bytes| bytes < MIN_MEMORY_BYTES)
+    {
+        let gib = facts
+            .memory_bytes
+            .map(|bytes| bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+            .unwrap_or(0.0);
+        found.push(req(
+            "memory",
+            "Physical memory",
+            &format!("This PC has about {gib:.1} GiB of memory; a sandbox needs at least 7 GiB."),
+            "Use a PC with more memory, or run your sandbox on a machine we host instead.",
+            Action::Unsupported,
+        ));
+        found.extend(disk(facts));
+        return found;
+    }
+    if facts.windows_s_mode == Some(true) {
+        found.push(req(
+            "windows-edition",
+            "Windows edition",
+            "This PC is in Windows S mode, which cannot run the container engine a sandbox needs.",
+            "Switch out of S mode in Settings (Activation), or run your sandbox on a machine we host instead.",
             Action::Unsupported,
         ));
         found.extend(disk(facts));
@@ -469,7 +560,16 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         ));
     }
 
-    // ---- Docker itself ----
+    match chosen_engine(facts) {
+        crate::engine::Kind::Intentic => append_intentic_engine(&mut found, facts),
+        _ => append_docker_desktop(&mut found, facts),
+    }
+
+    found.extend(disk(facts));
+    found
+}
+
+fn append_docker_desktop(found: &mut Vec<Requirement>, facts: &Facts) {
     if facts.docker_desktop_path.is_empty() && !facts.docker_cli {
         // One route, with or without the Windows package manager: see fix.rs, where it is the one that can be watched,
         // and where it is installed for this account alone, which needs no administrator.
@@ -541,9 +641,50 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             ));
         }
     }
+}
 
-    found.extend(disk(facts));
-    found
+fn append_intentic_engine(found: &mut Vec<Requirement>, facts: &Facts) {
+    let waiting = engine_blocked_on_wsl(facts);
+    if !facts.engine_installed {
+        let mut requirement = req(
+            "engine",
+            "Intentic engine",
+            if waiting {
+                "Intentic's container engine is not installed yet, and WSL2 has to finish first."
+            } else {
+                "Intentic's container engine is not installed on this PC."
+            },
+            if waiting {
+                "We install it after WSL2 is working (after the restart, if Windows needs one)."
+            } else {
+                "We will download and install it. No administrator permission is needed."
+            },
+            Action::Fix,
+        );
+        if waiting {
+            requirement.detail = Some(
+                "This step runs after WSL2 works and any restart Windows needed for it."
+                    .to_string(),
+            );
+        }
+        found.push(requirement);
+    } else if !facts.engine_running {
+        found.push(req(
+            "engine-start",
+            "Intentic engine running",
+            "Intentic's container engine is installed but not running.",
+            "We will start it and wait until it answers.",
+            Action::Fix,
+        ));
+    } else if !facts.docker_daemon && !facts.docker_denied {
+        found.push(req(
+            "engine-start",
+            "Intentic engine running",
+            "Intentic's container engine is installed but not answering yet.",
+            "We will start it and wait until it answers.",
+            Action::Fix,
+        ));
+    }
 }
 
 /// Free space, as a requirement rather than a check — it belongs in the same list as everything else the user
@@ -564,11 +705,264 @@ fn disk(facts: &Facts) -> Option<Requirement> {
     ))
 }
 
+/* THE PREPARE SUMMARY — one JSON line the desktop app reads at the end of every run. */
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetRow {
+    pub id: &'static str,
+    pub title: String,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryMachine {
+    pub os: String,
+    pub build: u32,
+    pub memory_bytes: Option<u64>,
+    pub free_bytes: Option<u64>,
+    pub cpus: Option<u32>,
+    pub virtualization: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareSummary {
+    pub state: &'static str,
+    pub engine: &'static str,
+    pub restart: bool,
+    pub admin: bool,
+    pub download_bytes: u64,
+    pub minutes: u32,
+    pub machine: SummaryMachine,
+    pub met: Vec<MetRow>,
+}
+
+pub fn free_bytes(facts: &Facts) -> Option<u64> {
+    facts.free_gib.map(|gib| gib * 1024 * 1024 * 1024)
+}
+
+pub fn sandbox_image_bytes_remaining() -> u64 {
+    use crate::image_cache::{self, Reference, DEFAULT_IMAGE};
+    let Some(reference) = Reference::parse(DEFAULT_IMAGE) else {
+        return SANDBOX_IMAGE_ESTIMATE_BYTES;
+    };
+    let Some(dir) = image_cache::dir_for(&reference) else {
+        return SANDBOX_IMAGE_ESTIMATE_BYTES;
+    };
+    let Some(state) = image_cache::read_state(&dir) else {
+        return SANDBOX_IMAGE_ESTIMATE_BYTES;
+    };
+    if state.state == "ready" && state.total > 0 && state.done >= state.total {
+        return 0;
+    }
+    if state.total > 0 {
+        return state.total.saturating_sub(state.done);
+    }
+    SANDBOX_IMAGE_ESTIMATE_BYTES
+}
+
+fn summary_state(unmet: &[Requirement]) -> &'static str {
+    if unmet.is_empty() {
+        return "ready";
+    }
+    if unmet.iter().any(|r| {
+        matches!(
+            r.action,
+            Action::Unsupported | Action::Firmware | Action::HostVm
+        )
+    }) {
+        return "cantRun";
+    }
+    "needsSetup"
+}
+
+/// Whether the summary should warn that Windows will need a restart before sandboxes can run.
+pub fn summary_restart_needed(unmet: &[Requirement], session_restart: bool) -> bool {
+    session_restart
+        || unmet
+            .iter()
+            .any(|r| r.action == Action::Restart || r.id == "wsl-features")
+}
+
+fn minutes_for(requirement: &Requirement) -> u32 {
+    match requirement.id {
+        "wsl-features" => MINUTES_WSL_FEATURES,
+        "wsl-kernel" => MINUTES_WSL_KERNEL,
+        "docker-desktop" | "docker-path" => MINUTES_DOCKER_DESKTOP,
+        "docker-running" | "docker-linux-containers" => MINUTES_DOCKER_RUNNING,
+        "engine" => MINUTES_ENGINE,
+        "engine-start" => MINUTES_ENGINE_START,
+        _ => 0,
+    }
+}
+
+pub fn download_bytes_for(facts: &Facts, unmet: &[Requirement]) -> u64 {
+    if unmet.is_empty() {
+        return 0;
+    }
+    let mut total = sandbox_image_bytes_remaining();
+    let engine = chosen_engine(facts);
+    for requirement in unmet {
+        match requirement.id {
+            "docker-desktop" => total += DOCKER_DESKTOP_DOWNLOAD_BYTES,
+            "engine" if engine == crate::engine::Kind::Intentic => {
+                total += crate::engine::download_bytes();
+            }
+            _ => {}
+        }
+    }
+    total
+}
+
+pub fn minutes_for_setup(unmet: &[Requirement]) -> u32 {
+    unmet.iter().map(minutes_for).sum()
+}
+
+pub fn met(facts: &Facts) -> Vec<MetRow> {
+    let mut rows = Vec::new();
+    if facts
+        .memory_bytes
+        .is_some_and(|bytes| bytes >= MIN_MEMORY_BYTES)
+    {
+        rows.push(MetRow {
+            id: "memory",
+            title: "Physical memory".to_string(),
+            detail: None,
+        });
+    }
+    if facts.windows_s_mode == Some(false) {
+        rows.push(MetRow {
+            id: "windows-edition",
+            title: "Windows edition".to_string(),
+            detail: None,
+        });
+    }
+    if virtualization_ok(facts) == Some(true) || virtualization_proven(facts) {
+        rows.push(MetRow {
+            id: "virtualization",
+            title: "Hardware virtualization".to_string(),
+            detail: None,
+        });
+    }
+    if wsl_ready(facts) {
+        rows.push(MetRow {
+            id: "wsl",
+            title: "WSL2".to_string(),
+            detail: None,
+        });
+    }
+    if facts.free_gib.is_some_and(|gib| gib >= MIN_FREE_GIB) {
+        rows.push(MetRow {
+            id: "disk-space",
+            title: "Free disk space".to_string(),
+            detail: None,
+        });
+    }
+    if chosen_engine(facts) == crate::engine::Kind::Intentic {
+        if facts.engine_running {
+            rows.push(MetRow {
+                id: "engine",
+                title: "Intentic engine running".to_string(),
+                detail: None,
+            });
+        } else if facts.engine_installed {
+            rows.push(MetRow {
+                id: "engine",
+                title: "Intentic engine installed".to_string(),
+                detail: None,
+            });
+        }
+    } else if facts.docker_daemon {
+        rows.push(MetRow {
+            id: "docker-running",
+            title: "Docker's engine running".to_string(),
+            detail: None,
+        });
+    }
+    rows
+}
+
+pub fn prepare_summary(
+    facts: &Facts,
+    unmet: &[Requirement],
+    session_restart: bool,
+) -> PrepareSummary {
+    let admin = unmet
+        .iter()
+        .any(|r| requirement_admin_ours(r).0 && r.action == Action::FixElevated);
+    PrepareSummary {
+        state: summary_state(unmet),
+        engine: chosen_engine(facts).id(),
+        restart: summary_restart_needed(unmet, session_restart),
+        admin,
+        download_bytes: download_bytes_for(facts, unmet),
+        minutes: minutes_for_setup(unmet),
+        machine: SummaryMachine {
+            os: windows_name(&facts.product_name, facts.build),
+            build: facts.build,
+            memory_bytes: facts.memory_bytes,
+            free_bytes: free_bytes(facts),
+            cpus: facts.cpus,
+            virtualization: virtualization_ok(facts).or(facts.virtualization_firmware),
+        },
+        met: met(facts),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn print_unix_prepare_summary(state: &'static str) {
+    let summary = PrepareSummary {
+        state,
+        engine: "native",
+        restart: false,
+        admin: false,
+        download_bytes: 0,
+        minutes: 0,
+        machine: SummaryMachine {
+            os: std::env::consts::OS.to_string(),
+            build: 0,
+            memory_bytes: None,
+            free_bytes: None,
+            cpus: None,
+            virtualization: None,
+        },
+        met: Vec::new(),
+    };
+    let line = serde_json::to_string(&summary).unwrap_or_else(|error| {
+        format!(
+            "{{\"state\":\"{state}\",\"engine\":\"native\",\"restart\":false,\"admin\":false,\"downloadBytes\":0,\"minutes\":0,\"machine\":{{\"os\":\"{}\",\"build\":0,\"memoryBytes\":null,\"freeBytes\":null,\"cpus\":null,\"virtualization\":null}},\"met\":[],\"error\":\"{error}\"}}",
+            std::env::consts::OS
+        )
+    });
+    println!("intentic-prepare-summary: {line}");
+}
+
+pub fn print_prepare_summary(facts: &Facts, unmet: &[Requirement], session_restart: bool) {
+    let summary = prepare_summary(facts, unmet, session_restart);
+    let line = serde_json::to_string(&summary).unwrap_or_else(|error| {
+        format!(
+            "{{\"state\":\"needsSetup\",\"engine\":\"native\",\"restart\":false,\"admin\":false,\"downloadBytes\":0,\"minutes\":0,\"machine\":{{\"os\":\"Windows\",\"build\":0,\"memoryBytes\":null,\"freeBytes\":null,\"cpus\":null,\"virtualization\":null}},\"met\":[],\"error\":\"{error}\"}}"
+        )
+    });
+    println!("intentic-prepare-summary: {line}");
+}
+
 /* THE CHECKLIST — the same diagnosis, drawn as rows rather than as a list of problems. */
 
 /// Every area of the machine, in examination order, with the requirement ids that belong to it.
-pub const AREAS: [(&str, &[&str]); 8] = [
-    ("This PC", &["arch", "windows-version", "slat"]),
+pub const AREAS: [(&str, &[&str]); 9] = [
+    (
+        "This PC",
+        &[
+            "arch",
+            "windows-version",
+            "windows-edition",
+            "memory",
+            "slat",
+        ],
+    ),
     (
         "Hardware virtualization",
         &["virtualization", "nested-virtualization"],
@@ -581,13 +975,16 @@ pub const AREAS: [(&str, &[&str]); 8] = [
         "Docker's engine",
         &["docker-running", "docker-linux-containers"],
     ),
+    ("Intentic engine", &["engine", "engine-start"]),
     ("Free disk space", &["disk-space"]),
 ];
 
 /// The requirements [`requirements`] stops at: everything below one of these is unjudged, not fine.
-const BLOCKING: [&str; 6] = [
+const BLOCKING: [&str; 8] = [
     "arch",
     "windows-version",
+    "windows-edition",
+    "memory",
     "slat",
     "virtualization",
     "nested-virtualization",
@@ -741,12 +1138,18 @@ mod tests {
             in_docker_users: true,
             in_docker_users_group: true,
             free_gib: Some(200),
+            memory_bytes: Some(16 * 1024 * 1024 * 1024),
+            cpus: Some(16),
+            windows_s_mode: Some(false),
             user: "radarsu".to_string(),
             user_qualified: "omen\\radarsu".to_string(),
             docker_cli: true,
             docker_daemon: true,
             docker_denied: false,
             docker_server_os: Some("linux".to_string()),
+            engine_installed: false,
+            engine_running: false,
+            test_engine: None,
         }
     }
 
@@ -790,6 +1193,7 @@ mod tests {
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
             ..healthy()
         };
         let found = requirements(&facts);
@@ -819,6 +1223,7 @@ mod tests {
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
             ..healthy()
         };
         let desktop = requirements(&facts)
@@ -1063,6 +1468,7 @@ mod tests {
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
             ..healthy()
         };
         assert_eq!(ids(&facts), vec!["docker-desktop", "docker-running"]);
@@ -1221,6 +1627,7 @@ mod tests {
             elevated: false,
             docker_desktop_path: path.to_string(),
             docker_desktop_version: version.to_string(),
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
             ..stopped()
         };
         let all_users = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
@@ -1457,12 +1864,13 @@ mod tests {
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::Intentic),
             ..healthy()
         };
         assert_eq!(
             ids(&facts),
-            vec!["wsl-features", "docker-desktop", "docker-running"],
-            "WSL2 before Docker, Docker before waiting on the engine - and no group: the Docker Desktop installed here is per-user and today's, which checks none"
+            vec!["wsl-features", "engine"],
+            "WSL2 before our engine on a PC without Docker Desktop - and no docker-users sign-out"
         );
         assert!(
             requirements(&facts).iter().all(|r| r.action.ours()),
@@ -1517,6 +1925,7 @@ mod tests {
             docker_cli: false,
             docker_daemon: false,
             docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
             ..healthy()
         };
         let rows = checklist(&facts);
@@ -1548,6 +1957,8 @@ mod tests {
         for id in [
             "arch",
             "windows-version",
+            "windows-edition",
+            "memory",
             "slat",
             "virtualization",
             "nested-virtualization",
@@ -1559,6 +1970,8 @@ mod tests {
             "docker-users",
             "docker-running",
             "docker-linux-containers",
+            "engine",
+            "engine-start",
             "disk-space",
         ] {
             assert!(known.contains(&id), "{id} is not on any checklist row");
@@ -1636,6 +2049,119 @@ mod tests {
         );
         // A build we could not read is not evidence of anything, so the registry's word stands.
         assert_eq!(windows_name("Windows 10 Pro", 0), "Windows 10 Pro");
+    }
+
+    #[test]
+    fn a_pc_with_docker_desktop_keeps_the_docker_desktop_rows() {
+        let facts = Facts {
+            service_wsl: false,
+            service_vmcompute: false,
+            wsl_status_ok: false,
+            wsl_version: String::new(),
+            docker_desktop_path: "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"
+                .to_string(),
+            docker_cli: false,
+            docker_daemon: false,
+            docker_server_os: None,
+            ..healthy()
+        };
+        assert!(
+            ids(&facts).contains(&"docker-desktop") || ids(&facts).contains(&"docker-path"),
+            "Docker Desktop installed keeps today's docker rows"
+        );
+        assert!(
+            !ids(&facts).contains(&"engine"),
+            "Docker Desktop chosen means no intentic engine row"
+        );
+    }
+
+    #[test]
+    fn tight_disk_space_is_needs_setup_not_cant_run() {
+        let facts = Facts {
+            free_gib: Some(3),
+            ..healthy()
+        };
+        let unmet = requirements(&facts);
+        assert_eq!(unmet[0].id, "disk-space");
+        assert_eq!(unmet[0].action, Action::User);
+        assert_eq!(prepare_summary(&facts, &unmet, false).state, "needsSetup");
+    }
+
+    #[test]
+    fn four_gigabytes_is_too_little_memory() {
+        let facts = Facts {
+            memory_bytes: Some(4 * 1024 * 1024 * 1024),
+            ..bare()
+        };
+        let found = requirements(&facts);
+        assert_eq!(found[0].id, "memory");
+        assert_eq!(found[0].action, Action::Unsupported);
+        assert_eq!(prepare_summary(&facts, &found, false).state, "cantRun");
+    }
+
+    #[test]
+    fn summary_json_for_fixture_pcs() {
+        let fresh = Facts {
+            service_wsl: false,
+            service_vmcompute: false,
+            wsl_status_ok: false,
+            wsl_version: String::new(),
+            memory_bytes: Some(8 * 1024 * 1024 * 1024),
+            cpus: Some(8),
+            docker_desktop_path: String::new(),
+            docker_cli: false,
+            docker_daemon: false,
+            docker_server_os: None,
+            test_engine: Some(crate::engine::Kind::Intentic),
+            ..healthy()
+        };
+        let fresh_unmet = requirements(&fresh);
+        let fresh_summary = prepare_summary(&fresh, &fresh_unmet, false);
+        assert_eq!(fresh_summary.state, "needsSetup");
+        assert_eq!(fresh_summary.engine, "intentic");
+        assert!(fresh_summary.restart);
+        assert!(fresh_summary.download_bytes >= SANDBOX_IMAGE_ESTIMATE_BYTES);
+        assert!(fresh_summary.admin);
+
+        let dd = healthy();
+        assert!(requirements(&dd).is_empty());
+        let dd_summary = prepare_summary(&dd, &[], false);
+        assert_eq!(dd_summary.state, "ready");
+        assert_eq!(dd_summary.engine, "dockerDesktop");
+
+        let no_virt = Facts {
+            virtualization_firmware: Some(false),
+            memory_bytes: Some(16 * 1024 * 1024 * 1024),
+            ..bare()
+        };
+        let no_virt_unmet = requirements(&no_virt);
+        let no_virt_summary = prepare_summary(&no_virt, &no_virt_unmet, false);
+        assert_eq!(no_virt_summary.state, "cantRun");
+        assert_eq!(no_virt_unmet[0].id, "virtualization");
+
+        if std::env::var("PRINT_PREPARE_SUMMARY").as_deref() == Ok("1") {
+            eprintln!(
+                "fresh-win11={}",
+                serde_json::to_string(&fresh_summary).unwrap()
+            );
+            eprintln!(
+                "docker-desktop-running={}",
+                serde_json::to_string(&dd_summary).unwrap()
+            );
+            eprintln!(
+                "virtualization-off={}",
+                serde_json::to_string(&no_virt_summary).unwrap()
+            );
+            let four_gb = Facts {
+                memory_bytes: Some(4 * 1024 * 1024 * 1024),
+                ..bare()
+            };
+            let four_gb_unmet = requirements(&four_gb);
+            eprintln!(
+                "four-gb={}",
+                serde_json::to_string(&prepare_summary(&four_gb, &four_gb_unmet, false)).unwrap()
+            );
+        }
     }
 
     #[test]

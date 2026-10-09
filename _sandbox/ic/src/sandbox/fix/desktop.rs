@@ -214,6 +214,10 @@ pub fn prerequisite(facts: &DeviceFacts, id: &str) -> Done {
 }
 
 /// Linux Docker Engine under systemd. `sudo` asks for its password on the terminal itself when it needs one.
+pub fn start_intentic_engine() -> Done {
+    crate::engine::start().map(|()| Applied::Now)
+}
+
 pub fn start_engine() -> Done {
     #[cfg(unix)]
     let root = docker::is_root();

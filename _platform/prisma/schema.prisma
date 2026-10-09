@@ -35,6 +35,7 @@ model User {
     sandboxes        Sandbox[]
     sandboxTrash     SandboxTrash[]
     trialUsage       TrialUsage[]
+    repairUsage      RepairUsage[]
     hostedUsage      HostedUsage[]
     hostedPlan       HostedPlan?
     hostedProvisions HostedProvision[]
@@ -71,6 +72,24 @@ model ApiToken {
 
     @@index([userId])
     @@map("api_token")
+}
+
+// The Repair allowance this account has spent today. Same shape and day key as TrialUsage: the desktop app sends turns
+// through POST /api/repair/turn with the reader's session, and without a counter one person could spend the whole pool.
+// Rows are disposable: nothing reads a past day, so retention.ts sweeps them. Cascades with the user.
+model RepairUsage {
+    id     String @id @default(cuid())
+    userId String
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    day    String
+    turns  Int    @default(0)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([userId, day])
+    @@index([day])
+    @@map("repair_usage")
 }
 
 // The free-trial allowance this account has spent today. The trial is the one thing the platform serves ON the

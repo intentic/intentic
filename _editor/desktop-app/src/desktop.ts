@@ -2,7 +2,7 @@ import type { ResourcesForm } from "@intentic/ui";
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { LocalFound } from "@intentic/web/local-host";
+import type { LocalFirstTask, LocalFound } from "@intentic/web/local-host";
 import type { FixEnd } from "./fixReport";
 
 // Typed surface over the Rust commands in src-tauri/src/commands.rs. The native side just runs the shipped scripts
@@ -200,6 +200,62 @@ export const folderEntries = (path: string): Promise<number> => invoke(`folder_e
 // `install` is the user's answer to the requirements list. The first attempt always passes false (`ic docker
 // prepare` only reports what would change); the click to fix it comes back as true.
 export const setupRun = (args: SetupArgs, install = false): Promise<void> => invoke(`setup_run`, { args, install });
+
+export interface OnboardingMachineParts {
+    readonly os: string;
+    readonly build: number;
+    readonly memoryBytes?: number;
+    readonly freeBytes?: number;
+    readonly cpus?: number;
+    readonly virtualization?: boolean;
+}
+
+export interface OnboardingCheckRow {
+    readonly id: string;
+    readonly state: `met` | `ours` | `yours` | `blocked`;
+    readonly detail?: string;
+    readonly admin: boolean;
+}
+
+export interface OnboardingCheck {
+    readonly state: `checking` | `ready` | `needsSetup` | `cantRun` | `unknown`;
+    readonly rows: readonly OnboardingCheckRow[];
+    readonly machine?: OnboardingMachineParts;
+    readonly restart: boolean;
+    readonly admin: boolean;
+    readonly downloadBytes: number;
+    readonly minutes: number;
+    readonly engine?: `dockerDesktop` | `intentic` | `native`;
+}
+
+export interface OnboardingPrefetch {
+    readonly state: `idle` | `running` | `paused` | `metered` | `done` | `failed`;
+    readonly done: number;
+    readonly total: number;
+}
+
+export type OnboardingSetup =
+    | { readonly state: `idle` }
+    | { readonly state: `running`; readonly step?: string; readonly percent: number; readonly needsYou?: boolean }
+    | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
+    | { readonly state: `ready` }
+    | { readonly state: `failed`; readonly reason: string };
+
+export interface OnboardingSnapshot {
+    readonly check?: OnboardingCheck;
+    readonly prefetch?: OnboardingPrefetch;
+    readonly setup: OnboardingSetup;
+    readonly firstLaunch?: boolean;
+}
+
+export const onboardingState = (): Promise<OnboardingSnapshot> => invoke(`onboarding_state`);
+export const onboardingRecheck = (): Promise<void> => invoke(`onboarding_recheck`);
+export const onboardingSetUp = (): Promise<void> => invoke(`onboarding_set_up`);
+export const onboardingPause = (paused: boolean): Promise<void> => invoke(`onboarding_pause`, { paused });
+export const onboardingRestart = (when: `now` | `in10Minutes` | `later`): Promise<void> => invoke(`onboarding_restart`, { when });
+export const onboardingUseCloud = (): Promise<void> => invoke(`onboarding_use_cloud`);
+export const onOnboarding = (handler: (snapshot: OnboardingSnapshot) => void): Promise<UnlistenFn> =>
+    listen(`desktop://onboarding`, (event) => handler(event.payload as OnboardingSnapshot));
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
 /** This computer's environments and the machine agent each holds; a stand-in that knows none answers nothing. */
 export const machineAgents = async (): Promise<MachineEnvironment[]> => (await invoke<MachineEnvironment[] | null>(`machine_agents`)) ?? [];
@@ -226,6 +282,11 @@ export const deviceAgentRestart = (): Promise<string> => invoke(`machine_restart
 // The workspace in the main window's place, at its root or a path under it: how This device reaches the workspace's
 // Devices tab for the same machine, and how a finished setup hands back.
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
+
+export const firstTaskRead = (): Promise<LocalFirstTask | null> => invoke(`first_task_read`);
+export const firstTaskQueue = (folder: string, text: string): Promise<void> => invoke(`first_task_queue`, { folder, text });
+export const firstTaskClear = (): Promise<void> => invoke(`first_task_clear`);
+export const firstTaskPickFolder = (): Promise<string | null> => invoke(`first_task_pick_folder`);
 // Brings the main window to the front at This device, for a run that stopped while nobody was looking (windows.rs takes
 // the frame back rather than opening beside it).
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);

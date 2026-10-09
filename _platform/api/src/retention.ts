@@ -28,12 +28,16 @@ const runRetention = async (
     // 13 months of usage history, enough to dispute a limit; pseudonymous but per-user, so it still expires. Strikes
     // are argued against the same way and keep the same window.
     const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS);
-    const [sessions, verifications, handoffs, , , provisions] = await Promise.all([
+    // TrialUsage and RepairUsage count UTC days (`YYYY-MM-DD`), so their cutoff is the ledger cutoff's UTC day.
+    const utcDayCutoff = ledgerCutoff.toISOString().slice(0, 10);
+    const [sessions, verifications, handoffs, , , , , provisions] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.toISOString().slice(0, 7) } } }),
         prisma.hostedStrike.deleteMany({ where: { createdAt: { lt: ledgerCutoff } } }),
+        prisma.trialUsage.deleteMany({ where: { day: { lt: utcDayCutoff } } }),
+        prisma.repairUsage.deleteMany({ where: { day: { lt: utcDayCutoff } } }),
         prisma.hostedProvision.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - PROVISION_MAX_AGE_MS) } } }),
     ]);
     const stale = await prisma.sandboxMember.findMany({

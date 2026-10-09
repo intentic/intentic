@@ -78,4 +78,22 @@ const COMMANDS: &[&str] = &[
     "machine_sandbox_end_session",
     "found_on_machine",
     "machine_agents",
+    // FIRST RUN (2026-10-09): this PC's check, download and setup (onboarding.rs).
+    "onboarding_state",
+    "onboarding_recheck",
+    "onboarding_set_up",
+    "onboarding_pause",
+    "onboarding_restart",
+    "onboarding_use_cloud",
+    // The first task (first_task.rs).
+    "first_task_read",
+    "first_task_queue",
+    "first_task_clear",
+    "first_task_pick_folder",
+    // Repair (repair.rs).
+    "repair_state",
+    "repair_start",
+    "repair_send",
+    "repair_answer",
+    "repair_reset",
 ];

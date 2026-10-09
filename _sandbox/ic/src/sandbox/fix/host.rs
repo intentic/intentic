@@ -832,6 +832,18 @@ fn engine_down(
             Fix::Do(Repair::StartEngine),
         );
     }
+    if facts.os == Os::Windows
+        && facts.desktop == Desktop::Absent
+        && !tried(&Repair::StartIntenticEngine)
+        && crate::engine::EngineRecord::load().is_some_and(|record| record.is_ours())
+    {
+        return Check::fail(
+            DOCKER,
+            problem,
+            "start the intentic engine: `ic sandbox fix` does this by itself.",
+            Fix::Do(Repair::StartIntenticEngine),
+        );
+    }
     Check::fail(
         DOCKER,
         problem,

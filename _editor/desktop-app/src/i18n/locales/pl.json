@@ -240,5 +240,22 @@
     },
     "setup": {
         "stuckInstallerNotStopped": "Nie udało się zatrzymać zawieszonego instalatora: {error}"
+    },
+    "onboarding": {
+        "needsYou": "Windows prosi o Twoją zgodę",
+        "machineSep": ", ",
+        "machineMemory": "{gb} GB pamięci",
+        "machineFree": "{gb} GB wolne",
+        "rows": {
+            "wsl-features": "Podsystem Windows dla Linuksa",
+            "virtualization": "Wirtualizacja w firmware",
+            "memory": "Wystarczająca pamięć",
+            "windows-edition": "Wydanie Windows",
+            "engine": "Silnik kontenerów",
+            "engine-start": "Silnik kontenerów działa",
+            "docker-desktop": "Docker Desktop",
+            "docker-path": "Docker w PATH",
+            "docker-users": "Uprawnienia Docker dla tego konta"
+        }
     }
 }

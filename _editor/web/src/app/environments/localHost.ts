@@ -110,6 +110,159 @@ export interface LocalView {
     readonly load: () => Promise<{ readonly default: Component }>;
     /** What its tile carries (a setup running here, an update waiting), when it carries anything. */
     readonly badge?: Readonly<Ref<ViewBadge | undefined>>;
+    /** False for a view that is routed but has no rail tile, opened from where it is needed (Repair). Drawn when absent. */
+    readonly inRail?: boolean;
+}
+
+/* FIRST RUN (2026-10-09): what a new computer needs before agents can run on it, answered by the app (the read-only
+   `ic docker prepare --dry-run`, the download it starts at first launch, the PC's own setup) and drawn on the local
+   shell's Agents view. The PC's own setup (WSL, the container engine) needs no account: it runs on the reader's one
+   "Set up this PC". The sandbox itself is made once someone is signed in (LocalMachineState). The first task is written
+   while the PC is set up, kept on disk by the app so a restart keeps it, and sent once this computer's sandbox is ready. */
+
+/** One line of the check of this PC: already fine, done by Intentic, the reader's to do, or impossible here. */
+export interface LocalCheckRow {
+    /** The requirement's id as `ic docker prepare` names it (`wsl-features`, `virtualization`, `memory`…). */
+    readonly id: string;
+    readonly state: `met` | `ours` | `yours` | `blocked`;
+    /** The line in the reader's words, as the app wrote it. */
+    readonly label: string;
+    readonly detail: string | undefined;
+    /** Windows asks for permission to do it. */
+    readonly admin: boolean;
+}
+
+/** What the read-only check of this PC found, before anything was asked or changed. */
+export interface LocalPcCheck {
+    /** `ready`: agents can run here now; `needsSetup`: Intentic can get it ready; `cantRun`: no sandbox can run here. */
+    readonly state: `checking` | `ready` | `needsSetup` | `cantRun` | `unknown`;
+    readonly rows: readonly LocalCheckRow[];
+    /** The machine in one line (`Windows 11, 16 GB memory, 214 GB free`), when the check could say. */
+    readonly machine: string | undefined;
+    /** Getting it ready needs a Windows restart. */
+    readonly restart: boolean;
+    /** Windows asks for permission once. */
+    readonly admin: boolean;
+    /** Everything getting it ready downloads, the sandbox's image included. */
+    readonly downloadBytes: number;
+    /** A rough estimate of the whole setup, the restart left out. */
+    readonly minutes: number;
+    /** The container engine the sandbox runs on here. */
+    readonly engine: `dockerDesktop` | `intentic` | `native` | undefined;
+}
+
+/** The download of what agents need: started at first launch on an unmetered connection, before anything is asked. */
+export interface LocalPrefetch {
+    readonly state: `idle` | `running` | `paused` | `metered` | `done` | `failed`;
+    readonly done: number;
+    readonly total: number;
+}
+
+/** The PC's own setup (WSL, the container engine), started by the reader's "Set up this PC", with or without an account. */
+export type LocalPcSetup =
+    | { readonly state: `idle` }
+    | { readonly state: `running`; readonly step: string | undefined; readonly percent: number; readonly needsYou?: boolean }
+    | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
+    | { readonly state: `ready` }
+    | { readonly state: `failed`; readonly reason: string };
+
+/** The first task, written while the PC is set up. */
+export interface LocalFirstTask {
+    /** The folder it works on, as the reader picked it. */
+    readonly folder: string;
+    readonly text: string;
+    readonly queuedAt: number;
+    readonly state: `queued` | `sending` | `sent` | `failed`;
+    readonly reason: string | undefined;
+}
+
+/** When to restart, while the PC's setup waits for one. `later` leaves it to the next time Windows starts. */
+export type LocalRestartWhen = `now` | `in10Minutes` | `later`;
+
+export interface LocalOnboardingHost {
+    readonly check: Readonly<Ref<LocalPcCheck | undefined>>;
+    readonly prefetch: Readonly<Ref<LocalPrefetch | undefined>>;
+    readonly setup: Readonly<Ref<LocalPcSetup>>;
+    readonly firstTask: Readonly<Ref<LocalFirstTask | undefined>>;
+    /** The check again, after the reader changed something (a firmware setting, freed disk space). */
+    recheck(): Promise<void>;
+    /** "Set up this PC": the reader's one consent. Windows asks for permission once; a restart is asked for on its own. */
+    setUp(): Promise<void>;
+    pause(paused: boolean): Promise<void>;
+    restart(when: LocalRestartWhen): Promise<void>;
+    /** The system's folder dialog for the first task's folder: undefined when nothing was chosen. */
+    pickFolder(): Promise<string | undefined>;
+    queueFirstTask(task: { readonly folder: string; readonly text: string }): Promise<void>;
+    clearFirstTask(): Promise<void>;
+    /** A machine we host instead, for a PC that cannot run a sandbox: the workspace's setup, after sign-in. */
+    useCloud(): Promise<void>;
+    /** A product event, sent as the app sends its own: outcomes, ids and timings only, never a task's text or a path. */
+    track(event: string, properties?: Readonly<Record<string, string | number | boolean>>): void;
+}
+
+/* THE FIRST TASK'S WAY INTO THE WORKSPACE: once this computer's sandbox is ready and the task's folder is in it, the app
+   opens the workspace on the folder's project with `?task=<base64url(JSON LocalTaskHandoff)>`. The workspace starts one
+   new chat with the text, sends it once (the id is remembered, so a reload sends nothing twice), takes the query off
+   the address, and tells the app with `intentic://first-task?do=sent&id=<id>`, or `do=failed&id=<id>&reason=<text>`. */
+export const TASK_QUERY = `task`;
+
+export interface LocalTaskHandoff {
+    readonly v: 1;
+    readonly id: string;
+    readonly text: string;
+}
+
+/* REPAIR (2026-10-09): an agent that runs in the app on this computer, outside every sandbox, for when a sandbox or its
+   engine is down: the moment the workspace's own agents cannot help. Its hands are `ic` (doctor, fix, restart, rollback,
+   the engine) and read-only checks of the PC; it has no shell and cannot touch the reader's files. Anything that changes
+   something waits for the reader's Allow. Its model is reached through the platform with the reader's session, so it
+   works with every sandbox down; signed out, it still runs the checks and offers the fixes, without the conversation. */
+
+/** One tool call of Repair's, drawn as a row under its message. */
+export interface LocalRepairTool {
+    readonly name: string;
+    readonly state: `running` | `done` | `failed` | `needsApproval` | `refused`;
+    /** What it is doing or found, in the reader's words. */
+    readonly summary: string;
+    /** Full tool output for the Details disclosure. */
+    readonly detail?: string;
+    /** Set while it waits for the reader: answered with `answer`. */
+    readonly approvalId: string | undefined;
+}
+
+export interface LocalRepairMessage {
+    readonly id: string;
+    readonly role: `user` | `assistant` | `tool`;
+    readonly text: string;
+    readonly tool: LocalRepairTool | undefined;
+}
+
+export interface LocalRepairSession {
+    /** `offline`: no model could be reached; `signedOut`: checks and fixes only, no conversation; `waiting`: a tool needs Allow. */
+    readonly state: `idle` | `thinking` | `waiting` | `offline` | `signedOut`;
+    readonly messages: readonly LocalRepairMessage[];
+    /** When Repair's daily allowance resets (ISO 8601), while it is spent; the checks and fixes still work meanwhile. */
+    readonly allowanceResetsAt?: string;
+}
+
+/** Where Repair was opened from, which it starts looking at. */
+export interface LocalRepairContext {
+    /** The sandbox the reader was trying to reach. */
+    readonly slug?: string;
+    /** `recovery` (the workspace stopped answering), `setup` (a setup failed), `tray`, `link`, `agents`. */
+    readonly from?: string;
+    /** What the reader saw, as the opener said it. */
+    readonly reason?: string;
+}
+
+export interface LocalRepairHost {
+    readonly session: Readonly<Ref<LocalRepairSession>>;
+    /** Opens a session, or carries on the one open, looking first at `context`. */
+    start(context?: LocalRepairContext): Promise<void>;
+    send(text: string): Promise<void>;
+    answer(approvalId: string, allow: boolean): Promise<void>;
+    /** Forget the conversation; nothing it did is undone. */
+    reset(): Promise<void>;
 }
 
 /* A FOLDER'S WAY TO AN AGENT: "Work on this with an agent" asks the app in the window's own dialog (local/LocalProject.vue),
@@ -251,6 +404,10 @@ export interface LocalHost {
     signOut(): Promise<void>;
     /** A sandbox for this window's folder, made here; absent where the app cannot (a page with no app behind it). */
     readonly project?: LocalProjectHost;
+    /** What a new computer needs before agents run on it, and the first task; absent where no app is behind the page. */
+    readonly onboarding?: LocalOnboardingHost;
+    /** Repair, the agent that runs on this computer outside every sandbox; absent where no app is behind the page. */
+    readonly repair?: LocalRepairHost;
 }
 
 /* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads

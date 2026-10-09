@@ -4090,6 +4090,7 @@
             "machine": {
                 "signedOut": "You'll sign in first. This computer's sandbox is made right after, and this folder goes into it.",
                 "creating": "This computer's sandbox is being set up ({percent}%). This folder goes in as soon as it's ready.",
+                "pcSetup": "This PC still needs a one-time setup before agents can run here. Open Agents to set it up and see what's downloading.",
                 "notReady": "This computer's sandbox isn't ready yet. This folder waits for it, and the card in the corner says what it needs."
             }
         },
@@ -4150,6 +4151,147 @@
                 "details": "Open This computer",
                 "open": "Open sandbox"
             }
+        },
+        "agents": {
+            "heading": "Agents on this PC",
+            "checking": "Checking this PC…",
+            "noHost": "Open this view in the desktop app to set up agents on this computer.",
+            "cost": {
+                "minutes": "About {count} minutes",
+                "restart": "one restart",
+                "download": "{size} download",
+                "sep": " · "
+            },
+            "setup": {
+                "title": "Get agents running on this PC"
+            },
+            "checkingRows": {},
+            "check": {
+                "ours": "Intentic does it",
+                "yours": "You do this",
+                "blocked": "Cannot run here",
+                "unknownTitle": "We couldn't check this PC",
+                "unknownBody": "Something stopped us from reading whether this computer can run agents. Try again.",
+                "recheck": "Check again"
+            },
+            "steps": {
+                "setup": {
+                    "title": "Set up this PC",
+                    "detail": "Windows asks for permission once, then one restart at a moment you pick.",
+                    "action": "Set up this PC"
+                },
+                "signIn": {
+                    "title": "Sign in",
+                    "detail": "So your agents reach your phone, with free agent messages to start.",
+                    "action": "Continue with Google",
+                    "done": "Signed in as {name}"
+                },
+                "task": {
+                    "title": "Give agents a first task",
+                    "detail": "Pick a folder and say what you want done. It starts when this PC is ready.",
+                    "detailWhenReady": "It starts as soon as you sign in.",
+                    "detailWhenSignedIn": "It starts right away."
+                }
+            },
+            "prefetch": {
+                "label": "Downloading what agents need",
+                "pause": "Pause",
+                "resume": "Resume",
+                "anyway": "Download anyway",
+                "progress": "{done} of {total}",
+                "paused": "Paused",
+                "meteredWait": "Waiting for an unmetered connection",
+                "todo": "{total} to download"
+            },
+            "progress": {
+                "title": "Getting this PC ready",
+                "details": "Details",
+                "minutesLeft": "About {count} minutes left",
+                "rowDone": "Done",
+                "rowTodo": "To do",
+                "needsYou": "Windows is asking for your permission. Choose Yes to continue."
+            },
+            "task": {
+                "pickFolder": "Choose folder",
+                "placeholder": "Describe the task for your agents…",
+                "queue": "Queue task",
+                "queuedTitle": "Your first task",
+                "autoStart": "It starts by itself when this PC is ready.",
+                "open": "Open it",
+                "retry": "Retry",
+                "status": {
+                    "queued": "Queued",
+                    "sending": "Sending…",
+                    "sent": "Sent",
+                    "failed": "Could not send",
+                    "sentAgent": "Sent to an agent",
+                    "failedStart": "Couldn't start your task"
+                },
+                "edit": "Edit",
+                "autoStartSignIn": "It starts as soon as you sign in.",
+                "autoStartNow": "It starts right away."
+            },
+            "phone": {
+                "title": "Meanwhile: Open Intentic on your phone",
+                "link": "app.intentic.dev"
+            },
+            "restart": {
+                "title": "One restart finishes setup",
+                "body": "Windows needs it to switch on Linux support. Everything else is already in place.",
+                "after": "After the restart Intentic opens by itself and finishes in about 2 minutes. Your queued task starts right after.",
+                "now": "Restart now",
+                "ten": "In 10 minutes",
+                "later": "Later",
+                "save": "Save your work in other apps first.",
+                "scheduledAt": "Restarting at {time}",
+                "cancel": "Cancel"
+            },
+            "admin": {
+                "title": "Windows permission needed",
+                "body": "Setup needs administrator permission once. Choose Yes when Windows asks.",
+                "retry": "Try again"
+            },
+            "signOut": {
+                "title": "Sign out needed",
+                "body": "Windows needs you to sign out and back in before setup can continue."
+            },
+            "failed": {
+                "title": "Setup failed",
+                "retry": "Try again",
+                "repair": "Ask Repair"
+            },
+            "cantRun": {
+                "cloud": "Use Intentic in the cloud",
+                "heading": "Agents can't run on this PC",
+                "hosted": "A computer we host can run your agents instead."
+            },
+            "ready": {
+                "title": "Agents are ready on this PC",
+                "workspace": "Open workspace"
+            },
+            "taskSendFailed": "The workspace could not send your first task.",
+            "pcReady": {
+                "subtitle": "This PC is ready for agents."
+            }
+        },
+        "repair": {
+            "title": "Repair",
+            "subtitle": "Runs on this PC, outside your workspace. Checks and fixes Intentic, nothing else.",
+            "bannerSafe": "Your files and conversations in the workspace stay as they are.",
+            "approvalHint": "Anything bigger asks you first.",
+            "composerPlaceholder": "Ask Repair…",
+            "send": "Send",
+            "signedOut": "Sign in to talk to Repair. Its checks and fixes work without it.",
+            "offline": "Repair cannot reach the model right now. Checks and fixes on this PC still work.",
+            "allow": "Allow",
+            "deny": "Deny",
+            "reset": "Start over",
+            "thinking": "Repair is thinking…",
+            "waitingForOk": "Waiting for your OK",
+            "signIn": "Sign in",
+            "showDetails": "Details",
+            "hideDetails": "Hide details",
+            "allowanceUsed": "Repair's daily allowance is used up. It resets at {time}. Checks and fixes still work."
         }
     },
     "needs": {

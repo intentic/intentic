@@ -516,6 +516,81 @@ fn docker_desktop_exe() -> Option<String> {
         .and_then(|answer| desktop_app::located(&answer.stdout))
 }
 
+/// What `~/.intentic/engine/engine.json` names when this PC runs our own engine (IC CONTRACT item 4). Read on every
+/// spawn: the record appears mid-setup and is never cached for the app's lifetime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EngineEnv {
+    pub docker_host: String,
+    pub cert_path: String,
+    pub bin_dir: PathBuf,
+}
+
+impl EngineEnv {
+    fn apply_to(&self, command: &mut Command) {
+        command.env("DOCKER_HOST", &self.docker_host);
+        command.env("DOCKER_TLS_VERIFY", "1");
+        command.env("DOCKER_CERT_PATH", &self.cert_path);
+        if let Some(path) = path_with_bin_first(&self.bin_dir) {
+            command.env("PATH", path);
+        }
+    }
+
+    fn as_pairs(&self) -> Vec<(String, String)> {
+        let mut pairs = vec![
+            ("DOCKER_HOST".into(), self.docker_host.clone()),
+            ("DOCKER_TLS_VERIFY".into(), "1".into()),
+            ("DOCKER_CERT_PATH".into(), self.cert_path.clone()),
+        ];
+        if let Some(path) = path_with_bin_first(&self.bin_dir) {
+            pairs.push(("PATH".into(), path));
+        }
+        pairs
+    }
+}
+
+/// The intentic engine record, when present and valid. `None` when the file is missing, malformed, or not our engine.
+pub(crate) fn engine_env() -> Option<EngineEnv> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    engine_env_at(Path::new(&home))
+}
+
+fn engine_env_at(home: &Path) -> Option<EngineEnv> {
+    let record = std::fs::read_to_string(engine_record_path(home)).ok()?;
+    parse_engine_record(&record)
+}
+
+fn engine_record_path(home: &Path) -> PathBuf {
+    home.join(".intentic").join("engine").join("engine.json")
+}
+
+fn parse_engine_record(text: &str) -> Option<EngineEnv> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value.get("engine")?.as_str()? != "intentic" {
+        return None;
+    }
+    Some(EngineEnv {
+        docker_host: value.get("host")?.as_str()?.to_string(),
+        cert_path: value.get("certPath")?.as_str()?.to_string(),
+        bin_dir: PathBuf::from(value.get("bin")?.as_str()?),
+    })
+}
+
+fn path_with_bin_first(bin_dir: &Path) -> Option<String> {
+    let existing = std::env::var_os("PATH")?;
+    let mut parts: Vec<PathBuf> = std::env::split_paths(&existing).collect();
+    parts.insert(0, bin_dir.to_path_buf());
+    std::env::join_paths(parts)
+        .ok()
+        .map(|joined| joined.to_string_lossy().into_owned())
+}
+
+/// [`app_env`](crate::commands::app_env) carries the same TLS and PATH as [`docker`].
+pub(crate) fn engine_env_pairs() -> Vec<(String, String)> {
+    engine_env().map(|env| env.as_pairs()).unwrap_or_default()
+}
+
 /// Docker Desktop's own CLI, when this process's PATH cannot find one. A PATH is copied into a process when it
 /// starts, so the minutes after this app's own setup installs Docker Desktop are exactly the minutes its PATH
 /// predates the install: every `docker` this app spawned then failed to start, and the card read "Docker wouldn't
@@ -533,9 +608,25 @@ fn docker_cli_fallback() -> Option<String> {
         .find(|cli| Path::new(cli).exists())
 }
 
-/// `docker`, as this app spawns it: the one on PATH, or [`docker_cli_fallback`] with its folder on the child's PATH,
-/// since the helpers the CLI calls (credentials, plugins) live beside it.
+/// `docker`, as this app spawns it: our engine's CLI and TLS when `engine.json` says `intentic`, else the one on PATH,
+/// or [`docker_cli_fallback`] with its folder on the child's PATH, since the helpers the CLI calls (credentials,
+/// plugins) live beside it.
 fn docker() -> Command {
+    if let Some(engine) = engine_env() {
+        let name = if cfg!(windows) {
+            "docker.exe"
+        } else {
+            "docker"
+        };
+        let cli = engine.bin_dir.join(name);
+        let mut command = quiet(Command::new(if cli.is_file() {
+            cli
+        } else {
+            PathBuf::from("docker")
+        }));
+        engine.apply_to(&mut command);
+        return command;
+    }
     #[cfg(windows)]
     if let Some(cli) = docker_cli_fallback() {
         let mut command = quiet(Command::new(&cli));
@@ -786,6 +877,43 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
 fn own_group(mut command: Command) -> Command {
     intentic_bounded::own_group(&mut command);
     command
+}
+
+/// Run the bundled `ic` with `args`, streaming every line like [`run_heard`]. `what` names the run in logs and events.
+/// BLOCKING — same contract as [`run_heard`]: a designed stop (exit 3 or 4) is returned in [`Ended`], not `Err`.
+pub fn run_ic_heard(
+    app: &AppHandle,
+    id: &str,
+    what: &str,
+    args: &[&str],
+    env: &[(String, String)],
+    heard: Option<Heard>,
+) -> Result<Ended, String> {
+    let ic = crate::commands::bundled_ic().ok_or_else(|| {
+        "Intentic's own ic is not beside this app, so this step cannot run.".to_string()
+    })?;
+    let mut command = Command::new(&ic);
+    if let Some(dir) = ic.parent() {
+        command.current_dir(dir);
+    }
+    command.args(args);
+    command.envs(
+        crate::commands::app_env(crate::commands::VERSION)
+            .into_iter()
+            .chain(env.iter().cloned()),
+    );
+    intentic_bounded::no_window(&mut command);
+    let spool = Spool::open(id).map_err(|error| {
+        format!("could not start {what}: nowhere to write what it says ({error})")
+    })?;
+    let child = spool
+        .attach(&mut command)
+        .and_then(|()| command.spawn())
+        .map_err(|error| {
+            spool.remove();
+            format!("could not start {what}: {error}")
+        })?;
+    follow(app, id, what, child, spool, None, heard)
 }
 
 /* WHERE A RUN'S CHILD WRITES — a file of its own, never a pipe this process holds (2026-10-05).
@@ -2141,6 +2269,34 @@ mod tests {
                 path.display(),
             );
         }
+    }
+
+    #[test]
+    fn engine_record_is_read_when_valid_and_ignored_when_not() {
+        let dir = std::env::temp_dir().join(format!("intentic-engine-env-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".intentic/engine")).unwrap();
+        let record = r#"{"engine":"intentic","host":"tcp://127.0.0.1:2376","certPath":"/home/me/.intentic/engine/certs","bin":"/home/me/.intentic/engine/bin","version":"1.2.3"}"#;
+        std::fs::write(dir.join(".intentic/engine/engine.json"), record).unwrap();
+        let parsed = engine_env_at(&dir).expect("intentic record");
+        assert_eq!(parsed.docker_host, "tcp://127.0.0.1:2376");
+        assert_eq!(parsed.cert_path, "/home/me/.intentic/engine/certs");
+        assert_eq!(
+            parsed.bin_dir,
+            PathBuf::from("/home/me/.intentic/engine/bin")
+        );
+
+        std::fs::write(
+            dir.join(".intentic/engine/engine.json"),
+            r#"{"engine":"dockerDesktop","host":"npipe:////./pipe/docker_engine"}"#,
+        )
+        .unwrap();
+        assert_eq!(engine_env_at(&dir), None);
+
+        std::fs::write(dir.join(".intentic/engine/engine.json"), "{not json").unwrap();
+        assert_eq!(engine_env_at(&dir), None);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(engine_env_at(&dir), None);
     }
 
     /// The `Add-IntenticPath` function, up to the brace that closes it. None for a script that has no such

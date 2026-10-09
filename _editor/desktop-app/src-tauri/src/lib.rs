@@ -4,6 +4,7 @@ mod agents;
 mod auth;
 mod badge;
 mod commands;
+mod first_task;
 mod fix;
 mod found;
 mod launch;
@@ -11,8 +12,10 @@ mod local;
 mod machine_sandbox;
 mod notice;
 mod offline;
+mod onboarding;
 mod prefetch;
 mod project;
+mod repair;
 mod resume;
 mod scripts;
 mod setup_link;
@@ -199,6 +202,24 @@ pub fn run() {
             machine_sandbox::machine_sandbox_end_session,
             found::found_on_machine,
             agents::machine_agents,
+            // FIRST RUN (2026-10-09): this PC's check, download and setup (onboarding.rs).
+            onboarding::onboarding_state,
+            onboarding::onboarding_recheck,
+            onboarding::onboarding_set_up,
+            onboarding::onboarding_pause,
+            onboarding::onboarding_restart,
+            onboarding::onboarding_use_cloud,
+            // The first task, kept until this computer's sandbox is ready (first_task.rs).
+            first_task::first_task_read,
+            first_task::first_task_queue,
+            first_task::first_task_clear,
+            first_task::first_task_pick_folder,
+            // Repair, the agent that runs on this computer outside every sandbox (repair.rs).
+            repair::repair_state,
+            repair::repair_start,
+            repair::repair_send,
+            repair::repair_answer,
+            repair::repair_reset,
         ])
         .setup(|app| {
             // The plugins are up, the single-instance handoff among them: this launch is the copy that runs.
@@ -293,6 +314,7 @@ pub fn run() {
             launch::send_reports(app.handle());
             // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
             // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
+            onboarding::begin(app.handle());
             machine_sandbox::start(app.handle());
             // What earlier runs left on disk (2026-10-05): run transcripts past the newest few (scripts.rs), and the paths
             // files of bring-backs a crash cut short (project.rs). Off the launch's thread: it is a folder or two read.
@@ -391,12 +413,14 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // A folder or a document of this computer, in a window of its own (local.rs): no sandbox, no sign-in.
     let open_folder = MenuItemBuilder::with_id("open-folder", "Open a folder…").build(app)?;
     let open_file = MenuItemBuilder::with_id("open-file", "Open a file…").build(app)?;
+    let repair = MenuItemBuilder::with_id("repair", "Repair Intentic…").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
         .separator()
         .item(&open_folder)
         .item(&open_file)
+        .item(&repair)
         .separator()
         .item(&agent)
         .item(&update)
@@ -414,6 +438,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "agent" => windows::show_device(app),
             "open-folder" => local::pick(app, true),
             "open-file" => local::pick(app, false),
+            "repair" => windows::show_home_route(app, "/repair?from=tray"),
             "update" => update::act(app),
             "quit" => app.exit(0),
             _ => {}

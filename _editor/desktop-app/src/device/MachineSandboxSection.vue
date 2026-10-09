@@ -15,6 +15,7 @@ import {
     revealMachineLog,
     startMachine,
 } from "./machineSandbox";
+import { localHost } from "@intentic/web/local-host";
 import { DOCKER_DOCS, useDevice } from "./useDevice";
 
 // THIS COMPUTER'S OWN SANDBOX, at the top of This device: the one the app makes after sign-in, in the background, and
@@ -49,6 +50,9 @@ const percent = computed(() => (record.value?.state === `creating` ? record.valu
 const step = computed(() => (record.value?.state === `creating` ? record.value.step : undefined));
 const reason = computed(() => (record.value?.state === `failed` ? record.value.reason : undefined));
 const folders = computed(() => record.value?.folders ?? []);
+const cloudOffered = computed(
+    () => localHost().onboarding?.check.value?.state === `cantRun`,
+);
 
 // The workspace at this computer's sandbox, once it is up.
 const open = (): void => {
@@ -59,6 +63,10 @@ const open = (): void => {
 };
 
 const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.folder.${folder.state}`);
+
+const useCloud = (): void => {
+    void localHost().onboarding?.useCloud();
+};
 </script>
 
 <template>
@@ -104,16 +112,20 @@ const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.
             v-if="state === `waiting`"
             :requirements="machineRequirements"
             :busy="false"
-            hide-elsewhere
             @install="retryMachine(true)"
             @restart="endMachineSession(`restart`)"
             @signout="endMachineSession(`signout`)"
             @recheck="retryMachine(false)"
+            @elsewhere="useCloud"
         />
 
         <Notice v-if="reason" tone="danger" class="text-2xs">
             <span class="block break-words">{{ reason }}</span>
         </Notice>
+
+        <div v-if="state === `failed` && cloudOffered" class="flex flex-wrap gap-2">
+            <Button size="small" :label="t(`desktop.requirements.runOnMachineWe`)" @click="useCloud" />
+        </div>
 
         <!-- The one thing that moves it on, as the primary press; the log beside a failure. -->
         <div v-if="state !== `creating` && state !== `ready` && state !== `waiting` && state !== `interrupted`" class="flex flex-wrap items-center gap-2">

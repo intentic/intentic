@@ -9987,6 +9987,7 @@
             "machine": {
                 "signedOut": "Najpierw się zalogujesz. Zaraz potem powstanie sandbox tego komputera, a ten folder do niego trafi.",
                 "creating": "Sandbox tego komputera jest konfigurowany ({percent}%). Ten folder trafi do niego, gdy tylko będzie gotowy.",
+                "pcSetup": "Ten komputer potrzebuje jeszcze jednorazowej konfiguracji, zanim będą mogli tu działać agenci. Otwórz Agenty, aby go przygotować i zobaczyć, co się pobiera.",
                 "notReady": "Sandbox tego komputera nie jest jeszcze gotowy. Ten folder na niego czeka, a karta w rogu mówi, czego potrzebuje."
             }
         },
@@ -10047,6 +10048,146 @@
                 "details": "Otwórz Ten komputer",
                 "open": "Otwórz sandbox"
             }
+        },
+        "agents": {
+            "heading": "Agenci na tym komputerze",
+            "checking": "Sprawdzamy ten komputer…",
+            "noHost": "Otwórz ten widok w aplikacji Intentic na komputerze, aby uruchomić tu agentów.",
+            "cost": {
+                "minutes": "Około {count} min",
+                "restart": "jeden restart",
+                "download": "{size} do pobrania",
+                "sep": " · "
+            },
+            "setup": {
+                "title": "Uruchom agentów na tym komputerze"
+            },
+            "check": {
+                "ours": "Zajmie się tym Intentic",
+                "yours": "To zrobisz Ty",
+                "blocked": "Nie da się tu uruchomić",
+                "unknownTitle": "Nie udało się sprawdzić tego komputera",
+                "unknownBody": "Coś przeszkodziło nam sprawdzić, czy ten komputer może uruchamiać agentów. Spróbuj ponownie.",
+                "recheck": "Sprawdź ponownie"
+            },
+            "steps": {
+                "setup": {
+                    "title": "Przygotuj ten komputer",
+                    "detail": "Windows raz poprosi o zgodę, a potem jeden restart w chwili, którą wybierzesz.",
+                    "action": "Przygotuj ten komputer"
+                },
+                "signIn": {
+                    "title": "Zaloguj się",
+                    "detail": "Żeby Twoi agenci byli dostępni na telefonie. Na start dostaniesz darmowe wiadomości do agentów.",
+                    "action": "Kontynuuj przez Google",
+                    "done": "Zalogowano jako {name}"
+                },
+                "task": {
+                    "title": "Daj agentom pierwsze zadanie",
+                    "detail": "Wybierz folder i napisz, co ma zostać zrobione. Zadanie ruszy, gdy ten komputer będzie gotowy.",
+                    "detailWhenReady": "Ruszy, gdy tylko się zalogujesz.",
+                    "detailWhenSignedIn": "Ruszy od razu."
+                }
+            },
+            "prefetch": {
+                "label": "Pobieramy to, czego potrzebują agenci",
+                "pause": "Wstrzymaj",
+                "resume": "Wznów",
+                "anyway": "Pobierz mimo to",
+                "progress": "{done} z {total}",
+                "paused": "Wstrzymano",
+                "meteredWait": "Czekamy na połączenie bez limitu danych",
+                "todo": "{total} do pobrania"
+            },
+            "progress": {
+                "title": "Przygotowujemy ten komputer",
+                "details": "Szczegóły",
+                "minutesLeft": "Zostało około {count} min",
+                "rowDone": "Gotowe",
+                "rowTodo": "Do zrobienia",
+                "needsYou": "Windows prosi o Twoją zgodę. Wybierz Tak, aby kontynuować."
+            },
+            "task": {
+                "pickFolder": "Wybierz folder",
+                "placeholder": "Opisz zadanie dla swoich agentów…",
+                "queue": "Dodaj do kolejki",
+                "queuedTitle": "Twoje pierwsze zadanie",
+                "autoStart": "Ruszy samo, gdy ten komputer będzie gotowy.",
+                "open": "Otwórz je",
+                "retry": "Ponów",
+                "status": {
+                    "queued": "W kolejce",
+                    "sending": "Wysyłanie…",
+                    "sent": "Wysłane",
+                    "failed": "Nie udało się wysłać",
+                    "sentAgent": "Wysłane do agenta",
+                    "failedStart": "Nie udało się uruchomić Twojego zadania"
+                },
+                "edit": "Edytuj",
+                "autoStartSignIn": "Ruszy, gdy tylko się zalogujesz.",
+                "autoStartNow": "Ruszy od razu."
+            },
+            "phone": {
+                "title": "W międzyczasie: otwórz Intentic na telefonie",
+                "link": "app.intentic.dev"
+            },
+            "restart": {
+                "title": "Jeden restart kończy konfigurację",
+                "body": "Windows potrzebuje go, by włączyć obsługę Linuksa. Wszystko inne jest już gotowe.",
+                "after": "Po restarcie Intentic otworzy się sam i dokończy konfigurację w około 2 minuty. Zadanie z kolejki ruszy zaraz potem.",
+                "now": "Uruchom ponownie teraz",
+                "ten": "Za 10 minut",
+                "later": "Później",
+                "save": "Najpierw zapisz pracę w innych aplikacjach.",
+                "scheduledAt": "Restart o {time}",
+                "cancel": "Anuluj"
+            },
+            "admin": {
+                "title": "Potrzebna zgoda Windows",
+                "body": "Konfiguracja raz potrzebuje uprawnień administratora. Gdy Windows zapyta, wybierz Tak.",
+                "retry": "Spróbuj ponownie"
+            },
+            "signOut": {
+                "title": "Potrzebne wylogowanie",
+                "body": "Wyloguj się z Windows i zaloguj ponownie, a konfiguracja będzie kontynuowana."
+            },
+            "failed": {
+                "title": "Konfiguracja nie powiodła się",
+                "retry": "Spróbuj ponownie",
+                "repair": "Otwórz Naprawę"
+            },
+            "cantRun": {
+                "cloud": "Użyj Intentic w chmurze",
+                "heading": "Agenci nie mogą działać na tym komputerze",
+                "hosted": "Twoich agentów może zamiast tego uruchomić nasz komputer w chmurze."
+            },
+            "ready": {
+                "title": "Agenci są gotowi na tym komputerze",
+                "workspace": "Otwórz przestrzeń roboczą"
+            },
+            "taskSendFailed": "Przestrzeń robocza nie mogła wysłać Twojego pierwszego zadania.",
+            "pcReady": {
+                "subtitle": "Ten komputer jest gotowy na agentów."
+            }
+        },
+        "repair": {
+            "title": "Naprawa",
+            "subtitle": "Działa na tym komputerze, poza Twoją przestrzenią roboczą. Sprawdza i naprawia Intentic, nic więcej.",
+            "bannerSafe": "Twoje pliki i rozmowy w przestrzeni roboczej pozostają bez zmian.",
+            "approvalHint": "O wszystko większe najpierw Cię zapyta.",
+            "composerPlaceholder": "Napisz do Naprawy…",
+            "send": "Wyślij",
+            "signedOut": "Zaloguj się, aby rozmawiać z Naprawą. Jej sprawdzenia i poprawki działają i bez tego.",
+            "offline": "Naprawa nie może teraz połączyć się z modelem. Sprawdzenia i poprawki na tym komputerze nadal działają.",
+            "allow": "Zezwól",
+            "deny": "Odmów",
+            "reset": "Zacznij od nowa",
+            "thinking": "Naprawa analizuje…",
+            "waitingForOk": "Czeka na Twoją zgodę",
+            "signIn": "Zaloguj się",
+            "showDetails": "Szczegóły",
+            "hideDetails": "Ukryj szczegóły",
+            "allowanceUsed": "Dzienny limit Naprawy się wyczerpał. Odnowi się o {time}. Sprawdzenia i poprawki nadal działają."
         }
     }
 }

@@ -1,0 +1,32 @@
+#!/bin/sh
+# Foreground keeper: dockerd for the intentic-engine WSL distro. Started by `ic engine start` on Windows.
+set -eu
+
+PORT="${1:-${INTENTIC_ENGINE_PORT:-2378}}"
+TLS_DIR="/etc/intentic-engine/tls"
+LOG="/var/log/intentic-engine.log"
+
+mkdir -p /var/run "$TLS_DIR" /var/lib/docker /var/log
+chmod 700 "$TLS_DIR"
+
+# cgroup v2 on Alpine without OpenRC: mount if the kernel did not already.
+if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
+  if ! mountpoint -q /sys/fs/cgroup 2>/dev/null; then
+    mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null || true
+  fi
+fi
+
+if [ ! -f "$TLS_DIR/server-cert.pem" ]; then
+  echo "TLS material missing in $TLS_DIR — run ic engine install on Windows first." >>"$LOG"
+  exit 1
+fi
+
+exec dockerd \
+  --host="unix:///var/run/docker.sock" \
+  --host="tcp://127.0.0.1:${PORT}" \
+  --tlsverify \
+  --tlscacert="$TLS_DIR/ca.pem" \
+  --tlscert="$TLS_DIR/server-cert.pem" \
+  --tlskey="$TLS_DIR/server-key.pem" \
+  --data-root=/var/lib/docker \
+  >>"$LOG" 2>&1

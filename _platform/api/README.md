@@ -220,3 +220,7 @@ pnpm --filter @intentic/api dev        # watch mode, reads the root .env
 pnpm --filter @intentic/api test
 pnpm --filter @intentic/api fleet      # read-only: what the platform runs on Fly, and for whom
 ```
+
+## Repair (`POST /api/repair/turn`)
+
+Session-authenticated turn endpoint for the desktop Repair agent. Tool definitions and the system prompt live on the server; the app executes tool calls locally. Allowance is **48 turns per user per UTC day** by default (`REPAIR_*` config, separate from the sandbox trial). Disabled when no repair/trial model keys are configured.

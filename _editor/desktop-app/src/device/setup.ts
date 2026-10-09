@@ -16,6 +16,8 @@ import {
     runStop,
     setupAlert,
     setupProgress,
+    onboardingSetUp,
+    onboardingState,
     setupRun,
     signOutForSetup,
     takePendingSetup,
@@ -58,6 +60,22 @@ import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs
 // Setup codes last 30 minutes (the platform's setup-code.ts). A setup resumed on one older than 20 asks for a fresh one
 // first, since its claim is still minutes of Docker ahead of it; one that cannot be had (signed out, offline, refused)
 // leaves the old code to run while it has 5 minutes left, and the card saying it ran out past that.
+/** On Windows, Docker/WSL for this PC goes through onboarding, not a sandbox setup run. */
+const pcPrepareUsesOnboarding = async (): Promise<boolean> => {
+    try {
+        const snap = await onboardingState();
+        const os = snap.check?.machine?.os ?? ``;
+        if (!os.toLowerCase().includes(`windows`)) {
+            return false;
+        }
+        return snap.check?.state !== `ready`;
+    } catch {
+        // allow(silent-catch): no onboarding state to read means the setup run's own prepare goes ahead, as before the
+        // one setup path, and that run reports its own failures on the requirements card.
+        return false;
+    }
+};
+
 const RENEW_AFTER_SECONDS = 20 * 60;
 const RESUME_WINDOW_SECONDS = 25 * 60;
 // A park this old is not resumed at all, however fresh a code could be: the restart it waited for was cancelled or
@@ -259,6 +277,9 @@ export const runSetup = async (trigger: InstallTrigger = `retry`): Promise<void>
     // While a fresh code is being asked for, no run is active yet, and a reader's press would run the setup on the old
     // code ahead of it: the press waits for the renewal's own run instead.
     if (args === undefined || running.value || (renewing.value && READER_PRESSES.has(trigger))) {
+        return;
+    }
+    if (await pcPrepareUsesOnboarding()) {
         return;
     }
     const startedAt = Date.now();
@@ -523,6 +544,10 @@ export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<
 /** The reader's go-ahead after the first pass reported what it would change: the terminal path's typed "y". */
 export const installRequirements = async (): Promise<void> => {
     consented.value = true;
+    if (await pcPrepareUsesOnboarding()) {
+        await onboardingSetUp();
+        return;
+    }
     await runSetup(`consent`);
 };
 
@@ -648,6 +673,9 @@ export const loadPending = async (): Promise<void> => {
     // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.
     resumedHow.value = undefined;
     expired.value = false;
+    if (await pcPrepareUsesOnboarding()) {
+        return;
+    }
     await runSetup(`arrival`);
 };
 

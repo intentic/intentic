@@ -116,6 +116,8 @@ pub enum Repair {
     LinuxContainers,
     /// Linux Docker Engine: `sudo systemctl start docker`.
     StartEngine,
+    /// The intentic engine in WSL (`ic engine start`).
+    StartIntenticEngine,
     /// Docker Desktop's own start-at-sign-in switched on, so a reboot does not take the sandbox down with it.
     AutoStart,
     /// One of `ic docker prepare`'s elevated Windows fixes, by its requirement id.
@@ -150,6 +152,7 @@ impl Repair {
     pub fn who(&self) -> Who {
         match self {
             Repair::StartDesktop
+            | Repair::StartIntenticEngine
             | Repair::Tidy
             | Repair::Start
             | Repair::Watch
@@ -186,6 +189,7 @@ impl Repair {
             }
             Repair::LinuxContainers => "Switching Docker to Linux containers".to_string(),
             Repair::StartEngine => "Starting Docker's engine".to_string(),
+            Repair::StartIntenticEngine => "Starting the intentic engine".to_string(),
             Repair::AutoStart => "Turning on Docker Desktop's start at sign-in".to_string(),
             Repair::Prerequisite(id) => format!("Fixing a Windows prerequisite ({id})"),
             Repair::Tidy => "Removing what updates left behind".to_string(),
@@ -867,6 +871,7 @@ mod tests {
     fn the_category_is_the_repairs_own() {
         for auto in [
             Repair::StartDesktop,
+            Repair::StartIntenticEngine,
             Repair::Tidy,
             Repair::Start,
             Repair::Watch,

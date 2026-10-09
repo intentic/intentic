@@ -419,6 +419,19 @@ pub async fn platform_post(
     })
 }
 
+/// A GET the app makes for itself, with the workspace session (Repair's turn uses POST; this checks sign-in).
+pub async fn platform_get(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    path: &str,
+) -> Result<Answered, String> {
+    let sent = with_session(app, window, Method::Get, path, None).await?;
+    Ok(match sent {
+        None => Answered::SignedOut,
+        Some((answer, _)) => answered(answer.status, &answer.body),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

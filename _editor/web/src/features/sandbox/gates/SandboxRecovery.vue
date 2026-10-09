@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../../lib/useApi";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { desktopRepairLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { deviceRoute } from "../devices/deviceLinks";
 import { useServingSlug } from "../environment/servingSlug";
 import { devicesAcross, subscribeDevicesAcross } from "../live/devicesAcross";
@@ -75,6 +76,17 @@ const others = computed<readonly DiagnosisAction[]>(() => notice.value?.otherAct
 // Behind "other options": the other presses the diagnosis offers, and for a machine of the owner's the two
 // single-purpose commands and any sibling that can press them there.
 const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hosted.value || siblings.value.length > 0));
+const desktop = desktopVersion() !== undefined;
+const repairReason = computed(() => notice.value?.findings.map((check) => check.problem ?? check.label).join(`; `) || undefined);
+const askRepair = (): void => {
+    openDesktopLink(
+        desktopRepairLink({
+            slug: slug.value,
+            from: `recovery`,
+            reason: repairReason.value,
+        }),
+    );
+};
 </script>
 
 <template>
@@ -105,6 +117,12 @@ const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hos
             </Button>
         </div>
         <FixCommand v-else-if="primary === `fix`" :machine="machine" />
+        <div v-if="desktop && !hosted && owner" class="flex flex-wrap items-center gap-2">
+            <Button size="small" :label="t(`local.repair.title`)" @click="askRepair">
+                <template #icon><Icon name="wrench" /></template>
+            </Button>
+            <span class="text-xs text-subtle">{{ t(`local.repair.subtitle`) }}</span>
+        </div>
         <details v-if="hasOthers" class="min-w-0 text-xs">
             <summary class="cursor-pointer text-link">{{ t(`sandbox.diagnosis.otherOptions`) }}</summary>
             <div class="mt-2 flex min-w-0 flex-col gap-3">

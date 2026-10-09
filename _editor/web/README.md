@@ -89,7 +89,10 @@ flowchart LR
   (`useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`), and the way to a folder's own
   sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
   card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
-  drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). The place chip names the
+  drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). The **Agents**
+  view (`local/agents/LocalAgents.vue`, `/agents` on the main window's rail from first launch) draws the PC check, setup,
+  sign-in, prefetch, the first task while the PC is prepared, and the way into the workspace once this computer's sandbox
+  is ready; dev fixtures live at `/kit/agents`. The place chip names the
   window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
   lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
   this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
@@ -273,3 +276,7 @@ pnpm --filter @intentic/web dev        # API_URL defaults to https://localhost:6
 pnpm --filter @intentic/web test
 pnpm --filter @intentic/web typecheck
 ```
+
+## Local shell: Repair
+
+`/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.

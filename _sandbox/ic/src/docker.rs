@@ -1,5 +1,8 @@
+use std::ffi::OsString;
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::RwLock;
 use std::time::Duration;
 
 use crate::logfile::Log;
@@ -7,10 +10,71 @@ use crate::util::{bail, Fail, Result};
 
 /* The docker CLI as a subprocess — deliberately NOT a docker API crate. */
 
+/// When this account runs on our WSL engine, every `docker` child gets these — not the process environment
+/// (`set_var` would race prepare's download threads). Filled by `engine::adopt()` at startup and after install.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineEnv {
+    pub host: String,
+    pub cert_path: String,
+    pub bin: PathBuf,
+}
+
+static INTENTIC_ENGINE: RwLock<Option<EngineEnv>> = RwLock::new(None);
+
+#[allow(dead_code)] // Windows engine path; Linux builds do not call it.
+pub fn set_intentic_engine(env: Option<EngineEnv>) {
+    if let Ok(mut guard) = INTENTIC_ENGINE.write() {
+        *guard = env;
+    }
+}
+
+fn path_with_bin_first(bin_dir: &Path) -> Option<OsString> {
+    let existing = std::env::var_os("PATH")?;
+    let mut paths: Vec<PathBuf> = vec![bin_dir.to_path_buf()];
+    paths.extend(std::env::split_paths(&existing));
+    std::env::join_paths(paths).ok()
+}
+
+fn apply_tls_env(command: &mut Command, host: &str, cert_path: &str, bin: &Path) {
+    command.env("DOCKER_HOST", host);
+    command.env("DOCKER_TLS_VERIFY", "1");
+    command.env("DOCKER_CERT_PATH", cert_path);
+    if let Some(path) = path_with_bin_first(bin) {
+        command.env("PATH", path);
+    }
+}
+
+fn apply_intentic_env(command: &mut Command) {
+    let Ok(guard) = INTENTIC_ENGINE.read() else {
+        return;
+    };
+    let Some(env) = guard.as_ref() else {
+        return;
+    };
+    apply_tls_env(command, &env.host, &env.cert_path, &env.bin);
+}
+
+fn docker_command(args: &[&str]) -> Command {
+    let mut command = Command::new("docker");
+    command.args(args);
+    command
+}
+
+/// `docker` subprocess with TLS host, cert path, and CLI `PATH` when this account uses our engine.
+pub fn command(args: &[&str]) -> Command {
+    let mut command = docker_command(args);
+    apply_intentic_env(&mut command);
+    command
+}
+
 fn docker(args: &[&str]) -> Command {
-    let mut cmd = Command::new("docker");
-    cmd.args(args);
-    cmd
+    command(args)
+}
+
+fn is_docker_program(program: &str) -> bool {
+    Path::new(program)
+        .file_stem()
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("docker"))
 }
 
 /// Docker Desktop's CLI folder beside `desktop_exe` (empty for unknown) or beside a default install: the shared
@@ -97,6 +161,23 @@ pub fn engine(limit: Duration) -> Engine {
     let Ok(ran) = capture_bounded(&["version", "--format", "{{.Server.Os}}"], limit) else {
         return Engine::NoCli;
     };
+    engine_from_bounded(ran)
+}
+
+/// Probe one TLS endpoint without touching the process environment. With `DOCKER_TLS_VERIFY=1` and our
+/// `ca.pem`/`cert.pem`/`key.pem`, the CLI verifies the server certificate against our CA, so a different
+/// dockerd on the same port cannot be mistaken for ours.
+#[allow(dead_code)] // Windows engine path; Linux builds do not call it.
+pub fn engine_with_env(host: &str, cert_path: &str, bin: &Path, limit: Duration) -> Engine {
+    let mut command = docker_command(&["version", "--format", "{{.Server.Os}}"]);
+    apply_tls_env(&mut command, host, cert_path, bin);
+    let Ok(ran) = bounded(command, limit) else {
+        return Engine::NoCli;
+    };
+    engine_from_bounded(ran)
+}
+
+fn engine_from_bounded(ran: Bounded) -> Engine {
     if ran.timed_out {
         return Engine::Silent;
     }
@@ -191,6 +272,9 @@ pub fn ask(args: &[&str], limit: Duration) -> Asked {
 pub fn run_bounded(program: &str, args: &[&str], limit: Duration) -> Result<Bounded> {
     let mut command = Command::new(program);
     command.args(args);
+    if is_docker_program(program) {
+        apply_intentic_env(&mut command);
+    }
     bounded(command, limit)
 }
 
@@ -541,7 +625,8 @@ pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<(), String> {
     // Logged HERE, not by the caller: every caller runs a second, differently-shaped attempt when the first
     // is refused, and a postmortem that shows only the first command describes a launch that never happened.
     log.line(&format!("docker {}", argv.join(" ")));
-    let out = match Command::new("docker").args(argv).output() {
+    let args: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let out = match command(&args).output() {
         Ok(out) => out,
         // Silence here reads as "docker refused the flags" in every caller's error message, so the one
         // failure that isn't docker's answer at all has to say so.

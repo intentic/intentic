@@ -99,6 +99,249 @@ if (($a -eq 0 -or $a -eq 3010) -and ($b -eq 0 -or $b -eq 3010)) { exit 0 }\n\
 exit 1\n";
 
 #[cfg(windows)]
+pub fn install_intentic_engine() -> Fixed {
+    let mut progress = |sentence: &str, _percent: Option<u64>| super::progress(sentence);
+    crate::engine::install(&mut progress)
+        .map(|_| Done::Now)
+        .map_err(Trouble::Failed)
+}
+
+#[cfg(windows)]
+pub fn start_intentic_engine() -> Fixed {
+    crate::engine::start()
+        .map(|_| Done::Now)
+        .map_err(Trouble::Failed)
+}
+
+/// Path for step markers: separate from [`shell::run_elevated_watched`]'s transcript, which it deletes.
+pub fn elevated_steps_log_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "intentic-elevated-steps-{}.log",
+        std::process::id()
+    ))
+}
+
+fn step_function_name(id: &str) -> String {
+    format!("Step-{id}")
+}
+
+/// Turn a script body into a function body: every `exit` statement becomes `return`.
+pub fn as_step_function(function_name: &str, body: &str) -> String {
+    let (converted, _) = convert_exit_to_return(body);
+    format!("function {function_name} {{\n{converted}\n}}\n")
+}
+
+fn convert_exit_to_return(body: &str) -> (String, usize) {
+    let bytes = body.as_bytes();
+    let mut out = String::with_capacity(body.len());
+    let mut index = 0;
+    let mut converted = 0;
+    while index < bytes.len() {
+        if index + 4 <= bytes.len()
+            && &bytes[index..index + 4] == b"exit"
+            && bytes.get(index + 4) != Some(&b'e')
+        {
+            let before_ok = index == 0
+                || matches!(bytes[index - 1], b' ' | b'\t' | b';' | b'{' | b'\n' | b'\r');
+            let after = bytes.get(index + 4).copied();
+            let after_ok =
+                after.is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b';' | b'}'));
+            if before_ok && after_ok {
+                out.push_str("return");
+                index += 4;
+                converted += 1;
+                continue;
+            }
+        }
+        out.push(char::from(bytes[index]));
+        index += 1;
+    }
+    (out, converted)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StepProgress {
+    pub started: bool,
+    pub exit_code: Option<i32>,
+}
+
+/// Read `STEP:<id>:start` and `STEP:<id>:exit:<code>` lines written by the elevated batch script.
+pub fn parse_elevated_steps(text: &str, ids: &[&'static str]) -> Vec<(&'static str, StepProgress)> {
+    use std::collections::HashMap;
+    let mut by_id: HashMap<&str, StepProgress> = HashMap::new();
+    for line in text.lines() {
+        let Some(rest) = line.trim().strip_prefix("STEP:") else {
+            continue;
+        };
+        let mut parts = rest.splitn(3, ':');
+        let Some(id) = parts.next() else {
+            continue;
+        };
+        let Some(kind) = parts.next() else {
+            continue;
+        };
+        match kind {
+            "start" => {
+                let entry = by_id.entry(id).or_default();
+                entry.started = true;
+            }
+            "exit" => {
+                let Some(code_text) = parts.next() else {
+                    continue;
+                };
+                let Ok(code) = code_text.trim().parse::<i32>() else {
+                    continue;
+                };
+                let entry = by_id.entry(id).or_default();
+                entry.started = true;
+                entry.exit_code = Some(code);
+            }
+            _ => {}
+        }
+    }
+    ids.iter()
+        .map(|id| (*id, by_id.get(id).cloned().unwrap_or_default()))
+        .collect()
+}
+
+pub fn build_elevated_batch_script(steps_path: &std::path::Path, ids: &[(&str, String)]) -> String {
+    let steps = steps_path.to_string_lossy().replace('\'', "''");
+    let mut script = format!("$Steps = '{steps}'\n");
+    for (id, body) in ids {
+        script.push_str(&as_step_function(&step_function_name(id), body));
+        script.push_str(&format!(
+            "Add-Content -Path $Steps -Value 'STEP:{id}:start'\n\
+             $code = @({})[-1]\n\
+             if ($null -eq $code) {{ $code = $LASTEXITCODE }}\n\
+             Add-Content -Path $Steps -Value \"STEP:{id}:exit:$code\"\n",
+            step_function_name(id)
+        ));
+    }
+    script.push_str("exit 0\n");
+    script
+}
+
+#[cfg(windows)]
+fn fixed_from_elevated_step(id: &str, progress: &StepProgress) -> Fixed {
+    let Some(code) = progress.exit_code else {
+        return Err(Trouble::Failed(format!("{id} did not finish")));
+    };
+    match id {
+        "wsl-features" if code == 0 || code == 3010 => {
+            if wsl_works_now() {
+                crate::ui::note("WSL2 is working already; no restart is needed for it.");
+                Ok(Done::Now)
+            } else {
+                Ok(Done::AfterRestart)
+            }
+        }
+        "wsl-kernel" if code == 0 => Ok(Done::Now),
+        "docker-users" if code == 0 => Ok(Done::AfterSignOut),
+        _ if code == 0 => Ok(Done::Now),
+        _ => Err(Trouble::Failed(format!(
+            "{id} did not finish (Windows reported code {code})"
+        ))),
+    }
+}
+
+fn relay_step_lines(text: &str, on_step: &mut dyn FnMut(&str, &str)) {
+    for line in text.lines() {
+        let Some(rest) = line.trim().strip_prefix("STEP:") else {
+            continue;
+        };
+        let mut parts = rest.splitn(3, ':');
+        let (Some(id), Some(kind)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        match kind {
+            "start" => on_step(id, "start"),
+            "exit" => {
+                if let Some(code) = parts.next() {
+                    on_step(id, &format!("exit:{code}"));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// One UAC prompt for every elevated requirement in this pass. Step markers go to [`elevated_steps_log_path`].
+#[cfg(windows)]
+pub fn run_elevated_batch(
+    requirements: &[&super::plan::Requirement],
+    facts: &Facts,
+    on_step: &mut dyn FnMut(&str, &str),
+) -> Result<Vec<(&'static str, Fixed)>, Trouble> {
+    use super::plan::Action;
+
+    let mut ids: Vec<&'static str> = Vec::new();
+    let mut bodies: Vec<(&str, String)> = Vec::new();
+    for requirement in requirements {
+        if requirement.action != Action::FixElevated {
+            continue;
+        }
+        let body = match requirement.id {
+            "wsl-features" => ENABLE_WSL.to_string(),
+            "wsl-kernel" => UPDATE_WSL.to_string(),
+            "docker-users" => {
+                let who = if facts.user_qualified.is_empty() {
+                    facts.user.clone()
+                } else {
+                    facts.user_qualified.clone()
+                };
+                if who.is_empty() {
+                    return Err(Trouble::Failed(
+                        "could not work out which account to add to docker-users.".to_string(),
+                    ));
+                }
+                ADD_TO_DOCKER_USERS.replace("%NAME%", &who.replace('\'', "''"))
+            }
+            _ => continue,
+        };
+        ids.push(requirement.id);
+        bodies.push((requirement.id, body));
+    }
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let steps_path = elevated_steps_log_path();
+    let _ = std::fs::remove_file(&steps_path);
+    let script = build_elevated_batch_script(&steps_path, &bodies);
+    let steps_for_watch = steps_path.clone();
+    let mut watch = super::elevated_watch("Setting up this PC", move || {
+        let text = std::fs::read(&steps_for_watch).ok()?;
+        let text = String::from_utf8_lossy(&text);
+        text.lines().rev().find_map(|line| {
+            let rest = line.trim().strip_prefix("STEP:")?;
+            let mut parts = rest.splitn(3, ':');
+            let id = parts.next()?;
+            let kind = parts.next()?;
+            Some(format!("{id}: {kind}"))
+        })
+    });
+    let output = shell::run_elevated_watched(&script, &mut watch);
+    let step_text = std::fs::read(&steps_path)
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
+    relay_step_lines(&step_text, on_step);
+    let _ = std::fs::remove_file(&steps_path);
+
+    if output.code == shell::CANCELLED {
+        return Err(Trouble::Cancelled);
+    }
+    if output.code == shell::UNANSWERED {
+        return Err(Trouble::Unanswered);
+    }
+
+    let progress = parse_elevated_steps(&step_text, &ids);
+    Ok(progress
+        .into_iter()
+        .map(|(id, step)| (id, fixed_from_elevated_step(id, &step)))
+        .collect())
+}
+
+#[cfg(windows)]
 pub fn enable_wsl_features() -> Fixed {
     let mut watch = super::elevated_watch("Turning on WSL2", || None);
     let done = from_exit(
@@ -565,13 +808,13 @@ pub fn switch_to_linux_containers(facts: &Facts) -> Fixed {
     wait_for_daemon()
 }
 
-/// Restart Windows, after saying so. `/t 10` rather than immediately: the app has just told somebody their PC
-/// is about to restart, and ten seconds is the difference between an announcement and a surprise.
+/// Restart Windows after the reader confirms. `/t 0` only: any `/t` above 0 makes Windows imply `/f` and
+/// force-close apps with unsaved work.
 #[cfg(windows)]
 pub fn restart_windows() -> Result<(), String> {
     let output = shell::run(
         "$ErrorActionPreference = 'Continue'\n\
-         shutdown.exe /r /t 10 /c \"intentic: finishing Docker setup\"\n\
+         shutdown.exe /r /t 0 /c \"intentic: finishing Docker setup\"\n\
          exit $LASTEXITCODE\n",
     );
     if output.ok {
@@ -589,6 +832,62 @@ mod tests {
     // The struct is only USED here on Windows (see this file's header), but the substitution it feeds is
     // pure, so the test that guards it runs on every runner.
     use crate::prepare::plan::Facts;
+
+    fn contains_exit_keyword(text: &str) -> bool {
+        count_exit_keywords(text) > 0
+    }
+
+    fn count_exit_keywords(text: &str) -> usize {
+        let bytes = text.as_bytes();
+        let mut count = 0;
+        let mut index = 0;
+        while index + 4 <= bytes.len() {
+            if &bytes[index..index + 4] != b"exit" {
+                index += 1;
+                continue;
+            }
+            if bytes.get(index + 4) == Some(&b'e') {
+                index += 1;
+                continue;
+            }
+            let before_ok = index == 0
+                || matches!(bytes[index - 1], b' ' | b'\t' | b';' | b'{' | b'\n' | b'\r');
+            let after = bytes.get(index + 4).copied();
+            let after_ok =
+                after.is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b';' | b'}'));
+            if before_ok && after_ok {
+                count += 1;
+                index += 4;
+            } else {
+                index += 1;
+            }
+        }
+        count
+    }
+
+    fn count_return_keywords(text: &str) -> usize {
+        let bytes = text.as_bytes();
+        let mut count = 0;
+        let mut index = 0;
+        while index + 6 <= bytes.len() {
+            if &bytes[index..index + 6] != b"return" {
+                index += 1;
+                continue;
+            }
+            let before_ok = index == 0
+                || matches!(bytes[index - 1], b' ' | b'\t' | b';' | b'{' | b'\n' | b'\r');
+            let after = bytes.get(index + 6).copied();
+            let after_ok =
+                after.is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b';' | b'}'));
+            if before_ok && after_ok {
+                count += 1;
+                index += 6;
+            } else {
+                index += 1;
+            }
+        }
+        count
+    }
 
     /* The bodies above are Windows-only and are covered by the Windows smoke tiers. */
 
@@ -766,5 +1065,60 @@ mod tests {
         assert_ne!(Done::Now, Done::AfterRestart);
         assert_ne!(Done::Now, Done::AfterSignOut);
         assert_ne!(Done::AfterRestart, Done::AfterSignOut);
+    }
+
+    #[test]
+    fn elevated_step_bodies_lose_exit_and_gain_return() {
+        for (label, body) in [
+            ("ENABLE_WSL", ENABLE_WSL),
+            ("UPDATE_WSL", UPDATE_WSL),
+            ("ADD_TO_DOCKER_USERS", ADD_TO_DOCKER_USERS),
+        ] {
+            let exits = count_exit_keywords(body);
+            assert!(exits > 0, "{label} must contain exit statements to convert");
+            let function = as_step_function("Step-test", body);
+            assert!(
+                !contains_exit_keyword(&function),
+                "{label} still contains exit: {function}"
+            );
+            assert_eq!(
+                count_return_keywords(&function),
+                exits,
+                "{label}: return count must match former exit count"
+            );
+            if label == "ENABLE_WSL" {
+                assert!(
+                    function.contains("exited"),
+                    "the Add-Content line about wsl --install must stay"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_elevated_batch_script_wraps_each_step_and_records_its_exit() {
+        let script = build_elevated_batch_script(
+            std::path::Path::new("C:\\Temp\\steps.log"),
+            &[("wsl-features", "return 0\n".to_string())],
+        );
+        assert!(script.contains("$Steps = 'C:\\Temp\\steps.log'"));
+        assert!(script.contains("function Step-wsl-features"));
+        assert!(script.contains("STEP:wsl-features:start"));
+        assert!(script.contains("STEP:wsl-features:exit:$code"));
+        assert!(script.trim_end().ends_with("exit 0"));
+    }
+
+    #[test]
+    fn the_elevated_step_file_parser_reads_each_exit_code() {
+        let text = "\
+STEP:wsl-features:start
+STEP:wsl-features:exit:3010
+STEP:wsl-kernel:start
+STEP:wsl-kernel:exit:1
+";
+        let parsed = parse_elevated_steps(text, &["wsl-features", "wsl-kernel", "docker-users"]);
+        assert_eq!(parsed[0].1.exit_code, Some(3010));
+        assert_eq!(parsed[1].1.exit_code, Some(1));
+        assert_eq!(parsed[2].1.exit_code, None);
     }
 }

@@ -25,6 +25,7 @@ pub fn apply(repair: &Repair, slug: Option<&str>, host: &DeviceFacts, patient: b
         Repair::ReapplyIntegration => desktop::reapply_integration(),
         Repair::LinuxContainers => desktop::linux_containers(host),
         Repair::StartEngine => desktop::start_engine(),
+        Repair::StartIntenticEngine => desktop::start_intentic_engine(),
         Repair::AutoStart => desktop::enable_autostart(host),
         Repair::Prerequisite(id) => desktop::prerequisite(host, id),
         Repair::Tidy => crate::sandbox::tidy::run(false, false, !patient)

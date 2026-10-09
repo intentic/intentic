@@ -1,0 +1,19 @@
+# Single source for the intentic-engine rootfs build and ic's fetch pins. Bump engine_version when the rootfs changes;
+# ic release attaches intentic-engine-<engine_version>-x86_64.tar.gz beside the ic binaries.
+
+engine_version = "1.0.0"
+
+# Alpine minirootfs (x86_64)
+alpine_version = "3.21.3"
+alpine_url = "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-minirootfs-3.21.3-x86_64.tar.gz"
+alpine_sha256 = "1a694899e406ce55d32334c47ac0b2efb6c06d7e878102d1840892ad44cd5239"
+
+# Static Docker engine bundle (linux x86_64), from download.docker.com
+docker_version = "27.5.1"
+docker_tgz_url = "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz"
+docker_tgz_sha256 = "4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"
+
+# Windows docker CLI (static)
+docker_cli_version = "27.5.1"
+docker_cli_zip_url = "https://download.docker.com/win/static/stable/x86_64/docker-27.5.1.zip"
+docker_cli_zip_sha256 = "a573be076030c8babe34ffcd89c7ad6e720cfb4f876a0f8412dba7ecdd368926"

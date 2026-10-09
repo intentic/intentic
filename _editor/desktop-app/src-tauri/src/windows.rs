@@ -556,6 +556,13 @@ pub const DEVICE_ROUTE: &str = "/device";
 /// The route of the folder itself.
 pub const FILES_ROUTE: &str = "/workspace";
 
+/// The main window in front, at a route of its own shell (`/agents`, `/repair?from=tray`): the way a link, the tray
+/// or a notification opens one of the local shell's views.
+pub(crate) fn show_home_route(app: &AppHandle, route: &str) {
+    app.state::<AppState>().remember_last_face(Face::Home);
+    show_home_at(app, Some(route), Keyboard::Take);
+}
+
 /// The main window in the workspace's place, at `route` when given: built on its folder the first time (local.rs
 /// `open_home`, which swaps it in once it is up), raised and taken there every time after.
 fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
@@ -1823,6 +1830,10 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             work_the_window(app, window, verb);
         }
         // A local window asking for a dialog or the file manager, about its own folder (local.rs).
+        // The workspace saying what became of the first task the app handed it (first_task.rs).
+        Some(Link::FirstTask(args)) => crate::first_task::on_link(app, args),
+        // Repair, opened on this computer from the recovery panel, a page or the system (repair.rs).
+        Some(Link::Repair(args)) => crate::repair::on_link(app, args),
         Some(Link::Local(verb)) => {
             if let Source::Files { window } = source {
                 crate::local::act(app, window, verb);

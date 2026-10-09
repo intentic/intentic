@@ -6,6 +6,7 @@
 import { Button, Icon, InfoHint, Modal, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import { localFace } from "../app/environments/local";
 import AgentHouse from "./house/AgentHouse.vue";
 import { cautionSentence, copyWeight, refusalSentence } from "./projectWords";
@@ -15,6 +16,14 @@ const t = useT();
 // Read through `computed`: the dialog outlives a folder pointed at in this window's place (folderSwitch.ts).
 const face = computed(localFace);
 const { dialogOpen, preview, attaching, failure, attach, cancel } = useLocalProject();
+const router = useRouter();
+
+// A folder taken in on a PC that cannot run agents yet goes on to the Agents view, which sets the PC up.
+const attachAndGo = async (): Promise<void> => {
+    if ((await attach()) === `agents`) {
+        await router.push({ path: `/agents`, query: { why: `pc` } });
+    }
+};
 
 // The folder's own name, known before the app has finished weighing it.
 const name = computed(() => (preview.value?.kind === `new` ? preview.value.name : (face.value?.name ?? ``)));
@@ -65,6 +74,8 @@ const machineNote = computed((): string | undefined => {
             return t(`local.project.machine.creating`, { percent: machine.percent });
         case `interrupted`:
             return t(`local.project.machine.creating`, { percent: 0 });
+        case `waiting`:
+            return t(`local.project.machine.pcSetup`);
         default:
             return t(`local.project.machine.notReady`);
     }
@@ -134,7 +145,7 @@ const open = computed({
             </template>
             <template v-else>
                 <Button tier="quiet" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />
-                <Button :label="label" :loading="attaching" :disabled="!ready" @click="attach" />
+                <Button :label="label" :loading="attaching" :disabled="!ready" @click="attachAndGo" />
             </template>
         </template>
     </Modal>

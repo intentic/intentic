@@ -20,6 +20,8 @@ const TRANSLATED = ["_editor/web/src/", "_editor/ui/src/", "_editor/desktop-app/
 const NOT_FOR_READERS = new Set([
     "_editor/web/src/features/settings/DesignKit.vue", // the dev-only design kit, mounted behind import.meta.env.DEV
     "_editor/web/src/features/settings/DesignKitAssistants.vue", // a section of that kit, mounted only inside it
+    "_editor/web/src/local/agents/AgentsKitSection.vue", // the local Agents view's states, routed only under DEV (/kit/agents)
+    "_editor/web/src/local/repair/RepairKitSection.vue", // the local Repair view's states, routed only under DEV (/kit/repair)
 ]);
 
 const files = subjectFiles("**/*.vue").filter((path) => TRANSLATED.some((dir) => path.startsWith(dir)) && !NOT_FOR_READERS.has(path));

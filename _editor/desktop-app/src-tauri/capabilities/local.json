@@ -62,6 +62,21 @@
         "allow-machine-sandbox-start",
         "allow-machine-sandbox-end-session",
         "allow-found-on-machine",
-        "allow-machine-agents"
+        "allow-machine-agents",
+        "allow-onboarding-state",
+        "allow-onboarding-recheck",
+        "allow-onboarding-set-up",
+        "allow-onboarding-pause",
+        "allow-onboarding-restart",
+        "allow-onboarding-use-cloud",
+        "allow-first-task-read",
+        "allow-first-task-queue",
+        "allow-first-task-clear",
+        "allow-first-task-pick-folder",
+        "allow-repair-state",
+        "allow-repair-start",
+        "allow-repair-send",
+        "allow-repair-answer",
+        "allow-repair-reset"
     ]
 }

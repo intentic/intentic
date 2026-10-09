@@ -35,6 +35,7 @@ import { t } from "@intentic/ui/i18n";
 import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
+import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
 import { DELETED_PATH } from "../features/sandbox/devices/deviceLinks";
@@ -421,6 +422,18 @@ const routes: RouteRecordRaw[] = [
                   meta: { title: () => t(`router.index.designKit`) },
                   component: () => import(`../features/settings/DesignKit.vue`),
               } satisfies RouteRecordRaw,
+              {
+                  path: `/kit/agents`,
+                  name: `kit-agents`,
+                  meta: { title: () => t(`local.agents.heading`) },
+                  component: () => import(`../local/agents/AgentsKitSection.vue`),
+              } satisfies RouteRecordRaw,
+              {
+                  path: `/kit/repair`,
+                  name: `kit-repair`,
+                  meta: { title: () => t(`local.repair.title`) },
+                  component: () => import(`../local/repair/RepairKitSection.vue`),
+              } satisfies RouteRecordRaw,
           ]
         : []),
     { path: `/:pathMatch(.*)*`, redirect: `/` },
@@ -453,6 +466,28 @@ const localRoutes = (): RouteRecordRaw[] => [
                 meta: { title: () => localFace()?.name ?? t(`shared.files`) },
                 component: asyncView(() => import(`../local/LocalFiles.vue`)),
             },
+            // FIRST RUN (2026-10-09): Agents from the first launch, where an app is behind the page to set this PC up; and
+            // Repair, the agent that runs on this computer outside every sandbox, routed with no tile of its own.
+            ...(localHost().onboarding === undefined
+                ? []
+                : [
+                      {
+                          path: `agents`,
+                          name: `local-agents`,
+                          meta: { title: () => t(`shared.agents`) },
+                          component: asyncView(() => import(`../local/agents/LocalAgents.vue`)),
+                      } satisfies RouteRecordRaw,
+                  ]),
+            ...(localHost().repair === undefined
+                ? []
+                : [
+                      {
+                          path: `repair`,
+                          name: `local-repair`,
+                          meta: { title: () => t(`local.repair.title`) },
+                          component: asyncView(() => import(`../local/repair/LocalRepair.vue`)),
+                      } satisfies RouteRecordRaw,
+                  ]),
             ...localHost().views.map(
                 (view): RouteRecordRaw => ({
                     path: view.path,
@@ -515,6 +550,8 @@ router.beforeResolve(() => overlayBackSettled());
 // The desktop app's "Ask an agent about this" arrives as `?handoff=` on whatever route it lands: kept for the chat that
 // takes the file, and out of the address before any other guard reads it (features/chat/drafts/localHandoff.ts).
 router.beforeEach((to) => receiveHandoff(to, () => useAuth().user.value !== null));
+
+router.beforeEach((to) => receiveTaskHandoff(to, localFace() !== undefined, () => router.currentRoute.value.path));
 
 // The desktop app's `/setup?found=…` (the AI tools signed in on this computer) is kept before the sign-in gate can send
 // the reader away from it, for the landing once setup finishes (lib/foundOnComputer.ts).

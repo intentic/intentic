@@ -187,13 +187,15 @@ flowchart LR
   writing one, so a flag change ships with the image.
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
   target; `ic runner up` starts a runner container for a parent sandbox.
-- On Windows, `prepare` installs Docker Desktop for the account alone (`install --user`): no permission prompt, no
-  `docker-users` group and no sign-out, which Docker Desktop on WSL2 no longer needs (per-user installs since 4.72, no
-  group check since 4.65). The group is only granted for an all-users Docker Desktop older than 4.65, or when the engine
-  itself refuses the account. The 600 MB download starts at consent, beside turning WSL2 on, and resumes after a
-  restart. When turning WSL2 on needs a restart, the run still downloads and installs Docker Desktop before stopping for
-  it, so a fresh PC restarts once; a restart is asked for only when Windows is still waiting to finish a feature, and
-  a restart Windows Update wants does not hold up a PC whose WSL2 already works (2026-10-08).
+- On Windows, `ic docker prepare` ends every piped run with one `intentic-prepare-summary: {json}` line (ready,
+  needsSetup, or cantRun; engine choice; download size and time estimates; machine facts; what is already fine in
+  `met`). Each `intentic-requirement:` row carries `"admin"` and `"ours"`. New checks: physical memory (under 7 GiB is
+  blocked), Windows S mode, and on PCs without Docker Desktop the Intentic engine rows (`engine`, `engine-start`) instead
+  of Docker Desktop's. With consent, every step that needs administrator runs in one elevated PowerShell pass (one UAC
+  prompt). A restart is never forced on a pre-consented caller: everything that can finish first does (including engine
+  prefetch), then exit 4 with `restart: true` in the summary; in a terminal, restart is offered with `shutdown /r /t 0`
+  only after the reader confirms and is warned to save work elsewhere. PCs that already have Docker Desktop keep the
+  per-user install path, the 600 MB download beside WSL2 setup, and the docker-users rules from before (2026-10-09).
 - `ic image prefetch` downloads the sandbox image's layers over HTTPS into `~/.intentic/image-cache/` before Docker
   exists, resumable and locked against a second fetcher, printing `intentic-prefetch: {json}` readings. The desktop app
   starts it while Docker is being set up. `ic sandbox connect`, at its pull, finishes that cache (waiting for a prefetch
@@ -203,6 +205,16 @@ flowchart LR
   Windows 11 VM at about 50 MB/s: the 1.8 GB finished before the restart; loading it took 237 s where a pull took 192 s,
   since `docker load` takes the archive in before it unpacks while a pull overlaps the two, so the prefetch pays off on
   links slow enough that the download outlasts the unpacking. See [src/image_cache.rs](src/image_cache.rs).
+- **Our engine on Windows without Docker Desktop.** `ic engine fetch` downloads the WSL rootfs tarball and the Windows
+  static `docker.exe` into `~/.intentic/engine-cache/` (same `intentic-prefetch:` readings as `ic image prefetch`).
+  `ic engine install` imports the `intentic-engine` WSL2 distro under `%LOCALAPPDATA%\Intentic\engine`, generates TLS
+  inside the distro, copies client material to `%USERPROFILE%\.intentic\engine\tls\`, installs `docker.exe` under
+  `%USERPROFILE%\.intentic\engine\bin\`, writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
+  `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in, and starts a hidden keeper
+  (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Every `ic` run calls `engine::adopt()`
+  first so `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, and the bundled `docker.exe` apply to this process
+  only — nothing is added to the user's PATH. `ic engine status --json` answers for the desktop app; `ic sandbox fix`
+  can start a stopped intentic engine automatically. Build: [engine/](engine/); implementation: [src/engine/](src/engine/).
 
 ## Key files
 

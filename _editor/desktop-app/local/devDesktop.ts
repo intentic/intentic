@@ -418,7 +418,14 @@ type Answer =
     | boolean
     | null
     | Promise<void>
-    | { memoryBytes: number; cpus: number };
+    | { memoryBytes: number; cpus: number }
+    | {
+          folder: string;
+          text: string;
+          queuedAt: number;
+          state: string;
+          reason?: string;
+      };
 
 const DESKTOP_INFO: DesktopInfo = {
     version: `1.318.0`,
@@ -431,6 +438,15 @@ const DESKTOP_INFO: DesktopInfo = {
 };
 
 const signedIn = (machine: Machine): boolean => machine !== `fresh` && sessionStorage.getItem(SIGNED_OUT_KEY) === null;
+
+/** The first task kept while dev local face runs (first_task.rs). */
+let devFirstTask: {
+    folder: string;
+    text: string;
+    queuedAt: number;
+    state: `queued` | `sending` | `sent` | `failed`;
+    reason?: string;
+} | null = null;
 
 /* THE ACCOUNT, as the platform answers a local window's account calls through the app (src-tauri/src/account.rs): Ada,
    on a complimentary plan, with one API token. A rename or a new picture holds until the tab reloads. */
@@ -498,6 +514,8 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`plugin:dialog|confirm`, () => true],
     [`plugin:dialog|ask`, () => true],
     [`plugin:dialog|open`, () => null],
+    [`first_task_read`, () => devFirstTask],
+    [`first_task_clear`, () => { devFirstTask = null; return null; }],
 ]);
 
 const answer = (machine: Machine, command: string, args: InvokeArgs | undefined): Answer => {
@@ -512,6 +530,18 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     if (command === `project_attach` && args !== undefined && `ask` in args) {
         // SAFETY: the page's own host.ts sends it, as `projectAttach` types it.
         return projectAttach(args[`ask`] as ProjectAsk);
+    }
+    if (command === `first_task_queue` && args !== undefined && `folder` in args && `text` in args) {
+        devFirstTask = {
+            folder: String(args[`folder`]),
+            text: String(args[`text`]),
+            queuedAt: Math.floor(Date.now() / 1000),
+            state: `queued`,
+        };
+        return null;
+    }
+    if (command === `first_task_pick_folder`) {
+        return `${HOME}\\code\\my-app`;
     }
     const verb = machineVerb(command, args);
     if (verb !== undefined) {

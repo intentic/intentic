@@ -135,11 +135,13 @@ const ask = async (): Promise<void> => {
  * unique by the app), and the dialog gone at once. Nobody signed in is asked to sign in now, and the sandbox, and the
  * folder in it, follow the sign-in by themselves.
  */
-const attach = async (): Promise<void> => {
+// Answers `agents` when the folder is in but this PC cannot run agents yet: the dialog then takes the reader to the
+// Agents view, which sets the PC up (the dialog navigates, since this module sits below the router).
+const attach = async (): Promise<`agents` | undefined> => {
     const project = host();
     const asked = preview.value;
     if (project === undefined || asked?.kind !== `new` || attaching.value) {
-        return;
+        return undefined;
     }
     attaching.value = true;
     failure.value = undefined;
@@ -147,6 +149,11 @@ const attach = async (): Promise<void> => {
         await project.attach({ project: projectDirNameFor(asked.name) });
         fold(false);
         dialogOpen.value = false;
+        const pc = localHost().onboarding?.check.value;
+        const machine = asked.machine;
+        if (pc !== undefined && pc.state !== `ready` && machine.state !== `ready` && machine.state !== `signedOut`) {
+            return `agents`;
+        }
         if (asked.machine.state === `signedOut`) {
             await project.act(`signIn`);
         }
@@ -155,6 +162,7 @@ const attach = async (): Promise<void> => {
     } finally {
         attaching.value = false;
     }
+    return undefined;
 };
 
 const cancel = (): void => {

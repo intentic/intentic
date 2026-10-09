@@ -240,5 +240,22 @@
     },
     "setup": {
         "stuckInstallerNotStopped": "The stuck installer could not be stopped: {error}"
+    },
+    "onboarding": {
+        "needsYou": "Windows is asking for your permission",
+        "machineSep": ", ",
+        "machineMemory": "{gb} GB memory",
+        "machineFree": "{gb} GB free",
+        "rows": {
+            "wsl-features": "Windows Subsystem for Linux",
+            "virtualization": "Virtualization in firmware",
+            "memory": "Enough memory",
+            "windows-edition": "Windows edition",
+            "engine": "Container engine",
+            "engine-start": "Container engine running",
+            "docker-desktop": "Docker Desktop",
+            "docker-path": "Docker on PATH",
+            "docker-users": "Docker permission for this account"
+        }
     }
 }

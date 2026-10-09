@@ -563,6 +563,46 @@ pub enum Link {
     Window(WindowVerb),
     /// See [`LocalVerb`]; a local window's only other channel.
     Local(LocalVerb),
+    /// See [`FirstTaskLink`]: the workspace saying what became of the first task the app handed it.
+    FirstTask(FirstTaskLink),
+    /// See [`RepairLink`]: Repair opened on this computer.
+    Repair(RepairLink),
+}
+
+/// `intentic://first-task?do=sent|failed&id=<id>[&reason=<text>]`: the workspace saying what became of the first task
+/// the app handed it (the web's localHost.ts `TASK_QUERY`, first_task.rs). App-window only: a link from anywhere else
+/// could mark a task sent that never was.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FirstTaskLink {
+    pub id: String,
+    /// None when it was sent; the workspace's own words when it could not be.
+    pub failed: Option<String>,
+}
+
+/// `intentic://repair[?slug=<slug>&from=<where>&reason=<text>]`: Repair opened on this computer (repair.rs), from the
+/// workspace's recovery panel, a page, or the system. It opens a view and starts nothing, so it is heard from the
+/// workspace and from outside alike; a local window opens it through its own router instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepairLink {
+    /// The sandbox the reader was trying to reach.
+    pub slug: Option<String>,
+    /// `recovery`, `setup`, `tray`, `link` or `agents` (`LocalRepairContext`).
+    pub from: Option<String>,
+    /// What the reader saw, as the opener said it: printable, and short.
+    pub reason: Option<String>,
+}
+
+/// A first task's id as the app mints it: letters, digits and dashes, never a path or a flag.
+fn is_task_id(id: &str) -> bool {
+    (1..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+/// Words a link carries for the reader to see: control characters out, and no more than a sentence or two.
+fn plain_words(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).take(300).collect()
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -756,6 +796,26 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             _ => return None,
         })),
         "window" => None,
+        "first-task" if source.is_app() => {
+            let id = get("id").filter(|id| is_task_id(id))?;
+            let failed = match get("do")?.as_str() {
+                "sent" => None,
+                "failed" => Some(plain_words(&get("reason").unwrap_or_default())),
+                _ => return None,
+            };
+            Some(Link::FirstTask(FirstTaskLink { id, failed }))
+        }
+        "first-task" => None,
+        "repair" => Some(Link::Repair(RepairLink {
+            slug: get("slug").filter(|slug| is_slug(slug)),
+            from: get("from").filter(|from| {
+                matches!(
+                    from.as_str(),
+                    "recovery" | "setup" | "tray" | "link" | "agents"
+                )
+            }),
+            reason: get("reason").map(|reason| plain_words(&reason)),
+        })),
         _ => None,
     }
 }

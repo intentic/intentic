@@ -457,6 +457,40 @@ pub struct Facts {
     /// Another environment of this computer whose machine agent keeps its sandboxes, when this one has none of its own
     /// (agents.rs `elsewhere`, `WSL (archlinux)`). Looked for only while the record holds no row.
     pub elsewhere: Option<String>,
+    /// FIRST RUN (2026-10-09): this PC's own setup as onboarding.rs last saw it, read with the rest of a round's facts
+    /// so `decide` reads no global.
+    pub pc: Pc,
+}
+
+/// This PC's own setup (WSL, the container engine), for a round that finds no engine answering.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Pc {
+    /// No check has landed, or it found the PC ready: an engine that does not answer is Docker's own trouble.
+    #[default]
+    Unknown,
+    /// The PC cannot run a sandbox at all (no virtualization, too little memory, S mode): the cloud is the way on.
+    CantRun,
+    /// The PC still needs its own setup, which waits for the reader's one consent ("Set up this PC").
+    NeedsSetup,
+    /// The PC's own setup is running now: the sandbox waits for it to finish.
+    SettingUp,
+}
+
+impl Pc {
+    /// What onboarding.rs knows now: its last check, and whether its setup is running.
+    fn now() -> Pc {
+        let Some(check) = crate::onboarding::check_snapshot() else {
+            return Pc::Unknown;
+        };
+        match check.state.as_str() {
+            "cantRun" => Pc::CantRun,
+            "needsSetup" | "checking" | "unknown" if crate::onboarding::setup_running() => {
+                Pc::SettingUp
+            }
+            "needsSetup" | "checking" | "unknown" => Pc::NeedsSetup,
+            _ => Pc::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -523,7 +557,31 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
         _ => {}
     }
     if let Err(reason) = facts.docker {
-        return become_(record, Standing::NeedsDocker { reason });
+        match facts.pc {
+            Pc::CantRun => {
+                return become_(
+                    record,
+                    Standing::Failed {
+                        reason: "This PC cannot run a sandbox here. Use a cloud workspace instead."
+                            .into(),
+                    },
+                );
+            }
+            // The PC's own setup is the way to an engine: it waits for the reader's one consent, never starts unasked.
+            Pc::NeedsSetup => {
+                return become_(
+                    record,
+                    Standing::Waiting {
+                        waiting_for: WaitingFor::Consent,
+                    },
+                );
+            }
+            Pc::SettingUp | Pc::Unknown => {}
+        }
+        if !matches!(record.standing, Standing::Waiting { .. }) {
+            return become_(record, Standing::NeedsDocker { reason });
+        }
+        return Decision::Keep;
     }
     if let Some(consent) = retry.filter(|_| {
         matches!(
@@ -920,6 +978,8 @@ fn update(app: &AppHandle, change: impl FnOnce(&mut Record)) -> Record {
     if let Err(error) = app.emit(EVENT, &after) {
         eprintln!("intentic: the windows could not be told about this computer's sandbox: {error}");
     }
+    // FIRST RUN (2026-10-09): the first task kept until this sandbox is ready may go now (first_task.rs).
+    crate::first_task::machine_changed(app, &after);
     if after.noticed.is_some() && after.noticed != before.noticed {
         notify(app, &after);
     }
@@ -1092,6 +1152,7 @@ fn gather(app: &AppHandle, record: &Record, launch: bool, asked: Option<Ask>) ->
         launch,
         asked,
         elsewhere,
+        pc: Pc::now(),
     }
 }
 
@@ -1145,6 +1206,16 @@ const WAITING_FOR_SETUP: &str = "Waiting for another sandbox's setup on this com
 /// Make it, or finish making it: the row (when the record has none), its setup code, and the connect script. BLOCKING,
 /// for minutes, on the supervisor's own thread.
 fn create(app: &AppHandle, consent: bool) {
+    if crate::onboarding::start_pc_setup_if_needed(app, consent) {
+        update(app, |record| {
+            record.standing = Standing::Creating {
+                phase: None,
+                step: Some("Finishing setup on this PC…".to_string()),
+                percent: 0,
+            };
+        });
+        return;
+    }
     let Some(window) = any_window(app) else {
         // No window to read the session from: the next round, once one is open.
         return;
@@ -1895,6 +1966,7 @@ mod tests {
             launch: false,
             asked: None,
             elsewhere: None,
+            pc: Pc::Unknown,
         }
     }
 
@@ -2226,6 +2298,50 @@ mod tests {
             decide(&record(Standing::SignedOut), &facts()),
             Decision::Create { consent: false }
         );
+    }
+
+    /// A PC whose Docker check says it still needs setup does not start the PC's own prepare without the reader's consent.
+    #[test]
+    fn pc_needs_setup_waits_for_consent_and_never_starts_unasked() {
+        let signed_out = decide(
+            &made(Standing::Ready),
+            &Facts {
+                account: None,
+                docker: Err(DockerReason::NotRunning),
+                container: Container::Unknown,
+                launch: false,
+                asked: None,
+                elsewhere: None,
+                pc: Pc::NeedsSetup,
+            },
+        );
+        assert_eq!(signed_out, Decision::Become(Standing::SignedOut));
+        let signed_in = decide(
+            &record(Standing::SignedOut),
+            &Facts {
+                docker: Err(DockerReason::NotRunning),
+                container: Container::Unknown,
+                pc: Pc::NeedsSetup,
+                ..facts()
+            },
+        );
+        assert_eq!(
+            signed_in,
+            Decision::Become(Standing::Waiting {
+                waiting_for: WaitingFor::Consent,
+            })
+        );
+        // A PC that cannot run a sandbox says so rather than waiting for a consent that could change nothing.
+        let cant = decide(
+            &record(Standing::SignedOut),
+            &Facts {
+                docker: Err(DockerReason::NotInstalled),
+                container: Container::Unknown,
+                pc: Pc::CantRun,
+                ..facts()
+            },
+        );
+        assert!(matches!(cant, Decision::Become(Standing::Failed { .. })));
     }
 
     /// Another environment of this computer already keeps its sandboxes with its own agent (a WSL distro's): the first

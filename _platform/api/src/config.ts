@@ -183,6 +183,17 @@ export const configSchema = z.object({
             dailyMessages: z.coerce.number().int().nonnegative().default(12),
         })
         .prefault({}),
+    // Repair agent in the desktop app: session-authenticated turns, separate from the sandbox trial allowance.
+    repair: z
+        .object({
+            // Comma-separated model keys; empty reuses trial.keys.
+            keys: z.string().default(``).meta({ secret: true }),
+            baseUrl: z.url().default(`https://generativelanguage.googleapis.com/v1beta/openai`),
+            models: z.string().default(``),
+            dailyTurns: z.coerce.number().int().nonnegative().default(48),
+            maxTokensPerTurn: z.coerce.number().int().positive().default(4096),
+        })
+        .prefault({}),
     // The hosted plan, sold via Stripe; no key/price means no plan and the hosted lane stays free-lane only.
     hostedPlan: z
         .object({

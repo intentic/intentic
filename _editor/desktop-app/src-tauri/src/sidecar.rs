@@ -509,7 +509,14 @@ pub fn want_office(app: &AppHandle) {
     app.state::<Sidecar>()
         .office_wanted
         .store(true, Ordering::SeqCst);
-    ask_for_office(app);
+    try_office_after_prefetch(app);
+}
+
+/// The office editor waits until the first-launch prefetch finishes or fails (onboarding.rs).
+pub fn try_office_after_prefetch(app: &AppHandle) {
+    if crate::onboarding::prefetch_settled() {
+        ask_for_office(app);
+    }
 }
 
 /// `prefetch-office`, once per run, when it is wanted and there is a process to ask. Never on an air-gapped

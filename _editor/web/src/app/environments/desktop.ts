@@ -542,6 +542,22 @@ export const desktopFixLink = (slug: string, code?: string): string => {
     return `intentic://fix?${params.toString()}`;
 };
 
+/** Opens Repair in the desktop app's main window (`intentic://repair`, repair/mod.rs). */
+export const desktopRepairLink = (options?: { slug?: string; from?: string; reason?: string }): string => {
+    const params = new URLSearchParams();
+    if (options?.slug !== undefined && options.slug !== ``) {
+        params.set(`slug`, options.slug);
+    }
+    if (options?.from !== undefined && options.from !== ``) {
+        params.set(`from`, options.from);
+    }
+    if (options?.reason !== undefined && options.reason !== ``) {
+        params.set(`reason`, options.reason);
+    }
+    const query = params.toString();
+    return query === `` ? `intentic://repair` : `intentic://repair?${query}`;
+};
+
 /* Page load is complete only when the document reports `readyState === "complete"`. */
 const pageLoaded = (): boolean => document.readyState === `complete`;
 

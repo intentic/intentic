@@ -49,6 +49,7 @@ fn announce(requirement: &plan::Requirement) {
     if !piped() {
         return;
     }
+    let (admin, ours) = plan::requirement_admin_ours(requirement);
     let line = serde_json::json!({
         "id": requirement.id,
         "title": requirement.title,
@@ -56,8 +57,18 @@ fn announce(requirement: &plan::Requirement) {
         "remedy": requirement.remedy,
         "action": requirement.action.id(),
         "detail": requirement.detail,
+        "admin": admin,
+        "ours": ours,
     });
     println!("intentic-requirement: {line}");
+}
+
+#[cfg(windows)]
+fn print_summary(facts: &plan::Facts, restart: bool) {
+    if !piped() {
+        return;
+    }
+    plan::print_prepare_summary(facts, &plan::requirements(facts), restart);
 }
 
 /* WHAT IS HAPPENING TO ONE REQUIREMENT, RIGHT NOW — the marker that turns a list into a live checklist. */
@@ -153,7 +164,15 @@ pub fn live_for(id: &str, text: &str, live: Live) {
 /// The Docker Desktop download and install are the long ones, and doing them now is what makes that restart the only
 /// one; starting Docker, and anything that asks its engine, waits for the next session.
 #[cfg_attr(not(windows), allow(dead_code))]
-const BEFORE_RESTART: [&str; 2] = ["docker-desktop", "docker-path"];
+const BEFORE_RESTART_DOCKER_DESKTOP: [&str; 2] = ["docker-desktop", "docker-path"];
+
+#[cfg(windows)]
+fn before_restart(engine: crate::engine::Kind, requirement_id: &str) -> bool {
+    match engine {
+        crate::engine::Kind::Intentic => false,
+        _ => BEFORE_RESTART_DOCKER_DESKTOP.contains(&requirement_id),
+    }
+}
 
 /// What an elevated fix says while it runs: who it is waiting on, and for how long. `what` is the work, in a
 /// reader's words ("Turning on WSL2"); `stage` is asked each second for where that work is, when it can say.
@@ -255,12 +274,20 @@ pub fn run(args: Args) -> Result<()> {
     use plan::Action;
 
     step("checking-docker", "checking this PC for Docker...");
-    let mut facts = facts::probe().map_err(crate::util::Fail)?;
+    let mut facts = match facts::probe() {
+        Ok(facts) => facts,
+        Err(problem) => {
+            let empty = plan::Facts::default();
+            print_summary(&empty, false);
+            return Err(crate::util::Fail(problem));
+        }
+    };
     draw(&facts);
 
     let unmet = plan::requirements(&facts);
     if unmet.is_empty() {
         crate::ui::note("Docker is ready on this PC.");
+        print_summary(&facts, false);
         return Ok(());
     }
     for requirement in &unmet {
@@ -284,13 +311,19 @@ pub fn run(args: Args) -> Result<()> {
         .cloned()
         .collect();
     if !stuck.is_empty() {
+        print_summary(&facts, false);
         bail!("{}", explain(&stuck));
     }
 
     // Report-only, by request. Everything left on the list is ours to fix (the `stuck` check above already
     // took the ones that are not, as a real failure), so this is the consent stop with the asking left out.
+    // Dry-run returns through `stop` here, before `consent` and before any fixer runs.
     if args.dry_run {
         println!("{}", explain(&unmet));
+        print_summary(
+            &facts,
+            unmet.iter().any(|r| r.action == plan::Action::Restart),
+        );
         stop(
             EXIT_NEEDS_CONSENT,
             "nothing was changed - this was a dry run.",
@@ -299,14 +332,25 @@ pub fn run(args: Args) -> Result<()> {
 
     // A restart Windows was already waiting for, with nothing else to do first.
     if unmet.iter().all(|r| r.action == Action::Restart) {
-        return restart(&unmet, args.yes);
+        return restart(&unmet, args.yes, &facts);
     }
     /* A stale login token cannot reach Docker until the user signs in again. */
     if let Some(stale) = unmet.iter().find(|r| r.action == Action::SignOut) {
-        return sign_out(std::slice::from_ref(stale), &facts.user);
+        return sign_out(std::slice::from_ref(stale), &facts.user, &facts);
     }
 
     consent(&unmet, args.yes)?;
+
+    let engine_kind = plan::chosen_engine(&facts);
+    if engine_kind == crate::engine::Kind::Intentic
+        && unmet
+            .iter()
+            .any(|r| r.id == "engine" || r.id == "engine-start")
+    {
+        std::thread::spawn(|| {
+            let _ = crate::engine::fetch(&mut |_, _| {});
+        });
+    }
 
     // The 600 MB download starts now, on its own thread, rather than when its turn in the list comes: it then runs
     // while Windows' permission prompt for WSL2 waits on the person and while the features are turned on, which is
@@ -345,8 +389,100 @@ pub fn run(args: Args) -> Result<()> {
         }
         previous = ids;
 
+        let elevated: Vec<&plan::Requirement> = todo
+            .iter()
+            .filter(|requirement| {
+                requirement.action == plan::Action::FixElevated
+                    && (restart_after.is_none() || before_restart(engine_kind, requirement.id))
+            })
+            .collect();
+        let mut elevated_done: Vec<(&'static str, fix::Fixed)> = Vec::new();
+        if !elevated.is_empty() {
+            let mut on_step = |id: &str, state: &str| {
+                announce_state(id, state, None);
+            };
+            match fix::run_elevated_batch(&elevated, &facts, &mut on_step) {
+                Ok(outcomes) => elevated_done = outcomes,
+                Err(fix::Trouble::Cancelled) => {
+                    for requirement in &elevated {
+                        announce_state(
+                            requirement.id,
+                            "failed",
+                            Some("Windows asked for permission and the prompt was closed, so nothing was changed."),
+                        );
+                    }
+                    print_summary(&facts, false);
+                    return Err(crate::util::Fail(
+                        "waiting for administrator permission — try again and choose Yes when Windows asks."
+                            .to_string(),
+                    ));
+                }
+                Err(fix::Trouble::Unanswered) => {
+                    for requirement in &elevated {
+                        announce_state(
+                            requirement.id,
+                            "failed",
+                            Some(
+                                "Windows' permission prompt closed without an answer, so nothing was changed.",
+                            ),
+                        );
+                    }
+                    print_summary(&facts, false);
+                    return Err(crate::util::Fail(
+                        "waiting for administrator permission — try again and choose Yes when Windows asks."
+                            .to_string(),
+                    ));
+                }
+                Err(fix::Trouble::Failed(problem)) => {
+                    print_summary(&facts, false);
+                    return Err(crate::util::Fail(problem));
+                }
+            }
+        }
+
         for requirement in &todo {
-            if restart_after.is_some() && !BEFORE_RESTART.contains(&requirement.id) {
+            if elevated
+                .iter()
+                .any(|elevated| elevated.id == requirement.id)
+            {
+                if let Some((_, outcome)) =
+                    elevated_done.iter().find(|(id, _)| *id == requirement.id)
+                {
+                    match outcome {
+                        Ok(fix::Done::Now) => {
+                            announce_state(requirement.id, "done", None);
+                        }
+                        Ok(fix::Done::AfterRestart) => {
+                            let mut pending = requirement.clone();
+                            pending.action = plan::Action::Restart;
+                            pending.remedy = "restart this PC and run the same command again - the setup picks up from here.".to_string();
+                            announce(&pending);
+                            announce_state(requirement.id, "done", Some("waiting for the restart"));
+                            restart_after = Some(pending);
+                        }
+                        Ok(fix::Done::AfterSignOut) => {
+                            let pending = plan::sign_out_requirement(&facts);
+                            announce_state(requirement.id, "done", None);
+                            announce(&pending);
+                            announce_state(
+                                pending.id,
+                                "done",
+                                Some("waiting for the next sign-in"),
+                            );
+                            print_summary(&facts, false);
+                            return sign_out_or_restart(&pending, &facts.user, args.yes, &facts);
+                        }
+                        Err(fix::Trouble::Failed(problem)) => {
+                            announce_state(requirement.id, "failed", Some(problem.as_str()));
+                            print_summary(&facts, false);
+                            return Err(crate::util::Fail(problem.clone()));
+                        }
+                        Err(fix::Trouble::Cancelled) | Err(fix::Trouble::Unanswered) => {}
+                    }
+                }
+                continue;
+            }
+            if restart_after.is_some() && !before_restart(engine_kind, requirement.id) {
                 continue;
             }
             // Uncovered by an earlier fix in this very pass: installing Docker Desktop adds the account to
@@ -355,14 +491,17 @@ pub fn run(args: Args) -> Result<()> {
             if requirement.action == Action::SignOut {
                 announce(requirement);
                 announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
-                return sign_out_or_restart(requirement, &facts.user, args.yes);
+                return sign_out_or_restart(requirement, &facts.user, args.yes, &facts);
             }
             // A fix in the last pass left Windows waiting for a restart (the Docker Desktop installer does): the
             // same parking as the examination's, not the wall below, which would report a machine one restart
             // from ready as a failure.
             if requirement.action == Action::Restart {
                 announce(requirement);
-                return restart(std::slice::from_ref(requirement), args.yes);
+                return restart(std::slice::from_ref(requirement), args.yes, &facts);
+            }
+            if requirement.id == "engine" && plan::engine_blocked_on_wsl(&facts) {
+                continue;
             }
             if !requirement.action.ours() {
                 // Reached only when a fix uncovered something new that is not ours (a full disk, say). Report
@@ -413,12 +552,31 @@ pub fn run(args: Args) -> Result<()> {
                     announce_state(requirement.id, "done", None);
                     announce(&pending);
                     announce_state(pending.id, "done", Some("waiting for the next sign-in"));
-                    return sign_out_or_restart(&pending, &facts.user, args.yes);
+                    return sign_out_or_restart(&pending, &facts.user, args.yes, &facts);
                 }
             }
         }
         if let Some(pending) = restart_after.take() {
-            return restart(std::slice::from_ref(&pending), args.yes);
+            if plan::chosen_engine(&facts) == crate::engine::Kind::Intentic {
+                let mut last_percent: Option<u64> = None;
+                let _ = crate::engine::fetch(&mut |done, total| {
+                    let percent = done
+                        .saturating_mul(100)
+                        .checked_div(total)
+                        .map_or(0, |percent| percent.min(100));
+                    if last_percent != Some(percent) {
+                        last_percent = Some(percent);
+                        announce_state(
+                            "engine",
+                            "running",
+                            Some(&format!(
+                                "downloading Intentic's container engine ({percent}%)"
+                            )),
+                        );
+                    }
+                });
+            }
+            return restart(std::slice::from_ref(&pending), args.yes, &facts);
         }
     }
 
@@ -429,9 +587,11 @@ pub fn run(args: Args) -> Result<()> {
         for requirement in &left {
             announce(requirement);
         }
+        print_summary(&facts, false);
         bail!("{}", explain(&left));
     }
     step("checking-docker", "Docker is ready.");
+    print_summary(&facts, false);
     Ok(())
 }
 
@@ -463,6 +623,8 @@ fn apply(
         }
         "docker-running" => "starting Docker Desktop in the system tray...",
         "docker-linux-containers" => "switching Docker to Linux containers...",
+        "engine" => "installing Intentic's container engine...",
+        "engine-start" => "starting Intentic's container engine...",
         _ => "preparing Docker...",
     };
     step("installing-docker", doing);
@@ -481,6 +643,8 @@ fn apply(
         "docker-users" => fix::add_to_docker_users(facts),
         "docker-running" => fix::start_docker_desktop(facts).and_then(|_| fix::wait_for_daemon()),
         "docker-linux-containers" => fix::switch_to_linux_containers(facts),
+        "engine" => fix::install_intentic_engine(),
+        "engine-start" => fix::start_intentic_engine(),
         other => Err(fix::Trouble::Failed(format!(
             "no idea how to fix '{other}' - this is a bug in intentic, please report it."
         ))),
@@ -526,7 +690,7 @@ fn apply(
 
 /* Turning on WSL2 succeeds and does nothing until Windows restarts, and this is the moment where a setup that merely SAYS so gets abandoned. */
 #[cfg(windows)]
-fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
+fn restart(unmet: &[plan::Requirement], pre_consented: bool, facts: &plan::Facts) -> Result<()> {
     use crate::tty;
 
     // A restart request owns the screen: the live step line is erased and the spinner stopped, or it repaints
@@ -535,15 +699,20 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!();
     println!("{}", explain(unmet));
     println!("Windows has to restart before Docker can run.");
+    println!("Save your work in other apps first.");
     println!();
     println!("{}", resume_hint("After it comes back"));
     println!();
     /* Pre-consent covers installing things, never a restart: the desktop app passes it. */
-    if !pre_consented && tty::have_tty() && tty::confirm("Restart this PC now?", false) {
+    print_summary(facts, true);
+    if !pre_consented
+        && tty::have_tty()
+        && tty::confirm("Restart now? Save your work in other apps first.", false)
+    {
         fix::restart_windows().map_err(crate::util::Fail)?;
         stop(
             EXIT_NEEDS_RESTART,
-            "this PC is restarting in 10 seconds - run the command above once it is back.",
+            "this PC is restarting now - run the command above once it is back.",
         );
     }
     stop(
@@ -560,21 +729,26 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
 /// Asking for the sign-out first sent a reader through it, back into the setup, and on to the restart it found
 /// next — or, more often, away. Installing Docker Desktop is what leaves both behind, in the same minute.
 #[cfg(windows)]
-fn sign_out_or_restart(pending: &plan::Requirement, user: &str, pre_consented: bool) -> Result<()> {
+fn sign_out_or_restart(
+    pending: &plan::Requirement,
+    user: &str,
+    pre_consented: bool,
+    facts: &plan::Facts,
+) -> Result<()> {
     let restart_waiting = facts::probe()
         .map(|now| now.reboot_pending)
         .unwrap_or(false);
     if restart_waiting {
         let both = plan::restart_requirement();
         announce(&both);
-        return restart(std::slice::from_ref(&both), pre_consented);
+        return restart(std::slice::from_ref(&both), pre_consented, facts);
     }
-    sign_out(std::slice::from_ref(pending), user)
+    sign_out(std::slice::from_ref(pending), user, facts)
 }
 
 /* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`. */
 #[cfg(windows)]
-fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
+fn sign_out(unmet: &[plan::Requirement], user: &str, facts: &plan::Facts) -> Result<()> {
     let who = if user.is_empty() {
         "this account"
     } else {
@@ -588,6 +762,7 @@ fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
     println!();
     println!("{}", resume_hint("After you sign back in"));
     println!();
+    print_summary(facts, true);
     stop(
         EXIT_NEEDS_RESTART,
         if unattended() {
@@ -675,11 +850,29 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
 
 /* Unix keeps its own route. */
 #[cfg(not(windows))]
+fn piped_stdout() -> bool {
+    use std::io::IsTerminal;
+    !std::io::stdout().is_terminal()
+}
+
+#[cfg(not(windows))]
 pub fn run(_args: Args) -> Result<()> {
     crate::util::step("checking-docker", "checking Docker...");
-    crate::docker::require_daemon()?;
-    println!("  Docker is ready on this machine.");
-    Ok(())
+    match crate::docker::require_daemon() {
+        Ok(()) => {
+            if piped_stdout() {
+                plan::print_unix_prepare_summary("ready");
+            }
+            println!("  Docker is ready on this machine.");
+            Ok(())
+        }
+        Err(failure) => {
+            if piped_stdout() {
+                plan::print_unix_prepare_summary("needsSetup");
+            }
+            Err(failure)
+        }
+    }
 }
 
 #[cfg(test)]

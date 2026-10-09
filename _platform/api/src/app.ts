@@ -33,6 +33,7 @@ import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.j
 import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
+import { repairRoutes } from "./repair/repair.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 
 // `Bindings` is Bun's server as Bun.serve hands it to `fetch`, of which only the per-request idle timeout is used; it is
@@ -533,6 +534,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // The free trial's model API, mounted as its own sub-app; off (404s) unless TRIAL_KEYS is set.
     app.route(`/trial`, trialRoutes({ config, prisma }));
+    app.route(`/api/repair`, repairRoutes({ config, prisma, auth }));
 
     // The hosted plan's one non-browser route, Stripe's webhook; off (404s) unless its Stripe keys are set.
     app.route(`/hosted-plan`, hostedPlanHttpRoutes({ config, prisma }));

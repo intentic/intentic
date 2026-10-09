@@ -662,8 +662,36 @@ pub async fn project_attach(
         let folder = root.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&folder)).await;
     }
-    let name = crate::machine_sandbox::queue(&app, &root, &ask.project);
+    attach_at_path(&app, &root, &ask.project)
+}
+
+/// A folder put in line for this computer's sandbox by path alone (first_task.rs): the same queueing as
+/// [`project_attach`], without a window's folder.
+pub fn attach_at_path(app: &AppHandle, root: &Path, project: &str) -> Result<Attached, String> {
+    if let Some(existing) = live_project_of(app, root) {
+        open_existing(app, &existing);
+        return Ok(Attached::Opened);
+    }
+    let stale = project_of(app, root).is_some();
+    if let Some(why) = refusal_here(app, root) {
+        return Err(why.sentence(root));
+    }
+    if !is_project_dir_name(project) {
+        return Err(format!(
+            "{} can't be used to name a folder in a sandbox. Rename the folder and try again.",
+            folder_name(root)
+        ));
+    }
+    if stale {
+        release_folder(root);
+    }
+    let name = crate::machine_sandbox::queue(app, root, project);
     Ok(Attached::Queued { name })
+}
+
+/// Why a folder cannot be the first task's project, in the reader's words.
+pub fn refusal_for_first_task(app: &AppHandle, root: &Path) -> Option<String> {
+    refusal_here(app, root).map(|why| why.sentence(root))
 }
 
 /// The account's sandboxes with one just made added, as the workspace's switcher would list it: where it runs is this
@@ -689,6 +717,27 @@ fn pairings_on(status: &serde_json::Value, folder: &Path, windows: bool) -> Vec<
         .collect()
 }
 
+/// One folder path, spelled as the platform compares them (case folded, either slash, on Windows; verbatim prefix
+/// stripped when present).
+pub(crate) fn folder_path_key(path: &Path, windows: bool) -> String {
+    let plain = crate::local::plain(path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
+    let trimmed = plain
+        .display()
+        .to_string()
+        .trim_end_matches(['/', '\\'])
+        .to_string();
+    if windows {
+        trimmed.replace('/', "\\").to_lowercase()
+    } else {
+        trimmed
+    }
+}
+
+/// Whether two folder paths name the same folder on disk.
+pub(crate) fn folder_paths_same(a: &Path, b: &Path, windows: bool) -> bool {
+    folder_path_key(a, windows) == folder_path_key(b, windows)
+}
+
 /// The machine agent's pairings (`intentic-machine status --json`, `sync.pairings`) whose folder is `folder`, spelled
 /// as the platform compares one (case folded, either slash, on Windows): what a folder's first copy into this
 /// computer's sandbox is followed by too (machine_sandbox.rs).
@@ -697,15 +746,7 @@ pub(crate) fn pairings_of<'a>(
     folder: &Path,
     windows: bool,
 ) -> Vec<&'a serde_json::Value> {
-    let fold = |path: &str| -> String {
-        let trimmed = path.trim_end_matches(['/', '\\']);
-        if windows {
-            trimmed.replace('/', "\\").to_lowercase()
-        } else {
-            trimmed.to_string()
-        }
-    };
-    let wanted = fold(&folder.display().to_string());
+    let wanted = folder_path_key(folder, windows);
     status["sync"]["pairings"]
         .as_array()
         .map(|pairings| {
@@ -714,7 +755,7 @@ pub(crate) fn pairings_of<'a>(
                 .filter(|pairing| {
                     pairing["localDir"]
                         .as_str()
-                        .is_some_and(|dir| fold(dir) == wanted)
+                        .is_some_and(|dir| folder_path_key(Path::new(dir), windows) == wanted)
                 })
                 .collect()
         })

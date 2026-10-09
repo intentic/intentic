@@ -1167,17 +1167,44 @@ fn ask(app: &AppHandle, label: &str, path: &str) {
         eprintln!("{label} asked about {path}, which is not a file of its own");
         return;
     };
+    let folder = if grant.folder {
+        grant.root.clone()
+    } else {
+        file.parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| grant.asked.clone())
+    };
+    let name = shown_name(&file);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Err(trouble) = hand_off(&app, &file) {
-            eprintln!(
-                "intentic: could not hand {} to the workspace: {}",
-                file.display(),
-                trouble.detail()
-            );
-            say(&app, &trouble.friendly(&shown_name(&file)));
+        let local_ready = crate::machine_sandbox::status(&app).standing
+            == crate::machine_sandbox::Standing::Ready;
+        if local_ready || !no_sandbox_can_answer(&app) {
+            if let Err(trouble) = hand_off(&app, &file) {
+                eprintln!(
+                    "intentic: could not hand {} to the workspace: {}",
+                    file.display(),
+                    trouble.detail()
+                );
+                say(&app, &trouble.friendly(&name));
+            }
+            return;
         }
+        crate::first_task::prefill_from_ask(&app, &folder, &name);
     });
+}
+
+/// True when Ask cannot reach any sandbox: nobody signed in, or this PC's sandbox is not ready and the roster lists no
+/// other sandbox to hand the file to.
+fn no_sandbox_can_answer(app: &AppHandle) -> bool {
+    let roster = app.state::<AppState>().roster();
+    if roster.account.is_none() {
+        return true;
+    }
+    if crate::machine_sandbox::status(app).standing == crate::machine_sandbox::Standing::Ready {
+        return false;
+    }
+    roster.sandboxes.is_empty()
 }
 
 /// A read-only grant of `file` for the workspace's origin alone, for [`HANDOFF_LIFE`], and the workspace opened on

@@ -629,6 +629,13 @@ fn marker(state: &str, done: u64, total: u64) -> String {
 fn docker_installed() -> bool {
     #[cfg(windows)]
     {
+        use intentic_docker_host::desktop_app;
+        let desktop = desktop_app::default_installs_here()
+            .into_iter()
+            .any(|path| std::path::Path::new(&path).exists());
+        if crate::engine::choose(desktop) == crate::engine::Kind::Intentic {
+            return crate::engine::status().running;
+        }
         crate::docker::program_folder("").is_some() || crate::docker::cli_present()
     }
     #[cfg(not(windows))]
@@ -985,13 +992,12 @@ fn load(
     image: &str,
     log: &crate::logfile::Log,
 ) -> Result<(), String> {
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
     log.section(&format!(
         "docker load ({} from the prefetched cache)",
         reference.full()
     ));
-    let mut child = Command::new("docker")
-        .args(["load"])
+    let mut child = crate::docker::command(&["load"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1029,8 +1035,7 @@ fn load(
             .find_map(|line| line.trim().strip_prefix("Loaded image ID: "))
             .map(str::trim)
             .ok_or_else(|| format!("docker load did not say what it loaded: {}", said.trim()))?;
-        let tagged = Command::new("docker")
-            .args(["tag", id, image])
+        let tagged = crate::docker::command(&["tag", id, image])
             .output()
             .map_err(|error| format!("could not run docker tag: {error}"))?;
         if !tagged.status.success() || !crate::docker::image_exists(image) {

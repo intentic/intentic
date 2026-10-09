@@ -143,6 +143,7 @@ jobs:
       # Windows. All five come off the zig/xwin toolchains baked into this image, with no Apple SDK anywhere in it
       # (build-ic.sh header).
       - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      - run: bash _tools/scripts/build/build-intentic-engine.sh
       # A directory upload is rooted at the directory, so the artifact holds the five binaries by name, and a download
       # into _sandbox/ic/dist-bin puts them back exactly where build-ic.sh wrote them.
       - uses: ./.github/actions/upload-artifact-retry

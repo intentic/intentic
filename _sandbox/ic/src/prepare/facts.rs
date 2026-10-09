@@ -91,6 +91,15 @@ $inGroup = (($roster -contains $me) -or ($roster -contains $short))
 $free = $null
 if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace / 1GB)) }
 
+$memoryBytes = $null
+$cpus = $null
+if ($cs -and $cs.TotalPhysicalMemory) { $memoryBytes = [int64]$cs.TotalPhysicalMemory }
+if ($cpu -and $cpu.NumberOfLogicalProcessors) { $cpus = [int32]$cpu.NumberOfLogicalProcessors }
+
+$sMode = $null
+$policy = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue
+if ($policy -and ($null -ne $policy.SkuPolicyRequired)) { $sMode = [bool]($policy.SkuPolicyRequired -eq 1) }
+
 @{
   build = [int]$reg.CurrentBuildNumber
   displayVersion = [string]$reg.DisplayVersion
@@ -115,6 +124,9 @@ if ($disk -and $disk.FreeSpace) { $free = [int64]([math]::Floor($disk.FreeSpace 
   inDockerUsers = ($groups -match 'docker-users')
   inDockerUsersGroup = [bool]$inGroup
   freeGib = $free
+  memoryBytes = $memoryBytes
+  cpus = $cpus
+  windowsSMode = $sMode
   user = [string]$env:USERNAME
   userQualified = $me
 } | ConvertTo-Json -Compress
@@ -181,6 +193,11 @@ fn read(output: shell::Output) -> Result<Facts, String> {
     } else {
         None
     };
+    if super::plan::chosen_engine(&facts) == crate::engine::Kind::Intentic {
+        let status = crate::engine::status();
+        facts.engine_installed = status.installed;
+        facts.engine_running = status.running;
+    }
     Ok(facts)
 }
 
