@@ -259,6 +259,60 @@ describe(`turnsOf across frames`, () => {
         expect(next[1]).not.toBe(first[1]);
         expect(next[1]?.messages).toEqual([again, grown]);
     });
+
+    it(`gives a turn back a row appended to it rather than standing it unchanged`, () => {
+        const first = turnsOf([asked, answered, again]);
+        const more: ChatMessage = { id: 4, role: `assistant`, text: `on it` };
+        const next = turnsOf([asked, answered, again, more], first);
+        expect(next[0]).toBe(first[0]);
+        expect(next[1]?.messages).toEqual([again, more]);
+    });
+
+    // Every way a transcript changes between two groupings, against grouping from scratch: the reused turns must be the
+    // grouping a fresh read would make, only kept as the same objects.
+    it(`groups exactly as a fresh read does, whatever changed`, () => {
+        let state = 7;
+        const next = (): number => {
+            state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+            return state / 2_147_483_648;
+        };
+        let id = 0;
+        const row = (): ChatMessage => {
+            id += 1;
+            const pick = next();
+            if (pick < 0.25) {
+                return { id, role: `user`, text: `prompt ${id}` };
+            }
+            if (pick < 0.3) {
+                return { id, role: `user`, text: `continue` };
+            }
+            return pick < 0.4 ? { id, role: `notice`, text: `note ${id}` } : { id, role: `assistant`, text: `answer ${id}` };
+        };
+        let rows: ChatMessage[] = [];
+        let turns = turnsOf(rows);
+        const shape = (grouped: readonly { messages: readonly ChatMessage[]; folded: readonly ChatMessage[] }[]) =>
+            grouped.map((turn) => [turn.messages.map((message) => message.id), turn.folded.map((message) => message.id)]);
+        for (let step = 0; step < 500; step += 1) {
+            const pick = next();
+            const at = Math.floor(next() * rows.length);
+            // A new array every step, as every change to a transcript is: the reuse is by row identity.
+            if (pick < 0.5 || rows.length === 0) {
+                rows = rows.concat([row()]);
+            } else if (pick < 0.75) {
+                rows = rows.map((message, index) => (index === rows.length - 1 ? { ...message, text: `${message.text}.` } : message));
+            } else if (pick < 0.85) {
+                rows = rows.map((message, index) => (index === at ? row() : message));
+            } else if (pick < 0.92) {
+                rows = rows.filter((_, index) => index !== at);
+            } else {
+                rows = [row(), row(), ...rows];
+            }
+            const fresh = turnsOf(rows);
+            const reused = turnsOf(rows, turns);
+            expect(shape(reused)).toEqual(shape(fresh));
+            turns = reused;
+        }
+    });
 });
 
 describe(`checklistViewsOf across frames`, () => {

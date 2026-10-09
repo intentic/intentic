@@ -8,12 +8,19 @@ import { nextTick, type Ref, ref, watch } from "vue";
 // Safari's stand-in for an idle callback.
 const IDLE_FALLBACK_MS = 200;
 
+// The most rows the pass lays out. It costs every drawn row's style and layout twice, in one task: 4,000 rows held the
+// main thread 414ms and then 340ms at a turn's end, just as the reader starts their reply. The row window
+// (paneWindow.ts) keeps a parked chat well under this; a reader who climbed far above it keeps estimated heights instead.
+const REALIZE_MOST = 480;
+
 export const useTranscriptWarmup = (transcript: {
     /** A new transcript on screen, a tab switch, a history open. */
     readonly conversationId: Ref<string>;
     /** Rows in the list, watched for the bulk arrivals rather than for a streamed frame. */
     readonly messageCount: Ref<number>;
     readonly streaming: Ref<boolean>;
+    /** How many rows are drawn when the pass would run. */
+    readonly drawn: () => number;
 }): { readonly realizing: Ref<boolean> } => {
     const realizing = ref(false);
     let queued = false;
@@ -46,6 +53,10 @@ export const useTranscriptWarmup = (transcript: {
         }
         queued = true;
         whenIdle(() => {
+            if (transcript.drawn() > REALIZE_MOST) {
+                queued = false;
+                return;
+            }
             realizing.value = true;
             void nextTick(() => {
                 const view = painter();

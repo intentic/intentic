@@ -8,7 +8,7 @@ import { useMemoryAnswer } from "../../transcript/held/memoryAnswer";
 import { memoryShare, sendAnywayTip } from "../../transcript/held/memoryTip";
 import { usePaneView } from "../useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
-import { pendingDecisionOf, type WaitKind } from "./pendingDecision";
+import { pendingCardReader, pendingDecisionOf, type WaitKind } from "./pendingDecision";
 import { showWaitingCard, waitingCardIn } from "./waitingCard";
 
 // What waits on the reader, pinned right above the composer so it is on screen at any scroll position: the card the
@@ -27,8 +27,10 @@ const t = useT();
 const { conversation, messages, waitsOn, staged, ending, waiting, resumeQueue } = usePaneView();
 const root = useTemplateRef<HTMLElement>(`root`);
 
-// A turn a person already ended owes nobody an answer, whatever it is still unwinding.
-const decision = computed(() => (ending.value === undefined ? pendingDecisionOf(messages.value, waitsOn.value) : undefined));
+// A turn a person already ended owes nobody an answer, whatever it is still unwinding. Read per frame of a streamed turn,
+// so through a reader that reads only the rows that changed since it last read.
+const readCard = pendingCardReader();
+const decision = computed(() => (ending.value === undefined ? pendingDecisionOf(messages.value, waitsOn.value, readCard) : undefined));
 const replying = computed(() => {
     const requestId = decision.value?.requestId;
     return requestId !== undefined && conversation.value.requests.isReplying(requestId);

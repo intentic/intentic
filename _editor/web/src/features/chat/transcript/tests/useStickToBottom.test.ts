@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { createApp, h, nextTick, ref } from "vue";
+import { createApp, h, nextTick, type Ref, ref } from "vue";
 import { useStickToBottom } from "../useStickToBottom";
 
 // Pins the follow rule: stays at newest content unless the reader has scrolled up. Needs jsdom stand-ins for layout and
@@ -47,21 +47,22 @@ const geometry = (element: HTMLElement, scrollHeight: number, clientHeight: numb
 };
 
 // The panel, reduced to what the composable touches: the scroller and the content wrapper it measures.
-const mountPanel = (): { scroller: HTMLElement; pin: () => void; follow: () => void } => {
+const mountPanel = (): { scroller: HTMLElement; pin: () => void; follow: () => void; parked: () => boolean } => {
     const scroller = ref<HTMLElement | null>(null);
     const content = ref<HTMLElement | null>(null);
     let pin: () => void = () => {};
     let follow: () => void = () => {};
+    let parked: Readonly<Ref<boolean>> = ref(true);
     const app = createApp({
         setup() {
-            ({ pin, follow } = useStickToBottom(scroller, content));
+            ({ pin, follow, parked } = useStickToBottom(scroller, content));
             return () => h(`div`, { ref: scroller }, [h(`div`, { ref: content })]);
         },
     });
     const host = document.createElement(`div`);
     document.body.append(host);
     app.mount(host);
-    return { scroller: scroller.value as HTMLElement, pin: () => pin(), follow: () => follow() };
+    return { scroller: scroller.value as HTMLElement, pin: () => pin(), follow: () => follow(), parked: () => parked.value };
 };
 
 it(`follows growth while parked at the bottom, and leaves a reader who scrolled up alone`, async () => {
@@ -86,6 +87,24 @@ it(`follows growth while parked at the bottom, and leaves a reader who scrolled 
     box.scrollHeight = 2200;
     observed.fire();
     expect(scroller.scrollTop).toBe(1800);
+});
+
+// What the row window reads (paneWindow.ts): it takes rows above it down only while this says the reader is at the newest.
+it(`says whether the reader is at the newest, as they leave it and come back`, async () => {
+    installObserver(window);
+    const { scroller, parked, pin } = mountPanel();
+    geometry(scroller, 1000, 400);
+    await nextTick();
+    pin();
+    expect(parked()).toBe(true);
+
+    scroller.scrollTop = 300;
+    scroller.dispatchEvent(new Event(`scroll`));
+    expect(parked()).toBe(false);
+
+    scroller.scrollTop = 600;
+    scroller.dispatchEvent(new Event(`scroll`));
+    expect(parked()).toBe(true);
 });
 
 it(`sends the transcript to its newest message when the panel asks`, async () => {

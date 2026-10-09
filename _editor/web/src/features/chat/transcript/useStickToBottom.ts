@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, type Ref } from "vue";
+import { onMounted, onUnmounted, type Ref, ref } from "vue";
 
 // Stays pinned to the bottom unless the user scrolls up away from it; follow() re-pins on any change, keyed on scroll
 // state rather than a panel-owned flag. Any upward scroll by the reader counts as leaving, however small: a soft wheel
@@ -15,9 +15,17 @@ const THRESHOLD = 80;
 export const useStickToBottom = (
     scroller: Ref<HTMLElement | null>,
     content: Ref<HTMLElement | null>,
-): { pin: () => void; follow: () => void } => {
+): { pin: () => void; follow: () => void; parked: Readonly<Ref<boolean>> } => {
     // Closure state, not refs: reads happen inside DOM callbacks where reactivity buys nothing.
     let pinned = true;
+    // The same, for a reader outside the DOM callbacks (the row window, paneWindow.ts, which may take rows above down
+    // only while the reader is at the newest). Written on every change of `pinned`; a ref set to the value it holds
+    // triggers nothing, so a scroll that leaves the state alone costs no effect.
+    const parked = ref(true);
+    const park = (value: boolean): void => {
+        pinned = value;
+        parked.value = value;
+    };
     let lastTop = 0;
     // Geometry at the last scroll measure; an upward move while either changed is the browser clamping, not the reader.
     let lastHeight = 0;
@@ -33,7 +41,7 @@ export const useStickToBottom = (
     };
 
     const pin = (): void => {
-        pinned = true;
+        park(true);
         const element = scroller.value;
         if (element === null) {
             return;
@@ -62,12 +70,12 @@ export const useStickToBottom = (
         measure(element);
         if (up) {
             if (!reshaped) {
-                pinned = false;
+                park(false);
             }
             return;
         }
         if (element.scrollHeight - top - element.clientHeight <= THRESHOLD) {
-            pinned = true;
+            park(true);
         }
     };
 
@@ -75,7 +83,7 @@ export const useStickToBottom = (
     // content (which the scroll rule above then cannot tell from clamping).
     const onWheel = (event: WheelEvent): void => {
         if (event.deltaY < 0 && listening !== null && listening.scrollTop > 0) {
-            pinned = false;
+            park(false);
         }
     };
 
@@ -114,5 +122,5 @@ export const useStickToBottom = (
         listening = null;
     });
 
-    return { pin, follow };
+    return { pin, follow, parked };
 };

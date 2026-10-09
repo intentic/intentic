@@ -1,6 +1,7 @@
 import { planParts, REQUEST_FIELDS } from "@intentic/sandbox-contract";
 import { type AgentStanding, awaitingUser } from "../../../agents/fleet/agentStatus";
 import type { ChatMessage } from "../../transcript/transcript";
+import { newestOf } from "../../transcript/transcriptScan";
 
 // What a chat waits on a person for, as the bar pinned above its composer names it (ChatWaitingBar): the card this window
 // drew, or, before it has drawn one, what the agents list says. The card itself sits in the transcript, where a reader
@@ -54,6 +55,12 @@ export const pendingCardOf = (messages: readonly ChatMessage[]): PendingDecision
     return undefined;
 };
 
+/**
+ * The same, as a reader that reads only the rows changed since its last read (transcriptScan.ts): the bar asks on every
+ * frame of a streamed turn, and a transcript with no card waiting was walked whole each time. One per transcript.
+ */
+export const pendingCardReader = (): ((messages: readonly ChatMessage[]) => PendingDecision | undefined) => newestOf(decisionIn);
+
 /** What the agents list says the chat waits on a person for, in the board's own rank; undefined when it waits on nobody. */
 export const waitKindOf = (agent: AgentStanding): WaitKind | undefined => {
     if (!awaitingUser(agent)) {
@@ -69,5 +76,8 @@ export const waitKindOf = (agent: AgentStanding): WaitKind | undefined => {
 };
 
 /** The drawn card when there is one; otherwise what the agents list says, so the bar stands before the card arrives. */
-export const pendingDecisionOf = (messages: readonly ChatMessage[], waitsOn: WaitKind | undefined): PendingDecision | undefined =>
-    pendingCardOf(messages) ?? (waitsOn === undefined ? undefined : { kind: waitsOn });
+export const pendingDecisionOf = (
+    messages: readonly ChatMessage[],
+    waitsOn: WaitKind | undefined,
+    read: (messages: readonly ChatMessage[]) => PendingDecision | undefined = pendingCardOf,
+): PendingDecision | undefined => read(messages) ?? (waitsOn === undefined ? undefined : { kind: waitsOn });

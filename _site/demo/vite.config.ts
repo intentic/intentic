@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { defineConfig, type Plugin } from "vite";
-import { shared } from "../../_editor/web/vite.shared.ts";
+import { MONACO_WORKER, shared } from "../../_editor/web/vite.shared.ts";
 
 // Builds the same source as the app via `shared` (../../_editor/web/vite.shared.ts), differing only in entry, serving
 // and output. `base: /demo/` gives vue-router its history prefix. Builds into the site's `public/demo/` (gitignored) so
@@ -41,6 +41,11 @@ export default defineConfig({
             // How the app persists open chat tabs; sharing its shape turns a format change into a build error.
             "@intentic/web/chat-tabs": fromRoot(`_editor/web/src/features/chat/tabs/tabSnapshot.ts`),
         },
+    },
+    // The app's list, with monaco's worker reached through the app: the demo has no monaco of its own to resolve it from.
+    optimizeDeps: {
+        ...shared.optimizeDeps,
+        include: shared.optimizeDeps.include.map((name) => (name === MONACO_WORKER ? `@intentic/web > ${MONACO_WORKER}` : name)),
     },
     base: `/demo/`,
     // App's own public dir (assets, ext-shims/); the demo serves the app, so nothing of its own belongs here.

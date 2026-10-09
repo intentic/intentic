@@ -182,8 +182,8 @@ interface Transcript {
 
 /**
  * Inflates one fixture conversation's transcript to `copies` copies of its rows, standing in for a long real run: the
- * demo's own conversations are a handful of turns. Wraps `fetch` once the demo has installed its own, which is how the
- * demo's daemon answers (`_site/demo/src/transport.ts`). Every second copy of an answer gains a list, a table and a
+ * demo's own conversations are a handful of turns. Wraps the `fetch` the demo installs, which is how the demo's daemon
+ * answers (`_site/demo/src/transport.ts`). Every second copy of an answer gains a list, a table and a
  * TypeScript block, so markdown and highlighting are exercised as an agent's answers would.
  */
 export function inflateTranscript(ask: { readonly conversationId: string; readonly copies: number }): void {
@@ -207,8 +207,7 @@ export function inflateTranscript(ask: { readonly conversationId: string; readon
             "```",
             ``,
         ].join(`\n`);
-    const wrap = (): void => {
-        const answer = globalThis.fetch;
+    const wrap = (answer: typeof fetch): typeof fetch => {
         const inflated = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
             const url = input instanceof Request ? input.url : String(input);
             const response = await answer(input, init);
@@ -231,15 +230,29 @@ export function inflateTranscript(ask: { readonly conversationId: string; readon
             }
             return new Response(JSON.stringify({ ...body, messages: rows }), { status: 200, headers: { "content-type": `application/json` } });
         };
-        globalThis.fetch = Object.assign(inflated, { preconnect: () => undefined });
+        return Object.assign(inflated, { preconnect: () => undefined });
     };
-    // The demo installs its own fetch as it boots; this one goes over it, the moment it has.
-    const waiting = setInterval(() => {
-        if (!String(globalThis.fetch).includes(`[native code]`)) {
-            clearInterval(waiting);
-            wrap();
-        }
-    }, 2);
+    // The demo installs its own fetch as it boots; this one goes over it, as it is installed. Caught at the assignment
+    // rather than polled for: under the browser track's paused clock a polling timer runs only when the clock is moved,
+    // after the transcript was already asked for. Chained through any hook installed before this one, and only the
+    // first fetch installed is wrapped, so one installed over the demo's later is not inflated a second time.
+    const before = Object.getOwnPropertyDescriptor(globalThis, `fetch`);
+    let current = globalThis.fetch;
+    let wrapped = false;
+    Object.defineProperty(globalThis, `fetch`, {
+        configurable: true,
+        enumerable: before?.enumerable ?? true,
+        get: () => before?.get?.call(globalThis) ?? current,
+        set: (next: typeof fetch) => {
+            const taken = wrapped ? next : wrap(next);
+            wrapped = true;
+            if (before?.set === undefined) {
+                current = taken;
+            } else {
+                before.set.call(globalThis, taken);
+            }
+        },
+    });
 }
 
 /**

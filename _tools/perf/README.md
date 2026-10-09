@@ -1,12 +1,13 @@
 # perf
 
-Performance checks that count work instead of timing it, failing only on a few declared budgets and reporting every other count against a baseline checked into this package, beside a timed phone lab that finds what a phone pays and never fails anything.
+Performance checks that count work instead of timing it, failing only on a few declared budgets and reporting every other count against a baseline checked into this package, beside two timed labs, for a phone and for a long conversation, that find what a reader pays and never fail anything.
 
 ```mermaid
 flowchart LR
     instr["perf:instr<br/>Valgrind instruction counts"] --> perf(["perf"])
     browser["perf:browser<br/>renders · calls · layouts · mutations"] --> perf
     mobile["perf:mobile<br/>a phone, timed: INP · CLS · long frames"] -.->|"report only"| lab(["lab"])
+    chat["perf:chat<br/>a long chat, timed: open · stream · type · scroll"] -.->|"report only"| lab
     perf --> budgets["*-budgets.ts<br/>fails the run"]
     perf --> judge["baseline.ts<br/>diff as a report"]
     judge --> files["baselines/<br/>instr.json · browser.json"]
@@ -64,11 +65,32 @@ holding the main thread half busy on an idle board, a chat opening as one multi-
 and a header that re-laid itself out after the first paint; a timed lab was chosen over another counted budget because
 those costs are a phone's CPU time, which only a throttled clock shows.
 
+## The long-chat lab (`perf:chat`)
+
+The same production build, server and observers as the phone lab, pointed at one question: what a conversation costs
+to live with as it gets long. One fixture chat is inflated to `--rows` rows (2,000 by default) and opened by its address
+on a 1440×900 desktop, or on the phone lab's Galaxy S10 with `--phone`. Four scenarios
+(`src/chat/chat-scenarios.ts`): opening it (first rows, rows drawn, long tasks, DOM size, heap), a turn streaming
+under it (main-thread share, frame intervals, long frames), typing in its composer, and flinging up through it.
+
+- The streamed turn is the page's own (`src/chat/stream.ts`): it answers the send the way the daemon does, a run and
+  then its attach stream, and writes answers a few words every 16ms with calls starting and finishing between them.
+  The demo's own reply is a sentence and one call, too little to show what a streamed frame costs.
+- Nothing in a scenario queries the page by role while it is measured: a Playwright role query forces a layout per
+  candidate element, and over a changing transcript one such query showed up as a 19-second frame of the harness's.
+- What it was built to find, at 4,000 rows on a desktop: every drawn row paid for on every frame, so a streamed turn
+  kept the main thread 94% busy and a keystroke took 56ms, until the chat drew a window of its rows
+  (`_editor/web/src/features/chat/panel/pane/paneWindow.ts`). `--dist` compares two builds as in the phone lab.
+
+The browser track counts the same property: `chat-long-open` opens a chat of 2,002 rows and reports `chat.rows`, the
+rows it drew once settled.
+
 ## Key files
 
 - [src/baseline.ts](src/baseline.ts) — judges a run's budgets and reports its diff against a baseline, for both tracks.
 - [src/browser/browser-budgets.ts](src/browser/browser-budgets.ts) — the browser track's budgets, each with its claim.
 - [src/mobile/mobile-scenarios.ts](src/mobile/mobile-scenarios.ts) — what the phone lab times, and how each run reads its numbers.
+- [src/chat/chat-scenarios.ts](src/chat/chat-scenarios.ts) — what the long-chat lab times.
 - [src/instr/scenarios](src/instr/scenarios) — one file per instruction scenario, found by name.
 - [src/browser/session.ts](src/browser/session.ts) — the fresh context, paused clock and flush that make counts exact.
 - [src/browser/scenarios.ts](src/browser/scenarios.ts) — the interactions the browser counts cover.
@@ -79,5 +101,6 @@ those costs are a phone's CPU time, which only a throttled clock shows.
 pnpm perf:instr                      # every scenario; --only <name>, --runs 3 for the spread
 pnpm perf:browser                    # same flags
 pnpm perf:mobile                     # the phone lab; --only, --runs, --cpu, --rows, --replay, --profile, --dist
+pnpm perf:chat                       # the long-chat lab; --only, --runs, --rows, --phone, --cpu, --stream-ms, --profile, --dist
 gh workflow run perf-record.yml -f track=browser   # re-record (instr, browser or both), then apply its patch
 ```

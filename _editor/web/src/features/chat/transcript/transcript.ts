@@ -117,16 +117,42 @@ const deltaOf = (before: readonly TodoItem[], after: readonly TodoItem[]): Check
 // map, whose equal views are kept so only a row whose checklist actually moved redraws on a streamed frame.
 const sameView = (a: ChecklistView, b: ChecklistView): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
 
-// Swaps each view for last frame's where the two are equal, so a row keyed on its view keeps its memo.
-const keepEqualViews = (views: Map<number, ChecklistView>, drawn: ReadonlyMap<number, ChecklistView>): Map<number, ChecklistView> => {
-    for (const [id, view] of views) {
-        const was = drawn.get(id);
-        if (was !== undefined && was !== view && sameView(was, view)) {
-            views.set(id, was);
+// One turn's views, read in order: the turn's first list in full, then what each later one moved, and its last list that
+// moved anything in full again.
+const viewsOfTurn = (lists: readonly ChatMessage[], hidden: readonly boolean[], drawn: ReadonlyMap<number, ChecklistView> | undefined): [number, ChecklistView][] => {
+    const views: [number, ChecklistView][] = [];
+    // Reset per turn, not per conversation: a new prompt re-states the whole list once to orient the reader.
+    let previous: readonly TodoItem[] | undefined;
+    let latest: number | undefined;
+    for (const [index, message] of lists.entries()) {
+        if (hidden[index] === true) {
+            continue;
+        }
+        const items = message.todos!;
+        const view = previous === undefined ? FULL : deltaOf(previous, items);
+        views.push([message.id, view]);
+        previous = items;
+        if (!changedNothing(view)) {
+            latest = message.id;
         }
     }
-    return views;
+    // Read top-down, the opening list is the most prominent thing in the turn and the least true by the end of it,
+    // with every move after it worth a line. So the turn ENDS on the list too: the last snapshot that moved
+    // anything draws in full, which is the one still standing when the reader gets there.
+    return views.map(([id, view]): [number, ChecklistView] => {
+        const shown = id === latest ? FULL : view;
+        // Swapped for last frame's where the two are equal, so a row keyed on its view keeps its memo.
+        const was = drawn?.get(id);
+        return [id, was !== undefined && sameView(was, shown) ? was : shown];
+    });
 };
+
+// A turn's views as last read, by the turn object (turnsOf hands an unchanged turn back as the same object) and which of
+// its lists were repeats: a streamed frame reads the turn it changed, and compares no settled turn's views again.
+const viewsByTurn = new WeakMap<
+    ChatTurn,
+    { readonly lists: readonly ChatMessage[]; readonly hidden: readonly boolean[]; readonly views: readonly [number, ChecklistView][] }
+>();
 
 export const checklistViewsOf = (
     turns: readonly ChatTurn[],
@@ -135,29 +161,19 @@ export const checklistViewsOf = (
 ): Map<number, ChecklistView> => {
     const views = new Map<number, ChecklistView>();
     for (const turn of turns) {
-        // Reset per turn, not per conversation: a new prompt re-states the whole list once to orient the reader.
-        let previous: readonly TodoItem[] | undefined;
-        let latest: number | undefined;
-        for (const message of turn.messages) {
-            const items = message.role === `assistant` ? message.todos : undefined;
-            if (items === undefined || items.length === 0 || repeated.has(message.id)) {
-                continue;
-            }
-            const view = previous === undefined ? FULL : deltaOf(previous, items);
-            views.set(message.id, view);
-            previous = items;
-            if (!changedNothing(view)) {
-                latest = message.id;
-            }
+        const held = viewsByTurn.get(turn);
+        const lists = held?.lists ?? turn.messages.filter((message) => message.role === `assistant` && (message.todos?.length ?? 0) > 0);
+        const hidden = lists.map((message) => repeated.has(message.id));
+        const reuse = held !== undefined && held.hidden.every((was, index) => was === hidden[index]);
+        const entries = reuse ? held.views : viewsOfTurn(lists, hidden, drawn);
+        if (!reuse) {
+            viewsByTurn.set(turn, { lists, hidden, views: entries });
         }
-        // Read top-down, the opening list is the most prominent thing in the turn and the least true by the end of it,
-        // with every move after it worth a line. So the turn ENDS on the list too: the last snapshot that moved
-        // anything draws in full, which is the one still standing when the reader gets there.
-        if (latest !== undefined) {
-            views.set(latest, FULL);
+        for (const [id, view] of entries) {
+            views.set(id, view);
         }
     }
-    return drawn === undefined ? views : keepEqualViews(views, drawn);
+    return views;
 };
 
 /* A file the user attached to a turn, already uploaded to the workspace before send, as the COMPOSER holds it. */
@@ -269,11 +285,13 @@ export const isAcknowledgment = (message: ChatMessage): boolean => {
 };
 
 // Reads the last PERMISSION card specifically, not the last card of any kind: a dismissed question or rejected plan
-// already carries the user's own words about what to do instead.
-export const continuationFor = (messages: readonly ChatMessage[]): string =>
-    messages.findLast((message) => message.permission !== undefined)?.permission?.status === `denied`
-        ? CONTINUATIONS.afterDenial
-        : CONTINUATIONS.plain;
+// already carries the user's own words about what to do instead. `newest` finds that card; a view asking on every frame
+// hands in a reader that reads only the rows changed since its last read (transcriptScan.ts newestOf).
+export const newestPermission = (message: ChatMessage): ChatMessage["permission"] => message.permission;
+export const continuationFor = (
+    messages: readonly ChatMessage[],
+    newest: (messages: readonly ChatMessage[]) => ChatMessage["permission"] = (rows) => rows.findLast((message) => message.permission !== undefined)?.permission,
+): string => (newest(messages)?.status === `denied` ? CONTINUATIONS.afterDenial : CONTINUATIONS.plain);
 
 // Two different reasons to fold, both pointing at the prompt above: a bare acknowledgment is the user's own contentless
 // nudge, an errand is a prompt the app composed on their behalf (errands.ts).
@@ -315,15 +333,43 @@ const NOTHING_FOLDED: readonly ChatMessage[] = [];
 
 const sameRows = (a: readonly ChatMessage[], b: readonly ChatMessage[]): boolean => a.length === b.length && a.every((message, index) => message === b[index]);
 
-// `previous` is the last grouping of the same transcript: a turn whose rows are the very same objects comes back as the
-// very same turn, and a changed turn keeps its old `folded` array when it folds the same messages. A streamed reply
-// rebuilds this grouping on every frame, and a fresh turn object (or a fresh equal `folded`) re-renders the rows of every
-// settled turn keyed on it; comparing row identities is a pointer walk, rendering them is not.
+// Whether a row starts a turn of its own rather than joining the one above it.
+const opensTurn = (message: ChatMessage): boolean => message.role === `user` && !foldsIntoTurn(message);
+
+// How many of `previous`'s turns stand unchanged at the head of `messages`, and the index of the first row after them. A
+// turn stands when its rows are the very same objects in the same places and the row after it still opens a turn (or
+// there is none), since a turn's grouping is its own rows and where the next prompt cuts it off.
+const standingTurns = (messages: readonly ChatMessage[], previous: readonly ChatTurn[]): { readonly count: number; readonly at: number } => {
+    let count = 0;
+    let at = 0;
+    for (const turn of previous) {
+        const rows = turn.messages;
+        if (at + rows.length > messages.length || !rows.every((message, index) => message === messages[at + index])) {
+            break;
+        }
+        count += 1;
+        at += rows.length;
+    }
+    // The last one matched may have grown: rows were added to it rather than after it.
+    if (count > 0 && at < messages.length && !opensTurn(messages[at]!)) {
+        count -= 1;
+        at -= previous[count]!.messages.length;
+    }
+    return { count, at };
+};
+
+// `previous` is the last grouping of the same transcript. A streamed reply rebuilds this grouping on every frame, and a
+// fresh turn object (or a fresh equal `folded`) re-renders the rows of every settled turn keyed on it, so: the turns
+// before the first one that changed are handed back as they were, without grouping their rows again (at 4,000 rows,
+// regrouping all of them cost 0.9ms a frame), and of the rest, a turn whose rows are the very same objects comes back as
+// the very same turn, and a changed turn keeps its old `folded` array when it folds the same messages.
 export const turnsOf = (messages: readonly ChatMessage[], previous: readonly ChatTurn[] = []): ChatTurn[] => {
+    const standing = standingTurns(messages, previous);
     const turns: { id: number; messages: ChatMessage[]; folded: readonly ChatMessage[] }[] = [];
-    for (const message of messages) {
+    for (let index = standing.at; index < messages.length; index += 1) {
+        const message = messages[index]!;
         const open = turns.at(-1);
-        if (open === undefined || (message.role === `user` && !foldsIntoTurn(message))) {
+        if (open === undefined || opensTurn(message)) {
             turns.push({ id: message.id, messages: [message], folded: NOTHING_FOLDED });
             continue;
         }
@@ -333,20 +379,24 @@ export const turnsOf = (messages: readonly ChatMessage[], previous: readonly Cha
             open.folded = open.folded === NOTHING_FOLDED ? [message] : [...open.folded, message];
         }
     }
-    if (previous.length === 0) {
-        return turns;
+    const kept = previous.slice(0, standing.count);
+    if (previous.length === standing.count) {
+        return [...kept, ...turns];
     }
-    const before = new Map(previous.map((turn) => [turn.id, turn]));
-    return turns.map((turn) => {
-        const was = before.get(turn.id);
-        if (was === undefined) {
-            return turn;
-        }
-        if (sameRows(was.messages, turn.messages)) {
-            return was;
-        }
-        return turn.folded !== NOTHING_FOLDED && sameRows(was.folded, turn.folded) ? { ...turn, folded: was.folded } : turn;
-    });
+    const before = new Map(previous.slice(standing.count).map((turn) => [turn.id, turn]));
+    return [
+        ...kept,
+        ...turns.map((turn) => {
+            const was = before.get(turn.id);
+            if (was === undefined) {
+                return turn;
+            }
+            if (sameRows(was.messages, turn.messages)) {
+                return was;
+            }
+            return turn.folded !== NOTHING_FOLDED && sameRows(was.folded, turn.folded) ? { ...turn, folded: was.folded } : turn;
+        }),
+    ];
 };
 
 // Bubble a live turn is writing into, found by scanning back to the last USER row, not the last assistant row anywhere,

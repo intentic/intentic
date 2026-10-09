@@ -1,7 +1,6 @@
-import type { ToolCallContent, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import { fitNestedTool, fitPageRow, type TranscriptRow, type TranscriptTool } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
-import { PAGE_TEXT_CAP } from "./record/record-rows.js";
 import { type TranscriptPage, type TranscriptRecord, type TranscriptWindow, windowOf } from "./transcript-record.js";
 
 // Which conversation to answer about: its record is keyed by the conversation alone, so a mid-conversation provider
@@ -42,34 +41,17 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
     stampAnchors(await deps.record.read(agent.id), await deps.turnCheckpoints.all(agent.id), 0);
 
 
-const fitContent = (entry: ToolCallContent): ToolCallContent =>
-    entry.type === "text" && entry.text.length > PAGE_TEXT_CAP ? { ...entry, text: entry.text.slice(0, PAGE_TEXT_CAP) } : entry;
-
-// A delegation's own calls are left behind, counted rather than carried: the card draws collapsed until it is opened,
-// and `agentToolChildren` answers that press. On this workspace's records they are 86% of the bytes of the longest
-// conversation.
-const fitTool = (tool: TranscriptTool): TranscriptTool => {
-    const { children, content, ...carried } = tool;
-    return {
-        ...carried,
-        ...(content !== undefined ? { content: content.map(fitContent) } : {}),
-        ...(children !== undefined && children.length > 0 ? { nested: children.length } : {}),
-    };
-};
-
-const fitRow = (row: TranscriptRow): TranscriptRow => (row.tools === undefined ? row : { ...row, tools: row.tools.map(fitTool) });
-
 // One page of a conversation, for a reopening tab: the most recent turns and where they sit, so the chat can page back
 // for the rest. The only read on the click path, and the only one bounded in bytes.
 // `fit` last: it is what makes this a page rather than a read, so a caller's window cannot opt out of it.
 export const agentTranscriptPage = async (deps: AgentTranscriptDeps, agent: TranscriptAgent, window: TranscriptWindow = {}): Promise<TranscriptPage> => {
-    const page = await deps.record.window(agent.id, { ...window, fit: fitRow });
+    const page = await deps.record.window(agent.id, { ...window, fit: fitPageRow });
     return { ...page, rows: stampAnchors(page.rows, await deps.turnCheckpoints.all(agent.id), page.from) };
 };
 
 // The same page, for a caller holding the whole record in memory: the route fakes answer through it, so a test cannot
 // pass a page shape the daemon itself would not serve.
-export const transcriptPageOf = (rows: readonly TranscriptRow[], window: TranscriptWindow = {}): Promise<TranscriptPage> => windowOf(rows, { ...window, fit: fitRow });
+export const transcriptPageOf = (rows: readonly TranscriptRow[], window: TranscriptWindow = {}): Promise<TranscriptPage> => windowOf(rows, { ...window, fit: fitPageRow });
 
 // Depth-first, newest row back: a call's id is unique within a conversation, so the first hit is the only one.
 export const toolIn = (tools: readonly TranscriptTool[], id: string): TranscriptTool | undefined => {
@@ -85,20 +67,14 @@ export const toolIn = (tools: readonly TranscriptTool[], id: string): Transcript
     return undefined;
 };
 
-// Structure kept, text capped at every depth: an opened card draws the whole subtree, and the pane's own cap applies to
-// each of those cards exactly as it does to a top-level one.
-const fitNested = (tool: TranscriptTool): TranscriptTool => ({
-    ...tool,
-    ...(tool.content !== undefined ? { content: tool.content.map(fitContent) } : {}),
-    ...(tool.children !== undefined ? { children: tool.children.map(fitNested) } : {}),
-});
-
+// Structure kept, text capped at every depth (fitNestedTool): an opened card draws the whole subtree, and the pane's own
+// cap applies to each of those cards exactly as it does to a top-level one.
 // Same lookup as `agentToolChildren`, for a caller that already holds the whole record in memory.
 export const toolChildrenOf = (rows: readonly TranscriptRow[], toolId: string): TranscriptTool[] => {
     for (let index = rows.length - 1; index >= 0; index -= 1) {
         const found = toolIn(rows[index]?.tools ?? [], toolId);
         if (found !== undefined) {
-            return (found.children ?? []).map(fitNested);
+            return (found.children ?? []).map(fitNestedTool);
         }
     }
     return [];
@@ -109,7 +85,7 @@ export const toolCardOf = (rows: readonly TranscriptRow[], toolId: string): Tran
     for (let index = rows.length - 1; index >= 0; index -= 1) {
         const found = toolIn(rows[index]?.tools ?? [], toolId);
         if (found !== undefined) {
-            return fitNested(found);
+            return fitNestedTool(found);
         }
     }
     return undefined;
@@ -120,7 +96,7 @@ export const toolCardOf = (rows: readonly TranscriptRow[], toolId: string): Tran
 export const agentToolCard = async (deps: AgentTranscriptDeps, agent: TranscriptAgent, toolId: string): Promise<TranscriptTool | undefined> => {
     const found = await deps.record.findBack(agent.id, (row) => toolIn(row.tools ?? [], toolId) !== undefined);
     const card = found === undefined ? undefined : toolIn(found.tools ?? [], toolId);
-    return card === undefined ? undefined : fitNested(card);
+    return card === undefined ? undefined : fitNestedTool(card);
 };
 
 // The calls under one tool card, for a delegation the page left counted. Read back out of the record, not the subagent

@@ -85,12 +85,22 @@ export const deliverablesOfTurn = (turn: ChatTurn): readonly ChatDeliverable[] =
 const sameDeliverables = (before: readonly ChatDeliverable[] | undefined, after: readonly ChatDeliverable[]): readonly ChatDeliverable[] =>
     before !== undefined && before.length === after.length && before.every((entry, index) => entry.path === after[index]?.path) ? before : after;
 
+// A turn's documents as last read, by the turn object, which turnsOf hands back unchanged for a turn a frame did not
+// touch: a streamed frame reads the one turn it changed (shots.ts keeps the same cache).
+const byTurn = new WeakMap<ChatTurn, readonly ChatDeliverable[]>();
+
 // Every turn's documents by turn id, reusing `previous`'s arrays wherever a turn's list did not change.
 export const deliverablesByTurn = (
     turns: readonly ChatTurn[],
     previous: ReadonlyMap<number, readonly ChatDeliverable[]> | undefined,
 ): ReadonlyMap<number, readonly ChatDeliverable[]> =>
-    new Map(turns.map((turn) => [turn.id, sameDeliverables(previous?.get(turn.id), deliverablesOfTurn(turn))]));
+    new Map(
+        turns.map((turn) => {
+            const deliverables = byTurn.get(turn) ?? sameDeliverables(previous?.get(turn.id), deliverablesOfTurn(turn));
+            byTurn.set(turn, deliverables);
+            return [turn.id, deliverables];
+        }),
+    );
 
 // A document's name as the row shows it: the file's own name, extension and all, since the extension says what opens it.
 export const deliverableName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);

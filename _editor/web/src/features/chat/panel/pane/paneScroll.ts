@@ -1,6 +1,7 @@
-import { computed, type Ref, watch } from "vue";
+import { computed, getCurrentInstance, provide, type Ref, watch } from "vue";
 import { useStickToBottom } from "../../transcript/useStickToBottom";
 import { useTranscriptWarmup } from "../../transcript/useTranscriptWarmup";
+import { TRANSCRIPT_PARKED } from "./paneWindow";
 
 // Where the pane's scroller stands: at the newest message whenever another transcript comes on screen or a strip that
 // withheld its turns shows them, then following new rows unless the reader scrolled up; and the one idle-time pass
@@ -19,11 +20,17 @@ export interface PaneScrollHost {
 }
 
 export const usePaneScroll = (pane: PaneScrollHost) => {
-    const { pin, follow } = useStickToBottom(pane.scroller, pane.content);
+    const { pin, follow, parked } = useStickToBottom(pane.scroller, pane.content);
+    // The row window (paneWindow.ts, in the turns below) takes rows above it down only while the reader is here. A host
+    // that is no component (a test's scope) has no turns below it to tell.
+    if (getCurrentInstance() !== null) {
+        provide(TRANSCRIPT_PARKED, parked);
+    }
     const { realizing } = useTranscriptWarmup({
         conversationId: computed(pane.conversationId),
         messageCount: computed(pane.messageCount),
         streaming: pane.streaming,
+        drawn: () => pane.scroller.value?.getElementsByClassName(`chat-message`).length ?? 0,
     });
     // Post-flush, both: the transcript now on screen has to be in the DOM to be scrolled to.
     watch(

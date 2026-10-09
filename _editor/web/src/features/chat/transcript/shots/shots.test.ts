@@ -4,7 +4,7 @@ import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatMessage, ChatTurn } from "../transcript";
 import type { ShotLook } from "./shotLook";
-import { attachedPaths, type ChatShot, shotKey, shotName, shotsByTurn, shotsOfTurn, sortShots } from "./shots";
+import { attachedPathsOf, type ChatShot, shotKey, shotName, shotsByTurn, shotsOfTurn, sortShots } from "./shots";
 
 const SHOTS = `${STATE_DIR}/records/artifacts/browser`;
 
@@ -70,7 +70,7 @@ describe(`shotsOfTurn`, () => {
         const upload = `${STATE_DIR}/records/artifacts/attachments/u1/mockup.png`;
         const prompt = row({ role: `user`, text: `match this`, attachments: [upload] });
         const turn = turnOf(prompt, row({ role: `assistant`, tools: [shot(`r1`, upload), shot(`s1`, `${SHOTS}/result.png`)] }));
-        expect(shotsOfTurn(turn, attachedPaths(turn.messages)).map((entry) => entry.path)).toEqual([`${SHOTS}/result.png`]);
+        expect(shotsOfTurn(turn, attachedPathsOf([turn])).map((entry) => entry.path)).toEqual([`${SHOTS}/result.png`]);
     });
 
     it(`finds nothing in a turn whose calls carried no picture`, () => {

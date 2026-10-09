@@ -103,6 +103,8 @@ const stableDevStyles = (): Plugin => {
     };
 };
 
+export const MONACO_WORKER = `monaco-editor-core/esm/vs/editor/editor.worker.start.js`;
+
 export const shared = {
     plugins: [vue(), tailwindcss(), stableDevStyles()],
     // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
@@ -119,6 +121,9 @@ export const shared = {
         // - shiki/core, shiki/engine/javascript, @shikijs/themes/*, shikiLangDeps: useHighlighter, <Code>, Monaco.
         // - @vue-flow/core, @dagrejs/dagre: DagGraph, lazily imported by graph views.
         // - mermaid: MermaidDiagram, lazily imported on the first document with a diagram.
+        // - monaco's editor.worker.start.js: the editor worker's own entry (editorWorker.ts), found only when the first
+        //   editor spawns it, which re-optimised and reloaded the dev page under whoever opened a diff first. The demo
+        //   names it through @intentic/web instead (MONACO_WORKER), having no monaco of its own.
         // Resolved from the consuming config's root, which is why the demo package repeats this list itself; pnpm
         // doesn't hoist, so its root can't see what it never asked for.
         include: [
@@ -129,6 +134,7 @@ export const shared = {
             `@vue-flow/core`,
             `@dagrejs/dagre`,
             `mermaid`,
+            MONACO_WORKER,
             ...shikiLangDeps,
         ],
     },

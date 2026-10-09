@@ -61,7 +61,8 @@
         "diff:stat": "git diff HEAD --shortstat",
         "perf:instr": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:instr",
         "perf:browser": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:browser",
-        "perf:mobile": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:mobile"
+        "perf:mobile": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:mobile",
+        "perf:chat": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:chat"
     },
     "devDependencies": {
         "@commitlint/cli": "catalog:",

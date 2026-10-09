@@ -137,6 +137,7 @@ export * from "./events/child-run.js";
 export * from "./policy/turned-away.js";
 export * from "./text/mentions.js";
 export * from "./text/pages.js";
+export * from "./text/transcript-page.js";
 export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";
 export { type ControlReach, defaultFloor, type RouteAccess, type RouteMeta, routeAccess } from "./protocol/route-meta.js";

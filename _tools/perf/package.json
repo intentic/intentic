@@ -11,7 +11,8 @@
         "test": "suites",
         "perf:instr": "node dist/instr/perf-instr.js",
         "perf:browser": "node dist/browser/perf-browser.js",
-        "perf:mobile": "node dist/mobile/perf-mobile.js"
+        "perf:mobile": "node dist/mobile/perf-mobile.js",
+        "perf:chat": "node dist/chat/perf-chat.js"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",

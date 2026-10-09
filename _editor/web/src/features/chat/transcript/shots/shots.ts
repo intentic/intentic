@@ -50,8 +50,22 @@ const rowShots = (message: ChatMessage): readonly RowShot[] => {
 };
 
 // Files the user attached anywhere in the conversation: the agent reading one back is not a picture of its own work.
-export const attachedPaths = (messages: readonly ChatMessage[]): ReadonlySet<string> =>
-    new Set(messages.flatMap((message) => (message.role === `user` ? (message.attachments ?? []) : [])));
+// Read off the turns, since every user row is a turn's opener or folded into one: a few rows per turn rather than every
+// row. `previous` is handed back when nothing was attached since, which is what lets each turn's shots below be kept
+// from one frame to the next.
+export const attachedPathsOf = (turns: readonly ChatTurn[], previous?: ReadonlySet<string>): ReadonlySet<string> => {
+    const paths = new Set<string>();
+    for (const turn of turns) {
+        for (const message of [turn.messages[0], ...turn.folded]) {
+            if (message?.role === `user`) {
+                for (const path of message.attachments ?? []) {
+                    paths.add(path);
+                }
+            }
+        }
+    }
+    return previous !== undefined && previous.size === paths.size && [...paths].every((path) => previous.has(path)) ? previous : paths;
+};
 
 // A turn's shots in the order it showed them; a file shown twice (taken, then Read back) stands once, where it was last
 // shown, since the path draws whatever is on disk now either way.
@@ -73,13 +87,27 @@ export const shotsOfTurn = (turn: ChatTurn, attached: ReadonlySet<string>): read
 const sameShots = (before: readonly ChatShot[] | undefined, after: readonly ChatShot[]): readonly ChatShot[] =>
     before !== undefined && before.length === after.length && before.every((shot, index) => shot.key === after[index]?.key) ? before : after;
 
+// A turn's shots as last read, by the turn object (turnsOf hands an unchanged turn back as the same object) and the set
+// of attached paths they were read against: a streamed frame reads the one turn it changed, not every turn.
+const byTurn = new WeakMap<ChatTurn, { readonly attached: ReadonlySet<string>; readonly shots: readonly ChatShot[] }>();
+
 // Every turn's shots by turn id, reusing `previous`'s arrays wherever a turn's shots did not change.
 export const shotsByTurn = (
     turns: readonly ChatTurn[],
     attached: ReadonlySet<string>,
     previous: ReadonlyMap<number, readonly ChatShot[]> | undefined,
 ): ReadonlyMap<number, readonly ChatShot[]> =>
-    new Map(turns.map((turn) => [turn.id, sameShots(previous?.get(turn.id), shotsOfTurn(turn, attached))]));
+    new Map(
+        turns.map((turn) => {
+            const held = byTurn.get(turn);
+            if (held !== undefined && held.attached === attached) {
+                return [turn.id, held.shots];
+            }
+            const shots = sameShots(previous?.get(turn.id), shotsOfTurn(turn, attached));
+            byTurn.set(turn, { attached, shots });
+            return [turn.id, shots];
+        }),
+    );
 
 // Why a shot is set aside: nothing on it (shotLook.ts), or the same pixels as one the turn showed before it.
 export type AsideReason = "plain" | "repeat";

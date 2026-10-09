@@ -1,4 +1,4 @@
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import { PAGE_TEXT_CAP, type TranscriptRow } from "@intentic/sandbox-contract";
 
 // How a row is kept. What is long moves out of line (record-blobs.ts) and the row keeps a pointer: a tool output at
 // least this long keeps its start, and a delegation's calls at least this long in all keep their count. A page needs
@@ -6,10 +6,9 @@ import type { TranscriptRow } from "@intentic/sandbox-contract";
 // 62 MB in delegations' calls.
 const OUT_OF_LINE_CHARS = 16_384;
 
-// What a page carries of one tool output: the pane truncates text at 4000 characters of its own accord
-// (toolPresentation.ts TEXT_CAP), so twice that leaves room to raise that cap without a second round trip. Also the
-// start an out-of-line output keeps, so a page never needs the blob.
-export const PAGE_TEXT_CAP = 8_000;
+// What a page carries of one tool output (sandbox-contract text/transcript-page.ts), and so also the start an
+// out-of-line output keeps, so a page never needs the blob.
+export { PAGE_TEXT_CAP };
 
 // A kept output out of line: its start, the blob holding all of it, and how long it is.
 interface KeptText {

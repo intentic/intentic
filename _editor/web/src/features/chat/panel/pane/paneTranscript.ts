@@ -2,7 +2,7 @@ import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 import { computed, type Ref } from "vue";
 import { type ChatDeliverable, deliverablesByTurn } from "../../transcript/deliverables/deliverables";
 import type { TranscriptRefresh } from "../../session/transcriptView";
-import { attachedPaths, type ChatShot, shotsByTurn } from "../../transcript/shots/shots";
+import { attachedPathsOf, type ChatShot, shotsByTurn } from "../../transcript/shots/shots";
 import {
     type ChatMessage,
     type ChatTurn,
@@ -49,7 +49,7 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     // turn, not every turn above it.
     const turns = computed<ChatTurn[]>((previous) => turnsOf(messages.value, previous));
     // A turn whose pictures didn't change keeps its array (shotsByTurn), so a settled strip isn't redrawn per paint.
-    const attached = computed(() => attachedPaths(messages.value));
+    const attached = computed<ReadonlySet<string>>((previous) => attachedPathsOf(turns.value, previous));
     const turnShots = computed<ReadonlyMap<number, readonly ChatShot[]>>((previous) => shotsByTurn(turns.value, attached.value, previous));
     // Same reuse for each turn's documents (deliverablesByTurn).
     const turnDeliverables = computed<ReadonlyMap<number, readonly ChatDeliverable[]>>((previous) => deliverablesByTurn(turns.value, previous));

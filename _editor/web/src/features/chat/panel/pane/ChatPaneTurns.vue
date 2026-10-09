@@ -22,7 +22,7 @@ import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { unsaidError } from "../../transcript/transcript";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
-import { useRowBudget, windowTurns } from "./paneWindow";
+import { TRANSCRIPT_PARKED, useRowBudget, windowTurns } from "./paneWindow";
 import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../useChat-view";
 import FileRefPeek from "../../../workspace/files/refs/FileRefPeek.vue";
@@ -73,8 +73,16 @@ const {
     }),
     refresh,
 });
-// The rows drawn so far, newest first (paneWindow.ts): a long chat opens on its last rows and mounts the rest at idle.
-const budget = useRowBudget({ messages, conversationId: computed(() => conversation.value.conversationId) });
+// The rows drawn, newest first (paneWindow.ts): a long chat opens on its last rows, mounts more at idle up to a window,
+// and draws the rest above as the reader climbs to the mark (`edge`) over the oldest row drawn.
+const edge = ref<HTMLElement>();
+const budget = useRowBudget({
+    messages,
+    conversationId: computed(() => conversation.value.conversationId),
+    // A host that owns no stick-to-bottom scroller never says the reader is at the newest, so nothing drawn is taken down.
+    parked: inject(TRANSCRIPT_PARKED, ref(false)),
+    edge,
+});
 const shownTurns = computed(() => windowTurns(turns.value, messages.value.length, budget.value));
 // Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
 const whole = computed(() => budget.value >= messages.value.length);
@@ -128,6 +136,8 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             v-if="!conversation.transcript.historyMore.value && whole && messages.length > 0 && !props.subagent"
             :conversation-id="conversation.conversationId"
         />
+        <!-- Rows above the window are not drawn: this mark, within a screen of the top, draws the next slice of them. -->
+        <div v-if="messages.length > 0 && !whole" ref="edge" class="h-px shrink-0" aria-hidden="true"></div>
         <!-- The turns as one element, so the skeleton has one thing to remember them by; stacked by the column's own gap. -->
         <div v-if="messages.length > 0" v-skeleton-source="imprint" class="chat-stack flex flex-col">
             <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->

@@ -67,7 +67,10 @@ const measure = async (browser: Browser, server: DemoServer, scenario: Scenario)
     const logged = server.log().length;
     try {
         await scenario.prepare(session);
-        const reading = readingOf(await session.measure(() => scenario.act(session), scenario.navigations), scenario.frames);
+        const reading = {
+            ...readingOf(await session.measure(() => scenario.act(session), scenario.navigations), scenario.frames),
+            ...(await scenario.count?.(session)),
+        };
         // Vite announces a late dependency optimisation, and the page reload it pushes, on its own output.
         const said = server.log().slice(logged);
         if (/optimized dependencies changed|reloading/iu.test(said)) {

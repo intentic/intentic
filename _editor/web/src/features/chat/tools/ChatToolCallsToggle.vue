@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { usePaneView } from "../panel/useChat-view";
+import type { ChatMessage } from "../transcript/transcript";
+import { runningTotal } from "../transcript/transcriptScan";
 import { toolCallsNote, useToolCalls } from "./useToolCalls";
 import { useT } from "@intentic/ui/i18n";
 
@@ -13,8 +15,10 @@ const t = useT();
 const { showToolCalls } = useToolCalls();
 const { messages } = usePaneView();
 
-// Every call this pane's transcript holds: what the press shows or folds here, one row each.
-const calls = computed(() => messages.value.reduce((total, message) => total + (message.tools?.length ?? 0), 0));
+// Every call this pane's transcript holds: what the press shows or folds here, one row each. Summed over only the rows
+// changed since the last frame (transcriptScan.ts), since a streamed turn asks on every one.
+const callTotal = runningTotal<ChatMessage>((message) => message.tools?.length ?? 0);
+const calls = computed(() => callTotal(messages.value));
 
 // What the press just did to this chat, said over the hammer for a moment and gone: the slash alone said the switch
 // moved, not what it moved, and a reader whose chat held one call toggled it eight times looking for the difference.

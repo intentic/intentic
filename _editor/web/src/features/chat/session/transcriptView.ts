@@ -13,6 +13,7 @@ import { olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript"
 import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
+import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { Conversation } from "./conversation";
 import type { TurnClient } from "./turnClient";
@@ -39,6 +40,8 @@ export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draf
     readonly turn: Pick<TurnClient, "streaming" | "say">;
 };
 
+const NOTHING_DOOMED: ReadonlySet<number> = new Set();
+
 export class TranscriptView extends TranscriptClock {
     // True while a transcript read is in flight and nothing is painted, so the panel shows loading instead.
     readonly loading = ref(false);
@@ -52,25 +55,34 @@ export class TranscriptView extends TranscriptClock {
     // A page of older turns is loading; unlike `loading`, which blanks the whole transcript instead of appending.
     readonly loadingOlder = ref(false);
 
+    // Each reading below is over every row and asked on every frame of a streamed turn, so each reads only the rows
+    // changed since its last read (transcriptScan.ts).
+    private readonly firstAwaiting = firstWhere<ChatMessage>(isAwaitingDecision);
+    private readonly firstPlan = firstWhere<ChatMessage>((message) => message.plan?.status === `pending`);
+    private readonly costTotal = runningTotal<ChatMessage>((message) => message.usage?.costUsd ?? 0);
+    private readonly inputTotal = runningTotal<ChatMessage>((message) => message.usage?.inputTokens ?? 0);
+    private readonly outputTotal = runningTotal<ChatMessage>((message) => message.usage?.outputTokens ?? 0);
+
     // True while a turn is parked on a card; the turn still streams, but the composer shows Send, not Stop.
-    readonly awaitingDecision = computed(() => this.messages.value.some(isAwaitingDecision));
+    readonly awaitingDecision = computed(() => this.firstAwaiting(this.messages.value) !== undefined);
 
     // Message carrying a plan awaiting decision, if any; routes feedback into a plan rejection instead of a fresh turn.
-    readonly pendingPlanMessage = computed(() => this.messages.value.find((message) => message.plan?.status === `pending`));
+    readonly pendingPlanMessage = computed(() => this.firstPlan(this.messages.value));
 
     // Lifetime accounting summed off the rows on screen; the daemon's registry is the cross-device authoritative total.
-    readonly costUsd = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.costUsd ?? 0), 0));
-    readonly inputTokens = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.inputTokens ?? 0), 0));
-    readonly outputTokens = computed(() => this.messages.value.reduce((sum, message) => sum + (message.usage?.outputTokens ?? 0), 0));
+    readonly costUsd = computed(() => this.costTotal(this.messages.value));
+    readonly inputTokens = computed(() => this.inputTotal(this.messages.value));
+    readonly outputTokens = computed(() => this.outputTotal(this.messages.value));
 
     // Message being re-asked, keyed by id; disarmed by any transcript replacement, since ids repeat across transcripts.
     readonly editing = ref<{ readonly id: number; readonly restore: string; readonly attachments: readonly PendingAttachment[] } | undefined>();
 
     // The ids an armed edit would drop, from the edited message down; by id, since ids survive a streaming rebuild.
+    // Nothing armed reads no rows and hands back the same empty set, so a streamed frame leaves the rows' memo keys alone.
     readonly doomed = computed<ReadonlySet<number>>(() => {
         const id = this.editing.value?.id;
         const from = id === undefined ? -1 : this.messages.value.findIndex((message) => message.id === id);
-        return new Set(from < 0 ? [] : this.messages.value.slice(from).map((message) => message.id));
+        return from < 0 ? NOTHING_DOOMED : new Set(this.messages.value.slice(from).map((message) => message.id));
     });
 
     // `applied` hears every entry after its rows landed, in arrival order (TranscriptClock).

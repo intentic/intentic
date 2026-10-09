@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, CDPSession, Page } from "playwright";
+import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Page } from "playwright";
 import type { CpuProfile } from "./attribution.js";
 import { enableAnalytics, inflateTranscript, observePerformance, type PageRecord } from "./page-scripts.js";
 
@@ -23,6 +23,8 @@ export interface PhoneOptions {
     readonly replay?: boolean;
     /** Inflates this conversation's transcript to `copies` copies of its rows. */
     readonly transcript?: { readonly conversationId: string; readonly copies: number };
+    /** Another device to be, in place of the phone: the long-chat lab measures a desktop too. */
+    readonly device?: BrowserContextOptions;
 }
 
 export class Phone {
@@ -33,7 +35,7 @@ export class Phone {
     ) {}
 
     static async open(browser: Browser, options: PhoneOptions): Promise<Phone> {
-        const context = await browser.newContext({ ...PHONE, locale: `en-US` });
+        const context = await browser.newContext({ ...(options.device ?? PHONE), locale: `en-US` });
         await context.addInitScript(observePerformance);
         if (options.replay === true) {
             await context.addInitScript(enableAnalytics);

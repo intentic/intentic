@@ -17,7 +17,8 @@ import { providerCommands } from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../session/access";
-import { type ChatAttachment, type ChatMessage, continuationFor } from "../transcript/transcript";
+import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
+import { newestOf } from "../transcript/transcriptScan";
 import { endingOfTab } from "../tabs/tabFacts";
 import { conversations, setConversations } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
@@ -85,7 +86,9 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // Undefined while streaming, since a pick-up outlives its failure until the next turn actually starts; the state
     // arms the strip immediately after a send, before that turn begins.
     pickUp: computed(() => (conversation.value.turn.streaming.value ? undefined : conversation.value.pickUp.value)),
-    continuation: computed(() => continuationFor(conversation.value.transcript.messages.value)),
+    // Asked on every frame of a streamed turn, so through a reader of only the rows changed since it last read
+    // (transcriptScan.ts), one per view.
+    continuation: ((newest) => computed(() => continuationFor(conversation.value.transcript.messages.value, newest)))(newestOf(newestPermission)),
     // The press itself: continuing re-runs a held turn or has the daemon carry the session on, a choice that reads state
     // (`TurnClient.continueTurn`) no view should ask about directly. Neither sends a message, so neither counts as one.
     continueTurn: (options?: { readonly carry?: boolean }): Promise<void> => conversation.value.turn.continueTurn(options),

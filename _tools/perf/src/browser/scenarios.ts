@@ -1,4 +1,5 @@
 import type { Locator } from "playwright";
+import { inflateTranscript } from "../mobile/page-scripts.js";
 import type { Session } from "./session.js";
 
 // Fake ms every page gets before its window opens: the featured run replays its recording until it parks on the plan
@@ -13,6 +14,10 @@ export const TYPED = "the plan looks right";
 /** How long agents-idle watches the board, and the shared clock's tick it steps by. */
 export const IDLE_MS = 15_000;
 export const TICK_MS = 1_000;
+/** How long chat-long-open's conversation is, in rows: the fixture's 7 copied, far past any window a chat draws. */
+const LONG_ROWS = 2_002;
+// The curated recording's conversation with the most to draw: prompts, answers, edits with diffs, a job row.
+const LONG_CHAT = "cnv_soft_deletes";
 
 export interface Scenario {
     readonly name: string;
@@ -26,6 +31,8 @@ export interface Scenario {
     readonly navigations: number;
     /** False when `act` renders while modules still arrive, so wall time decides how many frames its layouts share. */
     readonly frames: boolean;
+    /** Counts of the page as `act` left it, read once the window closes and stored beside the window's own. */
+    readonly count?: (session: Session) => Promise<Readonly<Record<string, number>>>;
 }
 
 /**
@@ -96,6 +103,18 @@ export const SCENARIOS: readonly Scenario[] = [
         },
         navigations: 0,
         frames: true,
+    },
+    {
+        name: "chat-long-open",
+        about: `open a conversation of ${LONG_ROWS} rows by its address and let it settle: how many of its rows it draws`,
+        prepare: async (session) => {
+            await session.page.addInitScript(inflateTranscript, { conversationId: LONG_CHAT, copies: LONG_ROWS / 7 });
+            await session.blank();
+        },
+        act: (session) => session.open(`/demo/agents/${LONG_CHAT}`, SETTLE_MS),
+        navigations: 1,
+        frames: false,
+        count: async (session) => ({ "chat.rows": await session.page.evaluate(() => document.querySelectorAll(".chat-message").length) }),
     },
     {
         name: "workspace-open-file",

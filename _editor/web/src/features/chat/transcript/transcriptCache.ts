@@ -1,3 +1,4 @@
+import { fitPageRow } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "./transcript";
 
 // Local IndexedDB mirror of each conversation's transcript, so reopening paints from disk instead of a sandbox
@@ -66,8 +67,11 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
     });
 };
 
-// Every row field is plain data (a picture is a path, not an object URL), so it structured-clones as-is.
-const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => messages.slice(-KEPT_MESSAGES);
+// Every row field is plain data (a picture is a path, not an object URL), so it structured-clones as-is. Kept as the
+// daemon's page carries it (fitPageRow: tool outputs to their start, a delegation's calls counted): a row this window
+// streamed holds every byte its calls printed, all of it cloned on the main thread at each write, and a reopen painted
+// it from the mirror only for the daemon's page to hand it back fitted, a different row, drawn again.
+const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => messages.slice(-KEPT_MESSAGES).map(fitPageRow);
 
 // How many rows each mirror entry held when this window last wrote or read it. An unconfirmed write only has to know
 // whether the mirror is longer than what it would write, and reading the entry back to learn that cloned the whole
