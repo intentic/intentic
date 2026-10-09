@@ -6947,7 +6947,7 @@
         },
         "agentOffload": {
             "here": "This sandbox",
-            "intro": "Tests, typechecks and full checks can run on a runner on one of your machines instead of here, next to every conversation. The code travels as it stands, the output streams back, and any file the command changed comes back with it. A machine that is asleep or busy hands the work back to this sandbox.",
+            "intro": "Run tests, typechecks and full checks on a runner on your machine instead of here; output and changed files sync back, or run here when it's offline or busy.",
             "kindBunTest": "Test runs (bun test)",
             "kindBunTestDetail": "bun test, and each package's own test runner.",
             "kindCustomDetail": "Commands matching {pattern}",
@@ -6964,7 +6964,7 @@
             "lastRunFailed": "Last: {command}, exited {code}",
             "lastRunGoing": "Running now: {command}",
             "lastRunPassed": "Last: {command}, passed",
-            "noRunners": "None of your machines has a runner yet: add one from {devices} → a machine → Runners.",
+            "noRunners": " No runner yet—add one under {devices} → a machine → Runners.",
             "runnerGone": "The runner \"{runner}\" is no longer set up, so this runs here.",
             "runnerOffline": "Offline now: work sent here runs in this sandbox until it's back",
             "runnerOnline": "Connected",
