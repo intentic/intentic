@@ -1539,13 +1539,14 @@ test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was 
             seven_day_opus: { utilization: null, resets_at: null },
         }),
     );
-    // Pools are reported separately so a 1% pool never stands in for a 98% one; resets convert to epoch seconds.
+    // Pools are reported separately so a 1% pool never stands in for a 98% one; resets convert to epoch seconds, and
+    // each is marked rounded, since Anthropic reports whole percents.
     expect(events).toEqual([
         {
             kind: "account_usage",
             windows: [
-                { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all" },
-                { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all" },
+                { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true },
+                { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true },
             ],
         },
         { kind: "done" },

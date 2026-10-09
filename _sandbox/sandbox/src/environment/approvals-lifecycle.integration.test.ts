@@ -10,6 +10,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import type { Capability, EnvironmentDrift, Need, NeedTold } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -345,7 +346,7 @@ describe("approving leaves nothing behind in the owner's Changes", () => {
 // snapshot), and a cache-rule revision of an approved block.
 describe("a draft the daemon wrote and the owner threw away stays thrown away", () => {
     const DRIFT: EnvironmentDrift = { bornAt: 0, at: 0, apt: ["p7zip-full"], paths: [] };
-    const AUTO = join(".intentic", "config", "environment.d", "p7zip-full.Dockerfile");
+    const AUTO = join(STATE_DIR, "config", "environment.d", "p7zip-full.Dockerfile");
 
     // Two sessions installing it at runtime is what earns an auto-draft.
     const recurring = async (w: World): Promise<void> => {
@@ -453,7 +454,7 @@ describe("a draft the daemon wrote and the owner threw away stays thrown away", 
     });
 
     const LEGACY = "# ffmpeg\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ffmpeg \\\n    && rm -rf /var/lib/apt/lists/*";
-    const REVISION = join(".intentic", "config", "environment.d", "ffmpeg.Dockerfile");
+    const REVISION = join(STATE_DIR, "config", "environment.d", "ffmpeg.Dockerfile");
 
     test("a cache-rule revision thrown away is not offered again; an approved one leaves nothing to revise", async () => {
         const thrown = world();
