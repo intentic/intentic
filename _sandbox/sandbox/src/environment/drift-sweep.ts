@@ -1,11 +1,12 @@
 import type { Logger } from "pino";
 import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { synthesizeAutoDrafts } from "./auto-drafts.js";
+import { synthesizeCacheRevisions } from "./cache-revisions.js";
 import { clearDriftCache, computeDrift } from "./drift.js";
 import type { RuntimeInstallsStore } from "./runtime-installs.js";
 
 // Timer keeping the environment's ground truth current for the auto-drafter: one probe, one saved snapshot, one
-// synthesis pass per tick.
+// synthesis pass per tick, and one pass offering cache-rule revisions of blocks approved before the rule.
 // - never while agents work: mid-turn drift is a half-written story, so the first idle tick after a turn reads the
 //   finished state.
 // - allowed to fail: a probe error is a warn and a skipped pass, never a throw; the previous snapshot stays on the
@@ -41,6 +42,10 @@ export const createDriftSweep = (deps: DriftSweepDeps): DriftSweep => {
             const drafted = await synthesizeAutoDrafts(workspaceFiles, await deps.runtimeInstalls.read(), drift);
             if (drafted.length > 0) {
                 deps.logger.info({ drafted }, "environment: drafted overlay steps from recurring runtime installs");
+            }
+            const revised = await synthesizeCacheRevisions({ ...workspaceFiles, runtimeInstalls: deps.runtimeInstalls });
+            if (revised.length > 0) {
+                deps.logger.info({ revised }, "environment: drafted apt cache-mount revisions of approved overlay blocks");
             }
         } catch (error) {
             deps.logger.warn({ err: error }, "environment: drift sweep failed");

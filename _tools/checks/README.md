@@ -95,6 +95,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |
 | [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |
 | [engines](engines-blessed.mjs) | an `engines.json` version this repository does not pin |
+| [tool-pins](tool-pins.mjs) | a tool the sandbox image pins (ripgrep, gh, cloudflared, pnpm…) at two versions in two places |
 | [build-cache](build-cache-mounts.mjs) | a sandbox image fragment without BuildKit cache mounts |
 | [mirror-roots](mirror-roots.mjs) | replacing a directory an agent turn overlays instead of emptying it |
 | [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |

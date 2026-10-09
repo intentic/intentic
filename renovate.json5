@@ -9,6 +9,10 @@
     // digests maintained so a pin is always immutable. The first-party `sandbox` is intentionally unpinned (it
     // tracks the moving `stable` release tag the release publishes), so no manager below covers it.
     pinDigests: true,
+    // cloudflared, binary and image, belongs to the daily tool bump (.github/workflows/tools.yml, which moves its tag and
+    // digest at every site _tools/scripts/tools/tool-pins.mjs lists). Two bots writing one pin open competing pull
+    // requests, so Renovate leaves it alone. The same goes for anything else that table lists.
+    ignoreDeps: ["cloudflare/cloudflared"],
     customManagers: [
         {
             // Read each pin from the frozen IMAGES map. The `renovate:` hint comment above an entry supplies the
@@ -19,34 +23,6 @@
             matchStrings: [
                 'renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)[\\s\\S]*?"[^"]*:(?<currentValue>[^"@]+)@(?<currentDigest>sha256:[a-f0-9]+)"',
             ],
-        },
-        {
-            // The cloudflared sidecar IMAGE, embedded in files no built-in manager reads: the Windows host
-            // one-liner and the deploy-graph fixture that mirrors the IMAGES map. They are not Dockerfiles or
-            // compose files, so the pin is matched literally off the image name.
-            customType: "regex",
-            managerFilePatterns: [
-                "/_site/site/public/scripts/connect-host\\.ps1$/",
-                "/_deploy/sdk/src/__fixtures__/deploy\\.graph\\.ts$/",
-            ],
-            matchStrings: ["cloudflare/cloudflared:(?<currentValue>[^@'\"`\\s}]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
-            depNameTemplate: "cloudflare/cloudflared",
-            datasourceTemplate: "docker",
-        },
-        {
-            // The cloudflared BINARY — same upstream, a different artifact: the sandbox image bakes it on PATH,
-            // and the `ic` CLI installs it natively when it enrolls a machine or exposes a self-host's sshd (a
-            // container's localhost is the VM under Docker Desktop, so the connector cannot be one).
-            // github-releases, so there is no digest to pin — only the tag has to stay in step with the image.
-            customType: "regex",
-            managerFilePatterns: [
-                "/_sandbox/sandbox/Dockerfile$/",
-                "/_sandbox/ic/src/machine/enroll\\.rs$/",
-                "/_sandbox/ic/src/sandbox/connect\\.rs$/",
-            ],
-            matchStrings: ["CLOUDFLARED_VERSION[^\\n]*?(?<currentValue>20[0-9]{2}\\.[0-9]+\\.[0-9]+)"],
-            depNameTemplate: "cloudflare/cloudflared",
-            datasourceTemplate: "github-releases",
         },
         {
             // The starter Dockerfile the CI providers commit into a fresh repo that has none. It is a string
@@ -87,15 +63,6 @@
         {
             groupName: "komodo",
             matchPackageNames: ["ghcr.io/moghtech/komodo-core", "ghcr.io/moghtech/komodo-periphery"],
-        },
-        {
-            // cloudflared is named in seven places — the IMAGES map, the platform compose, the compose the
-            // setup page renders, the four connect scripts, the sandbox image's baked binary and the sync
-            // CLI's. Ungrouped they drifted to THREE versions at once (the PowerShell scripts sat a full minor
-            // behind their shell twins), which means a Windows user's tunnel and their sandbox's bundled
-            // cloudflared were different builds. One PR moves every reference or none of them.
-            groupName: "cloudflared",
-            matchPackageNames: ["cloudflare/cloudflared"],
         },
     ],
 }

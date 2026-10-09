@@ -26,13 +26,14 @@
 # image. `UV_LINK_MODE=copy` is the deliberate one: uv hardlinks from that cache into the target `.venv`, the
 # cache and /work are different filesystems in every sandbox, and the fallback it takes anyway prints a warning
 # on every install that reads as a fault.
-# ponytail: uv and ruff are pinned for reproducible images, not held in lockstep with anything — bump freely.
+# uv, ruff and pyright are pinned for reproducible images and moved by the daily tool bump (.github/workflows/tools.yml,
+# every site listed in _tools/scripts/tools/tool-pins.mjs); ruff and pyright are pinned again in _tools/ci-base.
 # pyright's `--outputjson` is a wire format the daemon parses (python-diagnostics.ts): its integration test
 # fails on a bump that changes the shape, and the parser reports "could not check" rather than "clean" if one
 # ever does.
 ENV UV_LINK_MODE=copy
-RUN version=0.12.19 \
-    && ruff_version=0.16.9 \
+RUN version=0.12.24 \
+    && ruff_version=0.16.10 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \

@@ -1,0 +1,177 @@
+# THE SANDBOX IMAGE'S PINNED TOOLS, KEPT CURRENT BY THE CLOCK RATHER THAN BY MEMORY.
+#
+# The core Dockerfile, its packs and the CI base image download ripgrep, jq, yq, gh, cloudflared, uv, ruff, pyright,
+# pnpm and Docker Engine at fixed versions (and ripgrep, jq, gh and cloudflared's image at fixed checksums). Moving those
+# was a chore nobody was assigned, so they drifted a release or several behind. _tools/scripts/tools/tool-pins.mjs lists
+# every place each is written; this workflow is the assignee, the sibling of engines.yml for everything that is not an
+# agent engine.
+#
+# It runs no build and no test, and that is the design. It rewrites the pins (fetching the checksums and digests a new
+# version needs), checks what it wrote clears the checkout gates its output can fail, and opens ONE pull request. ci.yml
+# runs on that pull request as on anyone else's, the image build is what proves a checksum, and auto-merge lands it when
+# the suite passes. To stop one tool without stopping the rest, give it a `hold` in tool-pins.mjs.
+#
+# Uses the engines bump's token, `ENGINE_BUMP_TOKEN` (contents: write, pull requests: write), for the same reason: a
+# pull request opened with GITHUB_TOKEN starts no CI, so nothing would verify it. Without it this job fails rather than
+# leaving that looking fine.
+#
+# ONE LONG-LIVED BRANCH, force-pushed: a bump CI refuses stays open and failing, and tomorrow's run rewrites it.
+name: Tools
+
+on:
+  schedule:
+    # 05:30 UTC daily: after the nightly (03:00) and half an hour behind the engines bump, so the two pull requests do
+    # not meet the CI queue at the same minute.
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: Bump one tool instead of every one.
+        type: choice
+        default: all
+        options:
+          - all
+          - ripgrep
+          - jq
+          - yq
+          - gh
+          - cloudflared
+          - uv
+          - ruff
+          - pyright
+          - pnpm
+          - docker
+      version:
+        description: Take exactly this version, skipping the soak window. Needs a single tool above.
+        type: string
+      dry-run:
+        description: Report what would move and change nothing.
+        type: boolean
+        default: false
+
+# Never two of these at once: both would write the same branch.
+concurrency:
+  group: tools
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BRANCH: tools/bump
+
+jobs:
+  bump:
+    # GitHub-hosted on purpose: this asks registries what they publish and hashes a few downloads; it wants nothing
+    # from the self-hosted fleet's caches or its docker socket.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Ahead of setup-node, which needs a pnpm on PATH to resolve the store path `cache: pnpm` keys on. Never
+      # `corepack enable`, for engines.yml's reason.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      # THROUGH THE ENVIRONMENT, never interpolated into the script: `version` is a free-text dispatch input.
+      - name: Decide what moves
+        id: plan
+        env:
+          TOOL: ${{ inputs.tool || 'all' }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$DRY_RUN" != "true" ]; then args+=(--apply); fi
+          if [ "$TOOL" != "all" ]; then args+=("--tool=$TOOL"); fi
+          if [ -n "${VERSION:-}" ]; then args+=("--to=$VERSION"); fi
+          node _tools/scripts/tools/bump-tools.mjs "${args[@]}"
+
+      # Only when pnpm itself moved: `packageManager` is what the lockfile is resolved by. A real resolution with
+      # `--ignore-scripts`, for engines.yml's reasons (no `--lockfile-only`, no package build scripts under this token).
+      - name: Move the lockfile
+        if: steps.plan.outputs.changed == 'true' && contains(format(',{0},', steps.plan.outputs.written), ',pnpm,')
+        run: pnpm install --no-frozen-lockfile --fix-lockfile --ignore-scripts
+
+      - name: Check what the bump wrote
+        if: steps.plan.outputs.changed == 'true'
+        run: node _tools/checks/run.mjs --only lockfile,tool-pins,build-cache
+
+      - name: Commit
+        if: steps.plan.outputs.changed == 'true'
+        id: commit
+        env:
+          TITLE: ${{ steps.plan.outputs.title }}
+          BODY: ${{ steps.plan.outputs.body }}
+          BUMP_TOKEN: ${{ secrets.ENGINE_BUMP_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git config user.name "intentic"
+          git config user.email "agent@intentic.dev"
+          git checkout -b "$BRANCH"
+          git commit --all --message "$TITLE" --message "$BODY"
+          # An identical tree already on the branch means yesterday's pull request is still open and current; pushing
+          # would only restamp it and re-run CI for nothing. Authenticated, for engines.yml's reason.
+          remote="https://x-access-token:${BUMP_TOKEN:-$FALLBACK_TOKEN}@github.com/${REPO}.git"
+          existing="$(git fetch --quiet "$remote" "$BRANCH" 2>/dev/null && git rev-parse FETCH_HEAD^{tree} || echo none)"
+          if [ "$(git rev-parse HEAD^{tree})" = "$existing" ]; then
+            echo "The open pull request already carries exactly this bump; nothing pushed." >> "$GITHUB_STEP_SUMMARY"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the pull request
+        if: steps.commit.outputs.push == 'true'
+        env:
+          BUMP_TOKEN: ${{ secrets.ENGINE_BUMP_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ steps.plan.outputs.title }}
+          BODY: ${{ steps.plan.outputs.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          GH_TOKEN="${BUMP_TOKEN:-$FALLBACK_TOKEN}"
+          export GH_TOKEN
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
+
+          body="$BODY
+
+          Opened by .github/workflows/tools.yml. Every version here is upstream's newest release that has aged past its
+          soak window; the pins, checksums and digests were written by _tools/scripts/tools/bump-tools.mjs. The image
+          build in CI is what proves a checksum, so let CI decide. To stop a tool from being proposed again, give it a
+          \`hold\` in _tools/scripts/tools/tool-pins.mjs."
+
+          if [ -z "${BUMP_TOKEN:-}" ]; then
+            body="$body
+
+          **CI has not run here.** This was opened with \`GITHUB_TOKEN\`, so its runs wait for a maintainer to press
+          *Approve and run* on the Checks tab. The \`ENGINE_BUMP_TOKEN\` secret the engines bump uses closes the loop."
+          fi
+
+          # By number, and only among open ones, for engines.yml's reason.
+          pr="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --repo "$REPO" --title "$TITLE" --body "$body"
+          else
+            pr="$(gh pr create --repo "$REPO" --head "$BRANCH" --base main --title "$TITLE" --body "$body")"
+          fi
+
+          if [ -z "${BUMP_TOKEN:-}" ]; then
+            echo "::error title=No ENGINE_BUMP_TOKEN::Pull request ${pr} is open but no CI will start on it."
+            exit 1
+          fi
+          gh pr merge "$pr" --repo "$REPO" --auto --squash \
+            || echo "auto-merge could not be enabled; the pull request is open and waiting for a person" >> "$GITHUB_STEP_SUMMARY"

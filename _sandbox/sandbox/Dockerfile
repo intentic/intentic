@@ -254,7 +254,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
 # no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
 # the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.9.3
+ARG CLOUDFLARED_VERSION=2026.10.0
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
@@ -310,11 +310,30 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # with a preferred answer. Debian's own `yq` package is a DIFFERENT program (a Python wrapper around jq) whose
 # write syntax is not the one every model has learned, so this is upstream's Go binary — pinned and
 # version-checked like cloudflared, same rationale.
-ARG YQ_VERSION=4.53.6
+ARG YQ_VERSION=4.54.1
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \
     && yq --version
+# gh, the GitHub CLI. Claude Code's own Bash guidance tells every turn to "use the gh CLI for GitHub operations", and
+# agents here reached for it 149 times with nothing there (`gh run view --log-failed`, PRs, releases), which is the
+# ordinary-CLI floor's admission test above. Upstream's release rather than Debian's `gh`: Debian stopped following
+# it at 2.46.0 (March 2024, still the version in unstable), and gh is a client for an API that keeps moving under it.
+# A static Go binary, sha256-checked per architecture like ripgrep and jq; the tool bumper
+# (_tools/scripts/tools/bump-tools.mjs) moves the version and both checksums together.
+ARG GH_VERSION=2.102.0
+RUN set -eu; arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) gh_sha=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386 ;; \
+      arm64) gh_sha=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484 ;; \
+      *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz; \
+    echo "$gh_sha  /tmp/gh.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/gh.tar.gz -C /tmp; \
+    install -m 0755 "/tmp/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
+    rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${arch}"; \
+    gh --version
 # ---- packs:pre-trees ---- (spliced by compose-image-dockerfile.mjs — pinned pack installs land here, ABOVE
 # the tree COPYs, so a source change never evicts a pack download; the core profile carries none)
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
@@ -630,7 +649,9 @@ ENV DO_NOT_TRACK=1 \
     DISABLE_FEEDBACK_COMMAND=1 \
     DISABLE_AUTOUPDATER=1 \
     OPENCODE_DISABLE_AUTOUPDATE=1 \
-    OPENCODE_DISABLE_SHARE=1
+    OPENCODE_DISABLE_SHARE=1 \
+    GH_NO_UPDATE_NOTIFIER=1 \
+    GH_NO_EXTENSION_UPDATE_NOTIFIER=1
 # Toolchain-wide telemetry opt-outs for everything that runs in the sandbox — the agent's Bash tool, the web
 # terminals' zsh, and any install/build/dev command in /work inherit this env. Tools not baked into the image
 # are covered on purpose: the agent installs toolchains at will, and an unused var is inert. Each name is the

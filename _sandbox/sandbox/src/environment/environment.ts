@@ -11,6 +11,7 @@ import {
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
+import { cacheProblem } from "./apt-cache-rule.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
 import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
@@ -317,46 +318,6 @@ export const draftProblem = (steps: string): string | undefined => {
     const lines = steps.split("\n");
     const stray = lines.find((line) => line.trim() !== "" && !line.trim().startsWith("#") && !DRAFT_LINE.test(line) && !CONTINUATION.test(line));
     return stray === undefined ? undefined : `only RUN and ENV lines may be proposed, and "${stray.trim().slice(0, 60)}" is neither`;
-};
-
-// The cache rule the published packs are held to (_tools/checks/build-cache-mounts.mjs), for apt, the install nearly
-// every proposal makes: every layer above the sandbox image rebuilds whenever it is published, and without the mounts
-// each rebuild downloads every package again. Said when an agent proposes, where the fix is one edit away, rather than
-// learned by the owner as a slow rebuild; a draft filed before the rule is still approvable.
-const APT_INSTALL = /\bapt(?:-get)?\s+(?:-\S+\s+)*install\b/u;
-const APT_CACHE = /--mount=type=cache,target=\/var\/cache\/apt\b/u;
-const APT_LISTS = /--mount=type=cache,target=\/var\/lib\/apt\/lists\b/u;
-const DELETES_LISTS = /\brm\s+(?:-\S+\s+)*[^\n]*\/var\/lib\/apt\/lists/u;
-
-// One instruction at a time, continuation lines included: a RUN's mounts sit on its first line, its install further down.
-const instructionsOf = (steps: string): string[] => {
-    const found: string[] = [];
-    let current: string | undefined;
-    for (const line of steps.split("\n")) {
-        const trimmed = line.trim();
-        if (current === undefined && (trimmed === "" || trimmed.startsWith("#"))) {
-            continue;
-        }
-        current = current === undefined ? line : `${current}\n${line}`;
-        if (!current.trimEnd().endsWith("\\")) {
-            found.push(current);
-            current = undefined;
-        }
-    }
-    return current === undefined ? found : [...found, current];
-};
-
-export const cacheProblem = (steps: string): string | undefined => {
-    if (instructionsOf(steps).some((step) => APT_INSTALL.test(step) && !(APT_CACHE.test(step) && APT_LISTS.test(step)))) {
-        return (
-            "an apt install must mount both apt caches on its RUN (--mount=type=cache,target=/var/cache/apt,sharing=locked " +
-            "and --mount=type=cache,target=/var/lib/apt/lists,sharing=locked), or every image update downloads it all again; " +
-            "the environment skill has the shape"
-        );
-    }
-    return DELETES_LISTS.test(steps)
-        ? "leave /var/lib/apt/lists alone: it is the cache mount the next rebuild reads, and it never reaches the image anyway"
-        : undefined;
 };
 
 // Files one tool's steps as a draft on the main tree, where the Environment card and the needs card both read it: an

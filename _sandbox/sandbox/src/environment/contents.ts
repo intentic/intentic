@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { EnvironmentContents, EnvironmentItem } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
@@ -11,16 +12,42 @@ import { probeAll, probeModules, probePackages } from "./version-probe.js";
 // container's own answers. Three groups: what an agent asked for and the owner approved, what a capability costs, and
 // what every sandbox ships with — the last is what a delta-only overlay view would otherwise miss.
 
-// Named by hand; the image explains why each is baked, not what it does; only shown when the command answers.
-const STAPLES: readonly { readonly bin: string; readonly name: string; readonly purpose: string }[] = [
+// Named by hand; the image explains why each is baked, not what it does; only shown when the command answers, which is
+// also what keeps a pack's tools (uv, ruff, pyright) off a sandbox whose image does not bake that pack. `locate` is for
+// a tool that is installed but not on PATH: it names the binary to ask instead.
+interface Staple {
+    readonly bin: string;
+    readonly name: string;
+    readonly purpose: string;
+    readonly locate?: () => Promise<string | undefined>;
+}
+
+// Playwright installs its browser under its own cache, never on PATH, so `chromium` answered nothing and the browser
+// every agent drives was missing from the list. Asked at the path the daemon's own playwright launches, which the
+// browser pack installs to match.
+const playwrightChromium = async (): Promise<string | undefined> => {
+    const { chromium } = await import("playwright").catch(() => ({ chromium: undefined }));
+    try {
+        const path = chromium?.executablePath();
+        return path !== undefined && existsSync(path) ? path : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+const STAPLES: readonly Staple[] = [
     { bin: "node", name: "Node.js", purpose: "The runtime everything JavaScript in here runs on." },
     { bin: "pnpm", name: "pnpm", purpose: "Installs and runs workspace packages." },
     { bin: "git", name: "Git", purpose: "Every repo in the workspace is a real git repo." },
+    { bin: "gh", name: "GitHub CLI", purpose: "Pull requests, issues, releases and CI runs from the command line." },
     {
         bin: "python3",
         name: "Python",
         purpose: "Scripting, with YAML and image reading baked in; anything else via pip inside a virtual environment.",
     },
+    { bin: "uv", name: "uv", purpose: "Installs Python projects and the interpreters they ask for." },
+    { bin: "ruff", name: "Ruff", purpose: "Lints and formats Python, and checks every Python file an agent edits." },
+    { bin: "pyright", name: "Pyright", purpose: "Type-checks Python where the project's environment resolves." },
     { bin: "rg", name: "ripgrep", purpose: "Fast text search across the workspace, and the engine behind code search." },
     { bin: "jq", name: "jq", purpose: "Reads and rewrites JSON on the command line." },
     { bin: "yq", name: "yq", purpose: "The same for YAML, compose files, pipelines, manifests." },
@@ -33,7 +60,7 @@ const STAPLES: readonly { readonly bin: string; readonly name: string; readonly 
     { bin: "tmux", name: "tmux", purpose: "The sessions behind the terminals panel." },
     { bin: "cloudflared", name: "cloudflared", purpose: "Puts a local port on a public URL." },
     { bin: "docker", name: "Docker", purpose: "Builds and runs containers, dormant until the Docker capability grants it privileges." },
-    { bin: "chromium", name: "Chromium", purpose: "The real browser the agent drives and screenshots." },
+    { bin: "chromium", name: "Chromium", purpose: "The real browser the agent drives and screenshots.", locate: playwrightChromium },
     { bin: "ffmpeg", name: "FFmpeg", purpose: "Converts and encodes audio and video." },
 ];
 
@@ -108,9 +135,11 @@ const toolOf = (name: string, probe: { version: string | undefined; found: boole
 export const readEnvironmentContents = async (services: Services): Promise<EnvironmentContents> => {
     const candidates = [...(await customCandidates(services)), ...(await capabilityCandidates(services))];
     const tooling = candidates.map((candidate) => blockTools(candidate.block));
+    // What each staple is asked as: its own name on PATH, or the binary its `locate` found.
+    const asked = new Map(await Promise.all(STAPLES.map(async (staple) => [staple.bin, (await staple.locate?.()) ?? staple.bin] as const)));
     // One probe per distinct command across the whole view, staples included; prefix modules read their manifest.
     const [probes, moduleProbes, packageProbes] = await Promise.all([
-        probeAll([...tooling.flatMap((tools) => tools.candidates), ...STAPLES.map((staple) => staple.bin)]),
+        probeAll([...tooling.flatMap((tools) => tools.candidates), ...asked.values()]),
         probeModules(tooling.flatMap((tools) => tools.modules.map((module) => ({ name: module.name, manifest: module.manifest })))),
         probePackages(tooling.flatMap((tools) => tools.packages)),
     ]);
@@ -153,7 +182,7 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
     // A staple the recipe already claims is not listed twice; the overlay's own entry wins.
     const claimed = new Set(items.flatMap((item) => item.tools.map((tool) => tool.name)));
     for (const staple of STAPLES) {
-        const tool = claimed.has(staple.bin) ? undefined : toolOf(staple.bin, probes.get(staple.bin));
+        const tool = claimed.has(staple.bin) ? undefined : toolOf(staple.bin, probes.get(asked.get(staple.bin) ?? staple.bin));
         if (tool === undefined) {
             continue;
         }

@@ -60,22 +60,32 @@ const githubHeaders = () => {
     return { accept: "application/vnd.github+json", ...(token === undefined || token === "" ? {} : { authorization: `Bearer ${token}` }) };
 };
 
-const githubVersions = async (repo) => {
+// A tag is the version behind a prefix: `v` by default, or the repository's own (`jq-1.8.2`, moby's `docker-v29.9.0`).
+// A tag without a declared prefix is some other artifact the repository releases (moby also tags its API module) and is
+// skipped rather than read as a version.
+export const versionOfTag = (tag, prefix) => {
+    if (prefix === undefined) {
+        return tag.replace(/^v/, "");
+    }
+    return tag.startsWith(prefix) ? tag.slice(prefix.length) : undefined;
+};
+
+const githubVersions = async (repo, tagPrefix) => {
     const body = await getJson(`https://api.github.com/repos/${repo}/releases?per_page=100`, githubHeaders());
     if (!Array.isArray(body)) {
         return undefined;
     }
     return body
         .filter((release) => release.prerelease !== true && release.draft !== true && typeof release.published_at === "string")
-        .map((release) => ({ version: String(release.tag_name ?? "").replace(/^v/, ""), at: Date.parse(release.published_at) }))
-        .filter((release) => isStable(release.version));
+        .map((release) => ({ version: versionOfTag(String(release.tag_name ?? ""), tagPrefix), at: Date.parse(release.published_at) }))
+        .filter((release) => release.version !== undefined && isStable(release.version));
 };
 
 // Every stable version upstream publishes for one engine, newest last, or undefined when upstream could not be asked.
 // `alsoPublished` intersects: a version only one of a pair of packages released is not a version this repo can pin,
 // because the pack and the catalog have to name the same one.
 export const publishedVersions = async (upstream) => {
-    const primary = upstream.kind === "npm" ? await npmVersions(upstream.package) : await githubVersions(upstream.repo);
+    const primary = upstream.kind === "npm" ? await npmVersions(upstream.package) : await githubVersions(upstream.repo, upstream.tagPrefix);
     if (primary === undefined) {
         return undefined;
     }

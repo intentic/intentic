@@ -87,7 +87,7 @@ COPY --from=oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef
 # because only that proves the parsers read what the binaries print, and pyright's `--outputjson` is a wire format.
 # So CI runs the SAME versions the sandbox image ships, fetched the same way (~62 MB, ~6s of build).
 # ponytail: keep both versions in lockstep with _sandbox/sandbox/image-packs/python.Dockerfile.
-RUN ruff_version=0.16.9 \
+RUN ruff_version=0.16.10 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \

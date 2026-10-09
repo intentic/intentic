@@ -577,7 +577,7 @@ const environmentContents = (): EnvironmentContents => ({
             name: `cloudflared`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `cloudflared`, version: `2026.9.3` }],
+            tools: [{ name: `cloudflared`, version: `2026.10.0` }],
             purpose: `Puts a local port on a public URL.`,
         },
     ],

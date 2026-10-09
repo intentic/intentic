@@ -60,6 +60,7 @@ flowchart LR
 | [desktop/](desktop) | desktop installer builds and install/update checks, `try-onboarding.mjs` |
 | [ci/](ci) | git hooks, runner setup, provider CLI installs, CI failure audit, SDLC scoreboard |
 | [engines/](engines) | agent engine version pins and the bumper behind `engines.yml` |
+| [tools/](tools) | the sandbox image's pinned tools, every place each is written, and the bumper behind `tools.yml` |
 | [lib/](lib) | shared shell and JS helpers: repo root, git, GitHub, registry retries, the publish set, gate steps |
 | [fonts.mjs](fonts.mjs) | downloads the served webfonts and writes their `@font-face` rules |
 

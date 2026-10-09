@@ -57,7 +57,7 @@ The rules for a change to stored data:
 
 ## Agent engines
 
-[`engines.json`](engines.json) names the `blessed` version of each agent program. Sandboxes on the `blessed` channel read it from `main` every hour, so a new blessing reaches them without a release. `_tools/checks/engines-blessed.mjs` requires each blessed version to be one this repository's suite pins and runs, and `engines.yml` moves those pins daily through an auto-merging pull request. An owner can put an engine on `latest` or pin a version instead. Going back from a version (the Environment card's "Back to") sets it aside: no daily check or boot installs it again while it is still the one its channel names, until a newer version is blessed or the owner chooses it by hand.
+[`engines.json`](engines.json) names the `blessed` version of each agent program. Sandboxes on the `blessed` channel read it from `main` every hour, so a new blessing reaches them without a release. `_tools/checks/engines-blessed.mjs` requires each blessed version to be one this repository's suite pins and runs, and `engines.yml` moves those pins daily through an auto-merging pull request. The command-line tools the sandbox image downloads at a fixed version (ripgrep, jq, yq, gh, cloudflared, uv, ruff, pyright, pnpm, Docker Engine) get the same daily treatment from `tools.yml`, after a 72-hour soak. An owner can put an engine on `latest` or pin a version instead. Going back from a version (the Environment card's "Back to") sets it aside: no daily check or boot installs it again while it is still the one its channel names, until a newer version is blessed or the owner chooses it by hand.
 
 ## What every update keeps
 

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -141,6 +141,20 @@ test("the staples every sandbox ships with are listed, and only where the comman
     const base = items.filter((item) => item.origin === "base");
     expect(base.map((item) => item.name)).toContain("Node.js");
     expect(base.every((item) => item.tools.length === 1 && item.state === "active")).toBe(true);
+});
+
+// Playwright's browser is never on PATH; it has to be found where the daemon's own playwright launches it.
+test("Chromium is listed where playwright installed it, not only where PATH has one", async () => {
+    const { chromium } = await import("playwright").catch(() => ({ chromium: undefined }));
+    const path = chromium?.executablePath();
+    if (path === undefined || !existsSync(path)) {
+        return;
+    }
+    clearVersionCache();
+    const { items } = await readEnvironmentContents(stubServices());
+    const browser = items.find((item) => item.id === "base:chromium");
+    expect(browser?.tools[0]?.name).toBe("chromium");
+    expect(browser?.tools[0]?.version).toMatch(/^\d+\.\d+/);
 });
 
 test("a prefix-installed npm module is active when its manifest is on disk", async () => {

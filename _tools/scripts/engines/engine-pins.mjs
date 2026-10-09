@@ -154,11 +154,11 @@ export const rewrite = (text, pattern, version) => {
     return { text: next, count };
 };
 
-// Writes one engine's versions into every site that carries them. All-or-nothing per file: a site that matched the
+// Writes one engine's versions into every site that carries them, keyed by each site's `carries` (an engine's are
+// `tracked` and `blessed`; the tool pins add checksums and digests). All-or-nothing per file: a site that matched the
 // wrong number of times throws before anything is written, since a half-applied pin passes no check and reads as a
 // deliberate mismatch.
-export const writePin = (engine, { tracked, blessed }) => {
-    const versions = { tracked, blessed };
+export const writePin = (engine, versions) => {
     const byFile = new Map();
     for (const spot of engine.sites) {
         const version = versions[spot.carries];
