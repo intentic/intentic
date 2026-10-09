@@ -3981,7 +3981,7 @@
         "agentChatPages": {
             "group": "Pages dans le chat",
             "title": "Répondre avec des pages",
-            "description": "Laissez l'agent dessiner un graphique, un tableau, un diagramme ou une maquette directement dans le chat, et vous poser une question sur une petite page quand un choix s'y fait plus facilement. Désactivé, les outils ne lui sont même pas proposés."
+            "description": "Graphiques, tableaux et choix dans le chat. Désactivé : pas d'outils."
         }
     },
     "settings": {

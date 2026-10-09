@@ -7289,7 +7289,7 @@
         "agentChatPages": {
             "group": "Strony w czacie",
             "title": "Odpowiadaj stronami",
-            "description": "Pozwól agentowi narysować wykres, tabelę, diagram lub makietę bezpośrednio w czacie i zapytać Cię na małej stronie, gdy tam łatwiej wybrać. Wyłączone: narzędzia w ogóle nie są mu oferowane."
+            "description": "Wykresy, tabele i strony wyboru w czacie. Wył.: bez narzędzi."
         }
     },
     "settings": {

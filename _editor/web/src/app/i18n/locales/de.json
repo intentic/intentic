@@ -3986,7 +3986,7 @@
         "agentChatPages": {
             "group": "Seiten im Chat",
             "title": "Mit Seiten antworten",
-            "description": "Lass den Agenten ein Diagramm, eine Tabelle oder einen Entwurf direkt im Chat zeichnen und dich auf einer kleinen Seite fragen, wenn eine Wahl dort leichter fällt. Aus, werden ihm die Werkzeuge gar nicht angeboten."
+            "description": "Diagramme, Tabellen und Wahlseiten im Chat. Aus: keine Werkzeuge."
         }
     },
     "settings": {

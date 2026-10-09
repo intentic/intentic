@@ -4002,7 +4002,7 @@
         "agentChatPages": {
             "group": "Páginas en el chat",
             "title": "Responder con páginas",
-            "description": "Deja que el agente dibuje un gráfico, una tabla, un diagrama o una maqueta directamente en el chat, y que te pregunte en una pequeña página cuando sea más fácil elegir allí. Desactivado, ni siquiera se le ofrecen las herramientas."
+            "description": "Gráficos, tablas y elección en el chat. Desactivado: sin herramientas."
         }
     },
     "settings": {
