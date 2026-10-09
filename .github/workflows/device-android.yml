@@ -88,10 +88,32 @@ jobs:
           IFS=. read -r major minor patch <<<"$version"
           echo "name=$version" >>"$GITHUB_OUTPUT"
           echo "code=$(( major * 1000000 + minor * 1000 + patch ))" >>"$GITHUB_OUTPUT"
+      # Checked here, by keytool, rather than left to AGP's packaging step: a key that cannot be read surfaced there as
+      # "Tag number over 30 is not supported" with a blank alias, naming none of the secrets it came from.
       - name: Restore the signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.INTENTIC_DEVICE_KEYSTORE_BASE64 }}
-        run: printf '%s' "$KEYSTORE_BASE64" | base64 -d >"$RUNNER_TEMP/intentic-device.keystore"
+          STORE_PASSWORD: ${{ secrets.INTENTIC_DEVICE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.INTENTIC_DEVICE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.INTENTIC_DEVICE_KEY_PASSWORD }}
+        run: |
+          missing=()
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!name}" ] || missing+=("INTENTIC_DEVICE_${name/STORE_PASSWORD/KEYSTORE_PASSWORD}")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::signing secrets are empty or unset: ${missing[*]}"
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/intentic-device.keystore"
+          if ! printf '%s' "$KEYSTORE_BASE64" | base64 -d >"$keystore"; then
+            echo "::error::INTENTIC_DEVICE_KEYSTORE_BASE64 is not base64 (it should be the output of \`base64 -w0 <keystore>\`)"
+            exit 1
+          fi
+          if ! keytool -list -keystore "$keystore" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >"$RUNNER_TEMP/keytool.err" 2>&1; then
+            echo "::error::the keystore in INTENTIC_DEVICE_KEYSTORE_BASE64 cannot be opened with INTENTIC_DEVICE_KEYSTORE_PASSWORD, or holds no key named INTENTIC_DEVICE_KEY_ALIAS: $(tr '\n' ' ' <"$RUNNER_TEMP/keytool.err")"
+            exit 1
+          fi
       # AGP's injected signing properties: the build script holds no signing config, so no key path is ever committed.
       - name: Build and sign the direct flavor
         env:

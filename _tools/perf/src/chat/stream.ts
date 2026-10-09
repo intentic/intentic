@@ -48,8 +48,13 @@ export function streamTurn(ask: StreamAsk): void {
         try {
             const text = input instanceof Request ? await input.clone().text() : typeof init?.body === `string` ? init.body : ``;
             return text === `` ? undefined : JSON.parse(text);
-        } catch {
-            return undefined;
+        } catch (error) {
+            // A body that is not JSON is not this conversation's ask, and goes on to the demo's own fetch; any other
+            // failure is the harness's own and is worth seeing.
+            if (error instanceof SyntaxError) {
+                return undefined;
+            }
+            throw error;
         }
     };
     const run = (prompt: string): Response => {
