@@ -33,6 +33,10 @@ export interface ModelCooldownStore {
     // this must cost one file read and no thought.
     readonly cooling: (provider: string) => Promise<ReadonlyMap<string, StoredCooldown>>;
     readonly record: (provider: string, model: string, cooldown: StoredCooldown) => Promise<void>;
+    // A model that just served content is open, whatever the stored instant says: a credential came back early, or the
+    // refusal that benched it was one account's and not the whole pool's. Without this the row reads "Back at …" while
+    // turns on it go through.
+    readonly clear: (provider: string, model: string) => Promise<void>;
 }
 
 export const fileModelCooldownStore = (path: string): ModelCooldownStore => {
@@ -56,6 +60,17 @@ export const fileModelCooldownStore = (path: string): ModelCooldownStore => {
         },
         record: async (provider, model, cooldown) => {
             await file.update((current) => ({ ...current, [keyOf(provider, model)]: cooldown }));
+        },
+        // Returns the same object when nothing is stored, so the common case (no cooldown) never writes the file.
+        clear: async (provider, model) => {
+            await file.update((current) => {
+                const key = keyOf(provider, model);
+                if (current[key] === undefined) {
+                    return current;
+                }
+                const { [key]: _reopened, ...rest } = current;
+                return rest;
+            });
         },
     };
 };

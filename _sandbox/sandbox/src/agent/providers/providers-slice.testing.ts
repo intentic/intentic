@@ -85,7 +85,7 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
         providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
         // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
-        modelCooldowns: { cooling: async () => new Map(), record: async () => {} },
+        modelCooldowns: { cooling: async () => new Map(), record: async () => {}, clear: async () => {} },
         cliProxy: emptyCliProxy(cliProxy),
         providerCatalogs: testProviderCatalogs,
         // The real tables: which runtime a pair reaches and which module answers for a provider are facts about the

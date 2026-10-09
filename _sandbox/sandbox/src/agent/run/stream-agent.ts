@@ -926,7 +926,7 @@ async function* runPreparedTurn(
             fingerprint = event.kind === "init" ? (event.prompt ?? fingerprint) : fingerprint;
             sniffer.observe(event);
             if (frames.note(event)) {
-                providerAnswered(services, provider, account);
+                providerAnswered(services, provider, account, request.spec.model);
             }
             recordFrame(services, event, { provider, account, record });
             yield event.kind === "error"

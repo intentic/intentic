@@ -70,9 +70,18 @@ export const turnActivity =
 
 // The first real content proves an outage over fleet-wide, releasing every stranded turn at once, and settles what this
 // provider and account last refused: content on the wire is the only evidence a refusal no poll can re-check yields to.
-export const providerAnswered = (deps: Pick<Services, "providerRefusals" | "claudeSeats" | "logger">, provider: string, account: string | undefined): void => {
+// It reopens the model it ran on as well, so the picker stops greying a row whose turns go through.
+export const providerAnswered = (
+    deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "logger">,
+    provider: string,
+    account: string | undefined,
+    model: string | undefined,
+): void => {
     recordProviderSuccess(provider);
     void deps.providerRefusals.clear(provider, account).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
+    if (model !== undefined && model !== "") {
+        void deps.modelCooldowns.clear(provider, model).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
+    }
     // Clears the seat mark too, so a re-enabled account rejoins rotation without a reconnect.
     if (account === undefined) {
         return;

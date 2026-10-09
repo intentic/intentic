@@ -1134,6 +1134,7 @@ test("a routed spent allowance benches the model it refused, to the reset the fr
                 modelCooldowns: {
                     cooling: async () => new Map(),
                     record: async (provider, model, cooldown) => void filed.push({ provider, model, until: cooldown.until }),
+                    clear: async () => {},
                 },
                 async *codexAgent() {
                     yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
@@ -1156,7 +1157,7 @@ test("a spent allowance on a natively-picked provider benches no model", async (
     const client = clientFor(
         createApp(
             services({
-                modelCooldowns: { cooling: async () => new Map(), record: async (_p, model) => void filed.push(model) },
+                modelCooldowns: { cooling: async () => new Map(), record: async (_p, model) => void filed.push(model), clear: async () => {} },
                 async *agent() {
                     yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
                     yield { kind: "done" };

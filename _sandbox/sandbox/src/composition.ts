@@ -346,7 +346,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         // Spread whole into Services; their members' docs live on the area interfaces, beside the code.
         areas: {
             ...claude,
-            ...createCodexSlice({ config, authRoot }),
+            ...createCodexSlice({ config, authRoot, planModels: () => cliProxy.planModels("codex") }),
             ...cursor,
             ...grok,
             ...gemini,

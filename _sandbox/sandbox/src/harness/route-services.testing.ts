@@ -225,6 +225,7 @@ export interface TurnWrites {
         readonly model: string;
         readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2];
     }[];
+    readonly cooldownsCleared: { readonly provider: string; readonly model: string }[];
     readonly observedLimits: {
         readonly provider: string;
         readonly account: string;
@@ -259,6 +260,7 @@ export const recordingTurnStores = (
         seatsCleared: [],
         modelRefusals: [],
         modelCooldowns: [],
+        cooldownsCleared: [],
         observedLimits: [],
         snapshots: [],
         checkpoints: [],
@@ -296,6 +298,7 @@ export const recordingTurnStores = (
             modelCooldowns: {
                 cooling: async () => new Map(),
                 record: async (provider, model, cooldown) => void writes.modelCooldowns.push({ provider, model, cooldown }),
+                clear: async (provider, model) => void writes.cooldownsCleared.push({ provider, model }),
             },
             observedLimits: {
                 spent: async () => ({}),

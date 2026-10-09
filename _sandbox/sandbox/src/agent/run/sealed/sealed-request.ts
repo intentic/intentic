@@ -150,7 +150,7 @@ const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadli
             // The first words on the wire settle what this provider and account last refused, as a turn's do.
             if (!answered) {
                 answered = true;
-                providerAnswered(services, ask.provider, plan.account);
+                providerAnswered(services, ask.provider, plan.account, plan.request.spec.model);
             }
             text += event.text;
         } else if (event.kind === "provider_retry" && (event.nextAttemptAt ?? 0) - Date.now() > MAX_RETRY_WAIT_MS) {

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileModelCooldownStore } from "./model-cooldowns.js";
@@ -45,4 +45,21 @@ test("a cooldown whose instant has passed is gone without anything clearing it",
     const { store } = tempStore();
     await store.record("codex", "gpt-5.6-sol", { until: Date.now() - 1, message: COOLING });
     expect(await store.cooling("codex")).toEqual(new Map());
+});
+
+// A model that just served a turn is open, whatever instant was stored: the row must stop reading "Back at …".
+test("a cleared cooldown is gone, and its siblings stay benched", async () => {
+    const { store } = tempStore();
+    const until = Date.now() + 300_000;
+    await store.record("codex", "gpt-6-astra", { until, message: COOLING });
+    await store.record("codex", "gpt-5.6-sol", { until, message: COOLING });
+    await store.clear("codex", "gpt-6-astra");
+    expect([...(await store.cooling("codex")).keys()]).toEqual(["gpt-5.6-sol"]);
+});
+
+// The common case is a turn on a model nothing benched; clearing it must not create the file.
+test("clearing a model nothing benched writes nothing", async () => {
+    const { store, path } = tempStore();
+    await store.clear("codex", "gpt-6-astra");
+    expect(existsSync(path)).toBe(false);
 });

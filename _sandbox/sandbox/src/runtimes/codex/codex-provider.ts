@@ -41,11 +41,16 @@ export interface CodexSlice {
     readonly codexAgent: (request: AgentRequest<CodexCredential>) => AsyncGenerator<AgentEvent>;
 }
 
-export const createCodexSlice = (input: { readonly config: Config; readonly authRoot: string }): CodexSlice => {
+export const createCodexSlice = (input: {
+    readonly config: Config;
+    readonly authRoot: string;
+    // What the translator's Codex credentials are registered for, benched or not (CliProxyClient.planModels).
+    readonly planModels?: () => Promise<readonly string[]>;
+}): CodexSlice => {
     // Base dir for the sandbox-wide CODEX_HOME; also the adapter's OPENAI_API_KEY-fallback default home.
     const codexHome = join(input.authRoot, "codex");
     return {
-        codexModels: createCodexCatalog(input.config, codexHome),
+        codexModels: createCodexCatalog(input.config, codexHome, input.planModels === undefined ? {} : { planModels: input.planModels }),
         codexHome,
         codexThreadExists: (threadId) => codexThreadExists(codexHome, threadId),
         codexAgent: createCodexAgent({ codexHome }),

@@ -803,3 +803,56 @@ describe("a bench the provider's later reading contradicts", () => {
         expect(await readAll(benchedCodex({ unavailable: false, next_retry_after: undefined }), 0)).toEqual([]);
     });
 });
+
+// The proxy's /v1/models drops a model while its only credential is benched; the plan's coverage is read per
+// credential instead, so a team-only model survives a spent team seat.
+test("answers what every enabled credential of a provider is registered for, benched or not", async () => {
+    const registered: Record<string, string[]> = {
+        "codex-team.json": ["gpt-6.1-sol", "gpt-6-astra", "gpt-5.5"],
+        "codex-free.json": ["gpt-6-luna", "gpt-5.5"],
+        "codex-off.json": ["gpt-retired"],
+        "kimi-1.json": ["kimi-k3"],
+    };
+    const fetchMock = jest.fn(async (url: string) => {
+        if (url.endsWith("/auth-files")) {
+            return Response.json({
+                files: [
+                    { name: "codex-team.json", provider: "codex", unavailable: true, status: "error" },
+                    { name: "codex-free.json", provider: "codex" },
+                    { name: "codex-off.json", provider: "codex", disabled: true },
+                    { name: "kimi-1.json", provider: "kimi" },
+                ],
+            });
+        }
+        const name = decodeURIComponent(new URL(url).searchParams.get("name") ?? "");
+        return Response.json({ models: (registered[name] ?? []).map((id) => ({ id })) });
+    });
+    stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    expect((await client.planModels("codex")).toSorted()).toEqual(["gpt-5.5", "gpt-6-astra", "gpt-6-luna", "gpt-6.1-sol"]);
+});
+
+test("answers no plan models when the proxy cannot say, rather than throwing", async () => {
+    stubGlobal(
+        "fetch",
+        jest.fn(async (url: string) =>
+            url.endsWith("/auth-files") ? Response.json({ files: [{ name: "codex-team.json", provider: "codex" }] }) : new Response("", { status: 500 }),
+        ),
+    );
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    expect(await client.planModels("codex")).toEqual([]);
+});

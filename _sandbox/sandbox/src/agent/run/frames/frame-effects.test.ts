@@ -117,7 +117,7 @@ describe("the first answer", () => {
     test("ends the provider's outage and settles what the provider and the seat last refused", () => {
         const { deps, writes } = recorded();
         recordProviderFailure("effects-provider");
-        providerAnswered(deps, "effects-provider", "acct");
+        providerAnswered(deps, "effects-provider", "acct", undefined);
         expect(providerOutage("effects-provider")).toBeUndefined();
         expect(writes.refusalsCleared).toStrictEqual([{ provider: "effects-provider", account: "acct" }]);
         expect(writes.seatsCleared).toStrictEqual(["acct"]);
@@ -125,9 +125,21 @@ describe("the first answer", () => {
 
     test("with no account settles the provider alone", () => {
         const { deps, writes } = recorded();
-        providerAnswered(deps, "codex", undefined);
+        providerAnswered(deps, "codex", undefined, undefined);
         expect(writes.refusalsCleared).toStrictEqual([{ provider: "codex", account: undefined }]);
         expect(writes.seatsCleared).toStrictEqual([]);
+    });
+
+    test("reopens the model it ran on, so a benched row stops reading as one", () => {
+        const { deps, writes } = recorded();
+        providerAnswered(deps, "codex", undefined, "gpt-6-astra");
+        expect(writes.cooldownsCleared).toStrictEqual([{ provider: "codex", model: "gpt-6-astra" }]);
+    });
+
+    test("with no model named reopens nothing", () => {
+        const { deps, writes } = recorded();
+        providerAnswered(deps, "codex", undefined, "");
+        expect(writes.cooldownsCleared).toStrictEqual([]);
     });
 
     test("logs each settle that fails under its own name", async () => {
@@ -136,7 +148,7 @@ describe("the first answer", () => {
             providerRefusals: { ...base.providerRefusals, clear: rejecting },
             claudeSeats: { ...base.claudeSeats, clear: rejecting },
         });
-        providerAnswered(deps, "claude", "acct");
+        providerAnswered(deps, "claude", "acct", undefined);
         await waitFor(
             () => expect(warnings(lines)).toStrictEqual(["provider refusal: settle failed", "claude account: could not clear the entitlement mark"]),
             SETTLES,
@@ -215,7 +227,7 @@ describe("a classification's writes", () => {
             observedLimits: { spent: async () => ({}), record: rejecting, clear: async () => {} },
             modelRefusals: { refused: async () => new Set(), record: rejecting },
             claudeSeats: { ...base.claudeSeats, refuse: rejecting },
-            modelCooldowns: { cooling: async () => new Map(), record: rejecting },
+            modelCooldowns: { cooling: async () => new Map(), record: rejecting, clear: async () => {} },
         });
         performFailureWrites(deps, all);
         await waitFor(() => expect(warnings(lines)).toHaveLength(5), SETTLES);

@@ -10,7 +10,7 @@ const catalogOf = (ids: readonly string[], fallback = ids[0]!): Promise<{ models
 type RegistryStores = Parameters<typeof servedModels>[0];
 const stores = (refused: readonly string[], cooling: ReadonlyMap<string, { until: number; message: string }> = new Map()): RegistryStores => ({
     modelRefusals: { refused: () => Promise.resolve(new Set(refused)), record: () => Promise.resolve() },
-    modelCooldowns: { cooling: () => Promise.resolve(cooling), record: () => Promise.resolve() },
+    modelCooldowns: { cooling: () => Promise.resolve(cooling), record: () => Promise.resolve(), clear: () => Promise.resolve() },
 });
 const refusing = (...ids: readonly string[]): RegistryStores => stores(ids);
 

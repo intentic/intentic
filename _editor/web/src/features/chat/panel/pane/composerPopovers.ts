@@ -7,7 +7,7 @@ import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../..
 import { type SendLater, timeChoices } from "../../composer/later/sendLater";
 import { chatPickable, pickerEntries } from "../../models/modelPickerState";
 import { effortsFor } from "../../models/run-settings/effortScale";
-import { ensureProviderCommands } from "../../models/useChat-catalog";
+import { ensureProviderCommands, loadAllProviderModels } from "../../models/useChat-catalog";
 import { providerReady } from "../../session/access";
 import type { Conversation } from "../../session/conversation";
 import type { ConversationView } from "../useChat-view";
@@ -158,6 +158,15 @@ export const useComposerPopovers = (host: PopoversHost) => {
     const quickSources = computed(() => quickSourcesOf(host.view.conversation.value, host));
     const quickOffered = computed(() => filesOffered.value || Object.values(quickSources.value).some((source) => source !== undefined));
     const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value && !host.isGuest.value);
+
+    // The list searches every provider's models, but a first paint reads only the open chat's catalog and every other
+    // native provider's floor is empty, so `@composer` found Cursor's rows only once the model picker had been opened
+    // (it warms them all). Warmed on opening, the picker's way: once per open, not per keystroke.
+    watch(mentionOpen, (open, was) => {
+        if (open && was !== true && quickSources.value.model !== undefined) {
+            void loadAllProviderModels();
+        }
+    });
 
     // Only when this composer has none (ensureProviderCommands is a no-op once known), on a provider switch or a typed
     // `/`; never from inside `availableCommands`, where a getter's fetch would refire on every re-evaluation.

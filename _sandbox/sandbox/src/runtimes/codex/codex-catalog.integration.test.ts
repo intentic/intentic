@@ -46,6 +46,30 @@ test("serves a registry-ordered catalog frontier-newest-first, and starts conver
     expect(catalog.default).toBe("gpt-5.6-sol");
 });
 
+// A spent team seat benches the only credential that serves team-only models, and the proxy's /v1/models drops them
+// for as long as it stays spent: the whole Sol family went missing from the picker. The plan still covers them.
+test("keeps a model the plan covers while the translator has it benched, and drops one no plan covers", async () => {
+    const catalog = await createCodexCatalog(translatorConfig, await codexHome(), {
+        fetchImpl: translatorServes(["gpt-6-astra", "gpt-6-luna", "gpt-5.5"]),
+        listModels: listsNothing,
+        planModels: async () => ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.5", "codex-auto-review", "gpt-image-2"],
+    }).models();
+
+    expect(catalog.models.map((model) => model.id)).toEqual(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.5"]);
+});
+
+test("still serves the translator's list when the plan cannot be read", async () => {
+    const catalog = await createCodexCatalog(translatorConfig, await codexHome(), {
+        fetchImpl: translatorServes(["gpt-6-luna", "gpt-5.5"]),
+        listModels: listsNothing,
+        planModels: async () => {
+            throw new Error("management unreachable");
+        },
+    }).models();
+
+    expect(catalog.models.map((model) => model.id)).toEqual(["gpt-6-luna", "gpt-5.5"]);
+});
+
 test("dresses the subscription's ids in what the runtime publishes about them: scale, name and description", async () => {
     // /v1/models says which models the subscription may drive; model/list says what each one accepts. A row the
     // runtime didn't mention still serves, on its id alone.

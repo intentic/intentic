@@ -56,6 +56,7 @@ const services = (adapter: Adapter, policy: Parameters<typeof privacySliceFake>[
         observedLimits: unstubbed<Services["observedLimits"]>("observedLimits", observed),
         headroom: unstubbed<Services["headroom"]>("headroom", { refresh: async () => undefined }),
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { clear: async () => {} }),
+        modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { clear: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
     });
     return { fake, refusals, observed, ledger: privacy.privacyLedger };

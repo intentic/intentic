@@ -248,6 +248,10 @@ export interface CliProxyClient {
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
+    // Every model id a connected, enabled credential of this provider is registered for: what the plans cover, read
+    // whatever the proxy has benched right now. The proxy's /v1/models drops a model for as long as its only credential is
+    // suspended, which for a spent ChatGPT allowance is days; this is the list that does not. Empty on any failure.
+    readonly planModels: (provider: KeyedProvider) => Promise<string[]>;
     // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
     // be reached, and answers how it took the list otherwise.
     readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
@@ -659,6 +663,22 @@ export const createCliProxyClient = (params: {
                           },
                       ],
             );
+        },
+        planModels: async (provider) => {
+            const files = providerFiles(await listFiles(), provider).filter((file) => file.disabled !== true);
+            const lists = await Promise.all(
+                files.map(async (file) => {
+                    const response = await fetchFn(`${managementUrl}/auth-files/models?name=${encodeURIComponent(file.name)}`, { headers: auth }).catch(
+                        () => undefined,
+                    );
+                    if (response === undefined || !response.ok) {
+                        return [];
+                    }
+                    const body = (await response.json().catch(() => ({}))) as { models?: { id?: unknown }[] };
+                    return (body.models ?? []).flatMap((model) => (typeof model.id === "string" && model.id !== "" ? [model.id] : []));
+                }),
+            );
+            return [...new Set(lists.flat())];
         },
         putCompat: async (entries) => {
             const response = await fetchFn(`${managementUrl}/openai-compatibility`, {

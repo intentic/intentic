@@ -8,9 +8,12 @@ import { runningTurn } from "../../../../../testing/runningTurn";
 // Pins the two lists over the composer: what an `@` at the caret offers and withholds, what a pick writes into the
 // draft and where the caret lands, and what a leading `/` lists and runs.
 
-// Asked for the provider's commands; a test reads whether the composer asked.
-const { ensureProviderCommands } = { ensureProviderCommands: jest.fn<(target: AgentProvider) => Promise<void>>(async () => undefined) };
-jest.mock("../../../models/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands }));
+// Asked for the provider's commands and every catalog; a test reads whether the composer asked.
+const { ensureProviderCommands, loadAllProviderModels } = {
+    ensureProviderCommands: jest.fn<(target: AgentProvider) => Promise<void>>(async () => undefined),
+    loadAllProviderModels: jest.fn<() => Promise<void>>(async () => undefined),
+};
+jest.mock("../../../models/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands, loadAllProviderModels }));
 
 const { useComposerPopovers } = await import("../composerPopovers");
 const { Conversation } = await import("../../../session/conversation");
@@ -61,6 +64,7 @@ afterEach(() => {
     unmount = undefined;
     document.body.innerHTML = ``;
     ensureProviderCommands.mockClear();
+    loadAllProviderModels.mockClear();
     jest.useRealTimers();
     resetSandboxScope();
 });
@@ -78,6 +82,29 @@ describe(`the @ list`, () => {
         type(`look at @src`);
         await nextTick();
         expect(lists.mentionOpen.value).toBe(true);
+    });
+
+    it(`warms every provider's catalog once per opening, so a model on a provider not yet read is findable`, async () => {
+        const { type, lists } = composerOf();
+        type(`@comp`);
+        await nextTick();
+        type(`@compo`);
+        await nextTick();
+        expect(loadAllProviderModels).toHaveBeenCalledTimes(1);
+
+        lists.popoverDismissed.value = true;
+        await nextTick();
+        type(`@composer`);
+        await nextTick();
+        expect(loadAllProviderModels).toHaveBeenCalledTimes(2);
+    });
+
+    it(`does not read catalogs for a list that offers no models`, async () => {
+        const { host, type } = composerOf();
+        host.steered.value = true;
+        type(`@src`);
+        await nextTick();
+        expect(loadAllProviderModels).not.toHaveBeenCalled();
     });
 
     it(`offers what the row offers, and withholds what it refuses`, () => {

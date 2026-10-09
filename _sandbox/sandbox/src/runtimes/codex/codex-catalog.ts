@@ -8,7 +8,11 @@ import { discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, SEED_
 
 // Codex model catalog on the shared ladder (agent/model-catalog.ts): live, then persisted last-known-good, then the
 // SEED_CODEX_MODELS floor. Live source, in order:
-// 1. the translator's OpenAI-compatible /v1/models (the subscription's authoritative list)
+// 1. the translator: its OpenAI-compatible /v1/models together with the models each connected credential's plan covers.
+//    /v1/models alone is what can be served this minute: it drops a model while its only credential is benched, so a
+//    spent team seat took every team-only model (the whole Sol family) off the picker for as long as the allowance
+//    stayed spent. A covered model stays listed; a known reopening is marked on it (provider-registry.ts), and a turn on
+//    it is refused in the provider's own words.
 // 2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (dev fallback)
 // Either answers ids alone, so the CLI's own model/list runs alongside them for what an id cannot say: display name,
 // description, and the reasoning rungs the model accepts. With no id source configured, model/list is the catalog.
@@ -30,9 +34,15 @@ const catalogOf = (models: readonly Model[]): { models: Model[]; default: string
 export const createCodexCatalog = (
     config: Config,
     codexHome: string,
-    injected: { readonly fetchImpl?: typeof fetch; readonly listModels?: CodexModelListReader } = {},
+    injected: {
+        readonly fetchImpl?: typeof fetch;
+        readonly listModels?: CodexModelListReader;
+        // The ids the connected credentials' plans cover (CliProxyClient.planModels); absent where nothing routes Codex.
+        readonly planModels?: () => Promise<readonly string[]>;
+    } = {},
 ): CodexCatalog => {
     const fetchImpl = injected.fetchImpl ?? fetch;
+    const planModels = injected.planModels ?? (async () => []);
     const listModels = injected.listModels ?? codexModelList(codexHome);
     // What the runtime last published about each id, so a turn's self-heal and an id-only discovery both render a model
     // with its own scale rather than stripping it back to a label.
@@ -43,13 +53,17 @@ export const createCodexCatalog = (
     const ranked = (ids: readonly string[]): Model[] => ids.toSorted(compareUnrankedModelIds).map(modelFor);
 
     const discoverIds = async (): Promise<readonly string[]> => {
-        // The translator holds the Codex subscription, so its /v1/models is the subscription's real usable list.
+        // The translator holds the Codex subscription: what it serves now, and what its plans cover however benched.
         const fromTranslator =
             config.translator.url !== ""
-                ? await discoverTranslatorCodexModels(config.translator.url, config.translator.token, fetchImpl).catch(() => [])
+                ? await Promise.all([
+                      discoverTranslatorCodexModels(config.translator.url, config.translator.token, fetchImpl).catch((): string[] => []),
+                      planModels().catch((): readonly string[] => []),
+                  ])
                 : [];
-        if (fromTranslator.length > 0) {
-            return fromTranslator;
+        const ids = [...new Set(fromTranslator.flat())].filter(isCodexModel);
+        if (ids.length > 0) {
+            return ids;
         }
         // Dev fallback with no translator: the container OPENAI_API_KEY can enumerate OpenAI's REST /v1/models.
         return config.openaiApiKey !== "" ? await discoverCodexModels(config.openaiApiKey, fetchImpl).catch(() => []) : [];
