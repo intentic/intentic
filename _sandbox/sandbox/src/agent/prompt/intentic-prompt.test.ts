@@ -4,7 +4,7 @@ import { forkablePrompt, intenticPromptOf, missedCuts } from "./intentic-prompt.
 // rules, and sections whose subheadings do not end them.
 const PRESET = [
     "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
-    "\nYou are an interactive agent that helps users with software engineering tasks.",
+    "\nYou are an agent working with the user toward their goals, using your own judgment along the way.",
     "IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges.\nIMPORTANT: You must NEVER generate or guess URLs.",
     "# Harness\n - Text you output outside of tool use is displayed as markdown.\n - Reference code as `file_path:line_number`.",
     "Write code that reads like the surrounding code: match its comment density, naming, and idiom.",

@@ -10,7 +10,7 @@ import { presetSystemPrompt } from "./preset-prompt.js";
 const CUT_LINES: readonly string[] = [
     // The CLI prefixes this line to any string prompt itself; kept, it would be said twice.
     "You are a Claude agent,",
-    "You are an interactive agent",
+    "You are an agent working with the user",
     "IMPORTANT: Assist with",
     "Write code that reads like the surrounding code",
     "When you use a pronoun",

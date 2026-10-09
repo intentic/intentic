@@ -201,7 +201,15 @@ test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit kills a server that ou
     const waiting = waitForExit(served.process ?? { pid: 0, stamp: "" }, processAlive);
     await advanceTimersByTimeAsync(2_999);
     expect(processAlive(pid)).toBe(true);
-    await advanceTimersByTimeAsync(1);
+    // The wait polls on a 20 ms timer, and on a loaded host the poll after one that fired can be scheduled only once the
+    // clock has stepped on, so stopping it at exactly 3 s could leave the poll that finds the grace over unfired, and the
+    // stand-in to sleep out its minute (run 37926641292). The clock moves on in poll-sized steps until the kill is heard;
+    // a kill at or after the grace is what it holds, which the 2 999 ms look above already bounds from below.
+    const heard = tracked(exited);
+    for (let step = 0; step < 50 && !heard(); step += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each step must land before the next is taken
+        await advanceTimersByTimeAsync(20);
+    }
 
     expect(await exited).toBe(`OpenCode's server exited (SIGKILL). It said: ${LISTENING}`);
     // The wait looks again on its next poll and finds it gone.
