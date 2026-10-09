@@ -23,6 +23,12 @@ export const UsageWindowSchema = z.object({
     utilization: z.number(), // 0-100
     resetsAt: z.number().optional(),
     gates: WindowGatesSchema,
+    rounded: z
+        .boolean()
+        .optional()
+        .describe(
+            "The provider rounds this figure to a whole percent (Anthropic does), so a reading of 100 may be 99.5 and the pool can still serve. Such a pool reads as at the line, not spent: only the provider's refusal proves it empty.",
+        ),
 });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 // A failed re-read, whatever the cause: a 429 park, a 403 asking for verification, a 5xx, a timeout. Recorded as the fact
@@ -59,7 +65,9 @@ export const AccountStateSchema = z.discriminatedUnion("kind", [
         kind: z.literal("ready"),
         room: z
             .number()
-            .describe("How much of the fullest pool that gates the turn is left, in percent (above 0, up to 100). Pickers take the most room."),
+            .describe(
+                "How much of the fullest pool that gates the turn is left, in percent (0 up to 100). Pickers take the most room. 0 is a rounded pool read at 100: at the line, tried after an unmeasured account, never a limit move's destination.",
+            ),
     }),
     z.object({
         kind: z.literal("spent"),

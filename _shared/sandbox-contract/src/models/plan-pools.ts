@@ -8,6 +8,18 @@ import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow, WindowGa
 // anything short of it still has room.
 export const SPENT_UTILIZATION = 100;
 
+// Whether a reading proves its pool empty. A pool read at the line by a provider that rounds to whole percents
+// (`rounded`) does not: Anthropic reports 99.5% as 100 and keeps serving turns on it, so treating that as spent strands
+// the last of an allowance (and turns a plain send into one scheduled for the reset). Such a pool is at the line, with
+// no room to rank by; only the provider's refusal (pinnedFull) proves it empty.
+export const provenFull = (window: UsageWindow): boolean => window.utilization >= SPENT_UTILIZATION && window.rounded !== true;
+
+// A pool a standing limit refusal shows full: at the line, and proven so whatever the provider's rounding.
+export const pinnedFull = (window: UsageWindow): UsageWindow => {
+    const { rounded: _rounded, ...pool } = window;
+    return { ...pool, utilization: Math.max(window.utilization, SPENT_UTILIZATION) };
+};
+
 export interface ModelRef {
     // Wire model id.
     readonly id: string;
@@ -210,15 +222,15 @@ export const headroomState = (usage: AccountUsage | undefined, model?: ModelRef)
     if (windows.length === 0) {
         return { kind: "unknown" };
     }
-    const full = windows.filter((window) => window.utilization >= SPENT_UTILIZATION);
-    const open = windows.filter((window) => window.utilization < SPENT_UTILIZATION);
+    const full = windows.filter(provenFull);
+    const open = windows.filter((window) => !provenFull(window));
     if (model !== undefined || full.some((window) => window.gates === "all") || open.length === 0) {
         const holding = model !== undefined ? full : full.some((window) => window.gates === "all") ? full.filter((window) => window.gates === "all") : full;
         if (holding.length > 0) {
             return spent(reopening(holding, model === undefined && !holding.some((window) => window.gates === "all")));
         }
     }
-    return { kind: "ready", room: SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization)) };
+    return { kind: "ready", room: Math.max(0, SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization))) };
 };
 
 // A standing limit refusal reads its pool as full, since a polled reading freezes the moment a pool actually empties: the
@@ -231,7 +243,7 @@ const refusedPool = (usage: AccountUsage | undefined, refusal: ProviderRefusal, 
         const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
         return sameModel ? spent(refusal.resetsAt) : headroomState(usage, model);
     }
-    const pinned = usage.windows.map((window) => (window === binding ? { ...window, utilization: Math.max(window.utilization, SPENT_UTILIZATION) } : window));
+    const pinned = usage.windows.map((window) => (window === binding ? pinnedFull(window) : window));
     const state = headroomState({ ...usage, windows: pinned }, model);
     // The provider's own "try again at" is when it reopens, over whatever the polled pool last said.
     return state.kind === "spent" && refusal.resetsAt !== undefined ? spent(refusal.resetsAt) : state;
@@ -287,19 +299,35 @@ export const serviceStates = (
     );
 };
 
-// Worst last: proven room, no reading either way, known spent, and nothing a turn can run on.
-const PREFERENCE: Record<AccountState["kind"], number> = { ready: 0, unknown: 1, spent: 2, blocked: 3 };
+// Worst last: proven room, no reading either way, a pool at the line (it may hold a sliver, or nothing), known spent,
+// and nothing a turn can run on.
+const preference = (state: AccountState): number => {
+    switch (state.kind) {
+        case "ready":
+            return state.room > 0 ? 0 : 2;
+        case "unknown":
+            return 1;
+        case "spent":
+            return 3;
+        case "blocked":
+            return 4;
+    }
+};
 
-/** The account an unnamed turn runs on: ready by most room, then unmeasured, then spent, blocked only when that is all there is. Ties keep the caller's order. */
+/** The account an unnamed turn runs on: ready by most room, then unmeasured, then at the line, then spent, blocked only when that is all there is. Ties keep the caller's order. */
 export const preferredAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
     entries.reduce<T | undefined>((best, next) => {
         if (best === undefined) {
             return next;
         }
-        const tier = PREFERENCE[next.state.kind] - PREFERENCE[best.state.kind];
+        const tier = preference(next.state) - preference(best.state);
         return tier < 0 || (tier === 0 && next.state.kind === "ready" && best.state.kind === "ready" && next.state.room > best.state.room) ? next : best;
     }, undefined);
 
-/** The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's order. */
+/**
+ * The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's
+ * order. An account at the line is left out: a move there could be refused in turn, and with one refusal remembered per
+ * provider, two such accounts would hand the turn back and forth.
+ */
 export const roomiestAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
-    preferredAccount(entries.filter((entry) => entry.state.kind === "ready"));
+    preferredAccount(entries.filter((entry) => entry.state.kind === "ready" && entry.state.room > 0));

@@ -39,10 +39,11 @@ test("reads every pool the limits list names, including the per-model slice the 
     // Resets land in whole seconds (the SDK's rate_limit-frame unit), converted from ISO-8601 with sub-second precision
     // and an offset.
     expect(claudeUsageWindows(LIVE_PAYLOAD)).toEqual([
-        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800, gates: "all" },
-        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400, gates: "all" },
-        // Gated to the tier the plan named it by, so it binds a Fable turn and leaves a Haiku call alone.
-        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400, gates: { models: ["Fable"] } },
+        { kind: "five_hour", utilization: 100, resetsAt: 1_785_691_800, gates: "all", rounded: true },
+        { kind: "seven_day", utilization: 10, resetsAt: 1_786_244_400, gates: "all", rounded: true },
+        // Gated to the tier the plan named it by, so it binds a Fable turn and leaves a Haiku call alone. Whole percents, so
+        // the 100 above is at the line, not proven spent.
+        { kind: "model:Fable", label: "Fable", utilization: 82, resetsAt: 1_786_244_400, gates: { models: ["Fable"] }, rounded: true },
     ]);
 });
 
@@ -65,10 +66,10 @@ test("names a surface-scoped pool by its surface, and an unrecognised one by its
         }),
     ).toEqual([
         // A surface alone is another product's allowance on this plan: shown, never binding a turn here.
-        { kind: "surface:Cowork", label: "Cowork", utilization: 40, gates: "none" },
-        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5, gates: { models: ["Opus"] } },
+        { kind: "surface:Cowork", label: "Cowork", utilization: 40, gates: "none", rounded: true },
+        { kind: "model:Opus", label: "Opus · Cowork", utilization: 5, gates: { models: ["Opus"] }, rounded: true },
         // Unscoped, so the plan's own, and it gates everything.
-        { kind: "claude:monthly_all", utilization: 12, gates: "all" },
+        { kind: "claude:monthly_all", utilization: 12, gates: "all", rounded: true },
     ]);
 });
 
@@ -83,17 +84,17 @@ test("falls back to the flat pool keys when the payload carries no list", () => 
             limits: [],
         }),
     ).toEqual([
-        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all" },
-        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all" },
+        { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true },
+        { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true },
         // A flat key this sandbox's turns don't spend: shown, never binding.
-        { kind: "seven_day_cowork", utilization: 3, gates: "none" },
+        { kind: "seven_day_cowork", utilization: 3, gates: "none", rounded: true },
     ]);
 });
 
 test("never counts purchased credits as a plan pool", () => {
     // extra_usage is credits bought beyond the plan; treating it as a pool would let spent credits skew headroom.
     expect(claudeUsageWindows({ extra_usage: { is_enabled: true, utilization: 96 }, five_hour: { utilization: 4, resets_at: null } })).toEqual([
-        { kind: "five_hour", utilization: 4, gates: "all" },
+        { kind: "five_hour", utilization: 4, gates: "all", rounded: true },
     ]);
 });
 

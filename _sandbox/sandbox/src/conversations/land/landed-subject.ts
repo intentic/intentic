@@ -128,23 +128,25 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     const ended = (outcome: `written` | `failed`, reason?: string): void =>
         publish({ ...draft, outcome, ...(reason === undefined ? {} : { reason }), finishedAt: Date.now() });
     publish(draft);
-    const claims = (await Promise.all(reposOf(entry).slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
-        (claim) => claim !== undefined,
-    );
-    if (claims.length === 0) {
-        // Nothing left to describe once history absorbed the claim; withdraw the report rather than leave noise.
-        services.agents.setLandedMessageDraft(id, undefined);
-        return;
-    }
-    const diffs = claims.map((claim) => claim.diff);
-    // Non-empty is what forces a Breaking-Note rather than merely allowing one (commitMessagePrompt).
-    const removed = claims.flatMap((claim) => claim.removed);
-    // Asked for when any spanned repo keeps a changelog, the same 'any, not all' rule the commit box follows.
-    const { changelogRepos } = await services.sandboxSettings.get();
-    const wantsNote = diffs.some((diff) => changelogRepos.includes(diff.repo));
-    // Diff only, no title: a title-plus-diff answer tends to write the title back verbatim, poisoning the commit.
-    // Each walk beat publishes immediately; the outcome (`ended`) is written last, after the sentence is already live.
+    // Everything after the report goes up sits inside the try: a throw reading the diff must end it as failed, or it
+    // reads as still writing until the next restart.
     try {
+        const claims = (await Promise.all(reposOf(entry).slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
+            (claim) => claim !== undefined,
+        );
+        if (claims.length === 0) {
+            // Nothing left to describe once history absorbed the claim; withdraw the report rather than leave noise.
+            services.agents.setLandedMessageDraft(id, undefined);
+            return;
+        }
+        const diffs = claims.map((claim) => claim.diff);
+        // Non-empty is what forces a Breaking-Note rather than merely allowing one (commitMessagePrompt).
+        const removed = claims.flatMap((claim) => claim.removed);
+        // Asked for when any spanned repo keeps a changelog, the same 'any, not all' rule the commit box follows.
+        const { changelogRepos } = await services.sandboxSettings.get();
+        const wantsNote = diffs.some((diff) => changelogRepos.includes(diff.repo));
+        // Diff only, no title: a title-plus-diff answer tends to write the title back verbatim, poisoning the commit.
+        // Each walk beat publishes immediately; the outcome (`ended`) is written last, after the sentence is already live.
         const { value } = await withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
             services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
                 askRoleModel(

@@ -54,6 +54,9 @@ const appendWindow = (windows: UsageWindow[], identity: PoolIdentity, percent: n
         ...identity,
         utilization: clampPercent(percent),
         ...(resetsAt === undefined ? {} : { resetsAt }),
+        // Whole percents in both spellings (`percent: 100`, `utilization: 100.0`), and an account read at 100 has been
+        // seen serving turns for hours after; the serviceability rule reads such a pool as at the line, not spent.
+        rounded: true,
     });
 };
 

@@ -132,6 +132,22 @@ test("spent is the contract's one line: 99.5% still has room, 100% is spent unti
     expect(headroomState(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent" });
 });
 
+// Anthropic reports whole percents: an account read at 100 kept serving turns for hours, so that reading is the line,
+// not proof. Only the provider's refusal makes such a pool spent.
+test("a pool read at 100 in whole percents is at the line with no room, until a refusal proves it empty", () => {
+    const week = window({ kind: "seven_day", utilization: 100, resetsAt: 900, rounded: true });
+    const atLine = usage(window({ kind: "five_hour", utilization: 75, rounded: true }), week);
+    expect(headroomState(atLine)).toEqual({ kind: "ready", room: 0 });
+    expect(headroomState(atLine, { id: "claude-opus-5-5" })).toEqual({ kind: "ready", room: 0 });
+    // A precise 100 is still spent.
+    expect(headroomState(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 })))).toEqual({ kind: "spent", reopensAt: 900 });
+    // The provider refused it: spent until the pool reopens, and a reading still at the line does not answer that.
+    const facts = { account: "a", usage: { ...atLine, measuredAt: 2_000 } };
+    const refused = refusal({ kind: "limit", account: "a" });
+    expect(refusalVerdict(refused, [facts])).toBe("standing");
+    expect(serviceStates([facts], refused).get("a")).toEqual({ kind: "spent", reopensAt: 900 });
+});
+
 test("with no model named, an account is spent only when no model can run on it", () => {
     // A full Opus slice leaves every other model the room of the fullest pool still open.
     expect(headroomState(CLAUDE)).toEqual({ kind: "ready", room: 70 });
@@ -242,4 +258,15 @@ test("an unnamed turn takes the most room, then an unmeasured account, then a sp
     expect(preferredAccount([entry("first", { kind: "ready", room: 60 }), entry("second", { kind: "ready", room: 60 })])?.id).toBe("first");
     expect(roomiestAccount([entry("seatless", blocked), entry("unread", { kind: "unknown" })])).toBeUndefined();
     expect(roomiestAccount([entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })])?.id).toBe("high");
+});
+
+test("an account at the line is tried after an unmeasured one and before a spent one, and never a move's destination", () => {
+    const entry = (id: string, state: AccountState) => ({ id, state });
+    const atLine: AccountState = { kind: "ready", room: 0 };
+    expect(preferredAccount([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
+    expect(preferredAccount([entry("line", atLine), entry("unread", { kind: "unknown" })])?.id).toBe("unread");
+    expect(preferredAccount([entry("spent", { kind: "spent" }), entry("line", atLine)])?.id).toBe("line");
+    // A move lands only on proven room: two accounts at the line would otherwise hand a refused turn back and forth.
+    expect(roomiestAccount([entry("line", atLine), entry("spent", { kind: "spent" })])).toBeUndefined();
+    expect(roomiestAccount([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
 });

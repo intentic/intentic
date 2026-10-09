@@ -7,6 +7,8 @@ import {
     headroomState,
     type ModelRef,
     type OauthAccount,
+    pinnedFull,
+    provenFull,
     type ProviderRefusal,
     refusalVerdict,
     reportsPlanLimits,
@@ -92,10 +94,10 @@ const freshest = (provider: AgentProvider, account: string, attached: AccountUsa
 const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, model: ModelRef | undefined): AccountUsage | undefined => {
     const refused = providerRefusals.value[provider]?.model;
     const binding = bindingWindow(usage, refused === undefined ? model : { id: refused });
-    if (usage === undefined || binding === undefined || binding.utilization >= SPENT_UTILIZATION || !limitStandsFor(provider, account, usage)) {
+    if (usage === undefined || binding === undefined || provenFull(binding) || !limitStandsFor(provider, account, usage)) {
         return usage;
     }
-    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: SPENT_UTILIZATION } : entry)) };
+    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? pinnedFull(entry) : entry)) };
 };
 
 // An account's reading as any surface should draw it: freshest data, corrected for what the plan has since
@@ -120,6 +122,8 @@ export interface PlanLimitPool {
     readonly resetsAt: number | undefined;
     // Which models this pool gates; a percentage alone can't say whether it blocks anything you run.
     readonly gates: WindowGates;
+    // Read in whole percents (UsageWindow.rounded): at 100 it is at the line, not proven spent.
+    readonly rounded?: boolean | undefined;
 }
 
 // One reading as its pools: named, worst-first, at the provider's precision — the shared basis for every plan-limit display
@@ -131,6 +135,7 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         percent: window.utilization,
         resetsAt: window.resetsAt,
         gates: window.gates,
+        rounded: window.rounded,
     }));
 
 // Short label for a pool's window length (e.g. "5h", "wk"), so a narrow rail can show both allowances instead
@@ -234,7 +239,9 @@ export const nestPools = <T>(items: readonly T[], poolOf: (item: T) => PlanLimit
     const placed: NestedPool<T>[] = [];
     const place = (item: T, depth: number, capped: boolean): void => {
         placed.push({ item, depth, parent: parentOf.get(item), capped });
-        const spent = capped || poolOf(item).percent >= SPENT_UTILIZATION;
+        // Only a pool proven empty caps what it holds; one read at 100 in whole percents may still be serving.
+        const pool = poolOf(item);
+        const spent = capped || (pool.percent >= SPENT_UTILIZATION && pool.rounded !== true);
         for (const child of items.filter((other) => parentOf.get(other) === item)) {
             place(child, depth + 1, spent);
         }
