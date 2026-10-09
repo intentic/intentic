@@ -1098,7 +1098,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted"
                     v-tooltip.right="mobile ? undefined : stageTip"
                 >
-                    <span :class="LEAD">
+                    <!-- Flex centres the glyph on the line box, whose descender room the label's capitals never use, so it
+                         read ~1.5px low beside "Pushed": lift it onto the cap-height centre. -->
+                    <span :class="LEAD" class="translate-y-[-0.12em]">
                         <Icon
                             :name="pushFlow.running.value ? `spinner` : `check-circle`"
                             :spin="pushFlow.running.value"
