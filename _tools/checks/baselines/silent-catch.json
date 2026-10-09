@@ -282,7 +282,7 @@
     "_sandbox/sandbox/src/exit/vpngate.ts": 2,
     "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts": 1,
     "_sandbox/sandbox/src/extensions/listener/listener.routes.ts": 2,
-    "_sandbox/sandbox/src/fences/tmux-fence.ts": 2,
+    "_sandbox/sandbox/src/fences/tmux-fence.ts": 1,
     "_sandbox/sandbox/src/git/agent-refs.ts": 4,
     "_sandbox/sandbox/src/git/changes/changes-commits.ts": 2,
     "_sandbox/sandbox/src/git/changes/changes-diff.ts": 1,

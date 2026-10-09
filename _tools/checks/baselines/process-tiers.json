@@ -17,7 +17,7 @@
     "_sandbox/sandbox/src/exit/invariant.ts": 1,
     "_sandbox/sandbox/src/exit/tor.ts": 1,
     "_sandbox/sandbox/src/exit/vpngate.ts": 1,
-    "_sandbox/sandbox/src/fences/tmux-fence.ts": 2,
+    "_sandbox/sandbox/src/fences/tmux-fence.ts": 1,
     "_sandbox/sandbox/src/git/changes/blob-reader.ts": 1,
     "_sandbox/sandbox/src/guard/plugin-modules.ts": 1,
     "_sandbox/sandbox/src/harness/e2e-harness.ts": 4,

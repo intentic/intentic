@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { suiteKindOf } from "@intentic/constants/test-suites";
@@ -15,11 +15,9 @@ beforeAll(() => {
     if (suiteKindOf(Bun.main) === "unit") {
         return;
     }
-    let binary: string;
-    try {
-        // Resolved before the shim goes on PATH, and by absolute path, so the shim can reach past itself.
-        binary = execFileSync("sh", ["-c", "command -v tmux"], { encoding: "utf8" }).trim();
-    } catch {
+    // Resolve before the shim goes on PATH, without a synchronous shell that can hang a worker's setup on CI.
+    const binary = Bun.which("tmux");
+    if (binary === null) {
         // No tmux on this machine: nothing to fence, and every suite that wanted one already degrades.
         return;
     }
@@ -38,11 +36,13 @@ afterAll(() => {
     if (dir === undefined) {
         return;
     }
-    // The private server dies with the run whatever the suites left on it; nothing outside this dir is named.
-    try {
-        execFileSync("tmux", ["kill-server"], { stdio: "ignore" });
-    } catch {
-        // No server was ever started, which is the common case and not a failure.
+    // Most suites never start tmux: only a private server's socket needs a shutdown subprocess.
+    if (existsSync(join(dir, "sock"))) {
+        try {
+            execFileSync("tmux", ["kill-server"], { stdio: "ignore" });
+        } catch {
+            // The private server already stopped, which leaves nothing to shut down.
+        }
     }
     rmSync(dir, { recursive: true, force: true });
     dir = undefined;
