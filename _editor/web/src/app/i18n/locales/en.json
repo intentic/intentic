@@ -7696,7 +7696,7 @@
         "agentChatPages": {
             "group": "Pages in chat",
             "title": "Answer with pages",
-            "description": "Let the agent draw a chart, a table, a diagram or a mock-up right in the chat, and ask you on a small page when a choice is easier to make there. Off, it is not offered the tools at all."
+            "description": "Charts, tables, diagrams and mock-ups in chat, plus small pages for choices. Off means the agent has no access."
         }
     },
     "settings": {
