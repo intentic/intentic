@@ -74,7 +74,7 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
   or failing in a row. An automation names its own models, required on the automation itself.
 - The jobs' lists are `modelRoles` in settings, edited on Sandbox ▸ Agent ▸ Jobs: helpers (**Commit messages**,
   **Session titles**, **Safety judge**, **Loop verdicts**, **New chat routing**) and runs (**Pipeline fixes**,
-  **Deployment fixes**, **Maintenance chores**, **Documentation runs**, **Acceptance runs**, **Approvals queue**,
+  **Deployment fixes**, **Maintenance chores**, **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**,
   **Extension update reviews**, **Loop iterations**). A helper with no list does not run; a run with no list
   opens on a connected provider.
 - What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this

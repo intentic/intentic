@@ -1,5 +1,5 @@
-import type { AgentSpan, AgentSummary, LandMode, LandResult, AgentChanges } from "@intentic/sandbox-contract";
-import { useDevice } from "@intentic/ui";
+import type { AgentChanges, AgentHarness, AgentProvider, AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
+import { type AgentRunChoice, useDevice } from "@intentic/ui";
 import type { Conversation } from "../../chat/session/conversation";
 import { errands } from "../../chat/run/errands";
 import { summonChat, summonTurn } from "../../chat/run/summon";
@@ -31,8 +31,14 @@ import { t } from "@intentic/ui/i18n";
 // message through the chat singleton and so never will.
 export type AgentReach = string | undefined;
 
-export const startAgent = (prompt?: string, actsAs?: string): string => {
+// `run` is the model a surface's run button stands at (useAgentRunPick: a job's list, or the reader's pick for this run
+// alone). Without it the draft opens on whatever the composer last held, which is the reader's chat model and says
+// nothing about the job the press starts.
+export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoice): string => {
     const conversation = draftConversation();
+    if (run !== undefined) {
+        wearRunChoice(conversation, run);
+    }
     // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
     // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it
     // instead of minting a second one.
@@ -305,6 +311,23 @@ const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined)
     if (agent.account !== undefined && agent.account !== ``) {
         conversation.selection.apply({ kind: `set`, picks: { account: agent.account } });
     }
+};
+
+// A run button's choice, worn as the card's rather than the reader's (wearModel): nothing is remembered for the next new
+// chat, and the composer's own pick is left as it was. Speed rides along since wearModel leaves it, and a fresh draft's
+// is off; the account after wearModel, which re-scopes it to the provider it points at.
+const wearRunChoice = (conversation: Conversation, run: AgentRunChoice): void => {
+    conversation.selection.apply({
+        kind: `wearModel`,
+        pin: {
+            provider: run.provider as AgentProvider,
+            model: run.model,
+            ...(run.harness !== undefined ? { harness: run.harness as AgentHarness } : {}),
+            ...(run.effort !== undefined ? { effort: run.effort } : {}),
+            ...(run.thinking !== undefined ? { thinking: run.thinking } : {}),
+        },
+    });
+    conversation.selection.apply({ kind: `set`, picks: { fast: run.fast === true, ...(run.account !== undefined ? { account: run.account } : {}) } });
 };
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible; the card leaves on the

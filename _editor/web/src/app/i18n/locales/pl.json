@@ -7243,6 +7243,10 @@
                 "blurb": "Agent uruchamiany przyciskiem Napraw przy nieudanym pipelinie.",
                 "label": "Naprawy pipeline’ów"
             },
+            "refactorRun": {
+                "blurb": "Agent uruchamiany z punktu zapalnego lub kluczowego modułu na karcie Kondycja repozytorium.",
+                "label": "Refaktoryzacje"
+            },
             "safetyJudge": {
                 "blurb": "Który model czyta Twoją politykę bezpieczeństwa, zanim zostanie uruchomione oznaczone polecenie.",
                 "label": "Sędzia bezpieczeństwa"

@@ -1,18 +1,48 @@
-// Pins the refactor action's wiring: one per hotspot row, none for an ordinary key module, and a press carries
-// that row's own prompt. Arithmetic is covered in refactorAsk.test.ts.
+// Pins the refactor action's wiring: one per hotspot row, none for an ordinary key module, a press carries that row's
+// own prompt, and it runs on the Refactors job's model unless the row's caret picked another. Arithmetic is covered in
+// refactorAsk.test.ts.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic/sandbox-contract";
+import type { AgentRunChoice } from "@intentic/ui";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Hoisted so the static import avoids the TDZ; matchMedia stays false, keeping the device desktop.
 const mocked = (() => {
-    return { started: [] as string[], health: { value: undefined as WorkspaceHealth | undefined } };
+    return {
+        started: [] as string[],
+        runs: [] as (AgentRunChoice | undefined)[],
+        health: { value: undefined as WorkspaceHealth | undefined },
+        // Which job the view asked for, what the picker was opened with, and what it answers.
+        roles: [] as string[],
+        opened: [] as { action?: string | undefined; model: string }[],
+        answer: undefined as AgentRunChoice | undefined,
+    };
 })();
-const { started, health } = mocked;
+const { started, runs, health } = mocked;
 
-jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => mocked.started.push(prompt ?? ``) }));
+const STANDING: AgentRunChoice = { provider: `claude`, model: `claude-opus-5-5`, label: `Claude Opus 5.5`, effort: `high`, effortLabel: `High` };
+const PICKED: AgentRunChoice = { provider: `codex`, model: `gpt-6.1-sol`, label: `GPT-6.1-Sol`, effort: `max`, effortLabel: `Max` };
+
+jest.mock(`../../agents/fleet/agentActions`, () => ({
+    startAgent: (prompt?: string, _actsAs?: string, run?: AgentRunChoice) => {
+        mocked.started.push(prompt ?? ``);
+        mocked.runs.push(run);
+    },
+}));
+jest.mock(`../../chat/models/shellModelPicking`, () => ({
+    shellModelPicking: () => ({
+        agentRun: (role: string) => {
+            mocked.roles.push(role);
+            return STANDING;
+        },
+        pick: async (options: { action?: string; model: string }) => {
+            mocked.opened.push({ action: options.action, model: options.model });
+            return mocked.answer;
+        },
+    }),
+}));
 jest.mock(`./useCodebaseHealth`, () => ({
     useCodebaseHealth: () => ({ health: mocked.health, loading: ref(false), error: ref(null), refresh: () => {} }),
 }));
@@ -53,6 +83,9 @@ const report: WorkspaceHealth = {
 
 const refactorButtons = (el: HTMLElement): HTMLButtonElement[] =>
     [...el.querySelectorAll<HTMLButtonElement>(`button`)].filter((button) => button.getAttribute(`aria-label`)?.startsWith(`Refactor `));
+const carets = (el: HTMLElement): HTMLButtonElement[] =>
+    [...el.querySelectorAll<HTMLButtonElement>(`button`)].filter((button) => button.getAttribute(`aria-label`)?.startsWith(`Configure and start`));
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeAll(() => {
     health.value = report;
@@ -99,4 +132,47 @@ it(`dims the row nobody has touched in a season instead of hiding it`, async () 
     dormant!.click();
     expect(started[0]).toContain(`src/legacy/parser.ts`);
     expect(started[0]).toContain(String(report.hotspots[1]!.commits));
+});
+
+describe(`which model a refactor runs on`, () => {
+    beforeEach(() => {
+        started.length = 0;
+        runs.length = 0;
+        mocked.opened.length = 0;
+        mocked.answer = undefined;
+    });
+
+    it(`is the Refactors job's own, not whatever the composer last held`, async () => {
+        const el = mount();
+        await nextTick();
+        refactorButtons(el)[0]!.click();
+        expect(mocked.roles).toContain(`refactor-run`);
+        expect(runs).toEqual([STANDING]);
+    });
+
+    it(`is the caret's pick for that one run, started by the picker's own button, and the next press is back on the job's`, async () => {
+        const el = mount();
+        await nextTick();
+        expect(carets(el)).toHaveLength(refactorButtons(el).length);
+        mocked.answer = PICKED;
+
+        carets(el)[2]!.click();
+        await settle();
+        expect(mocked.opened).toEqual([{ action: `Refactor schemas.ts`, model: STANDING.model }]);
+        expect(started).toHaveLength(1);
+        expect(started[0]).toContain(`src/schemas.ts`);
+        expect(runs).toEqual([PICKED]);
+
+        refactorButtons(el)[0]!.click();
+        expect(runs).toEqual([PICKED, STANDING]);
+    });
+
+    it(`starts nothing when the picker is closed without its button`, async () => {
+        const el = mount();
+        await nextTick();
+        carets(el)[0]!.click();
+        await settle();
+        expect(mocked.opened).toHaveLength(1);
+        expect(started).toEqual([]);
+    });
 });

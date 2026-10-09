@@ -7792,6 +7792,10 @@
                 "blurb": "The agent started by Fix on a failed pipeline.",
                 "label": "Pipeline fixes"
             },
+            "refactorRun": {
+                "blurb": "The agent started from a hotspot or key module on a repository's Health tab.",
+                "label": "Refactors"
+            },
             "safetyJudge": {
                 "blurb": "Which model reads your safety policy before a flagged command runs.",
                 "label": "Safety judge"

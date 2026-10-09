@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { at, drop, dropAll, fold, isJsonObject, mapValue, retype } from "../documents/conversions.js";
+import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, retype, transform } from "../documents/conversions.js";
 import type { KeepWarmSettings, RuleSchema } from "./settings.js";
 
 // The conversions the settings shape has had, oldest first: what brings any earlier release's settings to
@@ -63,6 +63,19 @@ const keepWarmObject = fold("folds keepWarm, keepWarmHours, keepWarmMinTokens an
     },
 });
 
+// The Refactors job (2026-10-09): a refactor started from a repository's Health tab used to name no job and opened on
+// whatever model the composer last held. A file from before it inherits the Maintenance chores list, the job nearest in
+// kind, so the owner's choice for work they start carries over instead of the new job opening empty. Only while the key
+// is absent: an owner who later empties it stores [], which this leaves alone.
+type RolesWithChores = JsonObject & { readonly "maintenance-chore": readonly unknown[] };
+const holdsChoresWithoutRefactors = (roles: JsonObject): roles is RolesWithChores =>
+    !Object.hasOwn(roles, "refactor-run") && Array.isArray(roles["maintenance-chore"]) && roles["maintenance-chore"].length > 0;
+const refactorsFromChores = transform(
+    "gives the new Refactors job the Maintenance chores list",
+    holdsChoresWithoutRefactors,
+    (roles): JsonObject => ({ ...roles, "refactor-run": roles["maintenance-chore"] }),
+);
+
 export const SETTINGS_HISTORY = [
     // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
     // retired, so passthrough stops carrying them, a definition naming one still applies, and no later setting may
@@ -112,4 +125,5 @@ export const SETTINGS_HISTORY = [
     at("modelRoles", drop("pre-push-fix")),
     // The short guidance form (2026-10-06): it lost its A/B to the full one, which every turn now gets.
     ...dropAll(["leanGuidance", "leanGuidanceHoldout"]),
+    at("modelRoles", refactorsFromChores),
 ] as const;

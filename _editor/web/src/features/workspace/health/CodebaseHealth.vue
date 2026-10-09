@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { formatCount, Picker, SegmentedControl } from "@intentic/ui";
+import { formatCount, Picker, SegmentedControl, useAgentRunPick } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { shellModelPicking } from "../../chat/models/shellModelPicking";
+import RefactorAction from "./RefactorAction.vue";
 import { useCodebaseHealth } from "./useCodebaseHealth";
 import { useRepos } from "../explorer/useRepos";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -11,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 // A repository's Health tab in the management panel, and the workspace root's own health tab; answers where the risk
 // sits, via hotspots (churn x complexity) and map (PageRank over imports). Every number is a count a reader can
 // recount, never a grade, so a row opens a file, not a score. Its action hands that file to an agent, using the row's
-// own numbers.
+// own numbers, on the Refactors job's model unless the row's caret picks another for that one run.
 
 const t = useT();
 
@@ -24,6 +25,8 @@ const repoRef = computed(() => repo);
 const churnWindow = ref<ChurnWindow>(`all`);
 const { health, loading, error, refresh } = useCodebaseHealth(repoRef, churnWindow);
 const { options } = useRepos();
+// One picker for every row: a caret's pick starts its run at once and clears (RefactorAction), so no row inherits it.
+const refactorPick = useAgentRunPick(shellModelPicking, `refactor-run`);
 
 const totals = computed(() => health.value?.totals);
 // Dormancy is measured from the read, not a live clock; recomputes only when the report or window changes.
@@ -127,7 +130,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 <span class="text-right">{{ t(`workspace.codebaseHealth.commits2`) }}</span>
                                 <span class="text-right">{{ t(`workspace.codebaseHealth.branches`) }}</span>
                             </div>
-                            <span class="w-4 shrink-0"></span>
+                            <span class="w-8 shrink-0"></span>
                         </div>
                         <ul class="flex flex-col">
                             <li
@@ -153,16 +156,13 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.complexity) }}</span>
                                 </button>
                                 <!-- Dormant actions stay dimmed and appear on hover or touch. -->
-                                <button
-                                    type="button"
-                                    class="shrink-0 cursor-pointer transition-colors md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
-                                    :class="row.ask.dormant ? 'text-subtle hover:text-muted' : 'text-muted hover:text-link'"
-                                    v-tooltip.top="row.ask.hint"
-                                    :aria-label="t(`workspace.codebaseHealth.refactor`, { name: row.name })"
-                                    @click="startAgent(row.ask.prompt)"
-                                >
-                                    <Icon name="sparkles" class="w-4 text-2xs" />
-                                </button>
+                                <RefactorAction
+                                    :prompt="row.ask.prompt"
+                                    :name="row.name"
+                                    :hint="row.ask.hint"
+                                    :dormant="row.ask.dormant"
+                                    :picker="refactorPick"
+                                />
                             </li>
                         </ul>
                     </template>
@@ -194,17 +194,14 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 }}</span>
                             </button>
                             <!-- Shown only when the module itself is the finding; a healthy chokepoint keeps no action, just a pointer. -->
-                            <button
+                            <RefactorAction
                                 v-if="module.ask"
-                                type="button"
-                                class="shrink-0 cursor-pointer text-muted transition-colors hover:text-link md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
-                                v-tooltip.top="module.ask.hint"
-                                :aria-label="t(`workspace.codebaseHealth.refactor`, { name: module.name })"
-                                @click="startAgent(module.ask.prompt)"
-                            >
-                                <Icon name="sparkles" class="w-4 text-2xs" />
-                            </button>
-                            <span v-else class="w-4 shrink-0"></span>
+                                :prompt="module.ask.prompt"
+                                :name="module.name"
+                                :hint="module.ask.hint"
+                                :picker="refactorPick"
+                            />
+                            <span v-else class="w-8 shrink-0"></span>
                         </li>
                     </ul>
                 </section>

@@ -93,6 +93,14 @@ export const MODEL_ROLES = [
         icon: "wrench",
     },
     {
+        id: "refactor-run",
+        label: "Refactors",
+        blurb: "The agent started from a hotspot or key module on a repository's Health tab.",
+        kind: "run",
+        trigger: "pressed",
+        icon: "hammer",
+    },
+    {
         id: "documentation-run",
         label: "Documentation runs",
         blurb: "A pass over a repo's own documentation.",

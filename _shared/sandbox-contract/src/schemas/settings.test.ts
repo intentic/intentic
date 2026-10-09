@@ -129,3 +129,28 @@ describe(`the retired pre-push fix role`, () => {
         expect(convertDocument(SETTINGS_HISTORY, `object`, { modelRoles: { "pipeline-fix": [pin] } }, true).changes).toEqual([]);
     });
 });
+
+// The Refactors job arrived on 2026-10-09; a file from before it carries the owner's Maintenance chores list over, so a
+// refactor started from Health opens on a model they chose rather than on an empty job.
+describe(`the new Refactors job`, () => {
+    const opus = { provider: `claude`, model: `claude-opus-5-5` };
+    const sol = { provider: `codex`, model: `gpt-sol-6.1` };
+
+    test(`takes the Maintenance chores list in a file from before it, and every other list stays`, () => {
+        const stored = { modelRoles: { "maintenance-chore": [opus, sol], "pipeline-fix": [sol] } };
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
+        expect(converted.value).toEqual({ modelRoles: { "maintenance-chore": [opus, sol], "pipeline-fix": [sol], "refactor-run": [opus, sol] } });
+        expect(SandboxSettingsSchema.parse(converted.value).modelRoles[`refactor-run`]).toEqual([opus, sol]);
+    });
+
+    test(`leaves a list the owner set, even an emptied one, and a file with no chores list`, () => {
+        for (const modelRoles of [
+            { "maintenance-chore": [opus], "refactor-run": [sol] },
+            { "maintenance-chore": [opus], "refactor-run": [] },
+            { "pipeline-fix": [opus] },
+            { "maintenance-chore": [] },
+        ]) {
+            expect(convertDocument(SETTINGS_HISTORY, `object`, { modelRoles }, true).changes).toEqual([]);
+        }
+    });
+});
