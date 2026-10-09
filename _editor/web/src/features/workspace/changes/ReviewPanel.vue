@@ -1305,7 +1305,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 type="button"
                 class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
                 :class="[
-                    originFilter === entry.id ? ['shrink font-medium', originHue(entry.id).chipOn] : ['shrink-0', originHue(entry.id).chip],
+                    originFilter === entry.id ? ['shrink', originHue(entry.id).chipOn] : ['shrink-0', originHue(entry.id).chip],
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
                 :disabled="changes.actionBusy.value"
@@ -1315,9 +1315,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :aria-label="originChipLabel(entry.id, entry.files)"
                 :aria-pressed="originFilter === entry.id"
             >
-                <!-- Lit reads at a glance, not only by the trailing cross: a tick leads, the plate deepens and gains an
-                     edge, the weight rises. A lone chip has no dimmed neighbours to tell the change by, so the chip
-                     itself has to. -->
+                <!-- Lit reads at a glance, not only by the trailing cross: a tick leads and the plate deepens a step with a
+                     faint edge, the same quiet "on" the kit's ui-chip-on gives. A lone chip has no dimmed neighbours to
+                     tell the change by, so the chip itself has to. -->
                 <Icon v-if="originFilter === entry.id" name="check" class="shrink-0 text-[0.6rem]" />
                 <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
                 <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
@@ -1335,7 +1335,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 v-if="legend.yours > 0"
                 type="button"
                 class="ui-chip shrink-0 gap-1 transition-opacity"
-                :class="originFilter === YOURS ? 'ui-chip-on font-medium' : originFilter !== undefined ? 'opacity-40' : ''"
+                :class="originFilter === YOURS ? 'ui-chip-on' : originFilter !== undefined ? 'opacity-40' : ''"
                 :disabled="changes.actionBusy.value"
                 :aria-pressed="originFilter === YOURS"
                 @click="toggleOrigin(YOURS)"
