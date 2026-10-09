@@ -5033,15 +5033,17 @@
             "copyRepoPaths": "{count} Pfade im Repo kopieren"
         },
         "codebaseHealth": {
+            "actionLegend": "Startet einen Agenten mit dem Umbau, den die Zahlen jeder Zeile nahelegen",
             "branchPoints": "Verzweigungspunkte",
-            "branches": "Verzweigungen",
             "commits": "Commits seit",
             "commits2": "Commits",
-            "commitsBranchPointsNeither": "Commits × Verzweigungspunkte. Keines allein ist eine Warnung: eine ständig geänderte Konfigurationsdatei ist trivial, und eine verworrene Datei, die niemand anfasst, kostet niemanden etwas. Öffnen Sie eine Zeile, um die Datei zu lesen, oder",
+            "couldntRead": "Zustand der Codebasis konnte nicht gelesen werden",
             "exports": "{exports} Exporte",
+            "file": "Datei",
             "filesBothChurnBranching": "Dateien mit hoher Änderungsrate und starker Verzweigung",
             "functionsTypesClasses": "Funktionen, Typen, Klassen",
             "hotspots": "Brennpunkte",
+            "hotspotsLead": "Dateien, die sich oft ändern und stark verzweigen. Keines allein ist eine Warnung: eine oft geänderte Konfigurationsdatei ist trivial, und eine verworrene Datei, die niemand anfasst, kostet nichts.",
             "indexStillBuildingFigures": "Der Index wird noch gebaut: diese Zahlen decken nur ab, was bisher gelesen wurde.",
             "indexedIgnoringBuildOutput": "indexiert, Build-Ausgaben ausgenommen",
             "keyModules": "Schlüsselmodule",
@@ -5053,11 +5055,13 @@
             "readingIndex": "Der Index wird gelesen…",
             "recompute": "Neu berechnen",
             "refactor": "{name} umbauen",
+            "refactorAction": "{action}: {name}",
             "refreshCodebaseHealth": "Zustand der Codebasis aktualisieren",
             "risk": "Risiko",
-            "symbols": "Symbole",
-            "toStartAgentRefactoring": "um einen Agenten damit zu beauftragen, sie umzubauen.",
-            "top": "· Top {count} von {hotspots}"
+            "riskNote": "Commits × Verzweigungspunkte",
+            "shownOf": "Top {count} von {hotspots}",
+            "suggested": "Vorschlag",
+            "symbols": "Symbole"
         },
         "compareDiffView": {
             "couldNotLoadVersions": "Beide Versionen dieses Dokuments konnten nicht geladen werden.",

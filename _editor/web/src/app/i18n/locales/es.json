@@ -5062,14 +5062,17 @@
             "copyRepoPaths": "Copiar {count} rutas en el repositorio"
         },
         "codebaseHealth": {
+            "actionLegend": "Inicia un agente con la refactorización que piden las cifras de cada fila",
             "branchPoints": "Puntos de ramificación",
-            "branches": "ramificaciones",
             "commits": "Commits desde",
-            "commitsBranchPointsNeither": "Commits × puntos de ramificación. Ninguno por sí solo es un aviso: un archivo de configuración que cambia mucho es trivial, y un archivo enrevesado que nadie toca no le cuesta nada a nadie. Abre una fila para leer el archivo, o",
+            "commits2": "Commits",
+            "couldntRead": "No se pudo leer la salud del código",
             "exports": "{exports} exportaciones",
+            "file": "Archivo",
             "filesBothChurnBranching": "archivos con mucho cambio y mucha ramificación",
             "functionsTypesClasses": "funciones, tipos, clases",
             "hotspots": "Puntos calientes",
+            "hotspotsLead": "Archivos que cambian a menudo y se ramifican mucho. Ninguno de los dos por sí solo es una alarma: un archivo de configuración muy editado es trivial, y un archivo enredado que nadie toca no cuesta nada.",
             "indexStillBuildingFigures": "El índice todavía se está construyendo: estas cifras cubren solo lo leído hasta ahora.",
             "indexedIgnoringBuildOutput": "indexados, sin contar la salida de compilación",
             "keyModules": "Módulos clave",
@@ -5081,12 +5084,14 @@
             "readingIndex": "Leyendo el índice…",
             "recompute": "Recalcular",
             "refactor": "Refactorizar {name}",
+            "refactorAction": "{action}: {name}",
             "refreshCodebaseHealth": "Actualizar la salud de la base de código",
             "repository": "Repositorio",
-            "risk": "riesgo",
-            "symbols": "Símbolos",
-            "toStartAgentRefactoring": "para poner un agente a refactorizarlo.",
-            "top": "· los {count} primeros de {hotspots}"
+            "risk": "Riesgo",
+            "riskNote": "Commits × puntos de ramificación",
+            "shownOf": "Top {count} de {hotspots}",
+            "suggested": "Sugerencia",
+            "symbols": "Símbolos"
         },
         "compareDiffView": {
             "couldNotLoadVersions": "No se pudieron cargar las dos versiones de este documento.",

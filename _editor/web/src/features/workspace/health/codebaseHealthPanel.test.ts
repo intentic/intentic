@@ -81,8 +81,7 @@ const report: WorkspaceHealth = {
     freshness: { state: `fresh` },
 };
 
-const refactorButtons = (el: HTMLElement): HTMLButtonElement[] =>
-    [...el.querySelectorAll<HTMLButtonElement>(`button`)].filter((button) => button.getAttribute(`aria-label`)?.startsWith(`Refactor `));
+const refactorButtons = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[data-refactor]`)];
 const carets = (el: HTMLElement): HTMLButtonElement[] =>
     [...el.querySelectorAll<HTMLButtonElement>(`button`)].filter((button) => button.getAttribute(`aria-label`)?.startsWith(`Configure and start`));
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -94,12 +93,13 @@ beforeAll(() => {
 it(`offers one refactor per hotspot row, and only the wide key module`, async () => {
     const el = mount();
     await nextTick();
-    // index.ts exports four symbols, an ordinary shape, so it gets no refactor invitation.
+    // index.ts exports four symbols, an ordinary shape, so it gets no refactor invitation. Each name leads with the
+    // refactor the button shows on a wide pane, so what a screen reader hears matches what a sighted reader sees.
     expect(refactorButtons(el).map((button) => button.getAttribute(`aria-label`))).toEqual([
-        `Refactor conversation.ts`,
-        `Refactor parser.ts`,
-        `Refactor schemas.ts`,
-        `Refactor schemas.ts`,
+        `Split by seams: conversation.ts`,
+        `Flatten branching: parser.ts`,
+        `Separate contract: schemas.ts`,
+        `Narrow surface: schemas.ts`,
     ]);
 });
 
@@ -125,8 +125,8 @@ it(`dims the row nobody has touched in a season instead of hiding it`, async () 
     const el = mount();
     await nextTick();
     const [live, dormant] = refactorButtons(el);
-    expect(dormant!.className).toContain(`text-subtle`);
-    expect(live!.className).not.toContain(`text-subtle`);
+    expect(dormant!.classList.contains(`text-subtle`)).toBe(true);
+    expect(live!.classList.contains(`text-subtle`)).toBe(false);
     // Dimmed, not disabled: the button still sends, since the git log is evidence, not a veto.
     started.length = 0;
     dormant!.click();

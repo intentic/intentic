@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { AgentRunPicker, Tip } from "@intentic/ui";
+import { type AgentRunPicker, type Tip, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
 
-// A Health row's refactor action, in the row's own icon scale: the sparkles start the agent on the Refactors job's model,
-// the caret beside them opens the model picker over this one run, as a Fix button's caret does (AgentRunButton), and
-// its own button starts it. Fades in with the row on a pointer, like every row action on this tab.
+// A Health row's refactor action, in the table's Suggested column: the sparkles, and on a wide pane the refactor's own
+// name, start the agent on the Refactors job's model; the caret beside them opens the model picker over this one run, as
+// a Fix button's caret does (AgentRunButton), and its own button starts it. It stays visible rather than fading in with
+// the row, since the name is the finding and a pane too narrow for it leans on the legend under the table.
 
 const t = useT();
 
@@ -28,6 +29,8 @@ const {
 
 const caret = ref<HTMLElement>();
 const verb = computed(() => t(`workspace.codebaseHealth.refactor`, { name }));
+// The visible label leads the accessible name, so a screen reader hears what the button says, then which file.
+const label = computed(() => t(`workspace.codebaseHealth.refactorAction`, { action: hint.title, name }));
 
 const run = (): void => {
     startAgent(prompt, undefined, picker.model.value);
@@ -66,28 +69,28 @@ const caretHint = computed(
 </script>
 
 <template>
-    <span
-        class="flex w-8 shrink-0 items-center justify-end transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:focus-within:opacity-100"
-    >
+    <!-- Stretched across the column so every caret lines up on its right edge, whatever the label's length. -->
+    <span class="flex items-center justify-between gap-0.5">
         <button
             type="button"
-            class="w-4 cursor-pointer transition-colors"
-            :class="dormant ? 'text-subtle hover:text-muted' : 'text-muted hover:text-link'"
+            :class="ui.textButton({ tone: dormant ? `subtle` : `quiet`, size: `xs` }, `whitespace-nowrap`)"
             v-tooltip.top="hint"
-            :aria-label="verb"
+            :aria-label="label"
+            data-refactor
             @click="run"
         >
-            <Icon name="sparkles" class="text-2xs" />
+            <Icon name="sparkles" class="shrink-0" />
+            <span class="hidden @2xl:inline">{{ hint.title }}</span>
         </button>
         <button
             ref="caret"
             type="button"
-            class="w-3.5 cursor-pointer text-subtle transition-colors hover:text-link"
+            :class="ui.iconButton({ size: `xs`, tone: `subtle` })"
             v-tooltip.top="caretHint"
             :aria-label="t(`ui.agentRunButton.configureStartRun`, { spend })"
             @click="configure"
         >
-            <Icon name="chevron-down" class="text-[0.6rem]" />
+            <Icon name="chevron-down" class="text-4xs" />
         </button>
     </span>
 </template>

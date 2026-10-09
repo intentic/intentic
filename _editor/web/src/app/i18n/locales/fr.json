@@ -4985,13 +4985,16 @@
             "copyRepoPaths": "Copier {count} chemins dans le dépôt"
         },
         "codebaseHealth": {
+            "actionLegend": "Lance un agent sur la refactorisation qu'appellent les chiffres de chaque ligne",
             "branchPoints": "Points de branchement",
-            "branches": "branchements",
             "commits": "Commits depuis",
-            "commitsBranchPointsNeither": "Commits × points de branchement. Ni l'un ni l'autre seul n'est un avertissement : un fichier de configuration qui bouge sans cesse est anodin, et un fichier embrouillé que personne ne touche ne coûte rien à personne. Ouvrez une ligne pour lire le fichier, ou",
+            "commits2": "Commits",
+            "couldntRead": "Impossible de lire la santé de la base de code",
+            "file": "Fichier",
             "filesBothChurnBranching": "fichiers à la fois mouvants et très branchés",
             "functionsTypesClasses": "fonctions, types, classes",
             "hotspots": "Points chauds",
+            "hotspotsLead": "Les fichiers qui changent souvent et se ramifient beaucoup. Aucun des deux seul n'est une alerte : un fichier de configuration très modifié est anodin, et un fichier embrouillé que personne ne touche ne coûte rien.",
             "indexStillBuildingFigures": "L'index est encore en construction : ces chiffres ne couvrent que ce qui a été lu jusqu'ici.",
             "indexedIgnoringBuildOutput": "indexés, sorties de compilation exclues",
             "keyModules": "Modules clés",
@@ -5003,12 +5006,14 @@
             "readingIndex": "Lecture de l'index…",
             "recompute": "Recalculer",
             "refactor": "Refactoriser {name}",
+            "refactorAction": "{action} : {name}",
             "refreshCodebaseHealth": "Rafraîchir la santé de la base de code",
             "repository": "Dépôt",
-            "risk": "risque",
-            "symbols": "Symboles",
-            "toStartAgentRefactoring": "pour lancer un agent qui le refactorise.",
-            "top": "· top {count} sur {hotspots}"
+            "risk": "Risque",
+            "riskNote": "Commits × points de branchement",
+            "shownOf": "Top {count} sur {hotspots}",
+            "suggested": "Suggestion",
+            "symbols": "Symboles"
         },
         "compareDiffView": {
             "couldNotLoadVersions": "Impossible de charger les deux versions de ce document.",

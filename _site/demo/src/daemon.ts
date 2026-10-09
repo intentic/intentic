@@ -49,6 +49,7 @@ import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
+import { demoHealth } from "./fixture/health";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import {
     DESK_AWAITING_ID,
@@ -923,6 +924,8 @@ export const procedures = {
         delete: ({ path }) => deleteEntry(path),
         restore: ({ trashed }) => restoreEntry(trashed) ?? refuse(`That is no longer in the trash.`, 404),
         repos: () => ({ repos: [...REPOS] }),
+        // The Health tab's report: hotspots and key modules for the shop's repositories (fixture/health.ts).
+        health: ({ repo, since }) => demoHealth(repo, since, Date.now()),
         search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
             searchWorkspace(query, {
                 smart: mode === `q`,
