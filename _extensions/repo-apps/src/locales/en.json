@@ -34,12 +34,117 @@
         "web": "Web"
     },
     "dependenciesView": {
-        "dev": "dev",
         "devDependencies": "Dev dependencies",
         "noWorkspacePackagesFound": "No workspace packages found: pnpm-workspace.yaml names no package dirs.",
         "readingWorkspaceGraph": "Reading the workspace graph…",
         "usedBy": "used by",
-        "uses": "uses"
+        "uses": "uses",
+        "tabs": {
+            "overview": "Overview",
+            "graph": "Graph",
+            "inside": "Inside {name}"
+        },
+        "grouping": {
+            "label": "Group by",
+            "component": "Components",
+            "folder": "Folders"
+        },
+        "stats": {
+            "packages": "Packages",
+            "runtime": "Runtime dependencies",
+            "runtimeNote": "plus {dev} dev",
+            "essential": "After reduction",
+            "essentialNote": "{implied} implied by a longer path",
+            "longest": "Longest chain",
+            "longestNote": "packages deep"
+        },
+        "findings": {
+            "heading": "What the code says",
+            "none": "Nothing to report: every runtime dependency is used by code it ships, and no two areas depend on each other.",
+            "unused": {
+                "title": "Declared, never used",
+                "caption": "Runtime dependencies nothing in the package imports or names. Remove them from package.json."
+            },
+            "toolingOnly": {
+                "title": "Runtime dependency, used only by tests or tooling",
+                "caption": "Only tests, scripts or config files use these. Move them to devDependencies."
+            },
+            "mutual": {
+                "title": "{from} → {to}, against the flow",
+                "caption": "{count} edge runs this way, {against} the other. The lighter direction is usually the one out of place. | {count} edges run this way, {against} the other. The lighter direction is usually the one out of place."
+            }
+        },
+        "matrix": {
+            "heading": "Areas against areas",
+            "caption": "Each row depends on each column, counting runtime edges. Areas are ordered foundation first, so numbers right of the diagonal point against the usual flow; an outlined cell is the lighter half of a pair that depends both ways. Select a cell to list its edges, or an area to open it in the graph.",
+            "cell": "{from} → {to}",
+            "openArea": "Open {area} in the graph"
+        },
+        "usageTable": {
+            "heading": "How declared dependencies are used",
+            "caption": "Read from each package's own files: the strongest use found decides.",
+            "runtime": "Runtime",
+            "dev": "Dev"
+        },
+        "usage": {
+            "code": "code",
+            "types": "types only",
+            "reference": "file reference",
+            "tooling": "tests and tooling",
+            "none": "unused"
+        },
+        "usageAbout": {
+            "code": "A shipped file imports a value from it.",
+            "types": "Shipped files import only its types, which erase at build time.",
+            "reference": "Nothing imports it, but a shipped file names it, like a Dockerfile copying its build.",
+            "tooling": "Only tests, scripts and config files use it.",
+            "none": "Nothing in the package names it."
+        },
+        "graph": {
+            "focus": "Area: {area}",
+            "clearFocus": "Show every area",
+            "dashed": "not a value import",
+            "findingEdge": "finding",
+            "allEdges": "Implied edges ({count})",
+            "hubsAsCards": "Hubs as cards",
+            "hubs": "Hubs, used almost everywhere:",
+            "hubTitle": "{name}: {count} packages depend on it at runtime. Shown as a mark on each card instead of a line.",
+            "hubOnly": "Only hubs ({count}):",
+            "standalone": "Standalone ({count}):",
+            "noRuntime": "No runtime edges ({count}):",
+            "empty": "No edges to draw with these settings."
+        },
+        "inspector": {
+            "close": "Close",
+            "reach": "Everything it reaches through its dependencies, and everything a change to it can affect.",
+            "lookInside": "Look inside",
+            "declares": "Declares ({count})",
+            "declaredBy": "Declared by ({count})"
+        },
+        "inside": {
+            "declared": "Directories stacked in the layers its layers.json declares, lowest at the bottom. A module may import its own layer and any layer below it.",
+            "inferred": "Directories stacked by their imports: a directory that imports nothing here sits at the bottom, and each one sits above everything it imports.",
+            "reading": "Reading its modules…",
+            "empty": "No source modules found.",
+            "emptyLayer": "nothing here",
+            "unitTitle": "{unit}: {count} module | {unit}: {count} modules",
+            "inCycle": "In an import cycle",
+            "reachesUp": "Imports a higher layer",
+            "imports": "{unit} imports",
+            "importedBy": "Imported by",
+            "upward": "Imports that reach up a layer",
+            "upwardCaption": "The package's boundary check refuses these unless they are on its baseline.",
+            "cycle": "Cycle {n}",
+            "unplaced": "No layer places: {units}. Add them to layers.json.",
+            "declareHint": "Add a layers.json next to this package's package.json to name its layers. Then this view shows any import that goes against them.",
+            "stats": {
+                "modules": "Modules",
+                "units": "Directories",
+                "imports": "Imports between them",
+                "upward": "Reaching up",
+                "cycles": "Cycles"
+            }
+        }
     },
     "extension": {
         "apps": "Apps",

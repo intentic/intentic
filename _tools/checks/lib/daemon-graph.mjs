@@ -2,15 +2,24 @@
 // value import between modules of _sandbox/sandbox/src, placed by lib/daemon-layers.mjs and judged by lib/layers.mjs.
 import { join, relative, resolve, sep } from "node:path";
 import { addEdge, cyclesOf } from "./cycle-edges.mjs";
-import { DAEMON_LAYERS } from "./daemon-layers.mjs";
+import { DAEMON_LAYERS, DAEMON_SHELVES, DAEMON_SURFACE } from "./daemon-layers.mjs";
 import { importsOf } from "./imports.mjs";
 import { layeredSink, layering } from "./layers.mjs";
 
 // runtimes/ is a shelf, not a subsystem: its adapters know nothing of each other, so each is its own subsystem.
-const SHELVES = new Set(["runtimes"]);
+const SHELVES = new Set(DAEMON_SHELVES);
 // The surface the router mounts and the suites import: a route or testing module belongs to no subsystem, as a root
 // file does not, so the directory it sits in is not charged with everything it wires together.
-const SURFACE_MODULE = /\.(?:routes|testing)\.ts$/;
+const SURFACE_PATTERNS = DAEMON_SURFACE.map(
+    (pattern) =>
+        new RegExp(
+            `^${pattern
+                .split("*")
+                .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+                .join("[^/]*")}$`,
+        ),
+);
+const isSurface = (path) => SURFACE_PATTERNS.some((pattern) => pattern.test(path.split("/").at(-1)));
 
 const { placeOf, top } = layering(DAEMON_LAYERS);
 
@@ -20,7 +29,7 @@ export const placeInDaemon = (path) => {
     if (parts.length === 1) {
         return undefined;
     }
-    if (SURFACE_MODULE.test(path)) {
+    if (isSurface(path)) {
         return { kind: "surface", unit: `${parts[0]} surface`, layer: top };
     }
     const subsystem = SHELVES.has(parts[0]) && parts.length > 2 ? `${parts[0]}/${parts[1]}` : parts[0];

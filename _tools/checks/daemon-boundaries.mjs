@@ -133,11 +133,11 @@ finish(
             newTakers,
         ],
         [
-            `A daemon directory is in no layer (paths under _sandbox/sandbox/src/). Add it to the layer it belongs to in _tools/checks/lib/daemon-layers.mjs`,
+            `A daemon directory is in no layer (paths under _sandbox/sandbox/src/). Add it to the layer it belongs to in _sandbox/sandbox/layers.json`,
             unplacedDirs,
         ],
         [
-            `A value import reaches a higher layer than its own more often than ${LAYERS_BASELINE_PATH} holds (paths under _sandbox/sandbox/src/; the layers are _tools/checks/lib/daemon-layers.mjs). Move what both need down, take it as a port the higher layer fills (a type in seams/ or a deps interface), or move a helper out of the route or testing module it sits in`,
+            `A value import reaches a higher layer than its own more often than ${LAYERS_BASELINE_PATH} holds (paths under _sandbox/sandbox/src/; the layers are _sandbox/sandbox/layers.json). Move what both need down, take it as a port the higher layer fills (a type in seams/ or a deps interface), or move a helper out of the route or testing module it sits in`,
             addedUpward,
         ],
         [

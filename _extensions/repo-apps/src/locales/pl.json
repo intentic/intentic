@@ -34,12 +34,117 @@
         "web": "Web"
     },
     "dependenciesView": {
-        "dev": "dev",
         "devDependencies": "Zależności deweloperskie",
-        "noWorkspacePackagesFound": "Nie znaleziono pakietów przestrzeni roboczej: pnpm-workspace.yaml nie wymienia żadnych katalogów pakietów.",
-        "readingWorkspaceGraph": "Odczytywanie grafu przestrzeni roboczej…",
+        "noWorkspacePackagesFound": "Nie znaleziono pakietów: pnpm-workspace.yaml nie wskazuje żadnego katalogu pakietu.",
+        "readingWorkspaceGraph": "Odczytuję graf przestrzeni roboczej…",
         "usedBy": "używane przez",
-        "uses": "używa"
+        "uses": "używa",
+        "tabs": {
+            "overview": "Przegląd",
+            "graph": "Graf",
+            "inside": "Wnętrze {name}"
+        },
+        "grouping": {
+            "label": "Grupuj według",
+            "component": "Komponentów",
+            "folder": "Katalogów"
+        },
+        "stats": {
+            "packages": "Pakiety",
+            "runtime": "Zależności uruchomieniowe",
+            "runtimeNote": "oraz {dev} deweloperskich",
+            "essential": "Po redukcji",
+            "essentialNote": "{implied} wynika z dłuższej ścieżki",
+            "longest": "Najdłuższy łańcuch",
+            "longestNote": "pakietów w głąb"
+        },
+        "findings": {
+            "heading": "Co mówi kod",
+            "none": "Nic do zgłoszenia: każdej zależności uruchomieniowej używa wydawany kod, a żadne dwa obszary nie zależą od siebie nawzajem.",
+            "unused": {
+                "title": "Zadeklarowane, nigdy nieużywane",
+                "caption": "Zależności uruchomieniowe, których nic w pakiecie nie importuje ani nie wymienia. Usuń je z package.json."
+            },
+            "toolingOnly": {
+                "title": "Zależność uruchomieniowa używana tylko przez testy lub narzędzia",
+                "caption": "Używają ich tylko testy, skrypty lub pliki konfiguracyjne. Przenieś je do devDependencies."
+            },
+            "mutual": {
+                "title": "{from} → {to}, pod prąd",
+                "caption": "W tę stronę biegnie {count} krawędź, w przeciwną {against}. Zwykle to słabszy kierunek jest nie na miejscu. | W tę stronę biegną {count} krawędzie, w przeciwną {against}. Zwykle to słabszy kierunek jest nie na miejscu. | W tę stronę biegnie {count} krawędzi, w przeciwną {against}. Zwykle to słabszy kierunek jest nie na miejscu."
+            }
+        },
+        "matrix": {
+            "heading": "Obszary względem obszarów",
+            "caption": "Każdy wiersz zależy od każdej kolumny; liczone są krawędzie uruchomieniowe. Obszary idą od fundamentu, więc liczby na prawo od przekątnej biegną pod prąd; obrysowana komórka to słabsza połowa pary zależnej w obie strony. Wybierz komórkę, by zobaczyć jej krawędzie, albo obszar, by otworzyć go w grafie.",
+            "cell": "{from} → {to}",
+            "openArea": "Otwórz {area} w grafie"
+        },
+        "usageTable": {
+            "heading": "Jak używane są zadeklarowane zależności",
+            "caption": "Odczytane z plików każdego pakietu: decyduje najsilniejsze znalezione użycie.",
+            "runtime": "Uruchomieniowe",
+            "dev": "Deweloperskie"
+        },
+        "usage": {
+            "code": "kod",
+            "types": "tylko typy",
+            "reference": "odwołanie do pliku",
+            "tooling": "testy i narzędzia",
+            "none": "nieużywana"
+        },
+        "usageAbout": {
+            "code": "Wydawany plik importuje z niej wartość.",
+            "types": "Wydawane pliki importują tylko jej typy, które znikają przy budowaniu.",
+            "reference": "Nic jej nie importuje, ale wydawany plik ją wymienia, np. Dockerfile kopiujący jej build.",
+            "tooling": "Używają jej tylko testy, skrypty i pliki konfiguracyjne.",
+            "none": "Nic w pakiecie jej nie wymienia."
+        },
+        "graph": {
+            "focus": "Obszar: {area}",
+            "clearFocus": "Pokaż wszystkie obszary",
+            "dashed": "nie import wartości",
+            "findingEdge": "uwaga",
+            "allEdges": "Krawędzie wynikowe ({count})",
+            "hubsAsCards": "Węzły jako karty",
+            "hubs": "Węzły, używane prawie wszędzie:",
+            "hubTitle": "{name}: zależy od niego {count} pakietów w czasie działania. Pokazany jako znak na każdej karcie zamiast linii.",
+            "hubOnly": "Tylko węzły ({count}):",
+            "standalone": "Samodzielne ({count}):",
+            "noRuntime": "Bez krawędzi uruchomieniowych ({count}):",
+            "empty": "Przy tych ustawieniach nie ma krawędzi do narysowania."
+        },
+        "inspector": {
+            "close": "Zamknij",
+            "reach": "Wszystko, do czego sięga przez swoje zależności, i wszystko, na co może wpłynąć jego zmiana.",
+            "lookInside": "Zajrzyj do środka",
+            "declares": "Deklaruje ({count})",
+            "declaredBy": "Deklarowany przez ({count})"
+        },
+        "inside": {
+            "declared": "Katalogi ułożone w warstwach z jego layers.json, najniższa na dole. Moduł może importować własną warstwę i każdą niższą.",
+            "inferred": "Katalogi ułożone według importów: katalog, który nic tu nie importuje, leży na dole, a każdy inny nad wszystkim, co importuje.",
+            "reading": "Odczytuję jego moduły…",
+            "empty": "Nie znaleziono modułów źródłowych.",
+            "emptyLayer": "nic tu nie ma",
+            "unitTitle": "{unit}: {count} moduł | {unit}: {count} moduły | {unit}: {count} modułów",
+            "inCycle": "W cyklu importów",
+            "reachesUp": "Importuje wyższą warstwę",
+            "imports": "{unit} importuje",
+            "importedBy": "Importowany przez",
+            "upward": "Importy sięgające warstwę wyżej",
+            "upwardCaption": "Kontrola granic pakietu je odrzuca, chyba że są w jej bazie.",
+            "cycle": "Cykl {n}",
+            "unplaced": "Bez warstwy: {units}. Dodaj je do layers.json.",
+            "declareHint": "Dodaj layers.json obok package.json tego pakietu, aby nazwać jego warstwy. Wtedy ten widok pokaże każdy import, który je łamie.",
+            "stats": {
+                "modules": "Moduły",
+                "units": "Katalogi",
+                "imports": "Importy między nimi",
+                "upward": "Sięgające w górę",
+                "cycles": "Cykle"
+            }
+        }
     },
     "extension": {
         "apps": "Aplikacje",

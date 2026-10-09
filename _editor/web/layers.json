@@ -1,0 +1,36 @@
+{
+    "root": "src",
+    "shelves": ["features", "workbench"],
+    "layers": [
+        {
+            "name": "foundation",
+            "about": "the app's own plumbing and generic helpers: the API client, query keys, markdown, environments, analytics",
+            "units": ["lib", "app", "skins", "styles", "assets", "design-system"]
+        },
+        {
+            "name": "client",
+            "about": "the editor's clients of what it talks to: the platform account and the sandbox daemon's session, endpoint, RPC and queries",
+            "units": ["client"]
+        },
+        {
+            "name": "components",
+            "about": "UI parts shared by several features that know no feature",
+            "units": ["components"]
+        },
+        {
+            "name": "workbench",
+            "about": "the services and registries features are written against, one unit per workbench/<x>",
+            "units": ["workbench"]
+        },
+        {
+            "name": "features",
+            "about": "one directory per product area; a feature may use another, but no two may form a cycle",
+            "units": ["features"]
+        },
+        {
+            "name": "composition",
+            "about": "what puts the features on screen: the shell, the router, built-in views, the extension host, local windows",
+            "units": ["core-views", "extension-host", "shell", "local", "router", "testing"]
+        }
+    ]
+}

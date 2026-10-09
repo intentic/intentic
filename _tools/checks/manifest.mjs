@@ -48,7 +48,7 @@ export const CHECKS = [
         file: "daemon-boundaries.mjs",
         needs: "checkout",
         gate: "code",
-        about: "no new whole-Services taker, no new value import reaching a higher layer (lib/daemon-layers.mjs) or closing a cycle within one, of any length (both ratcheted), no SDK value around its loader",
+        about: "no new whole-Services taker, no new value import reaching a higher layer (_sandbox/sandbox/layers.json) or closing a cycle within one, of any length (both ratcheted), no SDK value around its loader",
     },
     {
         id: "editor-boundaries",
@@ -56,7 +56,7 @@ export const CHECKS = [
         file: "editor-boundaries.mjs",
         needs: "checkout",
         gate: "code",
-        about: "no static value import closing a cycle between web editor modules, and no new value import reaching a higher layer (lib/editor-layers.mjs) or closing a cycle within one (both ratcheted)",
+        about: "no static value import closing a cycle between web editor modules, and no new value import reaching a higher layer (_editor/web/layers.json) or closing a cycle within one (both ratcheted)",
     },
     {
         id: "shared-boundary",

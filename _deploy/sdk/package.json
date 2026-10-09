@@ -38,11 +38,11 @@
     },
     "dependencies": {
         "@intentic/graph": "workspace:*",
-        "@intentic/resources": "workspace:*",
         "@intentic/state-resolver": "workspace:*",
         "tslib": "catalog:"
     },
     "devDependencies": {
+        "@intentic/resources": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",

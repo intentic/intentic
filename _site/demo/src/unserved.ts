@@ -242,6 +242,7 @@ export const UNSERVED = {
     "workspace.health": UNFILLED_VIEW,
     "workspace.modules": UNFILLED_VIEW,
     "workspace.packageGraph": UNFILLED_VIEW,
+    "workspace.packageModules": UNFILLED_VIEW,
     "workspace.resolve": UNFILLED_VIEW,
     "workspace.templates": UNFILLED_VIEW,
     "GET /workspace/media": UNFILLED_VIEW,

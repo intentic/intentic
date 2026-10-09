@@ -23,7 +23,6 @@
     "dependencies": {
         "@intentic/api-contract": "workspace:*",
         "@intentic/capability-catalog": "workspace:*",
-        "@intentic/localhost-https": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/code-read": "workspace:*",
         "@intentic/constants": "workspace:*",
@@ -71,6 +70,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@intentic/localhost-https": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@tailwindcss/vite": "catalog:",

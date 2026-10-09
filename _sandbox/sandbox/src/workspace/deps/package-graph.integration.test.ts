@@ -86,3 +86,23 @@ test("readPackageGraph honours a `!dir` negation: an excluded directory is not a
     expect(graph.packages.map((entry) => entry.name).toSorted()).toEqual(["@shop/ui", "@shop/web"]);
     await rm(dir, { recursive: true, force: true });
 });
+
+test("readPackageGraph names each package's component from the repository's map, and lists the map's components", async () => {
+    const dir = await scaffold({
+        "pnpm-workspace.yaml": `packages:\n  - "_libs/*"\n`,
+        "_libs/ui/package.json": pkg("@shop/ui"),
+        "_libs/api/package.json": pkg("@shop/api"),
+        "docs/architecture/repo.json": JSON.stringify({
+            components: [
+                { id: "front", name: "Storefront", oneLiner: "x", packages: ["_libs/ui/"], accent: "2" },
+                { id: "loose", packages: ["_libs/api"] },
+            ],
+        }),
+    });
+    const graph = readPackageGraph(dir);
+    expect(graph.components).toEqual([{ id: "front", name: "Storefront", accent: "2" }]);
+    // A component the map does not name in full is skipped, and so is what it lists.
+    expect(graph.packages.find((entry) => entry.name === "@shop/ui")?.component).toBe("front");
+    expect(graph.packages.find((entry) => entry.name === "@shop/api")?.component).toBeUndefined();
+    await rm(dir, { recursive: true, force: true });
+});

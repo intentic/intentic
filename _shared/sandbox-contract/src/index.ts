@@ -269,6 +269,7 @@ export * from "./schemas/offload.js";
 export * from "./schemas/webext.js";
 export * from "./schemas/phone.js";
 export * from "./schemas/workflows.js";
+export * from "./schemas/workspace/workspace-graph.js";
 export * from "./schemas/workspace/workspace-repos.js";
 export * from "./schemas/workspace/workspace-search.js";
 export * from "./schemas/workspace/workspace-setup.js";

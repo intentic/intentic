@@ -909,9 +909,6 @@ importers:
       '@intentic/graph':
         specifier: workspace:*
         version: link:../graph
-      '@intentic/resources':
-        specifier: workspace:*
-        version: link:../resources
       '@intentic/state-resolver':
         specifier: workspace:*
         version: link:../state-resolver
@@ -919,6 +916,9 @@ importers:
         specifier: 'catalog:'
         version: 2.8.1
     devDependencies:
+      '@intentic/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@intentic/testing':
         specifier: workspace:*
         version: link:../../_tools/testing
@@ -1475,9 +1475,6 @@ importers:
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_shared/extension-ui
-      '@intentic/localhost-https':
-        specifier: workspace:*
-        version: link:../../_tools/localhost-https
       '@intentic/registry':
         specifier: workspace:*
         version: link:../../_shared/registry
@@ -1560,6 +1557,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@intentic/localhost-https':
+        specifier: workspace:*
+        version: link:../../_tools/localhost-https
       '@intentic/testing':
         specifier: workspace:*
         version: link:../../_tools/testing
@@ -1841,9 +1841,6 @@ importers:
       '@intentic/connector-runtime':
         specifier: workspace:*
         version: link:../../_shared/connector-runtime
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
       imapflow:
         specifier: 'catalog:'
         version: 2.2.5
@@ -1996,9 +1993,6 @@ importers:
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_shared/extension-ui
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.104.1(vue@3.5.43(typescript@6.0.3))
@@ -2067,9 +2061,6 @@ importers:
       '@intentic/connector-runtime':
         specifier: workspace:*
         version: link:../../_shared/connector-runtime
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
       '@slack/socket-mode':
         specifier: 'catalog:'
         version: 3.1.0(undici@8.11.2)
@@ -2077,6 +2068,9 @@ importers:
         specifier: 'catalog:'
         version: 8.2.0
     devDependencies:
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
       '@intentic/testing':
         specifier: workspace:*
         version: link:../../_tools/testing
@@ -2103,10 +2097,10 @@ importers:
       '@intentic/connector-runtime':
         specifier: workspace:*
         version: link:../../_shared/connector-runtime
+    devDependencies:
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
-    devDependencies:
       '@intentic/testing':
         specifier: workspace:*
         version: link:../../_tools/testing

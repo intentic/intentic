@@ -75,11 +75,11 @@ finish(
             moduleCycles,
         ],
         [
-            `An editor directory is in no layer (paths under ${SRC}/). Add it to the layer it belongs to in _tools/checks/lib/editor-layers.mjs`,
+            `An editor directory is in no layer (paths under ${SRC}/). Add it to the layer it belongs to in _editor/web/layers.json`,
             unplacedDirs,
         ],
         [
-            `A value import reaches a higher layer than its own more often than ${LAYERS_BASELINE_PATH} holds (paths under ${SRC}/; the layers are _tools/checks/lib/editor-layers.mjs). Move what both need down, let the higher side register into a lower registry, or move a module that names features one by one up into composition`,
+            `A value import reaches a higher layer than its own more often than ${LAYERS_BASELINE_PATH} holds (paths under ${SRC}/; the layers are _editor/web/layers.json). Move what both need down, let the higher side register into a lower registry, or move a module that names features one by one up into composition`,
             addedUpward,
         ],
         [

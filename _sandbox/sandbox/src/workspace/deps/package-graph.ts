@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { WorkspaceDepEdge, WorkspaceDepType, WorkspaceGraph, WorkspacePackage } from "@intentic/sandbox-contract";
+import { undefinedIfMissing } from "@intentic/base/errors";
+import type { WorkspaceComponent, WorkspaceDepEdge, WorkspaceDepType, WorkspaceGraph, WorkspacePackage } from "@intentic/sandbox-contract";
 import { parse } from "yaml";
 
 // Workspace package dependency graph of a pnpm monorepo, read straight from the filesystem: pnpm-workspace.yaml's globs
@@ -76,9 +77,56 @@ export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => 
     return found;
 };
 
-export const readPackageGraph = (repoDir: string): WorkspaceGraph => {
-    const found = readWorkspaceManifests(repoDir);
-    const packages: WorkspacePackage[] = found.map(({ name, dir }) => ({ name, dir, group: dir.split("/")[0] ?? dir }));
+// The repository's map, docs/architecture/repo.json as the documentation extension writes it: its components in order,
+// each with the package directories it holds. Undefined without one, or with one that does not read as a map.
+const MAP_FILE = "docs/architecture/repo.json";
+interface RepoMap {
+    readonly components: readonly WorkspaceComponent[];
+    readonly componentOf: ReadonlyMap<string, string>;
+}
+const readRepoMap = (repoDir: string): RepoMap | undefined => {
+    let text: string;
+    try {
+        text = readFileSync(join(repoDir, MAP_FILE), "utf8");
+    } catch (error) {
+        return undefinedIfMissing(error);
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        // allow(silent-catch): a map caught mid-write draws the graph by folder, as a repository without docs gets it.
+        return undefined;
+    }
+    const listed = (parsed as { components?: unknown } | null)?.components;
+    if (!Array.isArray(listed)) {
+        return undefined;
+    }
+    const components: WorkspaceComponent[] = [];
+    const componentOf = new Map<string, string>();
+    for (const entry of listed as unknown[]) {
+        const { id, name, accent, packages } = (entry ?? {}) as Record<string, unknown>;
+        if (typeof id !== "string" || typeof name !== "string") {
+            continue;
+        }
+        components.push({ id, name, ...(typeof accent === "string" ? { accent } : {}) });
+        for (const listedDir of Array.isArray(packages) ? packages : []) {
+            const dir = typeof listedDir === "string" ? listedDir.replace(/\/+$/, "") : undefined;
+            // A package two components claim stays with the first.
+            if (dir !== undefined && !componentOf.has(dir)) {
+                componentOf.set(dir, id);
+            }
+        }
+    }
+    return components.length > 0 ? { components, componentOf } : undefined;
+};
+
+export const readPackageGraph = (repoDir: string, found: readonly WorkspaceManifest[] = readWorkspaceManifests(repoDir)): WorkspaceGraph => {
+    const map = readRepoMap(repoDir);
+    const packages: WorkspacePackage[] = found.map(({ name, dir }) => {
+        const component = map?.componentOf.get(dir);
+        return { name, dir, group: dir.split("/")[0] ?? dir, ...(component !== undefined ? { component } : {}) };
+    });
     const manifests = new Map(found.map(({ name, manifest }) => [name, manifest]));
 
     const edges: WorkspaceDepEdge[] = [];
@@ -96,5 +144,5 @@ export const readPackageGraph = (repoDir: string): WorkspaceGraph => {
             }
         }
     }
-    return { packages, edges };
+    return { packages, edges, ...(map !== undefined ? { components: [...map.components] } : {}) };
 };

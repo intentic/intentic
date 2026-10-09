@@ -233,7 +233,7 @@ every reader's open panel.
 ## Layout
 
 The directories are layered, lowest first, and a value import may only reach its own layer or a lower one
-([editor-layers.mjs](../../_tools/checks/lib/editor-layers.mjs), checked by `editor-boundaries`): foundation (`lib/`,
+([layers.json](layers.json), checked by `editor-boundaries` and drawn by the Dependencies view): foundation (`lib/`,
 `app/`, `skins/`, `styles/`, `design-system/`), the client (`client/`), `components/`, the workbench (`workbench/`),
 `features/`, and composition (`shell/`, `core-views/`, `extension-host/`, `router/`, `local/`, `testing/`). Where a lower
 layer needs something only a higher one knows (the built-in views, the account, the transcript mirror), the higher side

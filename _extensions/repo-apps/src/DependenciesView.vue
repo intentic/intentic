@@ -1,180 +1,130 @@
 <script setup lang="ts">
-import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import {
-    Card,
-    ui,
-    DagGraph,
-    Notice,
-    noticeOf,
-    SkeletonSnapshot,
-    ToggleSwitch,
-    useLoadingReveal,
-    vSkeletonSource,
-    type DagEdge,
-    type DagNode,
-} from "@intentic/extension-ui";
-import { computed, ref, toRef } from "vue";
+import { Card, Notice, noticeOf, SegmentedControl, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/extension-ui";
+import { computed, ref, toRef, watch } from "vue";
+import DepsGraph from "./DepsGraph.vue";
+import DepsOverview from "./DepsOverview.vue";
+import PackageInside from "./PackageInside.vue";
+import { areaIdOf, areasOf, findingsOf, hubsOf, type Grouping } from "./depModel";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
 import { t } from "./i18n.js";
 
-// Monorepo's workspace package dependency graph: one card per package (colored by top-level dir), edges flowing
-// dependency to dependent, left-to-right. Dev deps sit behind a toggle since they swamp the picture; selecting a
-// package highlights its transitive closure both ways, tinted apart, and dims the rest.
+// A monorepo's architecture as its files state it, in three views of one graph. Overview opens on what the code says:
+// counts, the findings the declared edges and their usage add up to, and every area against every other. Graph draws
+// the packages, without the edges a longer path implies and with the packages nearly everything uses as chips rather
+// than lines. Inside opens one package: its directories stacked in its declared layers, or in the tiers its imports
+// imply.
 
 const props = defineProps<{ repo: string }>();
-const { packages, edges, error, isLoading } = useWorkspaceGraph(toRef(props, `repo`));
+const { packages, edges, components, error, isLoading } = useWorkspaceGraph(toRef(props, `repo`));
 // Drawn only once the wait has earned it, and keyed on the repo so switching starts a fresh wait.
 const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
 
-const showDev = ref(false);
-const selectedId = ref<string | undefined>(undefined);
+type Tab = `overview` | `graph` | `inside`;
+const tab = ref<Tab>(`overview`);
+const selected = ref<string | undefined>(undefined);
+const focusArea = ref<string | undefined>(undefined);
+const inside = ref<string | undefined>(undefined);
+watch(
+    () => props.repo,
+    () => {
+        tab.value = `overview`;
+        selected.value = undefined;
+        focusArea.value = undefined;
+        inside.value = undefined;
+    },
+);
 
-// Directory groups' accents: a stripe on each card and a matching legend dot; unknown groups fall to subtle.
-const GROUP_BAR: Record<string, string> = {
-    _apps: `bg-success`,
-    _libs: `bg-info`,
-    _extensions: `bg-primary-500`,
-    _tools: `bg-warning`,
+// By the repository map's components when it has one, which is how its own docs carve it; by top-level folder otherwise.
+const hasMap = computed(() => components.value.length > 0);
+const picked = ref<Grouping | undefined>(undefined);
+const grouping = computed<Grouping>({
+    get: () => picked.value ?? (hasMap.value ? `component` : `folder`),
+    set: (value) => {
+        picked.value = value;
+        focusArea.value = undefined;
+    },
+});
+const areas = computed(() => areasOf(packages.value, edges.value, grouping.value, components.value));
+const areaOfPackage = computed(() => new Map(packages.value.map((pkg) => [pkg.name, areaIdOf(pkg, grouping.value)])));
+const findings = computed(() => findingsOf(edges.value, areaOfPackage.value));
+const hubs = computed(() => hubsOf(packages.value, edges.value));
+
+const tabs = computed(() => [
+    {
+        label: t(`dependenciesView.tabs.overview`),
+        value: `overview` as const,
+        badge: findings.value.reduce((sum, finding) => sum + finding.edges.length, 0),
+    },
+    { label: t(`dependenciesView.tabs.graph`), value: `graph` as const },
+    ...(inside.value !== undefined ? [{ label: t(`dependenciesView.tabs.inside`, { name: inside.value }), value: `inside` as const }] : []),
+]);
+const groupings = computed(() => [
+    { label: t(`dependenciesView.grouping.component`), value: `component` as const },
+    { label: t(`dependenciesView.grouping.folder`), value: `folder` as const },
+]);
+
+const openArea = (id: string): void => {
+    focusArea.value = id;
+    selected.value = undefined;
+    tab.value = `graph`;
 };
-const barOf = (group: string): string => GROUP_BAR[group] ?? `bg-subtle`;
-const legend = computed(() => [...new Set(packages.value.map((pkg) => pkg.group))].toSorted());
-
-// Visible slice: hiding dev toggles off dev edges and any package only reachable through one; edgeless packages stay
-// visible.
-const visibleEdges = computed(() => edges.value.filter((edge) => showDev.value || edge.type !== `dev`));
-const visiblePackages = computed(() => {
-    if (showDev.value) {
-        return packages.value;
-    }
-    const incident = new Set<string>();
-    const nonDev = new Set<string>();
-    for (const edge of edges.value) {
-        incident.add(edge.from).add(edge.to);
-        if (edge.type !== `dev`) {
-            nonDev.add(edge.from).add(edge.to);
-        }
-    }
-    return packages.value.filter((pkg) => !incident.has(pkg.name) || nonDev.has(pkg.name));
-});
-
-const edgeKey = (edge: WorkspaceDepEdge): string => `${edge.from}>${edge.to}:${edge.type}`;
-
-// Selected package's transitive closure over visible edges, walked both ways: `uses` follows from→to (dependencies),
-// `usedBy` follows to→from (dependents); each edge keeps whichever walk's accent traversed it.
-const closure = computed(() => {
-    const start = selectedId.value;
-    if (start === undefined || !visiblePackages.value.some((pkg) => pkg.name === start)) {
-        return undefined;
-    }
-    const walk = (follow: (edge: WorkspaceDepEdge, id: string) => string | undefined, accent: string) => {
-        const reached = new Set<string>();
-        const accents = new Map<string, string>();
-        const queue = [start];
-        while (queue.length > 0) {
-            const current = queue.pop();
-            if (current === undefined) {
-                break;
-            }
-            for (const edge of visibleEdges.value) {
-                const next = follow(edge, current);
-                if (next === undefined) {
-                    continue;
-                }
-                accents.set(edgeKey(edge), accent);
-                if (next !== start && !reached.has(next)) {
-                    reached.add(next);
-                    queue.push(next);
-                }
-            }
-        }
-        return { reached, accents };
-    };
-    const uses = walk((edge, id) => (edge.from === id ? edge.to : undefined), `text-warning`);
-    const usedBy = walk((edge, id) => (edge.to === id ? edge.from : undefined), `text-info`);
-    return { uses, usedBy, nodes: new Set([start, ...uses.reached, ...usedBy.reached]) };
-});
-
-const dagNodes = computed<DagNode<WorkspacePackage>[]>(() =>
-    visiblePackages.value.map((pkg) => ({
-        id: pkg.name,
-        data: pkg,
-        tooltip: `${pkg.name} · ${pkg.dir}`,
-        dimmed: closure.value !== undefined && !closure.value.nodes.has(pkg.name),
-    })),
-);
-// Edge direction is flipped from the API's `from depends on to`, so dependencies sit left and time flows into what's
-// built on them.
-const dagEdges = computed<DagEdge[]>(() =>
-    visibleEdges.value.map((edge) => ({
-        from: edge.to,
-        to: edge.from,
-        kind: edge.type,
-        dashed: edge.type === `dev`,
-        accent: closure.value?.uses.accents.get(edgeKey(edge)) ?? closure.value?.usedBy.accents.get(edgeKey(edge)),
-        dimmed: closure.value !== undefined && !closure.value.uses.accents.has(edgeKey(edge)) && !closure.value.usedBy.accents.has(edgeKey(edge)),
-    })),
-);
+const openPackage = (name: string): void => {
+    selected.value = name;
+    focusArea.value = undefined;
+    tab.value = `graph`;
+};
+const lookInside = (name: string): void => {
+    inside.value = name;
+    tab.value = `inside`;
+};
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col gap-3 p-4">
-        <Notice v-if="error" :of="noticeOf(error)" />
-        <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-3 text-2xs text-muted">
-                <span v-for="group in legend" :key="group" class="flex items-center gap-1.5">
-                    <span class="h-2 w-2 rounded-full" :class="barOf(group)"></span>{{ group }}
-                </span>
-                <span class="flex items-center gap-1.5">
-                    <svg class="h-px w-5 overflow-visible text-subtle" aria-hidden="true">
-                        <line x1="0" y1="0.5" x2="20" y2="0.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" />
-                    </svg>
-                    {{ t(`dependenciesView.dev`) }}
-                </span>
-            </div>
-            <div class="flex items-center gap-4">
-                <span v-if="closure" class="flex items-center gap-3 text-2xs text-muted">
-                    <span class="flex items-center gap-1"
-                        ><span class="h-2 w-2 rounded-full bg-warning"></span>{{ t(`dependenciesView.uses`) }} {{ closure.uses.reached.size }}</span
-                    >
-                    <span class="flex items-center gap-1"
-                        ><span class="h-2 w-2 rounded-full bg-info"></span>{{ t(`dependenciesView.usedBy`) }} {{ closure.usedBy.reached.size }}</span
-                    >
-                </span>
-                <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">
-                    <ToggleSwitch v-model="showDev" class="scale-75" />
-                    {{ t(`dependenciesView.devDependencies`) }}
-                </label>
-            </div>
+    <div class="flex h-full min-h-0 flex-col">
+        <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-4 pt-2">
+            <SegmentedControl v-model="tab" :options="tabs" variant="underline" />
+            <label v-if="hasMap && tab !== `inside`" class="flex items-center gap-2 pb-1.5 text-2xs text-muted">
+                {{ t(`dependenciesView.grouping.label`) }}
+                <SegmentedControl v-model="grouping" :options="groupings" size="xs" />
+            </label>
         </div>
-        <!-- The graph as it was last laid out here (its nodes are placed by transform, which the imprint keeps); until
-             then, cards of the real node dimensions. -->
+        <Notice v-if="error" class="mx-4 mt-3" :of="noticeOf(error)" />
+        <!-- The view as it was last drawn here; until then, cards of the real node dimensions. -->
         <SkeletonSnapshot v-if="isLoading && outline" of="repo-apps.dependencies" :label="t(`dependenciesView.readingWorkspaceGraph`)">
-            <div class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
+            <div class="min-h-0 flex-1 p-4" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
                 <div class="flex flex-wrap gap-3" aria-hidden="true">
                     <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
                 </div>
             </div>
         </SkeletonSnapshot>
-
-        <Card
-            v-else-if="packages.length === 0 && !isLoading"
-            v-skeleton-source="`repo-apps.dependencies`"
-            dashed
-            class="text-center text-sm text-muted"
-        >
-            {{ t(`dependenciesView.noWorkspacePackagesFound`) }}
-        </Card>
-        <div v-else v-skeleton-source="`repo-apps.dependencies`" class="min-h-0 flex-1">
-            <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52" touch-pan>
-                <template #node="{ node }">
-                    <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="barOf(node.data.group)"></span>
-                    <span class="flex h-full min-w-0 flex-col justify-center px-3">
-                        <span class="truncate text-sm font-medium leading-tight text-content">{{ node.data.name }}</span>
-                        <span class="truncate font-mono text-2xs leading-tight text-subtle">{{ node.data.dir }}</span>
-                    </span>
-                </template>
-            </DagGraph>
+        <div v-else-if="packages.length === 0 && !isLoading" v-skeleton-source="`repo-apps.dependencies`" class="p-4">
+            <Card dashed class="text-center text-sm text-muted">{{ t(`dependenciesView.noWorkspacePackagesFound`) }}</Card>
         </div>
+        <DepsOverview
+            v-else-if="tab === `overview`"
+            v-skeleton-source="`repo-apps.dependencies`"
+            class="min-h-0 flex-1"
+            :packages="packages"
+            :edges="edges"
+            :areas="areas"
+            :area-of-package="areaOfPackage"
+            :findings="findings"
+            @open-area="openArea"
+            @open-package="openPackage"
+        />
+        <DepsGraph
+            v-else-if="tab === `graph`"
+            v-model:selected="selected"
+            v-model:focus-area="focusArea"
+            class="min-h-0 flex-1"
+            :packages="packages"
+            :edges="edges"
+            :areas="areas"
+            :area-of-package="areaOfPackage"
+            :hubs="hubs"
+            @look-inside="lookInside"
+        />
+        <PackageInside v-else-if="inside !== undefined" class="min-h-0 flex-1" :repo="repo" :name="inside" :packages="packages" />
     </div>
 </template>

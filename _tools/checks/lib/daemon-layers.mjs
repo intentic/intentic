@@ -1,6 +1,10 @@
-// The sandbox daemon's layers (_sandbox/sandbox/src), lowest first: a module may import its own layer and any layer
-// below it, never one above (daemon-boundaries.mjs, through lib/layers.mjs). Every top-level directory sits in exactly
-// one; a new directory fails the check until it is placed here. Above all of them sits the surface: the root files
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { root } from "./repo.mjs";
+
+// The sandbox daemon's layers (_sandbox/sandbox/src), declared in _sandbox/sandbox/layers.json, lowest first: a module
+// may import its own layer and any layer below it, never one above (daemon-boundaries.mjs, through lib/layers.mjs).
+// Every top-level directory sits in exactly one; a new directory fails the check until it is placed there. Above all of them sits the surface: the root files
 // (app.ts, composition.ts, router.ts, main.ts and their helpers), every `*.routes.ts`, which the router mounts, and every
 // `*.testing.ts`, which only suites import. The surface may import anything; nothing below it may import a surface
 // module, so a helper a route defines and another subsystem needs moves out of the route file.
@@ -19,94 +23,13 @@
 // same-layer cycles from 54 edges to 9: the runtime table is handed to the providers slice rather than imported by it,
 // image/ and workload/ took the helpers system/ and environment/ lent the host layer, and the skill notes the
 // capability handlers print moved in beside them. The 9 left (baselines/daemon-cycles.json) each say why they stand.
-export const DAEMON_LAYERS = [
-    {
-        name: "foundation",
-        about: "storage, ports and primitives every other layer stands on; they know no subsystem",
-        units: ["store", "seams", "http", "offload", "netd", "fences", "speech", "areas", "workload", "safety", "tunnel", "image"],
-    },
-    {
-        name: "host",
-        about: "what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network",
-        units: [
-            "auth",
-            "personas",
-            "secrets",
-            "guard",
-            "git",
-            "workspace",
-            "derived",
-            "hashline",
-            "engines",
-            "terminal",
-            "processes",
-            "privacy",
-            "environment",
-            "peers",
-            "push",
-            "ports",
-            "exit",
-            "vpn",
-            "netdisk",
-            "usage",
-            "logs",
-            "rules",
-            "endpoints",
-            "trial",
-            "system",
-            "intentic",
-            "activity",
-        ],
-    },
-    {
-        name: "connections",
-        about: "what the owner connected: capabilities, browsers, devices, extensions, channels and published files",
-        units: [
-            "capabilities",
-            "browser",
-            "desktop",
-            "webext",
-            "phones",
-            "hosts",
-            "wallet",
-            "sandboxes",
-            "runners",
-            "scaffold",
-            "extensions",
-            "panels",
-            "public",
-            "share",
-            "webchat",
-            "issues",
-            "definition",
-        ],
-    },
-    {
-        name: "agent",
-        about: "the turn engine, its runtimes, conversations, transcripts and the code a turn runs",
-        units: ["agent", "runtimes", "conversations", "sessions", "execution"],
-    },
-    {
-        name: "orchestration",
-        about: "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings",
-        units: [
-            "automations",
-            "loops",
-            "workflows",
-            "ci",
-            "chores",
-            "needs",
-            "approvals",
-            "settings",
-            "inventory",
-            "portability",
-            "migrations",
-            "history",
-        ],
-    },
-    {
-        name: "composition",
-        about: "boot wiring and whole-daemon self-checks, which import every layer and are imported by none",
-        units: ["bootstrap", "invariants", "harness"],
-    },
-];
+//
+// The table lives beside the package rather than here so the editor's Dependencies view draws the same layers this
+// check enforces (the daemon reads it for `workspace.packageModules`); this module is its reader for the checks.
+const declared = JSON.parse(readFileSync(join(root, "_sandbox/sandbox/layers.json"), "utf8"));
+
+export const DAEMON_LAYERS = declared.layers;
+// A shelf is a directory whose every subdirectory is a unit of its own: each runtime adapter.
+export const DAEMON_SHELVES = declared.shelves ?? [];
+// File-name patterns of the surface modules, `*` a wildcard.
+export const DAEMON_SURFACE = declared.surface ?? [];

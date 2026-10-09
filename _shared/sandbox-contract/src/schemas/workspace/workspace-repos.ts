@@ -91,28 +91,6 @@ export const RepoAppSchema = z.object({
 export type RepoApp = z.infer<typeof RepoAppSchema>;
 export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema).describe("The apps in this repository.") });
 export type AppsList = z.infer<typeof AppsListSchema>;
-// A pnpm-workspace package, discovered from pnpm-workspace.yaml's globs. group is the top-level dir segment, the
-// dependencies view's coloring axis.
-export const WorkspacePackageSchema = z.object({
-    name: z.string().describe("The name the package declares."),
-    dir: z.string().describe("Where it lives, relative to the repository."),
-    group: z.string().describe("The top-level folder it sits under, which is what a diagram colours by."),
-});
-export type WorkspacePackage = z.infer<typeof WorkspacePackageSchema>;
-export const WorkspaceDepTypeSchema = z.enum(["prod", "dev", "peer"]);
-export type WorkspaceDepType = z.infer<typeof WorkspaceDepTypeSchema>;
-// A workspace-internal dependency edge: from depends on to, typed by which dependency block declared it.
-export const WorkspaceDepEdgeSchema = z.object({
-    from: z.string().describe("The package that depends."),
-    to: z.string().describe("The package it depends on."),
-    type: WorkspaceDepTypeSchema.describe("Which kind of dependency declared it."),
-});
-export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
-export const WorkspaceGraphSchema = z.object({
-    packages: z.array(WorkspacePackageSchema).describe("Every package in the repository."),
-    edges: z.array(WorkspaceDepEdgeSchema).describe("Which of them use which. Pure data: how to lay it out is yours to decide."),
-});
-export type WorkspaceGraph = z.infer<typeof WorkspaceGraphSchema>;
 // Path params for the per-repo apps routes: repo names the monorepo, validated like PanelRepoParam.
 export const RepoAppsParamSchema = z.object({ repo: z.string().describe("Which repository.") });
 export const AppParamSchema = z.object({

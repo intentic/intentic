@@ -21,7 +21,6 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
         "@tanstack/vue-query": "catalog:"
     },
     "devDependencies": {

@@ -1,0 +1,96 @@
+{
+    "root": "src",
+    "shelves": ["runtimes"],
+    "surface": ["*.routes.ts", "*.testing.ts"],
+    "layers": [
+        {
+            "name": "foundation",
+            "about": "storage, ports and primitives every other layer stands on; they know no subsystem",
+            "units": ["store", "seams", "http", "offload", "netd", "fences", "speech", "areas", "workload", "safety", "tunnel", "image"]
+        },
+        {
+            "name": "host",
+            "about": "what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network",
+            "units": [
+                "auth",
+                "personas",
+                "secrets",
+                "guard",
+                "git",
+                "workspace",
+                "derived",
+                "hashline",
+                "engines",
+                "terminal",
+                "processes",
+                "privacy",
+                "environment",
+                "peers",
+                "push",
+                "ports",
+                "exit",
+                "vpn",
+                "netdisk",
+                "usage",
+                "logs",
+                "rules",
+                "endpoints",
+                "trial",
+                "system",
+                "intentic",
+                "activity"
+            ]
+        },
+        {
+            "name": "connections",
+            "about": "what the owner connected: capabilities, browsers, devices, extensions, channels and published files",
+            "units": [
+                "capabilities",
+                "browser",
+                "desktop",
+                "webext",
+                "phones",
+                "hosts",
+                "wallet",
+                "sandboxes",
+                "runners",
+                "scaffold",
+                "extensions",
+                "panels",
+                "public",
+                "share",
+                "webchat",
+                "issues",
+                "definition"
+            ]
+        },
+        {
+            "name": "agent",
+            "about": "the turn engine, its runtimes, conversations, transcripts and the code a turn runs",
+            "units": ["agent", "runtimes", "conversations", "sessions", "execution"]
+        },
+        {
+            "name": "orchestration",
+            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings",
+            "units": [
+                "automations",
+                "loops",
+                "workflows",
+                "ci",
+                "chores",
+                "needs",
+                "approvals",
+                "settings",
+                "inventory",
+                "portability",
+                "migrations",
+                "history"
+            ]
+        },
+        {
+            "name": "composition",
+            "about": "boot wiring and whole-daemon self-checks, which import every layer and are imported by none",
+            "units": ["bootstrap", "invariants", "harness"]
+        }
+    ]
+}
