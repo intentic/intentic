@@ -222,38 +222,43 @@ const ensureListening = (): Promise<void> =>
         apply(await onboardingState());
     })());
 
-export const pcParts = (): PcParts => ({
-    check: computed(() => check.value),
-    prefetch: computed(() => prefetch.value),
-    setup,
-    recheck: async () => {
-        await ensureListening();
-        await onboardingRecheck();
-    },
-    setUp: async () => {
-        await ensureListening();
-        track(`onboarding_setup`, { action: `pressed` });
-        await onboardingSetUp();
-    },
-    pause: async (paused: boolean) => {
-        await ensureListening();
-        await onboardingPause(paused);
-    },
-    restart: async (when: LocalRestartWhen) => {
-        await ensureListening();
-        track(`onboarding_setup`, { action: `restart`, when });
-        await onboardingRestart(when);
-    },
-    useCloud: async () => {
-        await ensureListening();
-        track(`onboarding_cloud`, { action: `chosen` });
-        await onboardingUseCloud();
-    },
-    track: (event, properties) => {
-        if (event.startsWith(`onboarding_`)) {
-            track(event, properties);
-        }
-    },
-});
-
-void ensureListening();
+// Started with the host, not on import: the host is installed only where the app is behind the page (host.ts
+// `installHost`), and a page without it (the built local face in a test's browser) has no events to listen to.
+export const pcParts = (): PcParts => {
+    void ensureListening().catch((error: unknown) => {
+        console.error(`[onboarding] this PC's setup could not be followed:`, error);
+    });
+    return {
+        check: computed(() => check.value),
+        prefetch: computed(() => prefetch.value),
+        setup,
+        recheck: async () => {
+            await ensureListening();
+            await onboardingRecheck();
+        },
+        setUp: async () => {
+            await ensureListening();
+            track(`onboarding_setup`, { action: `pressed` });
+            await onboardingSetUp();
+        },
+        pause: async (paused: boolean) => {
+            await ensureListening();
+            await onboardingPause(paused);
+        },
+        restart: async (when: LocalRestartWhen) => {
+            await ensureListening();
+            track(`onboarding_setup`, { action: `restart`, when });
+            await onboardingRestart(when);
+        },
+        useCloud: async () => {
+            await ensureListening();
+            track(`onboarding_cloud`, { action: `chosen` });
+            await onboardingUseCloud();
+        },
+        track: (event, properties) => {
+            if (event.startsWith(`onboarding_`)) {
+                track(event, properties);
+            }
+        },
+    };
+};
