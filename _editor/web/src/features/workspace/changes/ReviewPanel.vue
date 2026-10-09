@@ -1299,13 +1299,16 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
              one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
+            <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
+                 wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
+                 so a lone chip still visibly changes without out-shouting the panel. -->
             <button
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
                 class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
                 :class="[
-                    originFilter === entry.id ? ['shrink', originHue(entry.id).chipOn] : ['shrink-0', originHue(entry.id).chip],
+                    originFilter === entry.id ? ['shrink', originHue(entry.id).chip] : 'shrink-0',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
                 :disabled="changes.actionBusy.value"
@@ -1315,19 +1318,26 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :aria-label="originChipLabel(entry.id, entry.files)"
                 :aria-pressed="originFilter === entry.id"
             >
-                <!-- Lit reads at a glance, not only by the trailing cross: a tick leads and the plate deepens a step with a
-                     faint edge, the same quiet "on" the kit's ui-chip-on gives. A lone chip has no dimmed neighbours to
-                     tell the change by, so the chip itself has to. -->
-                <Icon v-if="originFilter === entry.id" name="check" class="shrink-0 text-[0.6rem]" />
-                <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
-                <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
-                <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
-                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
-                <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
-                <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
-                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. -->
-                <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
-                <span class="shrink-0 opacity-70">{{ entry.files }}</span>
+                <span class="relative flex shrink-0" :class="originHue(entry.id).text">
+                    <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="text-2xs" />
+                    <Icon v-else name="sparkles" class="text-2xs" />
+                    <!-- A dot on the logo's corner means the session hasn't finished — its count is an instalment, not a
+                         total. Worn by the logo rather than beside it, so the chip leads with one mark, not a row. -->
+                    <span
+                        v-if="originMark(entry.id)"
+                        class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full"
+                        :class="originMark(entry.id)!.dot"
+                    ></span>
+                    <!-- The same corner, spent on a different wait: the chip's commit-message sentence still being written. -->
+                    <span v-else-if="originDrafting(entry.id)" class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-current opacity-60"></span>
+                </span>
+                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. Label and
+                     count share a baseline, the count a step smaller: full-size digits stand at cap height and read as
+                     floating above a lowercase name, which centring each box on its own could never fix. -->
+                <span class="flex min-w-0 items-baseline gap-1">
+                    <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
+                    <span class="shrink-0 text-[0.625rem] tabular-nums opacity-70">{{ entry.files }}</span>
+                </span>
                 <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
                 <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
@@ -1341,8 +1351,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="{ title: t(`workspace.savePanel.ownEdits`), note: t(`workspace.reviewPanel.alsoTerminalChats`) }"
             >
-                <Icon v-if="originFilter === YOURS" name="check" class="shrink-0 text-[0.6rem]" />
-                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
+                <span class="flex items-baseline gap-1">
+                    <span>{{ t(`workspace.reviewPanel.you`) }}</span>
+                    <span class="text-[0.625rem] tabular-nums opacity-70">{{ legend.yours }}</span>
+                </span>
                 <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>
