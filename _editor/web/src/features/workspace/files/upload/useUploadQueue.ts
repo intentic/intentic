@@ -4,35 +4,62 @@ import { isBrowsableArchive } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { basename, joinPath } from "@intentic/ui/path";
-import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
-import { computed, markRaw, reactive, ref } from "vue";
+import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { computed, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../explorer/transfer/dropEntries";
-import { packTar } from "../../explorer/transfer/tarStream";
+import { packTar } from "../../explorer/transfer/tarArchive";
+import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
 import { sandboxJson, sandboxUpload } from "../../../../client/sandbox/sandboxClient";
 import { jsonBody } from "../../../../client/sandbox/jsonBody";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
+import { measuredProtocol, streamCapacity } from "../../../../lib/streamBudget";
 import { workspaceAgent } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
-// Per-file transport is a bounded XHR pool (HTTP/1.1 and HTTP/2); large trees stream as one tar instead, falling
-// back to the pool once that's proven unavailable.
+// Per-file transport is a bounded XHR pool; a chunk of many small files goes as one tar archive instead, falling back to
+// the pool for that chunk when the archive fails. Both are XMLHttpRequests, which work on HTTP/1.1 and HTTP/2 alike.
+//
+// Nothing per file is reactive. A drop can be 66,000 files, and one render per file (scanned, started, landed) is what
+// froze the page; the queue keeps its counts in plain objects and publishes them to the card at most every PUBLISH_MS.
 
 type FileStatus = "queued" | "uploading" | "done" | "failed";
 export interface QueueFile {
     readonly path: string; // root-relative destination (targetDir already joined in)
     readonly size: number;
+    // Its row in the card's breakdown, root-relative: see groupOf.
+    readonly group: string;
     status: FileStatus;
     error?: string;
     readonly file: File;
 }
 
+// One row of the card's per-folder breakdown.
+export interface UploadGroup {
+    readonly name: string;
+    readonly total: number;
+    readonly done: number;
+    readonly failed: number;
+}
+
+export interface UploadFailure {
+    readonly path: string;
+    readonly error: string | undefined;
+}
+
 const TAR_THRESHOLD = 20;
+// Per-file requests at once. Over HTTP/1.1 the browser gives an origin six connections for everything the page does,
+// and five of them uploading left the explorer, chat and menus waiting behind the drop; two leaves them room.
 const POOL_SIZE = 5;
+const POOL_SIZE_HTTP1 = 2;
+// How often the card hears about progress, at most.
+const PUBLISH_MS = 100;
+// Failures the card lists by name; the count covers the rest.
+const MAX_FAILURES_SHOWN = 50;
 
 // The three helpers around the one write every backend serves (`POST /workspace/upload`). A folder on this computer (the
 // desktop app's sidecar) serves none of them, and says so in its hello: its drops skip the diff and the archive and are
@@ -41,28 +68,108 @@ const DIFF_ROUTE = `POST /workspace/upload-diff`;
 const ARCHIVE_ROUTE = `POST /workspace/upload-archive`;
 const INSTALL_ROUTE = `workspace.install`;
 
-// Each chunk gets its own stall watchdog and retry, so one bad chunk can't freeze or fail the whole drop.
+// Each chunk gets its own retry, so one bad chunk can't fail the whole drop; a stalled request is cut off by
+// sandboxUpload's own stall timer.
 const RETRY_ATTEMPTS = 4;
 const RETRY_BASE_MS = 1000;
-// Aborts a stalled tar chunk (no bytes for this long) so it retries; separate from XHR's UPLOAD_STALL_MS.
-const TAR_STALL_MS = 60_000;
 
-// Optimistic; flips false once proven unavailable (HTTP/1.1), and stays false for the session.
-let canStreamRequestBody = true;
+// Everything a drop changes file by file, where nothing observes it. One upload session per sandbox: the bytes go into
+// that sandbox's /work, so a switch starts the card over.
+interface Tally {
+    count: number;
+    done: number;
+    failed: number;
+    bytesTotal: number;
+    // Bytes of the files marked done: where bytesDone returns to when an attempt's partial progress is thrown away.
+    doneBytes: number;
+    bytesDone: number;
+    current: string;
+    scanned: number;
+    scannedBytes: number;
+    scanningName: string;
+    unreadable: number;
+    readonly groups: Map<string, { name: string; total: number; done: number; failed: number }>;
+    readonly failures: Set<QueueFile>;
+}
 
-// One upload session per sandbox: the bytes go into that sandbox's /work, so a switch starts the card over.
-const files = sandboxRef<QueueFile[]>(() => []);
+const freshTally = (): Tally => ({
+    count: 0,
+    done: 0,
+    failed: 0,
+    bytesTotal: 0,
+    doneBytes: 0,
+    bytesDone: 0,
+    current: ``,
+    scanned: 0,
+    scannedBytes: 0,
+    scanningName: ``,
+    unreadable: 0,
+    groups: new Map(),
+    failures: new Set(),
+});
+const tally = sandboxValue(freshTally);
+
+// What the card reads: the tally as of its last publish.
+const fileCount = sandboxRef(() => 0);
+const doneCount = sandboxRef(() => 0);
+const failedCount = sandboxRef(() => 0);
 const bytesTotal = sandboxRef(() => 0);
 const bytesDone = sandboxRef(() => 0);
 const currentName = sandboxRef(() => ``);
+const scannedCount = sandboxRef(() => 0);
+const scannedBytes = sandboxRef(() => 0);
+const scanningName = sandboxRef(() => ``);
+const unreadableCount = sandboxRef(() => 0);
+const groups = sandboxShallowRef<readonly UploadGroup[]>(() => []);
+const failures = sandboxShallowRef<readonly UploadFailure[]>(() => []);
+
+let publishTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Copies the tally into the refs now. Called directly wherever the card's phase turns (a scan ending, a batch queued,
+// the import settling), so a phase never shows with the counts of the one before it.
+const publish = (): void => {
+    clearTimeout(publishTimer);
+    publishTimer = undefined;
+    const now = tally.value;
+    fileCount.value = now.count;
+    doneCount.value = now.done;
+    failedCount.value = now.failed;
+    bytesTotal.value = now.bytesTotal;
+    bytesDone.value = now.bytesDone;
+    currentName.value = now.current;
+    scannedCount.value = now.scanned;
+    scannedBytes.value = now.scannedBytes;
+    scanningName.value = now.scanningName;
+    unreadableCount.value = now.unreadable;
+    groups.value = Array.from(now.groups.values(), (group) => ({ ...group }));
+    const shown: UploadFailure[] = [];
+    for (const item of now.failures) {
+        if (shown.length === MAX_FAILURES_SHOWN) {
+            break;
+        }
+        shown.push({ path: item.path, error: item.error });
+    }
+    failures.value = shown;
+};
+
+const schedulePublish = (): void => {
+    publishTimer ??= setTimeout(publish, PUBLISH_MS);
+};
+
 const finished = sandboxRef(() => false);
 const startedAt = sandboxRef(() => 0);
 
 // Pre-upload tree walk; scanning narrates progress until every overlapping scan (activeScans) finishes.
 const scanning = sandboxRef(() => false);
-const scannedCount = sandboxRef(() => 0);
-const scanningName = sandboxRef(() => ``);
 let activeScans = 0;
+
+// Files handed to enqueue and not yet in the queue: the time between a scan ending and the first byte moving, spent
+// asking the sandbox what it already has. Counted so the card says so rather than vanishing for it. A restart zeroes
+// it, and the enqueues it cut short see their signal aborted and leave it alone.
+const preparing = sandboxRef(() => 0);
+
+// Why a drop never got as far as the queue; the card keeps it until dismissed.
+const startError = sandboxRef<string | undefined>(() => undefined);
 
 // Set when a drop produced no files (unreadable items or an empty folder), so the panel can say so.
 const skippedNotice = sandboxRef<number | undefined>(() => undefined);
@@ -72,18 +179,44 @@ const skippedUnchanged = sandboxRef(() => 0);
 
 // Unpacks a just-landed zip or tar ahead of the first click on it. The listing request IS the unpack, so this is the
 // same call the home would make, made early and thrown away; a failure here costs nothing, since the home's own call
-// will report it when someone actually opens the archive.
+// will report it when someone actually opens the archive. A big drop's archives wait for that click instead: warming
+// hundreds at once would have the daemon unpack them all while it is still taking the upload.
 const warmArchive = (path: string): void => {
-    if (!isBrowsableArchive(basename(path))) {
+    if (tally.value.count > TAR_THRESHOLD || !isBrowsableArchive(basename(path))) {
         return;
     }
     void sandboxRpc.workspace.children({ path, agent: workspaceAgent.value }).catch(() => undefined);
 };
 
-// The one place a file's status moves, so the explorer's placeholder row for it can't drift from the card's counts.
-// `queued` covers a retry resetting a file that a previous attempt already reported on.
+// The one place a file's status moves, so neither the explorer's placeholder row for it nor the card's counts can
+// drift from it. `queued` covers a retry resetting a file that a previous attempt already reported on.
 const setStatus = (item: QueueFile, status: FileStatus): void => {
+    const was = item.status;
     item.status = status;
+    if (was !== status) {
+        const now = tally.value;
+        // Only an item left over from a sandbox switched away from lacks its row; it counts into nothing shown.
+        const group = now.groups.get(item.group) ?? { name: item.group, total: 0, done: 0, failed: 0 };
+        if (was === `done`) {
+            now.done -= 1;
+            now.doneBytes -= item.size;
+            group.done -= 1;
+        } else if (was === `failed`) {
+            now.failed -= 1;
+            now.failures.delete(item);
+            group.failed -= 1;
+        }
+        if (status === `done`) {
+            now.done += 1;
+            now.doneBytes += item.size;
+            group.done += 1;
+        } else if (status === `failed`) {
+            now.failed += 1;
+            now.failures.add(item);
+            group.failed += 1;
+        }
+        schedulePublish();
+    }
     if (status === `done`) {
         markSettled(item.path);
         warmArchive(item.path);
@@ -190,15 +323,13 @@ const restartQueue = (): void => {
     // Placeholder rows for bytes that never landed go with the queue; ones already on disk stay until the tree lists
     // them, since the row is the only sign of them until it does.
     clearUnsettledUploads();
-    files.value = [];
-    bytesTotal.value = 0;
-    bytesDone.value = 0;
-    currentName.value = "";
+    tally.value = freshTally();
+    publish();
     finished.value = false;
     startedAt.value = 0;
     scanning.value = false;
-    scannedCount.value = 0;
-    scanningName.value = "";
+    startError.value = undefined;
+    preparing.value = 0;
     skippedNotice.value = undefined;
     skippedUnchanged.value = 0;
     setupProjects.value = [];
@@ -212,21 +343,22 @@ const restartQueue = (): void => {
 // Segment-wise, so `src/.gitignore` or `notes/git` don't match.
 const isGitEntry = (path: string): boolean => path.split(`/`).includes(`.git`);
 
-// Sum of bytes for files marked done. Recomputed on a retry reset so a failed attempt's partial bytes don't
-// linger; live onProgress deltas add on top between calls.
+// Back to the bytes of files marked done, so a failed attempt's partial bytes don't linger; live progress deltas add on
+// top between calls.
 const recomputeBytesDone = (): void => {
-    bytesDone.value = files.value.reduce((sum, file) => sum + (file.status === `done` ? file.size : 0), 0);
+    tally.value.bytesDone = tally.value.doneBytes;
+    schedulePublish();
 };
 
 // Asks the daemon which dropped files are already identical (size + mtime) so a re-drop only sends what changed.
 // Any error returns everything unfiltered; dedup must never block or drop an upload.
-const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
+const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[], signal: AbortSignal): Promise<readonly DroppedFile[]> => {
     if (!supportsRoute(DIFF_ROUTE)) {
         return entries;
     }
     try {
         const stats = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
-        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, jsonBody(`POST`, { files: stats }));
+        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, { ...jsonBody(`POST`, { files: stats }), signal });
         if (skip.length === 0) {
             return entries;
         }
@@ -239,15 +371,27 @@ const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[
 
 // Uploads one file via XHR with a plain File body (streams from disk, works on HTTP/1.1 and HTTP/2). onProgress
 // reports cumulative bytes; only the delta since the last event is added to the aggregate.
-const uploadOneXhr = (item: QueueFile, signal: AbortSignal): Promise<void> => {
+const uploadOneXhr = async (item: QueueFile, signal: AbortSignal): Promise<void> => {
+    const now = tally.value;
     let last = 0;
-    return sandboxUpload(`/workspace/upload?path=${encodeURIComponent(item.path)}&mtime=${item.file.lastModified}`, item.file, {
+    const counted = (loaded: number): void => {
+        now.bytesDone += loaded - last;
+        last = loaded;
+        schedulePublish();
+    };
+    await sandboxUpload(`/workspace/upload?path=${encodeURIComponent(item.path)}&mtime=${item.file.lastModified}`, item.file, {
         signal,
-        onProgress: (loaded) => {
-            bytesDone.value += loaded - last;
-            last = loaded;
-        },
+        onProgress: counted,
     });
+    // A landed file counts whole, whether or not the last progress event said so.
+    counted(item.size);
+};
+
+// Whether the address in use multiplexes requests; by what the browser negotiated where known (lib/streamBudget.ts).
+const multiplexed = (): boolean => {
+    const { daemonBase, usingLocal, degradedTransport } = useEndpoint();
+    const kind = degradedTransport.value ? `local-insecure` : usingLocal.value ? `local` : `public`;
+    return streamCapacity(kind, measuredProtocol(daemonBase.value)) === Number.POSITIVE_INFINITY;
 };
 
 // Bounded-concurrency per-file upload (POOL_SIZE at once). A failed file is recorded and skipped; the rest keeps
@@ -264,7 +408,7 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
                 continue;
             }
             setStatus(item, `uploading`);
-            currentName.value = item.path;
+            tally.value.current = item.path;
             try {
                 await uploadOneXhr(item, signal);
                 setStatus(item, `done`);
@@ -272,91 +416,56 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
                 if (signal.aborted) {
                     return;
                 }
-                setStatus(item, `failed`);
                 item.error = messageOr(error, t(`workspace.uploadQueue.uploadFailed`));
+                setStatus(item, `failed`);
             }
         }
     };
-    await Promise.all(Array.from({ length: Math.min(POOL_SIZE, items.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(multiplexed() ? POOL_SIZE : POOL_SIZE_HTTP1, items.length) }, worker));
 };
 
-// Streams one bounded chunk as a tar (fetch streaming body, HTTP/2 only); packTar walks items in order, so
-// onFileStart's count indexes the chunk. A private AbortController also races a stall watchdog (TAR_STALL_MS).
+// Sends one bounded chunk as a single tar archive. The request's byte progress is mapped back onto the files through
+// where each one's bytes start in the archive, so the bar and the "now sending" line move as they do for the pool.
 // Returns:
-// - done: the chunk landed.
-// - fallback: the browser refused a streaming body (HTTP/1.1), or a file couldn't be read; caller falls back to the
-//   XHR pool, which fails an unreadable file alone.
-// - failed: a stall or a genuine mid-stream/daemon error; caller retries the chunk.
-const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): Promise<"done" | "fallback" | "failed"> => {
-    const control = new AbortController();
-    const onOuterAbort = (): void => control.abort();
-    signal.addEventListener(`abort`, onOuterAbort, { once: true });
-    let stall: ReturnType<typeof setTimeout> | undefined;
-    const arm = (): void => {
-        clearTimeout(stall);
-        stall = setTimeout(() => control.abort(), TAR_STALL_MS);
+// - done: the chunk landed (or the user cancelled, which leaves statuses alone).
+// - fallback: the archive failed, for whatever reason (a file that changed on disk under the read, a daemon refusing a
+//   whole-tree write, a dropped connection); the caller sends this chunk file by file, where one bad file fails alone.
+const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): Promise<"done" | "fallback"> => {
+    const now = tally.value;
+    const { blob, starts } = packTar(items.map((item) => ({ file: item.file, path: item.path })));
+    // The file whose bytes are being counted, and how many of them already are.
+    let index = 0;
+    let counted = 0;
+    const progress = (loaded: number): void => {
+        for (let item = items[index], start = starts[index]; item !== undefined && start !== undefined; item = items[index], start = starts[index]) {
+            if (loaded <= start) {
+                break;
+            }
+            now.current = item.path;
+            const reached = Math.min(loaded - start, item.size);
+            now.bytesDone += reached - counted;
+            counted = reached;
+            if (reached < item.size) {
+                break;
+            }
+            index += 1;
+            counted = 0;
+        }
+        schedulePublish();
     };
-    let index = -1;
-    let streamed = 0;
-    // The archive died on this browser's side, so it says nothing about whether the transport can stream.
-    let unreadable = false;
-    const body = packTar(
-        items.map((item) => ({ file: item.file, path: item.path })),
-        {
-            onFileStart: (path) => {
-                index += 1;
-                const current = items[index];
-                if (current !== undefined) {
-                    setStatus(current, `uploading`);
-                }
-                currentName.value = path;
-            },
-            onBytes: (delta) => {
-                streamed += delta;
-                bytesDone.value += delta;
-                arm();
-            },
-            onUnreadable: (path, error) => {
-                unreadable = true;
-                console.warn(`upload: ${path} failed its archive`, error);
-            },
-        },
-    );
-    arm();
     try {
-        await sandboxJson<{ ok: true }>(`/workspace/upload-archive`, { method: `POST`, body, duplex: `half`, signal: control.signal } as RequestInit);
+        await sandboxUpload(`/workspace/upload-archive`, blob, { signal, whole: true, onProgress: progress });
+        progress(blob.size);
         for (const item of items) {
             setStatus(item, `done`);
         }
         return `done`;
     } catch (error) {
-        // A real user cancel, not the watchdog; leave statuses alone.
         if (signal.aborted) {
             return `done`;
         }
-        // No bytes streamed + a TypeError means HTTP/1.1 refused the body; an unreadable file fails only this archive.
-        // Either way the chunk resets to queued for the XHR pool, which fails an unreadable file on its own.
-        if (unreadable || (streamed === 0 && error instanceof TypeError)) {
-            if (!unreadable) {
-                canStreamRequestBody = false;
-            }
-            for (const item of items) {
-                if (item.status === `uploading`) {
-                    setStatus(item, `queued`);
-                }
-            }
-            return `fallback`;
-        }
-        // Stall or a real error: record it for the give-up message, but leave status alone; a retry resends the chunk.
-        for (const item of items) {
-            if (item.status !== `done`) {
-                item.error = messageOr(error, t(`workspace.uploadQueue.uploadFailed`));
-            }
-        }
-        return `failed`;
-    } finally {
-        clearTimeout(stall);
-        signal.removeEventListener(`abort`, onOuterAbort);
+        console.warn(`upload: an archive of ${items.length} files failed; sending them one at a time`, error);
+        return `fallback`;
     }
 };
 
@@ -383,16 +492,11 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
                 return;
             }
         }
-        if (archive && chunk.length > TAR_THRESHOLD && canStreamRequestBody && supportsRoute(ARCHIVE_ROUTE)) {
-            const result = await uploadViaTar(chunk, signal);
-            if (result === `done` || signal.aborted) {
+        if (archive && chunk.length > TAR_THRESHOLD && supportsRoute(ARCHIVE_ROUTE)) {
+            if ((await uploadViaTar(chunk, signal)) === `done` || signal.aborted) {
                 return;
             }
-            if (result === `failed`) {
-                continue;
-            }
-            // "fallback" (HTTP/1.1, or a file the archive could not read): the per-file pool takes this chunk, and later
-            // ones via the flag when the transport refused; the archive's streamed bytes are not the pool's progress.
+            // The per-file pool takes this chunk, and the archive's partial bytes are not the pool's progress.
             archive = false;
             recomputeBytesDone();
         }
@@ -404,22 +508,52 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
     // Retries exhausted: fail whatever never landed, keeping the last real error message where present.
     for (const item of chunk) {
         if (item.status !== `done`) {
-            setStatus(item, `failed`);
             item.error ??= t(`workspace.uploadQueue.uploadFailedAfter`, { attempts: RETRY_ATTEMPTS }, RETRY_ATTEMPTS);
+            setStatus(item, `failed`);
         }
     }
 };
 
 // Takes one batch into the queue and starts the worker. Placeholder rows go in before the first byte moves, so the
-// explorer shows where the drop landed while the daemon's own listing (a walk of the whole workspace) is seconds away.
+// explorer shows where the drop landed while the daemon's own listing (a walk of the whole workspace) is seconds away,
+// but only once the queue holds the batch: a row put in for a file the queue never took spins with nothing to settle
+// it. Never `push(...items)`: spreading a 66,000-file drop into one call overflows the stack.
 const queueBatch = (items: QueueFile[]): void => {
+    const now = tally.value;
+    for (const item of items) {
+        now.count += 1;
+        now.bytesTotal += item.size;
+        const group = now.groups.get(item.group) ?? { name: item.group, total: 0, done: 0, failed: 0 };
+        group.total += 1;
+        now.groups.set(item.group, group);
+    }
+    pending.value.push(items);
     for (const item of items) {
         noteArriving(item.path, { kind: `upload`, size: item.size });
     }
-    files.value.push(...items);
-    bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);
-    pending.value.push(items);
+    publish();
     void run();
+};
+
+// The import is over once nothing is being scanned, prepared, queued or sent. Each of those calls this as it ends, and
+// the last one to end finds the queue idle: marks it finished, refreshes the tree and starts the install.
+const settleIfIdle = async (): Promise<void> => {
+    if (finished.value || running || activeScans > 0 || preparing.value > 0 || pending.value.length > 0) {
+        return;
+    }
+    publish();
+    finished.value = true;
+    // Every scope's tree, not the focused one: a drop can land files outside that scope, so every variant is stale.
+    await queryClient?.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
+    // After the tree refresh, so the install's projects are already listed; a cancelled drop never gets here.
+    await runInstall();
+};
+
+// The card's row for a file: the folder that was dropped, or for loose files the folder they were dropped into ("" for
+// the workspace root).
+const groupOf = (targetDir: string, path: string): string => {
+    const slash = path.indexOf(`/`);
+    return slash === -1 ? targetDir : joinPath(targetDir, path.slice(0, slash));
 };
 
 const run = async (): Promise<void> => {
@@ -453,11 +587,7 @@ const run = async (): Promise<void> => {
         if (!controller.value.signal.aborted && pending.value.length > 0) {
             void run();
         } else if (!signal.aborted) {
-            finished.value = true;
-            // Every scope's tree, not the focused one: a drop can land files outside that scope, so every variant is stale.
-            await queryClient?.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
-            // Runs after the tree refresh and after the abort check, so a cancelled drop installs nothing.
-            await runInstall();
+            await settleIfIdle();
         }
     }
 };
@@ -475,7 +605,7 @@ export function useUploadQueue() {
             // count.
             if (dropped.length > 0 && !running && pending.value.length === 0) {
                 skippedNotice.value = dropped.length;
-                finished.value = true;
+                await settleIfIdle();
             }
             return;
         }
@@ -485,34 +615,47 @@ export function useUploadQueue() {
         }
         // Captured before either round trip, so a cancel or a switch (which aborts it) during one aborts the enqueue too.
         const { signal } = controller.value;
-        // Detected before the unchanged-file filter prunes the usually-unchanged manifests; dedupe by dir across drops.
-        const detected = supportsRoute(INSTALL_ROUTE) ? await detectSetup(targetDir, entries) : [];
-        const unchanged = await filterUnchanged(targetDir, entries);
-        if (signal.aborted) {
-            return;
-        }
-        const known = new Set(setupProjects.value.map((project) => project.dir));
-        setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
-        // Two entries can target the same destination; keep only the last, or parallel writes interleave into one file.
-        const surviving = dedupeByPath(unchanged, (entry) => entry.path);
-        // Sinks .git entries to the back (stable sort) so the daemon doesn't see a repo before its work tree lands.
-        surviving.sort((left, right) => (isGitEntry(left.path) ? 1 : 0) - (isGitEntry(right.path) ? 1 : 0));
-        skippedUnchanged.value += entries.length - surviving.length;
-        if (surviving.length === 0) {
-            // Drop already fully up to date; surface via skippedUnchanged rather than a silent no-op.
-            if (!running && pending.value.length === 0) {
-                finished.value = true;
-                // Still offer install: re-dropping an up-to-date project is exactly what someone does when it isn't
-                // working.
-                await runInstall();
+        preparing.value += entries.length;
+        try {
+            // Detected before the unchanged-file filter prunes the usually-unchanged manifests; dedupe by dir across drops.
+            const detected = supportsRoute(INSTALL_ROUTE) ? await detectSetup(targetDir, entries) : [];
+            const unchanged = await filterUnchanged(targetDir, entries, signal);
+            if (signal.aborted) {
+                return;
             }
-            return;
+            const known = new Set(setupProjects.value.map((project) => project.dir));
+            setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
+            // Two entries can target the same destination; keep only the last, or parallel writes interleave into one file.
+            const surviving = dedupeByPath(unchanged, (entry) => entry.path);
+            // Sinks .git entries to the back (stable sort) so the daemon doesn't see a repo before its work tree lands.
+            surviving.sort((left, right) => (isGitEntry(left.path) ? 1 : 0) - (isGitEntry(right.path) ? 1 : 0));
+            skippedUnchanged.value += entries.length - surviving.length;
+            // An up-to-date drop queues nothing, and settling still offers the install: re-dropping an up-to-date
+            // project is exactly what someone does when it isn't working.
+            if (surviving.length > 0) {
+                queueBatch(
+                    surviving.map((entry): QueueFile => ({
+                        path: joinPath(targetDir, entry.path),
+                        size: entry.file.size,
+                        group: groupOf(targetDir, entry.path),
+                        status: `queued`,
+                        file: entry.file,
+                    })),
+                );
+            }
+        } catch (error) {
+            // Nothing of this batch is queued, so nothing of it is drawn either; the card says why it never started.
+            if (!signal.aborted) {
+                console.error(`Failed to queue the dropped files`, error);
+                startError.value = messageOr(error, t(`workspace.uploadQueue.startFailed`));
+            }
+        } finally {
+            // An abort (a cancel, or a switch) already zeroed the count this batch was part of.
+            if (!signal.aborted) {
+                preparing.value -= entries.length;
+                await settleIfIdle();
+            }
         }
-        // markRaw the File so Vue doesn't proxy it; .stream() throws on a reactive proxy of a File.
-        const items = surviving.map((entry): QueueFile =>
-            reactive({ path: joinPath(targetDir, entry.path), size: entry.file.size, status: `queued`, file: markRaw(entry.file) }),
-        );
-        queueBatch(items);
     };
 
     // Drop-target entry point: shows the panel immediately, walks the tree with streaming progress, then hands the
@@ -523,15 +666,18 @@ export function useUploadQueue() {
         }
         // Captures this session's signal so a cancel during the walk stops it and skips the enqueue.
         const { signal } = controller.value;
+        const now = tally.value;
         activeScans += 1;
         scanning.value = true;
         finished.value = false;
         skippedNotice.value = undefined;
         collectDroppedFiles(
             dataTransfer,
-            (path) => {
-                scannedCount.value += 1;
-                scanningName.value = path;
+            (path, size) => {
+                now.scanned += 1;
+                now.scannedBytes += size;
+                now.scanningName = path;
+                schedulePublish();
             },
             signal,
         )
@@ -539,42 +685,65 @@ export function useUploadQueue() {
                 if (signal.aborted) {
                     return;
                 }
-                void enqueue(targetDir, result.files);
+                now.unreadable += result.unreadable;
                 // Only set when nothing was uploaded; a drop that did yield files ignores stray skips.
                 if (result.files.length === 0) {
                     skippedNotice.value = result.skipped;
                 }
+                // Starts preparing before this scan's slot is given back below, so the card goes straight from one to
+                // the other.
+                void enqueue(targetDir, result.files);
             })
-            .catch((error: unknown) => console.error(`Failed to read the dropped items`, error))
+            .catch((error: unknown) => {
+                if (!signal.aborted) {
+                    console.error(`Failed to read the dropped items`, error);
+                    startError.value = messageOr(error, t(`workspace.uploadQueue.startFailed`));
+                }
+            })
             .finally(() => {
                 activeScans -= 1;
                 if (activeScans === 0) {
+                    publish();
                     scanning.value = false;
+                }
+                if (!signal.aborted) {
+                    void settleIfIdle();
                 }
             });
     };
 
-    const failedCount = computed(() => files.value.filter((file) => file.status === `failed`).length);
-    const doneCount = computed(() => files.value.filter((file) => file.status === `done`).length);
     const throughput = computed(() => {
         const elapsed = (performance.now() - startedAt.value) / 1000;
         return elapsed > 0 ? bytesDone.value / elapsed : 0;
     });
+    // Seconds to go at the pace so far; undefined until a few seconds of pace are worth extrapolating from.
+    const secondsLeft = computed(() => {
+        const elapsed = (performance.now() - startedAt.value) / 1000;
+        const rate = throughput.value;
+        return startedAt.value === 0 || elapsed < 3 || rate <= 0 ? undefined : (bytesTotal.value - bytesDone.value) / rate;
+    });
 
     return {
-        files,
+        fileCount,
         bytesTotal,
         bytesDone,
         currentName,
         finished,
         scanning,
         scannedCount,
+        scannedBytes,
         scanningName,
+        preparing,
+        startError,
+        unreadableCount,
         skippedNotice,
         skippedUnchanged,
         failedCount,
         doneCount,
+        groups,
+        failures,
         throughput,
+        secondsLeft,
         setupProjects,
         installAfterUpload,
         setInstallAfterUpload,

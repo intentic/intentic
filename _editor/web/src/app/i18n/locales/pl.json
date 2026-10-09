@@ -8029,6 +8029,9 @@
             "partIntenticDidNot": "Część Intentic się nie wczytała",
             "reloadToPickUp": "Przeładuj, żeby ją pobrać.",
             "scanningDroppedFolder": "Skanowanie upuszczonego folderu…",
+            "scannedSoFarSize": "Na razie {count} plik, {size}. | Na razie {count} pliki, {size}. | Na razie {count} plików, {size}.",
+            "preparingUpload": "Przygotowywanie {count} pliku… | Przygotowywanie {count} plików… | Przygotowywanie {count} plików…",
+            "uploadNotStarted": "Nie udało się rozpocząć wysyłania",
             "sessionNeedsAttention": "Sesja sandboxa w tej przeglądarce wymaga uwagi",
             "signInAgain": "Zaloguj się ponownie",
             "signedIntoGoogle": "Zalogowano do Google jako {presented}",
@@ -8044,7 +8047,6 @@
             "reconnect": "Połącz ponownie",
             "skippedUnreadable": "Pominięto {count} element, którego nie dało się odczytać (dowiązanie symboliczne lub plik specjalny). | Pominięto {count} elementy, których nie dało się odczytać (dowiązania symboliczne lub pliki specjalne). | Pominięto {count} elementów, których nie dało się odczytać (dowiązania symboliczne lub pliki specjalne).",
             "skippedUnchanged": "Pominięto {count} niezmieniony plik. | Pominięto {count} niezmienione pliki. | Pominięto {count} niezmienionych plików.",
-            "scannedSoFar": "Na razie {count} plik. | Na razie {count} pliki. | Na razie {count} plików.",
             "uploadedFiles": "Wysłano {count} plik | Wysłano {count} pliki | Wysłano {count} plików"
         },
         "pushMenuRow": {
@@ -9279,6 +9281,9 @@
             "startingInstall": "Uruchamianie instalacji…",
             "startsAfterActiveAgent": "Zaczyna się, gdy skończą się aktywne tury agentów, a potem pojawia się w Terminalach roboczych; sprawdzenia i wynik pojawiają się w Aktywności.",
             "scanningFiles": "Skanowanie… {count} plik | Skanowanie… {count} pliki | Skanowanie… {count} plików",
+            "timeLeft": "zostało około {time}",
+            "unreadableLeftOut": "Nie udało się odczytać {count} elementu; pominięto go. | Nie udało się odczytać {count} elementów; pominięto je. | Nie udało się odczytać {count} elementów; pominięto je.",
+            "moreFailures": "… i {count} więcej",
             "workspaceRoot": "katalog główny przestrzeni roboczej"
         },
         "useChanges": {
@@ -9597,7 +9602,8 @@
         "uploadQueue": {
             "installFailed": "Nie udało się uruchomić instalacji.",
             "uploadFailed": "Przesyłanie się nie powiodło.",
-            "uploadFailedAfter": "Przesyłanie nie powiodło się po {attempts} próbie. | Przesyłanie nie powiodło się po {attempts} próbach. | Przesyłanie nie powiodło się po {attempts} próbach."
+            "uploadFailedAfter": "Przesyłanie nie powiodło się po {attempts} próbie. | Przesyłanie nie powiodło się po {attempts} próbach. | Przesyłanie nie powiodło się po {attempts} próbach.",
+            "startFailed": "Nie udało się dodać upuszczonych plików do kolejki."
         },
         "quickLookContent": {
             "archive": "Archiwum",

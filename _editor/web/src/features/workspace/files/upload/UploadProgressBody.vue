@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatBytes } from "@intentic/ui";
+import { formatBytes, formatElapsed } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "./useUploadQueue";
@@ -12,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const {
-    files,
+    fileCount,
     bytesDone,
     bytesTotal,
     currentName,
@@ -20,10 +20,13 @@ const {
     scanning,
     scannedCount,
     scanningName,
+    unreadableCount,
     skippedNotice,
     failedCount,
-    doneCount,
+    groups,
+    failures,
     throughput,
+    secondsLeft,
     setupProjects,
     installAfterUpload,
     setInstallAfterUpload,
@@ -40,31 +43,15 @@ defineOptions({ inheritAttrs: false });
 const pct = computed(() => (bytesTotal.value === 0 ? 100 : Math.min(100, Math.round((bytesDone.value / bytesTotal.value) * 100))));
 
 // Shown while bytes are in flight or failed; a clean finish's headline already says it all.
-const breakdown = computed(() => files.value.length > 0 && !(finished.value && failedCount.value === 0));
+const breakdown = computed(() => fileCount.value > 0 && !(finished.value && failedCount.value + unreadableCount.value === 0));
 
-// One row per top-level dropped folder (loose root files group under "(files)"): scales where a flat per-file list
-// would not.
-const groups = computed(() => {
-    const map = new Map<string, { name: string; total: number; done: number; failed: number }>();
-    for (const file of files.value) {
-        const slash = file.path.indexOf(`/`);
-        const key = slash === -1 ? `` : file.path.slice(0, slash);
-        const group = map.get(key) ?? { name: key === `` ? `(files)` : key, total: 0, done: 0, failed: 0 };
-        group.total += 1;
-        if (file.status === `done`) {
-            group.done += 1;
-        }
-        if (file.status === `failed`) {
-            group.failed += 1;
-        }
-        map.set(key, group);
-    }
-    return Array.from(map.values());
-});
-const failures = computed(() => files.value.filter((file) => file.status === `failed`));
+// The rest of the time at the pace so far, once there is a pace worth extrapolating from.
+const timeLeft = computed(() =>
+    finished.value || secondsLeft.value === undefined ? undefined : t(`workspace.uploadProgressBody.timeLeft`, { time: formatElapsed(secondsLeft.value) }),
+);
 
 // The scan line, which needs either a count or a name to say anything.
-const scanLine = computed(() => scanning.value && (files.value.length > 0 || scanningName.value !== ``));
+const scanLine = computed(() => scanning.value && (fileCount.value > 0 || scanningName.value !== ``));
 
 // Offer shown for the whole upload (not a dialog or prompt), so drag-and-drop still just works, with time to uncheck
 // it. One row per project; label names the file read (e.g. "pnpm · pnpm-lock.yaml") so the pick isn't opaque.
@@ -84,7 +71,7 @@ watch(
     [finished, installSettled],
     ([isFinished, isSettled]) => {
         // Holds until install settles, so a clean finish can't vanish before saying what it kicked off.
-        if (isFinished && failedCount.value === 0 && isSettled && installError.value === undefined) {
+        if (isFinished && failedCount.value + unreadableCount.value === 0 && isSettled && installError.value === undefined) {
             timer = setTimeout(dismiss, installQueued.value.length > 0 ? 6000 : 3000);
         }
     },
@@ -106,7 +93,7 @@ onBeforeUnmount(() => {
 <template>
     <div v-if="drawn" v-bind="$attrs" class="text-xs text-content">
         <!-- Still scanning while files are already uploading; the headline belongs to the upload by then. -->
-        <p v-if="scanning && files.length > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
+        <p v-if="scanning && fileCount > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
             {{ t(`workspace.uploadProgressBody.scanningFiles`, { count: scannedCount }, scannedCount)
             }}<template v-if="scanningName !== ``"> · {{ scanningName }}</template>
         </p>
@@ -117,9 +104,11 @@ onBeforeUnmount(() => {
             <div class="h-1 overflow-hidden rounded bg-overlay">
                 <div class="h-full rounded bg-primary-500 transition-[width] duration-200" :style="{ width: `${pct}%` }"></div>
             </div>
-            <div class="mt-1 flex items-center justify-between text-2xs text-subtle">
+            <div class="mt-1 flex items-center justify-between gap-2 text-2xs text-subtle">
                 <span>{{ formatBytes(bytesDone) }} / {{ formatBytes(bytesTotal) }}</span>
-                <span v-if="!finished">{{ formatBytes(throughput) }}/s</span>
+                <span v-if="!finished" class="truncate">
+                    {{ formatBytes(throughput) }}/s<template v-if="timeLeft !== undefined"> · {{ timeLeft }}</template>
+                </span>
             </div>
             <p v-if="!finished && currentName !== ``" class="mt-0.5 truncate text-2xs text-subtle">{{ currentName }}</p>
 
@@ -127,18 +116,24 @@ onBeforeUnmount(() => {
             <ul class="mt-2 max-h-28 space-y-1 overflow-auto">
                 <li v-for="group in groups" :key="group.name" class="flex items-center gap-2 text-2xs">
                     <Icon name="folder" class="text-[0.6rem] text-muted" />
-                    <span class="flex-1 truncate">{{ group.name }}</span>
+                    <span class="flex-1 truncate">{{ group.name === `` ? t(`workspace.uploadProgressBody.workspaceRoot`) : group.name }}</span>
                     <span :class="group.failed > 0 ? `text-danger` : `text-subtle`">{{ group.done }}/{{ group.total }}</span>
                 </li>
             </ul>
 
-            <!-- Failures spelled out. This is the one phase that never retires itself. -->
+            <!-- Failures spelled out, the first of them by name. This is the one phase that never retires itself. -->
             <ul v-if="failures.length > 0" class="mt-3 max-h-24 space-y-1 overflow-auto">
                 <li v-for="file in failures" :key="file.path" class="text-2xs text-danger" v-tooltip.left="file.error">
                     <span class="truncate">{{ file.path }}</span>
                     <span class="text-subtle">: {{ file.error }}</span>
                 </li>
+                <li v-if="failedCount > failures.length" class="text-2xs text-subtle">
+                    {{ t(`workspace.uploadProgressBody.moreFailures`, { count: failedCount - failures.length }) }}
+                </li>
             </ul>
+            <p v-if="unreadableCount > 0" class="mt-2 text-2xs text-danger">
+                {{ t(`workspace.uploadProgressBody.unreadableLeftOut`, { count: unreadableCount }, unreadableCount) }}
+            </p>
         </template>
 
         <!-- Dependencies remain visible through scan, upload, and outcome phases. -->

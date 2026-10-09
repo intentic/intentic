@@ -19,6 +19,7 @@ import { useSandboxSession } from "../../client/session/sandboxSession";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useSandboxEstablished } from "../../features/sandbox/gates/established";
+import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { useRouter } from "vue-router";
 import { useDeviceDirectory } from "../../client/directory/deviceDirectory";
@@ -30,46 +31,65 @@ import { directMode } from "../../client/directory/directState";
 
 // Snapshot backing `uploadPhase`/`uploadHeadline`, kept separate from the notification shape so the phase table
 // can be read on its own. `undefined` upload state means no import is happening.
-interface UploadState {
+export interface UploadState {
     readonly count: number;
     readonly done: number;
     readonly failed: number;
     readonly finished: boolean;
     readonly scanning: boolean;
     readonly scanned: number;
+    readonly scannedBytes: number;
+    // Files between the scan and the queue, while the sandbox is asked what it already has.
+    readonly preparing: number;
+    readonly startError: string | undefined;
+    // Found by the scan but unreadable, so never part of `count`.
+    readonly unreadable: number;
     readonly skipped: number | undefined;
     readonly unchanged: number;
 }
 
 const uploadState = (upload: ReturnType<typeof useUploadQueue>): UploadState => ({
-    count: upload.files.value.length,
+    count: upload.fileCount.value,
     done: upload.doneCount.value,
     failed: upload.failedCount.value,
     finished: upload.finished.value,
     scanning: upload.scanning.value,
     scanned: upload.scannedCount.value,
+    scannedBytes: upload.scannedBytes.value,
+    preparing: upload.preparing.value,
+    startError: upload.startError.value,
+    unreadable: upload.unreadableCount.value,
     skipped: upload.skippedNotice.value,
     unchanged: upload.skippedUnchanged.value,
 });
 
-type UploadPhase = "nothing" | "unchanged" | "scanning" | "uploading" | "uploaded" | "partial";
+type UploadPhase = "notStarted" | "scanning" | "preparing" | "nothing" | "unchanged" | "uploading" | "uploaded" | "partial";
 
-const uploadPhase = (state: UploadState): UploadPhase | undefined => {
+// Until a file is queued the card narrates what comes before (the walk, then the sandbox being asked what it has), and
+// says why when nothing ever was. Every gap between those phases is a card that vanished mid-import, which is how a
+// 66,000-file drop that failed to queue read as nothing happening at all.
+export const uploadPhase = (state: UploadState): UploadPhase | undefined => {
     if (state.count === 0) {
+        if (state.startError !== undefined) {
+            return `notStarted`;
+        }
+        if (state.scanning) {
+            return `scanning`;
+        }
+        if (state.preparing > 0) {
+            return `preparing`;
+        }
         // Only symlinks and special items (which Chrome will not expose), or an empty folder.
         if (state.skipped !== undefined) {
             return `nothing`;
         }
         // Every file already matched the sandbox copy; says so, or a silent no-op reads as broken.
-        if (state.unchanged > 0) {
-            return `unchanged`;
-        }
-        return state.scanning ? `scanning` : undefined;
+        return state.unchanged > 0 ? `unchanged` : undefined;
     }
     if (!state.finished) {
         return `uploading`;
     }
-    return state.failed === 0 ? `uploaded` : `partial`;
+    return state.failed + state.unreadable === 0 ? `uploaded` : `partial`;
 };
 
 interface UploadHeadline {
@@ -79,7 +99,7 @@ interface UploadHeadline {
     readonly spin: boolean;
 }
 
-const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline => {
+export const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline => {
     switch (phase) {
         case `nothing`:
             return {
@@ -98,20 +118,29 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
                 tone: `done`,
                 spin: false,
             };
+        case `notStarted`:
+            return { title: t(`shell.notificationSources.uploadNotStarted`), detail: state.startError, tone: `problem`, spin: false };
         case `scanning`:
             return {
                 title: t(`shell.notificationSources.scanningDroppedFolder`),
-                detail: t(`shell.notificationSources.scannedSoFar`, { count: state.scanned }, state.scanned),
+                detail: t(`shell.notificationSources.scannedSoFarSize`, { count: state.scanned, size: formatBytes(state.scannedBytes) }, state.scanned),
                 tone: `info`,
                 spin: true,
             };
+        case `preparing`:
+            return { title: t(`shell.notificationSources.preparingUpload`, { count: state.preparing }, state.preparing), tone: `info`, spin: true };
         case `uploading`:
             return { title: t(`shell.notificationSources.uploading`, { done: state.done, count: state.count }), tone: `info`, spin: true };
         case `uploaded`:
             return { title: t(`shell.notificationSources.uploadedFiles`, { count: state.count }, state.count), tone: `done`, spin: false };
         case `partial`:
+            // Files the scan could not read never reached the queue, but they were dropped, so they count as failed here.
             return {
-                title: t(`shell.notificationSources.uploadedFailed`, { done: state.done, count: state.count, failed: state.failed }),
+                title: t(`shell.notificationSources.uploadedFailed`, {
+                    done: state.done,
+                    count: state.count + state.unreadable,
+                    failed: state.failed + state.unreadable,
+                }),
                 tone: `problem`,
                 spin: false,
             };

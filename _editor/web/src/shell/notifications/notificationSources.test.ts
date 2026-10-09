@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
-import { diagnosisCard, restartCard } from "./notificationSources";
+import { diagnosisCard, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
 
 // The lane's one rule about a sandbox going quiet: whether the silence was asked for decides both what is said and
 // how soon. Everything else in this file is wiring; this is the decision.
@@ -88,5 +88,48 @@ describe(`the card for a sandbox that isn't answering`, () => {
         const card = diagnosisCard(notice({ otherActions: [`fix`] }), false, () => undefined);
         expect(card).toMatchObject({ tone: `info`, spin: true, wide: true });
         expect(card.body).toBe(SandboxRecovery);
+    });
+});
+
+describe(`the card for files dropped into the workspace`, () => {
+    const idle: UploadState = {
+        count: 0,
+        done: 0,
+        failed: 0,
+        finished: false,
+        scanning: false,
+        scanned: 0,
+        scannedBytes: 0,
+        preparing: 0,
+        startError: undefined,
+        unreadable: 0,
+        skipped: undefined,
+        unchanged: 0,
+    };
+
+    it(`stays up from the first scanned file to the first queued one, naming each step between`, () => {
+        // The step between, asking the sandbox what it already has, used to have no card at all: a big drop's import
+        // vanished for as long as that took.
+        const steps: UploadState[] = [
+            { ...idle, scanning: true, scanned: 66_412, scannedBytes: 30 * 1024 ** 3 },
+            { ...idle, scanned: 66_412, preparing: 66_412 },
+            { ...idle, count: 66_412 },
+        ];
+        expect(steps.map(uploadPhase)).toEqual([`scanning`, `preparing`, `uploading`]);
+        expect(uploadHeadline(`scanning`, steps[0] ?? idle).detail).toContain(`30 GB`);
+    });
+
+    it(`says why when the drop never reached the queue, rather than saying nothing`, () => {
+        const state = { ...idle, scanned: 66_412, startError: `Maximum call stack size exceeded` };
+        expect([uploadPhase(state), uploadHeadline(`notStarted`, state).tone, uploadHeadline(`notStarted`, state).detail]).toEqual([
+            `notStarted`,
+            `problem`,
+            `Maximum call stack size exceeded`,
+        ]);
+    });
+
+    it(`counts files the scan could not read as failed ones, so the finish does not claim everything landed`, () => {
+        const state = { ...idle, count: 10, done: 10, finished: true, unreadable: 2 };
+        expect(uploadPhase(state)).toBe(`partial`);
     });
 });

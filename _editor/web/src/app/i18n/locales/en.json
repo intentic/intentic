@@ -8592,6 +8592,9 @@
             "partIntenticDidNot": "Part of Intentic did not load",
             "reloadToPickUp": "Reload to pick it up.",
             "scanningDroppedFolder": "Scanning dropped folder…",
+            "scannedSoFarSize": "{count} file, {size} so far. | {count} files, {size} so far.",
+            "preparingUpload": "Preparing {count} file… | Preparing {count} files…",
+            "uploadNotStarted": "Couldn't start the upload",
             "sessionNeedsAttention": "This browser's sandbox session needs attention",
             "signInAgain": "Sign in again",
             "signedIntoGoogle": "Signed into Google as {presented}",
@@ -8607,7 +8610,6 @@
             "reconnect": "Reconnect",
             "skippedUnreadable": "Skipped {count} item that couldn't be read (symlink or special file). | Skipped {count} items that couldn't be read (symlink or special file).",
             "skippedUnchanged": "Skipped {count} unchanged file. | Skipped {count} unchanged files.",
-            "scannedSoFar": "{count} file so far. | {count} files so far.",
             "uploadedFiles": "Uploaded {count} file | Uploaded {count} files"
         },
         "presence": {
@@ -9846,6 +9848,9 @@
             "startingInstall": "Starting install…",
             "startsAfterActiveAgent": "It starts after active agent turns finish, then appears in Work terminals; checks and the outcome appear in Activity.",
             "scanningFiles": "Scanning… {count} file | Scanning… {count} files",
+            "timeLeft": "about {time} left",
+            "unreadableLeftOut": "{count} item couldn't be read and was left out. | {count} items couldn't be read and were left out.",
+            "moreFailures": "… and {count} more",
             "workspaceRoot": "the workspace root"
         },
         "useChanges": {
@@ -10146,7 +10151,8 @@
         "uploadQueue": {
             "installFailed": "Couldn't start the install.",
             "uploadFailed": "Upload failed.",
-            "uploadFailedAfter": "Upload failed after {attempts} attempt. | Upload failed after {attempts} attempts."
+            "uploadFailedAfter": "Upload failed after {attempts} attempt. | Upload failed after {attempts} attempts.",
+            "startFailed": "The dropped files couldn't be queued."
         },
         "quickLookContent": {
             "archive": "Archive",

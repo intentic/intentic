@@ -76,14 +76,17 @@ const uploadTarget = (at: string | undefined): SandboxTarget => {
     return target;
 };
 
+// `whole` sends the body as one request with no `&offset=`, for a route that takes its body in one piece (an archive,
+// which the caller already keeps to about one part's size).
 export async function sandboxUpload(
     path: string,
     body: Blob,
-    opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal; at?: string },
+    opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal; at?: string; whole?: boolean },
 ): Promise<void> {
     const target = uploadTarget(opts?.at);
     const signal = opts?.signal;
-    for (let offset = 0; offset === 0 || offset < body.size; offset += CHUNK_BYTES) {
+    const partBytes = opts?.whole === true ? Math.max(body.size, 1) : CHUNK_BYTES;
+    for (let offset = 0; offset === 0 || offset < body.size; offset += partBytes) {
         if (signal?.aborted) {
             throw new DOMException(`Upload canceled`, `AbortError`);
         }
@@ -92,8 +95,8 @@ export async function sandboxUpload(
         if (bearer === undefined) {
             throw new Error(t(`sandbox.sandboxClient.signIn`));
         }
-        const url = `${target.base}${path}&offset=${offset}`;
-        const part = body.slice(offset, offset + CHUNK_BYTES);
+        const url = opts?.whole === true ? `${target.base}${path}` : `${target.base}${path}&offset=${offset}`;
+        const part = body.slice(offset, offset + partBytes);
         try {
             await sendPart(url, part, offset, bearer.token, target.connectToken, opts);
         } catch (error) {
