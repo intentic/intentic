@@ -532,29 +532,40 @@ The app (`src-tauri/src/drop_copy.rs`):
 
 1. Finds the `intentic-sandbox-*` container that publishes that port.
 2. Walks the dropped folders with the page's own skip rule, which the page sends.
-3. For a drop of at least 1,000 files or 1 GiB, copies two ways, each where it is fastest:
-   - Folders and files under 256 KB go as one tar archive into the sandbox's own `tar -x`
-     (`docker exec -i -u 0 <container>`).
-   - Bigger files go through a throwaway helper container (`intentic-drop-copy-<id>`, the sandbox's own image, no
-     network). It mounts each dropped folder read-only beside the workspace volume and tars them across with 1 MiB
-     records. A place it cannot mount (a network share), a helper Docker refuses, and any file the helper had trouble
-     reading go the first way instead.
-4. Removes from the workspace any file written but not whole: a failed read (tar pads the file out to its size) or a
-   cancel partway. A failed file is missing rather than there and wrong. A file that was never written is left alone,
-   so an older copy of it stays.
+3. For a drop of at least 1,000 files or 1 GiB, copies each file the way that is fastest for its size:
+   - **Staged:** folders and files under 2 MB. The app reads them 16 at a time into tar archives in a folder of its own
+     under the temp folder, each closed at 2,000 files, 256 MB or 2 seconds. A helper container
+     (`intentic-drop-copy-<id>-stage`, the sandbox's own image, no network) mounts that folder read-only and unpacks
+     each archive into the workspace volume as it is completed. At most two wait on it at once, so the copy holds
+     under 1 GB of this computer's disk.
+   - **Mounted:** files from 2 MB up. A second helper (`intentic-drop-copy-<id>`) mounts each dropped folder read-only
+     beside the workspace volume and tars them across with 1 MiB records.
+   - **Streamed:** one archive into the sandbox's own `tar -x` (`docker exec -i -u 0 <container>`), for what the
+     helpers cannot take: a big file on a place that will not mount (a network share), an archive that did not
+     unpack, a file a helper had trouble reading, and everything when no helper will run.
+4. Removes from the workspace any file written but not whole: a failed read of a streamed file (tar pads it out to its
+   size), an archive that failed partway through unpacking, or a cancel partway. A failed file is missing rather than
+   there and wrong. A file that was never written is left alone, so an older copy of it stays.
 
-Measured on omen (Docker Desktop for Windows) on 2026-10-09, idle unless the row says otherwise:
+Measured on omen (Docker Desktop for Windows) on 2026-10-09. Each class is about 512 MB, except the stills (164 MB).
+These ran with five of the CI runner's jobs on the same Docker engine; a row from an idle engine says so.
 
-| Route | 1 GiB film | 5,000 × 10 KB |
-| --- | --- | --- |
-| `docker exec -i … tar -x` (the streamed route) | 47 s | 3.2 s |
-| `docker cp -` | 52 s | 8.5 s; 20,000 stills took 170 s with six CI jobs running |
-| helper container, bind mount, tar with 1 MiB records | 5.6 s; 10–16 s with six CI jobs running | 16.6 s (`cp -a`) |
-| HTTP to a published loopback port (the browser's way, without the browser) | 7.7 s | not measured |
+| Files | Streamed (`docker exec -i … tar -x`) | Mounted | Staged (written / unpacked) |
+| --- | --- | --- | --- |
+| 20,000 × 8 KB | 40.5 s | 142.8 s | 0.7 s / 3.9 s |
+| 2,000 × 256 KB | 33.3 s | 30.6 s | 2.2 s / 11.2 s |
+| 256 × 2 MB | 34.8 s | 9.2 s | 1.2 s / 7.7 s |
+| 64 × 8 MB | 22.2 s | 6.3 s | 1.2 s / 6.9 s |
+| 1 × 1 GiB, idle | 47 s | 5.6 s | not measured |
 
-With six CI jobs holding 18 of the Docker VM's 26 GB, two of the helper's reads failed partway with "Cannot allocate
-memory". Repeated runs under the same load all landed, at every record size from 10 KiB to 1 MiB. That failure is the
-reason the helper's trouble goes back through the streamed route.
+Each unpack includes about 3 s of starting a container, which the staged route pays once. The staged writes for the
+three bigger classes were made by Windows' `tar.exe` reading one file at a time; the stills' 0.7 s was the app's
+reader with 16 at a time, on files already in the cache. Read one at a time, the same 20,000 stills took 72 s, about
+3.6 ms a file. That, not Docker, was why the first version crawled through small files.
+
+With six CI jobs holding 18 of the Docker VM's 26 GB, two of the mounting helper's reads failed partway with "Cannot
+allocate memory". Repeated runs under the same load all landed, at every record size from 10 KiB to 1 MiB. That
+failure is the reason a helper's trouble goes back through the streamed route.
 
 The page draws the same card as an upload from the `intentic:drop-copy` events. Anything else is `declined`, and the page
 uploads the drop itself: no Docker, no container on that port, a smaller drop (which keeps the upload's skipping of
@@ -565,8 +576,9 @@ only Windows builds say it.
 _(2026-10-09) A 30 GB folder of 66,000 films and stills, dropped from Explorer onto a local sandbox, froze the page while
 it was read and never started uploading. Rejected: compressing first, since the films were already compressed and the
 transfer was never the slow part; one archive streamed through Docker's API for everything, which the table above
-shows is the slowest way to move a big file; and `docker cp -` for the streamed route, which unpacks through Docker
-Desktop's backend and was the slowest way to move many small ones._
+shows is the slowest way to move a big file; `docker cp -` for the streamed route, which unpacks through Docker
+Desktop's backend (20,000 stills took 170 s with six CI jobs running); and staging the big files too, which writes every
+byte of a film to this computer's disk before the helper reads it again._
 
 ## The sidecar's control lines
 
@@ -595,7 +607,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — startup: plugins, the command list, the tray and what a launch opens onto.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
-- [src-tauri/src/drop_copy.rs](src-tauri/src/drop_copy.rs) — a big drop on the workspace, copied into a sandbox on this computer through `docker cp` (Windows).
+- [src-tauri/src/drop_copy.rs](src-tauri/src/drop_copy.rs) — a big drop on the workspace, copied into a sandbox on this computer through helper containers (Windows).
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
 - [src-tauri/src/resume.rs](src-tauri/src/resume.rs) and [src-tauri/src/prefetch.rs](src-tauri/src/prefetch.rs) — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.

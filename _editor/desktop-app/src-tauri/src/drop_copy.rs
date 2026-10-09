@@ -12,18 +12,23 @@
 // reads it as a string; an object makes it return an error, and WebView2 then calls no handler registered after it,
 // this one included (seen on omen, 2026-10-09). Tauri, finding the string is none of its calls, logs a console.error
 // in the page and does nothing else. The app finds the container publishing that port and walks the dropped folders
-// itself. A drop big enough to be worth it is then copied two ways, each where it is fastest (measured on Docker
-// Desktop for Windows, 2026-10-09):
+// itself. A drop big enough to be worth it is then copied by the routes each kind of file is fastest on (measured on
+// Docker Desktop for Windows, 2026-10-09; see the desktop app's README):
 //
-// - folders and small files as one tar archive streamed into the sandbox's own `tar -x` (`docker exec -i`): about
-//   2,000 small files a second, but only ~20 MB/s, since every byte crosses Docker's API;
-// - files from MOUNTED_FROM up by a throwaway helper container that bind-mounts the dropped folder read-only beside
-//   the sandbox's workspace volume and tars across: ~190 MB/s, but ~300 files a second, since each file is opened
-//   over Docker Desktop's file sharing. A place it cannot mount (a network share), and any file the helper had
-//   trouble reading, goes the first way instead.
+// - staged: folders and files under MOUNTED_FROM are read by the app, READERS at once, into tar archives on this
+//   computer's own disk, and a helper container that mounts those archives unpacks each into the workspace volume as
+//   it is completed. Opening a file on Windows costs milliseconds (3.6 ms each under load on omen), so one at a time
+//   20,000 stills took over a minute just to read; and every byte sent through Docker's API (`docker exec -i`) crawls
+//   when the engine is busy. A local archive is neither: 20,000 stills staged in under a second, unpacked in four.
+// - mounted: files from MOUNTED_FROM up are read by a helper container that bind-mounts the dropped folder read-only
+//   beside the workspace volume and tars across: ~190 MB/s, but a few milliseconds per file over Docker Desktop's
+//   file sharing, which a big file repays and a small one does not.
+// - streamed: one archive into the sandbox's own `tar -x` through `docker exec -i`, for what the other two cannot
+//   take: a big file on a place that will not mount (a network share), a file a helper had trouble with, and
+//   everything when no helper will run.
 //
-// A file written but not whole (a failed read, which tar pads out; a cancel partway) is removed from the workspace at
-// the end, so a failed file is missing rather than there and wrong.
+// A file written but not whole (a failed read of a streamed file, which tar pads out; an unpack that failed or was
+// cancelled partway) is removed from the workspace at the end, so a failed file is missing rather than there and wrong.
 //
 // The page hears how far it has got through `intentic:drop-copy` events and draws the same card it draws for an
 // upload. Anything the app will not take (no Docker, no container on that port, a drop too small to bother, a file
@@ -35,11 +40,11 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{self, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::{Child, ChildStdin, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -436,6 +441,12 @@ impl<'a> Meter<'a> {
         self.copied.live_bytes += bytes;
         self.report();
     }
+
+    /// A file is in the workspace whole: counted done, and no longer spoiled if an earlier route left it partial.
+    fn landed(&mut self, item: &Item) {
+        self.spoiled.remove(&item.name);
+        self.copied.land(item);
+    }
 }
 
 /// Why a copy stopped before the end.
@@ -445,11 +456,191 @@ enum Stop {
     Failed(String),
 }
 
+/// The error a cancel ends an archive with. Not `ErrorKind::Interrupted`: `io::Copy`, which tar copies a file's bytes
+/// with, retries a read that says that, forever.
 fn cancelled() -> io::Error {
-    io::Error::new(io::ErrorKind::Interrupted, "cancelled")
+    io::Error::other("cancelled")
 }
 
-/* THE STREAMED ROUTE: folders and small files, one archive into `tar -x` in the sandbox. */
+/* READING: the files every route but the mounted one reads itself, many at once. */
+
+/// Files the app reads at once. Opening a file on Windows costs milliseconds whatever its size (3.6 ms each on omen
+/// with its CI running, 2026-10-09), and the wait is the disk's and the scanner's, not this thread's: 20,000 stills took
+/// 72 s read one at a time, 13 s sixteen at a time.
+const READERS: usize = 16;
+/// Files read and not yet written, at most. Each is under MOUNTED_FROM, so this and READERS bound the memory a copy
+/// holds to about (READAHEAD + READERS) × MOUNTED_FROM.
+const READAHEAD: usize = 32;
+
+/// One item as an archive writer gets it.
+enum Ready {
+    Dir,
+    /// The whole file, read by a reader.
+    Bytes(Vec<u8>),
+    /// A file too big to hold in memory: the writer reads it from disk as it writes it.
+    Open,
+    /// A file that would not read.
+    Failed(String),
+}
+
+/// Reads one file whole, or says it is too big to (from the scan, or grown past MOUNTED_FROM since).
+fn read_whole(item: &Item) -> Ready {
+    if item.size >= MOUNTED_FROM {
+        return Ready::Open;
+    }
+    let read = std::fs::File::open(&item.source).and_then(|file| {
+        let mut bytes = Vec::with_capacity(usize::try_from(item.size).unwrap_or(0));
+        file.take(MOUNTED_FROM).read_to_end(&mut bytes)?;
+        Ok(bytes)
+    });
+    match read {
+        Ok(bytes) if bytes.len() as u64 >= MOUNTED_FROM => Ready::Open,
+        Ok(bytes) => Ready::Bytes(bytes),
+        Err(error) => Ready::Failed(error.to_string()),
+    }
+}
+
+/// Hands every item to `put` as it is ready: the folders first, in walk order, so the tree is there before anything
+/// lands in it; then the files, as READERS threads finish reading them. An error from `put` stops the readers and is
+/// returned; so does the cancel.
+fn each_ready<'i>(
+    items: &[&'i Item],
+    cancel: &AtomicBool,
+    put: &mut dyn FnMut(&'i Item, Ready) -> io::Result<()>,
+) -> io::Result<()> {
+    for &item in items.iter().filter(|item| item.kind == Kind::Dir) {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(cancelled());
+        }
+        put(item, Ready::Dir)?;
+    }
+    let files: Vec<&Item> = items
+        .iter()
+        .copied()
+        .filter(|item| item.kind == Kind::File)
+        .collect();
+    let next = AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        let (send, ready) = mpsc::sync_channel::<(usize, Ready)>(READAHEAD);
+        for _ in 0..READERS.min(files.len()) {
+            let (send, files, next) = (send.clone(), &files, &next);
+            scope.spawn(move || {
+                while !cancel.load(Ordering::Relaxed) {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(&item) = files.get(index) else {
+                        break;
+                    };
+                    // A send that fails is the writer gone: the copy has stopped.
+                    if send.send((index, read_whole(item))).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(send);
+        for (index, item) in ready {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(cancelled());
+            }
+            put(files[index], item)?;
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Err(cancelled());
+        }
+        Ok(())
+    })
+}
+
+/// What became of one item put into an archive: whether it went in whole, and how many bytes of it went in.
+struct Appended {
+    whole: bool,
+    bytes: u64,
+}
+
+/// Appends one ready item to `builder`. A file that will not read is recorded failed and left out; a big file read
+/// from disk that fails partway is padded out (see [`Exact`]), recorded failed, and marked spoiled. `Err` only for the
+/// archive itself: `out` refusing a write, or the cancel, which leaves the file going marked in `meter.in_flight`.
+fn append<W: Write>(
+    builder: &mut tar::Builder<W>,
+    item: &Item,
+    ready: Ready,
+    cancel: &AtomicBool,
+    meter: &mut Meter,
+) -> io::Result<Appended> {
+    let (file, size) = match ready {
+        Ready::Dir => {
+            let mut head = header(Kind::Dir, 0, item.mtime);
+            builder.append_data(&mut head, &item.name, io::empty())?;
+            return Ok(Appended {
+                whole: true,
+                bytes: 0,
+            });
+        }
+        Ready::Failed(error) => {
+            meter.copied.fail(item, error);
+            return Ok(Appended {
+                whole: false,
+                bytes: 0,
+            });
+        }
+        Ready::Bytes(bytes) => {
+            meter.copied.current.clone_from(&item.name);
+            let mut head = header(Kind::File, bytes.len() as u64, item.mtime);
+            builder.append_data(&mut head, &item.name, bytes.as_slice())?;
+            return Ok(Appended {
+                whole: true,
+                bytes: bytes.len() as u64,
+            });
+        }
+        Ready::Open => {
+            let opened = std::fs::File::open(&item.source).and_then(|file| {
+                let size = file.metadata()?.len();
+                Ok((file, size))
+            });
+            match opened {
+                Ok(opened) => opened,
+                Err(error) => {
+                    meter.copied.fail(item, error.to_string());
+                    return Ok(Appended {
+                        whole: false,
+                        bytes: 0,
+                    });
+                }
+            }
+        }
+    };
+    meter.copied.current.clone_from(&item.name);
+    // Until the file's last byte is out: an archive ended here (a cancel, the other end gone) leaves it partial.
+    meter.in_flight = Some(item.name.clone());
+    // The file's bytes count while it goes, and are the caller's to count once it has gone.
+    let before = meter.copied.live_bytes;
+    let mut head = header(Kind::File, size, item.mtime);
+    let mut exact = Exact {
+        inner: file,
+        remaining: size,
+        error: None,
+        meter: &mut *meter,
+        cancel,
+    };
+    builder.append_data(&mut head, &item.name, &mut exact)?;
+    let error = exact.error.take();
+    meter.in_flight = None;
+    meter.copied.live_bytes = before;
+    if let Some(error) = error {
+        meter.spoiled.insert(item.name.clone());
+        meter.copied.fail(item, error);
+        return Ok(Appended {
+            whole: false,
+            bytes: size,
+        });
+    }
+    Ok(Appended {
+        whole: true,
+        bytes: size,
+    })
+}
+
+/* THE STREAMED ROUTE: one archive into `tar -x` in the sandbox, for what the other routes cannot take. */
 
 /// A file's bytes, exactly as many as its header says. The header is written before the first byte is read, so a
 /// file that shrinks, or fails to read halfway, is padded out with zeros rather than leaving the archive misaligned
@@ -518,9 +709,8 @@ fn header(kind: Kind, size: u64, mtime: u64) -> tar::Header {
     header
 }
 
-/// Writes `items` as one tar archive into `out`, named by their paths below /work. A file that will not open is
-/// skipped and recorded; one that fails partway is padded (see [`Exact`]) and recorded. `Err` only for the archive
-/// itself: `out` refusing a write (the copy on the other end is gone) or the cancel.
+/// Writes `items` as one tar archive into `out`, named by their paths below /work, each file counted done as it goes
+/// in whole (see [`append`] for the ones that do not). `Err` only for the archive itself.
 fn write_archive<W: Write>(
     out: W,
     items: &[&Item],
@@ -528,52 +718,14 @@ fn write_archive<W: Write>(
     meter: &mut Meter,
 ) -> io::Result<()> {
     let mut builder = tar::Builder::new(out);
-    for item in items {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(cancelled());
+    each_ready(items, cancel, &mut |item, ready| {
+        let appended = append(&mut builder, item, ready, cancel, meter)?;
+        if appended.whole && item.kind == Kind::File {
+            meter.landed(item);
         }
-        if item.kind == Kind::Dir {
-            let mut head = header(Kind::Dir, 0, item.mtime);
-            builder.append_data(&mut head, &item.name, io::empty())?;
-            continue;
-        }
-        let opened = std::fs::File::open(&item.source).and_then(|file| {
-            let size = file.metadata()?.len();
-            Ok((file, size))
-        });
-        let (file, size) = match opened {
-            Ok(opened) => opened,
-            Err(error) => {
-                meter.copied.fail(item, error.to_string());
-                continue;
-            }
-        };
-        meter.copied.current.clone_from(&item.name);
-        // Until the file's last byte is out: an archive ended here (a cancel, the other end gone) leaves it partial.
-        meter.in_flight = Some(item.name.clone());
-        let mut head = header(Kind::File, size, item.mtime);
-        let mut exact = Exact {
-            inner: file,
-            remaining: size,
-            error: None,
-            meter: &mut *meter,
-            cancel,
-        };
-        builder.append_data(&mut head, &item.name, &mut exact)?;
-        let error = exact.error.take();
-        meter.in_flight = None;
-        meter.copied.live_bytes = 0;
-        match error {
-            Some(error) => {
-                meter.spoiled.insert(item.name.clone());
-                meter.copied.fail(item, error);
-            }
-            None => {
-                meter.spoiled.remove(&item.name);
-                meter.copied.land(item);
-            }
-        }
-    }
+        meter.report();
+        Ok(())
+    })?;
     builder.into_inner()?.flush()
 }
 
@@ -647,11 +799,421 @@ fn stream(
     }
 }
 
+/* THE STAGED ROUTE: folders and small files, in archives on this computer's disk that a helper unpacks. */
+
+/// When a staged archive is closed and handed to the helper: at this many files, this many bytes, or this long after
+/// it was opened, whichever comes first. Small enough that the card's count of files done moves every second or so.
+#[derive(Debug, Clone, Copy)]
+struct Limits {
+    files: usize,
+    bytes: u64,
+    open: Duration,
+    /// Archives handed over and not yet unpacked, at most: with the one being written, what the copy holds on this
+    /// computer's disk at once.
+    ahead: usize,
+}
+
+const STAGE: Limits = Limits {
+    files: 2_000,
+    bytes: 256 * 1024 * 1024,
+    open: Duration::from_secs(2),
+    ahead: 2,
+};
+
+/// What the staging helper runs: each archive named on its stdin unpacked into /work, and said back on stdout.
+const STAGE_SCRIPT: &str = "while IFS= read -r part; do \
+    if tar -x -b 2048 -f \"/stage/$part\" -C /work --no-same-owner; then echo \"ok $part\"; \
+    else echo \"failed $part\"; fi; done";
+
+/// The helper that unpacks staged archives, as the staged route talks to it. A trait so the tests can stand in for
+/// Docker.
+trait Unpacker {
+    /// Asks for one complete archive, by its file name in the staging folder, to be unpacked.
+    fn unpack(&mut self, part: &str) -> io::Result<()>;
+    /// The next answer, waiting at most `wait` for it.
+    fn answer(&mut self, wait: Duration) -> Answer;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Answer {
+    /// An archive, and whether it unpacked whole.
+    Unpacked(String, bool),
+    Waiting,
+    /// The helper has gone: it exited, or never got going (a folder Docker would not mount).
+    Gone,
+}
+
+/// The staging helper as a `docker run`: the staging folder read-only at /stage, the workspace volume at /work.
+struct StageHelper {
+    name: String,
+    child: Child,
+    stdin: Option<ChildStdin>,
+    answers: mpsc::Receiver<String>,
+}
+
+impl StageHelper {
+    fn start(name: &str, image: &str, volume: &str, stage: &Path) -> io::Result<Self> {
+        let mut command = crate::scripts::docker_command();
+        command
+            .args(stage_args(name, image, volume, stage))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command.spawn()?;
+        let (lines, answers) = mpsc::channel::<String>();
+        if let Some(stdout) = child.stdout.take() {
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for line in io::BufReader::new(stdout).lines().map_while(Result::ok) {
+                    if lines.send(line).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for line in io::BufReader::new(stderr).lines().map_while(Result::ok) {
+                    eprintln!("drop copy: staging helper: {line}");
+                }
+            });
+        }
+        Ok(Self {
+            name: name.to_string(),
+            stdin: child.stdin.take(),
+            child,
+            answers,
+        })
+    }
+
+    /// Ends the helper: closing its stdin ends its loop once the archive going is unpacked; a cancel removes it at
+    /// once (killing the CLI alone leaves the container running).
+    fn stop(mut self, cancelled: bool) {
+        self.stdin = None;
+        if cancelled {
+            let mut remove = crate::scripts::docker_command();
+            remove.args(["rm", "-f", &self.name]);
+            let _ = crate::scripts::capture("docker rm", remove, LOOKUP_LIMIT);
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+    }
+}
+
+impl Unpacker for StageHelper {
+    fn unpack(&mut self, part: &str) -> io::Result<()> {
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| io::Error::other("the helper is stopped"))?;
+        writeln!(stdin, "{part}")?;
+        stdin.flush()
+    }
+
+    fn answer(&mut self, wait: Duration) -> Answer {
+        match self.answers.recv_timeout(wait) {
+            Ok(line) => parse_answer(&line),
+            Err(mpsc::RecvTimeoutError::Timeout) => Answer::Waiting,
+            Err(mpsc::RecvTimeoutError::Disconnected) => Answer::Gone,
+        }
+    }
+}
+
+/// A line the staging helper wrote on stdout.
+fn parse_answer(line: &str) -> Answer {
+    match line.split_once(' ') {
+        Some(("ok", part)) => Answer::Unpacked(part.to_string(), true),
+        Some(("failed", part)) => Answer::Unpacked(part.to_string(), false),
+        _ => Answer::Waiting,
+    }
+}
+
+/// The staging helper's `docker run`.
+pub fn stage_args(name: &str, image: &str, volume: &str, stage: &Path) -> Vec<String> {
+    let mut args = run_args(name);
+    args.extend([
+        "-v".to_string(),
+        format!("{}:/stage:ro", stage.display()),
+        "-v".to_string(),
+        format!("{volume}:{WORK}"),
+        image.to_string(),
+        "-c".to_string(),
+        STAGE_SCRIPT.to_string(),
+    ]);
+    args
+}
+
+/// One staged archive: its file name, what went into it whole (folders and files), and the bytes of those files.
+struct Part<'i> {
+    name: String,
+    whole: Vec<&'i Item>,
+    bytes: u64,
+}
+
+/// The archive being written, and when it was opened.
+struct Open<'i> {
+    builder: tar::Builder<BufWriter<std::fs::File>>,
+    part: Part<'i>,
+    files: usize,
+    since: Instant,
+}
+
+/// Why staging stopped before its end, when it did.
+enum Halt {
+    Cancelled,
+    /// The helper went, or this computer's disk refused a write: what is left goes the streamed route.
+    Broken(String),
+}
+
+/// The staged route's state between the items `each_ready` hands it.
+struct Stager<'i, 'u> {
+    dir: &'u Path,
+    limits: Limits,
+    unpacker: &'u mut dyn Unpacker,
+    open: Option<Open<'i>>,
+    handed: VecDeque<Part<'i>>,
+    count: usize,
+    /// Items done with: unpacked whole, or failed in a way another route would fail at too (a file that will not read).
+    settled: HashSet<*const Item>,
+    halt: Option<Halt>,
+}
+
+impl<'i> Stager<'i, '_> {
+    fn put(
+        &mut self,
+        item: &'i Item,
+        ready: Ready,
+        cancel: &AtomicBool,
+        meter: &mut Meter,
+    ) -> io::Result<()> {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(cancelled());
+        }
+        if self.open.is_none() {
+            self.count += 1;
+            let name = format!("part-{:05}.tar", self.count);
+            let file = std::fs::File::create(self.dir.join(&name))?;
+            self.open = Some(Open {
+                builder: tar::Builder::new(BufWriter::with_capacity(1 << 20, file)),
+                part: Part {
+                    name,
+                    whole: Vec::new(),
+                    bytes: 0,
+                },
+                files: 0,
+                since: Instant::now(),
+            });
+        }
+        let open = self.open.as_mut().expect("opened above");
+        let appended = append(&mut open.builder, item, ready, cancel, meter)?;
+        if appended.whole {
+            open.part.whole.push(item);
+            open.part.bytes += appended.bytes;
+            meter.copied.live_bytes += appended.bytes;
+        } else if appended.bytes == 0 {
+            // Would not read: the streamed route would fail at it just the same.
+            self.settled.insert(item);
+        } else {
+            // Padded, and so spoiled: it goes in as it is, is removed at the end, and is not tried again.
+            open.part.whole.push(item);
+            self.settled.insert(item);
+        }
+        if item.kind == Kind::File {
+            open.files += 1;
+        }
+        if open.files >= self.limits.files
+            || open.part.bytes >= self.limits.bytes
+            || open.since.elapsed() >= self.limits.open
+        {
+            self.hand_over(cancel, meter)?;
+        }
+        if !self.hear(Duration::ZERO, meter) {
+            return Err(self.broken("the staging helper stopped"));
+        }
+        meter.report();
+        Ok(())
+    }
+
+    /// Closes the archive being written, padded out to whole RECORDs for the helper's `tar -b 2048`, and hands it to
+    /// the helper once fewer than `limits.ahead` are waiting on it.
+    fn hand_over(&mut self, cancel: &AtomicBool, meter: &mut Meter) -> io::Result<()> {
+        let Some(open) = self.open.take() else {
+            return Ok(());
+        };
+        let mut file = open
+            .builder
+            .into_inner()?
+            .into_inner()
+            .map_err(|error| error.into_error())?;
+        let written = file.metadata()?.len();
+        let padding = (RECORD - written % RECORD) % RECORD;
+        file.write_all(&vec![0u8; usize::try_from(padding).unwrap_or(0)])?;
+        file.flush()?;
+        drop(file);
+        while self.handed.len() >= self.limits.ahead {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(cancelled());
+            }
+            if !self.hear(Duration::from_millis(200), meter) {
+                return Err(self.broken("the staging helper stopped"));
+            }
+        }
+        if let Err(error) = self.unpacker.unpack(&open.part.name) {
+            let _ = std::fs::remove_file(self.dir.join(&open.part.name));
+            return Err(self.broken(&format!(
+                "the staging helper would not take an archive: {error}"
+            )));
+        }
+        self.handed.push_back(open.part);
+        Ok(())
+    }
+
+    /// Takes in the helper's answers: an archive unpacked whole lands its files; one that did not leaves them for the
+    /// streamed route, spoiled, since an unpack that failed partway may have left any of them partial. Waits for the
+    /// first answer at most `wait`. False once the helper has gone.
+    fn hear(&mut self, wait: Duration, meter: &mut Meter) -> bool {
+        let mut wait = wait;
+        loop {
+            match self.unpacker.answer(wait) {
+                Answer::Waiting => return true,
+                Answer::Gone => return false,
+                Answer::Unpacked(name, whole) => {
+                    let Some(at) = self.handed.iter().position(|part| part.name == name) else {
+                        continue;
+                    };
+                    let part = self.handed.remove(at).expect("found above");
+                    let _ = std::fs::remove_file(self.dir.join(&part.name));
+                    meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
+                    for item in &part.whole {
+                        if !whole {
+                            if item.kind == Kind::File {
+                                meter.spoiled.insert(item.name.clone());
+                            }
+                        } else if self.settled.insert(*item) && item.kind == Kind::File {
+                            meter.landed(item);
+                        }
+                    }
+                    if !whole {
+                        eprintln!(
+                            "drop copy: {} did not unpack; streaming its files",
+                            part.name
+                        );
+                    }
+                    meter.report();
+                }
+            }
+            wait = Duration::ZERO;
+        }
+    }
+
+    fn broken(&mut self, reason: &str) -> io::Error {
+        self.halt = Some(Halt::Broken(reason.to_string()));
+        io::Error::other(reason.to_string())
+    }
+}
+
+/// The staged route: `items` read by the app many at once into archives in `dir`, each unpacked by `unpacker` as soon
+/// as it is complete. Returns what is left for the streamed route: nothing when every archive unpacked; otherwise the
+/// items of the archives that did not (spoiled, see [`Stager::hear`]) and every item not staged yet.
+fn stage<'i>(
+    dir: &Path,
+    items: &[&'i Item],
+    unpacker: &mut dyn Unpacker,
+    limits: Limits,
+    cancel: &AtomicBool,
+    meter: &mut Meter,
+) -> Result<Vec<&'i Item>, Stop> {
+    let mut stager = Stager {
+        dir,
+        limits,
+        unpacker,
+        open: None,
+        handed: VecDeque::new(),
+        count: 0,
+        settled: HashSet::new(),
+        halt: None,
+    };
+    let written = each_ready(items, cancel, &mut |item, ready| {
+        stager.put(item, ready, cancel, meter)
+    });
+    let written = written.and_then(|()| stager.hand_over(cancel, meter));
+    if let Err(error) = written {
+        if cancel.load(Ordering::SeqCst) {
+            stager.halt = Some(Halt::Cancelled);
+        } else if stager.halt.is_none() {
+            stager.halt = Some(Halt::Broken(format!("staging stopped: {error}")));
+        }
+    }
+    // The archive being written when staging stopped was never handed over: nothing of it is in the workspace.
+    if let Some(open) = stager.open.take() {
+        drop(open.builder);
+        let _ = std::fs::remove_file(dir.join(&open.part.name));
+    }
+    while stager.halt.is_none() && !stager.handed.is_empty() {
+        if cancel.load(Ordering::SeqCst) {
+            stager.halt = Some(Halt::Cancelled);
+        } else if !stager.hear(Duration::from_millis(200), meter) {
+            stager.halt = Some(Halt::Broken("the staging helper stopped".to_string()));
+        }
+    }
+    // Handed over and never answered: possibly half unpacked.
+    for part in std::mem::take(&mut stager.handed) {
+        let _ = std::fs::remove_file(dir.join(&part.name));
+        meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
+        for item in part.whole.iter().filter(|item| item.kind == Kind::File) {
+            meter.spoiled.insert(item.name.clone());
+        }
+    }
+    match stager.halt {
+        Some(Halt::Cancelled) => return Err(Stop::Cancelled),
+        Some(Halt::Broken(reason)) => eprintln!("drop copy: streaming the rest: {reason}"),
+        None => {}
+    }
+    Ok(items
+        .iter()
+        .copied()
+        .filter(|item| !stager.settled.contains(&(*item as *const Item)))
+        .collect())
+}
+
+/// The staged route against Docker: a helper on the sandbox's image and volume, a staging folder of its own under this
+/// computer's temp folder, removed at the end.
+fn stage_into<'i>(
+    id: &str,
+    sandbox: &Sandbox,
+    items: &[&'i Item],
+    cancel: &AtomicBool,
+    meter: &mut Meter,
+) -> Result<Vec<&'i Item>, Stop> {
+    // Names the copy's helpers by the request, so a cancel can find them.
+    let name = format!("intentic-drop-copy-{}-stage", &id[..id.len().min(12)]);
+    let dir = std::env::temp_dir().join(format!("intentic-drop-copy-{id}"));
+    let started = std::fs::create_dir_all(&dir)
+        .and_then(|()| StageHelper::start(&name, &sandbox.image, &sandbox.volume, &dir));
+    let mut helper = match started {
+        Ok(helper) => helper,
+        Err(error) => {
+            eprintln!(
+                "drop copy: streaming the small files: the staging helper wouldn't start: {error}"
+            );
+            let _ = std::fs::remove_dir_all(&dir);
+            return Ok(items.to_vec());
+        }
+    };
+    let left = stage(&dir, items, &mut helper, STAGE, cancel, meter);
+    helper.stop(matches!(left, Err(Stop::Cancelled)));
+    let _ = std::fs::remove_dir_all(&dir);
+    left
+}
+
 /* THE MOUNTED ROUTE: big files, by a helper container that sees the dropped folder. */
 
-/// Files from this size up go the mounted route. Opening a file over Docker Desktop's file sharing costs about 3 ms,
-/// which the mounted route's ~9x speed repays from roughly 100 KB.
-const MOUNTED_FROM: u64 = 256 * 1024;
+/// Files from this size up go the mounted route; smaller ones are staged. Each file opened over Docker Desktop's file
+/// sharing costs milliseconds (7 ms each under load on omen), which a big file repays and a small one does not: with
+/// its CI running, 2,000 files of 256 KB took 31 s mounted and 13 s staged; 256 of 2 MB, 9.2 s and 8.9 s; 64 of 8 MB,
+/// 6.3 s and 8.1 s, since staging writes every byte to this computer's disk first (2026-10-09).
+const MOUNTED_FROM: u64 = 2 * 1024 * 1024;
 /// The helper's tar record, 1 MiB (`-b 2048`). At tar's default 10 KiB every read crosses the file sharing on its
 /// own: 1 GiB took 16 s rather than 6.
 const RECORD: u64 = 1024 * 1024;
@@ -668,14 +1230,23 @@ fn mountable(place: &Path) -> bool {
     place.is_absolute() && !place.to_string_lossy().starts_with(r"\\")
 }
 
-/// The sandbox container's image and the volume its /work is, from `docker inspect` (`image<TAB>volume`): the helper
-/// runs the image that is already here and mounts that same volume.
-pub fn parse_inspect(out: &str) -> Option<(String, String)> {
-    let (image, volume) = out.trim().split_once('\t')?;
-    (!image.is_empty() && !volume.is_empty()).then(|| (image.to_string(), volume.to_string()))
+/// What the helpers need of the sandbox: the image it runs, which is already here, and the volume its /work is.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Sandbox {
+    pub image: String,
+    pub volume: String,
 }
 
-fn inspect(container: &str) -> Result<(String, String), String> {
+/// The sandbox, from `docker inspect` (`image<TAB>volume`).
+pub fn parse_inspect(out: &str) -> Option<Sandbox> {
+    let (image, volume) = out.trim().split_once('\t')?;
+    (!image.is_empty() && !volume.is_empty()).then(|| Sandbox {
+        image: image.to_string(),
+        volume: volume.to_string(),
+    })
+}
+
+fn inspect(container: &str) -> Result<Sandbox, String> {
     let mut command = crate::scripts::docker_command();
     command.args([
         "inspect",
@@ -693,16 +1264,10 @@ fn inspect(container: &str) -> Result<(String, String), String> {
     })
 }
 
-/// The helper's `docker run`: named so a cancel can remove it (killing the CLI leaves a container running), no
-/// network, never a pull, each dropped root read-only at /src/<its name>, the workspace volume at /work.
-pub fn helper_args(
-    name: &str,
-    image: &str,
-    volume: &str,
-    mounts: &[(&Path, &str)],
-    target: &str,
-) -> Vec<String> {
-    let mut args: Vec<String> = [
+/// What every helper's `docker run` starts with: named so a cancel can remove it (killing the CLI leaves a container
+/// running), no network, never a pull, its script run by `sh`.
+fn run_args(name: &str) -> Vec<String> {
+    [
         "run",
         "--rm",
         "-i",
@@ -718,7 +1283,18 @@ pub fn helper_args(
         "sh",
     ]
     .map(String::from)
-    .to_vec();
+    .to_vec()
+}
+
+/// The mounting helper's `docker run`: each dropped root read-only at /src/<its name>, the workspace volume at /work.
+pub fn helper_args(
+    name: &str,
+    image: &str,
+    volume: &str,
+    mounts: &[(&Path, &str)],
+    target: &str,
+) -> Vec<String> {
+    let mut args = run_args(name);
     for (place, root) in mounts {
         args.push("-v".to_string());
         args.push(format!("{}:/src/{root}:ro", place.display()));
@@ -770,21 +1346,14 @@ pub fn said(line: &str) -> Said<'_> {
 /// with, and, when it could not do its job (it would not mount, Docker refused it), the file it was on and the rest. A
 /// failure of this route costs speed and never a file.
 fn mount<'i>(
-    container: &str,
     id: &str,
+    sandbox: &Sandbox,
     target: &str,
     scan: &Scan,
     items: &[&'i Item],
     cancel: &AtomicBool,
     meter: &mut Meter,
 ) -> Result<Vec<&'i Item>, Stop> {
-    let (image, volume) = match inspect(container) {
-        Ok(found) => found,
-        Err(reason) => {
-            eprintln!("drop copy: streaming the big files too: {reason}");
-            return Ok(items.to_vec());
-        }
-    };
     let name = format!("intentic-drop-copy-{}", &id[..id.len().min(12)]);
     let roots: Vec<usize> = {
         let mut roots: Vec<usize> = items.iter().map(|item| item.root).collect();
@@ -798,7 +1367,13 @@ fn mount<'i>(
         .collect();
     let mut command = crate::scripts::docker_command();
     command
-        .args(helper_args(&name, &image, &volume, &mounts, target))
+        .args(helper_args(
+            &name,
+            &sandbox.image,
+            &sandbox.volume,
+            &mounts,
+            target,
+        ))
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -1075,12 +1650,29 @@ pub fn run(
     }
 }
 
-/// Which way each item goes: big files on a place that mounts go mounted, everything else (folders first, so the
-/// tree exists before anything lands in it) streamed.
-fn routes(scan: &Scan) -> (Vec<&Item>, Vec<&Item>) {
-    scan.items.iter().partition(|item| {
-        item.kind == Kind::File && item.size >= MOUNTED_FROM && mountable(&scan.places[item.root])
-    })
+/// Which way each item goes.
+#[derive(Debug, Default)]
+struct Routes<'s> {
+    /// Folders and small files, read by the app.
+    staged: Vec<&'s Item>,
+    /// Big files on a place that mounts, read by a helper.
+    mounted: Vec<&'s Item>,
+    /// Big files on a place that does not.
+    streamed: Vec<&'s Item>,
+}
+
+fn routes(scan: &Scan) -> Routes<'_> {
+    let mut routes = Routes::default();
+    for item in &scan.items {
+        if item.kind == Kind::Dir || item.size < MOUNTED_FROM {
+            routes.staged.push(item);
+        } else if mountable(&scan.places[item.root]) {
+            routes.mounted.push(item);
+        } else {
+            routes.streamed.push(item);
+        }
+    }
+    routes
 }
 
 fn copy_into(
@@ -1129,28 +1721,40 @@ fn copy_into(
             })).collect::<Vec<_>>(),
         }),
     ));
-    let (mounted, streamed) = routes(&scan);
+    let routes = routes(&scan);
     let mut tick = |copied: &Copied| emit(with(id, "progress", copied_json(copied)));
     let mut meter = Meter::new(scan.roots.len(), &mut tick);
-    let outcome = stream(container, &streamed, cancel, &mut meter).and_then(|()| {
-        if mounted.is_empty() {
+    // Without the sandbox's image and volume no helper runs, and everything goes the streamed route.
+    let helpers = inspect(container)
+        .map_err(|reason| eprintln!("drop copy: streaming everything: {reason}"))
+        .ok();
+    let outcome = (|| {
+        let mut left = routes.streamed.clone();
+        match &helpers {
+            Some(sandbox) => {
+                left.extend(stage_into(id, sandbox, &routes.staged, cancel, &mut meter)?);
+                if !routes.mounted.is_empty() {
+                    left.extend(mount(
+                        id,
+                        sandbox,
+                        &request.target,
+                        &scan,
+                        &routes.mounted,
+                        cancel,
+                        &mut meter,
+                    )?);
+                }
+            }
+            None => {
+                left.extend(&routes.staged);
+                left.extend(&routes.mounted);
+            }
+        }
+        if left.is_empty() {
             return Ok(());
         }
-        let left = mount(
-            container,
-            id,
-            &request.target,
-            &scan,
-            &mounted,
-            cancel,
-            &mut meter,
-        )?;
-        if left.is_empty() {
-            Ok(())
-        } else {
-            stream(container, &left, cancel, &mut meter)
-        }
-    });
+        stream(container, &left, cancel, &mut meter)
+    })();
     remove_spoiled(container, &meter.spoiled);
     let copied = meter.copied;
     let mut detail = copied_json(&copied);
@@ -1557,7 +2161,34 @@ mod tests {
         let mut meter = Meter::new(scan.roots.len(), &mut tick);
         let items: Vec<&Item> = scan.items.iter().collect();
         let result = write_archive(Vec::new(), &items, &AtomicBool::new(true), &mut meter);
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Interrupted);
+        assert_eq!(result.unwrap_err().to_string(), "cancelled");
+    }
+
+    /// A cancel while a big file is being read from disk ends the archive there, rather than `io::copy` retrying the
+    /// read that says so, which it does forever with `ErrorKind::Interrupted`.
+    #[test]
+    fn a_cancel_partway_through_a_big_file_ends_the_archive_there() {
+        let base = Scratch::new();
+        let film = base.path().join("film.mov");
+        fs::File::create(&film)
+            .unwrap()
+            .set_len(MOUNTED_FROM * 2)
+            .unwrap();
+        let mut item = big("m/film.mov", MOUNTED_FROM * 2);
+        item.source = film;
+        let cancel = AtomicBool::new(false);
+        let mut tick = |copied: &Copied| {
+            if copied.live_bytes > 0 {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        };
+        let mut meter = Meter::new(1, &mut tick);
+        meter.last = Instant::now() - TICK;
+        let started = Instant::now();
+        let result = write_archive(io::sink(), &[&item], &cancel, &mut meter);
+        assert_eq!(result.unwrap_err().to_string(), "cancelled");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(meter.in_flight.as_deref(), Some("media/m/film.mov"));
     }
 
     /// Big files on a drive go mounted; folders, small files, and anything on a place that will not mount, streamed.
@@ -1570,29 +2201,311 @@ mod tests {
             .set_len(MOUNTED_FROM)
             .unwrap();
         let scan = scanned(&[marketing, loose], "");
-        let (mounted, streamed) = routes(&scan);
+        let routes = routes(&scan);
         assert_eq!(
-            mounted
+            routes
+                .mounted
                 .iter()
                 .map(|item| item.relative.as_str())
                 .collect::<Vec<_>>(),
             vec!["marketing/films/2026/launch-4k.mp4"]
         );
-        // The folders lead, in walk order, so the tree is there before anything lands in it.
         assert_eq!(
-            streamed
-                .first()
-                .map(|item| (item.relative.as_str(), item.kind)),
-            Some(("marketing", Kind::Dir))
-        );
-        assert_eq!(
-            streamed
-                .iter()
-                .filter(|item| item.kind == Kind::File)
-                .count(),
-            5
+            (
+                routes
+                    .staged
+                    .iter()
+                    .filter(|item| item.kind == Kind::File)
+                    .count(),
+                routes
+                    .staged
+                    .iter()
+                    .filter(|item| item.kind == Kind::Dir)
+                    .count(),
+                routes.streamed.len(),
+            ),
+            (5, 6, 0)
         );
         assert!(!mountable(Path::new(r"\\nas\films")));
+    }
+
+    /// Every item reaches the writer once: the folders first, then each file read whole, too big to hold, or failed.
+    #[test]
+    fn every_item_is_read_once_folders_first_then_files_as_they_are_read() {
+        let base = Scratch::new();
+        let mut owned = Vec::new();
+        for folder in 0..4 {
+            let dir = base.path().join(format!("d{folder}"));
+            fs::create_dir_all(&dir).unwrap();
+            owned.push(Item {
+                kind: Kind::Dir,
+                source: dir.clone(),
+                ..big(&format!("d{folder}"), 0)
+            });
+            for file in 0..150 {
+                let path = dir.join(format!("f{file}.jpg"));
+                fs::write(&path, format!("{folder}/{file}")).unwrap();
+                let mut item = big(&format!("d{folder}/f{file}.jpg"), 4);
+                item.source = path;
+                owned.push(item);
+            }
+        }
+        let huge = base.path().join("huge.mov");
+        fs::File::create(&huge)
+            .unwrap()
+            .set_len(MOUNTED_FROM)
+            .unwrap();
+        let mut huge_item = big("huge.mov", MOUNTED_FROM);
+        huge_item.source = huge;
+        owned.push(huge_item);
+        let mut gone = big("gone.jpg", 10);
+        gone.source = base.path().join("gone.jpg");
+        owned.push(gone);
+        let items: Vec<&Item> = owned.iter().collect();
+        let mut seen: Vec<(String, &'static str)> = Vec::new();
+        each_ready(&items, &AtomicBool::new(false), &mut |item, ready| {
+            let what = match ready {
+                Ready::Dir => "dir",
+                Ready::Bytes(bytes) => {
+                    let expected = fs::read(&item.source).unwrap();
+                    assert_eq!(bytes, expected, "{}", item.relative);
+                    "bytes"
+                }
+                Ready::Open => "open",
+                Ready::Failed(_) => "failed",
+            };
+            seen.push((item.relative.clone(), what));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(seen.len(), items.len());
+        assert!(seen[..4].iter().all(|(_, what)| *what == "dir"));
+        let count = |kind: &str| seen.iter().filter(|(_, what)| *what == kind).count();
+        assert_eq!(
+            (count("bytes"), count("open"), count("failed")),
+            (600, 1, 1)
+        );
+        let unique: HashSet<&String> = seen.iter().map(|(name, _)| name).collect();
+        assert_eq!(unique.len(), items.len());
+    }
+
+    /// A stand-in for the staging helper: unpacks each archive it is handed into `work` with the tar crate, as the
+    /// helper's tar would, and answers; or answers that the archives in `fail` did not unpack; or goes after `gone_after`.
+    struct FakeUnpacker {
+        stage: PathBuf,
+        work: PathBuf,
+        fail: HashSet<String>,
+        gone_after: Option<usize>,
+        answers: VecDeque<Answer>,
+        handed: usize,
+        most_waiting: usize,
+    }
+
+    impl FakeUnpacker {
+        fn new(stage: &Path, work: &Path) -> Self {
+            Self {
+                stage: stage.to_path_buf(),
+                work: work.to_path_buf(),
+                fail: HashSet::new(),
+                gone_after: None,
+                answers: VecDeque::new(),
+                handed: 0,
+                most_waiting: 0,
+            }
+        }
+    }
+
+    impl Unpacker for FakeUnpacker {
+        fn unpack(&mut self, part: &str) -> io::Result<()> {
+            if self.gone_after.is_some_and(|after| self.handed >= after) {
+                return Err(io::Error::from(io::ErrorKind::BrokenPipe));
+            }
+            self.handed += 1;
+            let bytes = fs::read(self.stage.join(part)).unwrap();
+            // Whole RECORDs, as the helper's `tar -b 2048` reads them.
+            assert_eq!(bytes.len() as u64 % RECORD, 0, "{part}");
+            let whole = !self.fail.contains(part);
+            if whole {
+                tar::Archive::new(bytes.as_slice())
+                    .unpack(&self.work)
+                    .unwrap();
+            }
+            self.answers
+                .push_back(Answer::Unpacked(part.to_string(), whole));
+            self.most_waiting = self.most_waiting.max(self.answers.len());
+            Ok(())
+        }
+
+        fn answer(&mut self, _wait: Duration) -> Answer {
+            match self.answers.pop_front() {
+                Some(answer) => answer,
+                None if self.gone_after.is_some_and(|after| self.handed >= after) => Answer::Gone,
+                None => Answer::Waiting,
+            }
+        }
+    }
+
+    /// A drop of `folders` × `files` small files under `marketing/`, scanned to land under `media/`.
+    fn stills(folders: usize, files: usize) -> (Scratch, Scan) {
+        let base = Scratch::new();
+        for folder in 0..folders {
+            let dir = base.path().join(format!("marketing/batch-{folder}"));
+            fs::create_dir_all(&dir).unwrap();
+            for file in 0..files {
+                fs::write(
+                    dir.join(format!("still-{file}.jpg")),
+                    format!("still {folder}/{file}"),
+                )
+                .unwrap();
+            }
+        }
+        let scan = scanned(&[base.path().join("marketing")], "media");
+        (base, scan)
+    }
+
+    const SMALL_PARTS: Limits = Limits {
+        files: 50,
+        bytes: 1 << 30,
+        open: Duration::from_secs(60),
+        ahead: 2,
+    };
+
+    /// Many small files staged in archives of SMALL_PARTS.files, each unpacked as it is complete: every file lands
+    /// with its own bytes, no more than `ahead` archives wait on the helper at once, and the staging folder ends empty.
+    #[test]
+    fn small_files_are_staged_in_archives_that_unpack_as_they_complete() {
+        let (_base, scan) = stills(4, 60);
+        let (stage_dir, work) = (Scratch::new(), Scratch::new());
+        let mut unpacker = FakeUnpacker::new(stage_dir.path(), work.path());
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(scan.roots.len(), &mut tick);
+        let items: Vec<&Item> = scan.items.iter().collect();
+        let left = stage(
+            stage_dir.path(),
+            &items,
+            &mut unpacker,
+            SMALL_PARTS,
+            &AtomicBool::new(false),
+            &mut meter,
+        )
+        .unwrap();
+        assert!(left.is_empty());
+        assert_eq!(
+            (
+                meter.copied.done,
+                meter.copied.failed,
+                meter.copied.live_bytes,
+                meter.copied.roots.clone()
+            ),
+            (240, 0, 0, vec![(240, 0)])
+        );
+        assert_eq!(
+            fs::read_to_string(work.path().join("media/marketing/batch-3/still-59.jpg")).unwrap(),
+            "still 3/59"
+        );
+        assert_eq!(unpacker.handed, 5);
+        assert!(unpacker.most_waiting <= SMALL_PARTS.ahead);
+        assert_eq!(fs::read_dir(stage_dir.path()).unwrap().count(), 0);
+    }
+
+    /// An archive that does not unpack leaves its files to the streamed route, marked spoiled until it lands them; the
+    /// other archives' files land, and a helper that goes leaves everything it did not answer for.
+    #[test]
+    fn what_the_helper_did_not_unpack_is_left_for_the_streamed_route() {
+        let (_base, scan) = stills(2, 60);
+        let items: Vec<&Item> = scan.items.iter().collect();
+        let (stage_dir, work) = (Scratch::new(), Scratch::new());
+        let mut unpacker = FakeUnpacker::new(stage_dir.path(), work.path());
+        unpacker.fail.insert("part-00002.tar".to_string());
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(scan.roots.len(), &mut tick);
+        let left = stage(
+            stage_dir.path(),
+            &items,
+            &mut unpacker,
+            SMALL_PARTS,
+            &AtomicBool::new(false),
+            &mut meter,
+        )
+        .unwrap();
+        let left_files = left.iter().filter(|item| item.kind == Kind::File).count();
+        assert_eq!(
+            (meter.copied.done, left_files, meter.spoiled.len()),
+            (70, 50, 50)
+        );
+        // Streamed whole, each comes off the spoiled list.
+        let mut streamed = Vec::new();
+        write_archive(&mut streamed, &left, &AtomicBool::new(false), &mut meter).unwrap();
+        assert_eq!((meter.copied.done, meter.spoiled.len()), (120, 0));
+
+        let (stage_dir, work) = (Scratch::new(), Scratch::new());
+        let mut unpacker = FakeUnpacker::new(stage_dir.path(), work.path());
+        unpacker.gone_after = Some(1);
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(scan.roots.len(), &mut tick);
+        let left = stage(
+            stage_dir.path(),
+            &items,
+            &mut unpacker,
+            SMALL_PARTS,
+            &AtomicBool::new(false),
+            &mut meter,
+        )
+        .unwrap();
+        let left_files = left.iter().filter(|item| item.kind == Kind::File).count();
+        assert_eq!(meter.copied.done as usize + left_files, 120);
+        assert_eq!(meter.copied.done, 50);
+        assert_eq!(fs::read_dir(stage_dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_cancel_stops_staging_and_leaves_no_archive_behind() {
+        let (_base, scan) = stills(2, 60);
+        let items: Vec<&Item> = scan.items.iter().collect();
+        let (stage_dir, work) = (Scratch::new(), Scratch::new());
+        let mut unpacker = FakeUnpacker::new(stage_dir.path(), work.path());
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(scan.roots.len(), &mut tick);
+        let result = stage(
+            stage_dir.path(),
+            &items,
+            &mut unpacker,
+            SMALL_PARTS,
+            &AtomicBool::new(true),
+            &mut meter,
+        );
+        assert!(matches!(result, Err(Stop::Cancelled)));
+        assert_eq!(fs::read_dir(stage_dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn the_staging_helper_is_heard_and_run_as_it_should_be() {
+        assert_eq!(
+            parse_answer("ok part-00001.tar"),
+            Answer::Unpacked("part-00001.tar".into(), true)
+        );
+        assert_eq!(
+            parse_answer("failed part-00002.tar"),
+            Answer::Unpacked("part-00002.tar".into(), false)
+        );
+        assert_eq!(parse_answer("tar: something"), Answer::Waiting);
+        let args = stage_args(
+            "intentic-drop-copy-a1-stage",
+            "sha256:abc",
+            "intentic-workspace-x",
+            Path::new("/tmp/stage"),
+        );
+        assert_eq!(
+            &args[13..19],
+            &[
+                "-v",
+                "/tmp/stage:/stage:ro",
+                "-v",
+                "intentic-workspace-x:/work",
+                "sha256:abc",
+                "-c"
+            ]
+        );
     }
 
     #[test]
@@ -1636,7 +2549,10 @@ mod tests {
         );
         assert_eq!(
             parse_inspect("sha256:abc\tintentic-workspace-x\n"),
-            Some(("sha256:abc".into(), "intentic-workspace-x".into()))
+            Some(Sandbox {
+                image: "sha256:abc".into(),
+                volume: "intentic-workspace-x".into()
+            })
         );
         assert_eq!(parse_inspect("sha256:abc\t\n"), None);
     }
@@ -1806,14 +2722,29 @@ mod tests {
         let request = parse_request(&json!({ "id": "e2e-1", "port": 1, "target": "dropped", "skip": { "dirs": ["node_modules"] }, "atLeast": { "files": 0, "bytes": 0 } })).unwrap();
         let mut last = Value::Null;
         let started = Instant::now();
+        let mut said = Instant::now();
         copy_into(
             &request,
             &[source],
             &container,
             &AtomicBool::new(false),
             &mut |event| {
-                if event["kind"] != "progress" {
-                    println!("{:>6.1}s {event}", started.elapsed().as_secs_f64());
+                // Every event but progress, and progress every two seconds: files done (unpacked or landed) against
+                // bytes sent (read and staged, or streamed), which says which half of a route is the slow one.
+                if event["kind"] != "progress" || said.elapsed() >= Duration::from_secs(2) {
+                    said = Instant::now();
+                    let shown = if event["kind"] == "progress" {
+                        format!(
+                            "progress: {} done, {:.0} MB done, {:.0} MB sent, now {}",
+                            event["done"],
+                            event["doneBytes"].as_f64().unwrap_or(0.0) / 1e6,
+                            event["sentBytes"].as_f64().unwrap_or(0.0) / 1e6,
+                            event["current"]
+                        )
+                    } else {
+                        event.to_string()
+                    };
+                    println!("{:>6.1}s {shown}", started.elapsed().as_secs_f64());
                 }
                 last = event;
             },
