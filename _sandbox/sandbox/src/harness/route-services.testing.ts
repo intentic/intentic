@@ -71,6 +71,9 @@ const inertOwnMembers = () =>
             decline: async () => {},
             settle: async () => {},
             unsettle: async () => {},
+            recordComposition: async () => {},
+            offer: async () => {},
+            withdrawOffers: async () => {},
         },
         info: undefined,
         // No dev platform, no TLS to terminate; a fake since compat entries read it on every capability write.

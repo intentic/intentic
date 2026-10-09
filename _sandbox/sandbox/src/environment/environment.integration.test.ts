@@ -376,10 +376,12 @@ test("approving clears the drafts, so the same request is not proposed forever",
     const after = await readEnvironment(services);
     expect(after.custom?.content).toContain("ffmpeg");
     expect(after.proposal).toBeUndefined();
-    // The drafts are gone: a second approve finds nothing new to fold in.
+    // Neither the drafts nor the proposal file are left behind: nothing sits in the owner's Changes, and a custom
+    // section edited afterwards finds nothing to fold back in.
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+    expect(await services.files.read(join(draftsDir(services), "ffmpeg.Dockerfile"))).toBeUndefined();
     await services.files.write(customPath(services), "RUN true\n");
-    const reread = await readEnvironment(services);
-    expect(reread.proposal?.content).toBe(proposal!.content);
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
 });
 
 test("rejecting drops the drafts, not just the composed proposal", async () => {

@@ -1,5 +1,7 @@
 import {
+    type EnvironmentComposition,
     type EnvironmentDrift,
+    type EnvironmentOffer,
     type RuntimeInstall,
     type RuntimeInstallKind,
     type RuntimeInstallsFile,
@@ -27,6 +29,11 @@ const COMMAND_MAX_LENGTH = 240;
 const TOOLS_KEPT = 200;
 // Answered drafts remembered; the oldest is forgotten past this, far more than one workspace's tools.
 const SETTLED_KEPT = 200;
+// Composed overlays remembered. A container is built from one of the last few; forty covers a long run of approvals and
+// capability changes between two rebuilds without the ledger growing with every compose.
+const COMPOSITIONS_KEPT = 40;
+// Daemon-written drafts awaiting an answer; one per tool at most, so this is a ceiling, not a working size.
+const OFFERS_KEPT = 200;
 
 export interface ClassifiedInstall {
     readonly tool: string;
@@ -45,6 +52,13 @@ export interface RuntimeInstallsStore {
     // proposes nothing; `unsettle` forgets one, for an agent asking for exactly those steps again on purpose.
     readonly settle: (drafts: readonly { readonly tool: string; readonly hash: string }[], at: number) => Promise<void>;
     readonly unsettle: (tool: string, hash: string) => Promise<void>;
+    // Remembers one composed overlay (environment.ts composeEnvironment), so the overlay a container was built from can
+    // be read back by its hash after newer ones replaced it on disk. The same hash again keeps its first record.
+    readonly recordComposition: (composition: EnvironmentComposition) => Promise<void>;
+    // Remembers drafts the daemon wrote on its own, until they are answered or thrown away (drift-sweep.ts).
+    readonly offer: (offers: readonly EnvironmentOffer[]) => Promise<void>;
+    // Forgets offers by tool and hash: answered, superseded, or read as a no.
+    readonly withdrawOffers: (offers: readonly { readonly tool: string; readonly hash: string }[]) => Promise<void>;
 }
 
 const keyOf = (install: { readonly kind: RuntimeInstallKind; readonly tool: string }): string => `${install.kind}:${install.tool}`;
@@ -132,6 +146,34 @@ export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => 
                 return;
             }
             await file.update((current) => ({ ...current, settled: (current.settled ?? []).filter((entry) => !answered(entry)) }));
+        },
+        recordComposition: async (composition) => {
+            if ((await file.read()).compositions?.some((entry) => entry.hash === composition.hash) === true) {
+                return;
+            }
+            await file.update((current) => {
+                const kept = current.compositions ?? [];
+                return kept.some((entry) => entry.hash === composition.hash)
+                    ? current
+                    : { ...current, compositions: [...kept, composition].slice(-COMPOSITIONS_KEPT) };
+            });
+        },
+        offer: async (offers) => {
+            if (offers.length === 0) {
+                return;
+            }
+            const keys = new Set(offers.map((offer) => `${offer.tool}\u0000${offer.hash}`));
+            await file.update((current) => {
+                const kept = (current.offered ?? []).filter((entry) => !keys.has(`${entry.tool}\u0000${entry.hash}`));
+                return { ...current, offered: [...kept, ...offers].slice(-OFFERS_KEPT) };
+            });
+        },
+        withdrawOffers: async (offers) => {
+            if (offers.length === 0) {
+                return;
+            }
+            const keys = new Set(offers.map((offer) => `${offer.tool}\u0000${offer.hash}`));
+            await file.update((current) => ({ ...current, offered: (current.offered ?? []).filter((entry) => !keys.has(`${entry.tool}\u0000${entry.hash}`)) }));
         },
     };
 };

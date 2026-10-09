@@ -45,12 +45,37 @@ export type RuntimeInstall = z.infer<typeof RuntimeInstallSchema>;
 // (`environment propose`) clears its tool's entries.
 export const SettledDraftSchema = z.object({ tool: z.string(), hash: z.string(), at: z.number() });
 export type SettledDraft = z.infer<typeof SettledDraftSchema>;
+// One overlay the daemon composed, by the hash a rebuild is stamped with, and the custom-section blocks it carried (each
+// by name and the hash of its trimmed steps). Kept so "is this tool in the image" is answered against the overlay the
+// running container was actually built from, which is rarely the newest one composed: every approval, capability change
+// and daemon update composes again, and a rebuild builds whatever was newest when it started.
+export const EnvironmentCompositionSchema = z.object({
+    hash: z.string(),
+    at: z.number(),
+    blocks: z.array(z.object({ name: z.string(), hash: z.string() })),
+});
+export type EnvironmentComposition = z.infer<typeof EnvironmentCompositionSchema>;
+// A draft the daemon wrote on its own (a recurring runtime install, a cache-rule revision of an approved block), by the
+// name its file carries and the hash of its steps. A draft that later vanishes with no answer on record was thrown away
+// by hand (the Changes panel's discard, a git clean): that is read as a no, rather than writing it back on the next
+// sweep. `install` is the ledger entry an auto-draft came from, which a no declines.
+export const EnvironmentOfferSchema = z.object({
+    tool: z.string(),
+    hash: z.string(),
+    at: z.number(),
+    install: z.string().optional(),
+});
+export type EnvironmentOffer = z.infer<typeof EnvironmentOfferSchema>;
 export const RuntimeInstallsFileSchema = z.object({
     installs: z.array(RuntimeInstallSchema),
     // The last drift snapshot, persisted so a daemon restart does not blank the card until the next sweep.
     drift: EnvironmentDriftSchema.optional(),
     // Drafts already answered, newest last and capped; absent on a ledger written before removal existed.
     settled: z.array(SettledDraftSchema).optional(),
+    // Overlays composed, oldest first and capped; absent on a ledger written before they were kept.
+    compositions: z.array(EnvironmentCompositionSchema).optional(),
+    // Drafts the daemon wrote that nobody has answered yet; absent on a ledger written before they were kept.
+    offered: z.array(EnvironmentOfferSchema).optional(),
 });
 export type RuntimeInstallsFile = z.infer<typeof RuntimeInstallsFileSchema>;
 // Ledger entry as the Environment card shows it: recurrence joined with whether it's present in the live container

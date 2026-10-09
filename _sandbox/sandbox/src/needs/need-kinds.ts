@@ -24,6 +24,13 @@ export interface Met {
     readonly use: readonly string[];
 }
 
+// A need whose subject was answered elsewhere: what the conversation is told when it is declined for it.
+export interface Gone {
+    readonly gone: string;
+}
+
+export const isGone = (checked: Met | Gone | undefined): checked is Gone => checked !== undefined && "gone" in checked;
+
 // Who answered, as the request verified them.
 export interface Answerer {
     readonly email: string | undefined;
@@ -39,8 +46,10 @@ export type Answered =
 
 export interface NeedKindHandler {
     readonly resolve: (ask: NeedAsk, context: AskContext) => Promise<Resolved>;
-    // Whether the need is met now, looked up fresh. Undefined means not yet.
-    readonly check: (need: Need) => Promise<Met | undefined>;
+    // Whether the need is met now, looked up fresh. Undefined means not yet; `gone` means it never will be, because what it
+    // asked for was turned down or taken away somewhere other than its own card (the need is declined with that sentence,
+    // rather than left offering an answer nothing can act on any more).
+    readonly check: (need: Need) => Promise<Met | Gone | undefined>;
     // A person's answer other than a decline, which needs.ts handles for every kind alike.
     readonly answer: (need: Need, answer: Exclude<NeedAnswer, { kind: "decline" }>, by: Answerer) => Promise<Answered>;
     // Who may answer at all, yes or no, when the kind names them (a release's approvers): the reason a click from

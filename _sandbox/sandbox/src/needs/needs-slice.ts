@@ -14,7 +14,7 @@ import { liveRequestRun } from "../conversations/actor/card-deps.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
-import { appliedEnvironmentHash, approveDraft, proposeDraft, rejectDraft } from "../environment/environment.js";
+import { approveDraft, composeEnvironment, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
 import { deliverWake } from "../agent/run/turn/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
@@ -138,7 +138,8 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
                 propose: (tool, steps) => proposeDraft(whole(), tool, steps),
                 approve: (tool) => approveDraft(whole(), tool),
                 reject: (tool) => rejectDraft(whole(), tool),
-                appliedHash: () => appliedEnvironmentHash(whole()),
+                standing: (subject) => toolStanding(whole(), subject),
+                composedHash: () => composeEnvironment(whole()),
             }),
             automation: automationNeed({
                 refuse: (automation) => refuseInvalidAutomation(whole(), automation),

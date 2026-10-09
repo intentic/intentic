@@ -78,7 +78,31 @@ export const withoutRuntimeDirectives = (fragments: readonly string[]): string[]
         )
         .filter((fragment) => fragment.split("\n").some((line) => line.trim() !== "" && !line.trim().startsWith("#")));
 
+// The custom-section blocks a composed overlay carries, each by its name and the hash of its trimmed steps: what a
+// composition record keeps, read from the composed text itself so it describes exactly what a rebuild of it builds.
+export const compositionBlocksOf = (content: string): { readonly name: string; readonly hash: string }[] => {
+    const at = content.indexOf(CUSTOM_MARKER);
+    if (at === -1) {
+        return [];
+    }
+    return uniqueBlocks(splitBlocks(content.slice(at + CUSTOM_MARKER.length).trim())).map((block) => ({ name: block.name, hash: sha256Hex(block.body.trim()) }));
+};
+
+const recordComposition = async (services: Services, content: string, at: number): Promise<void> => {
+    await services.runtimeInstalls.recordComposition({ hash: sha256Hex(content), at, blocks: compositionBlocksOf(content) });
+};
+
 export const composeEnvironment = async (services: Services): Promise<string | undefined> => {
+    // The overlay this container was built from is still on disk until the first compose after the rebuild replaces it:
+    // remembered now, before it goes, so "is this tool in the image" has an answer for a container built from an overlay
+    // composed before compositions were kept.
+    const applied = services.config.sandbox.environmentHash;
+    if (applied !== "") {
+        const built = await services.files.read(approvedPath(services));
+        if (built !== undefined && sha256Hex(built) === applied) {
+            await recordComposition(services, built, Date.now());
+        }
+    }
     const capabilities = await services.capabilities.list();
     const contributed = [
         ...new Set([
@@ -103,11 +127,13 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         // Built from an overlay now empty; keep a bare one so the owner has a hash-pinned path back to stock.
         const bare = `${HEADER}\n\nFROM ${base}\n`;
         await writeComposed(services, approvedPath(services), bare);
+        await recordComposition(services, bare, Date.now());
         return sha256Hex(bare);
     }
     const sections = [HEADER, `FROM ${base}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
     const content = `${sections.join("\n\n")}\n`;
     await writeComposed(services, approvedPath(services), content);
+    await recordComposition(services, content, Date.now());
     return sha256Hex(content);
 };
 
@@ -265,14 +291,20 @@ export const containerFacts = (sandbox: Config["sandbox"]): Pick<Environment, "a
 export const readEnvironment = async (services: Services): Promise<Environment> => {
     // Folds in drafts since the last read, so the card's hash is the one approve will check against.
     await mergeProposalDrafts(services);
-    const proposal = await fileState(services, proposalPath(services));
     const custom = await fileState(services, customPath(services));
+    // A proposal asking for nothing the approved section lacks is no decision, and the file is a leftover (an approval
+    // made before approving cleared it, or a land that brought an answered copy back): it goes, rather than sitting in
+    // the owner's Changes as an edit nobody made.
+    const standing = await fileState(services, proposalPath(services));
+    if (standing !== undefined && sameTools(standing.content, custom?.content ?? "")) {
+        await services.files.remove(proposalPath(services));
+    }
+    const proposal = await fileState(services, proposalPath(services));
     const approved = await fileState(services, approvedPath(services));
     // Approved contains custom by composition, so one string answers "already baked or already approved".
     const attention = await runtimeAttention(services, `${custom?.content ?? ""}\n${approved?.content ?? ""}`);
     return {
-        // A proposal asking for nothing the approved section lacks is no decision: it raises no "Needs you".
-        ...(proposal !== undefined && !sameTools(proposal.content, custom?.content ?? "") ? { proposal } : {}),
+        ...(proposal !== undefined ? { proposal } : {}),
         ...(custom !== undefined ? { custom } : {}),
         ...(approved !== undefined ? { approved } : {}),
         ...containerFacts(services.config.sandbox),
@@ -301,6 +333,9 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
     // remembering them keeps the copies an agent's branch still carries from proposing them again on its land.
     await settleDrafts(services, await listDrafts(services));
     await services.files.remove(draftsDir(services));
+    // Its content is the custom section now; left behind, the file sat in the owner's Changes as an uncommitted copy of
+    // what they had just approved.
+    await services.files.remove(proposalPath(services));
     await composeEnvironment(services);
     return undefined;
 };
@@ -381,6 +416,9 @@ export const rejectDraft = async (services: Services, tool: string): Promise<voi
     const draft = (await services.files.read(path))?.trim();
     if (draft !== undefined && draft !== "") {
         await settleDrafts(services, [{ tool: draftTool(file), body: draft }]);
+        // Settling alone left the sweep free to draft it again, and the copy it wrote was deleted on the next read as
+        // answered: a file appearing and vanishing every ten minutes, and back as a question once its dates moved.
+        await declineAutoDrafted(services, [{ name: draftTool(file), body: draft }]);
     }
     await services.files.remove(path);
     await recomposeProposal(services);
@@ -431,12 +469,7 @@ export const removeFromEnvironment = async (services: Services, block: string): 
     if (removed.length === 0) {
         return "missing";
     }
-    // Under the name its draft file would carry too, which is what a copy returning with a land is read by: a block
-    // approved before approvals were named by their file keeps its raw spelling.
-    const fileNamed = (name: string): string => {
-        const file = draftFileName(name);
-        return file === undefined ? name : draftTool(file);
-    };
+    // Under the name its draft file would carry too, which is what a copy returning with a land is read by.
     const settledAs = removed.flatMap((entry) => [...new Set([entry.name, fileNamed(entry.name)])].map((tool) => ({ tool, body: entry.body })));
     await settleDrafts(services, settledAs);
     await declineAutoDrafted(services, removed);
@@ -457,6 +490,53 @@ export const removeFromEnvironment = async (services: Services, block: string): 
 
 // The overlay this container was built from, as the runner stamped it; empty for a container built with none.
 export const appliedEnvironmentHash = (services: Pick<Services, "config">): string => services.config.sandbox.environmentHash;
+
+// A block's name as its draft file names it, which is how drafts, approvals and settled records are matched: a block
+// approved before approvals were named by their file keeps its raw spelling ("ImageMagick").
+const fileNamed = (name: string): string => {
+    const file = draftFileName(name);
+    return file === undefined ? name : draftTool(file);
+};
+
+// Where one tool asked for in the chat stands now, read fresh each time its need is checked:
+//   built     the running container was built from an overlay carrying it
+//   pending   its draft is still waiting for an answer
+//   approved  it is in the custom section, waiting for a rebuild
+//   gone      none of these: it was turned down or taken out somewhere other than its own card
+// "Built" is read against the overlay the container was actually built from (its composition record), not against the
+// overlay composed when this tool was approved: approving several tools one after another composes once per approval,
+// and the rebuild builds only the last, so an exact-hash test met only the last tool approved before it.
+export type ToolStanding = "built" | "pending" | "approved" | "gone";
+
+export const toolStanding = async (
+    services: Services,
+    asked: { readonly tool: string; readonly steps: string; readonly approvedHash?: string | undefined },
+): Promise<ToolStanding> => {
+    const name = fileNamed(asked.tool);
+    const applied = appliedEnvironmentHash(services);
+    if (asked.approvedHash !== undefined && applied === asked.approvedHash) {
+        return "built";
+    }
+    const compositions = (await services.runtimeInstalls.read()).compositions ?? [];
+    const built = compositions.find((entry) => entry.hash === applied);
+    if (applied !== "" && built !== undefined) {
+        const approvedInto = asked.approvedHash === undefined ? undefined : compositions.find((entry) => entry.hash === asked.approvedHash);
+        // The steps as they were approved, or as they were asked for when the approval's overlay is not on record.
+        const approvedBlock = approvedInto?.blocks.find((block) => fileNamed(block.name) === name)?.hash ?? sha256Hex(asked.steps.trim());
+        const inImage = built.blocks.find((block) => fileNamed(block.name) === name);
+        // The same steps, or a later overlay still carrying the tool (a revision approved since, say).
+        if (inImage !== undefined && (inImage.hash === approvedBlock || (approvedInto !== undefined && built.at >= approvedInto.at))) {
+            return "built";
+        }
+    }
+    // Draft before custom: approving writes custom and then removes the draft, so reading in this order never sees neither.
+    if ((await draftOf(services, asked.tool)) !== undefined) {
+        return "pending";
+    }
+    const custom = splitBlocks(((await services.files.read(customPath(services))) ?? "").trim());
+    return custom.some((block) => fileNamed(block.name) === name) ? "approved" : "gone";
+};
+
 
 // Drops the drafts too, or the next read composes the rejected proposal right back. Auto-drafted ones are also
 // tombstoned, so the sweep can't just re-earn and recreate them; agent-written ones are simply deleted, free to be
@@ -508,6 +588,8 @@ const adoptRuntimeInstall = async (services: Services, tool: string): Promise<"u
     const path = join(draftsDir(services), file);
     if ((await services.files.read(path)) === undefined) {
         await services.files.write(path, content);
+        // Offered like the sweep's own drafts, so throwing the file away afterwards is read as the owner's no too.
+        await services.runtimeInstalls.offer([{ tool: draftTool(file), hash: sha256Hex(content.trim()), at: Date.now(), install: tool }]);
     }
     return undefined;
 };

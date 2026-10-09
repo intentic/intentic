@@ -13,7 +13,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
-import type { Answerer, Met, NeedKinds } from "./need-kinds.js";
+import { type Answerer, isGone, type Met, type NeedKinds } from "./need-kinds.js";
 import type { NeedsStore } from "./needs-store.js";
 
 // One lifecycle for every need (docs/architecture/needs.md): raise it from an agent's ask, hold the asking call while
@@ -202,13 +202,13 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
     };
 
     // What a met need's answer tells the agent, freshly: the kind's own sentence when it can say it, else the stored one.
-    const metOf = async (need: Need): Promise<Met> =>
-        (await deps.kinds[need.subject.kind]
-            .check(need)
-            .catch((error: unknown) => {
-                deps.logger.warn({ err: error, need: need.id }, "needs: the kind could not say what the met need tells");
-                return undefined;
-            })) ?? { result: need.outcome ?? "It is done.", use: [] };
+    const metOf = async (need: Need): Promise<Met> => {
+        const checked = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
+            deps.logger.warn({ err: error, need: need.id }, "needs: the kind could not say what the met need tells");
+            return undefined;
+        });
+        return checked === undefined || isGone(checked) ? { result: need.outcome ?? "It is done.", use: [] } : checked;
+    };
 
     const checking = { running: false };
     const checkOpen = async (): Promise<void> => {
@@ -218,12 +218,14 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         checking.running = true;
         try {
             for (const need of (await deps.store.all()).filter(isOpenNeed)) {
-                const met = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
+                const checked = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
                     deps.logger.warn({ err: error, need: need.id }, "needs: a check failed; it stays open");
                     return undefined;
                 });
-                if (met !== undefined) {
-                    await settle(need.id, "met", met.result, undefined, met);
+                if (isGone(checked)) {
+                    await settle(need.id, "declined", checked.gone, undefined);
+                } else if (checked !== undefined) {
+                    await settle(need.id, "met", checked.result, undefined, checked);
                 }
             }
         } finally {

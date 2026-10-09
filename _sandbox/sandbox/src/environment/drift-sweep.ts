@@ -1,7 +1,9 @@
+import type { EnvironmentDrift } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
+import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { synthesizeAutoDrafts } from "./auto-drafts.js";
 import { synthesizeCacheRevisions } from "./cache-revisions.js";
+import { offerDrafts, reconcileOffers } from "./draft-offers.js";
 import { clearDriftCache, computeDrift } from "./drift.js";
 import type { RuntimeInstallsStore } from "./runtime-installs.js";
 
@@ -21,7 +23,9 @@ export interface DriftSweepDeps {
     readonly workspace: { readonly root: string };
     readonly runtimeInstalls: RuntimeInstallsStore;
     readonly conversations: { readonly liveSessionIds: () => readonly string[] };
-    readonly logger: Logger;
+    readonly logger: Pick<Logger, "info" | "warn">;
+    // What the live container has that the image did not put there; computeDrift, unless a test hands one in.
+    readonly probe?: () => Promise<EnvironmentDrift>;
 }
 
 export interface DriftSweep {
@@ -32,19 +36,27 @@ export interface DriftSweep {
 
 export const createDriftSweep = (deps: DriftSweepDeps): DriftSweep => {
     const workspaceFiles = { workspace: deps.workspace, files: { read: readWorkspaceFile, write: writeWorkspaceFile } };
+    const offerFiles = { ...workspaceFiles, files: { ...workspaceFiles.files, remove: removeWorkspacePath }, runtimeInstalls: deps.runtimeInstalls };
 
     // One pass at a time; a tick during a running pass joins it instead of stacking a second find walk.
     let running: Promise<void> | undefined;
     const pass = async (): Promise<void> => {
         try {
-            const drift = await computeDrift();
+            // First, so a draft thrown away since the last pass is on record as a no before anything could draft it again.
+            const discarded = await reconcileOffers(offerFiles, Date.now());
+            if (discarded.length > 0) {
+                deps.logger.info({ discarded }, "environment: drafts thrown away without an answer, read as declined");
+            }
+            const drift = await (deps.probe ?? computeDrift)();
             await deps.runtimeInstalls.saveDrift(drift);
             const drafted = await synthesizeAutoDrafts(workspaceFiles, await deps.runtimeInstalls.read(), drift);
             if (drafted.length > 0) {
+                await offerDrafts(offerFiles, drafted.map((tool) => ({ block: tool, install: tool })), Date.now());
                 deps.logger.info({ drafted }, "environment: drafted overlay steps from recurring runtime installs");
             }
             const revised = await synthesizeCacheRevisions({ ...workspaceFiles, runtimeInstalls: deps.runtimeInstalls });
             if (revised.length > 0) {
+                await offerDrafts(offerFiles, revised.map((block) => ({ block })), Date.now());
                 deps.logger.info({ revised }, "environment: drafted apt cache-mount revisions of approved overlay blocks");
             }
         } catch (error) {
