@@ -54,6 +54,9 @@ intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
 # What docker's refusals mean and where Docker Desktop lives, the one reading `ic` makes too (a broken engine is told
 # from a slow one the same way in both, and Docker Desktop is found wherever `ic`'s probe would find it).
 intentic-docker-host = { path = "../../../_sandbox/ic/docker-host" }
+# A big drop on the workspace, streamed as one tar archive into `docker cp -` (src/drop_copy.rs). Already in the graph
+# at this version through the updater, so this names what is compiled rather than adding a download.
+tar = { version = "0.4", default-features = false }
 # A delete in a local window goes to the Recycle Bin or the Trash, never straight off the disk (local.rs): the one
 # platform API behind a crate rather than written here, because each OS spells it differently (the freedesktop
 # trash spec on Linux, the shell's IFileOperation on Windows). MIT. Default features: `chrono` is what writes the

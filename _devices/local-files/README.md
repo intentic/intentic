@@ -47,9 +47,10 @@ flowchart LR
   inside the folder, and a link that points at nothing, as the file or on the way to it, is refused ("“name” is a
   link to something that isn't there."). A save or a drop's first part streams into a new name beside the file and
   replaces it by rename. A later part, and the time a drop sets, reach the file only after an lstat that finds a
-  file, and a later part is opened with `O_NOFOLLOW` where the platform has it. The 256 MiB cap counts the bytes that
-  arrive, so a body with no `Content-Length` is held to it too (413). A refused first part leaves the file as it was
-  (`files.ts`, `raw.ts`).
+  file, and a later part is opened with `O_NOFOLLOW` where the platform has it. The 10 GiB cap (the daemon's own)
+  counts the bytes that arrive, so a body with no `Content-Length` is held to it too (413). A refused first part
+  leaves the file as it was (`files.ts`, `raw.ts`). _(2026-10-09) The cap was 256 MiB, which refused every film in a
+  dropped folder._
 - **Text that is not UTF-8** reads with `lossy: true` on its window, and a text save over it is refused (422) rather
   than writing the replacement characters back.
 - **The editor's own contract.** Answers are the sandbox contract's, through `@intentic/contract-serve`, so the

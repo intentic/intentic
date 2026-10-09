@@ -22,6 +22,9 @@ interface DesktopWebview {
     /* THIS BUILD PUTS UP THE SYSTEM'S NOTIFICATIONS AND THE TAB'S MARK ON ITS ICON (`intentic://notice`, `badge`;
      * desktopNotices.ts). An older one drops both links, so the page offers neither in its settings. */
     notices?: boolean;
+    /* THIS BUILD COPIES A BIG DROP INTO A SANDBOX ON THIS COMPUTER ITSELF (the app's drop_copy.rs; nativeCopy.ts). Said
+     * only on Windows, whose WebView2 tells the app where a dropped file is. */
+    nativeCopy?: boolean;
 }
 
 declare global {

@@ -4,6 +4,7 @@ mod agents;
 mod auth;
 mod badge;
 mod commands;
+mod drop_copy;
 mod first_task;
 mod fix;
 mod found;

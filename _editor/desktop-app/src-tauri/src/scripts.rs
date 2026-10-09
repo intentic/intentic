@@ -639,6 +639,12 @@ fn docker() -> Command {
     quiet(Command::new("docker"))
 }
 
+/// [`docker`] for the modules that run a docker command of their own: a dropped folder copied into a sandbox
+/// (drop_copy.rs) goes through the same CLI and engine as everything else this app asks of Docker.
+pub(crate) fn docker_command() -> Command {
+    docker()
+}
+
 /// The docker CLI on this PATH, which names its own installation (`desktop_app::app_beside_cli`).
 #[cfg(windows)]
 fn docker_cli_path() -> Option<String> {

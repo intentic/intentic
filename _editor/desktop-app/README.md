@@ -512,10 +512,48 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic:navigate` | main window | `{ path }`, a route of the local shell (`/device`): the screen the app raised the window for. |
 | `intentic:sandbox` | local folder windows | `{ sandbox: true }`: the window's folder has its own sandbox now (`project.rs` `remember`), kept in its face for its reloads. |
 | `intentic:project-ask` | local folder window | none: put up the folder's sandbox dialog (`sandbox` asked by link for a folder with none). |
+| `intentic:drop-copy` | workspace, floating (Windows) | `{ id, kind, … }` for a drop the page handed over: `received`, `declined` (`reason`), `scanning`, `copying`, `progress` and `finished`. See "A big drop" below. |
 
 A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://pending-recreate`, `desktop://pending-sync`,
 `desktop://update`, and `desktop://machine-sandbox` (this computer's own sandbox, its whole record on every change).
+
+## A big drop, copied by the app (2026-10-09)
+
+A folder dropped on the workspace's explorer goes the browser's way, read and uploaded over HTTP, unless it is big and the
+sandbox is on this computer. On Windows, the page posts the drop's `File`s to the app with
+`chrome.webview.postMessageWithAdditionalObjects`, as an object, so Tauri's own IPC, which reads only strings, never sees
+it. It names the folder they go into and the loopback port it reaches its sandbox on. WebView2 hands the app each file's
+place on disk (`ICoreWebView2File`).
+
+The app (`src-tauri/src/drop_copy.rs`):
+
+1. Finds the `intentic-sandbox-*` container that publishes that port.
+2. Walks the dropped folders with the page's own skip rule, which the page sends.
+3. For a drop of at least 1,000 files or 1 GiB, copies two ways, each where it is fastest:
+   - Folders and files under 256 KB go as one tar archive into `docker cp - <container>:/work`.
+   - Bigger files go through a throwaway helper container (`intentic-drop-copy-<id>`, the sandbox's own image, no
+     network). It mounts each dropped folder read-only beside the workspace volume and tars them across with 1 MiB
+     records. A place it cannot mount (a network share), or a helper Docker refuses, sends those files the first way.
+
+What the routes do on Docker Desktop for Windows, measured on one laptop on 2026-10-09:
+
+| Route | 1 GiB file | 5,000 × 10 KB |
+| --- | --- | --- |
+| `docker cp -` / `docker exec -i tar -x` | 47–52 s | 2.5 s |
+| helper container, bind mount, tar with 1 MiB records | 5.6 s | 16.6 s (`cp -a`) |
+| HTTP to a published loopback port (the browser's way, without the browser) | 7.7 s | not measured |
+
+The page draws the same card as an upload from the `intentic:drop-copy` events. Anything else is `declined`, and the page
+uploads the drop itself: no Docker, no container on that port, a smaller drop (which keeps the upload's skipping of
+unchanged files), or a file with no place on disk. The page can only name files a person dropped. The folder it names
+is held to a plain relative path below `/work`. The init script's `nativeCopy: true` is what tells the page to ask, and
+only Windows builds say it.
+
+_(2026-10-09) A 30 GB folder of 66,000 films and stills, dropped from Explorer onto a local sandbox, froze the page while
+it was read and never started uploading. Rejected: compressing first, since the films were already compressed and the
+transfer was never the slow part; and one archive streamed through Docker's API for everything, which the table above
+shows is the slowest way to move a big file._
 
 ## The sidecar's control lines
 
@@ -544,6 +582,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — startup: plugins, the command list, the tray and what a launch opens onto.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
+- [src-tauri/src/drop_copy.rs](src-tauri/src/drop_copy.rs) — a big drop on the workspace, copied into a sandbox on this computer through `docker cp` (Windows).
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
 - [src-tauri/src/resume.rs](src-tauri/src/resume.rs) and [src-tauri/src/prefetch.rs](src-tauri/src/prefetch.rs) — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.

@@ -56,13 +56,23 @@ const gate = (limit: number): Gate => {
     };
 };
 
-// Daemon's IGNORED_DIRS minus `.git`/`.tmp`: a dropped repo keeps its `.git`, staying connected to its remote.
-const IGNORED_DIRS = new Set([...WORKSPACE_IGNORED_DIRS].filter((dir) => dir !== ".git" && dir !== ".tmp"));
+// What a drop leaves out, as data, so the desktop app's own walk of a big drop (its drop_copy.rs) applies the same rule:
+// the daemon's IGNORED_DIRS minus `.git`/`.tmp` (a dropped repo keeps its `.git`, staying connected to its remote), and
+// the files that hold secrets.
+export const DROP_SKIP = {
+    dirs: [...WORKSPACE_IGNORED_DIRS].filter((dir) => dir !== ".git" && dir !== ".tmp"),
+    files: [".secrets.json", "claude.json", "capabilities.json"],
+    prefixes: [".env"],
+    keep: [".env.example"],
+} as const;
+
+const IGNORED_DIRS: ReadonlySet<string> = new Set(DROP_SKIP.dirs);
 
 // Client-side choice, not a daemon rule (the daemon would happily write these); `.env.example` is exempt, placeholder
 // values only.
 const isSecretFile = (name: string): boolean =>
-    name === ".secrets.json" || name === "claude.json" || name === "capabilities.json" || (name.startsWith(".env") && name !== ".env.example");
+    !(DROP_SKIP.keep as readonly string[]).includes(name) &&
+    ((DROP_SKIP.files as readonly string[]).includes(name) || DROP_SKIP.prefixes.some((prefix) => name.startsWith(prefix)));
 
 // Checked against the destination, not the drop's shape: /work/.git is a pointer file, so a repo dropped at the root
 // would aim a directory at it. Fine once nested under a folder (a nested repo's own .git).
@@ -154,12 +164,17 @@ export interface DropResult {
 
 // A paste reads the same way as a drop: Chromium registers pasted OS files in the same isolated file system, so a
 // copied folder resolves to a directory entry. Its bare File (in `files`) is a zero-byte stand-in named after the folder.
-export const collectDroppedFiles = async (
-    dataTransfer: DataTransfer,
-    onFile?: (path: string, size: number) => void,
-    signal?: AbortSignal,
-): Promise<DropResult> => {
-    // Must call webkitGetAsEntry synchronously, while the drop's (or paste's) items are still alive.
+// What a drop holds, taken while its items are still alive: the drag-data store empties once the drop event returns, so
+// this runs synchronously inside it, and the walk (walkDrop) runs after.
+export interface CapturedDrop {
+    readonly roots: readonly FileSystemEntry[];
+    // The flat file list, for a drop with no entries to walk (a pasted screenshot is image data, not a file on disk).
+    readonly files: readonly File[];
+    // Items webkitGetAsEntry couldn't resolve.
+    readonly skipped: number;
+}
+
+export const captureDrop = (dataTransfer: DataTransfer): CapturedDrop => {
     const roots: FileSystemEntry[] = [];
     let skipped = 0;
     for (const item of Array.from(dataTransfer.items)) {
@@ -173,18 +188,22 @@ export const collectDroppedFiles = async (
             skipped += 1;
         }
     }
+    return { roots, files: roots.length > 0 ? [] : Array.from(dataTransfer.files), skipped };
+};
+
+export const walkDrop = async (drop: CapturedDrop, onFile?: (path: string, size: number) => void, signal?: AbortSignal): Promise<DropResult> => {
     // Resolved entries are the truth even when the walk yields nothing (an empty or all-ignored folder): the flat list
     // would turn each folder into an empty file named after it.
-    if (roots.length > 0) {
-        return { ...(await walkRoots(roots, onFile, signal)), skipped };
+    if (drop.roots.length > 0) {
+        return { ...(await walkRoots(drop.roots, onFile, signal)), skipped: drop.skipped };
     }
-    // No entries (a pasted screenshot is image data, not a file on disk; some sources lack the entry API): fall back to
-    // the flat file list.
-    const files = Array.from(dataTransfer.files)
-        .filter((file) => !isSecretFile(file.name))
-        .map((file): DroppedFile => ({ file, path: file.name }));
-    return { files, skipped, unreadable: 0 };
+    // No entries (some sources lack the entry API): the flat file list.
+    const files = drop.files.filter((file) => !isSecretFile(file.name)).map((file): DroppedFile => ({ file, path: file.name }));
+    return { files, skipped: drop.skipped, unreadable: 0 };
 };
+
+export const collectDroppedFiles = (dataTransfer: DataTransfer, onFile?: (path: string, size: number) => void, signal?: AbortSignal): Promise<DropResult> =>
+    walkDrop(captureDrop(dataTransfer), onFile, signal);
 
 // File-input pick (button fallback): webkitRelativePath is set when the input has webkitdirectory, keeping a picked
 // folder's structure.

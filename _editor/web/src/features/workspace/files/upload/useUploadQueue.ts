@@ -7,7 +7,7 @@ import { basename, joinPath } from "@intentic/ui/path";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
-import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../explorer/transfer/dropEntries";
+import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../explorer/transfer/dropEntries";
 import { packTar } from "../../explorer/transfer/tarArchive";
 import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
 import { sandboxJson, sandboxUpload } from "../../../../client/sandbox/sandboxClient";
@@ -19,6 +19,7 @@ import { measuredProtocol, streamCapacity } from "../../../../lib/streamBudget";
 import { workspaceAgent } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
+import { captureNativeDrop, copyNatively, type NativeDrop, type NativeEvent, type NativeProgress } from "./nativeCopy";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
 // Per-file transport is a bounded XHR pool; a chunk of many small files goes as one tar archive instead, falling back to
@@ -90,6 +91,8 @@ interface Tally {
     unreadable: number;
     readonly groups: Map<string, { name: string; total: number; done: number; failed: number }>;
     readonly failures: Set<QueueFile>;
+    // Failures with no queued file behind them: what the desktop app reports of a drop it copied itself.
+    readonly reported: UploadFailure[];
 }
 
 const freshTally = (): Tally => ({
@@ -106,6 +109,7 @@ const freshTally = (): Tally => ({
     unreadable: 0,
     groups: new Map(),
     failures: new Set(),
+    reported: [],
 });
 const tally = sandboxValue(freshTally);
 
@@ -149,7 +153,7 @@ const publish = (): void => {
         }
         shown.push({ path: item.path, error: item.error });
     }
-    failures.value = shown;
+    failures.value = [...shown, ...now.reported.slice(0, MAX_FAILURES_SHOWN - shown.length)];
 };
 
 const schedulePublish = (): void => {
@@ -162,6 +166,8 @@ const startedAt = sandboxRef(() => 0);
 // Pre-upload tree walk; scanning narrates progress until every overlapping scan (activeScans) finishes.
 const scanning = sandboxRef(() => false);
 let activeScans = 0;
+// Drops the desktop app is copying itself (nativeCopy.ts), from the moment it starts writing until it says it is done.
+let nativeCopies = 0;
 
 // Files handed to enqueue and not yet in the queue: the time between a scan ending and the first byte moving, spent
 // asking the sandbox what it already has. Counted so the card says so rather than vanishing for it. A restart zeroes
@@ -330,6 +336,7 @@ const restartQueue = (): void => {
     scanning.value = false;
     startError.value = undefined;
     preparing.value = 0;
+    nativeCopies = 0;
     skippedNotice.value = undefined;
     skippedUnchanged.value = 0;
     setupProjects.value = [];
@@ -535,10 +542,129 @@ const queueBatch = (items: QueueFile[]): void => {
     void run();
 };
 
+// Adds projects to the install offer, each folder once across drops.
+const offerSetup = (detected: readonly ProjectSetup[]): void => {
+    const known = new Set(setupProjects.value.map((project) => project.dir));
+    setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
+};
+
+// A drop the desktop app copies itself (nativeCopy.ts), its reports fed into the tally the card reads, so the card is
+// the same one an upload draws. Each report carries the copy's running totals; what this copy has already added is
+// kept, so each adds only what changed. "declined" hands the drop back to the browser, taking the app's scan back out
+// of the counts first, since the browser's walk counts it again.
+const copyViaApp = async (drop: NativeDrop, targetDir: string, signal: AbortSignal, endScan: () => void): Promise<"declined" | "handled"> => {
+    const now = tally.value;
+    const added = { scanned: 0, scannedBytes: 0, done: 0, doneBytes: 0, sentBytes: 0, failed: 0 };
+    // Per dropped item: its row in the card, and what this copy has added to it.
+    let rows: { key: string; files: number; done: number; failed: number }[] = [];
+    let copying = false;
+    let total = 0;
+    const scanned = (files: number, bytes: number): void => {
+        now.scanned += files - added.scanned;
+        now.scannedBytes += bytes - added.scannedBytes;
+        added.scanned = files;
+        added.scannedBytes = bytes;
+    };
+    const advance = (progress: NativeProgress): void => {
+        now.done += progress.done - added.done;
+        now.doneBytes += progress.doneBytes - added.doneBytes;
+        now.bytesDone += progress.sentBytes - added.sentBytes;
+        now.failed += progress.failed - added.failed;
+        Object.assign(added, { done: progress.done, doneBytes: progress.doneBytes, sentBytes: progress.sentBytes, failed: progress.failed });
+        progress.roots?.forEach((root, index) => {
+            const row = rows[index];
+            const group = row === undefined ? undefined : now.groups.get(row.key);
+            if (row !== undefined && group !== undefined) {
+                group.done += root.done - row.done;
+                group.failed += root.failed - row.failed;
+                row.done = root.done;
+                row.failed = root.failed;
+            }
+        });
+        if (progress.current !== undefined && progress.current !== ``) {
+            now.current = progress.current;
+        }
+        schedulePublish();
+    };
+    const report = (event: NativeEvent): void => {
+        if (signal.aborted) {
+            return;
+        }
+        if (event.kind === `scanning`) {
+            scanned(event.files, event.bytes);
+            now.scanningName = event.current;
+            schedulePublish();
+        } else if (event.kind === `copying`) {
+            scanned(event.files, event.bytes);
+            total = event.files;
+            now.count += event.files;
+            now.bytesTotal += event.bytes;
+            now.unreadable += event.unreadable;
+            rows = event.roots.map((root) => {
+                // As groupOf names an upload's rows: the dropped folder, or the folder loose files went into.
+                const key = root.dir ? joinPath(targetDir, root.name) : targetDir;
+                const group = now.groups.get(key) ?? { name: key, total: 0, done: 0, failed: 0 };
+                group.total += root.files;
+                now.groups.set(key, group);
+                if (root.dir) {
+                    noteArriving(key, { kind: `upload`, type: `dir` });
+                }
+                return { key, files: root.files, done: 0, failed: 0 };
+            });
+            if (supportsRoute(INSTALL_ROUTE)) {
+                offerSetup(detectProjects(event.manifests).map((project) => ({ dir: joinPath(targetDir, project.dir), recipe: project.recipe })));
+            }
+            copying = true;
+            nativeCopies += 1;
+            if (startedAt.value === 0) {
+                startedAt.value = performance.now();
+            }
+            publish();
+            // The walk is over and the card is on the copy now.
+            endScan();
+        } else if (event.kind === `progress`) {
+            advance(event);
+        } else if (event.kind === `finished`) {
+            advance(event);
+            now.reported.push(...(event.failures ?? []).slice(0, Math.max(0, MAX_FAILURES_SHOWN - now.reported.length)));
+            // A copy that stopped short: what it never reached did not land, and is counted with the failures.
+            if (event.error !== undefined && !event.cancelled) {
+                now.failed += Math.max(0, total - added.done - added.failed);
+                for (const row of rows) {
+                    const group = now.groups.get(row.key);
+                    if (group !== undefined) {
+                        group.failed += Math.max(0, row.files - row.done - row.failed);
+                    }
+                }
+                now.reported.unshift({ path: targetDir === `` ? `/` : targetDir, error: event.error });
+            }
+            for (const row of rows) {
+                markSettled(row.key);
+            }
+            if (copying) {
+                copying = false;
+                nativeCopies -= 1;
+            }
+            publish();
+        }
+    };
+    const outcome = await copyNatively(drop, targetDir, signal, report);
+    if (outcome === `declined` && !signal.aborted) {
+        scanned(0, 0);
+        now.scanningName = ``;
+        schedulePublish();
+    }
+    // A cancel ends the wait before the app's last word: the restart already zeroed the count this copy was part of.
+    if (copying && !signal.aborted) {
+        nativeCopies -= 1;
+    }
+    return outcome;
+};
+
 // The import is over once nothing is being scanned, prepared, queued or sent. Each of those calls this as it ends, and
 // the last one to end finds the queue idle: marks it finished, refreshes the tree and starts the install.
 const settleIfIdle = async (): Promise<void> => {
-    if (finished.value || running || activeScans > 0 || preparing.value > 0 || pending.value.length > 0) {
+    if (finished.value || running || activeScans > 0 || nativeCopies > 0 || preparing.value > 0 || pending.value.length > 0) {
         return;
     }
     publish();
@@ -623,8 +749,7 @@ export function useUploadQueue() {
             if (signal.aborted) {
                 return;
             }
-            const known = new Set(setupProjects.value.map((project) => project.dir));
-            setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
+            offerSetup(detected);
             // Two entries can target the same destination; keep only the last, or parallel writes interleave into one file.
             const surviving = dedupeByPath(unchanged, (entry) => entry.path);
             // Sinks .git entries to the back (stable sort) so the daemon doesn't see a repo before its work tree lands.
@@ -658,42 +783,68 @@ export function useUploadQueue() {
         }
     };
 
-    // Drop-target entry point: shows the panel immediately, walks the tree with streaming progress, then hands the
-    // files to enqueue. Must call collectDroppedFiles synchronously, before the drag store tears down.
+    // Drop-target entry point: shows the panel immediately, then either hands a big drop to the desktop app (which
+    // copies it into a sandbox on this computer itself) or walks the tree with streaming progress and hands the files to
+    // enqueue. Both captures happen here, synchronously, before the drag store tears down: the app may decline the
+    // drop, and the browser's walk then needs entries that are only handed out while the drop event lasts.
     const enqueueFromDataTransfer = (targetDir: string, dataTransfer: DataTransfer): void => {
-        if (finished.value && !running && activeScans === 0) {
+        if (finished.value && !running && activeScans === 0 && nativeCopies === 0) {
             restartQueue();
         }
         // Captures this session's signal so a cancel during the walk stops it and skips the enqueue.
         const { signal } = controller.value;
+        const native = captureNativeDrop(dataTransfer);
+        const drop = captureDrop(dataTransfer);
         const now = tally.value;
         activeScans += 1;
         scanning.value = true;
         finished.value = false;
         skippedNotice.value = undefined;
-        collectDroppedFiles(
-            dataTransfer,
-            (path, size) => {
-                now.scanned += 1;
-                now.scannedBytes += size;
-                now.scanningName = path;
-                schedulePublish();
-            },
-            signal,
-        )
-            .then((result) => {
-                if (signal.aborted) {
-                    return;
-                }
-                now.unreadable += result.unreadable;
-                // Only set when nothing was uploaded; a drop that did yield files ignores stray skips.
-                if (result.files.length === 0) {
-                    skippedNotice.value = result.skipped;
-                }
-                // Starts preparing before this scan's slot is given back below, so the card goes straight from one to
-                // the other.
-                void enqueue(targetDir, result.files);
-            })
+        // This drop's hold on the scanning phase, given back once: when a copy by the app gets going, or at the end.
+        let scanHeld = true;
+        const endScan = (): void => {
+            if (!scanHeld) {
+                return;
+            }
+            scanHeld = false;
+            activeScans -= 1;
+            if (activeScans === 0) {
+                publish();
+                scanning.value = false;
+            }
+        };
+        const viaBrowser = async (): Promise<void> => {
+            const result = await walkDrop(
+                drop,
+                (path, size) => {
+                    now.scanned += 1;
+                    now.scannedBytes += size;
+                    now.scanningName = path;
+                    schedulePublish();
+                },
+                signal,
+            );
+            if (signal.aborted) {
+                return;
+            }
+            now.unreadable += result.unreadable;
+            // Only set when nothing was uploaded; a drop that did yield files ignores stray skips.
+            if (result.files.length === 0) {
+                skippedNotice.value = result.skipped;
+            }
+            // Starts preparing before this scan's slot is given back below, so the card goes straight from one to the
+            // other.
+            void enqueue(targetDir, result.files);
+        };
+        const work = async (): Promise<void> => {
+            if (native !== undefined && (await copyViaApp(native, targetDir, signal, endScan)) === `handled`) {
+                return;
+            }
+            if (!signal.aborted) {
+                await viaBrowser();
+            }
+        };
+        work()
             .catch((error: unknown) => {
                 if (!signal.aborted) {
                     console.error(`Failed to read the dropped items`, error);
@@ -701,11 +852,7 @@ export function useUploadQueue() {
                 }
             })
             .finally(() => {
-                activeScans -= 1;
-                if (activeScans === 0) {
-                    publish();
-                    scanning.value = false;
-                }
+                endScan();
                 if (!signal.aborted) {
                     void settleIfIdle();
                 }

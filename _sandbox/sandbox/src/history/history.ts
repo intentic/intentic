@@ -13,6 +13,7 @@ import { checkoutGeneration } from "../git/feed/checkout-feed.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
+import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: each scope (/work root or a discovered repo) gets a bare git dir under
@@ -247,8 +248,9 @@ export const createWorkspaceHistory = (
         await ensureScope(scope);
         await healGitPointer(scope);
         const run = { cwd: scope.worktree, env: scopeEnv(scope) };
+        await leaveOutLargeFiles(git, scope, run, logger);
         try {
-            await git(["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"], run);
+            await git([...largeFilesConfig(scope.gitDir), "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"], run);
         } catch (error) {
             // A commit-less embedded repo aborts `add -A`; keep whatever got staged rather than losing the run.
             logger.warn({ err: error, scope: scope.name }, "history: partial add, snapshotting what staged");
@@ -470,14 +472,14 @@ export const createWorkspaceHistory = (
         return changed ? id : undefined;
     };
 
-    // Matches the worktree to the scope's tree at `sha`: clean removes files added since (ignored paths survive),
-    // checkout-index -u writes it back and refreshes stat info.
+    // Matches the worktree to the scope's tree at `sha`: clean removes files added since (ignored paths survive, the
+    // large files no snapshot records among them), checkout-index -u writes it back and refreshes stat info.
     const restoreScope = async (scope: Scope, sha: string): Promise<void> => {
         await mkdir(scope.worktree, { recursive: true });
         await healGitPointer(scope);
         const run = { cwd: scope.worktree, env: scopeEnv(scope) };
         await git(["read-tree", sha], run);
-        await git(["clean", "-q", "-f", "-d"], run);
+        await git([...largeFilesConfig(scope.gitDir), "clean", "-q", "-f", "-d"], run);
         await git(["checkout-index", "-q", "-f", "-a", "-u"], run);
     };
 

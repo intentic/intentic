@@ -306,8 +306,10 @@ fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true }}); }} }})();",
-        env!("CARGO_PKG_VERSION")
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {} }}); }} }})();",
+        env!("CARGO_PKG_VERSION"),
+        // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
+        cfg!(windows)
     )
 }
 
@@ -479,6 +481,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             crate::shown::watch(&window);
             // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
             crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
+            // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
+            crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
             // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
             settle_background(&window, app.state::<AppState>().ui_mode());
             let handle = app.clone();
@@ -747,6 +751,8 @@ fn show_floating(
             crate::shown::watch(&window);
             // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
             crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
+            // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
+            crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
             let handle = app.clone();
             let own = label.clone();
             window.on_window_event(move |event| match event {
@@ -1941,6 +1947,17 @@ mod loopback_tests {
     fn the_page_is_told_this_build_copies_a_folder_into_its_project() {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("projectSync: true"), "{script}");
+    }
+
+    /// The page hands a big drop to the app (drop_copy.rs) only on this word, and only Windows' WebView2 says where a
+    /// dropped file is: a build anywhere else must not invite a message nothing will answer.
+    #[test]
+    fn the_page_is_told_whether_this_build_copies_a_drop_itself() {
+        let script = workspace_init_script("install-1", None);
+        assert!(
+            script.contains(&format!("nativeCopy: {}", cfg!(windows))),
+            "{script}"
+        );
     }
 
     /// The page offers the app's notifications in its settings, and sends them, only on this word (desktop.ts

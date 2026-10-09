@@ -19,6 +19,9 @@ flowchart LR
   the platform tunnel, and relays HTTP over a Unix socket. The daemon decides, netd binds.
 - Two roots: `/work` is what agents edit; `/history` is the daemon's own (git dirs, worktrees, the conversation
   database, snapshots, logs) and sits outside `/work`.
+- A history snapshot leaves out any file over 32 MiB (`history/large-files.ts`). A restore neither brings such a file
+  back nor deletes it. _(2026-10-09) Snapshots had no size limit: a 30 GB folder of films dropped into `/work` was
+  hashed and stored a second time on `/history`._
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
 - It registers with the platform at boot (`system/boot/announce.ts`), then announces again about once an hour
