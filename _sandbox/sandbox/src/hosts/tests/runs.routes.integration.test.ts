@@ -1,6 +1,8 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner, TerminalRunOptions } from "../../terminal/terminal-run.js";
 import { createRunGrants } from "../device-door.js";
@@ -12,14 +14,14 @@ import { createRunsRoutes, readRunTargets, runSession } from "../runs.routes.js"
 const workspace = (): string => {
     const root = mkdtempSync(join(tmpdir(), "runs-routes-"));
     mkdirSync(join(root, "app", ".git"), { recursive: true });
-    mkdirSync(join(root, "app", ".intentic"), { recursive: true });
+    mkdirSync(join(root, "app", STATE_DIR), { recursive: true });
     writeFileSync(
-        join(root, "app", ".intentic", "run.json"),
+        join(root, "app", RUN_TARGETS_FILE),
         JSON.stringify({ targets: [{ name: "desktop", device: "rog", build: "make win", artifact: { "app.exe": "out/app.exe" }, program: "app.exe" }] }),
     );
     mkdirSync(join(root, "broken", ".git"), { recursive: true });
-    mkdirSync(join(root, "broken", ".intentic"), { recursive: true });
-    writeFileSync(join(root, "broken", ".intentic", "run.json"), JSON.stringify({ targets: [{ name: "../x", artifact: "/etc/passwd" }] }));
+    mkdirSync(join(root, "broken", STATE_DIR), { recursive: true });
+    writeFileSync(join(root, "broken", RUN_TARGETS_FILE), JSON.stringify({ targets: [{ name: "../x", artifact: "/etc/passwd" }] }));
     mkdirSync(join(root, "quiet", ".git"), { recursive: true });
     return root;
 };

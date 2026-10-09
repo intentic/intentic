@@ -509,6 +509,7 @@ export const createSystemRoutes = (services: Services) => {
         closeBrowserPage: i.closeBrowserPage.handler(async ({ input }) => {
             await browserSessionPage(input.name, input.pageId)
                 ?.close()
+                // allow(silent-catch): a page or browser already gone is the close asked for
                 .catch(() => undefined);
             return { ok: true };
         }),

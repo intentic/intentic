@@ -31,7 +31,7 @@ import { createSyncSshRoute } from "./hosts/desktop-sync-ssh.js";
 import { createSandboxesRoutes } from "./sandboxes/sandboxes.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createDeviceArtifactRoutes } from "./hosts/device-artifacts.routes.js";
-import { createDeviceDoorRoutes } from "./hosts/device-door.js";
+import { createDeviceDoorRoutes } from "./hosts/device-door.routes.js";
 import { createFleetRoutes } from "./conversations/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
 import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
@@ -304,6 +304,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // Composer voice input, a WAV in, text out; off oRPC since the contract carries no audio.
     app.route("/", createSpeechRoute(services));
+    // The composer's live dictation: phrases in as they are spoken, running guesses and finals back. Served next to the
+    // other speech routes, where raw-routes.ts declares it.
+    serve("GET /speech/stream", createSpeechStreamRoute(services));
 
     // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
@@ -329,8 +332,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Watch the browser the agent drives: the same screencast wire, attached to a live browser-* session.
     serve("GET /system/browser-view", createBrowserViewRoute(services));
     serve("GET /system/desktop-view", createDesktopViewRoute(services));
-    // The composer's live dictation: phrases in as they are spoken, running guesses and finals back.
-    serve("GET /speech/stream", createSpeechStreamRoute(services));
 
     // Deploy-target enrollment (connect token) and the automation fire (own token).
     serve("POST /enroll", createEnrollRoute(services));

@@ -89,8 +89,8 @@ interface Frame {
 }
 declare global {
     interface Window {
-        __frames?: Frame[];
-        __sameLoad?: boolean;
+        paintedFrames?: Frame[];
+        sameLoad?: boolean;
     }
 }
 
@@ -242,8 +242,8 @@ test(`another folder pointed at in the window's place takes it in place: no relo
     const watchFrames = async (): Promise<void> =>
         page.evaluate((offer) => {
             const frames: Frame[] = [];
-            window.__frames = frames;
-            window.__sameLoad = true;
+            window.paintedFrames = frames;
+            window.sameLoad = true;
             const paint = (): void => {
                 frames.push({
                     rail: document.querySelector(`nav.icon-rail`) !== null,
@@ -257,8 +257,8 @@ test(`another folder pointed at in the window's place takes it in place: no relo
         }, LOOPBACK_OFFER);
     // The frames since `watchFrames`, checked: the shell in every one, and the arriving folder never named over an empty tree.
     const expectNoBlankFrame = async (arriving: string): Promise<void> => {
-        expect(await page.evaluate(() => window.__sameLoad), `the page was reloaded`).toBe(true);
-        const frames = (await page.evaluate(() => window.__frames)) ?? [];
+        expect(await page.evaluate(() => window.sameLoad), `the page was reloaded`).toBe(true);
+        const frames = (await page.evaluate(() => window.paintedFrames)) ?? [];
         expect(frames.filter((frame) => !frame.rail), `frames painted without the shell's rail`).toEqual([]);
         const arrived = frames.filter((frame) => frame.folder === arriving);
         expect(arrived.length).toBeGreaterThan(0);

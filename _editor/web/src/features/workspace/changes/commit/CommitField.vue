@@ -3,8 +3,8 @@ import type { LandedMessageDraft } from "@intentic/sandbox-contract";
 import { growTextarea, type IconName, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { useLayout } from "../../../workbench/window/useLayout";
-import { draftReport, draftRunning, type DraftReportRow } from "./changeOrigins";
+import { useLayout } from "../../../../workbench/window/useLayout";
+import { draftReport, draftRunning, type DraftReportRow } from "../changeOrigins";
 
 // The field at the top of the Changes sidebar, shared by both halves of it: the developer's commit message
 // (ReviewPanel.vue) and the maker's version name (save/SavePanel.vue). The two used to grow apart, one a field with

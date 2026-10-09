@@ -324,17 +324,18 @@ const startIsolated = async (program: string, request: StartRequest, sandboxUrl:
 
 // An isolated run ends when its Windows Sandbox closes, which nothing here hears: it is read when someone asks.
 const refreshIsolated = async (sandboxUrl: string): Promise<void> => {
-    const open = (await readRuns(sandboxUrl)).filter((run) => run.isolated === true && run.endedAt === undefined);
-    if (open.length === 0 || (await windowsSandboxRunning().catch(() => true))) {
+    const running = (await readRuns(sandboxUrl)).filter((run) => run.isolated === true && run.endedAt === undefined);
+    // allow(silent-catch): a process list that cannot be read proves nothing closed, so the runs stay open until it can.
+    if (running.length === 0 || (await windowsSandboxRunning().catch(() => true))) {
         return;
     }
-    const ids = new Set(open.map((run) => run.id));
+    const ids = new Set(running.map((run) => run.id));
     await updateRuns(sandboxUrl, (runs) => runs.map((run) => (ids.has(run.id) && run.endedAt === undefined ? { ...run, endedAt: new Date().toISOString() } : run)));
 };
 
 // What an isolated run's program said about its end, from inside the VM.
 const insideExit = async (run: AppRun): Promise<string | undefined> =>
-    run.isolated === true ? isolatedExit(await readFile(join(dirname(run.log), "exit-code"), "utf8").catch(() => undefined)) : undefined;
+    run.isolated === true ? isolatedExit(await readFile(join(dirname(run.log), "exit-code"), "utf8").catch(undefinedIfMissing)) : undefined;
 
 // An isolated run's output is two files (Start-Process cannot merge them); the error one follows, marked.
 const runOutput = async (run: AppRun, lines: number): Promise<{ text: string; total: number }> => {

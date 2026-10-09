@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
@@ -23,7 +24,7 @@ const shellAsked = (id: string, sessionID: string, command: string): OpenCodeEve
     id: `evt_${id}`,
     created: 1_791_493_689_599,
     type: "permission.asked",
-    location: { directory: "/work" },
+    location: { directory: WORKSPACE_ROOT },
     data: {
         id,
         sessionID,

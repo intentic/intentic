@@ -272,6 +272,7 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
 
         // The browser's on-device recognizer, asked once: it bridges only while the model is not ready yet, and only once
         // a press, so a recognizer that keeps quitting is not restarted on every progress tick.
+        // allow(silent-catch): A browser without an on-device recognizer simply has no bridge; dictation waits for the daemon's model.
         const bridgeStarter = browserSpeechFor(language, options.page).catch(() => undefined);
         let bridgeTried = false;
         const maybeBridge = async (): Promise<void> => {

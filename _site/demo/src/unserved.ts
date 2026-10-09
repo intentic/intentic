@@ -90,6 +90,13 @@ export const UNSERVED = {
     "POST /fleet/message": NOT_THE_EDITORS,
     "GET /fleet/{handle}": NOT_THE_EDITORS,
     "POST /devices/{name}/artifacts": NOT_THE_EDITORS,
+    // The rest of the agent's `devices` command (a shell's app_start, a device port reached from the sandbox), and where
+    // the device dials back with a tunnel's ticket.
+    "POST /devices/{name}/apps": NOT_THE_EDITORS,
+    "POST /devices/{name}/tunnels": NOT_THE_EDITORS,
+    "DELETE /devices/{name}/tunnels/{port}": NOT_THE_EDITORS,
+    "GET /devices/tunnels": NOT_THE_EDITORS,
+    "GET /system/hosts/tunnel": NOT_THE_EDITORS,
     "GET /listeners/{provider}/state": NOT_THE_EDITORS,
     "POST /listeners/{provider}/dispatch": NOT_THE_EDITORS,
     "POST /listeners/{provider}/failure": NOT_THE_EDITORS,
@@ -245,6 +252,8 @@ export const UNSERVED = {
     "workspace.packageModules": UNFILLED_VIEW,
     "workspace.resolve": UNFILLED_VIEW,
     "workspace.templates": UNFILLED_VIEW,
+    // A repository's "Run on <device>" dialog: no fixture repository declares a run target.
+    "runs.targets": UNFILLED_VIEW,
     "GET /workspace/media": UNFILLED_VIEW,
     "GET /workspace/download": UNSIMULATED_WRITE,
     "GET /webchat/{id}/installs": UNFILLED_VIEW,
@@ -331,6 +340,7 @@ export const UNSERVED = {
     "ports.unforward": UNSIMULATED_WRITE,
     "public.publish": UNSIMULATED_WRITE,
     "public.unpublish": UNSIMULATED_WRITE,
+    "runs.start": UNSIMULATED_WRITE,
     "safety.setPolicy": UNSIMULATED_WRITE,
     "secrets.generate": UNSIMULATED_WRITE,
     "secrets.remove": UNSIMULATED_WRITE,

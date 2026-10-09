@@ -233,7 +233,7 @@ onMounted(() => {
                 <button
                     v-if="group.hidden > 0"
                     type="button"
-                    :class="ui.textButton({ tone: `link`, size: `xs` }, `my-0 min-h-8 w-full px-3 pl-[2.375rem] max-md:min-h-11`)"
+                    :class="ui.textButton({ tone: `link`, size: `xs`, flush: true }, `min-h-8 w-full px-3 pl-[2.375rem] max-md:min-h-11`)"
                     @click="unfold(group.lane)"
                 >
                     {{ t(`workspace.workspaceScopeChip.showMore`, { count: group.hidden }, group.hidden) }}
@@ -246,7 +246,7 @@ onMounted(() => {
         </div>
         <!-- Outside the scroll, so it stays in reach however long the list runs. -->
         <div v-if="current !== undefined" class="flex shrink-0 items-center border-t border-line px-3 py-1">
-            <RouterLink :to="`/agents/${current}`" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `my-0 min-h-8`)" @click="emit(`close`)">
+            <RouterLink :to="`/agents/${current}`" :class="ui.textButton({ tone: `quiet`, size: `xs`, flush: true }, `min-h-8`)" @click="emit(`close`)">
                 <Icon name="check-square" aria-hidden="true" />
                 {{ t(`workspace.words.seeChanges`) }}
             </RouterLink>

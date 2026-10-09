@@ -84,13 +84,17 @@ export const spokenText = (engine: SpeechEngine, raw: string): string => {
     return words === "" || WHISPER_PHANTOMS.has(phantomKey(words)) ? "" : words;
 };
 
-// Whether sherpa-onnx ships a binary for this machine; only a new image could change the answer.
-const runtimePresent = (): boolean => {
+// Whether sherpa-onnx ships a binary for this machine; only a new image could change the answer. A package that is not
+// there is the expected no; anything else is still a no, since nothing could load it, but said in the log.
+const runtimePresent = (log: (message: string) => void): boolean => {
     try {
         const require = createRequire(import.meta.url);
         createRequire(require.resolve("sherpa-onnx-node")).resolve(`sherpa-onnx-${process.platform}-${process.arch}/package.json`);
         return true;
-    } catch {
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") {
+            log(`could not tell whether the speech runtime is installed: ${errorMessage(error)}`);
+        }
         return false;
     }
 };
@@ -135,7 +139,7 @@ export const createSpeech = ({
     );
 
     let present: boolean | undefined;
-    const isProvisioned = (): boolean => (present ??= (provisioned ?? runtimePresent)());
+    const isProvisioned = (): boolean => (present ??= provisioned === undefined ? runtimePresent(log) : provisioned());
 
     const specFor = (engine: SpeechEngine, dir: string, locale: string | undefined): RecognizerSpec => {
         const language = engine === "whisper" ? speechLanguage(locale) : undefined;
@@ -160,7 +164,9 @@ export const createSpeech = ({
     };
 
     // Fetches in the background, reported through status and `subscribe`; a failure is the status's to tell.
-    const fetchInBackground = (engine: SpeechEngine): Promise<string | undefined> => store.ensure(SPEECH_MODELS[engine]).catch(() => undefined);
+    const fetchInBackground = (engine: SpeechEngine): Promise<string | undefined> =>
+        // allow(silent-catch): the model store logs a failed fetch and keeps its error for the status to report
+        store.ensure(SPEECH_MODELS[engine]).catch(() => undefined);
 
     const hear = async (samples: Float32Array, locale: string | undefined): Promise<string> => {
         if (!isProvisioned()) {

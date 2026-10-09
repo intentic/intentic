@@ -15,7 +15,7 @@ import { COMMIT_SCOPE, useChanges } from "../useChanges";
 import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
-import CommitField from "../CommitField.vue";
+import CommitField from "../commit/CommitField.vue";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 

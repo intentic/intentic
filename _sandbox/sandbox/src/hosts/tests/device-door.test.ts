@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { createRunGrants, refusalFor, type DoorServices } from "../device-door.js";
+import { createRunGrants } from "../device-door.js";
+import { refusalFor, type DoorServices } from "../device-door.routes.js";
 
 // Who may act on one of the owner's computers from a shell: an agent whose live turn mounts that computer, or a run the
 // owner started from the editor, for its one computer, while it lasts.

@@ -131,7 +131,7 @@ export const RAW_ROUTES = {
     // The `devices push` CLI: a program the agent built, carried to one of the owner's computers in chunks; held to the
     // devices the calling conversation's turn mounts, and refused by the machine itself unless "Run programs" is on.
     "POST /devices/{name}/artifacts": { agent: true, control: "never" },
-    // The rest of the `devices` command, held to the same rule (hosts/device-door.ts): the device's app_start for a
+    // The rest of the `devices` command, held to the same rule (hosts/device-door.routes.ts): the device's app_start for a
     // shell, and its loopback ports reached from the sandbox (hosts/device-tunnels.ts).
     "POST /devices/{name}/apps": { agent: true, control: "never" },
     "POST /devices/{name}/tunnels": { agent: true, control: "never" },

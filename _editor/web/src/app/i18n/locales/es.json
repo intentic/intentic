@@ -1556,8 +1556,7 @@
             "running": "{runningCount} en marcha",
             "switch": "Cambiar…",
             "switchChatOpen": "Cambiar de chat: {count} abiertos",
-            "togglePin": "Fijar o dejar de fijar el chat",
-            "waiting": "{attentionCount} esperando"
+            "togglePin": "Fijar o dejar de fijar el chat"
         },
         "chatTodoList": {
             "stillOpen": "{content} sin cerrar"
@@ -1968,8 +1967,7 @@
         },
         "unsentMark": {
             "notSent": "Sin enviar",
-            "unsent": "Sin enviar",
-            "written": "Escrito"
+            "unsent": "Sin enviar"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",

@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import { ref } from "vue";
 
@@ -112,7 +113,7 @@ it(`re-reads the review on an unnamed batch mid-turn, and still not on a named o
 // screenshots), all of it under the `.intentic` git never tracks. Each one used to cost a `git status` and a per-row
 // diff over every repo, for a review none of them can move; one tracked path in the same batch still re-reads it.
 it(`leaves the review alone for a batch of untracked machine state, and not for a tracked path beside it`, () => {
-    const churn = [`.intentic/local/privacy-log.json`, `.intentic/records/extension-usage.json`];
+    const churn = [`${STATE_DIR}/local/privacy-log.json`, `${STATE_DIR}/records/extension-usage.json`];
 
     applySystemEvent({ kind: `workspaceChanged`, paths: churn }, SANDBOX);
     expect(reaches(rpcKey(`git.changes`))).toBe(false);

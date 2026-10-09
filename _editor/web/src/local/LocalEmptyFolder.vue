@@ -88,7 +88,7 @@ const tipOf = (project: OfferedProject): Tip => ({
 const list = ref<HTMLElement | undefined>(undefined);
 const step = (by: number): void => {
     const rows = [...(list.value?.querySelectorAll<HTMLButtonElement>(`[data-found-row]`) ?? [])];
-    const at = rows.findIndex((row) => row === document.activeElement);
+    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
     rows[Math.min(Math.max(at + by, 0), rows.length - 1)]?.focus();
 };
 

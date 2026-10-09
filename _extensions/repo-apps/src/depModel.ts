@@ -163,8 +163,8 @@ export const flowOrder = (ids: readonly string[], weight: (from: string, to: str
         return order;
     }
     // best[set]: the fewest upward edges among the areas in `set` placed first, in some order; `last` rebuilds it.
-    const best = new Array<number>(1 << n).fill(Number.POSITIVE_INFINITY);
-    const last = new Array<number>(1 << n).fill(-1);
+    const best = Array.from<number>({ length: 1 << n }).fill(Number.POSITIVE_INFINITY);
+    const last = Array.from<number>({ length: 1 << n }).fill(-1);
     best[0] = 0;
     for (let set = 0; set < 1 << n; set++) {
         if (best[set] === Number.POSITIVE_INFINITY) {

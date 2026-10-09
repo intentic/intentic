@@ -2923,8 +2923,7 @@
             "running": "W toku: {runningCount}",
             "switch": "Przełącz…",
             "switchChatOpen": "Przełącz czat (otwarte: {count})",
-            "togglePin": "Przypnij lub odepnij czat",
-            "waiting": "Oczekuje: {attentionCount}"
+            "togglePin": "Przypnij lub odepnij czat"
         },
         "chatTodoList": {
             "added": "dodano: {count}",
@@ -3688,8 +3687,7 @@
         },
         "unsentMark": {
             "notSent": "Niewysłane",
-            "unsent": "Niewysłane",
-            "written": "Napisane"
+            "unsent": "Niewysłane"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",
@@ -6791,6 +6789,10 @@
                 "push": {
                     "label": "Wypychanie",
                     "where": "wysyłanie pracy do repozytorium"
+                },
+                "runs": {
+                    "label": "Cele uruchomienia",
+                    "where": "programy repozytorium uruchamiane na Twoich komputerach"
                 },
                 "safety": {
                     "label": "Polityka bezpieczeństwa",

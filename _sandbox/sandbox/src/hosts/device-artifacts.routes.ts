@@ -13,7 +13,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app-env.js";
-import { type DoorServices, refusalFor } from "./device-door.js";
+import { type DoorServices, refusalFor } from "./device-door.routes.js";
 
 // THE `devices push` DOOR: a program the agent built, carried from its shell to one of the owner's computers
 // (schemas/device-artifacts.ts). The CLI reads the bytes in the agent's own view of /work, so a build in a conversation's

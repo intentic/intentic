@@ -1,13 +1,14 @@
+import { STATE_DIR } from "@intentic/constants";
 import { batchMatters, gitMatters, iqMatters } from "./batch-relevance.js";
 
 /* The daemon's own state churn must not reach the reactions that re-walk the tree or re-read git. */
 
 // What the watcher actually delivered in a 20 s sample with seven sessions running: no code at all.
 const DAEMON_CHURN = [
-    ".intentic/records/artifacts/browser/page-2026-10-08T20-41-12.png",
-    ".intentic/local/privacy-log.json",
-    ".intentic/local/.privacy-log.json.55.3275.tmp",
-    ".intentic/records/extension-usage.json",
+    `${STATE_DIR}/records/artifacts/browser/page-2026-10-08T20-41-12.png`,
+    `${STATE_DIR}/local/privacy-log.json`,
+    `${STATE_DIR}/local/.privacy-log.json.55.3275.tmp`,
+    `${STATE_DIR}/records/extension-usage.json`,
 ];
 
 test("a batch of the daemon's own state moves neither the index nor git", () => {
@@ -33,7 +34,7 @@ test("tracked config is both indexed and versioned", () => {
 
 test("each reaction keeps its own rule: unversioned authored config is searchable but invisible to git", () => {
     // The staged docs are authored (searchable) but not versioned.
-    const path = ".intentic/config/docs/index.json";
+    const path = `${STATE_DIR}/config/docs/index.json`;
     expect(iqMatters(path)).toBe(true);
     expect(gitMatters(path)).toBe(false);
 });

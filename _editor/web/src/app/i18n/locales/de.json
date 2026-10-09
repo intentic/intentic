@@ -1547,8 +1547,7 @@
             "running": "{runningCount} laufen",
             "switch": "Wechseln…",
             "switchChatOpen": "Chat wechseln: {count} offen",
-            "togglePin": "Chat anheften oder lösen",
-            "waiting": "{attentionCount} wartend"
+            "togglePin": "Chat anheften oder lösen"
         },
         "chatTodoList": {
             "stillOpen": "{content} noch offen"
@@ -1958,8 +1957,7 @@
         },
         "unsentMark": {
             "notSent": "Nicht gesendet",
-            "unsent": "Nicht gesendet",
-            "written": "Geschrieben"
+            "unsent": "Nicht gesendet"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ heißt höchstens: andere Geräte in diesem Konto zahlen aus denselben Töpfen.",

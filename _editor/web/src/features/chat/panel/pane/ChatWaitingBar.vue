@@ -100,8 +100,8 @@ const sendHeld = (): Promise<void> => resumeQueue(waiting.value.map((message) =>
 const { sendsItself } = useMemoryAnswer();
 const memoryLine = computed(() => {
     const share = memoryShare(detail.value);
-    const held = share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });
-    return sendsItself.value ? `${held} · ${t(`chat.chatWaitingBar.sendsWhenRoom`)}` : held;
+    const said = share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });
+    return sendsItself.value ? `${said} · ${t(`chat.chatWaitingBar.sendsWhenRoom`)}` : said;
 });
 </script>
 

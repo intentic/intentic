@@ -34,7 +34,7 @@ const ALLOWED = new Map([
         ]),
     ],
     [
-        `_editor/web/src/features/workspace/changes/ReviewPanel.vue`,
+        `_editor/web/src/features/workspace/changes/commit/CommitField.vue`,
         new Map([
             [
                 `max-h-[142px]`,

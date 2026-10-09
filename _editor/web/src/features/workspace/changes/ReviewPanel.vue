@@ -31,13 +31,13 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
-import CommitField from "./CommitField.vue";
+import CommitField from "./commit/CommitField.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../explorer/fileType";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../../chat/run/useChat";
 import { useLayout } from "../../../workbench/window/useLayout";
-import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
+import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commit/commitMessage";
 import {
     ALL_SIDES,
     chipMessageNotice,

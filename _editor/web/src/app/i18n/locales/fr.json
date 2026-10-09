@@ -1548,8 +1548,7 @@
             "running": "{runningCount} en marche",
             "switch": "Changer…",
             "switchChatOpen": "Changer de chat : {count} ouverts",
-            "togglePin": "Épingler ou désépingler le chat",
-            "waiting": "{attentionCount} en attente"
+            "togglePin": "Épingler ou désépingler le chat"
         },
         "chatTodoList": {
             "stillOpen": "{content} encore ouverts"
@@ -1959,8 +1958,7 @@
         },
         "unsentMark": {
             "notSent": "Non envoyé",
-            "unsent": "Non envoyé",
-            "written": "Écrit"
+            "unsent": "Non envoyé"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ signifie au plus : les autres appareils de ce compte puisent dans les mêmes réserves.",

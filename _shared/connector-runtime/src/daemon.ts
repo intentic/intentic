@@ -99,7 +99,10 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
                 body: new Blob([new Uint8Array(wav)], { type: "audio/wav" }),
             });
             if (!res.ok) {
-                const detail = await res.text().catch(() => "");
+                const detail = await res.text().catch((error: unknown) => {
+                    log.warn({ err: error }, `/speech/transcribe returned ${res.status} and its body could not be read`);
+                    return "";
+                });
                 throw new Error(`/speech/transcribe returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
             }
             const { text } = (await res.json()) as { text?: unknown };

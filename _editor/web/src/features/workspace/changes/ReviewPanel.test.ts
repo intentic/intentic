@@ -12,7 +12,7 @@ import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
-import { nameCommitAfter } from "./commitMessage";
+import { nameCommitAfter } from "./commit/commitMessage";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 

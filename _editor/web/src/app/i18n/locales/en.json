@@ -2923,8 +2923,7 @@
             "running": "{runningCount} running",
             "switch": "Switch…",
             "switchChatOpen": "Switch chat: {count} open",
-            "togglePin": "Pin or Unpin Chat",
-            "waiting": "{attentionCount} waiting"
+            "togglePin": "Pin or Unpin Chat"
         },
         "chatTodoList": {
             "added": "{count} added",
@@ -3688,8 +3687,7 @@
         },
         "unsentMark": {
             "notSent": "Not sent",
-            "unsent": "Unsent",
-            "written": "Written"
+            "unsent": "Unsent"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",
@@ -7198,6 +7196,10 @@
                 "push": {
                     "label": "Pushing",
                     "where": "sending work to a repository"
+                },
+                "runs": {
+                    "label": "Run targets",
+                    "where": "programs a repository runs on your computers"
                 },
                 "safety": {
                     "label": "Safety policy",

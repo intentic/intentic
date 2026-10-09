@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
@@ -15,7 +16,7 @@ const ASKED: OpenCodeEvent = {
     id: "evt_asked",
     created: 1_791_493_690_080,
     type: "permission.asked",
-    location: { directory: "/work" },
+    location: { directory: WORKSPACE_ROOT },
     data: { id: "per_1", sessionID: "ses_1", action: "shell", resources: ["git push origin main"], save: ["git push *"] },
 };
 

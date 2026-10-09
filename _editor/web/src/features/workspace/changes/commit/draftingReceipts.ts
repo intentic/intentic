@@ -1,7 +1,7 @@
 import { computed, watch } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useNotifications } from "../../../workbench/notifications/notifications";
-import { commitMessageOf, draftRunning } from "./changeOrigins";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
+import { commitMessageOf, draftRunning } from "../changeOrigins";
 import { fillCommitMessage, namedAfter } from "./commitMessage";
 import { t } from "@intentic/ui/i18n";
 

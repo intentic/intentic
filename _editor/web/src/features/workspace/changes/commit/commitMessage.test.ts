@@ -7,7 +7,7 @@ const stored = new Map<string, string>();
 
 // The factory is synchronous: a jest.mock factory runs in place, and awaiting inside one that replaces a module
 // already in this file's graph never returns.
-jest.mock("../../../client/sandbox/useSandbox", () => ({
+jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(active.sandboxId) }),
 }));
 

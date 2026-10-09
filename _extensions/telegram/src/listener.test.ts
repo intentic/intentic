@@ -41,6 +41,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
                 },
                 failure: async () => {},
                 status: async () => {},
+                transcribe: async () => "",
             },
         },
     };

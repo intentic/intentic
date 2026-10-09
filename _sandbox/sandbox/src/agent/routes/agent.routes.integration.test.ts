@@ -802,6 +802,12 @@ describe("a message held because the sandbox was short of memory", () => {
             delivered: "started",
         });
         await waitFor(() => expect(daemon.conversations.state("conv-kept")?.resume.held?.reason).toBe("door"), SETTLES);
+        // The hold is filed as the refusal frame arrives, the run's ending only once it settles; the pass reads both, so a
+        // tick between them finds no memory hold, or a conversation still busy, and lets nothing go.
+        await waitFor(() => {
+            expect(daemon.conversations.running("conv-kept")).toBe(false);
+            expect(daemon.agents.entry("conv-kept")?.ending).toMatchObject({ kind: "failed", code: "sandbox-memory-low" });
+        }, SETTLES);
 
         await createTurnResumeScheduler(daemon).tick(settled());
         await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);

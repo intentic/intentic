@@ -1,4 +1,4 @@
-// The 44 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 45 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -169,6 +169,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Each repository's dev server: what it is and whether it is running",
         description:
             "One entry per repo, with whether its preview server is up and what the app worked out about its contents. Starting and stopping are here; watching the output is the terminal's job.",
+    },
+    {
+        name: "runs",
+        shelf: "workspace",
+        label: "Run targets",
+        summary: "The programs each repository declares, run on one of your own computers",
+        description:
+            "A repository can declare programs that run on the owner's own machines rather than in the sandbox. One read lists what each repository declares and which of your computers could run one now; the other builds a target here, carries the build over and starts it there, in a terminal you can watch. The computer still decides whether it accepts programs this sandbox sends.",
     },
     {
         name: "ports",

@@ -7,7 +7,7 @@ import { floatingWindowPanel } from "../workbench/window/floating";
 import { onScreen } from "../workbench/window/onScreen";
 import { awayFromWindow } from "../workbench/window/inputAway";
 import { startBackgroundLoader, stopBackgroundLoader } from "../router/prefetch/useBackgroundLoader";
-import { startDraftingReceipts } from "../features/workspace/changes/draftingReceipts";
+import { startDraftingReceipts } from "../features/workspace/changes/commit/draftingReceipts";
 import { reportAway, reportIdle, reportSessionId, reportView } from "../workbench/presence/usePresence";
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
 import { offerTimezone } from "../features/sandbox/overview/offerTimezone";

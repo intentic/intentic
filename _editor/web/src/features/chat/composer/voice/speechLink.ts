@@ -78,6 +78,7 @@ const streamTransport = (socket: WebSocket, events: SpeechLinkEvents, onLost: (i
         let parsed: unknown;
         try {
             parsed = JSON.parse(event.data);
+        // allow(silent-catch): A frame that is not JSON is not one of the daemon's messages, and is ignored like one that fails the schema.
         } catch {
             return;
         }
@@ -299,6 +300,7 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
     // A socket that dies after it was up (a daemon restart) costs only the phrases in flight on it; the next phrase dials
     // again.
     const dial = async (): Promise<void> => {
+        // allow(silent-catch): A socket address that cannot be had is the undefined below, which falls back to posting each phrase over HTTP.
         const url = await deps.socketUrl(`/speech/stream`, { lang }).catch(() => undefined);
         if (closed) {
             return;
@@ -367,4 +369,5 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
 
 /** Fetch and load the model for this language ahead of the press, where the daemon knows how; quietly nothing elsewhere. */
 export const prepareSpeech = (lang: string, ask: typeof sandboxJson = sandboxJson): Promise<SpeechStatus | undefined> =>
+    // allow(silent-catch): Preparing ahead is only a head start; a refusal leaves the first press to load the model itself.
     ask<SpeechStatus>(`/speech/prepare?lang=${encodeURIComponent(lang)}`, { method: `POST` }).catch(() => undefined);

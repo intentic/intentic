@@ -75,6 +75,7 @@ const AREAS: Readonly<Record<string, () => AreaName>> = {
     providers: () => ({ label: t(`sandbox.driftReport.areas.providers.label`), where: t(`sandbox.driftReport.areas.providers.where`) }),
     public: () => ({ label: t(`sandbox.driftReport.areas.public.label`), where: t(`sandbox.driftReport.areas.public.where`) }),
     push: () => ({ label: t(`sandbox.driftReport.areas.push.label`), where: t(`sandbox.driftReport.areas.push.where`) }),
+    runs: () => ({ label: t(`sandbox.driftReport.areas.runs.label`), where: t(`sandbox.driftReport.areas.runs.where`) }),
     safety: () => ({ label: t(`sandbox.driftReport.areas.safety.label`), where: t(`sandbox.driftReport.areas.safety.where`) }),
     secrets: () => ({ label: t(`sandbox.driftReport.areas.secrets.label`), where: t(`sandbox.driftReport.areas.secrets.where`) }),
     sessions: () => ({ label: t(`sandbox.driftReport.areas.sessions.label`), where: t(`sandbox.driftReport.areas.sessions.where`) }),

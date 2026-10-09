@@ -115,7 +115,10 @@ describe("an offloaded line", () => {
         const { root, ref } = parent();
         const { runner } = commands(root);
         const started = Date.now();
-        const frames = runner.run(input(ref, "(sleep 60 &); sleep 60"));
+        // A duration no other suite sleeps for: `ps` sees the whole machine, and the suites running beside this one in
+        // the same worker start (and leave dying) `sleep 60`s of their own.
+        const sleeper = `sleep ${String(7_000 + Math.floor(Math.random() * 1_000))}`;
+        const frames = runner.run(input(ref, `(${sleeper} &); ${sleeper}`));
         const collected: RunnerCommandFrame[] = [];
         for await (const frame of frames) {
             collected.push(frame);
@@ -125,7 +128,7 @@ describe("an offloaded line", () => {
         }
         expect(Date.now() - started).toBeLessThan(20_000);
         expect(exitOf(collected).failure).toStartWith("stopped");
-        expect(execFileSync("ps", ["-eo", "args"], { encoding: "utf8" }).split("\n").filter((line) => line === "sleep 60")).toEqual([]);
+        expect(execFileSync("ps", ["-eo", "args"], { encoding: "utf8" }).split("\n").filter((line) => line === sleeper)).toEqual([]);
     });
 
     test("says why when the snapshot cannot be fetched, and runs nothing", async () => {

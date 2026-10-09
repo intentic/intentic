@@ -152,7 +152,7 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                     send(ws, { type: "partial", id: current.id, text });
                 }
             } catch {
-                // A failed guess is only a missing preview; the final says what went wrong, if anything did.
+                // allow(silent-catch): a failed guess is only a missing preview; the final says what went wrong, if anything did.
             } finally {
                 current.guessing = false;
             }
@@ -215,6 +215,7 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                 try {
                     parsed = JSON.parse(String(event.data));
                 } catch {
+                    // allow(silent-catch): a text frame that is not JSON is no message of the protocol, dropped like one the schema refuses below
                     return;
                 }
                 const message = SpeechClientMessageSchema.safeParse(parsed);

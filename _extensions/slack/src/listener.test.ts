@@ -43,6 +43,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: object[]; streamed: object[] 
                 },
                 failure: async () => {},
                 status: async () => {},
+                transcribe: async () => "",
             },
         },
     };
