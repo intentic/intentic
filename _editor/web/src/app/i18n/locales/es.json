@@ -4723,21 +4723,17 @@
             "refreshSessions": "Recargar las sesiones",
             "restartShell": "Reiniciar la shell",
             "scrollback": "Historial, {scrollbackName}",
-            "showWorkTerminals": "Mostrar los terminales de trabajo",
             "split": "Dividir",
             "splitTerminal": "Dividir el terminal",
             "tab": "Pestaña",
             "terminalName": "Nombre del terminal",
             "terminalsKeepRunning": "Los terminales siguen",
-            "toggleWorkTerminals": "Alternar los terminales de trabajo",
             "typeBelowHandBack": ": escríbelo abajo y luego devuelve el control.",
             "unsplit": "Unir",
             "unsplitTerminal": "Unir el terminal"
         },
         "workTerminals": {
-            "alwaysShowTabs": "Mostrar siempre como pestañas",
-            "finished": "Terminado",
-            "giveEveryAgentShell": "Dar a cada shell y a cada tarea de agente su propia pestaña en este panel."
+            "finished": "Terminado"
         },
         "words": {
             "workTerminals": "Terminales de trabajo"

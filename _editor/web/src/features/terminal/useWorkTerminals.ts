@@ -1,28 +1,17 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { computed, type ComputedRef, type Ref } from "vue";
-import { definePreference } from "@intentic/ui/preference";
+import { computed, type ComputedRef } from "vue";
 import { isWork } from "./terminalMeta";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 import { importOrReload } from "../../lib/staleChunk";
 
 // Work terminals: agent Bash shells and daemon job sessions (including one-shot runs: installs, a project's checks, a
-// scaffold), shown by default only through their own surfaces (chat's Bash card, Capabilities page, the popover), not
-// tabbed in the panel unless showWorkTerminals is on. `rows` is what is live; `finished` is the jobs that have ended,
+// scaffold), shown through their own surfaces (chat's Bash card, Capabilities page, the popover), and
+// tabbed in the panel only when explicitly revealed. `rows` is what is live; `finished` is the jobs that have ended,
 // whose pane is the only place their output exists, for as long as the daemon's own sweep keeps them.
-
-const STORAGE_KEY = `ui-work-terminals`;
 
 // How many finished jobs the popover offers. A day of landings is dozens of checks; past the most recent handful the
 // answer isn't in a pane any more, it's in the activity the run wrote.
 const FINISHED_LIMIT = 6;
-
-// Default off; written directly by every surface that toggles it (Settings, the bar menu, the palette), so nothing
-// needs a setter.
-export const showWorkTerminals: Ref<boolean> = definePreference<boolean>({
-    key: STORAGE_KEY,
-    read: (raw) => raw === `on`,
-    write: (value) => (value ? `on` : `off`),
-});
 
 // Conversation title per agent terminal, so a row reads the chat's title instead of `agent-<id>`; a session without one
 // just shows its id. Written by the conversation as it surfaces its session; one daemon's sessions, so per sandbox.
@@ -44,7 +33,7 @@ export interface WorkTerminalRow {
     readonly activityAt: number;
 }
 
-// Reveals a work terminal as a focused tab regardless of the preference; a plain action so callers with no tab
+// Reveals a work terminal as a focused tab; a plain action so callers with no tab
 // machinery can call it. Imports the panel lazily so reading this module doesn't pull in xterm.
 export const openWorkTerminal = (session: string): void => {
     importOrReload(
@@ -66,7 +55,6 @@ const byRecency = (left: TerminalSession, right: TerminalSession): number => rig
 export function useWorkTerminals(): {
     rows: ComputedRef<WorkTerminalRow[]>;
     finished: ComputedRef<WorkTerminalRow[]>;
-    showWorkTerminals: Ref<boolean>;
 } {
     const { sessions } = useTerminalsQuery();
     const rows = computed<WorkTerminalRow[]>(() =>
@@ -86,5 +74,5 @@ export function useWorkTerminals(): {
             .slice(0, FINISHED_LIMIT)
             .map(toRow),
     );
-    return { rows, finished, showWorkTerminals };
+    return { rows, finished };
 }

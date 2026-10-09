@@ -1,7 +1,6 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { activeSandboxId } from "../../lib/activeSandbox";
-import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { isWork, KINDS, pruneTerminalMeta } from "./terminalMeta";
 import {
@@ -18,8 +17,8 @@ import { useTheme } from "@intentic/ui/theme";
 import { useSkin } from "../../skins/useSkin";
 
 // Multi-tab terminal state for the terminal panel: an instance per surface over one shared session cache. `kind` gates
-// restart and the background-process split: process sessions tab only as log views, agent/job only once revealed or
-// while showWorkTerminals is on. `groups` is the remembered arrangement intersected with what's listed.
+// restart and the background-process split: process sessions tab only as log views, agent/job only once revealed.
+// `groups` is the remembered arrangement intersected with what's listed.
 
 export interface TerminalTab {
     readonly name: string;
@@ -127,7 +126,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const processes = ref<TerminalTab[]>([]);
     // Process sessions the user opened a log view for; the only `process` sessions that appear in `order`.
     const viewedProcesses = new Set<string>();
-    // Work sessions revealed by an explicit open while the preference is off; lasts this surface's lifetime only.
+    // Work sessions revealed by an explicit open; lasts this surface's lifetime only.
     const revealed = new Set<string>();
     // Session an open request is still waiting to see listed; a second request supersedes the first.
     const pending = ref<string | undefined>(undefined);
@@ -172,13 +171,12 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     const groupOf = (name: string): string[] => arrangement.value.find((group) => group.includes(name)) ?? [name];
 
-    // Kinds listed by the daemon that don't tab on their own: unopened processes, and (unless revealed or the
-    // preference is on) agent/job sessions.
+    // Kinds listed by the daemon that don't tab on their own: unopened processes and unrevealed agent/job sessions.
     const hiddenFromStrip = (tab: TerminalTab): boolean => {
         if (KINDS[tab.kind].logs) {
             return !viewedProcesses.has(tab.name);
         }
-        return isWork(tab) && !showWorkTerminals.value && !revealed.has(tab.name);
+        return isWork(tab) && !revealed.has(tab.name);
     };
 
     // Drops a revealed session's reveal once it finishes, unless it's the active tab or not yet on the strip (spares an
@@ -394,19 +392,6 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         // Every question still out is void: its answer would paint the old sandbox's sessions onto this one.
         answered = asked;
         void refresh().catch(() => undefined);
-    });
-
-    // Preference toggled while open: relist so work terminals arrive or leave; sockets stay parked either way.
-    watch(showWorkTerminals, () => {
-        // A dropped list leaves the strip as is and the retry asks again; nothing to report here.
-        void refresh()
-            .catch(() => undefined)
-            .then(() => {
-                // Hiding the last tab would leave a blank panel, so open a shell instead, same as an empty attach().
-                if (order.value.length === 0 && source.create !== undefined) {
-                    newTab();
-                }
-            });
     });
 
     // `awaited` is the session the panel opened for, suppressing the empty-panel shell it would otherwise spawn.

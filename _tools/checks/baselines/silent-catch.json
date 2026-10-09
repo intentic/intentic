@@ -123,7 +123,7 @@
     "_editor/web/src/features/terminal/terminalMeta.ts": 1,
     "_editor/web/src/features/terminal/TerminalPanel.vue": 3,
     "_editor/web/src/features/terminal/terminalSession.ts": 5,
-    "_editor/web/src/features/terminal/useTerminal.ts": 7,
+    "_editor/web/src/features/terminal/useTerminal.ts": 6,
     "_editor/web/src/features/workspace/changes/commit/commitMessage.ts": 1,
     "_editor/web/src/features/workspace/directory-ui/useDirectoryUi.ts": 1,
     "_editor/web/src/features/workspace/explorer/tree/useTreeTransfer.ts": 1,

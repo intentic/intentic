@@ -4654,21 +4654,17 @@
             "refreshSessions": "Recharger les sessions",
             "restartShell": "Redémarrer le shell",
             "scrollback": "Historique, {scrollbackName}",
-            "showWorkTerminals": "Afficher les terminaux de travail",
             "split": "Diviser",
             "splitTerminal": "Diviser le terminal",
             "tab": "Onglet",
             "terminalName": "Nom du terminal",
             "terminalsKeepRunning": "Les terminaux continuent",
-            "toggleWorkTerminals": "Basculer les terminaux de travail",
             "typeBelowHandBack": " : tapez-le ci-dessous, puis rendez la main.",
             "unsplit": "Annuler la division",
             "unsplitTerminal": "Annuler la division du terminal"
         },
         "workTerminals": {
-            "alwaysShowTabs": "Toujours afficher en onglets",
-            "finished": "Terminé",
-            "giveEveryAgentShell": "Donner à chaque shell et à chaque tâche d'agent son propre onglet dans ce panneau."
+            "finished": "Terminé"
         },
         "words": {
             "workTerminals": "Terminaux de travail"

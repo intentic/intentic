@@ -6,7 +6,8 @@ import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
-const store = new Map<string, string>();
+// Seed before importing the composables: an old browser opt-in must not be read on startup.
+const store = new Map<string, string>([[`ui-work-terminals`, `on`]]);
 stubGlobal(`localStorage`, {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
@@ -32,7 +33,6 @@ jest.mock("./terminalSession", () => ({
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");
-const { showWorkTerminals } = await import("./useWorkTerminals");
 
 // activityAt is just 'said something recently'; the sweep itself is tested in terminalSweep.test.ts.
 type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job"; running: boolean; activityAt: number };
@@ -91,7 +91,6 @@ const panel = (initial: Listed[]) => {
 beforeEach(() => {
     store.clear();
     resetSandboxScope();
-    showWorkTerminals.value = false;
 });
 
 test("a panel opened after a night of finished work shows the user's shells and nothing else", async () => {
@@ -285,15 +284,15 @@ test("an empty panel opened with no session in mind still opens a shell", async 
     expect(names()).toEqual([`web-new`]);
 });
 
-test("with the preference on, work terminals tab and stay tabbed after they finish", async () => {
-    showWorkTerminals.value = true;
+test("the legacy opt-in is ignored: work terminals still need an explicit reveal", async () => {
+    store.set(`ui-work-terminals`, `on`);
     const { daemonLists, tabs, attach, names } = panel([shell(`web-1`), job(`capability-demo`, true)]);
     await attach();
-    expect(names()).toEqual([`web-1`, `job-capability-demo`]);
+    expect(names()).toEqual([`web-1`]);
 
     daemonLists([shell(`web-1`), job(`capability-demo`, false)]);
     await tabs.refresh();
     tabs.switchTab(`web-1`);
 
-    expect(names()).toEqual([`web-1`, `job-capability-demo`]);
+    expect(names()).toEqual([`web-1`]);
 });

@@ -8800,21 +8800,17 @@
             "refreshSessions": "Refresh sessions",
             "restartShell": "Restart shell",
             "scrollback": "Scrollback, {scrollbackName}",
-            "showWorkTerminals": "Show work terminals",
             "split": "Split",
             "splitTerminal": "Split terminal",
             "tab": "Tab",
             "terminalName": "Terminal name",
             "terminalsKeepRunning": "Terminals keep running",
-            "toggleWorkTerminals": "Toggle Work Terminals",
             "typeBelowHandBack": ": type it below, then hand back.",
             "unsplit": "Unsplit",
             "unsplitTerminal": "Unsplit terminal"
         },
         "workTerminals": {
-            "alwaysShowTabs": "Always show as tabs",
-            "finished": "Finished",
-            "giveEveryAgentShell": "Give every agent shell and job its own tab in this panel."
+            "finished": "Finished"
         },
         "terminalStrip": {
             "closeLogView": "Close log view",

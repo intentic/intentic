@@ -18,7 +18,6 @@ import { activeLocale, type Locale, LOCALE_CODES, LOCALES, setLocale, useT } fro
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useToolCalls } from "../chat/tools/useToolCalls";
-import { showWorkTerminals } from "../terminal/useWorkTerminals";
 import { showLiveMetrics } from "../agents/metrics/liveMetrics";
 import { type DiffOpen, useLayout } from "../../workbench/window/useLayout";
 import { useChangeGrouping } from "../workspace/changes/useChangeGrouping";
@@ -329,13 +328,6 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 :description="t(`settings.appearance.statusBar.liveMetricsHint`)"
             >
                 <template #control><ToggleSwitch v-model="showLiveMetrics" /></template>
-            </Row>
-        </RowGroup>
-
-        <!-- Work terminals are hidden by default (evidence, not kept tabs); this toggle is the way back. -->
-        <RowGroup :label="t(`shared.terminal`)">
-            <Row as="label" icon="sparkles" :title="t(`terminal.words.workTerminals`)">
-                <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
             </Row>
         </RowGroup>
     </div>

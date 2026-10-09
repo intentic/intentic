@@ -1,16 +1,14 @@
 import { computed, type ComputedRef } from "vue";
 import { isWork, KINDS } from "./terminalMeta";
-import { showWorkTerminals } from "./useWorkTerminals";
 import { useTerminalsQuery } from "./terminalsQuery";
 
-// Live-session count for the rail, read from the panel's own cache entry (with pending claims) so the two can't
-// disagree. Excludes `process` sessions (own rows in useBackgroundProcesses) and, while showWorkTerminals is off, WORK
-// sessions; the browser has its own rail area and isn't a tmux session.
+// Live non-work session count, read from the panel's own cache entry (with pending claims).
+// Excludes process sessions (own rows in useBackgroundProcesses) and work sessions, even when explicitly revealed.
 
 // Fed by the shared list's invalidation (the daemon pushes on tmux changes) rather than its own poll or clock.
 
 interface TerminalActivity {
-    // Count of live sessions currently shown as tabs (shells, dev servers, agent shells, jobs).
+    // Count of live non-work sessions (shells and dev servers).
     readonly count: ComputedRef<number>;
     // Tooltip text summarizing counts by kind, e.g. '2 shells, 1 dev server'.
     readonly summary: ComputedRef<string | undefined>;
@@ -20,7 +18,7 @@ export function useTerminalActivity(): TerminalActivity {
     const { sessions } = useTerminalsQuery();
 
     const live = computed(() =>
-        sessions.value.filter((session) => session.running && !KINDS[session.kind].logs && (!isWork(session) || showWorkTerminals.value)),
+        sessions.value.filter((session) => session.running && !KINDS[session.kind].logs && !isWork(session)),
     );
 
     const summary = computed<string | undefined>(() => {

@@ -11,7 +11,6 @@ import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalC
 import type { useTerminalFloating } from "../terminalFloating";
 import { inactiveTerminals } from "../terminalSweep";
 import type { TerminalTabs } from "../useTerminal";
-import { showWorkTerminals } from "../useWorkTerminals";
 import { hasWork, killAsks, killQuestion } from "./killPlan";
 import { panelCommands } from "./panelCommands";
 import { clearedLabel, cycled, iconFor, labelFor, segmentColor, stripIndex, tooltipFor } from "./stripSegments";
@@ -193,13 +192,6 @@ const stripItems = computed<MenuItem[]>(() => {
     }
     items.push(
         ...(items.length > 0 ? [{ separator: true }] : []),
-        // The one checked row: whether work terminals tab at all, the same preference as the popover and Settings.
-        {
-            label: t(`terminal.terminalPanel.showWorkTerminals`),
-            checked: showWorkTerminals.value,
-            shortcut: commandShortcut(`terminal.toggleWorkTerminals`),
-            command: () => (showWorkTerminals.value = !showWorkTerminals.value),
-        },
         {
             label: floating.floats.value ? t(`terminal.terminalStrip.dockPanelBack`) : t(`terminal.terminalStrip.movePanelToWindow`),
             shortcut: commandShortcut(`terminal.toggleFloating`),

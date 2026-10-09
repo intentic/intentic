@@ -8251,21 +8251,17 @@
             "refreshSessions": "Odśwież sesje",
             "restartShell": "Zrestartuj powłokę",
             "scrollback": "Historia, {scrollbackName}",
-            "showWorkTerminals": "Pokaż terminale robocze",
             "split": "Podziel",
             "splitTerminal": "Podziel terminal",
             "tab": "Karta",
             "terminalName": "Nazwa terminala",
             "terminalsKeepRunning": "Terminale działają dalej",
-            "toggleWorkTerminals": "Przełącz terminale robocze",
             "typeBelowHandBack": ": wpisz to poniżej, a potem oddaj.",
             "unsplit": "Połącz",
             "unsplitTerminal": "Połącz podzielony terminal"
         },
         "workTerminals": {
-            "alwaysShowTabs": "Zawsze pokazuj jako karty",
-            "finished": "Zakończone",
-            "giveEveryAgentShell": "Daj każdej powłoce i każdemu zadaniu agenta własną kartę w tym panelu."
+            "finished": "Zakończone"
         },
         "terminalStrip": {
             "closeLogView": "Zamknij widok logów",

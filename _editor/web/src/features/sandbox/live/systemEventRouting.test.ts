@@ -79,10 +79,10 @@ describe(`dropSandboxLocalState`, () => {
 
     it(`leaves other sandboxes and unscoped preferences alone`, () => {
         localStorage.setItem(`intentic.workspaceTabs.sbx-2`, `{}`);
-        localStorage.setItem(`ui-work-terminals`, `on`);
+        localStorage.setItem(`ui-motion`, `off`);
         dropSandboxLocalState(`sbx-1`);
         expect(localStorage.getItem(`intentic.workspaceTabs.sbx-2`)).toBe(`{}`);
-        expect(localStorage.getItem(`ui-work-terminals`)).toBe(`on`);
+        expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
     });
 
     it(`sweeps the window's own sessionStorage copy too`, () => {

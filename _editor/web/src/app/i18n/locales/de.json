@@ -4700,20 +4700,16 @@
             "refreshSessions": "Sessions neu laden",
             "restartShell": "Shell neu starten",
             "scrollback": "Verlauf, {scrollbackName}",
-            "showWorkTerminals": "Arbeits-Terminals zeigen",
             "split": "Teilen",
             "splitTerminal": "Terminal teilen",
             "terminalName": "Terminalname",
             "terminalsKeepRunning": "Terminals laufen weiter",
-            "toggleWorkTerminals": "Arbeits-Terminals umschalten",
             "typeBelowHandBack": ": tippen Sie es unten ein und geben Sie dann zurück.",
             "unsplit": "Teilung aufheben",
             "unsplitTerminal": "Terminalteilung aufheben"
         },
         "workTerminals": {
-            "alwaysShowTabs": "Immer als Tabs zeigen",
-            "finished": "Fertig",
-            "giveEveryAgentShell": "Jeder Agenten-Shell und jedem Job einen eigenen Tab in diesem Panel geben."
+            "finished": "Fertig"
         },
         "words": {
             "workTerminals": "Arbeits-Terminals"

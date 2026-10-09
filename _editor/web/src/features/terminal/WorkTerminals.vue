@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { AnchoredOverlay, timeAgo, ui } from "@intentic/ui";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { KINDS } from "./terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
@@ -8,12 +7,11 @@ import { useT } from "@intentic/ui/i18n";
 
 // Popover listing work in progress (agent Bash shells, daemon job sessions, one-shot runs) instead of tabbing into the
 // strip, and under it the jobs that have just ended: a finished check is the one whose pane you want, and it leaves the
-// strip the moment you look away. Hidden until there is something to say. Revealing a row tabs it regardless of the
-// preference; there is no Stop here.
+// strip the moment you look away. Hidden until there is something to say. Revealing a row tabs it; there is no Stop here.
 
 const t = useT();
 
-const { rows, finished, showWorkTerminals } = useWorkTerminals();
+const { rows, finished } = useWorkTerminals();
 // Anchored, not a Popover, so the overlay follows a popped-out terminal window instead of its edge.
 const trigger = ref<HTMLButtonElement | null>(null);
 const panelOpen = ref(false);
@@ -94,14 +92,6 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
                 </div>
                 <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
             </button>
-            <!-- The preference for where hidden terminals reappear as tabs. -->
-            <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line-subtle px-2 pb-1 pt-2">
-                <div class="min-w-0 flex-1">
-                    <div class="text-xs text-content">{{ t(`terminal.workTerminals.alwaysShowTabs`) }}</div>
-                    <div class="text-2xs text-muted">{{ t(`terminal.workTerminals.giveEveryAgentShell`) }}</div>
-                </div>
-                <ToggleSwitch v-model="showWorkTerminals" />
-            </label>
         </div>
     </AnchoredOverlay>
 </template>

@@ -3,14 +3,15 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
-import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createApp, defineComponent, h, ref } from "vue";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // Pins two halves of hiding work by default: the popover lists live work named by owning conversation, newest first,
 // and under it the jobs that just ended, since their pane is the only copy of what they printed; the rail badge stops
 // counting what the strip stopped tabbing.
 
-const store = new Map<string, string>();
+// Seed before importing the composables: an old browser opt-in must not be read on startup.
+const store = new Map<string, string>([[`ui-work-terminals`, `on`]]);
 stubGlobal(`localStorage`, {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
@@ -25,7 +26,7 @@ jest.mock("../../client/sandbox/useSandbox", () => ({
 }));
 
 const { queryClient } = await import("../../lib/queryPersistence");
-const { noteAgentTerminal, showWorkTerminals, useWorkTerminals } = await import("./useWorkTerminals");
+const { noteAgentTerminal, useWorkTerminals } = await import("./useWorkTerminals");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
 const HOUR = 3_600_000;
@@ -69,7 +70,7 @@ const mounted = <T>(composable: () => T): T => {
 beforeEach(() => {
     queryClient.clear();
     resetSandboxScope();
-    showWorkTerminals.value = false;
+    store.clear();
     jest.resetAllMocks();
 });
 
@@ -138,26 +139,12 @@ test("whatever spoke last is on top: the only ordering that says anything once e
     expect(rows.value.map((row) => row.session)).toEqual([`agent-aaaa1111`, `job-infra-check`, `job-capability-demo`]);
 });
 
-test("the rail's badge stops counting work terminals while they don't tab, and counts them again once they do", async () => {
+test("the rail's badge excludes work terminals even with the legacy opt-in stored", async () => {
+    store.set(`ui-work-terminals`, `on`);
     daemonLists(shell(`web-1`), agent(`aaaa1111`), job(`capability-demo`));
 
     const activity = mounted(() => useTerminalActivity());
     await waitFor(() => expect(activity.count.value).toBe(1));
     expect(activity.summary.value?.split(`, `)).toHaveLength(1);
     expect(activity.summary.value).toMatch(/^1 /);
-
-    showWorkTerminals.value = true;
-
-    expect(activity.count.value).toBe(3);
-    expect(activity.summary.value?.split(`, `)).toHaveLength(3);
-});
-
-test("the preference persists per browser, so a reload doesn't hand the panel back the tabs it hid", async () => {
-    showWorkTerminals.value = true;
-    await nextTick();
-    expect(store.get(`ui-work-terminals`)).toBe(`on`);
-
-    showWorkTerminals.value = false;
-    await nextTick();
-    expect(store.get(`ui-work-terminals`)).toBe(`off`);
 });

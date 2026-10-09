@@ -162,7 +162,6 @@ describe(`the context menus`, () => {
             `Kill terminal`,
             `Kill all terminals`,
             `—`,
-            `Show work terminals`,
             `Move panel into new window`,
         ]);
     });
@@ -189,7 +188,7 @@ describe(`the context menus`, () => {
     it(`opens the strip-wide rows alone on empty bar space`, async () => {
         const { host } = await stage({ order: [shell(`a`), shell(`b`, { activityAt: minutesAgo(30) })], groups: [[`a`], [`b`]] });
         await press(host.firstElementChild!, `contextmenu`);
-        expect(menuRows()).toEqual([`Kill 1 inactive terminal`, `Kill all terminals`, `—`, `Show work terminals`, `Move panel into new window`]);
+        expect(menuRows()).toEqual([`Kill 1 inactive terminal`, `Kill all terminals`, `—`, `Move panel into new window`]);
     });
 
     it(`offers and does no kill on a read-only strip`, async () => {
@@ -197,7 +196,7 @@ describe(`the context menus`, () => {
         await press(pill(host, `a`), `auxclick`, { button: 1 });
         runCommand(`terminal.killInactive`);
         await press(pill(host, `a`), `contextmenu`);
-        expect(menuRows()).toEqual([`Rename`, `Change color…`, `Change icon…`, `Show work terminals`, `Move panel into new window`]);
+        expect(menuRows()).toEqual([`Rename`, `Change color…`, `Change icon…`, `Move panel into new window`]);
         expect(document.querySelector(`[role="alertdialog"], [role="dialog"]`)).toBeNull();
     });
 });

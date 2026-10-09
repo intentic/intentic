@@ -42,7 +42,6 @@
     "features/sandbox -> features/workspace": "",
     "features/settings -> features/agents": "",
     "features/settings -> features/chat": "",
-    "features/settings -> features/terminal": "",
     "features/settings -> features/workspace": "",
     "features/setup -> features/agents": "",
     "features/setup -> features/capabilities": "",

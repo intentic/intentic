@@ -1,7 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import type { Ref } from "vue";
 import type { CommandRegistration } from "../../../workbench/commands/useCommands";
-import { showWorkTerminals } from "../useWorkTerminals";
 
 // Every strip action as a command, registered while the strip is mounted. Tab-family chords match the workspace and chat
 // strips, gated on this panel's focus; the panel's own verbs keep private, ungated chords. Defaults are Ctrl+Shift+<key>,
@@ -107,15 +106,6 @@ export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
             icon: `code`,
             keybinding: `Ctrl+Shift+U`,
             handler: onActive(activeName, unsplit),
-        },
-        {
-            // Unbound by default, like the cosmetic pickers: it already has two clickable homes.
-            command: `terminal.toggleWorkTerminals`,
-            title: t(`terminal.terminalPanel.toggleWorkTerminals`),
-            icon: `sparkles`,
-            handler: (): void => {
-                showWorkTerminals.value = !showWorkTerminals.value;
-            },
         },
         {
             command: `terminal.nextTab`,

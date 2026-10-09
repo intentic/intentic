@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { computed, ref } from "vue";
-import { showWorkTerminals } from "../useWorkTerminals";
 import { panelCommands, type PanelVerbs } from "./panelCommands";
 
 // Pins the panel's command set: which verbs exist for which strip (split and the kills only where the strip offers
@@ -40,7 +39,6 @@ describe(`the panel's commands`, () => {
             [`terminal.changeIcon`, undefined, undefined],
             [`terminal.join`, `Ctrl+Shift+G`, undefined],
             [`terminal.unsplit`, `Ctrl+Shift+U`, undefined],
-            [`terminal.toggleWorkTerminals`, undefined, undefined],
             [`terminal.nextTab`, `Alt+PageDown`, `tabSurface == 'terminal'`],
             [`terminal.previousTab`, `Alt+PageUp`, `tabSurface == 'terminal'`],
             [`terminal.split`, `Ctrl+Shift+5`, undefined],
@@ -87,13 +85,10 @@ describe(`the panel's commands`, () => {
         expect([selected.strip.requestKill.mock.calls, focused.strip.requestKill.mock.calls]).toEqual([[[[`b`, `c`]]], [[[`a`]], [[`a`, `b`]]]]);
     });
 
-    it(`walks tabs both ways and toggles the work terminals preference`, () => {
+    it(`walks tabs both ways`, () => {
         const { strip, run } = stage();
-        const before = showWorkTerminals.value;
         run(`terminal.nextTab`);
         run(`terminal.previousTab`);
-        run(`terminal.toggleWorkTerminals`);
-        expect({ walked: strip.cycleTab.mock.calls, shown: showWorkTerminals.value }).toEqual({ walked: [[1], [-1]], shown: !before });
-        showWorkTerminals.value = before;
+        expect(strip.cycleTab.mock.calls).toEqual([[1], [-1]]);
     });
 });
