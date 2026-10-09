@@ -15,7 +15,7 @@ const { settings, patch, refusal } = useSandboxSettings();
 
 <template>
     <RowGroup :label="t(`sandbox.agentChecks.mainCi`)">
-        <!-- Main's first failed CI run → one fix agent with every failed job; later failures until main passes, then hands off when stuck; runner failures re-run once. -->
+        <!-- One fix agent on main: first failed run (all jobs); later failures until main passes; hand off when out of turns or stuck; runner failures re-run once. -->
         <Row icon="wrench" :title="t(`sandbox.agentChecks.repairMainCi`)" :description="t(`sandbox.agentChecks.repairMainCiNote`)">
             <template #control>
                 <ToggleSwitch

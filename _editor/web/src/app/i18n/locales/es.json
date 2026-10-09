@@ -2156,7 +2156,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Reparar main cuando falle su CI",
-            "repairMainCiNote": "La primera ejecución que falla en main arranca, al terminar, un agente de corrección con todos los jobs que fallaron, y los fallos de cada ejecución posterior le llegan en un solo mensaje hasta que main vuelva a pasar. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
+            "repairMainCiNote": "Un agente de corrección en main: primer fallo (todos los jobs); fallos posteriores hasta que main pase; te lo cede sin turnos o atascado; fallos del runner, un reintento.",
             "mainCi": "CI de main"
         },
         "agentClock": {

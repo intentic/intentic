@@ -4041,7 +4041,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Naprawiaj main, gdy jego CI zawiedzie",
-            "repairMainCiNote": "Pierwszy przebieg, który nie powiedzie się na main, po zakończeniu uruchamia jednego agenta naprawczego ze wszystkimi nieudanymi zadaniami, a błędy każdego kolejnego przebiegu trafiają do niego jedną wiadomością, aż main znów zacznie przechodzić. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
+            "repairMainCiNote": "Jeden agent naprawczy na main: pierwszy nieudany przebieg (wszystkie joby); kolejne błędy aż main przejdzie; przekazanie bez tur lub w impasie; błędy runnera — jedno ponowienie.",
             "mainCi": "CI na main"
         },
         "agentClock": {

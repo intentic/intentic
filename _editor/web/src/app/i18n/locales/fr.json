@@ -2146,7 +2146,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Réparer main quand sa CI échoue",
-            "repairMainCiNote": "La première exécution qui échoue sur main lance, une fois terminée, un agent de correction avec tous les jobs en échec, et les échecs de chaque exécution suivante lui sont confiés en un seul message jusqu'à ce que main réussisse à nouveau. Quand ses tours sont épuisés, ou s'il ne change rien, il vous passe la main. Une exécution qui a échoué à cause des machines de CI elles-mêmes est relancée une fois à la place.",
+            "repairMainCiNote": "Un agent de correction sur main : premier échec (tous les jobs) ; échecs suivants jusqu'à main vert ; relais sans tours ou bloqué ; échecs runner relancés une fois.",
             "mainCi": "CI de main"
         },
         "agentClock": {

@@ -2147,7 +2147,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Main reparieren, wenn das CI fehlschlägt",
-            "repairMainCiNote": "Der erste Lauf, der auf main fehlschlägt, startet nach seinem Ende einen Reparatur-Agenten mit allen fehlgeschlagenen Jobs, und die Fehlschläge jedes weiteren Laufs gehen als eine Nachricht an ihn, bis main wieder erfolgreich durchläuft. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
+            "repairMainCiNote": "Ein Fix-Agent auf main: erster Fehl-Lauf (alle Jobs); weitere Fehlschläge bis main grün; Übergabe ohne Züge oder feststeckend; Runner-Fehler einmal neu.",
             "mainCi": "Main-CI"
         },
         "agentClock": {
