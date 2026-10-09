@@ -4081,7 +4081,7 @@
                 "developerHint": "Las palabras de git, el árbol de archivos como inicio, todos los paneles.",
                 "hint": "Cambia las palabras que usa la aplicación y qué página es el inicio. Nada de tus archivos ni de tus agentes.",
                 "maker": "Yo no",
-                "makerHint": "Palabras llanas, una página de proyecto como inicio, los archivos de herramientas apartados."
+                "makerHint": "Palabras llanas, los archivos de herramientas apartados."
             }
         },
         "hostedHours": {

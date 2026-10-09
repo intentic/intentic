@@ -7910,7 +7910,7 @@
                 "developerHint": "Git's own words, the file tree as the home, every panel.",
                 "hint": "Changes the words the app uses and which page is home. Nothing about your files or your agents.",
                 "maker": "I don't",
-                "makerHint": "Plain words, a project page as the home, tooling files out of the way."
+                "makerHint": "Plain words, tooling files out of the way."
             },
             "motion": {
                 "title": "Animations",

@@ -3,6 +3,7 @@ import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/sandbox-contract";
 import { ref } from "vue";
+import { setProjectScope } from "../../app/projectScope";
 import { useAudience } from "../../app/useAudience";
 
 // The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
@@ -14,7 +15,6 @@ import {
     railBands,
     railGroups,
     detectActivations,
-    homeViewId,
     railGroupsFor,
     railRank,
     onRail,
@@ -270,7 +270,7 @@ describe(`rail order`, () => {
     // the four ids are core shell tiles that contribute no activation.
     it(`keeps the busy permanent run adjacent, with nothing on the rail between them`, () => {
         // Pick the project, start a turn, read what it did: the loop the rail serves, with the scope that narrows the
-        // rest at its head. Approvals/Workflows used to sit between them.
+        // rest at its head whenever it is tiled. Approvals/Workflows used to sit between them.
         expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
         expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
         expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
@@ -415,13 +415,13 @@ describe(`rail tiles`, () => {
     });
 
     it(`spends permanent tiles on the work loop and nowhere else`, () => {
-        // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
-        // first is the project scope's tile, the only place the shell says which project it is looking at.
+        // The count is the point: few fit above the fold, with room for what lights up. Another means editing this.
+        // Projects is not among them: a permanent tile above Chat read as the place to start (see the projects rail).
         const permanent = railGroups()
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
         // Devices is pinned to keep, and tiles itself while a machine is being worked on.
         expect(railPolicy(`devices`)).toBe(`signal`);
         expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
@@ -462,52 +462,41 @@ describe(`what a badge says`, () => {
     });
 });
 
-// The maker's table: the same rail with the Projects dashboard in the file tree's tile, and the file tree standing in for it
-// while that extension is off. Read through the audience preference, so the switch is the same one Settings flips.
-describe(`the maker's rail`, () => {
-    const projectView = (): ViewRegistration => ({
-        id: `projects`,
-        label: `Projects`,
-        surface: `rail`,
-        detect: () => [{ key: `projects`, title: `Projects` }],
-        view: async () => ({}),
-    });
+// The Projects tile: in More until it matters, so the first thing on the rail after setup is the chat, not a second
+// place to begin. Read through the audience preference too, since a maker landed on the dashboard before.
+describe(`the projects rail`, () => {
+    const projectsTile = { id: `projects` };
+    const resting = { pinned: false, active: false };
 
-    it(`keeps the developer's home on the file tree when nothing has been answered, with the dashboard on the rail beside it`, () => {
-        expect(railPolicy(`workspace`)).toBe(`always`);
-        expect(railPolicy(`projects`)).toBe(`always`);
-        expect(homeViewId()).toBe(`workspace`);
-    });
-
-    it(`tiles the Projects dashboard where the file tree was, once a maker has it`, () => {
-        useAudience().setAudience(`maker`);
-        const registered = registerView(`test`, projectView());
-        try {
-            expect(railPolicy(`projects`)).toBe(`always`);
-            expect(railPolicy(`workspace`)).toBe(`signal`);
-            expect(homeViewId()).toBe(`projects`);
-            expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
-            expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
-            expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
-            // The phone's bar tiles Chat, never the home view: the Project page is the Menu's to list.
-            expect(tabBarIds()).not.toContain(`projects`);
-            expect(tabBarIds()).toContain(`chat`);
-        } finally {
-            registered.dispose();
-            useAudience().setAudience(`developer`);
+    it(`keeps Projects off the rail at rest, for a developer and a maker alike`, () => {
+        for (const audience of [`developer`, `maker`] as const) {
+            useAudience().setAudience(audience);
+            try {
+                expect(railPolicy(`projects`)).toBe(`signal`);
+                expect(railPolicy(`workspace`)).toBe(`always`);
+                expect(onRail(projectsTile, resting)).toBe(false);
+                expect(tabBarIds()).not.toContain(`projects`);
+            } finally {
+                useAudience().setAudience(`developer`);
+            }
         }
     });
 
-    it(`hands the tile back to the file tree while the Projects extension is off, so a maker never has no home`, () => {
-        useAudience().setAudience(`maker`);
+    it(`tiles Projects when pinned or visited, still at the head of the band`, () => {
+        expect(onRail(projectsTile, { pinned: true, active: false })).toBe(true);
+        expect(onRail(projectsTile, { pinned: false, active: true })).toBe(true);
+        expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+    });
+
+    it(`tiles Projects while a project is open, since it is the visible cause of every other tile's narrowing`, () => {
+        setProjectScope(`acme-shop`);
         try {
-            expect(railPolicy(`projects`)).toBe(`always`);
-            expect(railPolicy(`workspace`)).toBe(`always`);
-            expect(homeViewId()).toBe(`workspace`);
-            expect(tabBarIds()).not.toContain(`workspace`);
+            expect(onRail(projectsTile, resting)).toBe(true);
+            expect(onRailOnlyByVisit(projectsTile, { pinned: false, active: true })).toBe(false);
         } finally {
-            useAudience().setAudience(`developer`);
+            setProjectScope(undefined);
         }
+        expect(onRail(projectsTile, resting)).toBe(false);
     });
 
     it(`spends the same permanent tiles in both tables`, () => {
@@ -515,7 +504,7 @@ describe(`the maker's rail`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`projects`, `chat`, `agents`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
     });
 
     // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the

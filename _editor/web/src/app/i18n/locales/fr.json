@@ -4059,7 +4059,7 @@
                 "developerHint": "Les mots de git, l'arborescence comme accueil, tous les panneaux.",
                 "hint": "Change les mots employés par l'application et la page d'accueil. Rien pour vos fichiers ni vos agents.",
                 "maker": "Pas moi",
-                "makerHint": "Des mots simples, une page de projet comme accueil, les fichiers d'outillage à l'écart."
+                "makerHint": "Des mots simples, les fichiers d'outillage à l'écart."
             }
         },
         "hostedHours": {

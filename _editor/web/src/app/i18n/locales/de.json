@@ -4062,7 +4062,7 @@
                 "developerHint": "Gits eigene Worte, der Dateibaum als Startseite, alle Panels.",
                 "hint": "Ändert die Worte, die die App benutzt, und welche Seite die Startseite ist. Nichts an Ihren Dateien oder Ihren Agenten.",
                 "maker": "Ich nicht",
-                "makerHint": "Einfache Worte, eine Projektseite als Startseite, Werkzeugdateien aus dem Weg."
+                "makerHint": "Einfache Worte, Werkzeugdateien aus dem Weg."
             }
         },
         "hostedHours": {

@@ -193,7 +193,7 @@ const devicesTile = computed<SectionTile>(() => {
 // The always-present tiles; extension tiles are added separately below,
 // one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
 const fixedTiles = computed<readonly SectionTile[]>(() => [
-    // Below the Projects tile in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
+    // Heads the Work band's permanent tiles, below Projects when that is tiled; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
     ...(chatTileSeated.value
         ? [
               {

@@ -12,7 +12,6 @@ import {
     START_LOCATION,
 } from "vue-router";
 import { asyncView } from "../components/asyncView";
-import { homeViewId, PROJECTS_VIEW_ID } from "../workbench/views/registry";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { mobileChatPath } from "../lib/routes/tabRoots";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
@@ -274,19 +273,13 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home tile, where its
-            // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
-            // A guest has no home tile but the chat: the tree and the Project page are reads the daemon refuses it.
+            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the file tree with its chat
+            // already docked, for a maker too: the chat is where a first session starts, and the Projects dashboard
+            // landed on instead read as a second place to begin. A guest has no home tile but the chat: the tree is a
+            // read the daemon refuses it.
             {
                 path: ``,
-                redirect: () =>
-                    useRole().isGuest.value
-                        ? `/chat`
-                        : useDevice().mobile.value
-                          ? `/agents`
-                          : homeViewId() === PROJECTS_VIEW_ID
-                            ? `/ext/${PROJECTS_VIEW_ID}`
-                            : `/workspace`,
+                redirect: () => (useRole().isGuest.value ? `/chat` : useDevice().mobile.value ? `/agents` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
             // the rail, back button and reload already know how to enter and leave it. On a phone, the Chat tab.

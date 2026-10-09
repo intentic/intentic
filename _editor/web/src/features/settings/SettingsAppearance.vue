@@ -52,7 +52,7 @@ const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, hideTechnica
 // a list built once at setup holds the words it was born with and never hears the language change under it.
 const t = useT();
 
-// Who the screens are written for: the same workspace with git's words or plain ones, and a different home tile.
+// Who the screens are written for: the same workspace with git's words or plain ones.
 const { audience, setAudience } = useAudience();
 const audienceOptions = computed(
     () =>

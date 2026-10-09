@@ -3,10 +3,10 @@ import { bindHost } from "./host.js";
 import { monogramOf } from "./projects.js";
 import { t } from "./i18n.js";
 
-// The workspace's repositories as a dashboard: one rail tile, activating whether or not a repository exists yet,
-// since a workspace with none is where a maker starts and the dashboard's first tile is then New project. The rail
-// seats it at its head for everyone (workbench/views/registry.ts), above what its scope narrows; for a maker the file
-// tree stands in when the extension is off, so switching it off leaves nothing missing.
+// The workspace's repositories as a dashboard: one rail tile, activating whether or not a repository exists yet, so
+// New project is always one press from the rail's More menu. The rail ranks it at the head of the Work band
+// (workbench/views/registry.ts), above what its scope narrows, but keeps it in More until it matters: pinned, visited,
+// or while a project is open. A permanent tile above Chat read as the place to start right after setup.
 // The tile is also where the shell says which project it is looking at: it wears the project's monogram in place of
 // its glyph and the title carries the name, so every other area's narrowing has a visible cause one glance away.
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {

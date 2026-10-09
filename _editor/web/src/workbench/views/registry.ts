@@ -1,5 +1,6 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { computed, shallowRef } from "vue";
+import { projectScope } from "../../app/projectScope";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
 import { registerViewAsksGatherer, viewAsks, type ViewAsks } from "../../lib/registries/viewAsks";
@@ -75,9 +76,6 @@ export type RailPolicy = "always" | "signal";
 export interface RailItem {
     readonly id: string;
     readonly policy: RailPolicy;
-    // For an `always` tile an extension's view fills: the core id that takes the tile while that view is not
-    // registered, so switching the extension off leaves a home rather than a hole.
-    readonly standIn?: string;
 }
 
 export interface RailGroup {
@@ -87,10 +85,10 @@ export interface RailGroup {
     readonly items: readonly RailItem[];
 }
 
-const always = (id: string, standIn?: string): RailItem => (standIn === undefined ? { id, policy: `always` } : { id, policy: `always`, standIn });
+const always = (id: string): RailItem => ({ id, policy: `always` });
 const signal = (id: string): RailItem => ({ id, policy: `signal` });
 
-// The maker's home is the Projects dashboard (`@intentic/ext-projects`), on the rail where a developer has the file tree.
+// The Projects dashboard (`@intentic/ext-projects`): where the project scope (app/projectScope.ts) is read and changed.
 export const PROJECTS_VIEW_ID = `projects`;
 export const WORKSPACE_VIEW_ID = `workspace`;
 // The Sandbox hub's Devices section, tiled by the shell itself (ShellDesktop.vue) rather than by a view.
@@ -119,50 +117,26 @@ const know = (): RailGroup => ({
     items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)],
 });
 
-// One table per audience; only the Work band differs. Devices closes the band: the machines this sandbox reaches, a place
-// to go as This computer is in a local window. A signal tile a reader pins to keep: it comes onto the rail by itself
-// while one of the machines is being worked on (its turning mark) or a port is held, which is exactly when it has to be
-// in sight. The live app, Browsers and the sandbox's own Desktop are not in any band: they are live surfaces, not places,
-// so they are chips in the status bar beside the terminal (shell/status-bar/), there while they are live.
-// The Projects tile is on the rail for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
-// read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
-// sits above what it switches. For a maker the file tree stands in for it when the extension is off.
+// The Work band. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
+// window. A signal tile a reader pins to keep: it comes onto the rail by itself while one of the machines is being worked
+// on (its turning mark) or a port is held, which is exactly when it has to be in sight. The live app, Browsers and the
+// sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are chips in the status bar
+// beside the terminal (shell/status-bar/), there while they are live.
+// Projects heads the band but is a signal tile, not a permanent one: as a permanent tile above Chat it read, right after
+// setup, as the place to start, when the place to start is the chat. It is in More until it matters — pinned, visited,
+// or while a project is open (onRail), since every tile below it is then narrowed by what it says and the tile wearing
+// the project's monogram is the visible cause of that.
+const work = (): RailGroup => ({
+    id: `work`,
+    label: t(`views.registry.work`),
+    items: [signal(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), signal(`pipelines`), signal(DEVICES_VIEW_ID)],
+});
+
+// One table per audience, the same for both today: a maker reads the same rail in plainer words (useVocabulary), with
+// the file tree as home like a developer's. Kept keyed by audience so a band that ought to differ has a place to.
 const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
-    developer: [
-        {
-            id: `work`,
-            label: t(`views.registry.work`),
-            items: [
-                always(PROJECTS_VIEW_ID),
-                always(`chat`),
-                always(`agents`),
-                always(WORKSPACE_VIEW_ID),
-                signal(`pipelines`),
-                signal(DEVICES_VIEW_ID),
-            ],
-        },
-        judge(),
-        setup(),
-        know(),
-    ],
-    // The file tree keeps a rank of its own below the work loop, so a maker who opens it finds it in the same tile.
-    maker: [
-        {
-            id: `work`,
-            label: t(`views.registry.work`),
-            items: [
-                always(PROJECTS_VIEW_ID, WORKSPACE_VIEW_ID),
-                always(`chat`),
-                always(`agents`),
-                signal(WORKSPACE_VIEW_ID),
-                signal(`pipelines`),
-                signal(DEVICES_VIEW_ID),
-            ],
-        },
-        judge(),
-        setup(),
-        know(),
-    ],
+    developer: [work(), judge(), setup(), know()],
+    maker: [work(), judge(), setup(), know()],
 });
 
 export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railGroupsByAudience()[audience];
@@ -186,25 +160,18 @@ export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().dev
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
 const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? guestRailGroups() : railGroupsFor(useAudience().audience.value));
 
-const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
+// An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging.
+export const railPolicy = (id: string): RailPolicy =>
+    activeGroups()
+        .flatMap((group) => group.items)
+        .find((item) => item.id === id)?.policy ?? `signal`;
 
-// An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging. A stand-in
-// inherits the `always` tile of the view it fills in for while that view is not registered.
-export const railPolicy = (id: string): RailPolicy => {
-    const items = activeGroups().flatMap((group) => group.items);
-    const own = items.find((item) => item.id === id)?.policy ?? `signal`;
-    if (own === `always`) {
-        return own;
-    }
-    const filling = items.find((item) => item.standIn === id && item.policy === `always`);
-    return filling !== undefined && !isRegistered(filling.id) ? `always` : own;
-};
-
-// The view a tile press on the home tile opens: the Project view when a maker has it, else the file tree.
-export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECTS_VIEW_ID) ? PROJECTS_VIEW_ID : WORKSPACE_VIEW_ID);
+// The Projects tile holds its place while a project is open: it is the only place the shell says which project every
+// other tile is narrowed to, and where it is widened back to everything.
+const holdsScope = (id: string): boolean => id === PROJECTS_VIEW_ID && projectScope.value !== undefined;
 
 // Whether a tile is on the rail now, in one predicate. `pinned` overrules the table; `active` keeps the current section
-// on the rail while you're in it. The More menu asks the negative with `active: false`, so a visited section shows in
+// on the rail while you're in it; an open project keeps the Projects tile (holdsScope). The More menu asks the negative with `active: false`, so a visited section shows in
 // both (marked current in the menu) and the menu's rows don't shift with where you stand.
 // A badge tiles a tile whatever it says, an errand or only that something is running there. The rail has always
 // on the rail live work (an open browser, a subagent, a workflow run), so a running pipeline earning no tile would be
@@ -212,7 +179,7 @@ export const homeViewId = (): string => (useAudience().maker.value && isRegister
 export const onRail = (
     tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
     context: { readonly pinned: boolean; readonly active: boolean },
-): boolean => railPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined;
+): boolean => railPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined || holdsScope(tile.id);
 
 // On the rail only because you're standing on it (the `active` clause alone): the one tile gone the moment you
 // leave. A label predicate for that case, not a tile one; derived from onRail so the two can't drift.

@@ -7369,7 +7369,7 @@
                 "developerHint": "Własne słowa gita, drzewo plików jako strona główna, wszystkie panele.",
                 "hint": "Zmienia słowa, których używa aplikacja, i to, która strona jest główna. Nic w Twoich plikach ani agentach.",
                 "maker": "Ja nie",
-                "makerHint": "Proste słowa, strona projektu jako główna, pliki narzędziowe zejdą z drogi."
+                "makerHint": "Proste słowa, pliki narzędziowe zejdą z drogi."
             }
         },
         "hostedHours": {

@@ -11,12 +11,15 @@ flowchart LR
     ext -->|"New project"| daemon
 ```
 
-- Runs in the browser, compiled into the editor app as a builtin. It registers one `rail` view that shows even
-  with no repositories, since the New project tile is where an empty workspace starts.
+- Runs in the browser, compiled into the editor app as a builtin. It registers one `rail` view that activates even
+  with no repositories, so New project is always reachable.
+- The tile is not permanent. It lives in the rail's More menu and comes onto the rail when it is pinned, while it is
+  being visited, or while a project is open. As a permanent tile at the top of the rail it read as the place to start
+  after setup, and the place to start is the chat. Everyone lands on the file tree with the chat docked.
 - A tile's description is the first paragraph of that repository's `README.md`, reduced to one plain line by
   `summaryOf`. A README that opens with a heading and nothing else gives an empty tile.
 - Opening a tile makes the project the shell's scope, and every other area narrows to it. While a project is open
-  the rail tile wears its two-letter monogram and a badge that names it.
+  the rail tile stays on the rail and wears the project's two-letter monogram, so the narrowing has a visible cause.
 - "See it running" appears only at desktop widths, where the shell mounts the preview panel it opens. A phone has no
   such panel, and its router would send the link to the Agents board.
 - New project fills in the first free name in a series and creates the folder through the daemon, which has the
