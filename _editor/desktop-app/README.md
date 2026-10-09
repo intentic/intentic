@@ -522,8 +522,10 @@ A local window also hears the app's Tauri events, which This device listens on: 
 
 A folder dropped on the workspace's explorer goes the browser's way, read and uploaded over HTTP, unless it is big and the
 sandbox is on this computer. On Windows, the page posts the drop's `File`s to the app with
-`chrome.webview.postMessageWithAdditionalObjects`, as an object, so Tauri's own IPC, which reads only strings, never sees
-it. It names the folder they go into and the loopback port it reaches its sandbox on. WebView2 hands the app each file's
+`chrome.webview.postMessageWithAdditionalObjects`, naming the folder they go into and the loopback port it reaches its
+sandbox on. The message is a JSON string. wry's handler, which carries Tauri's IPC, hears every message first and reads
+it as a string. An object makes that handler fail, and WebView2 then calls no handler after it. Tauri logs one
+`console.error` in the page for the string, which is none of its calls. WebView2 hands the app each file's
 place on disk (`ICoreWebView2File`).
 
 The app (`src-tauri/src/drop_copy.rs`):
@@ -531,18 +533,28 @@ The app (`src-tauri/src/drop_copy.rs`):
 1. Finds the `intentic-sandbox-*` container that publishes that port.
 2. Walks the dropped folders with the page's own skip rule, which the page sends.
 3. For a drop of at least 1,000 files or 1 GiB, copies two ways, each where it is fastest:
-   - Folders and files under 256 KB go as one tar archive into `docker cp - <container>:/work`.
+   - Folders and files under 256 KB go as one tar archive into the sandbox's own `tar -x`
+     (`docker exec -i -u 0 <container>`).
    - Bigger files go through a throwaway helper container (`intentic-drop-copy-<id>`, the sandbox's own image, no
      network). It mounts each dropped folder read-only beside the workspace volume and tars them across with 1 MiB
-     records. A place it cannot mount (a network share), or a helper Docker refuses, sends those files the first way.
+     records. A place it cannot mount (a network share), a helper Docker refuses, and any file the helper had trouble
+     reading go the first way instead.
+4. Removes from the workspace any file written but not whole: a failed read (tar pads the file out to its size) or a
+   cancel partway. A failed file is missing rather than there and wrong. A file that was never written is left alone,
+   so an older copy of it stays.
 
-What the routes do on Docker Desktop for Windows, measured on one laptop on 2026-10-09:
+Measured on omen (Docker Desktop for Windows) on 2026-10-09, idle unless the row says otherwise:
 
-| Route | 1 GiB file | 5,000 × 10 KB |
+| Route | 1 GiB film | 5,000 × 10 KB |
 | --- | --- | --- |
-| `docker cp -` / `docker exec -i tar -x` | 47–52 s | 2.5 s |
-| helper container, bind mount, tar with 1 MiB records | 5.6 s | 16.6 s (`cp -a`) |
+| `docker exec -i … tar -x` (the streamed route) | 47 s | 3.2 s |
+| `docker cp -` | 52 s | 8.5 s; 20,000 stills took 170 s with six CI jobs running |
+| helper container, bind mount, tar with 1 MiB records | 5.6 s; 10–16 s with six CI jobs running | 16.6 s (`cp -a`) |
 | HTTP to a published loopback port (the browser's way, without the browser) | 7.7 s | not measured |
+
+With six CI jobs holding 18 of the Docker VM's 26 GB, two of the helper's reads failed partway with "Cannot allocate
+memory". Repeated runs under the same load all landed, at every record size from 10 KiB to 1 MiB. That failure is the
+reason the helper's trouble goes back through the streamed route.
 
 The page draws the same card as an upload from the `intentic:drop-copy` events. Anything else is `declined`, and the page
 uploads the drop itself: no Docker, no container on that port, a smaller drop (which keeps the upload's skipping of
@@ -552,8 +564,9 @@ only Windows builds say it.
 
 _(2026-10-09) A 30 GB folder of 66,000 films and stills, dropped from Explorer onto a local sandbox, froze the page while
 it was read and never started uploading. Rejected: compressing first, since the films were already compressed and the
-transfer was never the slow part; and one archive streamed through Docker's API for everything, which the table above
-shows is the slowest way to move a big file._
+transfer was never the slow part; one archive streamed through Docker's API for everything, which the table above
+shows is the slowest way to move a big file; and `docker cp -` for the streamed route, which unpacks through Docker
+Desktop's backend and was the slowest way to move many small ones._
 
 ## The sidecar's control lines
 

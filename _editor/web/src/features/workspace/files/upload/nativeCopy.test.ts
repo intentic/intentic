@@ -14,10 +14,15 @@ interface Posted {
     readonly manifests?: readonly string[];
 }
 
+// Each message read back from the JSON string it goes as: an object would stop at Tauri's own handler.
 const posted: { message: Posted; objects?: ArrayLike<unknown> }[] = [];
+const read = (message: unknown): Posted => {
+    expect(typeof message).toBe(`string`);
+    return JSON.parse(message as string) as Posted;
+};
 const bridge = {
-    postMessage: (message: Posted) => posted.push({ message }),
-    postMessageWithAdditionalObjects: (message: Posted, objects: ArrayLike<unknown>) => posted.push({ message, objects }),
+    postMessage: (message: unknown) => posted.push({ message: read(message) }),
+    postMessageWithAdditionalObjects: (message: unknown, objects: ArrayLike<unknown>) => posted.push({ message: read(message), objects }),
 };
 
 // The app's answer, as its drop_copy.rs dispatches it.

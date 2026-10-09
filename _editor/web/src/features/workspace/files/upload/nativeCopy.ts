@@ -22,8 +22,10 @@ const ANSWER_MS = 5000;
 
 export const NATIVE_COPY_EVENT = `intentic:drop-copy`;
 
-// WebView2's bridge, as far as this uses it. Messages go as objects: Tauri's own IPC reads only strings, so it never
-// sees these.
+// WebView2's bridge, as far as this uses it. Messages go as JSON strings. Tauri's own handler hears every message
+// first and reads it as a string; an object makes it fail, and WebView2 then calls no handler after it, the app's
+// drop_copy.rs among them (seen on omen, 2026-10-09). Tauri, unable to read the string as one of its own calls, says so
+// with a console.error and does nothing else.
 interface WebviewBridge {
     postMessage(message: unknown): void;
     postMessageWithAdditionalObjects?(message: unknown, additionalObjects: ArrayLike<unknown>): void;
@@ -114,7 +116,7 @@ export const copyNatively = (drop: NativeDrop, target: string, signal: AbortSign
         let heard = false;
         let settled = false;
         // oxlint-disable-next-line unicorn/require-post-message-target-origin -- WebView2's bridge posts to the app, not to a window
-        const cancel = (): void => bridge?.postMessage({ intentic: `drop-copy-cancel`, id });
+        const cancel = (): void => bridge?.postMessage(JSON.stringify({ intentic: `drop-copy-cancel`, id }));
         const settle = (outcome: "declined" | "handled"): void => {
             if (settled) {
                 return;
@@ -156,7 +158,7 @@ export const copyNatively = (drop: NativeDrop, target: string, signal: AbortSign
         signal.addEventListener(`abort`, abort, { once: true });
         try {
             bridge?.postMessageWithAdditionalObjects?.(
-                { intentic: `drop-copy`, id, port: drop.port, target, skip: DROP_SKIP, manifests: [...MANIFESTS], atLeast: AT_LEAST },
+                JSON.stringify({ intentic: `drop-copy`, id, port: drop.port, target, skip: DROP_SKIP, manifests: [...MANIFESTS], atLeast: AT_LEAST }),
                 drop.files,
             );
         } catch (error) {

@@ -7,17 +7,23 @@
 // folder is on disk, and the Docker engine the sandbox runs in.
 //
 // So, on Windows, where WebView2 hands the app a dropped file's place: the page posts the drop's `File`s to the app
-// (`chrome.webview.postMessageWithAdditionalObjects`, as an object rather than a string so Tauri's own IPC handler,
-// which reads only strings, never sees it), naming the folder they go into and the loopback port it reaches its
-// sandbox on. The app finds the container publishing that port and walks the dropped folders itself. A drop big
-// enough to be worth it is then copied two ways at once, each where it is fastest (measured on Docker Desktop for
-// Windows, 2026-10-09):
+// (`chrome.webview.postMessageWithAdditionalObjects`), naming the folder they go into and the loopback port it reaches
+// its sandbox on. The message is a JSON string: wry's handler, which carries Tauri's IPC, hears every message first and
+// reads it as a string; an object makes it return an error, and WebView2 then calls no handler registered after it,
+// this one included (seen on omen, 2026-10-09). Tauri, finding the string is none of its calls, logs a console.error
+// in the page and does nothing else. The app finds the container publishing that port and walks the dropped folders
+// itself. A drop big enough to be worth it is then copied two ways, each where it is fastest (measured on Docker
+// Desktop for Windows, 2026-10-09):
 //
-// - folders and small files as one tar archive streamed into `docker cp - <container>:/work`: about 2,000 small files
-//   a second, but only ~20 MB/s, since everything crosses Docker's API;
+// - folders and small files as one tar archive streamed into the sandbox's own `tar -x` (`docker exec -i`): about
+//   2,000 small files a second, but only ~20 MB/s, since every byte crosses Docker's API;
 // - files from MOUNTED_FROM up by a throwaway helper container that bind-mounts the dropped folder read-only beside
 //   the sandbox's workspace volume and tars across: ~190 MB/s, but ~300 files a second, since each file is opened
-//   over Docker Desktop's file sharing. A place it cannot mount (a network share) goes the first way instead.
+//   over Docker Desktop's file sharing. A place it cannot mount (a network share), and any file the helper had
+//   trouble reading, goes the first way instead.
+//
+// A file written but not whole (a failed read, which tar pads out; a cancel partway) is removed from the workspace at
+// the end, so a failed file is missing rather than there and wrong.
 //
 // The page hears how far it has got through `intentic:drop-copy` events and draws the same card it draws for an
 // upload. Anything the app will not take (no Docker, no container on that port, a drop too small to bother, a file
@@ -397,6 +403,12 @@ struct Meter<'a> {
     copied: Copied,
     last: Instant,
     tick: &'a mut dyn FnMut(&Copied),
+    /// Files below /work that a route wrote but not whole: padded after a failed read, or cut off by a cancel. Taken
+    /// out again by a later route landing the file, and removed from the workspace at the end (`remove_spoiled`), so a
+    /// failed file is missing rather than there and wrong.
+    spoiled: HashSet<String>,
+    /// The file the streamed route is writing now.
+    in_flight: Option<String>,
 }
 
 impl<'a> Meter<'a> {
@@ -408,6 +420,8 @@ impl<'a> Meter<'a> {
             },
             last: Instant::now(),
             tick,
+            spoiled: HashSet::new(),
+            in_flight: None,
         }
     }
 
@@ -435,7 +449,7 @@ fn cancelled() -> io::Error {
     io::Error::new(io::ErrorKind::Interrupted, "cancelled")
 }
 
-/* THE STREAMED ROUTE: folders and small files, one archive through `docker cp -`. */
+/* THE STREAMED ROUTE: folders and small files, one archive into `tar -x` in the sandbox. */
 
 /// A file's bytes, exactly as many as its header says. The header is written before the first byte is read, so a
 /// file that shrinks, or fails to read halfway, is padded out with zeros rather than leaving the archive misaligned
@@ -498,7 +512,7 @@ fn header(kind: Kind, size: u64, mtime: u64) -> tar::Header {
     header.set_size(size);
     header.set_mode(if kind == Kind::Dir { 0o755 } else { 0o644 });
     header.set_mtime(mtime);
-    // Owned by root, as everything else in /work is: `docker cp -` keeps the archive's owners.
+    // Owned by root, as everything else in /work is: tar run as root keeps the archive's owners.
     header.set_uid(0);
     header.set_gid(0);
     header
@@ -535,6 +549,8 @@ fn write_archive<W: Write>(
             }
         };
         meter.copied.current.clone_from(&item.name);
+        // Until the file's last byte is out: an archive ended here (a cancel, the other end gone) leaves it partial.
+        meter.in_flight = Some(item.name.clone());
         let mut head = header(Kind::File, size, item.mtime);
         let mut exact = Exact {
             inner: file,
@@ -545,10 +561,17 @@ fn write_archive<W: Write>(
         };
         builder.append_data(&mut head, &item.name, &mut exact)?;
         let error = exact.error.take();
+        meter.in_flight = None;
         meter.copied.live_bytes = 0;
         match error {
-            Some(error) => meter.copied.fail(item, error),
-            None => meter.copied.land(item),
+            Some(error) => {
+                meter.spoiled.insert(item.name.clone());
+                meter.copied.fail(item, error);
+            }
+            None => {
+                meter.spoiled.remove(&item.name);
+                meter.copied.land(item);
+            }
         }
     }
     builder.into_inner()?.flush()
@@ -565,8 +588,9 @@ fn copy_error(written: Option<&io::Error>, exited_ok: Option<bool>, said: &str) 
     }
 }
 
-/// `items` through `docker cp - <container>:/work`: the archive on its stdin, unpacked by the engine into the
-/// workspace volume, parent folders and all.
+/// `items` through `docker exec -i -u 0 <container> tar -x -C /work`: the archive on tar's stdin, unpacked by the
+/// sandbox's own tar into its workspace, parent folders and all. Not `docker cp -`, which unpacks through Docker
+/// Desktop's backend at about 20 ms a file: 20,000 stills took 170 s that way on omen (2026-10-09).
 fn stream(
     container: &str,
     items: &[&Item],
@@ -575,7 +599,9 @@ fn stream(
 ) -> Result<(), Stop> {
     let mut command = crate::scripts::docker_command();
     command
-        .args(["cp", "-", &format!("{container}:{WORK}")])
+        .args([
+            "exec", "-i", "-u", "0", container, "tar", "-x", "-f", "-", "-C", WORK,
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -600,6 +626,9 @@ fn stream(
     };
     if written.is_err() {
         let _ = child.kill();
+        if let Some(name) = meter.in_flight.take() {
+            meter.spoiled.insert(name);
+        }
     }
     let status = child.wait();
     let said = stderr
@@ -737,9 +766,9 @@ pub fn said(line: &str) -> Said<'_> {
     Said::Started
 }
 
-/// The big files, through the helper. Returns what is left for the streamed route: nothing when the helper did its
-/// job; from the file it was on when it could not (it would not mount, Docker refused it), so a failure of the route
-/// costs speed and never a file.
+/// The big files, through the helper. Returns what is left for the streamed route: the files the helper had trouble
+/// with, and, when it could not do its job (it would not mount, Docker refused it), the file it was on and the rest. A
+/// failure of this route costs speed and never a file.
 fn mount<'i>(
     container: &str,
     id: &str,
@@ -808,6 +837,9 @@ fn mount<'i>(
             let _ = crate::scripts::capture("docker rm", remove, LOOKUP_LIMIT);
             let _ = child.kill();
             let _ = child.wait();
+            if let Some((index, _)) = follow.going {
+                meter.spoiled.insert(items[index].name.clone());
+            }
             return Err(Stop::Cancelled);
         }
         match heard.recv_timeout(Duration::from_millis(200)) {
@@ -828,6 +860,10 @@ struct Follow {
     going: Option<(usize, bool)>,
     /// Bytes of the files settled so far, the yardstick for the records count.
     settled_bytes: u64,
+    /// The files tar had trouble with, by their place in the list: for the streamed route to try again. On Docker
+    /// Desktop a read through the file sharing can fail where the app's own read of the same file does not (2026-10-09:
+    /// "Cannot allocate memory" partway through a film).
+    retry: Vec<usize>,
     /// Docker's or tar's last words that were about no one file.
     last_words: String,
 }
@@ -857,17 +893,18 @@ impl Follow {
                 self.going = Some((self.next, false));
                 self.next += 1;
             }
-            Said::Trouble(path, trouble) => {
-                let error = trouble.to_string();
+            Said::Trouble(path, _) => {
                 match self.going {
-                    // The file going now, coming up short (tar pads it, as the streamed route does).
+                    // The file going now, coming up short: tar pads it out, so what landed is spoiled until the
+                    // retry lands it whole.
                     Some((index, false)) if items[index].relative == path => {
                         self.going = Some((index, true));
-                        meter.copied.fail(items[index], error);
+                        meter.spoiled.insert(items[index].name.clone());
+                        self.retry.push(index);
                     }
                     // A file tar could not open: it is never named as started, and the list moves past it.
                     _ if self.next < items.len() && items[self.next].relative == path => {
-                        meter.copied.fail(items[self.next], error);
+                        self.retry.push(self.next);
                         self.settled_bytes += items[self.next].size;
                         self.next += 1;
                     }
@@ -884,8 +921,8 @@ impl Follow {
         meter.report();
     }
 
-    /// The helper has exited. Every file it reached is settled; if it stopped before the end of its list, the file it
-    /// was on and the rest are handed back.
+    /// The helper has exited. Every file it reached is settled, and the files it had trouble with are handed back;
+    /// if it stopped before the end of its list, so are the file it was on and the rest.
     fn end<'i>(
         mut self,
         status: Option<ExitStatus>,
@@ -893,31 +930,69 @@ impl Follow {
         meter: &mut Meter,
     ) -> Vec<&'i Item> {
         let reached_end = self.next == items.len();
-        // tar exits 2 when some files had trouble, each already recorded; any other failure stopped the copy.
+        // tar exits 2 when some files had trouble, each already handed back; any other failure stopped the copy.
         let finished = status
             .is_some_and(|status| status.success() || (status.code() == Some(2) && reached_end));
+        meter.copied.live_bytes = 0;
+        let mut left: Vec<&Item> = self.retry.iter().map(|&index| items[index]).collect();
         if finished {
             self.settle(items, meter);
-            meter.copied.live_bytes = 0;
-            return Vec::new();
+            return left;
         }
         eprintln!(
             "drop copy: the helper stopped ({:?}): {}; streaming the rest",
             status, self.last_words
         );
         let from = match self.going {
-            Some((index, troubled)) => {
-                // Started and not finished: sent again, unless its trouble is already on the card.
-                if troubled {
-                    index + 1
-                } else {
-                    index
-                }
+            // Already handed back with its trouble.
+            Some((index, true)) => index + 1,
+            // Started and not finished: what landed of it is partial until the streamed route sends it whole.
+            Some((index, false)) => {
+                meter.spoiled.insert(items[index].name.clone());
+                index
             }
             None => self.next,
         };
-        meter.copied.live_bytes = 0;
-        items[from.min(items.len())..].to_vec()
+        left.extend_from_slice(&items[from.min(items.len())..]);
+        left
+    }
+}
+
+/// Removes from the workspace the files a route wrote but not whole, by name below /work, NUL-separated on `xargs`'s
+/// input so no name is read as an option or split at a space.
+fn remove_spoiled(container: &str, spoiled: &HashSet<String>) {
+    if spoiled.is_empty() {
+        return;
+    }
+    let mut command = crate::scripts::docker_command();
+    command
+        .args([
+            "exec", "-i", "-u", "0", "-w", WORK, container, "xargs", "-0", "rm", "-f", "--",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let names: Vec<u8> = spoiled
+        .iter()
+        .flat_map(|name| name.bytes().chain([0]))
+        .collect();
+    let removed = command.spawn().and_then(|mut child| {
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(&names)?;
+        }
+        child.wait_with_output()
+    });
+    match removed {
+        Ok(output) if output.status.success() => {}
+        Ok(output) => eprintln!(
+            "drop copy: could not remove {} partial files: {}",
+            spoiled.len(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+        Err(error) => eprintln!(
+            "drop copy: could not remove {} partial files: {error}",
+            spoiled.len()
+        ),
     }
 }
 
@@ -1076,6 +1151,7 @@ fn copy_into(
             stream(container, &left, cancel, &mut meter)
         }
     });
+    remove_spoiled(container, &meter.spoiled);
     let copied = meter.copied;
     let mut detail = copied_json(&copied);
     detail["failures"] = copied
@@ -1105,9 +1181,10 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
 
     let handle = window.clone();
     let origin = app_origin.origin();
-    let _ = window.with_webview(move |webview| {
-        let Ok(core) = (unsafe { webview.controller().CoreWebView2() }) else {
-            return;
+    let watched = window.with_webview(move |webview| {
+        let core = match unsafe { webview.controller().CoreWebView2() } {
+            Ok(core) => core,
+            Err(error) => return eprintln!("drop copy: no WebView2 to hear the page on: {error}"),
         };
         let handler = WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else {
@@ -1116,15 +1193,24 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
             let mut source = windows::core::PWSTR::null();
             unsafe { args.Source(&mut source)? };
             let source = webview2_com::take_pwstr(source);
-            if url::Url::parse(&source).map(|url| url.origin()).ok() != Some(origin.clone()) {
+            // A string, as the page sends it (see the top of this file); anything else is not this module's.
+            let mut message = windows::core::PWSTR::null();
+            if unsafe { args.TryGetWebMessageAsString(&mut message) }.is_err() {
                 return Ok(());
             }
-            let mut message = windows::core::PWSTR::null();
-            unsafe { args.WebMessageAsJson(&mut message)? };
             let Ok(message) = serde_json::from_str::<Value>(&webview2_com::take_pwstr(message))
             else {
                 return Ok(());
             };
+            if !matches!(message["intentic"].as_str(), Some(COPY | CANCEL)) {
+                return Ok(());
+            }
+            if url::Url::parse(&source).map(|url| url.origin()).ok() != Some(origin.clone()) {
+                eprintln!(
+                    "drop copy: refused a message from {source}, which is not the app's page"
+                );
+                return Ok(());
+            }
             match message["intentic"].as_str() {
                 Some(CANCEL) => {
                     if let Some(id) = cancel_id(&message) {
@@ -1133,6 +1219,7 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
                 }
                 Some(COPY) => {
                     let Some(request) = parse_request(&message) else {
+                        eprintln!("drop copy: refused a request that is not well formed");
                         return Ok(());
                     };
                     // Read here, on the event: the objects are the event's, and gone once it returns.
@@ -1150,10 +1237,13 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
             Ok(())
         }));
         let mut token = 0i64;
-        unsafe {
-            let _ = core.add_WebMessageReceived(&handler, &mut token);
+        if let Err(error) = unsafe { core.add_WebMessageReceived(&handler, &mut token) } {
+            eprintln!("drop copy: WebView2 would not let the app hear the page: {error}");
         }
     });
+    if let Err(error) = watched {
+        eprintln!("drop copy: the window's WebView2 was not reachable: {error}");
+    }
 
     /// The dropped files' places on disk, as WebView2 hands them over with the message.
     fn places_of(args: &ICoreWebView2WebMessageReceivedEventArgs) -> Result<Vec<PathBuf>, String> {
@@ -1436,11 +1526,7 @@ mod tests {
 
         // Short partway: the bytes that were there, then zeros up to the size the header gave.
         let mut tick = |_: &Copied| {};
-        let mut meter = Meter {
-            copied: Copied::default(),
-            last: Instant::now(),
-            tick: &mut tick,
-        };
+        let mut meter = Meter::new(0, &mut tick);
         let cancel = AtomicBool::new(false);
         let mut short = Exact {
             inner: &b"abc"[..],
@@ -1597,27 +1683,33 @@ mod tests {
         ExitStatus::from_raw(code as u32)
     }
 
-    /// The helper's run as the card hears it: files done as the next starts, a file tar could not open named, and the
-    /// list as the helper's own NUL-separated input.
+    /// The helper's run as the card hears it: a file done as the next starts, and the files tar had trouble with
+    /// handed back to the streamed route rather than counted failed, the one it padded marked as spoiled.
     #[test]
     fn the_helper_is_followed_file_by_file() {
         let owned = [
             big("m/a.mp4", 3 * RECORD),
             big("m/b.mov", RECORD),
             big("m/c.mp4", 2 * RECORD),
+            big("m/d.mov", RECORD),
         ];
         let items: Vec<&Item> = owned.iter().collect();
-        assert_eq!(helper_list(&items), b"m/a.mp4\0m/b.mov\0m/c.mp4\0".to_vec());
+        assert_eq!(
+            helper_list(&items),
+            b"m/a.mp4\0m/b.mov\0m/c.mp4\0m/d.mov\0".to_vec()
+        );
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(1, &mut tick);
         let mut follow = Follow::default();
-        let total = 6 * RECORD;
+        let total = 7 * RECORD;
         for line in [
             "m/a.mp4",
             "tar: 2",
             "tar: m/b.mov: Cannot open: Permission denied",
             "m/c.mp4",
             "tar: 4",
+            "tar: m/c.mp4: Read error at byte 1048576, while reading 1048576 bytes: Cannot allocate memory",
+            "m/d.mov",
         ] {
             follow.hear(line, &items, total, &mut meter);
         }
@@ -1625,31 +1717,31 @@ mod tests {
             (
                 meter.copied.done,
                 meter.copied.done_bytes,
-                meter.copied.live_bytes,
                 meter.copied.failed
             ),
-            (1, 3 * RECORD, 0, 1)
+            (1, 3 * RECORD, 0)
         );
+        let left = follow.end(Some(exited(2)), &items, &mut meter);
         assert_eq!(
-            meter.copied.failures,
-            vec![(
-                "media/m/b.mov".to_string(),
-                "Cannot open: Permission denied".to_string()
-            )]
+            left.iter()
+                .map(|item| item.relative.as_str())
+                .collect::<Vec<_>>(),
+            vec!["m/b.mov", "m/c.mp4"]
         );
-        assert_eq!(follow.end(Some(exited(2)), &items, &mut meter).len(), 0);
         assert_eq!(
             (
                 meter.copied.done,
                 meter.copied.done_bytes,
-                meter.copied.roots
+                meter.copied.roots.clone()
             ),
-            (2, 5 * RECORD, vec![(2, 1)])
+            (2, 4 * RECORD, vec![(2, 0)])
         );
+        // b.mov was never written; c.mp4 was, padded, and goes once the streamed route lands it or the copy ends.
+        assert_eq!(meter.spoiled, HashSet::from(["media/m/c.mp4".to_string()]));
     }
 
     /// A helper that could not do its job (here, Docker refusing the mount) hands back the file it was on and the
-    /// rest, for the streamed route.
+    /// rest, for the streamed route; what it wrote of the file it was on is spoiled until then.
     #[test]
     fn a_helper_that_stops_hands_back_what_it_did_not_finish() {
         let owned = [
@@ -1670,7 +1762,38 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["m/b.mov", "m/c.mp4"]
         );
-        assert_eq!(meter.copied.done, 1);
+        assert_eq!(
+            (meter.copied.done, meter.spoiled.clone()),
+            (1, HashSet::from(["media/m/b.mov".to_string()]))
+        );
+    }
+
+    /// The streamed route marks a file it padded, and clears the mark when it lands the file whole, as a retry of a
+    /// file the helper padded does.
+    #[test]
+    fn a_file_written_but_not_whole_is_marked_until_a_whole_copy_lands() {
+        let base = Scratch::new();
+        let whole = base.path().join("whole.mov");
+        fs::write(&whole, vec![1u8; 4096]).unwrap();
+        let mut gone = big("m/gone.mov", 4096);
+        gone.source = base.path().join("not-there.mov");
+        let mut retried = big("m/whole.mov", 4096);
+        retried.source = whole;
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(1, &mut tick);
+        meter.spoiled.insert("media/m/whole.mov".to_string());
+        write_archive(
+            Vec::new(),
+            &[&gone, &retried],
+            &AtomicBool::new(false),
+            &mut meter,
+        )
+        .unwrap();
+        // gone.mov never opened, so nothing of it was written and nothing is taken away.
+        assert_eq!(
+            (meter.copied.done, meter.copied.failed, meter.spoiled.len()),
+            (1, 1, 0)
+        );
     }
 
     /// Both routes against a real container, for a machine with Docker: DROP_COPY_CONTAINER names a running container
