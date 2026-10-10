@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { Meter, type Tip, ui } from "@intentic/ui";
-import { formatBytes, formatPercent } from "@intentic/ui/format";
+import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { agentDisplayTitle } from "../fleet/agentStatus";
@@ -64,20 +64,37 @@ const open = (id: string): void => {
 <template>
     <div class="flex flex-wrap items-start gap-x-8 gap-y-3 pt-1">
         <!-- The figures that run out, each a meter: its fill says how close, its track the rest of the room. -->
-        <div role="group" data-section="gauges" class="flex w-44 shrink-0 flex-col gap-2.5">
-            <div v-for="gauge in readout.gauges" :key="gauge.key" v-tooltip.left="warned(gauge.hint, gauge.warn)" data-figure class="flex cursor-help flex-col gap-1">
-                <div class="flex items-baseline gap-2 text-2xs">
-                    <span class="shrink-0 text-muted">{{ gauge.label }}</span>
-                    <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
+        <div role="group" data-section="gauges" class="flex w-64 max-w-full shrink-0 flex-col gap-2.5">
+            <div v-for="gauge in readout.gauges" :key="gauge.key" class="flex flex-col gap-1">
+                <div v-tooltip.left="warned(gauge.hint, gauge.warn)" data-figure class="flex cursor-help flex-col gap-1">
+                    <div class="flex items-baseline gap-2 text-2xs">
+                        <span class="shrink-0 text-muted">{{ gauge.label }}</span>
+                        <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
+                    </div>
+                    <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `accent`" :label="gauge.label" :valuetext="gauge.detail" />
                 </div>
-                <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `accent`" :label="gauge.label" :valuetext="gauge.detail" />
+                <template v-if="gauge.key === `memory`">
+                    <dl
+                        v-if="readout.memoryRows.length > 0"
+                        data-section="memory-accounting"
+                        :aria-label="t(`agents.liveMetrics.accountingLabel`)"
+                        class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 pt-1 text-2xs"
+                    >
+                        <template v-for="row in readout.memoryRows" :key="row.key">
+                            <dt class="text-muted">{{ row.label }}</dt>
+                            <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">{{ row.value }}</dd>
+                        </template>
+                    </dl>
+                    <p v-if="readout.memoryRows.length > 0" data-accounting-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.accountingNote`) }}</p>
+                    <p data-memory-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.memoryNote`) }}</p>
+                </template>
             </div>
         </div>
 
         <dl
             role="group"
             data-section="figures"
-            class="grid w-72 shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
+            class="grid w-72 max-w-full shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
         >
             <template v-for="figure in readout.figures" :key="figure.key">
                 <dt v-tooltip.left="warned(figure.hint, figure.warn)" class="cursor-help text-muted">{{ figure.label }}</dt>
@@ -92,10 +109,11 @@ const open = (id: string): void => {
         </dl>
 
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
-        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 shrink-0 flex-col gap-1.5">
+        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 max-w-full shrink-0 flex-col gap-1.5">
             <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
+            <p data-process-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.rolesNote`) }}</p>
             <div
                 v-for="role in shownRoles"
                 :key="role.key"
@@ -120,7 +138,7 @@ const open = (id: string): void => {
                         ? t(`agents.liveMetrics.smallRolesHide`)
                         : t(
                               `agents.liveMetrics.smallRoles`,
-                              { count: readout.smallRoles.length, size: formatBytes(readout.smallRolesBytes) },
+                              { count: readout.smallRoles.length, size: formatBinaryBytes(readout.smallRolesBytes) },
                               readout.smallRoles.length,
                           )
                 }}
@@ -129,10 +147,11 @@ const open = (id: string): void => {
 
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
-        <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 shrink-0 flex-col gap-1.5">
+        <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 max-w-full shrink-0 flex-col gap-1.5">
             <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.sessionsLabel`) }}
             </h4>
+            <p data-session-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.sessionsNote`) }}</p>
             <div
                 v-for="session in shownSessions"
                 :key="session.key"
@@ -168,7 +187,7 @@ const open = (id: string): void => {
                         ? t(`agents.liveMetrics.smallSessionsHide`)
                         : t(
                               `agents.liveMetrics.smallSessions`,
-                              { count: readout.smallSessions.length, size: formatBytes(readout.smallSessionsBytes) },
+                              { count: readout.smallSessions.length, size: formatBinaryBytes(readout.smallSessionsBytes) },
                               readout.smallSessions.length,
                           )
                 }}

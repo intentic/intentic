@@ -129,7 +129,11 @@ flowchart LR
   sandbox's desktop while a window is open on it, a port open to the internet, a connected tunnel), each there only
   while it is live or its page is in front, so a chip arriving is news and the rail never moves for it. Geek metrics
   (Settings ▸ Appearance) add CPU, memory and disk at the bar's far end, whose panel and the docked terminal take turns
-  above the bar. _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
+  above the bar. Resource sizes use binary units (MiB/GiB). The panel separates the sandbox's counted working set
+  (daemon, counted file cache and kernel memory included) from process RSS grouped by kind or session: those groups
+  overlap and are not an additive breakdown. Optional cgroup accounting shows measured categories and the inactive
+  file cache excluded from the total; an older daemon still gets the scope notes without invented readings.
+  _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
   closed browser still listed, a repo with a panel counted as running), and tightening them would have made the rail
   move with every agent turn._
 - **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in

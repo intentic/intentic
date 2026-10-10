@@ -1,6 +1,6 @@
 import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract";
 import type { Tip } from "@intentic/ui";
-import { formatBytes, formatFixed, formatPercent } from "@intentic/ui/format";
+import { formatBinaryBytes, formatFixed, formatPercent } from "@intentic/ui/format";
 import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
 import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING, sessionHeavy } from "./liveMetrics";
@@ -13,9 +13,9 @@ import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSUR
 export interface Gauge {
     readonly key: `cpu` | `memory` | `disk`;
     readonly label: string;
-    // Short enough for the bar: "43%", "9.3 / 16 GB".
+    // Short enough for the bar: "43%", "9.3 / 16 GiB".
     readonly value: string;
-    // The full reading, for the panel and for a screen reader: "43% of 16 cores", "9.3 GB / 16 GB".
+    // The full reading, for the panel and for a screen reader: "43% of 16 cores", "9.3 GiB / 16 GiB".
     readonly detail: string;
     // How full, 0 to 1; undefined on a first reading, which has no CPU yet.
     readonly fraction: number | undefined;
@@ -44,7 +44,7 @@ export interface RoleRow {
 export interface SessionRow {
     // The conversation's id, which its title is looked up by where the row is drawn.
     readonly key: string;
-    // Its memory, "1.3 GB", and its CPU, "179%", undefined on a first reading.
+    // Its memory, "1.3 GiB", and its CPU, "179%", undefined on a first reading.
     readonly value: string;
     readonly cpu: string | undefined;
     readonly bytes: number;
@@ -55,8 +55,17 @@ export interface SessionRow {
     readonly tip: Tip;
 }
 
+export interface MemoryRow {
+    readonly key: string;
+    readonly label: string;
+    readonly value: string;
+    readonly excluded: boolean;
+}
+
 export interface SandboxReadout {
     readonly gauges: readonly Gauge[];
+    // Measured cgroup accounting, not a residual inferred from the process RSS lists below.
+    readonly memoryRows: readonly MemoryRow[];
     readonly figures: readonly Figure[];
     // The kinds worth a glance, heaviest first; the small ones fold away (smallRoles) behind one line that sums them.
     readonly roles: readonly RoleRow[];
@@ -70,16 +79,16 @@ export interface SandboxReadout {
     readonly alerts: readonly Figure[];
 }
 
-// "9.3 / 16 GB" when both halves share a unit, which is the common case; both units kept when they differ.
+// "9.3 / 16 GiB" when both halves share a unit, which is the common case; both units kept when they differ.
 export const usedOf = (used: number, total: number): string => {
-    const [usedText, totalText] = [formatBytes(used), formatBytes(total)];
+    const [usedText, totalText] = [formatBinaryBytes(used), formatBinaryBytes(total)];
     const unit = totalText.slice(totalText.lastIndexOf(` `));
     return usedText.endsWith(unit) ? `${usedText.slice(0, -unit.length)} / ${totalText}` : `${usedText} / ${totalText}`;
 };
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value));
 
-// A kind under this much memory folds away: a long list of 40 MB kinds buries the two that matter.
+// A kind under this much memory folds away: a long list of 40 MiB kinds buries the two that matter.
 export const SMALL_ROLE_BYTES = 100 * 2 ** 20;
 // The heaviest few always show, whatever they hold, so the list never folds down to nothing.
 const ROLES_ALWAYS_SHOWN = 3;
@@ -118,9 +127,10 @@ export const sessionTip = (
     title: t(`agents.liveMetrics.sessionUsage`),
     rows: [
         { label: t(`agents.liveMetrics.cpuLabel`), value: session.cpuPercent === undefined ? `` : formatPercent(session.cpuPercent) },
-        { label: t(`agents.liveMetrics.memoryLabel`), value: formatBytes(session.rssBytes) },
+        { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(session.rssBytes) },
         { label: t(`agents.liveMetrics.processesLabel`), value: session.processes },
     ],
+    note: t(`agents.liveMetrics.cpuPerCore`),
 });
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
@@ -135,6 +145,21 @@ export const memoryShort = (sandbox: SandboxMetrics[`sandbox`]): boolean => {
                 room.stallSustainedLimitPercent !== undefined &&
                 room.stallSustainedPercent >= room.stallSustainedLimitPercent))
     );
+};
+
+// Optional measured categories keep unknown distinct from zero. Neither RSS nor the headline is used to guess a row.
+export const memoryRowsOf = (t: TypedT, sandbox: SandboxMetrics[`sandbox`]): MemoryRow[] => {
+    const breakdown = sandbox.memoryBreakdown;
+    const fields = [
+        { key: `anonymousBytes`, label: t(`agents.liveMetrics.anonymousLabel`), excluded: false },
+        { key: `countedFileCacheBytes`, label: t(`agents.liveMetrics.fileCacheLabel`), excluded: false },
+        { key: `kernelBytes`, label: t(`agents.liveMetrics.kernelLabel`), excluded: false },
+        { key: `inactiveFileCacheBytes`, label: t(`agents.liveMetrics.inactiveCacheLabel`), excluded: true },
+    ] as const;
+    return fields.flatMap(({ key, label, excluded }) => {
+        const bytes = breakdown?.[key];
+        return bytes === undefined ? [] : [{ key, label, excluded, value: formatBinaryBytes(bytes) }];
+    });
 };
 
 export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<SandboxReadout> {
@@ -159,7 +184,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             key: `memory`,
             label: t(`agents.liveMetrics.memoryLabel`),
             value: usedOf(sandbox.memoryBytes, sandbox.memoryLimitBytes),
-            detail: `${formatBytes(sandbox.memoryBytes)} / ${formatBytes(sandbox.memoryLimitBytes)}`,
+            detail: `${formatBinaryBytes(sandbox.memoryBytes)} / ${formatBinaryBytes(sandbox.memoryLimitBytes)}`,
             fraction: sandbox.memoryLimitBytes > 0 ? clamp(sandbox.memoryBytes / sandbox.memoryLimitBytes) : undefined,
             hint: { title: t(`agents.liveMetrics.memoryLabel`), note: t(`agents.liveMetrics.memoryNote`) },
             warn: memoryShort(sandbox),
@@ -171,7 +196,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             key: `disk`,
             label: t(`agents.liveMetrics.diskLabel`),
             value: usedOf(sandbox.diskBytes, sandbox.diskTotalBytes),
-            detail: `${formatBytes(sandbox.diskBytes)} / ${formatBytes(sandbox.diskTotalBytes)}`,
+            detail: `${formatBinaryBytes(sandbox.diskBytes)} / ${formatBinaryBytes(sandbox.diskTotalBytes)}`,
             fraction: sandbox.diskTotalBytes > 0 ? clamp(sandbox.diskBytes / sandbox.diskTotalBytes) : undefined,
             hint: { title: t(`agents.liveMetrics.diskLabel`), note: t(`agents.liveMetrics.diskNote`) },
             warn: sandbox.diskBytes >= NEAR_LIMIT * sandbox.diskTotalBytes,
@@ -218,7 +243,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                           // Against what swap can hold where the daemon says, since a full swap is what makes it count.
                           value:
                               sandbox.swapLimitBytes === undefined
-                                  ? formatBytes(sandbox.swapBytes)
+                                  ? formatBinaryBytes(sandbox.swapBytes)
                                   : usedOf(sandbox.swapBytes, sandbox.swapLimitBytes),
                           hint: {
                               title: t(`agents.liveMetrics.swapLabel`),
@@ -255,7 +280,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                 key: `daemon`,
                 label: t(`agents.liveMetrics.daemonLabel`),
                 value: [
-                    formatBytes(daemon.rssBytes),
+                    formatBinaryBytes(daemon.rssBytes),
                     ...(daemon.cpuPercent === undefined ? [] : [t(`agents.liveMetrics.cpu`, { percent: formatPercent(daemon.cpuPercent) })]),
                     ...(daemon.eventLoopPercent === undefined
                         ? []
@@ -264,7 +289,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                 hint: {
                     title: t(`agents.liveMetrics.daemonLabel`),
                     rows: [
-                        { label: t(`agents.liveMetrics.memoryLabel`), value: formatBytes(daemon.rssBytes) },
+                        { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(daemon.rssBytes) },
                         { label: t(`agents.liveMetrics.cpuLabel`), value: daemon.cpuPercent === undefined ? `` : formatPercent(daemon.cpuPercent) },
                         {
                             label: t(`agents.liveMetrics.eventLoop`),
@@ -284,7 +309,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         return held.map(({ role, rssBytes }) => ({
             key: role,
             label: t(`agents.liveMetrics.role.${role}`),
-            value: formatBytes(rssBytes),
+            value: formatBinaryBytes(rssBytes),
             bytes: rssBytes,
             share: heaviest === 0 ? 0 : rssBytes / heaviest,
         }));
@@ -295,7 +320,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         const heaviest = held[0]?.rssBytes ?? 0;
         return held.map((session) => ({
             key: session.id,
-            value: formatBytes(session.rssBytes),
+            value: formatBinaryBytes(session.rssBytes),
             cpu: session.cpuPercent === undefined ? undefined : formatPercent(session.cpuPercent),
             bytes: session.rssBytes,
             share: heaviest === 0 ? 0 : session.rssBytes / heaviest,
@@ -311,6 +336,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         const [sessions, smallSessions] = splitSessions(sessionsOf(reading));
         return {
             gauges: gaugesOf(reading),
+            memoryRows: memoryRowsOf(t, reading.sandbox),
             figures,
             roles,
             smallRoles,

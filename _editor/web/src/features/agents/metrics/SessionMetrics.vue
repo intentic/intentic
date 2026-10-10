@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatBytes, formatPercent } from "@intentic/ui/format";
+import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject } from "vue";
 import { LIVE_METRICS_KEY, sessionHeavy } from "./liveMetrics";
@@ -28,8 +28,8 @@ const figure = computed<{ readonly short: string; readonly hint: Tip; readonly h
         return undefined;
     }
     return {
-        short: [formatBytes(session.rssBytes), ...(session.cpuPercent === undefined ? [] : [formatPercent(session.cpuPercent)])].join(` · `),
-        hint: { ...sessionTip(t, session), note: t(`agents.liveMetrics.cpuPerCore`) },
+        short: [formatBinaryBytes(session.rssBytes), ...(session.cpuPercent === undefined ? [] : [formatPercent(session.cpuPercent)])].join(` · `),
+        hint: sessionTip(t, session),
         heavy: sessionHeavy(session.rssBytes, reading.sandbox),
     };
 });

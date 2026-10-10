@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // What the sandbox is using right now, measured only when asked (GET /system/metrics). CPU percentages are of ONE core
-// unless the field says otherwise; memory is resident bytes.
+// unless the field says otherwise; memory is in bytes, with admission accounting and process RSS distinguished below.
 
 // The kinds of process a sandbox runs, as the daemon classifies them by command line.
 export const PROCESS_ROLES = [
@@ -30,7 +30,7 @@ export const ProcessGroupMetricsSchema = z.object({
     rssBytes: z
         .number()
         .describe(
-            "Their resident memory added up, in bytes. Memory two processes share is counted in each, so this can exceed what they cost together.",
+            "Their process resident memory (RSS) added up, in bytes, including file mappings and shared pages counted once per process. This can exceed what they cost together. It excludes unmapped file cache, kernel memory and swapped-out pages.",
         ),
 });
 export type ProcessGroupMetrics = z.infer<typeof ProcessGroupMetricsSchema>;
@@ -84,24 +84,46 @@ export const SandboxUsageSchema = z.object({
     memoryBytes: z
         .number()
         .describe(
-            "Memory counted against the limit, as the daemon admits work by it: resident memory less the file cache the kernel takes back on demand, and once swap is full (`swapFull`) what was pushed to swap as well.",
+            "Memory counted against the limit, as the daemon admits work by it: the cgroup's resident charge, including the daemon, kernel memory and file cache except inactive_file, plus swapped bytes only when swap is nearly full (`swapFull`). Falls back to the machine's used memory when the budget cannot measure it.",
         ),
     memoryLimitBytes: z
         .number()
         .describe(
             "The memory limit work is admitted against: where the kernel starts throttling the container (memory.high), else its hard limit, else the machine's memory.",
         ),
+    memoryBreakdown: z
+        .object({
+            anonymousBytes: z.number().optional().describe("Anonymous resident memory charged to the cgroup (memory.stat anon), in bytes."),
+            countedFileCacheBytes: z
+                .number()
+                .optional()
+                .describe("File cache counted in resident usage (memory.stat file less inactive_file), in bytes. Absent unless both counters are valid."),
+            kernelBytes: z
+                .number()
+                .optional()
+                .describe("Kernel memory charged to the cgroup (memory.stat kernel), in bytes. Absent on kernels without that aggregate."),
+            inactiveFileCacheBytes: z
+                .number()
+                .optional()
+                .describe("Inactive file cache (memory.stat inactive_file), in bytes, excluded from memoryBytes."),
+        })
+        .optional()
+        .describe(
+            "Approximate measured memory.stat categories, not an RSS subtraction or an exact sum of memoryBytes: admission is sampled separately and may also count swap. Missing or invalid categories are omitted, not zero. Absent without cgroup memory, on machine-memory fallback, when no category is valid, and from older daemons.",
+        ),
     swapBytes: z
         .number()
         .optional()
         .describe(
-            "What was pushed out to swap, counted in `memoryBytes` only once swap is full. Absent where the sandbox cannot see its own memory.",
+            "What was pushed out to swap, counted in `memoryBytes` only when swap is nearly full under admission policy. Absent where the sandbox cannot see its own memory.",
         ),
     swapLimitBytes: z.number().optional().describe("What swap can hold. Absent where nothing bounds it, and from a daemon that predates it."),
     swapFull: z
         .boolean()
         .optional()
-        .describe("Swap is nearly at `swapLimitBytes`: nothing more can be parked there, so what is swapped counts against the limit too."),
+        .describe(
+            "Swap has reached the admission policy's nearly-full threshold against `swapLimitBytes`, so swapped bytes count against the memory limit too, even if swap space remains.",
+        ),
     memoryRoom: MemoryRoomSchema.optional().describe("What admission reads off the same reading. Absent from a daemon that predates it."),
     diskBytes: z.number().optional().describe("Space used on the volume the workspace lives on. Absent when the volume would not say."),
     diskTotalBytes: z.number().optional().describe("That volume's size. Absent when the volume would not say."),
@@ -114,7 +136,7 @@ export const SandboxUsageSchema = z.object({
         .describe(
             "Cores the machine's load average reads against: every core the sandbox may be scheduled on, before any quota. Absent from a daemon that predates it.",
         ),
-    processes: z.number().describe("How many processes are running in the sandbox."),
+    processes: z.number().describe("How many processes are running in the sandbox, including the daemon."),
     pressure: PressureMetricsSchema.optional().describe(
         "How much work waited on CPU, memory or disk lately. Absent where the kernel does not report it.",
     ),
@@ -140,12 +162,12 @@ export const SandboxMetricsSchema = z.object({
         .number()
         .optional()
         .describe("How long the CPU figures were measured over, in milliseconds. Absent on a first reading, and then so is every CPU figure."),
-    sandbox: SandboxUsageSchema.describe("The sandbox as a whole."),
-    daemon: DaemonUsageSchema.describe("The daemon that runs it, which none of the other figures include."),
+    sandbox: SandboxUsageSchema.describe("The sandbox as a whole, including the daemon."),
+    daemon: DaemonUsageSchema.describe("The daemon's own usage, included in the sandbox total and process count but excluded from roles and session sums."),
     sessions: z
         .record(z.string(), SessionMetricsSchema)
         .describe(
-            "What each conversation's processes use, by conversation id: the agent's own process and everything it started. Only conversations with processes running, and only those the caller may see.",
+            "What each conversation's processes use, by conversation id: the agent's own process and everything it started, excluding the daemon. These group many of the same process readings as roles, not additional memory. Only conversations with processes running, and only those the caller may see.",
         ),
     roles: z
         .partialRecord(ProcessRoleSchema, ProcessGroupMetricsSchema)

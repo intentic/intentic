@@ -1,24 +1,28 @@
 /// <reference lib="es2025.intl" />
 import { ref } from "vue";
 
-// Human-readable byte size for the breadcrumb / file-info chips. Empty string when the size is unknown.
-export const formatBytes = (bytes: number | undefined): string => {
+// Both byte readouts share the compact rounding and the reader's number format; only their unit symbols differ.
+const formatByteSize = (bytes: number | undefined, units: readonly string[]): string => {
     if (bytes === undefined) {
         return ``;
     }
     if (bytes < 1024) {
         return `${bytes} B`;
     }
-    const units = [`KB`, `MB`, `GB`, `TB`];
     let value = bytes / 1024;
     let unit = 0;
     while (value >= 1024 && unit < units.length - 1) {
         value /= 1024;
         unit++;
     }
-    // The unit symbols stay as they are: KB/MB/GB are read as symbols rather than words in every language we ship.
     return `${value < 10 ? formatFixed(value, 1) : formatFixed(Math.round(value), 0)} ${units[unit]}`;
 };
+
+// Legacy file-info readout. Keep existing callers unchanged while resource readings use explicit binary units.
+export const formatBytes = (bytes: number | undefined): string => formatByteSize(bytes, [`KB`, `MB`, `GB`, `TB`]);
+
+// Resource counters are bytes scaled by 1024: GiB, not decimal GB. Empty when the reading is unknown.
+export const formatBinaryBytes = (bytes: number | undefined): string => formatByteSize(bytes, [`KiB`, `MiB`, `GiB`, `TiB`]);
 
 // A span of playable seconds as a clock, hours omitted under an hour ("0:14", "3:07:22"). Infinity or NaN render
 // `--:--` rather than "0:00": a container that hasn't reported its length yet is not a zero-length one.

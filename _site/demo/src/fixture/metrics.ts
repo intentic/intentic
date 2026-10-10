@@ -22,6 +22,13 @@ export const demoMetrics = (now: number, roster: readonly AgentSummary[]): Sandb
             cores: 8,
             memoryBytes: Math.round((9.4 + swing(now, 1) * 0.5) * GIB),
             memoryLimitBytes: 16 * GIB,
+            // Sample cache-heavy cgroup accounting, separate from the process RSS groups below.
+            memoryBreakdown: {
+                anonymousBytes: Math.round(4.6 * GIB),
+                countedFileCacheBytes: Math.round((4.2 + swing(now, 1) * 0.5) * GIB),
+                kernelBytes: Math.round(0.6 * GIB),
+                inactiveFileCacheBytes: Math.round(0.7 * GIB),
+            },
             swapBytes: Math.round(0.6 * GIB),
             diskBytes: 42 * GIB,
             diskTotalBytes: 100 * GIB,

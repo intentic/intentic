@@ -110,8 +110,8 @@ const wordsOf = (node: Node): string =>
         .join(` `);
 
 // The panel's plain figures, a term and its reading.
-const termsOf = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll(`[data-section="figures"] dt`)].map(
+const termsOf = (el: HTMLElement, section = `figures`): string[] =>
+    [...el.querySelectorAll(`[data-section="${section}"] dt`)].map(
         (term) => `${term.textContent?.trim()}: ${term.nextElementSibling?.textContent?.trim()}`,
     );
 
@@ -119,18 +119,18 @@ describe("a card's figure", () => {
     // One figure in the card's stats row, memory first since memory is what runs out; the whole reading is its hover.
     it("says what the conversation's processes hold and use, with the whole reading on hover", () => {
         const figure = mount(SessionMetrics, { conversationId: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
-        expect(figure.textContent?.trim()).toBe(`412 MB · 37%`);
-        expect(figure.dataset[`tip`]).toBe(`Session usage · CPU 37% · Memory 412 MB · Processes 12 · 100% = 1 core`);
+        expect(figure.textContent?.trim()).toBe(`412 MiB · 37%`);
+        expect(figure.dataset[`tip`]).toBe(`Session usage · CPU 37% · Process memory (RSS) 412 MiB · Processes 12 · 100% = 1 core`);
         expect(figure.classList.contains(`text-warning`)).toBe(false);
     });
 
     it("leaves CPU out of a first reading rather than guessing it", () => {
         const figure = mount(SessionMetrics, { conversationId: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
-        expect(figure.textContent?.trim()).toBe(`40 MB`);
-        expect(figure.dataset[`tip`]?.startsWith(`Session usage · Memory 40 MB · Processes 1 · `)).toBe(true);
+        expect(figure.textContent?.trim()).toBe(`40 MiB`);
+        expect(figure.dataset[`tip`]?.startsWith(`Session usage · Process memory (RSS) 40 MiB · Processes 1 · `)).toBe(true);
     });
 
-    // A quarter of a 16 GB limit is 4 GB: the boundary itself tints, a byte under it does not.
+    // A quarter of a 16 GiB limit is 4 GiB: the boundary itself tints, a byte under it does not.
     it("tints a conversation holding a quarter of the sandbox's memory, and none holding less", () => {
         const holding = (rssBytes: number): boolean => {
             const metrics = { ...reading(), sessions: { a1: { processes: 3, rssBytes, cpuPercent: 80 } } };
@@ -152,12 +152,12 @@ describe("a card's figure", () => {
 
 describe("the sandbox segment", () => {
     it("reads the three figures that run out, as short as the line allows, and nothing else while all is well", () => {
-        expect(figuresOf(mount(SandboxMetricsSummary, { metrics: reading() }))).toEqual([`CPU 23%`, `Memory 5.5 / 16 GB`, `Disk 400 / 1,000 GB`]);
+        expect(figuresOf(mount(SandboxMetricsSummary, { metrics: reading() }))).toEqual([`CPU 23%`, `Memory 5.5 / 16 GiB`, `Disk 400 / 1,000 GiB`]);
     });
 
     it("keeps both units when used and total differ, and a dash for a first reading's CPU", () => {
         const el = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { cpuPercent: undefined, memoryBytes: 900 * MIB } }) });
-        expect(figuresOf(el).slice(0, 2)).toEqual([`CPU –`, `Memory 900 MB / 16 GB`]);
+        expect(figuresOf(el).slice(0, 2)).toEqual([`CPU –`, `Memory 900 MiB / 16 GiB`]);
     });
 
     it("raises a figure past its limit onto the line, tinted, so it needs no click to be seen", () => {
@@ -169,10 +169,10 @@ describe("the sandbox segment", () => {
         });
         expect(figuresOf(el)).toEqual([
             `CPU 23%`,
-            `Memory 15 / 16 GB`,
-            `Disk 400 / 1,000 GB`,
+            `Memory 15 / 16 GiB`,
+            `Disk 400 / 1,000 GiB`,
             `Pressure CPU 0.0% · memory 30% · I/O 0.0%`,
-            `Daemon 412 MB · 2.0% CPU · loop 95%`,
+            `Daemon 412 MiB · 2.0% CPU · loop 95%`,
         ]);
         const tinted = [...el.querySelectorAll(`[data-figure]`)].filter(
             (figure) => figure.matches(`.text-warning`) || figure.querySelector(`.text-warning`) !== null,
@@ -182,11 +182,75 @@ describe("the sandbox segment", () => {
 });
 
 describe("the sandbox panel", () => {
+    it("separates measured cache-heavy accounting from process RSS rather than inventing a residual", () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: reading({
+                sandbox: {
+                    memoryBytes: 8_485_601_280,
+                    memoryLimitBytes: 18 * GIB,
+                    memoryBreakdown: {
+                        anonymousBytes: 3_298_127_872,
+                        countedFileCacheBytes: 4_514_959_360,
+                        kernelBytes: 668_442_624,
+                        inactiveFileCacheBytes: 722_030_592,
+                    },
+                },
+            }),
+        });
+        expect(figuresOf(el, `gauges`)[1]).toBe(`Memory 7.9 GiB / 18 GiB`);
+        expect(termsOf(el, `memory-accounting`)).toEqual([
+            `Anonymous memory: 3.1 GiB`,
+            `File cache (counted): 4.2 GiB`,
+            `Kernel memory: 637 MiB`,
+            `Inactive cache (excluded): 689 MiB`,
+        ]);
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`]);
+        expect(wordsOf(el.querySelector(`[data-accounting-note]`)!)).toBe(`Measured separately; values may not add up exactly.`);
+        expect(wordsOf(el.querySelector(`[data-memory-note]`)!)).toBe(
+            `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
+        );
+        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
+        expect(wordsOf(el.querySelector(`[data-process-note]`)!)).toBe(
+            `RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
+        );
+        expect(wordsOf(el.querySelector(`[data-session-note]`)!)).toBe(
+            `Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.`,
+        );
+    });
+
+    it("keeps real zero accounting values visible, without inventing unavailable categories", () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: reading({ sandbox: { memoryBreakdown: { anonymousBytes: 0, kernelBytes: 0 } } }),
+        });
+        expect(termsOf(el, `memory-accounting`)).toEqual([`Anonymous memory: 0 B`, `Kernel memory: 0 B`]);
+    });
+
+    it("keeps scope explanations for older daemons without displaying a made-up breakdown", () => {
+        const el = mount(SandboxMetricsDetails, { metrics: reading() });
+        expect(el.querySelector(`[data-section="memory-accounting"]`)).toBeNull();
+        expect(el.querySelector(`[data-accounting-note]`)).toBeNull();
+        expect(wordsOf(el.querySelector(`[data-memory-note]`)!)).toBe(
+            `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
+        );
+        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
+        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Process memory by session`);
+    });
+
+    it("names all-core sandbox CPU separately from the daemon's single-core percentage", () => {
+        const el = mount(SandboxMetricsDetails, { metrics: reading() });
+        expect(el.querySelector<HTMLElement>(`[data-section="gauges"] [data-figure]`)!.dataset[`tip`]).toBe(
+            `CPU · All available sandbox cores; 100% means all are busy (last few seconds).`,
+        );
+        expect(el.querySelector<HTMLElement>(`[data-section="figures"] dt:last-of-type`)!.dataset[`tip`]).toBe(
+            `Daemon · Process memory (RSS) 412 MiB · CPU 2.0% · Event loop 4.5% · Included in sandbox memory, not process groups. CPU: 100% = 1 core.`,
+        );
+    });
+
     it("reads capacity against use, and leaves out what is quiet: no swap in use, no pressure worth naming", () => {
         const el = mount(SandboxMetricsDetails, { metrics: reading() });
-        expect(figuresOf(el, `gauges`)).toEqual([`CPU 23% of 16 cores`, `Memory 5.5 GB / 16 GB`, `Disk 400 GB / 1,000 GB`]);
-        expect(termsOf(el)).toEqual([`Machine load: 1.5 of 32 cores busy · steady`, `Processes: 104`, `Daemon: 412 MB · 2.0% CPU · loop 4.5%`]);
-        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`]);
+        expect(figuresOf(el, `gauges`)).toEqual([`CPU 23% of 16 cores`, `Memory 5.5 GiB / 16 GiB`, `Disk 400 GiB / 1,000 GiB`]);
+        expect(termsOf(el)).toEqual([`Machine load: 1.5 of 32 cores busy · steady`, `Processes: 104`, `Daemon: 412 MiB · 2.0% CPU · loop 4.5%`]);
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`]);
     });
 
     it("says which way the machine's load is heading, and its cores' worth alone from a daemon that does not send its cores", () => {
@@ -197,7 +261,7 @@ describe("the sandbox panel", () => {
         expect(termsOf(older)[0]).toBe(`Machine load: 0.5 cores busy · easing`);
     });
 
-    it("folds the kinds under 100 MB past the heaviest few behind one line that sums them, and unfolds them on a click", async () => {
+    it("folds the kinds under 100 MiB past the heaviest few behind one line that sums them, and unfolds them on a click", async () => {
         const el = mount(SandboxMetricsDetails, {
             metrics: {
                 ...reading(),
@@ -210,13 +274,13 @@ describe("the sandbox panel", () => {
                 },
             },
         });
-        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`, `other 60 MB`]);
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`, `other 60 MiB`]);
         const fold = el.querySelector<HTMLButtonElement>(`[data-small-roles]`)!;
-        expect(wordsOf(fold)).toBe(`2 smaller kinds · 40 MB`);
+        expect(wordsOf(fold)).toBe(`2 smaller kinds · 40 MiB`);
         expect(fold.getAttribute(`aria-expanded`)).toBe(`false`);
         fold.click();
         await nextTick();
-        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`, `other 60 MB`, `git 30 MB`, `terminals 10 MB`]);
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`, `other 60 MiB`, `git 30 MiB`, `terminals 10 MiB`]);
         expect(fold.getAttribute(`aria-expanded`)).toBe(`true`);
     });
 
@@ -241,7 +305,7 @@ describe("the sandbox panel", () => {
             metrics: reading({ sandbox: { cpuPercent: undefined, swapBytes: 3 * GIB, pressure: { cpu: 2, memory: 12.5, io: 0 } } }),
         });
         expect(figuresOf(el, `gauges`)[0]).toBe(`CPU 16 cores`);
-        expect(termsOf(el)).toContain(`Swap: 3.0 GB`);
+        expect(termsOf(el)).toContain(`Swap: 3.0 GiB`);
         expect(termsOf(el)).toContain(`Pressure: CPU 2.0% · memory 13% · I/O 0.0%`);
     });
 
@@ -249,7 +313,7 @@ describe("the sandbox panel", () => {
         const el = mount(SandboxMetricsDetails, {
             metrics: reading({ sandbox: { swapBytes: 9.5 * GIB, swapLimitBytes: 10 * GIB, swapFull: true } }),
         });
-        expect(termsOf(el)).toContain(`Swap: 9.5 / 10 GB`);
+        expect(termsOf(el)).toContain(`Swap: 9.5 / 10 GiB`);
     });
 
     it("lists where the memory went by session, heaviest first, each as its card names it, and opens one on a press", async () => {
@@ -263,10 +327,10 @@ describe("the sandbox panel", () => {
                 },
             },
         });
-        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`By session`);
-        expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GB 179%`, `Wire the checkout 412 MB 37%`, `fresh 40 MB –`]);
+        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Process memory by session`);
+        expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GiB 179%`, `Wire the checkout 412 MiB 37%`, `fresh 40 MiB –`]);
         const rows = [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure]`)];
-        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`Session usage · CPU 179% · Memory 1.3 GB · Processes 27`);
+        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`Session usage · CPU 179% · Process memory (RSS) 1.3 GiB · Processes 27 · 100% = 1 core`);
 
         rows[1]!.querySelector<HTMLButtonElement>(`button`)!.click();
         await nextTick();
@@ -281,7 +345,7 @@ describe("the sandbox panel", () => {
             metrics: { ...reading(), sessions: { b2: { processes: 30, rssBytes: 5 * GIB, cpuPercent: 250 }, a1: { processes: 12, rssBytes: 412 * MIB } } },
         });
         const values = [...el.querySelectorAll(`[data-section="sessions"] [data-figure]`)].map((row) => row.querySelector(`.text-warning`)?.textContent?.trim());
-        expect(values).toEqual([`5.0 GB`, undefined]);
+        expect(values).toEqual([`5.0 GiB`, undefined]);
     });
 
     it("folds the sessions past the heaviest five behind one line that sums them, and unfolds them on a click", async () => {
@@ -291,7 +355,7 @@ describe("the sandbox panel", () => {
         const el = mount(SandboxMetricsDetails, { metrics: { ...reading(), sessions } });
         expect(figuresOf(el, `sessions`).map((row) => row.split(` `)[0])).toEqual([`s1`, `s2`, `s3`, `s4`, `s5`]);
         const fold = el.querySelector<HTMLButtonElement>(`[data-small-sessions]`)!;
-        expect(wordsOf(fold)).toBe(`2 more sessions · 300 MB`);
+        expect(wordsOf(fold)).toBe(`2 more sessions · 300 MiB`);
         fold.click();
         await nextTick();
         expect(figuresOf(el, `sessions`)).toHaveLength(7);

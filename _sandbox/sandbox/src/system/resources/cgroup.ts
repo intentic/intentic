@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import type { SandboxUsage } from "@intentic/sandbox-contract";
 
 // The sandbox's own cgroup v2 figures, raw, for CPU, pressure and the minute log; /proc/pressure describes the host and
 // stands in only where the cgroup keeps none. Whether there is room is not read here: that is the resource budget's one
@@ -73,6 +74,8 @@ export interface CgroupReading {
     readonly workingSetBytes: number | undefined;
     // memory.max; undefined when uncapped.
     readonly memoryLimitBytes: number | undefined;
+    // Measured memory.stat categories, where present; independent of the budget's admission reading.
+    readonly memoryBreakdown?: SandboxUsage["memoryBreakdown"];
     // memory.swap.current: anon pushed to swap, charged here and not to memory.current.
     readonly swapBytes: number | undefined;
     readonly swapLimitBytes: number | undefined;
@@ -80,6 +83,26 @@ export interface CgroupReading {
     readonly memoryEvents: Readonly<Record<string, number>>;
     readonly pressure: Pressure;
 }
+
+// A measured byte counter can be zero; negative, fractional or unrepresentable values are not accounting.
+const memoryCounter = (value: number | undefined): number | undefined =>
+    value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+
+const memoryBreakdownOf = (memory: Readonly<Record<string, number>>): SandboxUsage["memoryBreakdown"] => {
+    const anonymousBytes = memoryCounter(memory["anon"]);
+    const fileBytes = memoryCounter(memory["file"]);
+    const inactiveFileCacheBytes = memoryCounter(memory["inactive_file"]);
+    const kernelBytes = memoryCounter(memory["kernel"]);
+    const countedFileCacheBytes =
+        fileBytes === undefined || inactiveFileCacheBytes === undefined ? undefined : memoryCounter(fileBytes - inactiveFileCacheBytes);
+    const breakdown = {
+        ...(anonymousBytes === undefined ? {} : { anonymousBytes }),
+        ...(countedFileCacheBytes === undefined ? {} : { countedFileCacheBytes }),
+        ...(kernelBytes === undefined ? {} : { kernelBytes }),
+        ...(inactiveFileCacheBytes === undefined ? {} : { inactiveFileCacheBytes }),
+    };
+    return Object.keys(breakdown).length === 0 ? undefined : breakdown;
+};
 
 export const readCgroup = async (read: ReadText = readText): Promise<CgroupReading> => {
     const [cpuStat, cpuMax, current, max, memoryStat, swap, swapMax, events, pressure] = await Promise.all([
@@ -100,6 +123,8 @@ export const readCgroup = async (read: ReadText = readText): Promise<CgroupReadi
     const [quota, period] = (cpuMax ?? "").trim().split(/\s+/u);
     const cores = Number(quota) / Number(period);
     const memoryBytes = numeric(current);
+    const memory = flatKeyed(memoryStat);
+    const memoryBreakdown = memoryBreakdownOf(memory);
     return {
         cpuUsageMicros: cpu["usage_usec"],
         cpuThrottle:
@@ -108,8 +133,9 @@ export const readCgroup = async (read: ReadText = readText): Promise<CgroupReadi
                 : { throttledMs: Math.round(throttledUsec / 1000), throttledPeriods },
         cpuQuotaCores: Number.isFinite(cores) && cores > 0 ? cores : undefined,
         memoryBytes,
-        workingSetBytes: memoryBytes === undefined ? undefined : Math.max(0, memoryBytes - (flatKeyed(memoryStat)["inactive_file"] ?? 0)),
+        workingSetBytes: memoryBytes === undefined ? undefined : Math.max(0, memoryBytes - (memory["inactive_file"] ?? 0)),
         memoryLimitBytes: numeric(max),
+        ...(memoryBreakdown === undefined ? {} : { memoryBreakdown }),
         swapBytes: numeric(swap),
         swapLimitBytes: numeric(swapMax),
         memoryEvents: flatKeyed(events),

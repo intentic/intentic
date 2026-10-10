@@ -48,7 +48,7 @@ describe("the cgroup reading", () => {
             files({
                 "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
-                "/sys/fs/cgroup/memory.stat": `anon 1\nfile 2\ninactive_file ${3 * 2 ** 30}\n`,
+                "/sys/fs/cgroup/memory.stat": `anon ${5 * 2 ** 30}\nfile ${4 * 2 ** 30}\nkernel ${2 ** 30}\ninactive_file ${3 * 2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.swap.current": `${2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.swap.max": "max\n",
                 "/sys/fs/cgroup/memory.events": "low 0\nhigh 0\nmax 12\noom 1\noom_kill 1\noom_group_kill 0\n",
@@ -62,6 +62,90 @@ describe("the cgroup reading", () => {
             swapLimitBytes: undefined,
             memoryEvents: { low: 0, high: 0, max: 12, oom: 1, oom_kill: 1, oom_group_kill: 0 },
         });
+        expect(reading.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
+        });
+    });
+
+    test("a cache-heavy reading measures its categories from the one memory.stat read", async () => {
+        const paths: string[] = [];
+        const read = files({
+            "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
+            "/sys/fs/cgroup/memory.stat": `anon ${2 ** 30}\nfile ${8 * 2 ** 30}\nkernel ${2 ** 30}\ninactive_file ${7 * 2 ** 30}\n`,
+        });
+        const reading = await readCgroup(async (path) => {
+            paths.push(path);
+            return read(path);
+        });
+        expect([reading.memoryBytes, reading.workingSetBytes]).toEqual([10 * 2 ** 30, 3 * 2 ** 30]);
+        expect(reading.memoryBreakdown).toEqual({
+            anonymousBytes: 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 7 * 2 ** 30,
+        });
+        expect(paths.filter((path) => path === "/sys/fs/cgroup/memory.stat")).toEqual(["/sys/fs/cgroup/memory.stat"]);
+    });
+
+    test("measured zero counters are retained, including a zero file-minus-inactive difference", async () => {
+        const reading = await readCgroup(
+            files({
+                "/sys/fs/cgroup/memory.current": "0\n",
+                "/sys/fs/cgroup/memory.stat": "anon 0\nfile 0\nkernel 0\ninactive_file 0\n",
+            }),
+        );
+        expect([reading.memoryBytes, reading.workingSetBytes]).toEqual([0, 0]);
+        expect(reading.memoryBreakdown).toEqual({ anonymousBytes: 0, countedFileCacheBytes: 0, kernelBytes: 0, inactiveFileCacheBytes: 0 });
+    });
+
+    test("partial stats omit missing categories, and kernel's aggregate is not required", async () => {
+        const cases = [
+            {
+                stat: `anon ${5 * 2 ** 30}\nfile ${4 * 2 ** 30}\ninactive_file ${3 * 2 ** 30}\n`,
+                breakdown: { anonymousBytes: 5 * 2 ** 30, countedFileCacheBytes: 2 ** 30, inactiveFileCacheBytes: 3 * 2 ** 30 },
+            },
+            { stat: "anon 4096\nfile 8192\nkernel 4096\n", breakdown: { anonymousBytes: 4096, kernelBytes: 4096 } },
+            { stat: "anon 4096\nkernel 4096\ninactive_file 8192\n", breakdown: { anonymousBytes: 4096, kernelBytes: 4096, inactiveFileCacheBytes: 8192 } },
+            { stat: "kernel 0\n", breakdown: { kernelBytes: 0 } },
+            { stat: "inactive_file 0\n", breakdown: { inactiveFileCacheBytes: 0 } },
+            { stat: "file 4096\ninactive_file 4096\n", breakdown: { countedFileCacheBytes: 0, inactiveFileCacheBytes: 4096 } },
+        ];
+        for (const { stat, breakdown } of cases) {
+            const reading = await readCgroup(files({ "/sys/fs/cgroup/memory.stat": stat }));
+            expect(reading.memoryBreakdown).toEqual(breakdown);
+        }
+    });
+
+    test("missing or unusable stats omit the whole breakdown, without inventing zero categories", async () => {
+        const cases: Record<string, string>[] = [
+            {},
+            { "/sys/fs/cgroup/memory.stat": "" },
+            { "/sys/fs/cgroup/memory.stat": "pgfault 100\n" },
+            { "/sys/fs/cgroup/memory.stat": "file 4096\n" },
+        ];
+        for (const texts of cases) {
+            const reading = await readCgroup(files({ "/sys/fs/cgroup/memory.current": "8192\n", ...texts }));
+            expect([reading.memoryBytes, reading.workingSetBytes]).toEqual([8192, 8192]);
+            expect(Object.hasOwn(reading, "memoryBreakdown")).toBe(false);
+        }
+    });
+
+    test("invalid byte counters are omitted, not clamped to zero", async () => {
+        for (const invalid of ["-1", "1.5", "NaN", "Infinity", "unreadable", "9007199254740992"]) {
+            const reading = await readCgroup(
+                files({ "/sys/fs/cgroup/memory.stat": `anon ${invalid}\nfile ${invalid}\nkernel ${invalid}\ninactive_file ${invalid}\n` }),
+            );
+            expect(Object.hasOwn(reading, "memoryBreakdown")).toBe(false);
+        }
+        const partial = await readCgroup(files({ "/sys/fs/cgroup/memory.stat": "anon -1\nfile Infinity\nkernel 0\ninactive_file 4096\n" }));
+        expect(partial.memoryBreakdown).toEqual({ kernelBytes: 0, inactiveFileCacheBytes: 4096 });
+        const invalidInactive = await readCgroup(files({ "/sys/fs/cgroup/memory.stat": "anon 4096\nfile 8192\nkernel 4096\ninactive_file -1\n" }));
+        expect(invalidInactive.memoryBreakdown).toEqual({ anonymousBytes: 4096, kernelBytes: 4096 });
+        const negativeDifference = await readCgroup(files({ "/sys/fs/cgroup/memory.stat": "anon 0\nfile 4096\nkernel 0\ninactive_file 8192\n" }));
+        expect(negativeDifference.memoryBreakdown).toEqual({ anonymousBytes: 0, kernelBytes: 0, inactiveFileCacheBytes: 8192 });
     });
 
     test("a CPU quota is cores, `max` is none, and cpu.stat gives the usage and what the quota took back", async () => {

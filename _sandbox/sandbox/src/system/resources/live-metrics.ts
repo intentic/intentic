@@ -163,7 +163,8 @@ export interface SandboxUsageInput {
 // Capacity is the quota where there is one, and never more than the cores the sandbox can be given. Memory is the
 // budget's own figures (resource-budget.ts), so the gauge and the gate that holds a turn never disagree: the gauge's
 // used is what the gate counts against the limit (resident, and swap only once swap is full), and swap is its own
-// figure. The machine's stand in only where the budget can measure nothing.
+// figure. The machine's stand in only where the budget can measure nothing. Measured memory.stat categories are
+// separate, approximate counters: they need not sum to the budget headline sampled independently.
 export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUsed }: SandboxUsageInput): SandboxUsage => {
     const cores = Math.min(cgroup.cpuQuotaCores ?? Number.POSITIVE_INFINITY, machine.cores);
     const { cpu, memory, io } = cgroup.pressure;
@@ -176,6 +177,7 @@ export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUs
         ...(reading.usedBytes === undefined
             ? {}
             : {
+                  ...(cgroup.memoryBytes === undefined || cgroup.memoryBreakdown === undefined ? {} : { memoryBreakdown: cgroup.memoryBreakdown }),
                   swapBytes: reading.swapBytes,
                   ...(reading.swapLimitBytes === undefined ? {} : { swapLimitBytes: reading.swapLimitBytes }),
                   swapFull: swapFullOf(reading),

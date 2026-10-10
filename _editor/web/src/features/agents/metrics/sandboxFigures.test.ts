@@ -1,10 +1,29 @@
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
-import { memoryShort } from "./sandboxFigures";
+import { t } from "@intentic/ui/i18n";
+import { memoryRowsOf, memoryShort, usedOf } from "./sandboxFigures";
 
 // The memory gauge warns on the daemon's own verdict for a person's turn: the free memory the budget counts against the
 // room that turn needs, and the stall it refuses at. The gate's thresholds arrive with the reading, never restated here.
 
 const GIB = 2 ** 30;
+
+// These are independently measured counters, never a residual made by subtracting the process lists.
+test("memory accounting omits missing fields but retains real zeroes", () => {
+    const base = sandbox(undefined);
+    expect(memoryRowsOf(t, base)).toEqual([]);
+    expect(memoryRowsOf(t, { ...base, memoryBreakdown: { anonymousBytes: 0, kernelBytes: GIB / 2 } })).toEqual([
+        { key: `anonymousBytes`, label: `Anonymous memory`, excluded: false, value: `0 B` },
+        { key: `kernelBytes`, label: `Kernel memory`, excluded: false, value: `512 MiB` },
+    ]);
+});
+
+test("used and limit use binary units, keeping both symbols only when they differ", () => {
+    expect([usedOf(8.1 * GIB, 18 * GIB), usedOf(900 * 2 ** 20, 18 * GIB), usedOf(0, 18 * GIB)]).toEqual([
+        `8.1 / 18 GiB`,
+        `900 MiB / 18 GiB`,
+        `0 B / 18 GiB`,
+    ]);
+});
 
 const sandbox = (room: SandboxMetrics[`sandbox`][`memoryRoom`], memoryBytes = 4 * GIB): SandboxMetrics[`sandbox`] => ({
     cores: 4,

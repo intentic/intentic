@@ -1,4 +1,7 @@
+import { computed } from "vue";
 import {
+    formatBinaryBytes,
+    formatBytes,
     formatCompact,
     formatCount,
     formatDate,
@@ -20,6 +23,34 @@ const inLocale = <T>(tag: string, read: () => T): T => {
     setFormatLocale(tag);
     return read();
 };
+
+describe(`formatBinaryBytes: resource counters in explicit binary units`, () => {
+    it(`retains unknown and zero, then scales at powers of 1024 with the existing compact rounding`, () => {
+        expect([
+            formatBinaryBytes(undefined),
+            formatBinaryBytes(0),
+            formatBinaryBytes(1023),
+            formatBinaryBytes(1024),
+            formatBinaryBytes(9.94 * 1024),
+            formatBinaryBytes(10 * 1024),
+            formatBinaryBytes(2 ** 20),
+            formatBinaryBytes(5.5 * 2 ** 30),
+            formatBinaryBytes(2 ** 40),
+        ]).toEqual([``, `0 B`, `1023 B`, `1.0 KiB`, `9.9 KiB`, `10 KiB`, `1.0 MiB`, `5.5 GiB`, `1.0 TiB`]);
+        expect(formatBytes(2 ** 30)).toBe(`1.0 GB`);
+    });
+
+    it(`uses Polish decimals and grouping without changing unit symbols`, () => {
+        expect(inLocale(`pl`, () => [formatBinaryBytes(5.5 * 2 ** 30), formatBinaryBytes(12_345 * 2 ** 40)])).toEqual([`5,5 GiB`, `12 345 TiB`]);
+    });
+
+    it(`reformats an already cached reactive reading after the locale changes`, () => {
+        const text = computed(() => formatBinaryBytes(1.5 * 2 ** 20));
+        expect(text.value).toBe(`1.5 MiB`);
+        setFormatLocale(`pl`);
+        expect(text.value).toBe(`1,5 MiB`);
+    });
+});
 
 describe(`formatElapsed: a span of time in its two largest units, rounded down`, () => {
     it(`speaks English narrowly, drops a zero second unit, and never rounds up`, () => {

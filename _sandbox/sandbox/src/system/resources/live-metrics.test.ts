@@ -177,7 +177,7 @@ describe("the sandbox and the daemon", () => {
         "/sys/fs/cgroup/cpu.max": "200000 100000\n",
         "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
         "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
-        "/sys/fs/cgroup/memory.stat": `anon 1\nfile 2\ninactive_file ${3 * 2 ** 30}\n`,
+        "/sys/fs/cgroup/memory.stat": `anon ${5 * 2 ** 30}\nfile ${4 * 2 ** 30}\nkernel ${2 ** 30}\ninactive_file ${3 * 2 ** 30}\n`,
         "/sys/fs/cgroup/memory.swap.current": `${2 ** 30}\n`,
         "/sys/fs/cgroup/cpu.pressure": "some avg10=1.50 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
         "/sys/fs/cgroup/memory.pressure": "some avg10=12.25 avg60=0.00 avg300=0.00 total=1\nfull avg10=3.00 avg60=0.00 avg300=0.00 total=0\n",
@@ -204,6 +204,12 @@ describe("the sandbox and the daemon", () => {
             cores: 2,
             memoryBytes: 7 * 2 ** 30,
             memoryLimitBytes: 16 * 2 ** 30,
+            memoryBreakdown: {
+                anonymousBytes: 5 * 2 ** 30,
+                countedFileCacheBytes: 2 ** 30,
+                kernelBytes: 2 ** 30,
+                inactiveFileCacheBytes: 3 * 2 ** 30,
+            },
             swapBytes: 2 ** 30,
             swapFull: false,
             memoryRoom: {
@@ -246,12 +252,112 @@ describe("the sandbox and the daemon", () => {
     // 7 GiB resident + 9.5 of 10 GiB swapped: swap is full, so the gauge reads 16.5 of 16 GiB, as the gate counts it.
     test("once swap is full the gauge counts it in used, and says swap is full against its limit", async () => {
         const full = { ...files, "/sys/fs/cgroup/memory.swap.current": `${9.5 * 2 ** 30}\n`, "/sys/fs/cgroup/memory.swap.max": `${10 * 2 ** 30}\n` };
-        expect(await usageOf(full, { processes: 1 })).toMatchObject({
+        const shown = await usageOf(full, { processes: 1 });
+        expect(shown).toMatchObject({
             memoryBytes: 16.5 * 2 ** 30,
             swapBytes: 9.5 * 2 ** 30,
             swapLimitBytes: 10 * 2 ** 30,
             swapFull: true,
             memoryRoom: { freeBytes: 0 },
+        });
+        // The resident categories are still measured as-is, not inflated by swap to force a headline sum.
+        expect(shown.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
+        });
+    });
+
+    test("measured zeros and partial categories survive propagation without defaults", async () => {
+        const zero = await usageOf(
+            {
+                "/sys/fs/cgroup/memory.current": "0\n",
+                "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
+                "/sys/fs/cgroup/memory.stat": "anon 0\nfile 0\nkernel 0\ninactive_file 0\n",
+            },
+            { processes: 1 },
+        );
+        expect(zero.memoryBytes).toBe(0);
+        expect(zero.memoryBreakdown).toEqual({ anonymousBytes: 0, countedFileCacheBytes: 0, kernelBytes: 0, inactiveFileCacheBytes: 0 });
+        const partial = await usageOf(
+            { ...files, "/sys/fs/cgroup/memory.stat": `anon ${5 * 2 ** 30}\nfile ${4 * 2 ** 30}\ninactive_file ${3 * 2 ** 30}\n` },
+            { processes: 1 },
+        );
+        expect(partial.memoryBytes).toBe(7 * 2 ** 30);
+        expect(partial.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
+        });
+    });
+
+    test("no memory.stat means no breakdown even when the cgroup headline is measured", async () => {
+        const texts = { ...files };
+        delete texts["/sys/fs/cgroup/memory.stat"];
+        const shown = await usageOf(texts, { processes: 1 });
+        expect([shown.memoryBytes, shown.memoryLimitBytes]).toEqual([10 * 2 ** 30, 16 * 2 ** 30]);
+        expect(Object.hasOwn(shown, "memoryBreakdown")).toBe(false);
+    });
+
+    test("a cgroup breakdown is not attached to the budget's machine-memory fallback", async () => {
+        const cgroup = await cgroupOf(files);
+        expect(cgroup.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
+        });
+        const shown = sandboxUsageOf({
+            cgroup,
+            room: await budgetOver({}).snapshot(),
+            machine,
+            disk: undefined,
+            processes: 1,
+            coresUsed: undefined,
+        });
+        expect([shown.memoryBytes, shown.memoryLimitBytes]).toEqual([12 * 2 ** 30, 32 * 2 ** 30]);
+        expect(Object.hasOwn(shown, "memoryBreakdown")).toBe(false);
+    });
+
+    test("memory.stat alone is not a cgroup memory reading, even when the budget measured one", async () => {
+        const texts = { ...files };
+        delete texts["/sys/fs/cgroup/memory.current"];
+        const cgroup = await cgroupOf(texts);
+        expect(cgroup.memoryBytes).toBeUndefined();
+        expect(cgroup.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
+        });
+        const shown = sandboxUsageOf({
+            cgroup,
+            room: await budgetOver(files).snapshot(),
+            machine,
+            disk: undefined,
+            processes: 1,
+            coresUsed: undefined,
+        });
+        expect([shown.memoryBytes, shown.memoryLimitBytes]).toEqual([7 * 2 ** 30, 16 * 2 ** 30]);
+        expect(Object.hasOwn(shown, "memoryBreakdown")).toBe(false);
+    });
+
+    test("the independently sampled breakdown does not replace or force a sum to the budget headline", async () => {
+        const shown = sandboxUsageOf({
+            cgroup: await cgroupOf(files),
+            room: await budgetOver({ ...files, "/sys/fs/cgroup/memory.current": `${11 * 2 ** 30}\n` }).snapshot(),
+            machine,
+            disk: undefined,
+            processes: 1,
+            coresUsed: undefined,
+        });
+        expect([shown.memoryBytes, shown.memoryRoom?.freeBytes]).toEqual([8 * 2 ** 30, 8 * 2 ** 30]);
+        expect(shown.memoryBreakdown).toEqual({
+            anonymousBytes: 5 * 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 3 * 2 ** 30,
         });
     });
 
@@ -329,6 +435,28 @@ describe("a reading", () => {
         // The daemon counts as running, and is never scanned: its figures are its own.
         expect(metrics.sandbox.processes).toBe(5);
         expect(host.reads).not.toContain(`/proc/${DAEMON_PID}/stat`);
+    });
+
+    test("a cache-heavy live reading reports measured categories, not a remainder after process RSS", async () => {
+        const host = fakeHost(
+            { 10: { comm: "claude", owner: "conv-a", ticks: 1_000, rssPages: 16_384 } },
+            {
+                "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
+                "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
+                "/sys/fs/cgroup/memory.stat": `anon ${2 ** 30}\nfile ${8 * 2 ** 30}\nkernel ${2 ** 30}\ninactive_file ${7 * 2 ** 30}\n`,
+            },
+        );
+        const metrics = await createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source }).read();
+        expect(metrics.sandbox.memoryBytes).toBe(3 * 2 ** 30);
+        expect(metrics.sandbox.memoryBreakdown).toEqual({
+            anonymousBytes: 2 ** 30,
+            countedFileCacheBytes: 2 ** 30,
+            kernelBytes: 2 ** 30,
+            inactiveFileCacheBytes: 7 * 2 ** 30,
+        });
+        expect(metrics.sessions).toEqual({ "conv-a": { processes: 1, rssBytes: 16_384 * PAGE } });
+        expect(metrics.roles).toEqual({ agentRuntime: { processes: 1, rssBytes: 16_384 * PAGE } });
+        expect(host.reads.filter((path) => path === "/sys/fs/cgroup/memory.stat")).toEqual(["/sys/fs/cgroup/memory.stat"]);
     });
 
     test("the next one measures CPU since the first, a command that finished and was reaped included", async () => {
