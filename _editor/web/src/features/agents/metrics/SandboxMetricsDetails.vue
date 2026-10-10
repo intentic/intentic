@@ -37,7 +37,7 @@ const sessionsTip = computed(
             { label: t(`agents.liveMetrics.cpuLabel`), value: t(`agents.liveMetrics.cpuPerCore`) },
             { label: t(`agents.liveMetrics.tinted`), value: t(`agents.liveMetrics.tintAt`, { percent: formatPercent(HEAVY_SESSION_SHARE * 100) }) },
         ],
-        note: t(`agents.liveMetrics.pressToOpen`),
+        note: `${t(`agents.liveMetrics.sessionsNote`)} ${t(`agents.liveMetrics.pressToOpen`)}`,
     }),
 );
 
@@ -77,6 +77,7 @@ const open = (id: string): void => {
                     <dl
                         v-if="readout.memoryRows.length > 0"
                         data-section="memory-accounting"
+                        v-tooltip.left="{ title: t(`agents.liveMetrics.accountingLabel`), note: t(`agents.liveMetrics.accountingNote`) }"
                         :aria-label="t(`agents.liveMetrics.accountingLabel`)"
                         class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 pt-1 text-2xs"
                     >
@@ -85,8 +86,6 @@ const open = (id: string): void => {
                             <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">{{ row.value }}</dd>
                         </template>
                     </dl>
-                    <p v-if="readout.memoryRows.length > 0" data-accounting-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.accountingNote`) }}</p>
-                    <p data-memory-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.memoryNote`) }}</p>
                 </template>
             </div>
         </div>
@@ -113,7 +112,6 @@ const open = (id: string): void => {
             <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
-            <p data-process-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.rolesNote`) }}</p>
             <div
                 v-for="role in shownRoles"
                 :key="role.key"
@@ -151,7 +149,6 @@ const open = (id: string): void => {
             <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.sessionsLabel`) }}
             </h4>
-            <p data-session-note class="text-2xs leading-relaxed text-muted">{{ t(`agents.liveMetrics.sessionsNote`) }}</p>
             <div
                 v-for="session in shownSessions"
                 :key="session.key"

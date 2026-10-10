@@ -205,15 +205,18 @@ describe("the sandbox panel", () => {
             `Inactive cache (excluded): 689 MiB`,
         ]);
         expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`]);
-        expect(wordsOf(el.querySelector(`[data-accounting-note]`)!)).toBe(`Measured separately; values may not add up exactly.`);
-        expect(wordsOf(el.querySelector(`[data-memory-note]`)!)).toBe(
+        expect(el.querySelector(`p`)).toBeNull();
+        expect(el.querySelector<HTMLElement>(`[data-section="memory-accounting"]`)!.dataset[`tip`]).toBe(
+            `Memory accounting · Measured separately; values may not add up exactly.`,
+        );
+        expect(el.querySelectorAll<HTMLElement>(`[data-section="gauges"] [data-figure]`)[1]!.dataset[`tip`]).toContain(
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
         );
         expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
-        expect(wordsOf(el.querySelector(`[data-process-note]`)!)).toBe(
-            `RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
+        expect(el.querySelector<HTMLElement>(`[data-section="roles"] h4`)!.dataset[`tip`]).toBe(
+            `Process memory by kind · RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
         );
-        expect(wordsOf(el.querySelector(`[data-session-note]`)!)).toBe(
+        expect(el.querySelector<HTMLElement>(`[data-section="sessions"] h4`)!.dataset[`tip`]).toContain(
             `Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.`,
         );
     });
@@ -225,11 +228,11 @@ describe("the sandbox panel", () => {
         expect(termsOf(el, `memory-accounting`)).toEqual([`Anonymous memory: 0 B`, `Kernel memory: 0 B`]);
     });
 
-    it("keeps scope explanations for older daemons without displaying a made-up breakdown", () => {
+    it("keeps scope explanations on hover for older daemons without displaying a made-up breakdown", () => {
         const el = mount(SandboxMetricsDetails, { metrics: reading() });
         expect(el.querySelector(`[data-section="memory-accounting"]`)).toBeNull();
-        expect(el.querySelector(`[data-accounting-note]`)).toBeNull();
-        expect(wordsOf(el.querySelector(`[data-memory-note]`)!)).toBe(
+        expect(el.querySelector(`p`)).toBeNull();
+        expect(el.querySelectorAll<HTMLElement>(`[data-section="gauges"] [data-figure]`)[1]!.dataset[`tip`]).toContain(
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
         );
         expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);

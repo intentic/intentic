@@ -132,7 +132,7 @@ flowchart LR
   above the bar. Resource sizes use binary units (MiB/GiB). The panel separates the sandbox's counted working set
   (daemon, counted file cache and kernel memory included) from process RSS grouped by kind or session: those groups
   overlap and are not an additive breakdown. Optional cgroup accounting shows measured categories and the inactive
-  file cache excluded from the total; an older daemon still gets the scope notes without invented readings.
+  file cache excluded from the total; scope explanations stay in tooltips, including for older daemons without invented readings.
   _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
   closed browser still listed, a repo with a panel counted as running), and tightening them would have made the rail
   move with every agent turn._
