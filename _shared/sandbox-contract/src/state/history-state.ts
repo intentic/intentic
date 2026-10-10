@@ -31,6 +31,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // (settings/member-audience.ts). Carried: it is theirs, and asking again after a move would be a question already
     // answered.
     { path: "member-audience.json", portability: "carry" },
+    // Each person's own answers to the editor's getting-started checklist (put away, a step passed over), keyed by sign-in
+    // address (settings/member-getting-started.ts). Carried for the same reason: a checklist someone put away should not
+    // come back after a move.
+    { path: "member-getting-started.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },

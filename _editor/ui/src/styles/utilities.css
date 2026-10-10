@@ -339,6 +339,30 @@
     animation: none;
 }
 
+/* THE BEACON'S RIPPLE (Beacon.vue): a ring that swells from the dot and fades, once a second. Here rather than as an
+   `animate-ping` at the call site, with the reduced-motion answer beside it: the ripple stands still behind the dot,
+   and the dot's ring takes the primary colour instead, so the mark is still seen. Unlayered, like the checkbox's,
+   so it outranks the ring utility on the dot. */
+@keyframes ui-beacon-ping {
+    75%,
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+.ui-beacon-ripple {
+    animation: ui-beacon-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+:root[data-motion="reduced"] .ui-beacon-ripple {
+    animation: none;
+}
+
+:root[data-motion="reduced"] .ui-beacon-dot {
+    --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 40%, transparent);
+}
+
 /* Kept for the tiny tooltip and anchored-overlay reveal. */
 @keyframes ui-fade-in {
     from {

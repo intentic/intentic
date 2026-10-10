@@ -1566,6 +1566,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
+                    removedAt: null,
                     ownerId: `u1`,
                     hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
@@ -1588,6 +1589,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 sandbox: {
                     findFirst: jest.fn().mockResolvedValue({
                         id: `s1`,
+                        removedAt: null,
                         ownerId: `u1`,
                         hosted: { id: `h1`, sandboxId: `s1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
                     }),
@@ -2161,6 +2163,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
+                    removedAt: null,
                     ownerId: `u1`,
                     hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
@@ -2194,6 +2197,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
+                    removedAt: null,
                     ownerId: `u1`,
                     hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
@@ -2211,6 +2215,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
         const findFirst = jest.fn().mockResolvedValue({
             id: `s1`,
+            removedAt: null,
             hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, region: `iad`, tier: `free` },
         });
         const prisma = fakePrisma({ sandbox: { findFirst }, hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }) } });
@@ -2229,6 +2234,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fly = configuredFly(PRE_TUNNEL_ENV);
         const row = {
             id: `s1`,
+            removedAt: null,
             ownerId: `u1`,
             token: WAKE_TOKEN,
             owner: { email: `Owner@Example.com` },
@@ -2293,6 +2299,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
+                    removedAt: null,
                     ownerId: `u1`,
                     hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
