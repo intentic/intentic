@@ -35,32 +35,6 @@ export interface Opening {
 // (another document, the viewer going) took over.
 export type Loaded = { readonly framed: true } | { readonly status: DocsState } | { readonly superseded: true };
 
-// What decides the mode a document opens in.
-export interface ModeRules {
-    // Whether the reader may edit this document here at all: their role, the copy it is read from, the host's word.
-    readonly mayEdit: boolean;
-    // The backend asked for documents to open for reading first (`openAs: "view"`, a desktop app's local window).
-    readonly viewFirst: boolean;
-    // The reader pressed Edit on this document.
-    readonly editAsked: boolean;
-}
-
-// A document the reader may edit opens for editing, unless the backend asked for reading first and the reader has not
-// pressed Edit yet.
-export const openingMode = (rules: ModeRules): Opening[`mode`] => (rules.mayEdit && (!rules.viewFirst || rules.editAsked) ? `edit` : `view`);
-
-// Edit is offered on a document opened for reading first, which the reader may edit, in a format the engine can write
-// back (`formatWritable`: the browser engine can't write the legacy binary ones), and hasn't asked to edit yet.
-export const offersEdit = (rules: ModeRules, formatWritable: boolean): boolean => rules.viewFirst && rules.mayEdit && formatWritable && !rules.editAsked;
-
-// The documents the reader pressed Edit on, for as long as the page looks at this sandbox: coming back to one opens it
-// for editing again, in the editor kept alive for it if it still is.
-const editsChosen = sandboxValue(() => new Set<string>());
-export const editChosen = (path: string): boolean => editsChosen.value.has(path);
-export const chooseEdit = (path: string): void => {
-    editsChosen.value.add(path);
-};
-
 /* UNSAVED EDITS, BY THE EDITOR THAT HOLDS THEM. Every editor frame this page runs, in a slot or kept out of sight
    (frames.ts), with what its page last said about edits its file doesn't have; and per document, where the host is
    told. Apart from any one EditorSlot on purpose: a kept editor saves, fails or meets a conflict after its viewer has

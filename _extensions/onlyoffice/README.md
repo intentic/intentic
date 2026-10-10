@@ -83,8 +83,8 @@ flowchart LR
   Its listener keeps to loopback (`host` in `listener.ts`), where a sandbox's listens on every interface for the
   document server's container, and the bundle is downloaded once into the app's cache. The app can ask for that
   download before any document is open (`prefetch`, the sidecar's `prefetch-office`).
-  - The sidecar's settings say `{ engine: "browser", openAs: "view" }`: a document opens to read, and the viewer's
-    Edit opens it again in `edit` mode, which the backend grants wherever the window may write the document.
+  - Writable documents open directly for editing, without a mode switch. The host's permissions and the backend
+    keep protected files read-only. The sidecar's `localWindow` marker hides sandbox settings in these windows.
   - **Originals** (`src/server/originals.ts`). Before the first save of a document in a run of the app (an autosave
     or an explicit one), the document as it stood is copied into `office-originals/` beside the bundle's cache, one
     folder per document named by the hash of its real path, holding each kept copy under the time it was kept and a

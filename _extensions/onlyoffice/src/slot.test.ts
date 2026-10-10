@@ -3,7 +3,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { OpenRequest, OpenResult } from "./contract.js";
 import { drop, frameId, KEEP_MS } from "./frames.js";
 import { CHANNEL, type PageMessage, type ViewerMessage } from "./protocol.js";
-import { chooseEdit, EditorSlot, editChosen, offersEdit, openingMode, reportUnsaved, type Opening } from "./slot.js";
+import { EditorSlot, reportUnsaved, type Opening } from "./slot.js";
 
 // The viewer's frame against scripted backend answers, in jsdom with a stand-in `moveBefore` (jsdom has none, and a
 // browser without one keeps nothing). What is checked is which frame ends up in the slot, when it may be used, and what
@@ -291,53 +291,6 @@ describe(`the browser engine's page`, () => {
 
     it(`is a different editor from the document server's for the same document`, () => {
         expect(frameId(`brief.docx`, undefined, `edit`, `light`, `browser`)).not.toBe(frameId(`brief.docx`, undefined, `edit`, `light`, `server`));
-    });
-});
-
-// A backend that asks for reading first (a desktop app's local window, `openAs: "view"`): the document opens for
-// reading, Edit is a press away where the reader may edit it, and the press opens an editing editor in the same slot.
-describe(`a document opened for reading first`, () => {
-    const may = { mayEdit: true, viewFirst: true, editAsked: false };
-
-    it(`opens for reading until the reader asks to edit, and for editing where nobody asked for reading first`, () => {
-        expect(openingMode(may)).toBe(`view`);
-        expect(openingMode({ ...may, editAsked: true })).toBe(`edit`);
-        expect(openingMode({ ...may, viewFirst: false })).toBe(`edit`);
-    });
-
-    it(`never opens for editing a document the reader may not edit, whatever was pressed`, () => {
-        expect(openingMode({ ...may, mayEdit: false, editAsked: true })).toBe(`view`);
-        expect(openingMode({ ...may, mayEdit: false, viewFirst: false })).toBe(`view`);
-    });
-
-    it(`offers Edit only where pressing it can open an editor`, () => {
-        expect(offersEdit(may, true)).toBe(true);
-        // Already asked, nobody asked for reading first, not the reader's to edit, a format the engine can't write back.
-        expect(offersEdit({ ...may, editAsked: true }, true)).toBe(false);
-        expect(offersEdit({ ...may, viewFirst: false }, true)).toBe(false);
-        expect(offersEdit({ ...may, mayEdit: false }, true)).toBe(false);
-        expect(offersEdit(may, false)).toBe(false);
-    });
-
-    it(`remembers the documents the reader chose to edit, so coming back to one opens it for editing`, () => {
-        expect(editChosen(`chosen.docx`)).toBe(false);
-        chooseEdit(`chosen.docx`);
-        expect(editChosen(`chosen.docx`)).toBe(true);
-        expect(editChosen(`other.docx`)).toBe(false);
-        expect(openingMode({ ...may, editAsked: editChosen(`chosen.docx`) })).toBe(`edit`);
-    });
-
-    it(`swaps the reading editor for an editing one in the same slot, asking nothing of the one it throws away`, async () => {
-        const state = fake();
-        await state.slot.load({ ...brief, mode: openingMode(may) });
-        const [reading] = frames(state.element);
-        state.answer = async () => ({ url: `https://port-1.example/editor?s=two`, session: `two`, engine: `server` });
-        state.slot.reset();
-        expect(await state.slot.load({ ...brief, mode: openingMode({ ...may, editAsked: true }) })).toEqual({ framed: true });
-        expect(state.opened.map((request) => request.mode)).toEqual([`view`, `edit`]);
-        expect(state.saved).toEqual([]);
-        expect(reading?.isConnected).toBe(false);
-        expect(frames(state.element).map((frame) => frame.src)).toEqual([`http://port-1.localhost/editor?s=two`]);
     });
 });
 

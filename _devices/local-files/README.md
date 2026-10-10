@@ -82,9 +82,9 @@ flowchart LR
   event stream (`derivedChanged`) when it lands. The routes that wait on long work (a rendering, a trash ask, a
   copy) are exempt from the connection's idle bound (`unhurried` in `server.ts`).
 - **Office documents** open in the ONLYOFFICE browser engine from `@intentic/ext-onlyoffice/local-office`, which
-  downloads its editor bundle once into the app's cache and edits in the page, with no Docker. The viewer opens a
-  document to read first (`openAs: "view"`), keeps the original of a document before its first save, and can put it
-  back ([onlyoffice](../../_extensions/onlyoffice/README.md)).
+  downloads its editor bundle once into the app's cache and edits in the page, with no Docker. Writable documents
+  open directly for editing; protected files stay read-only. It keeps the original before a document's first save
+  and can put it back ([onlyoffice](../../_extensions/onlyoffice/README.md)).
 - **Watching.** Changes batch every 250 ms into `workspaceChanged` events, with what moves inside installed packages,
   build output and `.git` left out, and this side's own scratch files too. A batch of more than 200 paths is sent as
   "everything moved". Windows and macOS watch a whole folder natively; Linux watches one folder at a time, so only

@@ -3,11 +3,10 @@ import { activeLocale, appLink, Button, Checkbox, ConfirmDialog, formatDateTime,
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import type { DocsState } from "./contract.js";
 import { forceSaveDocument, type KeptOriginal, openDocument, originalOf, restoreOriginal, startDocs } from "./docs.js";
-import { extensionOf, READ_ONLY_IN_BROWSER } from "./formats.js";
 import { host } from "./host.js";
 import type { ConflictChoice, PageMessage } from "./protocol.js";
 import { AUTO_START, ENGINE, engineOf } from "./settings.js";
-import { chooseEdit, EditorSlot, editChosen, offersEdit, openingMode, reportUnsaved, type UnsavedReport } from "./slot.js";
+import { EditorSlot, reportUnsaved, type UnsavedReport } from "./slot.js";
 import { t } from "./i18n.js";
 
 /* A document in ONLYOFFICE: an editor frame on the listener's own origin once the chosen engine can open it (the browser engine's one download, or the document server's container), and until then a card saying what stands between the reader and it. The frame is placed by EditorSlot rather than by the template, so that leaving the document can keep the editor alive and coming back shows it again at once. */
@@ -20,9 +19,8 @@ defineSlots<{ text?: () => VNode[] }>();
 // Between polls while the engine is downloading or starting; the download is a minute or less, a start tens of seconds.
 const POLL_MS = 1500;
 
-// The backend's word on how documents open. `view` opens each one for reading, with Edit a press away: a desktop app's
-// local window, whose documents are the user's own files. Not a declared setting, since nobody sets it from here.
-const OPEN_AS = `openAs`;
+// A desktop app's local window has no sandbox settings to offer. The sidecar supplies this marker, not a user setting.
+const localWindow = host().settings.get(`localWindow`) === true;
 
 // What the browser engine's page said that the reader should see over the editor, or a restore that didn't happen.
 type Note =
@@ -48,17 +46,10 @@ let editor: EditorSlot | undefined;
 // The owner's engine, kept in step with the Extensions tab through the host's settings store.
 const engine = ref(engineOf({ [ENGINE]: host().settings.get(ENGINE) }));
 const browserEngine = computed(() => engine.value === `browser`);
-const viewFirst = ref(host().settings.get(OPEN_AS) === `view`);
 
-// Editing needs a tier that may write files, and the shared tree: a scoped copy can't be written into at all. The host
-// may refuse it for a reason of its own (`readOnly`).
+// Writable documents open directly for editing. A scoped copy, restricted tier or host-protected file stays read-only;
+// the backend also enforces those restrictions and the browser engine's view-only legacy formats.
 const editable = computed(() => agent === undefined && !readOnly && [`owner`, `maintainer`].includes(host().sandbox.role()));
-// The reader pressed Edit on this document, opened for reading first; remembered for the page's life (slot.ts).
-const editAsked = ref(editChosen(path));
-const rules = computed(() => ({ mayEdit: editable.value, viewFirst: viewFirst.value, editAsked: editAsked.value }));
-const mode = computed(() => openingMode(rules.value));
-// The browser engine opens the legacy binary formats for reading whatever it is asked, so Edit is never offered on one.
-const editOffered = computed(() => framed.value && offersEdit(rules.value, !(browserEngine.value && READ_ONLY_IN_BROWSER.includes(extensionOf(path)))));
 const theme = (): `light` | `dark` => (document.documentElement.dataset[`mode`] === `dark` ? `dark` : `light`);
 
 const settled = (state: DocsState): boolean => state.state !== `pulling` && state.state !== `starting`;
@@ -73,7 +64,7 @@ const load = async (): Promise<void> => {
         const loaded = await editor.load({
             path,
             agent,
-            mode: mode.value,
+            mode: editable.value ? `edit` : `view`,
             theme: theme(),
             engine: engine.value,
             lang: activeLocale.value,
@@ -166,15 +157,6 @@ const reopen = (): void => {
     void load();
 };
 
-// Opens the document for editing, in this tab: the reading editor goes (it holds nothing to save), an editing one
-// takes its place.
-const edit = (): void => {
-    chooseEdit(path);
-    editAsked.value = true;
-    status.value = undefined;
-    reopen();
-};
-
 // Restoring asks first: it replaces the document with the original, and whatever the editor holds goes with it.
 const confirmingRestore = ref(false);
 const restoring = ref(false);
@@ -224,7 +206,7 @@ onMounted(() => {
         forceSave: (session) => forceSaveDocument({ session }),
         framed: (value) => {
             framed.value = value;
-            // Shown at last: what stood in the way is past, and a later reopen (Edit, a restore) is a moment's wait.
+            // Shown at last: what stood in the way is past, and a later reopen (a retry or restore) is a moment's wait.
             if (value) {
                 waited.value = false;
             }
@@ -239,11 +221,10 @@ const reload = (): void => {
     note.value = undefined;
     void load();
 };
-// Another document starts over: opened as the reader last chose for it, with its own original and its own wait.
+// Another document starts over, with its own original and its own wait.
 watch(
-    () => [path, agent] as const,
+    () => [path, agent, readOnly] as const,
     () => {
-        editAsked.value = editChosen(path);
         original.value = undefined;
         originalAsked = false;
         waited.value = false;
@@ -251,7 +232,7 @@ watch(
     },
 );
 // The standing choices, offered where the wait is felt; the same values the Extensions tab edits, kept in step through
-// the host's settings store. A new engine means a new editor, and so does a new word on how documents open.
+// the host's settings store. A new engine means a new editor.
 const autoStart = ref(host().settings.get(AUTO_START) === true);
 const settingsWatch = host().settings.onDidChange((key) => {
     if (key === AUTO_START) {
@@ -261,13 +242,6 @@ const settingsWatch = host().settings.onDidChange((key) => {
         const chosen = engineOf({ [ENGINE]: host().settings.get(ENGINE) });
         if (chosen !== engine.value) {
             engine.value = chosen;
-            reload();
-        }
-    }
-    if (key === OPEN_AS) {
-        const first = host().settings.get(OPEN_AS) === `view`;
-        if (first !== viewFirst.value) {
-            viewFirst.value = first;
             reload();
         }
     }
@@ -319,20 +293,14 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
 
 <template>
     <div class="flex h-full w-full flex-col">
-        <!-- A document opened for reading first, and the original a first save kept: one quiet row, there only when it has something to say. -->
-        <div v-if="framed && (editOffered || original !== undefined)" class="flex shrink-0 items-center gap-3 border-b border-line px-3 py-1 text-2xs text-muted">
-            <span v-if="original !== undefined" class="flex min-w-0 items-center gap-1.5" v-tooltip.bottom="keptTitle">
-                <Icon name="history" class="shrink-0 text-xs" />
-                <span class="truncate">{{ t(`onlyOfficeViewer.originalKept`) }}</span>
-                <span aria-hidden="true">·</span>
-                <button type="button" :class="ui.textButton(`shrink-0 font-medium`)" @click="confirmingRestore = true">
-                    {{ t(`onlyOfficeViewer.restoreOriginal`) }}
-                </button>
-            </span>
-            <span class="flex-1" />
-            <Button v-if="editOffered" size="small" tier="quiet" v-tooltip.bottom="t(`onlyOfficeViewer.editHint`)" @click="edit">
-                <Icon name="pencil" class="text-xs" /> {{ t(`onlyOfficeViewer.edit`) }}
-            </Button>
+        <!-- Recovery is offered only after a save kept an original; opening a document needs no extra chrome. -->
+        <div v-if="framed && original !== undefined" class="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-1 text-2xs text-muted" v-tooltip.bottom="keptTitle">
+            <Icon name="history" class="shrink-0 text-xs" />
+            <span class="truncate">{{ t(`onlyOfficeViewer.originalKept`) }}</span>
+            <span aria-hidden="true">·</span>
+            <button type="button" :class="ui.textButton(`shrink-0 font-medium`)" @click="confirmingRestore = true">
+                {{ t(`onlyOfficeViewer.restoreOriginal`) }}
+            </button>
         </div>
         <!-- Above the editor rather than over it: the notice's tint is translucent, and the editor's toolbar is right there. -->
         <div v-if="framed && note !== undefined" class="shrink-0 p-2">
@@ -417,8 +385,8 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
                     {{ browserEngine ? t(`onlyOfficeViewer.openEditSaveInBrowser`) : t(`onlyOfficeViewer.openEditSaveDocument`) }}
                 </p>
                 <Button class="mt-1" @click="start">{{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}</Button>
-                <!-- The standing choices are a sandbox's: a backend that says how documents open (a local window's) has none the reader sets. -->
-                <template v-if="!viewFirst">
+                <!-- The standing choices belong to a sandbox, not a desktop app's local window. -->
+                <template v-if="!localWindow">
                     <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
                         <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
                         {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
@@ -433,7 +401,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             <template v-else-if="status?.state === 'starting'">
                 <Icon name="spinner" spin class="text-4xl text-subtle" />
                 <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.startingDocumentServerCold`) }}</p>
-                <label v-if="!viewFirst" class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <label v-if="!localWindow" class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
                     {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
                 </label>

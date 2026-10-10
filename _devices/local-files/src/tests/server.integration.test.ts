@@ -150,10 +150,10 @@ describe(`reading`, () => {
         expect(await (await ask(`/git/changes`, { token: FOLDER_TOKEN })).json()).toEqual({ repos: [], originAgents: {} });
     });
 
-    // The office viewer opens a document to read first, and edits it in the browser engine once asked.
-    it(`tells the office viewer to open documents to read, in the browser engine`, async () => {
+    // The office viewer edits in the browser engine, without offering settings for a sandbox this window has none of.
+    it(`tells the office viewer it is in a local window using the browser engine`, async () => {
         expect(await (await ask(`/extensions/intentic.onlyoffice/settings`, { token: FOLDER_TOKEN })).json()).toEqual({
-            settings: { engine: `browser`, openAs: `view` },
+            settings: { engine: `browser`, localWindow: true },
             secretsSet: [],
         });
     });

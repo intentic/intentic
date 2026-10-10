@@ -19,10 +19,10 @@ import type { Watches } from "./watch.js";
 // Liveness: the editor's watchdog drops a stream that goes quiet for ten seconds.
 const HEARTBEAT_MS = 2_000;
 
-// The one extension with settings the local face activates, and how it runs here: the browser engine, since no Docker
-// runs on this side, and a document opened to read first, with editing one click away (the viewer's Edit button).
+// The one extension with settings the local face activates: the browser engine, since no Docker runs on this side.
+// A local window has no sandbox settings for the viewer to offer.
 const OFFICE_ID = `intentic.onlyoffice`;
-const OFFICE_SETTINGS = { engine: `browser`, openAs: `view` };
+const OFFICE_SETTINGS = { engine: `browser`, localWindow: true };
 
 // A folder holds no model accounts: every provider the contract knows, with none.
 const NO_TRANSLATOR_ACCOUNTS = TranslatorAccountsSchema.parse(Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])));
