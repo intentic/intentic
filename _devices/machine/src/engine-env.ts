@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, win32 } from "node:path";
+import { homeDir } from "@intentic/local-agent";
 
 // The agent acts on this only on Windows, and the tests run on Linux: the separator is spelled as Windows spells it.
 const delimiter = win32.delimiter;
@@ -68,7 +68,7 @@ let pointedAt: string | undefined;
 
 // Read the record and bring this process's environment in step with it. Windows only: elsewhere `docker` is the
 // system's own, and inside WSL the sandboxes stay on Docker Desktop through its integration.
-export const syncEngineEnv = (env: NodeJS.ProcessEnv = process.env, home: string = homedir()): void => {
+export const syncEngineEnv = (env: NodeJS.ProcessEnv = process.env, home: string = homeDir()): void => {
     if (process.platform !== "win32") {
         return;
     }

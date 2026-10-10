@@ -1194,9 +1194,13 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                              verb and its arrow already say which way; Sync moves both, so each number keeps its arrow. -->
                         <span v-if="syncVerb === `sync`" class="inline-flex items-center gap-1 tabular-nums opacity-70" aria-hidden="true">
                             <span class="inline-flex items-center"><Icon name="arrow-down" class="text-3xs" />{{ behindTotal }}</span>
-                            <span v-if="aheadTotal > 0" class="inline-flex items-center"><Icon name="arrow-up" class="text-3xs" />{{ aheadTotal }}</span>
+                            <span v-if="aheadTotal > 0" class="inline-flex items-center"
+                                ><Icon name="arrow-up" class="text-3xs" />{{ aheadTotal }}</span
+                            >
                         </span>
-                        <span v-else-if="syncVerb === `push` && aheadTotal > 0" class="tabular-nums opacity-70" aria-hidden="true">{{ aheadTotal }}</span>
+                        <span v-else-if="syncVerb === `push` && aheadTotal > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
+                            aheadTotal
+                        }}</span>
                         <span v-else-if="syncVerb === `pull`" class="tabular-nums opacity-70" aria-hidden="true">{{ behindTotal }}</span>
                     </Button>
                 </div>
@@ -1326,7 +1330,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         :class="originMark(entry.id)!.dot"
                     ></span>
                     <!-- The same corner, spent on a different wait: the chip's commit-message sentence still being written. -->
-                    <span v-else-if="originDrafting(entry.id)" class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-current opacity-60"></span>
+                    <span
+                        v-else-if="originDrafting(entry.id)"
+                        class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-current opacity-60"
+                    ></span>
                 </span>
                 <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. Label and
                      count share a baseline, the count a step smaller: full-size digits stand at cap height and read as
@@ -1341,8 +1348,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <button
                 v-if="legend.yours > 0"
                 type="button"
-                class="ui-chip shrink-0 gap-1"
-                :class="originFilter === YOURS ? 'ui-chip-on' : originFilter !== undefined ? 'opacity-40' : ''"
+                class="shrink-0 gap-1"
+                :class="[ui.chip({ on: originFilter === YOURS }), originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
                 :disabled="changes.actionBusy.value"
                 :aria-pressed="originFilter === YOURS"
                 @click="toggleOrigin(YOURS)"

@@ -1,6 +1,13 @@
 import { narrate } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { DeviceScopes, DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp, ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract";
+import type {
+    DeviceScopes,
+    DeviceFlowLine,
+    DeviceSandboxFlow,
+    DeviceSandboxOp,
+    ProjectDelivery,
+    ProjectDeliveryResult,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { audit } from "./audit.js";
 import { readGrant, tolerantDeviceContract } from "./grant.js";
@@ -9,7 +16,7 @@ import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { ScopeError } from "./policy.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
-import { dialLoopback } from "./tools/programs/tunnel.js";
+import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import { machineReport } from "../sync/report.js";
@@ -107,7 +114,9 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
         ({ slug, shape, when }, scopes) =>
         (onLine) => {
             if (shape === undefined || when === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: "A shape is set whole, with when it takes effect: `shape` and `when` are both required." });
+                throw new ORPCError("BAD_REQUEST", {
+                    message: "A shape is set whole, with when it takes effect: `shape` and `when` are both required.",
+                });
             }
             return shapeSandbox(slug, shape, when, scopes, onLine);
         },
@@ -164,7 +173,11 @@ const deliverOverLink = async (runtime: HostRuntime, delivery: ProjectDelivery):
         runtime.log(`${runtime.sandboxUrl}: delivered ${said}`);
         return result;
     } catch (error) {
-        void audit({ tool: "deliverProject", ok: false, detail: `${asked}: ${error instanceof DeliveryRefused ? "refused" : "failed"}: ${errorMessage(error)}` });
+        void audit({
+            tool: "deliverProject",
+            ok: false,
+            detail: `${asked}: ${error instanceof DeliveryRefused ? "refused" : "failed"}: ${errorMessage(error)}`,
+        });
         runtime.log(`${runtime.sandboxUrl}: did not deliver ${asked}: ${errorMessage(error)}`);
         throw error instanceof DeliveryRefused
             ? new ORPCError(error.code, { message: error.message })
@@ -181,7 +194,9 @@ export const createHostRouter = (runtime: HostRuntime) => {
         // Behind "Run commands" like `status`; FORBIDDEN is the one refusal the sandbox reads as that switch.
         report: os.report.handler(async () => {
             if (runtime.scopes().shell !== "on") {
-                throw new ORPCError("FORBIDDEN", { message: `"Run commands" is switched off for this device, so it does not describe its folders and ports.` });
+                throw new ORPCError("FORBIDDEN", {
+                    message: `"Run commands" is switched off for this device, so it does not describe its folders and ports.`,
+                });
             }
             return await machineReport();
         }),
@@ -240,7 +255,11 @@ export const createHostRouter = (runtime: HostRuntime) => {
                 }
                 return result;
             } catch (error) {
-                void audit({ tool: "stageArtifact", ok: false, detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}` });
+                void audit({
+                    tool: "stageArtifact",
+                    ok: false,
+                    detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}`,
+                });
                 throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
             }
         }),

@@ -32,6 +32,7 @@ on:
           - desktop-setup
           - desktop-update
           - desktop-windows
+          - desktop-engine
           - images-public
           - install-urls
           - demo-live
@@ -472,7 +473,7 @@ jobs:
   # commit, and reaching across workflows for an artifact would make this job's subject "whatever main last
   # built" rather than "main".
   desktop-windows-build:
-    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows' }}
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows' || inputs.only == 'desktop-engine' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -500,13 +501,19 @@ jobs:
       # Windows smoke's tier 4: before this the rootfs was only built by a release, so nothing ran it ahead of one.
       - run: bash _tools/scripts/build/build-intentic-engine.sh
       - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
+        if: ${{ inputs.only != 'desktop-engine' }}
       # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
       # the paths' common ancestor, and the tiers below ask for these two by name.
       - run: |
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
-          cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
           cp _sandbox/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
+          if [ "$ENGINE_ONLY" != "true" ]; then
+            cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" windows-artifacts/
+          fi
+        env:
+          ENGINE_ONLY: ${{ inputs.only == 'desktop-engine' }}
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: windows-desktop-artifacts-nightly
@@ -534,15 +541,16 @@ jobs:
   # them — tier 2 pulls a full sandbox image before it can wait on the daemon.
   desktop-windows:
     needs: [desktop-windows-build]
-    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && ((inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows') }}
+    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && ((inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows' || inputs.only == 'desktop-engine') }}
     uses: ./.github/workflows/windows-smoke.yml
     with:
       artifact-name: windows-desktop-artifacts-nightly
       installer: Intentic-*-x64-setup.exe
-      deep: true
+      deep: ${{ inputs.only != 'desktop-engine' }}
       sandbox-image: ghcr.io/intentic/sandbox:latest
-      # Tier 4 whole: our engine beside Docker Desktop, and the sandbox tier 2 made moved onto it and back.
+      # Tier 4: the engine install and published port. Deep runs also move tier 2's sandbox onto it and back.
       engine: true
+      engine-only: ${{ inputs.only == 'desktop-engine' }}
       timeout-minutes: 150
 
   # The published images are readable WITHOUT a credential — the one thing no other job here can see. Every job

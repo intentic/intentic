@@ -282,7 +282,7 @@ export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue"
 // A placeholder drawn exactly as its content last looked in this sandbox: `v-skeleton-source="name"` on the content
 // takes its imprint once settled, `<SkeletonSnapshot of="name">` draws it, with its slot as the fallback until one exists.
 export { default as SkeletonSnapshot } from "./components/feedback/SkeletonSnapshot.vue";
-export { vSkeletonSource } from "./lib/skeletonSource.js";
+export { vSkeletonSource } from "./lib/skeleton/skeletonSource.js";
 export {
     adoptImprints,
     clearImprints,
@@ -290,8 +290,8 @@ export {
     loadImprintScope,
     type SkeletonPersistence,
     type SkeletonSnapshotOptions,
-} from "./lib/skeletonStore.js";
-export { IMPRINT_VERSION, type SkeletonImprint } from "./lib/skeletonImprint.js";
+} from "./lib/skeleton/skeletonStore.js";
+export { IMPRINT_VERSION, type SkeletonImprint } from "./lib/skeleton/skeletonImprint.js";
 // Index-and-body screen layout.
 export { default as SplitView } from "./components/layout/SplitView.vue";
 // Whether the screen has folded its index above its body; lets a rail match the shell's compact-width breakpoint.

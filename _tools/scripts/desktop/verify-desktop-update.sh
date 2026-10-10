@@ -18,7 +18,7 @@
 #   3. write the manifest 9.9.10 as a release would, signed with the throwaway key
 #   4. run 9.9.9 in the container and let it alone
 #        → it checks, downloads, and verifies the signature with nobody pressing anything
-#        → closing the window installs it
+#        → pressing the workspace banner installs it
 #        → the file on disk is now 9.9.10, byte for byte
 #        → it starts again, and reports itself current against the same manifest
 #
@@ -68,6 +68,16 @@ pnpm --filter @intentic/desktop-app build
 # The ic CLI both AppImages carry beside the app, once: the drill is about the app replacing itself, and which ic
 # rides along says nothing about that, so the two passes share one unstamped build (stage-desktop-ic.sh --bundle).
 bash "$ROOT/_tools/scripts/desktop/stage-desktop-ic.sh" --bundle
+
+# Cache prefetches may be paused, but a real setup must still hold the updater. The native test needs this desktop
+# image's GTK/WebKit toolchain; the sandbox cannot run it. Stage the sidecar first, as the app's build requires it.
+bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh"
+INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
+    scripts::tests::resumable_downloads_can_be_paused_but_setup_still_holds_an_update -- --exact
+INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
+    onboarding::tests::prefetch_stop_
+INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
+    windows::loopback_tests::the_workspace_reports_the_stamped_release_version -- --exact
 
 # linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates
 # RELR relocations. Both are build-desktop.sh's, and needed here for the same container-shaped reasons.

@@ -114,6 +114,7 @@ for required in from.AppImage to.AppImage latest.json; do
         exit 1
     }
 done
+EXPECTED_VERSION="$(python3 -c 'import json; print(json.load(open("/artifacts/latest.json"))["version"])')"
 
 # The excludelist baseline this deliberately bare image does not carry — the same set smoke.sh installs in its
 # AppImage tier, for the same reason: an AppImage is self-contained above that line and host-dependent below it.
@@ -146,6 +147,10 @@ mkdir -p "$STUB"
 cat >"$STUB/index.html" <<'PAGE'
 <!doctype html><title>stub workspace</title><h1>stub</h1>
 <script>
+const desktop = window.__INTENTIC_DESKTOP__;
+if (desktop) {
+    fetch(`running?version=${desktop.version}`, { cache: `no-store` }).catch(() => {});
+}
 let announced = null;
 const announce = (version) => {
     if (version && announced === null) {
@@ -153,7 +158,7 @@ const announce = (version) => {
         fetch(`announced?version=${version}`, { cache: `no-store` }).catch(() => {});
     }
 };
-announce(window.__INTENTIC_DESKTOP__ && window.__INTENTIC_DESKTOP__.update);
+announce(desktop && desktop.update);
 window.addEventListener(`intentic-desktop-update`, (event) => announce(event.detail.version));
 
 // Polled unconditionally even while there is nothing to take, because these 404s are the only witness out here that
@@ -254,14 +259,23 @@ fi
 # The half that makes an update worth having at all. A swap that boots into nothing trades a machine that was
 # merely out of date for one with no working app — the outcome `intentic-machine upgrade` rolls back for, and the
 # reason this is asserted rather than assumed. Installing relaunches the app itself (update.rs), so this waits
-# for the window to come back rather than starting anything.
-until_true 90 "the updated app is running" workspace_window || app_log
+# for the window to come back rather than starting anything. Its native version must be the new one: the old window
+# remaining visible after an install was refused used to pass this assertion too.
+updated_running() {
+    workspace_window && grep -Fq "GET /running?version=$EXPECTED_VERSION HTTP/1.1" /tmp/stub.log
+}
+if ! until_true 90 "the updated app is running" updated_running; then
+    app_log
+    stub_log
+    pkill -f intentic-desktop 2>/dev/null || true
+    echo "==> update smoke FAILED ($failures)" >&2
+    exit "$failures"
+fi
 
 # 6. Verify that the installed build is current.
 # The assertion that closes the loophole in 4: identical bytes would satisfy a hash check too. This one passes
 # only if the running app's own version now outranks the manifest, so it declines the update it just took
-# instead of taking it again forever.
-rm -rf "${STAGING_DIR:?}"
+# instead of taking it again forever. Do not delete a staged update to manufacture the evidence of being current.
 sleep 90
 if staged_download; then
     fail "the updated app downloaded the same release again — it does not believe it moved"

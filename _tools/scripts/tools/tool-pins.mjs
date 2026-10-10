@@ -48,7 +48,8 @@ export const sha256Of = async (url) => {
         return createHash("sha256")
             .update(Buffer.from(await response.arrayBuffer()))
             .digest("hex");
-    } catch {
+    } catch (error) {
+        console.warn(`tool-pins: could not hash ${url}:`, error);
         return undefined;
     }
 };
@@ -70,7 +71,8 @@ export const dockerHubDigest = async (repository, tag) => {
         });
         const digest = response.headers.get("docker-content-digest");
         return response.ok && /^sha256:[a-f0-9]{64}$/.test(digest ?? "") ? digest.slice("sha256:".length) : undefined;
-    } catch {
+    } catch (error) {
+        console.warn(`tool-pins: could not read the Docker Hub digest for ${repository}:${tag}:`, error);
         return undefined;
     }
 };
@@ -91,7 +93,8 @@ const aptIndex = async (url) => {
             }
         }
         return pairs;
-    } catch {
+    } catch (error) {
+        console.warn(`tool-pins: could not read the apt index at ${url}:`, error);
         return undefined;
     }
 };

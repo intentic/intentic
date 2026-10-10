@@ -1,3 +1,5 @@
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+
 // Substituted for `${tools}` in a host pack's SKILL.md: the core, cross-platform tool surface and rules; `${id}` is the
 // instance name. The OS-specific half is a separate pack per platform; one capability per machine namespaces tool names
 // so examples are copy-pasteable. Tools are deferred behind tool search, so the note opens by saying how to load them.
@@ -212,7 +214,7 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
 3. \`app_status <id>\` lists its windows: pass a window id to \`screenshot\` and \`ui_elements\` to look at it and drive it.
    \`app_logs\` reads what it printed. \`app_stop\` ends it with every process it started; do that when you are done.
 
-When the repository has a \`.intentic/run.json\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
+When the repository has a \`${RUN_TARGETS_FILE}\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
 its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
 the sandbox needs, the start. The owner's "Run on" button in the file tree runs the very same command. A new target is
 a few lines in that file (\`devices --help\`); write one when you will run a program here more than once.

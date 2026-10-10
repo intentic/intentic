@@ -110,8 +110,8 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/ui/loading-reveal": fromRoot("_editor/ui/src/composables/loadingReveal.ts"),
     // The remembered loading shapes (taking one, and the scoped store) without the components that draw them, for the
     // persistence the app installs at boot and for tests that measure a DOM without booting the component graph.
-    "@intentic/ui/skeleton-imprint": fromRoot("_editor/ui/src/lib/skeletonImprint.ts"),
-    "@intentic/ui/skeleton-store": fromRoot("_editor/ui/src/lib/skeletonStore.ts"),
+    "@intentic/ui/skeleton-imprint": fromRoot("_editor/ui/src/lib/skeleton/skeletonImprint.ts"),
+    "@intentic/ui/skeleton-store": fromRoot("_editor/ui/src/lib/skeleton/skeletonStore.ts"),
     // The rename state machine alone, for the four surfaces that draw their own field (a dragging card, a tab strip,
     // a tree node) and so cannot use <InlineRename> itself; off the barrel because a tree row must not boot mermaid
     // to know that Escape cancels.
