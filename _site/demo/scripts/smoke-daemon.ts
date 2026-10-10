@@ -11,7 +11,7 @@ import { build } from "vite";
 
 type Contract = typeof import("@intentic/sandbox-contract");
 type Daemon = typeof import("../src/daemon.ts");
-type Router = Daemon["procedures"];
+type Router = typeof import("../src/daemon/procedures.ts")["procedures"];
 
 // One input per served procedure, as the editor hands it to its client; a handler added without one fails to compile.
 type Samples = { readonly [G in keyof Router]: { readonly [P in keyof Router[G]]: SandboxCallInput<G, P & SandboxProcedure<G>> } };
@@ -101,6 +101,7 @@ const stubBrowser = (): void => {
 // Every module the run reads, bundled once so the daemon and the fixtures below share one instance of each.
 const ENTRIES = {
     daemon: `src/daemon.ts`,
+    procedures: `src/daemon/procedures.ts`,
     router: `@intentic/contract-serve`,
     fleet: `src/fixture/fleet.ts`,
     automations: `src/fixture/automations.ts`,
@@ -503,7 +504,8 @@ const main = async (): Promise<number> => {
     stubBrowser();
     const out = await mkdtemp(join(tmpdir(), `demo-smoke-`));
     await bundle(out);
-    const { daemon, procedures } = await loaded<Daemon>(out, `daemon`);
+    const { daemon } = await loaded<Daemon>(out, `daemon`);
+    const { procedures } = await loaded<typeof import("../src/daemon/procedures.ts")>(out, `procedures`);
     const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);
     const contract = await loaded<Contract>(out, `contract`);
     const samples = samplesOf(await fixturesOf(out), Date.now());

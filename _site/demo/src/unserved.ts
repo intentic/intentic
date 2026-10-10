@@ -1,10 +1,12 @@
 import { RAW_ROUTE_LIST, type RawRouteKey, SANDBOX_ROUTE_NAMES, type SandboxGroup, type SandboxProcedure } from "@intentic/sandbox-contract";
-import type { procedures, raw, sockets } from "./daemon";
+import type { sockets } from "./daemon";
+import type { procedures } from "./daemon/procedures";
+import type { raw } from "./daemon/raw";
 
 // Every contract route the fixture daemon leaves unanswered, and why: the demo's real coverage, stated. The demo's
 // typecheck holds this list to the contract in both directions. A route the fixture neither serves nor lists here is a
 // missing property below, and a listed one that the fixture now serves, or that the contract dropped, is an unknown one.
-// So a new route lands with a decision: answer it in daemon.ts, or give it a reason here.
+// So a new route lands with a decision: answer it in daemon/, or give it a reason here.
 
 type ContractRoute = { readonly [G in SandboxGroup]: `${G}.${SandboxProcedure<G>}` }[SandboxGroup] | RawRouteKey;
 type Procedures = typeof procedures;
@@ -261,6 +263,7 @@ export const UNSERVED = {
     "accounts.complete": UNSIMULATED_WRITE,
     "accounts.disconnect": UNSIMULATED_WRITE,
     "accounts.rename": UNSIMULATED_WRITE,
+    "agent.chooseHandoff": UNSIMULATED_WRITE,
     "agent.resume": UNSIMULATED_WRITE,
     "agent.rewind": UNSIMULATED_WRITE,
     "agent.routeChat": UNSIMULATED_WRITE,
