@@ -1,4 +1,4 @@
-import { AgentTurnSchema, RESUME_NOTES, type ResumeReason, TodoItemSchema, TurnSpeakerSchema } from "@intentic/sandbox-contract";
+import { AgentTurnSchema, HandoffOfferSchema, RESUME_NOTES, type ResumeReason, TodoItemSchema, TurnSpeakerSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../../opt.js";
 import type { Services } from "../../composition.js";
@@ -45,6 +45,7 @@ export const StoredLimitHoldSchema = z.object({
     move: RoutingPickSchema.optional(),
     onto: RoutingPickSchema.optional(),
     carryRefused: z.boolean().optional(),
+    handoff: HandoffOfferSchema.optional(),
     // When the refusal was recorded: the resume pass never fires at a reopen instant at or before it (turn-resume.ts).
     recordedAt: z.number(),
 });

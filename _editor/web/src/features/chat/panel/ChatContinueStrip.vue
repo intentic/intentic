@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { type HandoffMode, isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -9,7 +9,9 @@ import { accountsOutdated } from "../accounts/accountsOutdated";
 import { modelLabelFor, modelOptionsFor } from "../accounts/providerCatalog";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
+import { type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
+import { handoffLine } from "../run/handoffChoice";
+import HandoffQuestion from "./HandoffQuestion.vue";
 import TurnBreakQuestion from "./TurnBreakQuestion.vue";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -32,9 +34,9 @@ const props = defineProps<{
     ready: boolean;
 }>();
 // The press, and whether it keeps the provider session across an account change (the menu's carrying variant).
-const emit = defineEmits<{ (event: "continue", options?: { readonly carry?: boolean }): void }>();
+const emit = defineEmits<{ (event: "continue", options?: ContinueOptions): void }>();
 
-const { conversation, connected, pickUp, provider, model, account, accounts, selectModel } = usePaneView();
+const { conversation, connected, pickUp, provider, model, account, accounts, selectModel, chooseHandoff } = usePaneView();
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
@@ -55,6 +57,12 @@ const continueHint = computed((): TooltipValue => {
     const keys = !mobile.value && props.ready ? t(`ui.keys.enter`) : undefined;
     if (pickUp.value?.held !== undefined) {
         const cost = pressCost(pickUp.value.held);
+        const label = {
+            reread: t(`chat.chatContinueStrip.rereads`),
+            handoff: t(`chat.chatContinueStrip.handoff`),
+            trim: t(`chat.chatContinueStrip.trimStarts`),
+            summary: t(`chat.chatContinueStrip.summaryStarts`),
+        };
         return {
             title: t(`chat.chatContinueStrip.resendUnchanged`),
             keys,
@@ -63,7 +71,7 @@ const continueHint = computed((): TooltipValue => {
                     ? []
                     : [
                           {
-                              label: cost.kind === `reread` ? t(`chat.chatContinueStrip.rereads`) : t(`chat.chatContinueStrip.handoff`),
+                              label: label[cost.kind],
                               value: t(`chat.chatContinueStrip.aboutTokens`, { tokens: formatTokens(cost.tokens) }),
                           },
                       ],
@@ -148,9 +156,20 @@ const chosen = (next: TurnBreakPolicy): void => {
     // waiting for the reset under a pill that says "Move": the answer promises a move at once, so this one moves now,
     // keeping the session by the daemon's own rule (sibling-account.ts bookLimitMove).
     if (next === `move` && wall === `limit` && fallback.value !== undefined && pickUp.value?.held?.moving === undefined) {
-        void continueOnFallback(carriesOnMove.value);
+        void continueOnFallback(carriesOnMove.value, handoff.value);
     }
 };
+
+// How the held turn continues once its cache is cold, where a spent allowance left a choice (HandoffQuestion): the
+// person's pick, else the sandbox's suggestion, which every press below sends and the daemon also keeps on the hold.
+const handoffOffer = computed(() => (ending.value === `limit` ? pickUp.value?.held?.handoff : undefined));
+const handoff = computed(() => handoffPicked(pickUp.value?.held));
+const pickHandoff = (next: HandoffMode): void => {
+    if (reachable.value) {
+        void chooseHandoff(next);
+    }
+};
+const pressContinue = (): void => emit(`continue`, handoff.value === undefined ? undefined : { handoff: handoff.value });
 
 // The only control here that changes whether a press can work, rather than when: reopens the account's five-hour
 // window on demand (once a week), leaving the weekly pool alone. Asked about the conversation's own account pick
@@ -206,17 +225,17 @@ watch(
 // One daemon command (switchAccount) moves the conversation and re-runs the held turn on the new credential. `carry`
 // keeps the provider session (re-reads once, cold); fresh reseeds from the record (a short hand-off, and anything not
 // recorded is lost). Where no held turn is this sandbox's to move (nothing held, another box), the pick then the press.
-const continueOnFallback = async (carry: boolean): Promise<void> => {
+const continueOnFallback = async (carry: boolean, way?: HandoffMode): Promise<void> => {
     const target = fallback.value;
     if (target === undefined || !reachable.value) {
         return;
     }
     waysOpen.value = false;
-    if (await conversation.value.turn.continueOn(target.id, carry)) {
+    if (await conversation.value.turn.continueOn(target.id, carry, way)) {
         return;
     }
     conversation.value.selection.apply({ kind: `selectAccount`, account: target.id });
-    emit(`continue`, { carry });
+    emit(`continue`, { carry, ...(way === undefined ? {} : { handoff: way }) });
 };
 const canCarry = computed(() => pickUp.value?.held?.ran === true);
 // What the `move` answer carries when chosen on a held turn: the same line the daemon draws when it books the move itself.
@@ -243,6 +262,20 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
     const target = fallback.value;
     if (target === undefined) {
         return [];
+    }
+    // A held turn with a choice of hand-offs moves the way the card's Hand-off row says: one row, that way's words.
+    const offer = handoffOffer.value;
+    const way = handoff.value;
+    if (offer !== undefined && way !== undefined) {
+        return [
+            {
+                key: `move`,
+                icon: `user` as IconName,
+                title: t(`chat.chatContinueStrip.continueOnWith`, { fallback: fallbackLabel(target) }),
+                note: handoffLine(offer, way),
+                press: () => void continueOnFallback(way !== `summary`, way),
+            },
+        ];
     }
     return [
         ...(canCarry.value
@@ -310,7 +343,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     </Button>
                 </template>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button v-else size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
+                <Button v-else size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`ui.action.continue`) }}
                 </Button>
                 <Button
@@ -337,6 +370,9 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
             :disabled="!connected"
             @chosen="chosen"
         />
+        <!-- The second question a spent allowance asks: how the held turn continues once its cache is cold. The sandbox
+             suggests a way and preselects it; the pick is the person's, and every way on above uses it. -->
+        <HandoffQuestion v-if="handoffOffer !== undefined" :offer="handoffOffer" :disabled="!connected || !reachable" @choose="pickHandoff" />
         <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
         <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->

@@ -5,6 +5,7 @@ import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
+import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
@@ -476,6 +477,9 @@ export const TurnEndingSchema = z.object({
                 .describe(
                     "The account the owner's policy is already moving this turn to, when it is; the surface then reports the move rather than offering a press.",
                 ),
+            handoff: HandoffOfferSchema.optional().describe(
+                "How the held turn can continue once its cache is cold: carry the session, trim it, or summarise it, which one the sandbox suggests, and which one a person picked. Absent where there is nothing to carry.",
+            ),
         })
         .optional()
         .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),

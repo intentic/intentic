@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
+    HANDOFF_MODES,
     type KeepWarmSettings,
+    type LimitHandoff,
     KeepWarmSettingsSchema,
     type LimitPolicy,
     type RetryPolicy,
@@ -12,6 +14,7 @@ import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { breakAnswers, breakLabel } from "../../../chat/run/turnBreak";
+import { handoffLabel } from "../../../chat/run/handoffChoice";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
@@ -53,17 +56,31 @@ const memoryPolicy = computed<TurnBreakPolicy>({
     set: (value) => patch({ memoryPolicy: value as RoomPolicy }),
 });
 
-// 0 is a real value (never carry); an emptied field clamps to the bound rather than falling back to the saved
-// number, and the input is written back so a refused value doesn't linger.
-const setLimitMoveCarryUnder = (event: Event): void => {
+// How a turn a spent allowance held continues once its cache is cold (chat/run/handoffChoice.ts): the chat's card asks
+// each time and preselects this, and a booked send (a move, a resend at the reset) uses it unless someone picked there.
+const handoffRows = computed(() => [
+    { label: t(`sandbox.agentRecovery.handoffSuggested`), value: `suggested` as LimitHandoff, title: { title: t(`sandbox.agentRecovery.handoffSuggested`), note: t(`sandbox.agentRecovery.handoffSuggestedBrief`) } },
+    ...HANDOFF_MODES.map((mode) => ({ label: handoffLabel(mode), value: mode as LimitHandoff, title: { title: handoffLabel(mode), note: t(`chat.handoffChoice.${mode}Brief`) } })),
+]);
+const limitHandoff = computed<LimitHandoff>({
+    get: () => settings.value?.limitHandoff ?? `suggested`,
+    set: (value) => patch({ limitHandoff: value }),
+});
+
+// The suggestion's two lines. 0 is a real value (never suggest carrying, always suggest a summary); an emptied field
+// clamps to the bound rather than falling back to the saved number, and the input is written back so a refused value
+// doesn't linger.
+const setTokens = (key: `limitMoveCarryUnder` | `handoffSummaryOver`) => (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
         return;
     }
-    const limitMoveCarryUnder = Math.max(0, Math.round(Number(input.value) || 0));
-    input.value = String(limitMoveCarryUnder);
-    patch({ limitMoveCarryUnder });
+    const value = Math.max(0, Math.round(Number(input.value) || 0));
+    input.value = String(value);
+    patch({ [key]: value });
 };
+const setLimitMoveCarryUnder = setTokens(`limitMoveCarryUnder`);
+const setHandoffSummaryOver = setTokens(`handoffSummaryOver`);
 
 // keep-warm's knobs travel as one object, so every row writes the whole of it back.
 const keepWarm = computed((): KeepWarmSettings => settings.value?.keepWarm ?? KeepWarmSettingsSchema.parse({}));
@@ -103,26 +120,43 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured brief plus a capped copy and loses the rest. -->
-        <Row
-            v-if="limitPolicy === `move`"
-            icon="user"
-            :title="t(`sandbox.agentRecovery.carrySessionContextUnder`)"
-            :description="t(`sandbox.agentRecovery.tokensUnderMoveKeeps`)"
-        >
+        <!-- How the held turn continues once its cache is cold: the whole session, a trimmed copy, or a summary. The chat's
+             card asks each time and preselects this; measured in sandbox/bench/handoff-bench.ts. -->
+        <Row icon="history" :title="t(`sandbox.agentRecovery.handoff`)" :description="t(`sandbox.agentRecovery.handoffNote`)">
             <template #control>
-                <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    :aria-label="t(`sandbox.agentRecovery.contextSizeInTokens`)"
-                    class="ui-field-box ui-field-sm w-24 text-right"
-                    :value="settings?.limitMoveCarryUnder ?? 100000"
-                    :disabled="settings === undefined"
-                    @change="setLimitMoveCarryUnder"
-                />
+                <SegmentedControl v-model="limitHandoff" :options="handoffRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
             </template>
         </Row>
+        <template v-if="limitHandoff === `suggested`">
+            <Row icon="history" :title="t(`sandbox.agentRecovery.carryUnder`)" :description="t(`sandbox.agentRecovery.carryUnderNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        :aria-label="t(`sandbox.agentRecovery.carryUnder`)"
+                        class="ui-field-box ui-field-sm w-24 text-right"
+                        :value="settings?.limitMoveCarryUnder ?? 150000"
+                        :disabled="settings === undefined"
+                        @change="setLimitMoveCarryUnder"
+                    />
+                </template>
+            </Row>
+            <Row icon="align-left" :title="t(`sandbox.agentRecovery.summaryOver`)" :description="t(`sandbox.agentRecovery.summaryOverNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        :aria-label="t(`sandbox.agentRecovery.summaryOver`)"
+                        class="ui-field-box ui-field-sm w-24 text-right"
+                        :value="settings?.handoffSummaryOver ?? 700000"
+                        :disabled="settings === undefined"
+                        @change="setHandoffSummaryOver"
+                    />
+                </template>
+            </Row>
+        </template>
 
         <Row icon="refresh" :title="breakLabel(`outage`)" :description="t(`sandbox.agentRecovery.outagePolicyNote`)">
             <template #control>

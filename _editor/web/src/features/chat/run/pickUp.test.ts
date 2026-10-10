@@ -1,6 +1,7 @@
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import {
     cooledPickUp,
+    handoffPicked,
     LIMIT_COOLDOWN_MS,
     pickUpNext,
     pickUpOf,
@@ -12,6 +13,7 @@ import {
     repointedPickUp,
     wakesHeldUntil,
     warmedPickUp,
+    withHandoffChosen,
 } from "./pickUp";
 
 const NOW = 1_800_000_000_000;
@@ -20,6 +22,14 @@ describe(`pressCost`, () => {
     it(`reads the plain press off the daemon's own arms: a turn that ran re-reads its session, one refused at the door pays the hand-off`, () => {
         expect(pressCost({ ran: true, contextTokens: 85_000, handoffTokens: 6_000 })).toEqual({ kind: `reread`, tokens: 85_000 });
         expect(pressCost({ ran: false, contextTokens: 85_000, handoffTokens: 6_000 })).toEqual({ kind: `handoff`, tokens: 6_000 });
+    });
+
+    it(`reads a held turn with a choice of hand-offs off the way picked: the person's, else the suggestion`, () => {
+        const handoff = { suggested: `trim`, basis: `size`, carry: { tokens: 430_000 }, trim: { tokens: 110_000, cleared: 180 }, summary: { tokens: 40_000 } } as const;
+        const held = { ran: true, contextTokens: 430_000, handoff };
+        expect(pressCost(held)).toEqual({ kind: `trim`, tokens: 110_000 });
+        expect(pressCost({ ...held, handoff: { ...handoff, chosen: `summary` } })).toEqual({ kind: `summary`, tokens: 40_000 });
+        expect(pressCost({ ...held, handoff: { ...handoff, chosen: `carry` } })).toEqual({ kind: `reread`, tokens: 430_000 });
     });
 
     it(`says nothing about a hold the daemon did not measure`, () => {
@@ -241,5 +251,21 @@ describe(`wakesHeldUntil`, () => {
         expect(wakesHeldUntil({ ...held, readyAt: NOW - 1 }, [wake], NOW)).toBeUndefined();
         expect(wakesHeldUntil({ reason: `outage`, readyAt: NOW + 60_000, held: { ran: true } }, [wake], NOW)).toBeUndefined();
         expect(wakesHeldUntil(held, [], NOW)).toBeUndefined();
+    });
+});
+
+describe(`withHandoffChosen`, () => {
+    const handoff = { suggested: `trim`, basis: `size`, carry: {}, trim: { tokens: 110_000, cleared: 180 } } as const;
+
+    it(`records a pick on the held turn, and takes it back to the suggestion`, () => {
+        const picked = withHandoffChosen({ reason: `limit`, held: { ran: true, handoff } }, `carry`);
+        expect(handoffPicked(picked?.held)).toBe(`carry`);
+        expect(handoffPicked(withHandoffChosen(picked, undefined)?.held)).toBe(`trim`);
+    });
+
+    it(`leaves a pick-up with no choice of hand-offs as it was`, () => {
+        const plain = { reason: `limit`, held: { ran: true } } as const;
+        expect(withHandoffChosen(plain, `carry`)).toBe(plain);
+        expect(withHandoffChosen(undefined, `carry`)).toBeUndefined();
     });
 });

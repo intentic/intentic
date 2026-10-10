@@ -133,6 +133,15 @@ export const createAgentRoutes = (services: Services) => {
             }
             return outcome.run === undefined ? {} : { run: outcome.run };
         }),
+        // A person's pick of how a held turn continues once its cache is cold (agent/providers/limit-handoff.ts).
+        chooseHandoff: i.chooseHandoff.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            const taken = await services.conversations.send(input.conversationId, { kind: "handoff-chosen", handoff: input.handoff }).settled;
+            if (!taken) {
+                throw new ORPCError("NOT_FOUND", { message: "no turn a spent allowance holds there can continue that way" });
+            }
+            return { ok: true };
+        }),
         // Renders the run: its head, then every change as it lands, `end` when it settles.
         attach: i.attach.handler(async function* ({ input, context, signal }) {
             own(context, input.conversationId);

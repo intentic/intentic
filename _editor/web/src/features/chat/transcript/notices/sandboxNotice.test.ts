@@ -61,6 +61,15 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `install`, reach: `own-copy`, projects: [] }]),
     ...turn([{ kind: `install`, reach: `main-tree`, projects: [``] }]),
     ...turn([{ kind: `install`, reach: `main-tree`, projects: [`a`, ``, `b`, `c`, `d`] }]),
+    ...turn([{ kind: `handoff`, mode: `carry`, tokens: 431_000 }]),
+    ...turn([{ kind: `handoff`, mode: `carry` }]),
+    ...turn([{ kind: `handoff`, mode: `trim`, tokens: 112_000, from: 431_000, cleared: 180 }]),
+    ...turn([{ kind: `handoff`, mode: `trim`, tokens: 112_000, cleared: 1 }]),
+    ...turn([{ kind: `handoff`, mode: `trim`, cleared: 4 }]),
+    ...turn([{ kind: `handoff`, mode: `trim`, fellBack: true }]),
+    ...turn([{ kind: `handoff`, mode: `summary`, model: `claude-haiku-5-5`, from: 431_000 }]),
+    ...turn([{ kind: `handoff`, mode: `summary` }]),
+    ...turn([{ kind: `handoff`, mode: `summary`, fellBack: true }]),
 ];
 
 // What the daemon writes outside the fold, each as it writes it.
@@ -111,7 +120,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
         const rows = [...FOLDED, ...DAEMON, ...RESUMED, ...UNSPOKEN];
         expect(rows.map((row) => noticeLine(row, `developer`))).toEqual(rows.map((row) => row.text));
         // Nothing slipped through uncoded: every row above is worded by the chat, none falls back to its text.
-        expect(RESUMED).toHaveLength(12);
+        expect(RESUMED).toHaveLength(14);
         expect(rows.filter((row) => row.noticeCode === undefined && row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined)).toEqual([]);
     });
 

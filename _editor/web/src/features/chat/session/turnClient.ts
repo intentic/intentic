@@ -11,6 +11,7 @@ import {
     type ResumeRouting,
     type TurnErrand,
     type TurnFact,
+    type HandoffMode,
 } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
@@ -24,7 +25,7 @@ import type { TurnBooking } from "../composer/later/sendLater";
 import { holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../composer/later/bookings";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
-import { repointedPickUp } from "../run/pickUp";
+import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../run/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
@@ -72,8 +73,8 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
 // has not taken or a hand pick no turn has run on yet (the same rule a send names it by, accountIntent); naming none leaves
 // it to the daemon's record, which also moves the turn off an account that can no longer serve. An empty pick means the daemon keeps the held model.
 // `carry` keeps the provider session across an account change, only when asked; moving to another account is
-// switchAccount's (continueOn).
-const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: { readonly carry?: boolean }): ResumeRouting => {
+// switchAccount's (continueOn). `handoff` is how a spent allowance's held turn continues (the card's pick, handoffChoice.ts).
+const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: ContinueOptions): ResumeRouting => {
     const account = accountIntent(settings, { registered: true, session });
     return {
         agent: settings.agent,
@@ -81,6 +82,7 @@ const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, op
         ...(account === undefined ? {} : { account }),
         model: settings.model || undefined,
         ...(options.carry === true ? { carry: true } : {}),
+        ...(options.handoff === undefined ? {} : { handoff: options.handoff }),
     };
 };
 
@@ -730,7 +732,7 @@ export class TurnClient {
 
     // What "carry on" does: a held turn is re-run, and a turn the daemon holds nothing of (a Stop, a restart since) is
     // carried on by the daemon in its own session. Neither adds a word of the person's to the conversation.
-    async continueTurn(options: { readonly carry?: boolean } = {}): Promise<void> {
+    async continueTurn(options: ContinueOptions = {}): Promise<void> {
         if (await this.resumeHeldTurn(options)) {
             return;
         }
@@ -864,16 +866,19 @@ export class TurnClient {
 
     // Re-run the held turn: what Continue means when the daemon kept it; false leaves it to carryOn.
     // No message is appended: a press is the same request again, so the daemon resumes with a note, not a repeat.
-    async resumeHeldTurn(options: { readonly carry?: boolean } = {}): Promise<boolean> {
-        if (this.streaming.value || this.host.pickUp.value?.held === undefined) {
+    async resumeHeldTurn(options: ContinueOptions = {}): Promise<boolean> {
+        const held = this.host.pickUp.value?.held;
+        if (this.streaming.value || held === undefined) {
             return false;
         }
+        // The card's pick rides the press as well as the hold, so a pick whose save was still in flight is not lost.
+        const handoff = options.handoff ?? held.handoff?.chosen;
         if (this.stopping !== undefined) {
             await this.stopping;
         }
         // Where it re-runs, and in which session, is the daemon's to say; a new session it names cuts the segment then.
         const settings = this.host.selection.turnSettings();
-        const routing = heldRouting(settings, this.host.session.value, options);
+        const routing = heldRouting(settings, this.host.session.value, { ...options, ...(handoff === undefined ? {} : { handoff }) });
         this.host.selection.apply({ kind: `rerun` });
         const resumed = await this.askResume(routing);
         if (resumed === undefined) {
@@ -916,12 +921,35 @@ export class TurnClient {
         );
     }
 
+    // Records how a spent allowance's held turn continues once it is sent again (agent.chooseHandoff): carry the session,
+    // trim it, or summarise it. Starts nothing; the card shows the pick at once and snaps back if the daemon refuses it.
+    async chooseHandoff(handoff: HandoffMode): Promise<boolean> {
+        const { host } = this;
+        const before = host.pickUp.value;
+        if (before?.held?.handoff === undefined || !host.registered.value) {
+            return false;
+        }
+        host.pickUp.value = withHandoffChosen(before, handoff);
+        try {
+            await sandboxRpc.agent.chooseHandoff({ conversationId: host.conversationId, handoff }, { context: { at: host.box.value } });
+            return true;
+        } catch (error) {
+            // Only a pick still showing snaps back: a press or a new ending since owns the card now.
+            if (host.pickUp.value?.held?.handoff?.chosen === handoff) {
+                host.pickUp.value = withHandoffChosen(host.pickUp.value, before.held.handoff.chosen);
+            }
+            host.error.value = messageOr(error, t(`chat.handoffChoice.notSaved`));
+            return false;
+        }
+    }
+
     // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
     // there (switchAccount with `run`). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
+    // `handoff`, where the held turn offers a choice, says which of the three ways it continues and wins over `carry`.
     // False, having done nothing, where no held turn is this sandbox's to move (nothing held, or another box): the caller
     // then picks the account and presses, which names it on the turn. Never offered by a sandbox too old for the command
     // (accountsOutdated), whose continue card says it needs an update instead.
-    async continueOn(account: string, carry: boolean): Promise<boolean> {
+    async continueOn(account: string, carry: boolean, handoff?: HandoffMode): Promise<boolean> {
         const { host } = this;
         const held = host.registered.value && host.pickUp.value?.held !== undefined;
         if (this.streaming.value || !held || host.box.value !== undefined) {
@@ -931,13 +959,18 @@ export class TurnClient {
             await this.stopping;
         }
         host.selection.apply({ kind: `accountMoved`, account });
-        if (!carry) {
+        // A trimmed copy is cut from the session, so only a summary (or a fresh move) starts the conversation over.
+        const keepsSession = handoff === undefined ? carry : handoff !== `summary`;
+        if (!keepsSession) {
             this.cutSegment();
         }
         host.selection.apply({ kind: `rerun` });
         try {
             const moved = await orRefusal(
-                sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account, run: true, ...(carry ? { carry } : {}) }, { context: { at: host.box.value } }),
+                sandboxRpc.agent.switchAccount(
+                    { conversationId: host.conversationId, account, run: true, ...(carry ? { carry } : {}), ...(handoff === undefined ? {} : { handoff }) },
+                    { context: { at: host.box.value } },
+                ),
             );
             if (moved instanceof SandboxHttpError) {
                 host.error.value = moved.message;

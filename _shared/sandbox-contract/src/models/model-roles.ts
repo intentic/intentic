@@ -58,6 +58,14 @@ export const MODEL_ROLES = [
         icon: "check-square",
     },
     {
+        // Reads a whole conversation (capped tool output) once, so a small model with a large window suits it best.
+        id: "handoff-summary",
+        label: "Hand-off summaries",
+        blurb: "The summary a fresh session opens with when you choose to summarise a long conversation that hit a usage limit, instead of re-reading it all.",
+        kind: "helper",
+        icon: "align-left",
+    },
+    {
         // One reading answering both halves of "what does this chat open on": an offered `provider:model` line with an
         // effort and an account, and a persona id, each a classification over a fixed list rather than free text. The
         // id predates the persona half and stays as it is, since it is what a settings file already carries.

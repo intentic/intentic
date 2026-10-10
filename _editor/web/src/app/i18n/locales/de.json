@@ -2262,14 +2262,11 @@
             "whatYoudTellSomebody": "Was Sie jemandem sagen würden, der das Modell für einen neuen Chat wählt: welche Arbeit günstig laufen darf, welches Konto zu schonen ist, wann das stärkste gefragt ist."
         },
         "agentRecovery": {
-            "carrySessionContextUnder": "Die Session mitnehmen, wenn ihr Kontext unter",
             "consecutiveFailuresBeforeAutomation": "Aufeinanderfolgende Fehlschläge, bevor eine Automation abgeschaltet wird",
-            "contextSizeInTokens": "Kontextgröße in Tokens, unter der ein verschobener Zug seine Session behält",
             "disableAutomationAfterConsecutive": "Eine Automation nach aufeinanderfolgenden Fehlschlägen abschalten (0 schaltet nie ab).",
             "pickUpInFlight": "Züge, die noch laufen, aufnehmen, wenn die Sandbox neu startet.",
             "resumeTurnsAfterRestart": "Züge nach einem Neustart fortsetzen",
             "stopFailingAutomation": "Eine fehlschlagende Automation stoppen",
-            "tokensUnderMoveKeeps": "Tokens. Darunter behält eine Verschiebung die Session (liest sie einmal kalt erneut); ab diesem Wert startet eine frische Session aus dem gemessenen Briefing. 0 startet immer frisch.",
             "turnBreaks": "Wenn ein Zug abbricht",
             "keepWarmGroup": "Ruhende Chats",
             "keepWarm": "Caches nach einem Zug warm halten",

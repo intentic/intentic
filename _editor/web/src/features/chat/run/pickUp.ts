@@ -1,4 +1,4 @@
-import type { AccountState, HeldEnding, QueuedMessage, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import type { AccountState, HandoffMode, HandoffOffer, HeldEnding, QueuedMessage, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
@@ -34,21 +34,56 @@ export interface PickUp {
 
 // The held turn as the daemon describes it, shared by the failure frame and the record's ending.
 // `contextTokens`/`handoffTokens` are what each way back costs (re-read the session vs. pay only the hand-off);
-// `moving` means the owner's policy is already relocating the turn.
+// `moving` means the owner's policy is already relocating the turn. `handoff` is the choice of how a spent allowance's
+// held turn continues once its cache is cold (carry the session, trim it, or summarise it), with the sandbox's suggestion
+// and the person's pick; absent where there is only one way on.
 export interface HeldTurn {
     readonly ran: boolean;
     readonly contextTokens?: number;
     readonly handoffTokens?: number;
     readonly moving?: string;
+    readonly handoff?: HandoffOffer;
 }
 
+/** What a Continue press may say about how it goes on: keep the session across an account move, and which hand-off. */
+export interface ContinueOptions {
+    readonly carry?: boolean;
+    readonly handoff?: HandoffMode;
+}
+
+/** The hand-off the next send of a held turn uses: the person's pick, else the sandbox's suggestion. */
+export const handoffPicked = (held: HeldTurn | undefined): HandoffMode | undefined =>
+    held?.handoff === undefined ? undefined : (held.handoff.chosen ?? held.handoff.suggested);
+
+/** The pick-up once a person picked a hand-off on the card: every press, booked move and reset then uses it. */
+export const withHandoffChosen = (pickUp: PickUp | undefined, chosen: HandoffMode | undefined): PickUp | undefined => {
+    const handoff = pickUp?.held?.handoff;
+    if (pickUp?.held === undefined || handoff === undefined) {
+        return pickUp;
+    }
+    const { chosen: _was, ...offer } = handoff;
+    return { ...pickUp, held: { ...pickUp.held, handoff: chosen === undefined ? offer : { ...offer, chosen } } };
+};
+
 // What the plain press pays, from the daemon's own numbers: a turn that ran resumes and re-reads its session, one
-// refused at the door pays only the hand-off. Undefined when the daemon measured neither.
-export type PressCost = { readonly kind: `reread`; readonly tokens: number } | { readonly kind: `handoff`; readonly tokens: number };
+// refused at the door pays only the hand-off, and one with a choice of hand-offs pays what the picked one starts from.
+// Undefined when the daemon measured none of it.
+export type PressCost =
+    | { readonly kind: `reread`; readonly tokens: number }
+    | { readonly kind: `handoff`; readonly tokens: number }
+    | { readonly kind: `trim`; readonly tokens: number }
+    | { readonly kind: `summary`; readonly tokens: number };
 
 export const pressCost = (held: HeldTurn | undefined): PressCost | undefined => {
     if (held === undefined) {
         return undefined;
+    }
+    const picked = handoffPicked(held);
+    if (picked === `trim` && held.handoff?.trim !== undefined) {
+        return { kind: `trim`, tokens: held.handoff.trim.tokens };
+    }
+    if (picked === `summary` && held.handoff?.summary !== undefined) {
+        return { kind: `summary`, tokens: held.handoff.summary.tokens };
     }
     if (held.ran) {
         return held.contextTokens === undefined ? undefined : { kind: `reread`, tokens: held.contextTokens };

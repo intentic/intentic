@@ -8,6 +8,7 @@ import { t } from "@intentic/ui/i18n";
 const LABELS: Readonly<Record<ModelRole, () => string>> = {
     "commit-message": () => t(`sandbox.modelRoles.commitMessage.label`),
     "session-title": () => t(`sandbox.modelRoles.sessionTitle.label`),
+    "handoff-summary": () => t(`sandbox.modelRoles.handoffSummary.label`),
     "safety-judge": () => t(`sandbox.modelRoles.safetyJudge.label`),
     "loop-verdict": () => t(`sandbox.modelRoles.loopVerdict.label`),
     "model-router": () => t(`sandbox.modelRoles.modelRouter.label`),
@@ -25,6 +26,7 @@ const LABELS: Readonly<Record<ModelRole, () => string>> = {
 const BLURBS: Readonly<Record<ModelRole, () => string>> = {
     "commit-message": () => t(`sandbox.modelRoles.commitMessage.blurb`),
     "session-title": () => t(`sandbox.modelRoles.sessionTitle.blurb`),
+    "handoff-summary": () => t(`sandbox.modelRoles.handoffSummary.blurb`),
     "safety-judge": () => t(`sandbox.modelRoles.safetyJudge.blurb`),
     "loop-verdict": () => t(`sandbox.modelRoles.loopVerdict.blurb`),
     "model-router": () => t(`sandbox.modelRoles.modelRouter.blurb`),

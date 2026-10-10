@@ -60,6 +60,8 @@ const RESUMED = {
     limit: () => t(`chat.sandboxNotice.resumed.limit`),
     switched: () => t(`chat.sandboxNotice.resumed.switched`),
     carried: () => t(`chat.sandboxNotice.resumed.carried`),
+    trimmed: () => t(`chat.sandboxNotice.resumed.trimmed`),
+    summarized: () => t(`chat.sandboxNotice.resumed.summarized`),
     refused: () => t(`chat.sandboxNotice.resumed.refused`),
     door: () => t(`chat.sandboxNotice.resumed.door`),
     overflow: () => t(`chat.sandboxNotice.resumed.overflow`),
@@ -212,6 +214,8 @@ const codedLine = (notice: SandboxNotice, audience: Audience): string => {
             return RESUMED[notice.params.reason]();
         case `keptWarm`:
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
+        case `handedOff`:
+            return handedOffLine(notice.params);
         case `keptCold`:
             return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
         case `installing`:
@@ -225,6 +229,27 @@ const codedLine = (notice: SandboxNotice, audience: Audience): string => {
             );
         }
     }
+};
+
+// How a held turn continued after a spent allowance: the whole session, a trimmed copy, or a summary (handoff.ts).
+const handedOffLine = (params: Extract<SandboxNotice, { code: "handedOff" }>["params"]): string => {
+    const { mode, tokens, from, model } = params;
+    if (params.fellBack === true) {
+        return mode === `trim` ? t(`chat.sandboxNotice.handedOff.trimFellBack`) : t(`chat.sandboxNotice.handedOff.summaryFellBack`);
+    }
+    if (mode === `carry`) {
+        return tokens === undefined ? t(`chat.sandboxNotice.handedOff.carry`) : t(`chat.sandboxNotice.handedOff.carrySized`, { tokens });
+    }
+    if (mode === `summary`) {
+        return model === undefined ? t(`chat.sandboxNotice.handedOff.summary`) : t(`chat.sandboxNotice.handedOff.summaryBy`, { model });
+    }
+    const cleared = params.cleared ?? 0;
+    if (tokens === undefined) {
+        return t(`chat.sandboxNotice.handedOff.trim`, { cleared }, cleared);
+    }
+    return from === undefined
+        ? t(`chat.sandboxNotice.handedOff.trimSized`, { tokens, cleared }, cleared)
+        : t(`chat.sandboxNotice.handedOff.trimFrom`, { tokens, from, cleared }, cleared);
 };
 
 // Another agent's words, named by its title where it had one, else by its id.

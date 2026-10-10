@@ -12,6 +12,7 @@ const heldEnding = (held: HeldTurn): NonNullable<TurnEnding["held"]> => ({
     ...(held.contextTokens !== undefined ? { contextTokens: held.contextTokens } : {}),
     ...(held.handoffTokens !== undefined ? { handoffTokens: held.handoffTokens } : {}),
     ...(held.move !== undefined ? { moving: held.move.account } : {}),
+    ...(held.handoff !== undefined ? { handoff: held.handoff } : {}),
 });
 // The live hold, never a summary flag: a restart clears the hold, so only it backs a re-run rather than a message.
 // A stopped hold also says how far its automatic re-runs got, once any has gone.

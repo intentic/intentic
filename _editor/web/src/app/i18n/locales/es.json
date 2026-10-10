@@ -2271,14 +2271,11 @@
             "whatYoudTellSomebody": "Lo que le dirías a alguien que elige el modelo para un chat nuevo: qué trabajo puede ir barato, qué cuenta conviene no tocar, cuándo recurrir al más potente."
         },
         "agentRecovery": {
-            "carrySessionContextUnder": "Llevarse la sesión cuando su contexto esté por debajo de",
             "consecutiveFailuresBeforeAutomation": "Fallos consecutivos antes de desactivar una automatización",
-            "contextSizeInTokens": "Tamaño de contexto, en tokens, por debajo del cual un turno movido conserva su sesión",
             "disableAutomationAfterConsecutive": "Desactivar una automatización tras fallos consecutivos (0 nunca la desactiva).",
             "pickUpInFlight": "Retomar los turnos en vuelo cuando el sandbox se reinicia.",
             "resumeTurnsAfterRestart": "Reanudar los turnos tras un reinicio",
             "stopFailingAutomation": "Detener una automatización que falla",
-            "tokensUnderMoveKeeps": "Tokens. Por debajo de esto, un traslado conserva la sesión (la relee una vez, en frío); a partir de ahí arranca una sesión nueva desde el resumen medido. 0 arranca siempre de nuevo.",
             "turnBreaks": "Cuando un turno se rompe",
             "keepWarmGroup": "Chats inactivos",
             "keepWarm": "Mantener las cachés calientes tras un turno",

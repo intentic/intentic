@@ -13,6 +13,7 @@ import {
 } from "../events/transcript.js";
 import { contextTrimLine, contextTrimNotice } from "../schemas/context-trim.js";
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
+import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
@@ -460,6 +461,8 @@ export class TranscriptFold {
                 // A row of its own rather than a stamp on the message: what was left out is not part of what was sent,
                 // and the fold beside the message only ever lists notes that actually rode.
                 return this.pushRow({ role: "notice", text: contextTrimLine(event), noticeCode: noticeCode(contextTrimNotice(event)) });
+            case "handoff":
+                return this.pushRow({ role: "notice", text: handedOffLine(event), noticeCode: noticeCode(handedOffNotice(event)) });
             case "worktree":
                 return event.sync === undefined ? [] : this.synced(event.sync);
             case "landed":

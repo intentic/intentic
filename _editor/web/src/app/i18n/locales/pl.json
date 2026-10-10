@@ -2303,7 +2303,10 @@
             "retryOn": "Ponów na {model}",
             "retryTitle": "Ten sam model",
             "weeklyUntouched": "Limit tygodniowy bez zmian",
-            "answerNotSaved": "Nie udało się zapisać tej odpowiedzi."
+            "answerNotSaved": "Nie udało się zapisać tej odpowiedzi.",
+            "trimStarts": "Przycięta kopia zaczyna od",
+            "summaryStarts": "Nowa sesja zaczyna od",
+            "continueOnWith": "Kontynuuj na {fallback}"
         },
         "chatDocumentBody": {
             "clipped": "przycięte"
@@ -2418,7 +2421,9 @@
                 "door": "Wysłano ponownie: pierwsza próba została odrzucona, zanim cokolwiek się wykonało.",
                 "overflow": "Wysłano ponownie w nowej sesji, bo poprzednia przerosła okno kontekstu modelu.",
                 "flagged": "Wysłane ponownie po zatrzymaniu przez zabezpieczenia modelu, bez zatrzymanej odpowiedzi.",
-                "continued": "Kontynuowano od miejsca, w którym zatrzymała się poprzednia tura."
+                "continued": "Kontynuowano od miejsca, w którym zatrzymała się poprzednia tura.",
+                "trimmed": "Wysłano ponownie po wyczerpaniu limitu, w kopii sesji z wyczyszczonymi starszymi wynikami narzędzi.",
+                "summarized": "Wysłano ponownie po wyczerpaniu limitu, w nowej sesji otwartej streszczeniem rozmowy."
             },
             "watchWake": {
                 "met": "{note} — obserwacja zadziałała po {elapsed}.",
@@ -2467,7 +2472,18 @@
             "installingMain": "Trwa instalacja pakietów w głównym drzewie, po jednej instalacji naraz.",
             "installingMainIn": "Trwa instalacja pakietów w {where} w głównym drzewie, po jednej instalacji naraz.",
             "installRoot": "katalogu głównym przestrzeni roboczej",
-            "installMore": "{named} i jeszcze {more}"
+            "installMore": "{named} i jeszcze {more}",
+            "handedOff": {
+                "carry": "Kontynuowano w tej samej sesji, odczytując ją całą od nowa.",
+                "carrySized": "Kontynuowano w tej samej sesji, odczytując ją całą od nowa (około {tokens} tokenów).",
+                "trim": "Kontynuowano w przyciętej kopii sesji: wyczyszczono {cleared} starszy wynik narzędzia, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji: wyczyszczono {cleared} starsze wyniki narzędzi, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji: wyczyszczono {cleared} starszych wyników narzędzi, każda wiadomość i każde wywołanie narzędzia zostały.",
+                "trimSized": "Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów): wyczyszczono {cleared} starszy wynik narzędzia, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów): wyczyszczono {cleared} starsze wyniki narzędzi, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów): wyczyszczono {cleared} starszych wyników narzędzi, każda wiadomość i każde wywołanie narzędzia zostały.",
+                "trimFrom": "Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów zamiast {from}): wyczyszczono {cleared} starszy wynik narzędzia, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów zamiast {from}): wyczyszczono {cleared} starsze wyniki narzędzi, każda wiadomość i każde wywołanie narzędzia zostały. | Kontynuowano w przyciętej kopii sesji (około {tokens} tokenów zamiast {from}): wyczyszczono {cleared} starszych wyników narzędzi, każda wiadomość i każde wywołanie narzędzia zostały.",
+                "summary": "Kontynuowano w nowej sesji otwartej streszczeniem rozmowy.",
+                "summaryBy": "Kontynuowano w nowej sesji otwartej streszczeniem rozmowy, napisanym przez {model}.",
+                "trimFellBack": "Nie udało się przyciąć sesji do przekazania, więc przeniesiono ją w całości.",
+                "summaryFellBack": "Nie udało się napisać streszczenia do przekazania, więc nowa sesja otworzyła się ostatnią częścią rozmowy i stanem pracy."
+            }
         },
         "providerFailure": {
             "flaggedMessage": "Zabezpieczenia modelu {model} oznaczyły tę wiadomość.",
@@ -3648,6 +3664,27 @@
             "agentTold": "agent o tym wie",
             "askFix": "Poproś o poprawkę",
             "fixRequest": "Strona \"{title}\" (id \"{id}\") rzuciła błędy w moim czacie:\n{errors}\n\nPopraw ją i pokaż ponownie z replaces: \"{id}\"."
+        },
+        "handoffChoice": {
+            "label": "Przekazanie",
+            "question": "Jak rozmowa toczy się dalej, gdy pamięć podręczna wystygła",
+            "carry": "Przenieś wszystko",
+            "carryBrief": "Wznawia tę sesję bez zmian",
+            "carryWhat": "Zachowuje wszystko i odczytuje ~{tokens} tokenów przy każdym wywołaniu następnej tury.",
+            "carryWhatUnmeasured": "Zachowuje wszystko i odczytuje całość przy każdym wywołaniu następnej tury.",
+            "trim": "Przytnij stare wyniki",
+            "trimBrief": "Wznawia kopię z wyczyszczonymi starszymi wynikami narzędzi",
+            "trimWhat": "Zachowuje każdą wiadomość i każde wywołanie narzędzia, czyści starsze wyniki narzędzi ({cleared}): ~{tokens} tokenów zamiast ~{from}.",
+            "trimWhatUnmeasured": "Zachowuje każdą wiadomość i każde wywołanie narzędzia, czyści starsze wyniki narzędzi ({cleared}): ~{tokens} tokenów.",
+            "summary": "Streszczenie",
+            "summaryBrief": "Otwiera nową sesję streszczeniem",
+            "summaryWhat": "Nowa sesja otwarta streszczeniem rozmowy, ostatnimi wymianami i stanem pracy: ~{tokens} tokenów, gdy model streszczający raz odczyta ~{reads}. Szczegóły pominięte w streszczeniu przepadają.",
+            "summaryWhatUnread": "Nowa sesja otwarta streszczeniem rozmowy, ostatnimi wymianami i stanem pracy: ~{tokens} tokenów. Szczegóły pominięte w streszczeniu przepadają.",
+            "suggested": "Sugerowane",
+            "suggestedForSize": "Sugerowane dla rozmowy tej wielkości.",
+            "suggestedWas": "Sugerowane: {way}.",
+            "yourDefault": "Twoje ustawienie domyślne.",
+            "notSaved": "Nie udało się zapisać wyboru przekazania."
         }
     },
     "common": {
@@ -4197,9 +4234,7 @@
             "whatYoudTellSomebody": "Co powiedziałbyś komuś, kto wybiera model dla nowego czatu: która praca może pójść taniej, którego konta nie ruszać, kiedy sięgnąć po najmocniejszy."
         },
         "agentRecovery": {
-            "carrySessionContextUnder": "Zabierz sesję, gdy jej kontekst jest poniżej",
             "consecutiveFailuresBeforeAutomation": "Kolejne niepowodzenia, zanim automatyzacja zostanie wyłączona",
-            "contextSizeInTokens": "Rozmiar kontekstu w tokenach, poniżej którego przeniesiona tura zachowuje swoją sesję",
             "disableAutomationAfterConsecutive": "Wyłącz automatyzację po kolejnych niepowodzeniach (0 nigdy nie wyłącza).",
             "limitPolicyNote": "Co się dzieje z turą, którą odrzucił wyczerpany limit użycia. Domyślne dla każdej rozmowy; własne ustawienie czatu decyduje tylko o tym czacie.",
             "outagePolicyNote": "Co się dzieje z turą, którą zabiła awaria samego dostawcy modelu (błąd 500, brak przepustowości, zerwane połączenie).",
@@ -4207,7 +4242,6 @@
             "resumeTurnsAfterRestart": "Wznawiaj tury po restarcie",
             "stopFailingAutomation": "Zatrzymaj automatyzację, która zawodzi",
             "stopPolicyNote": "Co się dzieje z turą, która przerwała się bez niczego do naprawienia: zawieszone środowisko uruchomieniowe, awaria harnessu.",
-            "tokensUnderMoveKeeps": "Tokeny. Poniżej tego przeniesienie zachowuje sesję (odczytuje ją raz, na zimno); od tej wartości w górę startuje świeża sesja z odmierzonego briefu. 0 zawsze startuje od zera.",
             "turnBreaks": "Gdy tura się załamie",
             "keepWarmGroup": "Bezczynne czaty",
             "keepWarm": "Utrzymuj pamięć podręczną ciepłą po turze",
@@ -4221,7 +4255,15 @@
             "keepWarmReserve": "Zostaw tyle limitu wolnego",
             "keepWarmReserveNote": "Odświeżanie ustaje, gdy którykolwiek limit zużywany przez model konta jest pełniejszy niż 100% minus ta wartość.",
             "keepWarmReserveLabel": "Wolny limit, w procentach",
-            "memoryPolicyNote": "Co się dzieje z wiadomością, którą sandbox wstrzymał, bo kończyła się pamięć. Nic się nie uruchomiło, więc wysłanie jej po zwolnieniu pamięci niczego nie wydaje dwa razy."
+            "memoryPolicyNote": "Co się dzieje z wiadomością, którą sandbox wstrzymał, bo kończyła się pamięć. Nic się nie uruchomiło, więc wysłanie jej po zwolnieniu pamięci niczego nie wydaje dwa razy.",
+            "handoff": "Przekazanie po wyczerpaniu limitu",
+            "handoffNote": "Jak tura wstrzymana przez wyczerpany limit toczy się dalej, gdy pamięć podręczna wystygła, na tym koncie po odnowieniu albo na innym. Karta w czacie zaznacza ten wybór i pozwala wybrać inny dla tej tury.",
+            "handoffSuggested": "Sugerowane",
+            "handoffSuggestedBrief": "Wybiera według wielkości rozmowy",
+            "carryUnder": "Sugeruj przeniesienie poniżej",
+            "carryUnderNote": "Tokeny. Poniżej tej wartości przenoszona jest cała sesja (przycinanie niewiele daje); od niej sugerowana jest przycięta kopia. 0 nigdy nie sugeruje przeniesienia.",
+            "summaryOver": "Sugeruj streszczenie od",
+            "summaryOverNote": "Tokeny. Od tej wartości sugerowane jest streszczenie, jeśli w Modelach ustawiono model do streszczeń przekazania; przycięta kopia wciąż zawiera każdą wiadomość i każde wywołanie narzędzia, co bywa duże."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Nie udało się odczytać, co deklarują repozytoria.",
@@ -7254,6 +7296,10 @@
             "sessionTitle": {
                 "blurb": "Nazwa, którą rozmowa nosi na tablicy, nadawana sekundę po rozpoczęciu jej pierwszej tury.",
                 "label": "Tytuły sesji"
+            },
+            "handoffSummary": {
+                "label": "Streszczenia przekazania",
+                "blurb": "Streszczenie, którym otwiera się nowa sesja, gdy zdecydujesz się streścić długą rozmowę, która wyczerpała limit, zamiast odczytywać ją całą od nowa."
             }
         },
         "personaBounds": {

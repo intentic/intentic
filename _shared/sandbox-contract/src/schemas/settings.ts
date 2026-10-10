@@ -5,6 +5,7 @@ import { z } from "zod";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
+import { LimitHandoffSchema } from "./providers/handoff.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
@@ -457,13 +458,28 @@ export const SandboxSettingsSchema = z.object({
     memoryPolicy: RoomPolicySchema.default("resend").describe(
         "What happens to a message the sandbox held because it was short of memory: nothing ran, so nothing was spent. `resend` sends it by itself once memory has stayed free for a while, one held conversation at a time. `wait` holds it until somebody presses Send anyway. The sandbox-wide default; any one conversation can say otherwise.",
     ),
+    // How a held turn continues once its cache has gone cold (schemas/providers/handoff.ts). The card asks each time and
+    // preselects this; a booked send (a move, a resend at the reset) uses it unless a person picked on the card.
+    limitHandoff: LimitHandoffSchema.default("suggested").describe(
+        "How a turn a spent usage limit held continues, on this account at the reset or on another: `carry` resumes the session as it is (the model keeps everything and re-reads all of it), `trim` resumes a copy with older tool output cleared (every message and tool call stays), `summary` opens a fresh session with a smaller model's summary and the last exchanges word for word. `suggested` picks by the conversation's size, using the two thresholds beside this. The chat's card preselects it and lets you pick another for that turn.",
+    ),
+    // Read by the `suggested` hand-off only. Kept under its old name: before 2026-10-10 it chose between carrying and a
+    // short record hand-off for a move, and a saved value still means "carry under this".
     limitMoveCarryUnder: z
         .number()
         .int()
         .min(0)
-        .default(100_000)
+        .default(150_000)
         .describe(
-            "When a spent usage limit moves a turn to another account, carry the provider session (the model keeps everything, and re-reads all of it once on the other account) while the conversation's context is under this many tokens; at or above it, start a fresh session with the sandbox's measured brief instead. Zero always starts fresh.",
+            "For the suggested hand-off: carry the session as it is while the conversation's context is under this many tokens; at or above it, trim it (or summarise it, past the next threshold). Zero never suggests carrying.",
+        ),
+    handoffSummaryOver: z
+        .number()
+        .int()
+        .min(0)
+        .default(700_000)
+        .describe(
+            "For the suggested hand-off: at or above this many tokens of context, suggest a summary rather than a trimmed session, where a model is set for hand-off summaries.",
         ),
     // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet. Before
     // 2026-09-26 these were four top-level settings (settings-history.ts folds them).

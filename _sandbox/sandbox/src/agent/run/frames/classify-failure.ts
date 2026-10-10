@@ -221,6 +221,7 @@ const heldOf = (ran: boolean, way: LimitWay | undefined, moving: string | undefi
     ...opt("contextTokens", way?.contextTokens),
     ...opt("handoffTokens", way?.handoffTokens),
     ...opt("moving", moving),
+    ...opt("handoff", way?.handoff),
 });
 
 // Dresses a spent-allowance frame with when it reopens, whether it is held, and whether a clock resumes it unasked;
@@ -355,7 +356,7 @@ const dressFlagged = (event: ErrorFrame, context: FailureContext, conversationId
 // Held whole for a press; a carry refused unanswered moves fresh at once; an unanswered `stopped` resume is not held again.
 const dressDeath = async (event: ErrorFrame, context: FailureContext, conversationId: string, queries: FailureQueries): Promise<Dressed> => {
     const { turn, answered } = context;
-    if (turn.resume === "carried" && !answered && turn.account !== undefined) {
+    if ((turn.resume === "carried" || turn.resume === "trimmed") && !answered && turn.account !== undefined) {
         const left = leftBy(context);
         const held = holding(context, conversationId, "limit", {
             ran: true,

@@ -26,7 +26,22 @@ const failure = {
 };
 
 // The re-runs a resumed turn's row can name (events/resume.ts); a reason a reader does not know draws the row's text.
-const ResumeNoticeReasonSchema = z.enum(["auth", "outage", "restart", "stopped", "limit", "switched", "carried", "refused", "door", "overflow", "flagged", "continued"]);
+const ResumeNoticeReasonSchema = z.enum([
+    "auth",
+    "outage",
+    "restart",
+    "stopped",
+    "limit",
+    "switched",
+    "carried",
+    "trimmed",
+    "summarized",
+    "refused",
+    "door",
+    "overflow",
+    "flagged",
+    "continued",
+]);
 export type ResumeNoticeReason = z.infer<typeof ResumeNoticeReasonSchema>;
 
 // Every code this build writes, one per sentence shape, each with the facts that shape needs.
@@ -66,6 +81,21 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     // A turn sent thin for a small window ("16k"): what was left out, and whether the base instructions were swapped too.
     z.object({ code: z.literal("contextTrim"), params: z.object({ window: z.string(), omitted: z.string().optional(), base: z.boolean() }) }),
     z.object({ code: z.literal("resumed"), params: z.object({ reason: ResumeNoticeReasonSchema }) }),
+    // How a turn a spent allowance held continued the conversation (schemas/providers/handoff.ts): `tokens` the context
+    // it started from and `from` the one carrying the session whole would have re-read (both worded, "118k"); `cleared`
+    // older tool outputs a trimmed copy stubbed; `model` the one that wrote a summary. `fellBack` names the hand-off that
+    // was asked for and could not be built, which then went on with the record's short hand-off instead.
+    z.object({
+        code: z.literal("handedOff"),
+        params: z.object({
+            mode: z.enum(["carry", "trim", "summary"]),
+            tokens: z.string().optional(),
+            from: z.string().optional(),
+            cleared: count.optional(),
+            model: z.string().optional(),
+            fellBack: z.boolean().optional(),
+        }),
+    }),
     // An agent's own dependency install starting: into its conversation's own copy (`ownCopy`) or the main tree; the
     // workspace root (`root`) and up to three project folders named (`projects`, each with its slash, already joined),
     // and how many `more` were not named.

@@ -88,7 +88,8 @@ export const PromptCacheOpeningSchema = z.object({
 });
 export type PromptCacheOpening = z.infer<typeof PromptCacheOpeningSchema>;
 
-const tokensLabel = (tokens: number): string => (tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens));
+/** A token count as the transcript words it: "305k", or the bare count under a thousand. */
+export const tokensLabel = (tokens: number): string => (tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens));
 
 const spanLabel = (ms: number): string => {
     const minutes = Math.max(1, Math.round(ms / 60_000));

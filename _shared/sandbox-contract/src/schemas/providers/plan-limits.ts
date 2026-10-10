@@ -3,6 +3,7 @@ import { ChildRunSchema, PAGE_VALUE_MAX } from "../../events/requests.js";
 import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
 import { AgentHarnessSchema, AgentProviderSchema, ConversationIdSchema, EditorContextSchema } from "../agent.js";
 import { MENTION_LIMIT } from "../../text/mentions.js";
+import { HandoffModeSchema } from "./handoff.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
 // reads this one type.
@@ -399,8 +400,11 @@ export const ResumeRoutingSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "When the account changes, keep the provider session (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record. Ignored when the provider changes, or when nothing changes.",
+            "When the account changes, keep the provider session (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record. Ignored when the provider changes, or when nothing changes. `handoff` says the same and more; it wins where both are given.",
         ),
+    handoff: HandoffModeSchema.optional().describe(
+        "How a turn a spent allowance held continues the conversation, on this account or another: `carry` resumes the session as it is, `trim` resumes a copy with older tool output cleared, `summary` opens a fresh session with a summary. Leave it out for the one a person picked on the held turn, else the sandbox's setting (`limitHandoff`). Only a spent allowance's held turn reads it.",
+    ),
 });
 export type ResumeRouting = z.infer<typeof ResumeRoutingSchema>;
 // Returns an ordinary `StartedTurn`; the caller attaches to it like any turn someone else started. A resume note on the
@@ -477,6 +481,9 @@ export const SwitchAccountSchema = z.object({
         .describe(
             "Keep the provider session across the move (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record.",
         ),
+    handoff: HandoffModeSchema.optional().describe(
+        "How the held turn continues the conversation on the new account: `carry`, `trim` or `summary` (see `limitHandoff`). Wins over `carry`. Leave it out for the held turn's own pick, else the sandbox's setting.",
+    ),
     run: z
         .boolean()
         .optional()

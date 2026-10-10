@@ -19,6 +19,7 @@ import {
     StopResultSchema,
     StopTurnSchema,
 } from "../schemas/providers/plan-limits.js";
+import { ChooseHandoffSchema } from "../schemas/providers/handoff.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // A turn executes as a detached daemon-side run. `run` starts it, or says the message into the running turn, or queues it
@@ -154,6 +155,18 @@ export const agentContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(SwitchAccountSchema)
         .output(AccountSwitchedSchema),
+    // NOT_FOUND when no spent allowance holds a turn there, or the hand-off named is not one this turn can take.
+    chooseHandoff: procedure
+        .route({
+            method: "POST",
+            path: "/agent/handoff",
+            summary: "Choose how a held turn continues",
+            description:
+                "Records how the turn a spent allowance is holding continues the conversation once it is sent again: carry the session as it is, trim it, or summarise it. Starts nothing: a press, a booked move or the reset sends it, and each uses this pick.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(ChooseHandoffSchema)
+        .output(OkSchema),
     // CONFLICT while a turn is running; NOT_FOUND when the message has no checkpoint; PRECONDITION_FAILED when the
     // position no longer holds the message named.
     rewind: procedure

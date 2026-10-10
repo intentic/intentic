@@ -22,6 +22,7 @@
         "e2e:providers": "INTENTIC_E2E_PROVIDERS=1 suites wire.e2e",
         "bench:agents": "tsx bench/agent-bench.ts",
         "bench:guidance": "tsx bench/guidance-stats.ts",
+        "bench:handoff": "tsx bench/handoff-bench.ts",
         "bench:map": "tsx bench/map-stats.ts"
     },
     "dependencies": {

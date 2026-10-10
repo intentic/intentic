@@ -6,6 +6,8 @@ import {
     type AgentSummary,
     type AgentWatch,
     type ForkedFrom,
+    handoffAvailable,
+    type HandoffMode,
     type KeepWarmEnd,
     type LimitPolicy,
     PARK_KINDS,
@@ -157,6 +159,8 @@ export type ConversationEvent =
     // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
     // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
     | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
+    // A person picked how a spent allowance's held turn continues once it is sent again; answers whether the hold took it.
+    | { readonly kind: "handoff-chosen"; readonly handoff: HandoffMode }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
     | { readonly kind: "turn-registered" }
     // A person's words reached the live turn.
@@ -249,6 +253,7 @@ interface Replies {
     readonly "resume-superseded": HeldRecord | undefined;
     readonly "held-fired": boolean;
     readonly "held-repointed": boolean;
+    readonly "handoff-chosen": boolean;
     readonly "steer-reserved": number | undefined;
     readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
     readonly "grant-taken": { readonly always: boolean } | undefined;
@@ -639,6 +644,15 @@ const onHeldRepointed = (state: ConversationState, event: Extract<ConversationEv
     return unchanged(withResume(state, { held: repointed }), true);
 };
 
+// Only an unfired limit hold whose offer names that way on takes the pick; told to every window, whose card shows it.
+const onHandoffChosen = (state: ConversationState, event: Extract<ConversationEvent, { kind: "handoff-chosen" }>): Decision<boolean> => {
+    const { held } = state.resume;
+    if (held === undefined || held.fired || held.reason !== "limit" || held.handoff === undefined || !handoffAvailable(held.handoff, event.handoff)) {
+        return unchanged(state, false);
+    }
+    return { state: withResume(state, { held: { ...held, handoff: { ...held.handoff, chosen: event.handoff } } }), effects: BROADCAST, reply: true };
+};
+
 // Bounds runaway steering per conversation; a settling turn empties the boxes, this guards one that never does. Only
 // ever bites at the tail, so it can't shift an earlier message's position.
 const MAX_STEER_SLOTS = 200;
@@ -763,6 +777,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
             : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
+    "handoff-chosen": (state, event) => onHandoffChosen(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
     "turn-registered": (state) => unchanged({ ...state, steered: false }, undefined),

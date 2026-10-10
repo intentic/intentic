@@ -65,6 +65,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
             resume: procedureOf(`agent.resume`),
             queueResume: procedureOf(`agent.queueResume`),
             switchAccount: procedureOf(`agent.switchAccount`),
+            chooseHandoff: procedureOf(`agent.chooseHandoff`),
             rewind: procedureOf(`agent.rewind`),
         },
         agents: { place: procedureOf(`agents.place`), transcript: procedureOf(`agents.transcript`) },
@@ -2151,6 +2152,49 @@ describe(`Conversation`, () => {
         expect(turnBodies()).toHaveLength(1);
         expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
         expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+    });
+
+    // A spent allowance that leaves a choice of hand-offs: the card preselects the sandbox's suggestion, a pick is saved on
+    // the hold at once, and the press names it too, so a pick whose save is still in flight is not lost.
+    it(`saves a hand-off picked on the card and sends it with the press`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.registered.value = true;
+        const handoff = { suggested: `trim`, basis: `size`, carry: { tokens: 430_000 }, trim: { tokens: 110_000, cleared: 180 } } as const;
+        daemon.mockImplementation(
+            turnDaemon([
+                { kind: `session`, sessionId: `s-1`, account: `spent` },
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, account: `spent`, held: { ran: true, contextTokens: 430_000, handoff } },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.turn.send(`ship the parser`, settings);
+        expect(conversation.pickUp.value?.held?.handoff).toEqual(handoff);
+
+        daemon.mockImplementation((procedure) => (procedure === `agent.chooseHandoff` ? Promise.resolve({ ok: true }) : Promise.reject(new Error(`unexpected ${procedure}`))));
+        await expect(conversation.turn.chooseHandoff(`carry`)).resolves.toBe(true);
+        expect(conversation.pickUp.value?.held?.handoff?.chosen).toBe(`carry`);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.chooseHandoff`).map(([, input]) => wire(input))).toEqual([
+            { conversationId: `c1`, handoff: `carry` },
+        ]);
+
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+                head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.limit), startedAt: Date.now() }),
+            }),
+        );
+        await conversation.turn.continueTurn();
+        const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
+        expect(wire(press[1])).toMatchObject({ conversationId: `c1`, routing: { handoff: `carry` } });
+    });
+
+    it(`snaps a refused hand-off pick back and says why`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.registered.value = true;
+        conversation.pickUp.value = { reason: `limit`, held: { ran: true, handoff: { suggested: `trim`, basis: `size`, carry: {}, trim: { tokens: 1, cleared: 1 } } } };
+        daemon.mockImplementation(() => Promise.reject(daemonRefusal(404, `no turn a spent allowance holds there can continue that way`)));
+        await expect(conversation.turn.chooseHandoff(`carry`)).resolves.toBe(false);
+        expect(conversation.pickUp.value?.held?.handoff?.chosen).toBeUndefined();
+        expect(conversation.error.value).toBe(`no turn a spent allowance holds there can continue that way`);
     });
 
     // The reported case: the turn waited on a question, the person picked another account, answered, and the turn went

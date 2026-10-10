@@ -11,6 +11,7 @@ import {
     type SnapshotTurn,
     type TranscriptRow,
     type TurnNote,
+    type HandedOff,
     mentionPaths,
     noticeCode,
     withRuntimeDefaults,
@@ -49,6 +50,7 @@ import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
+import { summaryNote, trimmedTurn } from "../providers/limit-handoff.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { planTurn, type TurnPlan } from "./turn/turn-plan.js";
@@ -350,6 +352,15 @@ const preflightClock = (): { readonly mark: (stage: string) => void; readonly re
 const supersedeHeld = (services: Pick<Services, "conversations">, conversationId: string | undefined): HeldTurn | undefined =>
     conversationId === undefined ? undefined : services.conversations.send(conversationId, { kind: "resume-superseded" }).reply;
 
+const HANDOFF_STATUS = "handoff";
+
+// A held turn a person could have trimmed or summarised, carried whole instead: said too, with what it re-reads, so the
+// transcript names every way a choice went and not only the cheaper ones.
+const carriedHandoff = (input: RoutedTurn, held: HeldTurn | undefined): HandedOff | undefined =>
+    held?.handoff === undefined || (input.resume !== "limit" && input.resume !== "carried")
+        ? undefined
+        : { mode: "carry", ...opt("tokens", held.contextTokens) };
+
 // What a fresh session is told beside the transcript: the tree, the proof, the checklist — only for a turn seeded from
 // the record.
 const handoffNoteFor = async (
@@ -573,7 +584,10 @@ interface Preflight {
     readonly isolation: TurnPlacement | undefined;
     readonly effectiveCwd: string;
     readonly frames: TurnFrames;
-    readonly handoffNote: TurnNote | undefined;
+    // What a fresh session is told beside the record: a summary, where the hand-off asked for one, then the measured state.
+    readonly handoffNotes: readonly TurnNote[];
+    // How a spent allowance's held turn continued, where a person had a choice of ways (agent/providers/limit-handoff.ts).
+    readonly handedOff: HandedOff | undefined;
     readonly repoSync: Promise<RepoSync[]> | undefined;
 }
 
@@ -613,14 +627,22 @@ const preflight = async (
                   services.logger.warn({ err: error }, "repo sync failed");
                   return [];
               });
+    // A trimmed hand-off resumes a copy of the session with older tool output cleared, written before the store is asked.
+    const trimmed = input.resume === "trimmed" ? await trimmedTurn(services, input, held) : undefined;
+    const turnInput = trimmed?.turn ?? input;
     // Asks the runtime's store whether it still holds the named session: a session id is a claim, not a fact.
-    const resumed = await sessionToResume(services, input, execution);
-    const history = await handoffOf(services, input, resumed);
+    const resumed = await sessionToResume(services, turnInput, execution);
+    const history = await handoffOf(services, turnInput, resumed);
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
+    const summarized =
+        input.resume === "summarized" && history.length > 0 && input.conversationId !== undefined
+            ? await summaryNote(services, execution, { conversationId: input.conversationId, rows: history, contextTokens: held?.contextTokens, signal })
+            : undefined;
+    const handedOff = trimmed?.event ?? summarized?.event ?? carriedHandoff(input, held);
     clock.mark("history");
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
-    const base = baseRequestOf(services, input, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
+    const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
     const context = {
         base,
@@ -633,7 +655,8 @@ const preflight = async (
         ...opt("resync", worktree?.resync),
         ...opt("children", childrenOf(services, input, localCwd)),
     };
-    return { context, isolation, effectiveCwd, frames, handoffNote, repoSync };
+    const handoffNotes = [...(summarized?.note === undefined ? [] : [summarized.note]), ...(handoffNote === undefined ? [] : [handoffNote])];
+    return { context, isolation, effectiveCwd, frames, handoffNotes, handedOff, repoSync };
 };
 
 // A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
@@ -696,12 +719,12 @@ type PlannedTurn = Extract<TurnPlan, { readonly ok: true }>;
 const wireOf = (
     plan: PlannedTurn,
     advisory: string | undefined,
-    handoffNote: TurnNote | undefined,
+    handoffNotes: readonly TurnNote[],
 ): { readonly request: AgentRequest; readonly notes: TurnNote[]; readonly trim: ContextTrim | undefined } => {
     const planned = plan.request.spec;
     const spec: TurnSpec =
         advisory === undefined ? planned : { ...planned, notes: [{ title: REPO_SYNC_NOTE_TITLE, text: advisory }, ...(planned.notes ?? [])] };
-    const { notes, trim } = sentNotes([...(spec.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])], plan.briefing, plan.contextTrim);
+    const { notes, trim } = sentNotes([...(spec.notes ?? []), ...handoffNotes], plan.briefing, plan.contextTrim);
     return { request: { ...plan.request, spec: { ...spec, prompt: composeWirePrompt(notes, spec.prompt) } }, notes, trim };
 };
 
@@ -747,11 +770,22 @@ async function* prepareTurn(
     turn: SnapshotTurn | undefined,
 ): AsyncGenerator<AgentEvent, PreparedTurn | undefined> {
     const clock = preflightClock();
+    // A summary hand-off asks a model before the turn's own does, which takes a while on a long conversation: said.
+    const summarizing = input.resume === "summarized";
+    if (summarizing) {
+        yield { kind: "agent_status", key: HANDOFF_STATUS, text: "Writing a summary of the conversation for the hand-off…" };
+    }
     const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock);
+    if (summarizing) {
+        yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
+    }
     if ("refused" in ready) {
         yield { kind: "error", message: ready.refused };
         yield { kind: "done" };
         return undefined;
+    }
+    if (ready.handedOff !== undefined) {
+        yield { kind: "handoff", ...ready.handedOff };
     }
     const plan = await planTurn(services, input, ready.context);
     if (!plan.ok) {
@@ -764,7 +798,7 @@ async function* prepareTurn(
     // Fast-forwards repos with a remote before the agent reads them; pulled files count as user-authored.
     const advisory = ready.repoSync === undefined ? undefined : syncAdvisory(await ready.repoSync);
     clock.mark("repoSync");
-    const wire = wireOf(plan, advisory, ready.handoffNote);
+    const wire = wireOf(plan, advisory, ready.handoffNotes);
     yield* preambleDisclosure(wire.notes, wire.trim);
     recordSystemPrompt(services, input, wire.request);
     // An isolated turn takes no history capture: history covers only the main tree, which it never touches.

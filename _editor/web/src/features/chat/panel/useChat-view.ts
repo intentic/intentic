@@ -6,6 +6,7 @@ import type {
     OauthAccount,
     PermissionMode,
     QueuedMessage,
+    HandoffMode,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
@@ -15,6 +16,7 @@ import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { providerCommands } from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
+import type { ContinueOptions } from "../run/pickUp";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../session/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
@@ -91,7 +93,9 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     continuation: ((newest) => computed(() => continuationFor(conversation.value.transcript.messages.value, newest)))(newestOf(newestPermission)),
     // The press itself: continuing re-runs a held turn or has the daemon carry the session on, a choice that reads state
     // (`TurnClient.continueTurn`) no view should ask about directly. Neither sends a message, so neither counts as one.
-    continueTurn: (options?: { readonly carry?: boolean }): Promise<void> => conversation.value.turn.continueTurn(options),
+    continueTurn: (options?: ContinueOptions): Promise<void> => conversation.value.turn.continueTurn(options),
+    // How a spent allowance's held turn continues once sent again: the card's hand-off pick (handoffChoice.ts).
+    chooseHandoff: (handoff: HandoffMode): Promise<boolean> => conversation.value.turn.chooseHandoff(handoff),
     // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
     // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
     // cannot disagree with the same switch on the board.

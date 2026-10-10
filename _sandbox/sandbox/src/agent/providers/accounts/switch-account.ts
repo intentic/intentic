@@ -47,7 +47,9 @@ export const switchAccount = async (
     input: SwitchAccount,
     now: number = Date.now(),
 ): Promise<AccountSwitch> => {
-    const { conversationId, account, carry, run: rerun } = input;
+    const { conversationId, account, run: rerun, handoff } = input;
+    // A trimmed copy is cut from the session as well, so it is kept whenever the hand-off carries or trims it.
+    const carry = handoff === undefined ? input.carry === true : handoff === "carry" || handoff === "trim";
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return { kind: "unknown" };
@@ -59,7 +61,7 @@ export const switchAccount = async (
     const held = rerun === true ? state?.resume.held : undefined;
     if (held !== undefined) {
         const { agent, harness } = withRuntimeDefaults(held.input);
-        const routing = { agent, harness, account, ...(carry === true ? { carry } : {}) };
+        const routing = { agent, harness, account, ...(carry ? { carry } : {}), ...(handoff === undefined ? {} : { handoff }) };
         // A person's press: a conversation archived since the turn was held reopens, as their words would reopen it.
         await services.agents.clearArchived([conversationId]);
         const run = await services.turns.resume(conversationId, routing);
@@ -79,12 +81,16 @@ export const switchAccount = async (
         services.conversations.send(conversationId, {
             kind: "held-repointed",
             account,
-            carry: carry === true,
+            carry,
             ...(reopening.reopensAt === undefined ? {} : { reopensAt: reopening.reopensAt }),
         });
+        // A way on named with the pick is the person's pick for the booked re-run too.
+        if (handoff !== undefined) {
+            services.conversations.send(conversationId, { kind: "handoff-chosen", handoff });
+        }
         await services.agents.switchAccount(conversationId, account, reopening.shown === undefined ? {} : { resetsAt: reopening.shown });
     }
-    if (entry.profile.account !== account && carry !== true) {
+    if (entry.profile.account !== account && !carry) {
         await services.conversations.send(conversationId, { kind: "session-cleared" }).settled;
     }
     return { kind: "moved" };

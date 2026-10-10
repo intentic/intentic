@@ -711,6 +711,8 @@ const RERUN_WHY = {
     limit: "its allowance reopened",
     switched: "its allowance ran out and it moved to another account",
     carried: "its allowance ran out and it moved to another account",
+    trimmed: "its allowance ran out and it went on in a trimmed copy of its session",
+    summarized: "its allowance ran out and it went on in a fresh session opened with a summary",
     refused: "its allowance refused the last attempt before anything ran",
     door: "its last attempt was turned away before anything ran",
     overflow: "its session outgrew the model's window",

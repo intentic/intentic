@@ -2303,7 +2303,10 @@
             "retryOn": "Retry on {model}",
             "retryTitle": "Same model",
             "weeklyUntouched": "Weekly allowance untouched",
-            "answerNotSaved": "That answer didn't save."
+            "answerNotSaved": "That answer didn't save.",
+            "trimStarts": "Trimmed copy starts from",
+            "summaryStarts": "Fresh session starts from",
+            "continueOnWith": "Continue on {fallback}"
         },
         "chatDocumentBody": {
             "clipped": "clipped"
@@ -2418,7 +2421,9 @@
                 "door": "Sent again: the first attempt was turned away before anything ran.",
                 "overflow": "Sent again in a fresh session after the last one outgrew the model's context window.",
                 "flagged": "Sent again after the model's safeguards stopped it, without the stopped response.",
-                "continued": "Carried on from where the last turn stopped."
+                "continued": "Carried on from where the last turn stopped.",
+                "trimmed": "Sent again after the allowance ran out, in a copy of the session with older tool output cleared.",
+                "summarized": "Sent again after the allowance ran out, in a fresh session opened with a summary of the conversation."
             },
             "watchWake": {
                 "met": "{note} — the watch fired after {elapsed}.",
@@ -2467,7 +2472,18 @@
             "installingMain": "Installing packages in the main tree, one install at a time.",
             "installingMainIn": "Installing packages in {where} in the main tree, one install at a time.",
             "installRoot": "the workspace root",
-            "installMore": "{named} and {more} more"
+            "installMore": "{named} and {more} more",
+            "handedOff": {
+                "carry": "Continued in the same session, re-reading all of it.",
+                "carrySized": "Continued in the same session, re-reading all of it (about {tokens} tokens).",
+                "trim": "Continued in a trimmed copy of the session: {cleared} older tool output cleared, every message and tool call kept. | Continued in a trimmed copy of the session: {cleared} older tool outputs cleared, every message and tool call kept.",
+                "trimSized": "Continued in a trimmed copy of the session (about {tokens} tokens): {cleared} older tool output cleared, every message and tool call kept. | Continued in a trimmed copy of the session (about {tokens} tokens): {cleared} older tool outputs cleared, every message and tool call kept.",
+                "trimFrom": "Continued in a trimmed copy of the session (about {tokens} tokens instead of {from}): {cleared} older tool output cleared, every message and tool call kept. | Continued in a trimmed copy of the session (about {tokens} tokens instead of {from}): {cleared} older tool outputs cleared, every message and tool call kept.",
+                "summary": "Continued in a fresh session opened with a summary of the conversation.",
+                "summaryBy": "Continued in a fresh session opened with a summary of the conversation written by {model}.",
+                "trimFellBack": "Could not trim the session for the hand-off, so it was carried whole.",
+                "summaryFellBack": "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead."
+            }
         },
         "providerFailure": {
             "flaggedMessage": "{model}'s safeguards flagged this message.",
@@ -3648,6 +3664,27 @@
             "agentTold": "the agent heard it",
             "askFix": "Ask to fix",
             "fixRequest": "The page \"{title}\" (id \"{id}\") threw in my chat:\n{errors}\n\nFix it and show it again with replaces: \"{id}\"."
+        },
+        "handoffChoice": {
+            "label": "Hand-off",
+            "question": "How the conversation continues once the cache is cold",
+            "carry": "Carry everything",
+            "carryBrief": "Resumes this session as it is",
+            "carryWhat": "Keeps everything, and re-reads ~{tokens} tokens on every call of the next turn.",
+            "carryWhatUnmeasured": "Keeps everything, and re-reads all of it on every call of the next turn.",
+            "trim": "Trim old output",
+            "trimBrief": "Resumes a copy with older tool output cleared",
+            "trimWhat": "Keeps every message and tool call, clears {cleared} older tool outputs: ~{tokens} tokens instead of ~{from}.",
+            "trimWhatUnmeasured": "Keeps every message and tool call, clears {cleared} older tool outputs: ~{tokens} tokens.",
+            "summary": "Summary",
+            "summaryBrief": "Opens a fresh session from a summary",
+            "summaryWhat": "A fresh session opened with a summary of the conversation, the latest exchanges and where the work stands: ~{tokens} tokens, after the summary model reads ~{reads} once. Detail the summary leaves out is gone.",
+            "summaryWhatUnread": "A fresh session opened with a summary of the conversation, the latest exchanges and where the work stands: ~{tokens} tokens. Detail the summary leaves out is gone.",
+            "suggested": "Suggested",
+            "suggestedForSize": "Suggested for a conversation this size.",
+            "suggestedWas": "Suggested: {way}.",
+            "yourDefault": "Your default in Settings.",
+            "notSaved": "That hand-off didn't save."
         }
     },
     "common": {
@@ -4746,9 +4783,7 @@
             "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one."
         },
         "agentRecovery": {
-            "carrySessionContextUnder": "Carry the session when its context is under",
             "consecutiveFailuresBeforeAutomation": "Consecutive failures before an automation is disabled",
-            "contextSizeInTokens": "Context size, in tokens, under which a moved turn keeps its session",
             "disableAutomationAfterConsecutive": "Disable an automation after consecutive failures (0 never disables).",
             "limitPolicyNote": "What happens to a turn a spent usage limit refused. The default for every conversation; a chat's own control answers for that chat alone.",
             "outagePolicyNote": "What happens to a turn the model provider's own failure killed (500, capacity, a dropped connection).",
@@ -4756,7 +4791,6 @@
             "resumeTurnsAfterRestart": "Resume turns after a restart",
             "stopFailingAutomation": "Stop a failing automation",
             "stopPolicyNote": "What happens to a turn that stopped short with nothing to repair: a hung runtime, a crashed harness.",
-            "tokensUnderMoveKeeps": "Tokens. Under this a move keeps the session (re-reads it once, cold); at or above it a fresh session starts from the measured brief. 0 always starts fresh.",
             "turnBreaks": "When a turn breaks",
             "keepWarmGroup": "Idle chats",
             "keepWarm": "Keep caches warm after a turn",
@@ -4770,7 +4804,15 @@
             "keepWarmReserve": "Leave this much allowance free",
             "keepWarmReserveNote": "Refreshing stops once any limit the account's model spends is fuller than 100% minus this.",
             "keepWarmReserveLabel": "Allowance kept free, in percent",
-            "memoryPolicyNote": "What happens to a message the sandbox held because its memory was low. Nothing ran, so sending it once memory frees up spends nothing twice."
+            "memoryPolicyNote": "What happens to a message the sandbox held because its memory was low. Nothing ran, so sending it once memory frees up spends nothing twice.",
+            "handoff": "Hand-off after a usage limit",
+            "handoffNote": "How a turn a spent usage limit held continues once its cache has gone cold, on this account at the reset or on another. The chat's card preselects this and lets you pick another for that turn.",
+            "handoffSuggested": "Suggested",
+            "handoffSuggestedBrief": "Picks by the conversation's size",
+            "carryUnder": "Suggest carrying under",
+            "carryUnderNote": "Tokens. Under this the whole session is carried (trimming saves little); at or above it a trimmed copy is suggested. 0 never suggests carrying.",
+            "summaryOver": "Suggest a summary from",
+            "summaryOverNote": "Tokens. At or above this a summary is suggested, where a model is set for hand-off summaries in Models; a trimmed copy still holds every message and tool call, which gets large."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Couldn't read what the repositories declare.",
@@ -7803,6 +7845,10 @@
             "sessionTitle": {
                 "blurb": "The name a conversation wears on the board, written a second into its first turn.",
                 "label": "Session titles"
+            },
+            "handoffSummary": {
+                "label": "Hand-off summaries",
+                "blurb": "The summary a fresh session opens with when you choose to summarise a long conversation that hit a usage limit, instead of re-reading it all."
             }
         },
         "personaBounds": {

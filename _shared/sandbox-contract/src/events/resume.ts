@@ -17,6 +17,10 @@ export const RESUME_NOTES = {
     limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
     switched:
         "The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account, which starts a fresh session. The conversation so far has been carried across above, including the part of the request that was already completed, and the sandbox has measured where the work actually stands (the files changed on this branch, what was verified, what the checklist still holds) in the note headed 'Where the work stands': trust that note over anything recalled, then continue from that point instead of starting over.",
+    // The two cold-cache hand-offs a person can pick (schemas/providers/handoff.ts) besides carrying the session whole.
+    trimmed: `The model provider's usage allowance ran out while this conversation was running, and this turn has been sent again in a copy of the same session, to save re-reading it: every message and tool call is still here, but the output of older tool calls has been cleared (each says so where it was). Run a command or read a file again if you need what it returned. ${REPEATED}`,
+    summarized:
+        "The model provider's usage allowance ran out while this conversation was running, and this turn has been sent again in a fresh session, to save re-reading the old one. A summary of the conversation so far is in the note headed 'Summary of the conversation so far', the most recent part of it is carried across above, and the sandbox has measured where the work actually stands in the note headed 'Where the work stands': trust that note over the summary where they differ, then continue from that point instead of starting over.",
     // `carried` switches account but keeps the session, so REPEATED stays true here, unlike `switched`.
     carried: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account of the same provider, in this same session: everything you knew is still here. ${REPEATED}`,
     refused:
@@ -75,6 +79,8 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     limit: notice("limit", "Sent again after the allowance ran out mid-turn, picking up where it left off."),
     switched: notice("switched", "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session."),
     carried: notice("carried", "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it."),
+    trimmed: notice("trimmed", "Sent again after the allowance ran out, in a copy of the session with older tool output cleared."),
+    summarized: notice("summarized", "Sent again after the allowance ran out, in a fresh session opened with a summary of the conversation."),
     refused: notice("refused", "Sent again after the allowance refused it: nothing had run."),
     door: notice("door", "Sent again: the first attempt was turned away before anything ran."),
     overflow: notice("overflow", "Sent again in a fresh session after the last one outgrew the model's context window."),

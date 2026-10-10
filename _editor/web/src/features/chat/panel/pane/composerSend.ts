@@ -23,7 +23,7 @@ import type { InputHistory } from "../../drafts/inputHistory";
 import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/pickUp";
+import { type ContinueOptions, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/pickUp";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { track } from "../../../../app/analytics";
@@ -227,7 +227,7 @@ export const useComposerSend = (host: SendHost) => {
 
     // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on), so nothing
     // joins the recall ring.
-    const continueTurn = (options?: { readonly carry?: boolean }): void => {
+    const continueTurn = (options?: ContinueOptions): void => {
         if (!host.reachable.value) {
             return;
         }

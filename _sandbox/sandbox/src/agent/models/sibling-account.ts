@@ -30,6 +30,8 @@ export const bookLimitMove = async (
         readonly ran: boolean;
         readonly contextTokens: number | undefined;
         readonly carryRefused?: boolean | undefined;
+        // The hand-off already worked out for this hold (limit-handoff.ts): whether its way on carries the session.
+        readonly carry?: boolean | undefined;
     },
 ): Promise<{ readonly account: string; readonly carry: boolean } | undefined> => {
     if ((await breakPolicyFor(services, params.conversationId, "limit")) !== "move") {
@@ -40,6 +42,9 @@ export const bookLimitMove = async (
         return undefined;
     }
     const { limitMoveCarryUnder } = await services.sandboxSettings.get();
-    const carry = params.ran && params.carryRefused !== true && params.contextTokens !== undefined && params.contextTokens < limitMoveCarryUnder;
+    const carry =
+        params.ran &&
+        params.carryRefused !== true &&
+        (params.carry ?? (params.contextTokens !== undefined && params.contextTokens < limitMoveCarryUnder));
     return { account, carry };
 };

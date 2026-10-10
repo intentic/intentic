@@ -12,6 +12,8 @@ import {
     RESUME_NOTES,
     type ResumeReason,
     type ResumeRouting,
+    type HandoffMode,
+    type HandoffOffer,
     RETRY_LADDER_TRIES,
     retryLadderDelay,
     type TodoItem,
@@ -82,6 +84,9 @@ export interface HeldTurn {
     readonly onto?: { readonly account: string; readonly carry: boolean } | undefined;
     // Set when the other account refuses the carried session, so the retry opens fresh instead of replaying it.
     readonly carryRefused?: boolean | undefined;
+    // The ways a spent allowance's held turn can continue once its cache is cold, measured at the failure, with the one
+    // the sandbox suggests and the one a person picked (agent/providers/limit-handoff.ts). Absent: one way on, as before.
+    readonly handoff?: HandoffOffer | undefined;
     // An auth hold's credential: the account to re-mint, and the refused token the rotation must supersede, not replay.
     readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
     // A flagged hold's session entry before the stopped response (refusal-fork.ts): the re-run resumes there, so the
@@ -139,8 +144,47 @@ interface RerunNote {
     readonly restate?: true;
 }
 
+// The ways on a spent allowance's held turn can take where it is going: carrying or trimming the session needs the turn
+// to have run, its session not refused, and the press to keep its runtime; a summary goes anywhere.
+const handoffCan = (held: HeldTurn, routing: ResumeRouting | undefined, offer: HandoffOffer, mode: HandoffMode): boolean => {
+    if (offer[mode] === undefined) {
+        return false;
+    }
+    return mode === "summary" || (held.ran && held.carryRefused !== true && (routing === undefined || sameRuntime(held.input, routing)));
+};
+
+// Which way a held turn the owner had a choice for continues: the press's own word, else the person's pick on the card,
+// else an older editor's `carry`, else the suggestion the card showed. A way the destination cannot take (another
+// provider holds no session) falls to a summary, then a trim, then carrying, whichever the offer has. Undefined for a
+// hold with no offer, which goes on as it always has.
+export const handoffFor = (held: HeldTurn, routing: ResumeRouting | undefined): HandoffMode | undefined => {
+    const offer = held.reason === "limit" ? held.handoff : undefined;
+    if (offer === undefined) {
+        return undefined;
+    }
+    const asked = routing?.handoff ?? offer.chosen ?? (routing?.carry === true ? "carry" : undefined) ?? offer.suggested;
+    const can = (mode: HandoffMode): boolean => handoffCan(held, routing, offer, mode);
+    return can(asked) ? asked : (["summary", "trim", "carry"] as const).find(can);
+};
+
+const handoffNote = (held: HeldTurn, routing: ResumeRouting | undefined, mode: HandoffMode): RerunNote => {
+    switch (mode) {
+        case "carry":
+            return { reason: movesAccount(held.input, routing) ? "carried" : "limit", restate: true };
+        case "trim":
+            return { reason: "trimmed", restate: true };
+        case "summary":
+            return { reason: "summarized", fresh: true, restate: true };
+    }
+};
+
 // Keeps the session when the turn ran and nothing retires it; fresh otherwise, `switched` if it ran and `refused` if not.
+// A spent allowance's hold with a choice of ways on takes the one handoffFor names.
 const wallNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote => {
+    const handoff = handoffFor(held, routing);
+    if (handoff !== undefined) {
+        return handoffNote(held, routing, handoff);
+    }
     if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
         return { reason: held.reason === "stopped" ? "stopped" : movesAccount(held.input, routing) ? "carried" : "limit", restate: true };
     }

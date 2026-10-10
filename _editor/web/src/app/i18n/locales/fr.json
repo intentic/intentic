@@ -2260,14 +2260,11 @@
             "whatYoudTellSomebody": "Ce que vous diriez à quelqu'un qui choisit le modèle d'un nouveau chat : quel travail peut partir au moins cher, quel compte ménager, quand prendre le plus puissant."
         },
         "agentRecovery": {
-            "carrySessionContextUnder": "Emporter la session quand son contexte est sous",
             "consecutiveFailuresBeforeAutomation": "Échecs consécutifs avant qu'une automatisation ne soit désactivée",
-            "contextSizeInTokens": "Taille de contexte, en jetons, sous laquelle un tour déplacé garde sa session",
             "disableAutomationAfterConsecutive": "Désactiver une automatisation après des échecs consécutifs (0 ne désactive jamais).",
             "pickUpInFlight": "Reprendre les tours en vol quand le sandbox redémarre.",
             "resumeTurnsAfterRestart": "Reprendre les tours après un redémarrage",
             "stopFailingAutomation": "Arrêter une automatisation qui échoue",
-            "tokensUnderMoveKeeps": "Jetons. En dessous, un déplacement garde la session (la relit une fois, à froid) ; à partir de là une nouvelle session démarre depuis le brief mesuré. 0 repart toujours de zéro.",
             "turnBreaks": "Quand un tour casse",
             "keepWarmGroup": "Chats inactifs",
             "keepWarm": "Garder les caches chauds après un tour",

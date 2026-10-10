@@ -10,6 +10,7 @@ import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/ke
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
+import { HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
@@ -56,6 +57,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The other half of `preamble`: what a window too small for a full turn left OUT. A note that never rode has no
     // message to be drawn beside, so this is the only place the reader can learn the turn ran thin.
     ContextTrimSchema.extend({ kind: z.literal("context_trim") }),
+    // How a turn a spent allowance held continued the conversation: the whole session, a trimmed copy, or a summary.
+    HandedOffSchema.extend({ kind: z.literal("handoff") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     // `prompt` names the parts the cache is keyed on, so a later turn can say which of them changed.
     z.object({ kind: z.literal("init"), model: z.string(), prompt: PromptFingerprintSchema.optional() }),
@@ -361,6 +364,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // Set when the owner's policy is already moving this turn to the named account, instead of offering a
                 // press.
                 moving: z.string().optional(),
+                // The ways this turn can continue once its cache is cold, the one the sandbox suggests, and the one a
+                // person picked (schemas/providers/handoff.ts). Absent where there is nothing to carry.
+                handoff: HandoffOfferSchema.optional(),
             })
             .optional(),
         // provider-outage only, while the breaker has tries left: epoch seconds its backoff next lets one through.
