@@ -108,6 +108,8 @@ export interface DeviceSandboxRow {
     keptElsewhereName?: string | undefined;
     // This side took it over because the keeping side's agent went quiet (ic's keeper heartbeat).
     adoptedFrom?: string | undefined;
+    // The machine's keeper put it to sleep for want of use; it starts again when somebody opens it.
+    asleep?: boolean | undefined;
 }
 
 /**
@@ -607,6 +609,13 @@ export const cardStatus = (group: DeviceSandboxGroup, busy: boolean): CardStatus
             variant: `warning`,
             label: t(`ui.deviceDetail.interruptedTitle`),
             hint: { title: t(`ui.deviceDetail.interruptedTitle`), note: t(`ui.deviceDetail.startPutsItBack`) },
+        };
+    }
+    if (group.sandbox?.asleep === true) {
+        return {
+            variant: `neutral`,
+            label: t(`ui.deviceDetail.asleep`),
+            hint: { title: t(`ui.deviceDetail.asleepTitle`), note: t(`ui.deviceDetail.asleepNote`) },
         };
     }
     return { variant: `neutral`, label: t(`ui.deviceDetail.stopped`), hint: t(`ui.deviceDetail.stopped`) };

@@ -25,6 +25,7 @@ pub mod remove;
 pub mod restore;
 pub mod resume;
 pub mod side;
+pub mod sleep;
 pub mod staged;
 pub mod storage;
 pub mod tidy;
@@ -158,10 +159,24 @@ pub fn list() -> Result<()> {
         return Ok(());
     }
     for slug in slugs {
-        println!("{:<9} {slug}", container_status(&slug));
+        let asleep = crate::record::read(&slug).is_ok_and(|record| record.asleep);
+        println!(
+            "{:<9} {slug}",
+            shown_status(&container_status(&slug), asleep)
+        );
     }
     print_recoverable();
     Ok(())
+}
+
+/// The state a listing row shows: docker's word, or `asleep` for a sandbox the keeper put to sleep that is still down
+/// (sleep.rs), which "exited" would make read as broken. Pure.
+fn shown_status(status: &str, asleep: bool) -> &str {
+    if asleep && status != "running" && status != "restarting" {
+        "asleep"
+    } else {
+        status
+    }
 }
 
 /// The trash, under the live listing rather than in it: these are not sandboxes you can open, only ones you can
@@ -206,6 +221,13 @@ mod tests {
             shared["names"]["tunnelContainer"],
             format!("{TUNNEL_PREFIX}{slug}")
         );
+    }
+
+    #[test]
+    fn a_sandbox_asleep_is_listed_as_asleep_and_one_running_as_running() {
+        assert_eq!(shown_status("exited", true), "asleep");
+        assert_eq!(shown_status("exited", false), "exited");
+        assert_eq!(shown_status("running", true), "running");
     }
 
     fn names(list: &[&str]) -> Vec<String> {

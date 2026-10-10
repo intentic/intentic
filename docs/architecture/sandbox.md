@@ -308,7 +308,14 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   containers and dangling images of the agents' dockerd, daily, only when it already runs.
 - **The host sees a restart storm too.** `/run/intentic/work.json` keeps `liveTurns` (since 2026-10-05 everything a restart would cut: turns, lands, running subagents, workflow steps; [`working-now.ts`](../../_sandbox/sandbox/src/bootstrap/working-now.ts)) and `at`, and adds `bootedAt`,
   `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt` (when the restart this boot follows was asked
-  for) ([`work-signal.ts`](../../_sandbox/sandbox/src/workload/work-signal.ts)).
+  for) ([`work-signal.ts`](../../_sandbox/sandbox/src/workload/work-signal.ts)). Since 2026-10-10 it also carries
+  `quietSince` (when the current stretch with nobody connected, nothing in flight, no typing and no open connection to a
+  workspace app began; absent while busy) and `nextWakeAt` (the soonest promised one-time wake), which the computer's
+  keeper puts an unused local sandbox to sleep on ([`quiet-watch.ts`](../../_sandbox/sandbox/src/system/quiet-watch.ts)).
+- **Unused helpers rest.** The code-search engine's process exits after 10 minutes nobody searched and comes back on
+  the next search; the workspace's autostarted apps stop after 15 minutes with no editor connected, no preview visit and
+  no open connection, and start again when somebody connects or visits one
+  ([`app-rest.ts`](../../_sandbox/sandbox/src/scaffold/app-rest.ts)).
 - **Children do not inherit netd's sockets.** Once the netd door has dialled them, `INTENTIC_NETD_SOCKET` and
   `INTENTIC_NODE_SOCKET` leave the daemon's environment and the tmux server's, so no agent shell can start a second
   Node that takes them over.

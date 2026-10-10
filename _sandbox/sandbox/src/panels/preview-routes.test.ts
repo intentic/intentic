@@ -137,6 +137,25 @@ describe("the pages netd writes as rendered", () => {
         expect(stray.headers["access-control-allow-origin"]).toBeUndefined();
     });
 
+    test("a visit that wakes a rested app says it is starting and reloads itself; a probe wakes nothing", async () => {
+        const visited: string[] = [];
+        const port: PreviewDeps = {
+            ...deps(),
+            visit: (panel) => {
+                visited.push(panel);
+                return panel === "rested";
+            },
+        };
+        const woken = await rendered(port, "preview-rested.example.com");
+        expect(woken.status).toBe(502);
+        expect(woken.body).toContain("was resting while nobody used it");
+        expect(woken.body).toContain(`http-equiv="refresh"`);
+        // A stopped panel nothing rested is still the sidebar's to start.
+        expect((await rendered(port, "preview-other.example.com")).body).toContain(`panel "other" is not running`);
+        await rendered(port, "preview-rested.example.com", PREVIEW_PROBE_PATH);
+        expect(visited).toEqual(["rested", "other"]);
+    });
+
     test("the probe of a serving panel is its report, never a relay to the panel", async () => {
         const panelOf = panelsOf({ app: { state: "serving", port: 4000, assigned: true } });
         expect((await previewRoute("preview-app.example.com", true, deps({ panelOf }))).to).toBe("page");

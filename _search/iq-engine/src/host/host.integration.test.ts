@@ -159,3 +159,43 @@ test("a ceiling nothing reaches never fires", async () => {
         await roomy.close();
     }
 });
+
+test("an idle child is let go, a file change does not wake it, and the next search does", async () => {
+    const reported: Error[] = [];
+    const rested: { pid: number; idleMs: number }[] = [];
+    const idle = createEngineClient({ root, idleExitMs: 50, onIdleExit: (info) => rested.push(info), onQueryError: (error) => reported.push(error) });
+    try {
+        await idle.warm();
+        const first = idle.pid();
+        await waitFor(() => expect(idle.pid()).toBeUndefined(), { timeout: 10_000 });
+        expect(rested[0]?.pid).toBe(first);
+        expect(rested[0]?.idleMs).toBeGreaterThanOrEqual(50);
+        // The index on disk is still what it was: metrics keep the count, only the worker is gone.
+        expect(idle.metrics().files).toBeGreaterThan(0);
+        expect(idle.metrics().queryWorker.live).toBe(false);
+
+        idle.markDirty();
+        idle.invalidateHealth();
+        expect(idle.pid()).toBeUndefined();
+
+        const outcome = await idle.run(request({ verb: "files", query: "widget" }));
+        expect(outcome.result.groups[0]?.path).toBe("alpha/src/widget.ts");
+        expect(idle.pid()).toBeGreaterThan(0);
+        expect(idle.pid()).not.toBe(first);
+        // A rest is a decision, not a degraded search.
+        expect(reported).toEqual([]);
+    } finally {
+        await idle.close();
+    }
+});
+
+test("an ask restarts the idle window", async () => {
+    const busy = createEngineClient({ root });
+    try {
+        await busy.run(request({ verb: "files", query: "widget" }));
+        expect(busy.restIfIdle(60_000)).toBe(false);
+        expect(busy.pid()).toBeGreaterThan(0);
+    } finally {
+        await busy.close();
+    }
+});

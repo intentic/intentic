@@ -154,6 +154,14 @@ flowchart LR
   carry `env` (the WSL distro) and `upkeep` (the machine's upkeep counts), both optional. (2026-10-05) There was one
   slot, so a PC's Windows and WSL agents overwrote each other, and the throttle read one's report as the other's
   repeat.
+- (2026-10-10) A sandbox on its owner's own machine can sleep: the machine's keeper stops one nobody has needed for a
+  while (`ic sandbox sleep --idle`) and says so in a report carrying `asleep: true`. Waking it goes through the
+  platform without the platform calling the machine. `sandbox.wake` on a sandbox intentic does not host stamps
+  `wakeRequestedAt` and answers `{ ok: true }`. While any of its sandboxes sleeps, the machine asks
+  `POST /host-report/wakes` with `{ asks: [{ sandbox, key }] }` (one tunnel id and report key per sleeper, 64 at most;
+  the route takes no other credential). It is answered `{ wake: [tunnel ids] }`: the asks whose key matched and whose
+  request is under ten minutes old. Each request is cleared as it is handed out, pinned to the stamp read, so it is
+  delivered once. A sleep reported right after a healthy report with the same stage and outcome is not throttled.
 - The report key is lowercase hex HMAC-SHA256 over `intentic/host-report/v1` (`HOST_REPORT_KEY_LABEL`), keyed with
   the connect token. `ic` derives it from the container's env and keeps it, so the machine agent's own runs report
   with no code. The platform derives it from the token it keeps encrypted and compares in constant time, and it

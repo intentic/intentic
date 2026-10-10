@@ -15,6 +15,7 @@ use model::{Check, Fix, Outcome, Repair, Source, Stage, State, Who};
 use report::{Poster, Target};
 
 use crate::record::ChannelRecord;
+use crate::sandbox::power::Rest;
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::ui::{self, RowOutcome};
 use crate::util::{Fail, Result};
@@ -154,12 +155,10 @@ pub fn run(args: Args) -> Result<()> {
         Mode::Doctor => (true, false, false, Vec::new()),
         Mode::Fix { auto, yes, accept } => (false, auto, yes, accept),
     };
-    let forced = std::env::var("PLATFORM_URL")
-        .ok()
-        .filter(|url| !url.is_empty());
+    let forced = report::forced_platform();
     let default_platform = forced
         .clone()
-        .unwrap_or_else(|| "https://api.intentic.dev".to_string())
+        .unwrap_or_else(|| report::DEFAULT_PLATFORM.to_string())
         .trim_end_matches('/')
         .to_string();
     let mut explicit = args.slug.map(|slug| named(&slug));
@@ -275,7 +274,7 @@ fn discover(engine_up: bool) -> Vec<String> {
 
 /// The sandboxes this side holds a channel record of its own for (archived ones are in another folder). Records the
 /// other side wrote, which an older ic copied here, are not this side's to start Docker for (audit 2026-10 item 12).
-fn own_records() -> Vec<String> {
+pub(crate) fn own_records() -> Vec<String> {
     let here = side::here();
     let mut slugs: Vec<String> = std::fs::read_dir(crate::logfile::intentic_home())
         .map(|entries| {
@@ -295,6 +294,16 @@ fn own_records() -> Vec<String> {
         .unwrap_or_default();
     slugs.sort();
     slugs
+}
+
+/// What a look changes about the record's rest, when it changes anything: a stop a person made outside ic becomes held,
+/// but never one the keeper made to put the sandbox to sleep, and a sandbox found running is awake again, held or asleep
+/// (someone started it from Docker Desktop). Pure.
+pub fn rest_after(record: &ChannelRecord, stopped_outside: bool, running: bool) -> Option<Rest> {
+    if running && (record.held || record.asleep) {
+        return Some(Rest::Awake);
+    }
+    (stopped_outside && !record.held && !record.asleep).then_some(Rest::Held)
 }
 
 /// Whether a channel record is this side's own: one written by this side, or one from an ic before records named
@@ -433,6 +442,9 @@ fn doing_because(repair: &Repair, check: Option<&Check>) -> String {
 
 /// The platform's limit on `doing` (@intentic/api-contract's HostReportInputSchema).
 const DOING_MAX: usize = 300;
+
+/// What a healthy run says of a sandbox asleep, in place of "running and reachable".
+const ASLEEP_VERDICT: &str = "Your sandbox is asleep; it starts again when somebody opens it.";
 
 /// The next repair to make, in check order: every automatic one before any that needs a yes. Pure.
 fn next(
@@ -645,20 +657,20 @@ impl Engine {
         let mut sandboxes = Vec::new();
         for slug in self.slugs.clone() {
             let mut facts = chain::gather(&slug, engine_up, self.oom_seen.contains(&slug));
+            facts.attended = !self.doctor && !self.auto;
             if facts.oom_seen {
                 self.oom_seen.insert(slug.clone());
             }
             // A stop a person made outside ic is remembered as held, so a later restart of the engine (which forgets
-            // the stop) does not have the keeper start it after all; one found running again is the stop reversed.
+            // the stop) does not have the keeper start it after all; one found running again is the stop (or the
+            // sleep) reversed.
             if !self.doctor {
                 let running =
                     matches!(&facts.container, chain::Container::Present(state) if state.running());
-                if facts.stopped_outside && !facts.record.held {
-                    crate::sandbox::power::hold(&slug, true);
-                    facts.record.held = true;
-                } else if facts.record.held && running {
-                    crate::sandbox::power::hold(&slug, false);
-                    facts.record.held = false;
+                if let Some(rest) = rest_after(&facts.record, facts.stopped_outside, running) {
+                    crate::sandbox::power::rest(&slug, rest);
+                    facts.record.held = rest == Rest::Held;
+                    facts.record.asleep = false;
                 }
             }
             let own = {
@@ -818,6 +830,7 @@ impl Engine {
                 doing,
                 outcome: None,
                 checks: &checks,
+                asleep: chain::asleep(&sandbox.facts),
             });
             self.poster.send(target, stage, body);
         }
@@ -869,6 +882,7 @@ impl Engine {
                     doing: None,
                     outcome: Some(outcome),
                     checks: &checks,
+                    asleep: chain::asleep(&sandbox.facts),
                 }),
                 self.upkeep.as_ref(),
             );
@@ -917,6 +931,7 @@ impl Engine {
                         doing: None,
                         outcome: Some(outcome),
                         checks: &snapshot.host_checks,
+                        asleep: false,
                     }),
                     self.upkeep.as_ref(),
                 );
@@ -975,7 +990,17 @@ impl Engine {
             let fixed = slug
                 .as_deref()
                 .map_or(self.fixed_for(""), |slug| self.fixed_for(slug));
-            let sentence = model::verdict(*outcome, fixed, theirs);
+            let resting = slug.as_deref().is_some_and(|slug| {
+                snapshot
+                    .sandboxes
+                    .iter()
+                    .any(|sandbox| sandbox.slug == slug && chain::asleep(&sandbox.facts))
+            });
+            let sentence = if resting && *outcome == Outcome::Healthy {
+                ASLEEP_VERDICT.to_string()
+            } else {
+                model::verdict(*outcome, fixed, theirs)
+            };
             match (several, slug) {
                 (true, Some(slug)) => ui::note(&format!("{slug}: {sentence}")),
                 _ => ui::note(&sentence),
@@ -1012,6 +1037,16 @@ impl Engine {
                 .filter_map(|sandbox| sandbox.facts.env.public_url.as_deref())
                 .collect();
             match urls.as_slice() {
+                _ if !snapshot.sandboxes.is_empty()
+                    && snapshot
+                        .sandboxes
+                        .iter()
+                        .all(|sandbox| chain::asleep(&sandbox.facts)) =>
+                {
+                    ui::note(&format!(
+                        "every checkable link checks out. {ASLEEP_VERDICT}"
+                    ))
+                }
                 [url] => ui::note(&format!(
                     "every link checks out — the sandbox is reachable at {url}."
                 )),
@@ -1129,6 +1164,7 @@ mod tests {
             now_ms: 0,
             ledger: crate::sandbox::ledger::Ledger::default(),
             stopped_outside: false,
+            attended: false,
         };
         Snapshot {
             host: host_facts(),
@@ -1228,6 +1264,36 @@ mod tests {
         assert!(!record_is_ours(&by(Some("windows")), &here));
         assert!(!record_is_ours(&by(Some("linux/ubuntu")), &here));
         assert!(record_is_ours(&by(Some("linux")), &here));
+    }
+
+    #[test]
+    fn a_stop_outside_ic_is_held_unless_the_keeper_slept_it_and_running_again_is_awake() {
+        let plain = ChannelRecord::default();
+        let held = ChannelRecord {
+            held: true,
+            ..ChannelRecord::default()
+        };
+        let asleep = ChannelRecord {
+            asleep: true,
+            ..ChannelRecord::default()
+        };
+        // record, stopped outside ic, running
+        assert_eq!(rest_after(&plain, true, false), Some(Rest::Held));
+        assert_eq!(
+            rest_after(&asleep, true, false),
+            None,
+            "the keeper's sleep is no person's stop"
+        );
+        assert_eq!(rest_after(&held, true, false), None, "held already");
+        assert_eq!(rest_after(&asleep, false, false), None);
+        assert_eq!(rest_after(&plain, false, false), None);
+        assert_eq!(rest_after(&held, false, true), Some(Rest::Awake));
+        assert_eq!(
+            rest_after(&asleep, false, true),
+            Some(Rest::Awake),
+            "started from Docker Desktop: awake"
+        );
+        assert_eq!(rest_after(&plain, false, true), None);
     }
 
     #[test]

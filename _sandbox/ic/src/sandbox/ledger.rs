@@ -21,6 +21,9 @@ pub const AUTO_RESTARTS_MAX: usize = 3;
 /// The kinds a ledger counts.
 pub const RESTART: &str = "restart";
 pub const START: &str = "start";
+/// `ic sandbox sleep`: counted like any other, and never against the keeper's restart limit, which counts restarts
+/// alone. The wake after it is a person's start (sleep.rs).
+pub const SLEEP: &str = "sleep";
 
 /// One kind of repair: how many were made through ic, the last one's moment, and the automatic ones still inside the
 /// window.
@@ -169,7 +172,9 @@ mod tests {
             .noted(RESTART, NOW - 300 * MIN, true)
             .noted(RESTART, NOW - 200 * MIN, true)
             .noted(RESTART, NOW, true)
-            .noted(START, NOW, true);
+            .noted(START, NOW, true)
+            .noted(SLEEP, NOW, false)
+            .noted(SLEEP, NOW, false);
         let restart = &ledger.entries[RESTART];
         assert_eq!(restart.count, 3);
         assert_eq!(
@@ -178,6 +183,7 @@ mod tests {
             "the moments older than two hours are dropped"
         );
         assert_eq!(ledger.entries[START].count, 1);
+        assert_eq!(ledger.entries[SLEEP].count, 2);
         assert_eq!(ledger.restarts_exhausted(NOW), None);
     }
 

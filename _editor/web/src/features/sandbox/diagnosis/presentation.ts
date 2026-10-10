@@ -166,6 +166,27 @@ const notDialledNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis
     );
 };
 
+// Asleep on its own machine: this visit has asked for it back, which its keeper there does within a minute while that
+// computer is on. Past that, the attended fix starts it (`ic sandbox fix` wakes a sleeping sandbox when a person asks).
+const asleepNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { kind: "asleep" }>): DiagnosisNotice => {
+    const machine = machineName(input, diagnosis.report);
+    if (diagnosis.patient) {
+        return notice(
+            { title: t(`sandbox.diagnosis.asleepTitle`, { name: input.name }), body: t(`sandbox.diagnosis.asleepBody`, { machine }), waiting: true },
+            chainOf([`ok`, `ok`, `working`, `unknown`], machine),
+        );
+    }
+    return notice(
+        {
+            title: t(`sandbox.diagnosis.asleepStuckTitle`, { name: input.name }),
+            body: t(`sandbox.diagnosis.asleepStuckBody`, { machine }),
+            waiting: false,
+            action: input.owner ? `fix` : undefined,
+        },
+        chainOf([`ok`, `ok`, `down`, `unknown`], machine),
+    );
+};
+
 const silentNotice = (input: PresentationInput, patient: boolean, machine: string): DiagnosisNotice => {
     if (patient) {
         return notice(
@@ -251,6 +272,8 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
             return machineNotice(input, diagnosis);
         case `not-dialled`:
             return notDialledNotice(input, diagnosis);
+        case `asleep`:
+            return asleepNotice(input, diagnosis);
         case `local-only`:
             return notice(
                 { title: t(`sandbox.diagnosis.localOnlyTitle`, { name }), body: t(`sandbox.diagnosis.localOnlyBody`), waiting: false },

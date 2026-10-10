@@ -138,10 +138,45 @@ const resolvePids = async (procRoot: string, wanted: ReadonlySet<string>): Promi
 // Docker's embedded DNS answers outside the PID namespace, the one unowned listener nameable by address.
 const DOCKER_EMBEDDED_DNS_ADDRESS = "0B00007F"; // 127.0.0.11, /proc/net/tcp little-endian hex
 
+const readTables = (procRoot: string): Promise<string[]> =>
+    Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
+
+// What the listening sockets are, as one string: every LISTEN row's port and inode, sorted. Two reads of the kernel's
+// tables and no fd walk, so it can be asked as often as the scan below is wanted: while it is the same, no socket
+// opened or closed, and the scan's answer still stands.
+export const listenerFingerprint = async (procRoot = "/proc"): Promise<string> =>
+    (await readTables(procRoot))
+        .flatMap(parseListeners)
+        .map((listener) => `${String(listener.port)}:${listener.inode}`)
+        .toSorted()
+        .join(",");
+
+/* THE SCAN, ASKED LESS (2026-10-10). The owner's computer polls `/ports` every five seconds for every sandbox it mirrors
+   ports of, whether or not anyone is there, and each scan walks every process's fd table and lists tmux's panes: the
+   largest share of an idle sandbox's CPU on rog. While the fingerprint is unchanged the last answer is the answer; it
+   is scanned again anyway once it is `maxAgeMs` old, for an owner's pane that changed without a socket doing so. */
+export const cachedScan = <T>(
+    scan: () => Promise<T>,
+    fingerprint: () => Promise<string>,
+    { maxAgeMs = 30_000, now = Date.now }: { readonly maxAgeMs?: number; readonly now?: () => number } = {},
+): (() => Promise<T>) => {
+    let held: { readonly print: string; readonly at: number; readonly value: T } | undefined;
+    return async () => {
+        const print = await fingerprint();
+        const at = now();
+        if (held !== undefined && held.print === print && at - held.at < maxAgeMs) {
+            return held.value;
+        }
+        const value = await scan();
+        held = { print, at, value };
+        return value;
+    };
+};
+
 // Every forwardable TCP port in the sandbox's netns, attributed to its owning process where procfs allows. procRoot is
 // injectable for test fixtures; dual-stack listeners collapse to one row.
 export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningPort[]> => {
-    const tables = await Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
+    const tables = await readTables(procRoot);
     const byPort = new Map<number, { port: number; host: LoopbackHost; forwardable: boolean; address: string; inode: string }>();
     for (const listener of tables.flatMap(parseListeners)) {
         const existing = byPort.get(listener.port);

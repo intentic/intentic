@@ -107,6 +107,9 @@
         "agentOnThisDevice": "Agent auf diesem Gerät"
     },
     "deviceDetail": {
+        "asleep": "schläft",
+        "asleepNote": "Niemand hat sie genutzt, also hat dieser Computer sie schlafen gelegt. Öffnen weckt sie.",
+        "asleepTitle": "Schläft",
         "backup": "Sicherung: {folder}",
         "busyHere": "Hier belegt",
         "conflicts": "{count} Konflikt | {count} Konflikte",

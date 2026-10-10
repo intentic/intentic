@@ -136,9 +136,11 @@ const hostedRelease = withConcurrency(
     { mode: `singleFlight`, key: (sandboxId) => sandboxId },
 );
 
-// Wakes a sleeping hosted sandbox on a network-shaped connection failure, from any path that lands on it.
-// Two refusals are kept and shown rather than swallowed: PAYMENT_REQUIRED (spent hours) and FORBIDDEN (the owner's
-// hosted lane is switched off); everything else is a wait.
+// Wakes a sleeping sandbox on a network-shaped connection failure, from any path that lands on it. A hosted one is
+// started by the platform; one on its owner's own machine is asked for, and that machine's keeper starts it when it
+// next asks (2026-10-10: a keeper puts an unused local sandbox to sleep). Two refusals are kept and shown rather than
+// swallowed: PAYMENT_REQUIRED (spent hours) and FORBIDDEN (the owner's hosted lane is switched off); everything else is
+// a wait.
 const WAKE_THROTTLE_MS = 60_000;
 const wokeAt = new Map<string, number>();
 export type WakeRefusalKind = "hours" | "suspended";
@@ -162,9 +164,9 @@ const recordWake = (sandboxId: string, outcome: unknown): void => {
     }
 };
 watch(
-    () => [active.value?.id, active.value?.hosted !== null && active.value?.hosted !== undefined, connection.value] as const,
-    ([id, hosted, state]) => {
-        if (id === undefined || !hosted || state.failure === undefined) {
+    () => [active.value?.id, connection.value] as const,
+    ([id, state]) => {
+        if (id === undefined || state.failure === undefined) {
             return;
         }
         // A sleeping machine's causes: silence, or the edge saying it holds no tunnel for it. A 403 or a missing address

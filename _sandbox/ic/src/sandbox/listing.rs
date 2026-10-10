@@ -200,7 +200,13 @@ fn listing(
             let mut sandbox = Map::new();
             sandbox.insert("slug".into(), json!(slug));
             sandbox.insert("container".into(), json!(row.name));
-            sandbox.insert("running".into(), json!(row.state == "running" && !parked));
+            let running = row.state == "running" && !parked;
+            sandbox.insert("running".into(), json!(running));
+            // Put to sleep for idleness and still down: it starts again when somebody opens it (sleep.rs).
+            sandbox.insert(
+                "asleep".into(),
+                json!(!running && record.is_some_and(|record| record.asleep)),
+            );
             sandbox.insert("image".into(), json!(row.image));
             if parked {
                 sandbox.insert("parked".into(), json!(true));
@@ -391,6 +397,37 @@ mod tests {
     }
 
     #[test]
+    fn a_sandbox_put_to_sleep_is_listed_asleep_until_it_runs_again() {
+        let rows = rows_from("intentic-sandbox-nap\texited\timg:1\nintentic-sandbox-woke\trunning\timg:1\nintentic-sandbox-off\texited\timg:1\n");
+        let asleep = ChannelRecord {
+            asleep: true,
+            ..ChannelRecord::default()
+        };
+        let records = HashMap::from([
+            ("nap".to_string(), asleep.clone()),
+            // Started from Docker Desktop before any fix run cleared the record: awake.
+            ("woke".to_string(), asleep),
+            (
+                "off".to_string(),
+                ChannelRecord {
+                    held: true,
+                    ..ChannelRecord::default()
+                },
+            ),
+        ]);
+        let listed = listing(&rows, &HashMap::new(), &records, &HashMap::new(), &|_| true);
+        let asleep_of = |slug: &str| {
+            listed
+                .as_array()
+                .and_then(|all| all.iter().find(|row| row["slug"] == slug))
+                .map(|row| row["asleep"].clone())
+        };
+        assert_eq!(asleep_of("nap"), Some(json!(true)));
+        assert_eq!(asleep_of("woke"), Some(json!(false)));
+        assert_eq!(asleep_of("off"), Some(json!(false)), "held is not asleep");
+    }
+
+    #[test]
     fn a_sidecar_is_a_tunnel_whose_sandbox_exists_and_a_tunnel_named_sandbox_is_a_sandbox() {
         let rows = rows();
         assert_eq!(rows.len(), 3);
@@ -436,6 +473,7 @@ mod tests {
                     "slug": "work",
                     "container": "intentic-sandbox-work",
                     "running": true,
+                    "asleep": false,
                     "image": "ghcr.io/intentic/sandbox:stable",
                     "tunnelRunning": false,
                     "resources": {
@@ -455,6 +493,7 @@ mod tests {
                     "slug": "tunnel-lab",
                     "container": "intentic-sandbox-tunnel-lab",
                     "running": false,
+                    "asleep": false,
                     "image": "intentic-sandbox-env-lab:abc",
                 },
             ])

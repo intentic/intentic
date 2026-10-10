@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { parentPid } from "../system/resources/proc-stat.js";
-import { scanListeningPorts, withOwningSessions } from "./port-scan.js";
+import { cachedScan, listenerFingerprint, scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
 // procfs fixture: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}; fd entries are dangling symlinks whose target
 // string is the socket marker, as readlink returns on the real thing.
@@ -158,4 +158,31 @@ test("parentPid reads the ppid past a comm containing spaces and parentheses", (
     expect(parentPid(statFile(400, "node (vite)", 399))).toBe(399);
     expect(parentPid(statFile(1, "systemd", 0))).toBeUndefined(); // pid 1 has no parent to walk to
     expect(parentPid("")).toBeUndefined(); // the process died between the readdir and the read
+});
+
+describe("the scan, asked less", () => {
+    test("the fingerprint names every listener by port and inode, and nothing that is not listening", async () => {
+        expect(await listenerFingerprint(fixture())).toBe("3000:1002,3000:1003,45678:1001,9999:1004");
+    });
+
+    test("an unchanged fingerprint answers from the last scan until it is too old; a changed one scans at once", async () => {
+        let print = "a";
+        let clock = 0;
+        let scans = 0;
+        const scan = cachedScan(
+            () => {
+                scans += 1;
+                return Promise.resolve(scans);
+            },
+            () => Promise.resolve(print),
+            { maxAgeMs: 30_000, now: () => clock },
+        );
+        expect(await scan()).toBe(1);
+        clock = 29_999;
+        expect(await scan()).toBe(1);
+        print = "b";
+        expect(await scan()).toBe(2);
+        clock = 29_999 + 30_000;
+        expect(await scan()).toBe(3);
+    });
 });

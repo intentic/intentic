@@ -120,6 +120,9 @@
         "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
+        "asleep": "uśpiony",
+        "asleepNote": "Nikt z niego nie korzystał, więc ten komputer go uśpił. Otwarcie go wybudza.",
+        "asleepTitle": "Uśpiony",
         "backup": "kopia zapasowa: {folder}",
         "busyHere": "Zajęte tutaj",
         "conflicts": "{count} konflikt | {count} konflikty | {count} konfliktów",

@@ -100,8 +100,16 @@ fn what_ic_reads_it_finds_in_the_daemons_example() {
 
     let signal = &files["workSignal"]["example"];
     let turns = u32::try_from(number(&signal["liveTurns"])).expect("a count");
+    let read = chain::WorkSignal::parse(&signal.to_string()).expect("the signal");
+    assert_eq!(read.turns(number(&signal["at"])), Some(turns));
+    // What the keeper's sleep decides on (sleep.rs), read from the same example.
     assert_eq!(
-        chain::live_turns(&signal.to_string(), number(&signal["at"])),
-        Some(turns)
+        read,
+        chain::WorkSignal {
+            at: number(&signal["at"]),
+            live_turns: turns,
+            quiet_since: Some(number(&signal["quietSince"])),
+            next_wake_at: Some(number(&signal["nextWakeAt"])),
+        }
     );
 }

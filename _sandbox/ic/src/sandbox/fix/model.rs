@@ -549,6 +549,9 @@ pub struct Report<'a> {
     pub doing: Option<&'a str>,
     pub outcome: Option<Outcome>,
     pub checks: &'a [Check],
+    /// The keeper put the sandbox to sleep for idleness and it is still down (`ic sandbox sleep`): the page says it is
+    /// asleep, and that opening it starts it, rather than reading a stopped container as broken.
+    pub asleep: bool,
 }
 
 /// The platform's caps (`HostCheckSchema`, `HostReportInputSchema`): a value past one fails the whole report, so it
@@ -604,6 +607,10 @@ pub fn wire(report: &Report<'_>) -> Value {
         if let Some(outcome) = report.outcome {
             body["outcome"] = json!(outcome.wire());
         }
+    }
+    // Only ever `true`: a report that says nothing of sleep is one about a sandbox that is not asleep.
+    if report.asleep {
+        body["asleep"] = json!(true);
     }
     body
 }
@@ -775,6 +782,7 @@ mod tests {
             doing: None,
             outcome: Some(Outcome::NeedsYou),
             checks: &checks,
+            asleep: false,
         });
         assert_eq!(
             body,
@@ -798,6 +806,36 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[test]
+    fn a_sandbox_asleep_says_so_and_one_awake_carries_no_key() {
+        let report = |asleep: bool| {
+            wire(&Report {
+                source: Source::Agent,
+                machine: "m",
+                os: "linux",
+                env: None,
+                stage: Stage::Done,
+                doing: None,
+                outcome: Some(Outcome::Healthy),
+                checks: &[],
+                asleep,
+            })
+        };
+        assert_eq!(
+            report(true),
+            json!({
+                "source": "agent",
+                "machine": "m",
+                "os": "linux",
+                "stage": "done",
+                "outcome": "healthy",
+                "checks": [],
+                "asleep": true,
+            })
+        );
+        assert_eq!(report(false).get("asleep"), None);
     }
 
     #[test]
@@ -848,6 +886,7 @@ mod tests {
             doing: Some("Starting Docker Desktop"),
             outcome: Some(Outcome::Fixed),
             checks: &[],
+            asleep: false,
         });
         assert_eq!(body["doing"], json!("Starting Docker Desktop"));
         assert_eq!(body["env"], json!("archlinux"));
@@ -862,6 +901,7 @@ mod tests {
             doing: Some(&long),
             outcome: None,
             checks: &[],
+            asleep: false,
         });
         assert_eq!(
             clipped["doing"].as_str().map(|s| s.chars().count()),

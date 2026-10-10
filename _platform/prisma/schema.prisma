@@ -243,6 +243,10 @@ model Sandbox {
     // (2026-10-05) holds one bare report, read as a single reporter. The owner's summary shows the newest, a member's
     // never does. No mint lifecycle: it describes the machine, not a fix code.
     hostReport         Json?
+    // When somebody last asked for this sandbox while it slept on its own machine (sandbox.wake on a sandbox intentic
+    // does not host), and null once that machine's keeper has heard it (POST /host-report/wakes) or nobody asked. The
+    // platform never calls the machine: its agent asks here while any sandbox of its sleeps (api host-report.ts).
+    wakeRequestedAt    DateTime?
     // The last two distinct copies of this sandbox that announced, as [{instance, host, os, firstAt, at}] (api
     // announce-copies.ts): an `instance` is minted once per container start, so two that keep announcing side by side
     // are two containers holding one connect token, which is what pasting the setup command into PowerShell and into

@@ -652,6 +652,28 @@ clock.
   retiring as before was rejected, since a machine whose last link was revoked kept its sandbox down after every
   reboot).
 
+### Sleep and wake
+
+(2026-10-10) A PC holding a dozen sandboxes, one or two of them in use, kept every one up: about 1.4 GB each on rog.
+The keeper now puts an unneeded sandbox to sleep and wakes it when somebody opens it
+([`device/sandbox-rounds/sleep.ts`](src/device/sandbox-rounds/sleep.ts)).
+
+- **Sleep.** Right after each sweep the keeper runs `ic sandbox sleep --idle <minutes> --json --source agent`. ic stops,
+  through Docker (so `--restart unless-stopped` leaves it down), every running sandbox of this side whose daemon has
+  said for that long that nobody needs it: no editor connected, nothing in flight, no terminal typed in, nobody
+  connected to one of its apps (`quietSince` in its work signal), and no promised wake due within the stretch. ic
+  records it asleep and reports `asleep: true` to the platform, so the editor can say so. A sleeping sandbox's dead link
+  is never a repair: the keeper leaves it alone, and `ic sandbox fix` finds it healthy.
+- **Wake.** The platform never calls a machine. A browser that finds the sandbox asleep asks the platform to wake it,
+  and this agent's wake round asks the platform for such requests (`ic sandbox wakes --json --source agent`, one request
+  for every sleeper on this side, each under its own report key), starting each one asked for through `ic sandbox
+  start`. It asks every fifteen seconds while anything sleeps, and every five minutes otherwise, to catch a sleep made
+  by hand. It runs whatever the keeper's switch says, so a sandbox asleep when the keeper was switched off still wakes.
+- **The setting** is this environment's `sandboxSleepMinutes` in `machine.json`: absent means 30, `0` means never. Set
+  it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`.
+  `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
+  nothing sleeps.
+
 ### Upkeep
 
 What older releases left on a device, and the stores with no bound, are put right by a reconciler that ships with each

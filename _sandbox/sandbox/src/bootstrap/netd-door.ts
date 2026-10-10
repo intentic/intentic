@@ -29,6 +29,7 @@ import { sameProcess } from "../system/resources/proc-stat.js";
 import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
 import { buildId } from "../version.js";
 import { LINK_LOST_EXIT } from "../system/boot/daemon-stop.js";
+import { visitWorkspaceApp } from "../scaffold/app-rest.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // The daemon behind intentic-netd (_sandbox/netd): HTTP on a Unix socket only netd dials, and every port, the
@@ -156,6 +157,7 @@ export const tunnelReports = (
 
 const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
     panelOf: services.panelUpstreamOf,
+    visit: visitWorkspaceApp,
     slotTargetOf: services.portForwards.targetOf,
     sandboxId: sandboxIdFromToken(config.connectToken),
     outbox:

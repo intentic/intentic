@@ -8,6 +8,11 @@ import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
 // The sooner of two wakes, either 0 for none.
 const sooner = (a: number, b: number): number => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
 
+// The soonest moment this sandbox promised somebody, 0 for none: a one-time automation, and a person's scheduled send,
+// since the sandbox's own clock is all that lets either go. What a stop for idleness must not sleep through.
+export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promise<number> =>
+    sooner(await nextOneTimeWakeAt(services), nextBookedSendAt(services));
+
 // Container role only: a guest daemon or a local folder speaks for nobody.
 export const startPlatformPresence = ({ config, logger, role, services, shutdown }: BootPhase, reach: ReachPosture): void => {
     // Started with the listeners so it can't queue behind the sweeps it reports through.
@@ -24,8 +29,7 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                 {
                     ...DEFAULT_PROBES,
                     working: () => workingNow(services, "idle-stop").length,
-                    // A person's scheduled send is a promised moment too: the sandbox's own clock is all that lets it go.
-                    nextOneTimeWakeAt: async () => sooner(await nextOneTimeWakeAt(services), nextBookedSendAt(services)),
+                    nextOneTimeWakeAt: () => nextPromisedWakeAt(services),
                 },
             ),
         );

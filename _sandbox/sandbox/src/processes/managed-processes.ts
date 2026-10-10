@@ -165,6 +165,8 @@ export interface ManagedProcesses {
     readonly runOf: (repo: string) => { readonly running: boolean; readonly finishedAt?: number } | undefined;
     // The assigned port, undefined when not running; the preview proxy's forward target.
     readonly portOf: (repo: string) => number | undefined;
+    // Every running dev-server panel's assigned port (one-shots excluded): what a visitor to a workspace app connects to.
+    readonly ports: () => number[];
     // Start progress for a dev-server panel (PanelLaunch); undefined when not running or for a one-shot job.
     readonly launchOf: (repo: string) => PanelLaunch | undefined;
     // SIGTERM shutdown path, kill every managed panel.
@@ -340,6 +342,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             return finishedAt === undefined ? undefined : { running: false, finishedAt };
         },
         portOf: (key) => current.get(key)?.port,
+        ports: () => [...current.values()].filter((entry) => entry.oneShot === undefined).map((entry) => entry.port),
         launchOf: (key) => {
             const entry = current.get(key);
             if (entry === undefined || entry.oneShot !== undefined) {

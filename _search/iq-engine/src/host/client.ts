@@ -7,7 +7,8 @@ import type { EngineAnswer, EngineEvent, EngineMetricsSnapshot, EngineRequest } 
 
 // A ResidentEngine by interface, a proxy by implementation: the index and ML models live in a separate process, so
 // their memory does not sit in the daemon's own heap. Costs one IPC round trip and a structured clone per query. A dead
-// child is recoverable: the next call starts a fresh one, which re-sweeps and re-claims the index.
+// child is recoverable: the next call starts a fresh one, which re-sweeps and re-claims the index. So is a resting one:
+// with `idleExitMs` set, a child nobody has asked anything for that long is let go, and the next ask starts it again.
 
 // Always the built JS in dist/, since a forked child has no TypeScript loader.
 const childModule = new URL("../../dist/host/child.js", import.meta.url);
@@ -46,12 +47,17 @@ export interface EngineClient extends ResidentEngine {
     // Replaces the child now, if there is one and nothing is in flight. Exposed for tests and for an operator who
     // would rather pay a re-sweep than go on holding the memory.
     recycleNow(): Promise<boolean>;
+    // Lets the child go now if the idle rule allows it (idle for `idleMs`, nothing in flight, no indexing left), as the
+    // idle check would. Exposed for tests and for a host that knows its workspace went quiet.
+    restIfIdle(idleMs?: number): boolean;
 }
 
 // How long a child asked to close gets before it is killed. Its handle is already gone by then, so a process that
 // will not go is unreachable memory, which is worse than a dead one.
 const RECYCLE_GRACE_MS = 10_000;
 const MEMORY_CHECK_INTERVAL_MS = 60_000;
+// The idle check's cadence, capped so a short window (a test's) is still looked at often enough to mean something.
+const IDLE_CHECK_INTERVAL_MS = 60_000;
 
 export interface EngineClientOptions extends ResidentEngineOptions {
     // Resident size above which the child is replaced at the next moment nothing is in flight. Absent or 0 never
@@ -64,6 +70,13 @@ export interface EngineClientOptions extends ResidentEngineOptions {
     // Told each child's pid as it is forked, before it has read a request: where the host puts it in its own class of
     // process (priority, OOM rank), which this package has no view of.
     readonly onSpawn?: (pid: number) => void;
+    // How long the child may go unasked (no search, health read or warm) before it is let go, freeing the index and
+    // both ML models. Absent or 0 keeps it for the client's whole life. A child still indexing is never let go: that
+    // work would only be done again. While it rests, file changes are not forwarded and start nothing; the next ask
+    // forks a fresh child, whose first pass sweeps the on-disk index and picks them up, at the price of the models'
+    // load on that one ask.
+    readonly idleExitMs?: number;
+    readonly onIdleExit?: (info: { readonly pid: number; readonly idleMs: number }) => void;
 }
 
 // VmRSS for one pid. Linux only, and undefined everywhere else, which reads as "no reason to recycle".
@@ -74,7 +87,18 @@ const residentBytes = async (pid: number): Promise<number | undefined> => {
 };
 
 export const createEngineClient = (options: EngineClientOptions): EngineClient => {
-    const { onIndexError, onQueryError, onIndexProgress, memoryCeilingBytes, memoryCheckIntervalMs, onRecycle, onSpawn, ...init } = options;
+    const {
+        onIndexError,
+        onQueryError,
+        onIndexProgress,
+        memoryCeilingBytes,
+        memoryCheckIntervalMs,
+        onRecycle,
+        onSpawn,
+        idleExitMs,
+        onIdleExit,
+        ...init
+    } = options;
     // Callbacks and policy are destructured out because `init` is structured-cloned to the child, which a function
     // cannot survive.
     const ceilingBytes = memoryCeilingBytes ?? 0;
@@ -83,6 +107,10 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
     let nextId = 0;
     let metrics = COLD;
     let closed = false;
+    // When something last asked the engine a question; what the idle window is measured from.
+    let askedAt = Date.now();
+    // Let go for idleness: a file change is not a reason to fork again, only an ask is.
+    let resting = false;
 
     const fail = (error: Error): void => {
         const orphaned = [...pending.values()];
@@ -158,6 +186,8 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
     };
 
     const call = (build: (id: number) => EngineRequest, signal?: AbortSignal): Promise<EngineAnswer> => {
+        askedAt = Date.now();
+        resting = false;
         const channel = start();
         if (channel === undefined) {
             return Promise.reject(new Error("iq engine is closed"));
@@ -186,20 +216,25 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
         });
     };
 
-    // Replaces the child: drops the handle so the next call forks a fresh one, then asks the old process to go. Its
+    // Lets the child go: drops the handle so the next call forks a fresh one, then asks the old process to go. Its
     // `exit` listener is removed first, because this exit is a decision and must not be reported as a crash.
-    const replaceChild = (doomed: ChildProcess, rssBytes: number): void => {
-        if (doomed.pid !== undefined) {
-            onRecycle?.({ pid: doomed.pid, rssBytes });
-        }
+    const retireChild = (doomed: ChildProcess): void => {
         child = undefined;
-        metrics = COLD;
         doomed.removeAllListeners("exit");
         doomed.removeAllListeners("message");
         doomed.send({ type: "close", id: -1 } satisfies EngineRequest, () => undefined);
         const hard = setTimeout(() => doomed.kill("SIGKILL"), RECYCLE_GRACE_MS);
         hard.unref();
         doomed.once("exit", () => clearTimeout(hard));
+    };
+
+    // Replaced for its size: a fresh child starts at once, so its metrics start cold.
+    const replaceChild = (doomed: ChildProcess, rssBytes: number): void => {
+        if (doomed.pid !== undefined) {
+            onRecycle?.({ pid: doomed.pid, rssBytes });
+        }
+        retireChild(doomed);
+        metrics = COLD;
     };
 
     // A recycle mid-query would reject a search someone is waiting on, and the memory has waited this long already.
@@ -220,6 +255,23 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
         return true;
     };
 
+    // Whether the child has work of its own left: files it was told of and has not indexed, or embeddings still owed.
+    const indexing = (): boolean => metrics.dirtySequence !== metrics.appliedSequence || metrics.embedBacklog > 0;
+
+    const restIfIdle = (window: number): boolean => {
+        const running = child;
+        const idleMs = Date.now() - askedAt;
+        if (window <= 0 || !spare(running) || idleMs < window || indexing()) {
+            return false;
+        }
+        onIdleExit?.({ pid: running.pid as number, idleMs });
+        retireChild(running);
+        resting = true;
+        // What the index on disk holds is still true while nothing serves it; only the worker answering is gone.
+        metrics = { ...metrics, queryWorker: { live: false, pendingRequests: 0 } };
+        return true;
+    };
+
     // Started eagerly: an in-process engine begins indexing in its constructor, and boot relies on that.
     start();
 
@@ -229,11 +281,23 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
             : undefined;
     // Watching for a leak must never be the reason the daemon cannot exit.
     memoryTimer?.unref();
+    const idleWindow = idleExitMs ?? 0;
+    const idleTimer =
+        idleWindow > 0
+            ? setInterval(
+                  () => {
+                      restIfIdle(idleWindow);
+                  },
+                  Math.min(IDLE_CHECK_INTERVAL_MS, Math.max(10, idleWindow / 4)),
+              )
+            : undefined;
+    idleTimer?.unref();
 
     return {
         pid: () => child?.pid,
         // Ignores the ceiling: an explicit ask is already the decision the ceiling exists to make automatically.
         recycleNow: () => recycleIfOver(1),
+        restIfIdle: (window = idleWindow) => restIfIdle(Math.max(window, 1)),
         // Synchronous, from the last pushed snapshot; age is computed here so an idle sweep keeps getting older.
         metrics: (): ResidentEngineMetrics => ({
             files: metrics.files,
@@ -247,19 +311,25 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
         }),
         run: (request: QueryRequest, signal?: AbortSignal) => call((id) => ({ type: "run", id, request }), signal) as Promise<QueryOutcome>,
         health: (request: HealthRequest) => call((id) => ({ type: "health", id, request })) as Promise<CodebaseHealth>,
+        // Neither wakes a resting child: the fresh one an ask forks computes health and sweeps the disk from scratch.
         invalidateHealth: () => {
-            start()?.send({ type: "healthDirty" } satisfies EngineRequest, () => undefined);
+            if (!resting) {
+                start()?.send({ type: "healthDirty" } satisfies EngineRequest, () => undefined);
+            }
         },
         warm: () => call((id) => ({ type: "warm", id })) as Promise<IndexStatus>,
         // Fire-and-forget; one that arrives while the child restarts is covered by the fresh child's own first pass.
         markDirty: () => {
-            start()?.send({ type: "dirty" } satisfies EngineRequest, () => undefined);
+            if (!resting) {
+                start()?.send({ type: "dirty" } satisfies EngineRequest, () => undefined);
+            }
         },
         async close() {
             if (closed) {
                 return;
             }
             clearInterval(memoryTimer);
+            clearInterval(idleTimer);
             if (child === undefined) {
                 closed = true;
                 return;

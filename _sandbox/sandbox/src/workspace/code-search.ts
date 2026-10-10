@@ -8,6 +8,10 @@ import { applyWorkload } from "../workload/workload-class.js";
 const BACKLOG_LOG_MS = 30_000;
 // 2.5 GiB: under the child's inherited 3 GiB heap cap, so a runaway is replaced before V8 makes it a fatal error.
 const IQ_MEMORY_CEILING_BYTES = 2.5 * 1024 * 1024 * 1024;
+// Ten minutes nobody searched: the child (index plus both ML models, ~350 MB measured idle on 2026-10-10, most of it
+// swapped) is let go, and the next search or turn forks it again, paying the models' load once. Every turn asks for
+// context, so a sandbox in use never reaches this; one left alone among a dozen others on a PC stops holding it.
+const IQ_IDLE_EXIT_MS = 10 * 60_000;
 
 // The workspace's code-search engine, run in a child process the daemon supervises and replaces past its memory ceiling.
 export const createCodeSearchEngine = (
@@ -48,6 +52,8 @@ export const createCodeSearchEngine = (
         // ration what the engine legitimately needs — a ceiling low enough to fire in normal use announces itself
         // in the log below, which is the signal to raise it rather than to keep paying for re-sweeps.
         memoryCeilingBytes: IQ_MEMORY_CEILING_BYTES,
+        idleExitMs: IQ_IDLE_EXIT_MS,
+        onIdleExit: ({ pid, idleMs }) => logger.info({ enginePid: pid, idleMs }, "iq search engine let go after going unasked; the next search starts it"),
         onRecycle: ({ pid, rssBytes }) =>
             logger.warn(
                 { enginePid: pid, rssBytes, ceilingBytes: IQ_MEMORY_CEILING_BYTES },

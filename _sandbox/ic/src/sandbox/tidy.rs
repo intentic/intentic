@@ -175,6 +175,7 @@ pub fn report_only(record: &ChannelRecord) -> bool {
         written: None,
         side: None,
         held: false,
+        asleep: false,
         ..record.clone()
     };
     bare == ChannelRecord::default()

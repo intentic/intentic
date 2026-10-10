@@ -54,6 +54,18 @@ flowchart LR
   `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each
   sandbox's state, its share as docker enforces it, the shape it runs with, the shape saved for its next restart and
   the update staged for it, in the sandbox contract's `DeviceSandbox` shape.
+- **Held and asleep.** `ic sandbox stop` marks the sandbox `held` in its channel record: stopped on purpose, so
+  `ic sandbox fix` only starts it again after a yes. `ic sandbox sleep [<slug>]` stops it the same way but marks it
+  `asleep` instead, never both; `--idle <minutes>` (the machine agent's keeper) sleeps only the sandboxes this side
+  keeps whose daemon's work signal (`/run/intentic/work.json`) has said `quietSince` for that long, with nothing
+  working and no `nextWakeAt` due within the window, and never one mid-update, parked, held or locked by another ic
+  run. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
+  sleeps, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
+  `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then
+  `done` around it; `--json` ends on `{"asleep": n}`. `start`, `restart` and every recreate clear both marks, and so
+  does the fix engine when it finds the container running. The keeper's `fix --auto` reads a sandbox asleep as
+  healthy and skips its daemon, registration and tunnel checks; an attended `fix` starts it. `ic sandbox list` says
+  `asleep` (`"asleep": true` in `--json`).
 - Before a swap touches the running container, it pre-flights the target image's state conversions against
   read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
   contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;

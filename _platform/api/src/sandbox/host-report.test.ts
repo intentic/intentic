@@ -8,6 +8,8 @@ import {
     hostReportsOf,
     reporterOf,
     skipsWrite,
+    WAKE_REQUEST_TTL_MS,
+    wakeIsLive,
     withHostReport,
 } from "./host-report.js";
 
@@ -43,6 +45,12 @@ describe(`skipsWrite`, () => {
         expect(skipsWrite(storedAged(0, done), { ...done, outcome: `failed` }, NOW)).toBe(false);
         // An outcome appearing is a move too: absent and present are two answers.
         expect(skipsWrite(storedAged(0, { ...checking, stage: `done` }), done, NOW)).toBe(false);
+    });
+
+    it(`writes a sleep reported right after the same healthy verdict`, () => {
+        const healthy: HostReportInput = { ...checking, stage: `done`, outcome: `healthy` };
+        expect(skipsWrite(storedAged(0, healthy), { ...healthy, asleep: true }, NOW)).toBe(false);
+        expect(skipsWrite(storedAged(0, { ...healthy, asleep: true }), healthy, NOW)).toBe(false);
     });
 
     it(`writes when there is nothing stored, and when the stored one is from the future`, () => {
@@ -118,5 +126,13 @@ describe(`reports per reporter`, () => {
     it(`carries the upkeep counts an ic with an upkeep pass sends`, () => {
         const upkeep = { found: 4, fixed: 3, skipped: 1, kinds: { pairing: 2, volume: 2 } };
         expect(hostReportsOf(withHostReport(null, { ...windows, upkeep }))[0]?.upkeep).toEqual(upkeep);
+    });
+});
+
+describe(`wakeIsLive`, () => {
+    it(`holds a request for its lifetime and no longer, and none at all for no stamp`, () => {
+        expect(wakeIsLive(new Date(NOW - WAKE_REQUEST_TTL_MS), NOW)).toBe(true);
+        expect(wakeIsLive(new Date(NOW - WAKE_REQUEST_TTL_MS - 1), NOW)).toBe(false);
+        expect(wakeIsLive(null, NOW)).toBe(false);
     });
 });

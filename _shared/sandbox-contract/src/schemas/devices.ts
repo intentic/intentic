@@ -101,6 +101,9 @@ export const DeviceSandboxSchema = z.object({
     // so this side adopted it for its rounds: `keptElsewhere` is left out, and these say whose it was and since when.
     adoptedFrom: z.string().optional(),
     keeperSilentSince: z.number().optional(),
+    // (2026-10-10) Stopped by the machine's keeper after a stretch nobody needed it (`ic sandbox sleep`), and started
+    // again by itself when somebody opens it. `running` is false while this is true.
+    asleep: z.boolean().optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending

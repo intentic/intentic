@@ -52,7 +52,7 @@ const files = {
                 bootsInWindow: 2,
                 storm: false,
                 restartAskedAt: AT - 90_000,
-            }),
+            }, { quietSince: AT - 30_000, nextWakeAt: AT + 7_200_000 }),
         ) as unknown,
     },
 };

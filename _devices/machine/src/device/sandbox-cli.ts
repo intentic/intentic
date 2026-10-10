@@ -3,6 +3,7 @@ import { runLogPath } from "../config.js";
 import { type MachineConfig, readMachineConfig, updateMachineConfig } from "../environments/machine.js";
 import { ensureResident } from "../resident.js";
 import { runIcAttached } from "./tools/sandboxes.js";
+import { sleepMinutesOf, sleepStatus, withSleepMinutes } from "./sandbox-rounds/sleep.js";
 
 // `intentic-machine sandbox <verb> [slug]`: ic's own sandbox verbs, passed through, so a sandbox on this machine can be
 // looked at and repaired from the agent's CLI when no browser can reach it (the one it runs in is down, say). Nothing
@@ -143,11 +144,48 @@ const keeper = buildCommand<Record<never, never>, [KeeperWord | undefined]>({
     },
 });
 
+/* HOW LONG AN UNNEEDED SANDBOX STAYS UP (sandbox-rounds/sleep.ts), in this environment's machine.json beside the
+   keeper's switch: the default is stored as the key's absence, `off` as 0. */
+
+type SleepWord = { readonly minutes: number } | "status";
+
+// A whole number of minutes, `off`, or `status`; anything else is refused here rather than written.
+export const sleepWord = (value: string): SleepWord => {
+    if (value === "status") {
+        return value;
+    }
+    if (value === "off") {
+        return { minutes: 0 };
+    }
+    if (/^\d+$/.test(value) && Number(value) <= 7 * 24 * 60) {
+        return { minutes: Number(value) };
+    }
+    throw new Error(`"${value}" is not a number of minutes, off or status.`);
+};
+
+const sleepAfter = buildCommand<Record<never, never>, [SleepWord | undefined]>({
+    docs: { brief: "After how many minutes nobody needs a sandbox the keeper puts it to sleep (it wakes when opened): minutes, off, or status" },
+    parameters: {
+        positional: {
+            kind: "tuple",
+            parameters: [{ brief: "minutes, off or status (status unless given)", parse: sleepWord, optional: true, placeholder: "minutes|off|status" }],
+        },
+    },
+    async func(this: CommandContext, _flags: Record<never, never>, word: SleepWord | undefined) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        if (word !== undefined && word !== "status") {
+            await updateMachineConfig((config) => withSleepMinutes(config, word.minutes));
+        }
+        out(sleepStatus(sleepMinutesOf(await readMachineConfig())));
+    },
+});
+
 export const sandboxRoutes = buildRouteMap({
     routes: {
         list,
         start: verbCommand<Record<never, never>>("start", "Start a sandbox and its tunnel (a parked one included), applying a shape saved for its next restart", {}),
         stop: verbCommand<Record<never, never>>("stop", "Stop a sandbox and its tunnel", {}),
+        sleep: verbCommand<Record<never, never>>("sleep", "Put a sandbox to sleep now: stopped, and started again by itself when somebody opens it", {}),
         restart: verbCommand<Record<never, never>>("restart", "Restart a sandbox and its tunnel, applying a shape saved for its next restart", {}),
         update: verbCommand<UpdateFlags>("update", "Update a sandbox onto the newest image of its release channel, keeping its files and history", {
             channel: { kind: "parsed", parse: String, optional: true, brief: "Move onto a release channel and stay there (e.g. stable)" },
@@ -184,6 +222,7 @@ export const sandboxRoutes = buildRouteMap({
             },
         ),
         keeper,
+        "sleep-after": sleepAfter,
     },
     docs: { brief: "Look at and repair the sandboxes on this machine without a browser: ic's own verbs, passed through" },
 });

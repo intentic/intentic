@@ -14,6 +14,8 @@ import {
     HostReportClaimedSchema,
     HostReportClaimSchema,
     HostReportPostSchema,
+    HostWakesAnswerSchema,
+    HostWakesAskSchema,
     IngressOkSchema,
     LocalDnsAnswerSchema,
     LocalDnsBodySchema,
@@ -84,6 +86,17 @@ export const PLATFORM_INGRESS = {
     },
     // What `ic sandbox fix` found on the machine; 204 whether stored or throttled, so `ic` never retries.
     hostReport: { method: "POST", path: "/host-report", auth: "report-key", body: "json", answer: "empty", input: HostReportPostSchema },
+    // Which of the machine's sleeping sandboxes somebody wants back (`ic sandbox wakes`); each ask carries its own report
+    // key in the body, so the route itself takes no credential.
+    hostWakes: {
+        method: "POST",
+        path: "/host-report/wakes",
+        auth: "none",
+        body: "json",
+        answer: "json",
+        input: HostWakesAskSchema,
+        output: HostWakesAnswerSchema,
+    },
     // The container is gone (`ic`, the site's cleanup script).
     farewell: {
         method: "POST",

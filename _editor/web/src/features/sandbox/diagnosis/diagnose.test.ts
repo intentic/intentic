@@ -1,6 +1,7 @@
 import type { HostReport } from "@intentic/api-contract";
 import type { SandboxVitals } from "@intentic/sandbox-contract";
 import {
+    ASLEEP_WAKE_PATIENCE_MS,
     CRASH_LOOP_RESTARTS,
     diagnose,
     type DiagnosisInput,
@@ -127,6 +128,23 @@ describe(`an own-machine sandbox that is not dialled in`, () => {
 
     it(`says it runs here and is offline when this computer's loopback answers`, () => {
         expect(diagnose(input({ evidence: evidence({ netd: { kind: `edge`, verdict: `no-tunnel` }, loopback: true }) }))).toEqual({ kind: `local-only` });
+    });
+
+    it(`is asleep while its machine's newest word says so, however long ago it fell asleep, and patient for a while`, () => {
+        // Put to sleep hours before this visit: far older than any report freshReport would take about this outage.
+        const slept = report({ stage: `done`, outcome: `healthy`, doing: undefined, checks: [], asleep: true, at: new Date(OUTAGE_AT - 5 * 3_600_000).toISOString() });
+        expect(diagnose(input({ evidence: noTunnel, hostReport: slept }))).toEqual({ kind: `asleep`, report: slept, patient: true });
+        expect(diagnose(input({ evidence: noTunnel, hostReport: slept, outageMs: ASLEEP_WAKE_PATIENCE_MS }))).toEqual({
+            kind: `asleep`,
+            report: slept,
+            patient: false,
+        });
+        // A silent address with the same report is the same sleeper, and so is a detached connection before any probe.
+        expect(diagnose(input({ evidence: evidence({ netd: { kind: `silent` } }), hostReport: slept })).kind).toBe(`asleep`);
+        expect(diagnose(input({ failure: { kind: `detached`, message: `` }, evidence: undefined, hostReport: slept })).kind).toBe(`asleep`);
+        // The wake's own report replaces it: the machine waking it up is the machine at work.
+        const waking = report({ doing: `Waking it up: somebody opened it`, checks: [] });
+        expect(diagnose(input({ evidence: noTunnel, hostReport: waking })).kind).toBe(`machine`);
     });
 
     it(`reads the edge's verdict from the connection before any probe settles`, () => {

@@ -157,6 +157,10 @@ export const HostReportInputSchema = z.object({
             agentVersion: z.string().max(40).optional(),
         })
         .optional(),
+    // (2026-10-10) The sandbox is asleep on this machine: its keeper stopped it after a stretch nobody needed it
+    // (`ic sandbox sleep`), and it starts again when somebody asks for it (POST /host-report/wakes). Absent while awake,
+    // and from an older `ic`.
+    asleep: z.boolean().optional(),
 });
 export type HostReportInput = z.infer<typeof HostReportInputSchema>;
 
@@ -166,6 +170,21 @@ export type HostReport = z.infer<typeof HostReportSchema>;
 // `POST /host-report`, bearer the sandbox's report key: `sandbox` is its tunnel id, the hex its hostname carries.
 export const HostReportPostSchema = z.object({ sandbox: z.string().regex(SANDBOX_ID), report: HostReportInputSchema });
 export type HostReportPost = z.infer<typeof HostReportPostSchema>;
+
+// `POST /host-report/wakes` (2026-10-10): a machine whose keeper put sandboxes to sleep asks, every few seconds while
+// any sleeps, whether somebody wants one of them back. Each ask names a sandbox by its tunnel id beside that sandbox's
+// report key, so one request covers every sleeper on the machine and each is authenticated on its own; an ask whose key
+// does not match is dropped without a word. The answer names the sandboxes somebody asked for recently, each once: the
+// platform forgets a request as it hands it out.
+export const HostWakesAskSchema = z.object({
+    asks: z
+        .array(z.object({ sandbox: z.string().regex(SANDBOX_ID), key: z.string().min(1).max(128) }))
+        .min(1)
+        .max(64),
+});
+export type HostWakesAsk = z.infer<typeof HostWakesAskSchema>;
+export const HostWakesAnswerSchema = z.object({ wake: z.array(z.string()) });
+export type HostWakesAnswer = z.infer<typeof HostWakesAnswerSchema>;
 
 // `POST /host-report/claim`: a live fix code buys the sandbox it was minted for and that sandbox's report key, which
 // `ic` keeps in its channel record so later runs (the machine agent's among them) can report with no code at all.

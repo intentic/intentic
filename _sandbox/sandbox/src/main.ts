@@ -2,7 +2,11 @@ import { setRunnerEnv } from "@intentic/base/git";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
-import { startWorkSignal } from "./workload/work-signal.js";
+import { startWorkSignal, type WorkSignal } from "./workload/work-signal.js";
+import { anyConnected } from "./ports/established.js";
+import { lastTerminalActivity } from "./system/idle-stop.js";
+import { connectedCount } from "./system/presence.js";
+import { startQuietWatch } from "./system/quiet-watch.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
@@ -18,7 +22,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
-import { startPlatformPresence } from "./bootstrap/platform-presence.js";
+import { nextPromisedWakeAt, startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
@@ -154,9 +158,30 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         setRunnerEnv({ SSH_AUTH_SOCK: services.sshAgent.owner });
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => room.close());
+        // Since when nobody has needed the sandbox, for the host's keeper that puts an unused one to sleep (quiet-watch.ts);
+        // a change is written at once rather than on the signal's next beat.
+        let work: WorkSignal | undefined;
+        const quiet = startQuietWatch(
+            {
+                connected: connectedCount,
+                working: () => workingNow(services, "idle-stop").length,
+                terminalActivityAt: lastTerminalActivity,
+                appsInUse: () => anyConnected(services.processes.ports()),
+                nextWakeAt: () => nextPromisedWakeAt(services),
+            },
+            { logger, onChange: () => void work?.tick() },
+        );
+        shutdown.push(() => quiet.stop());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
-        const work = startWorkSignal({ working: () => workingNow(services, "restart").length, events: services.events, logger, boot: bootFacts });
-        shutdown.push(() => work.stop());
+        work = startWorkSignal({
+            working: () => workingNow(services, "restart").length,
+            events: services.events,
+            logger,
+            boot: bootFacts,
+            quiet: quiet.read,
+        });
+        const signal = work;
+        shutdown.push(() => signal.stop());
     }
     // The credential gateway, on loopback beside netd rather than behind it, up before any turn can be handed one of its
     // addresses (broker/broker-server.ts).

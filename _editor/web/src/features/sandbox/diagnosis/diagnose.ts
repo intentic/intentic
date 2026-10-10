@@ -81,6 +81,9 @@ export type Diagnosis =
     | { readonly kind: "hosted-down"; readonly machine: HostedMachineState | undefined }
     // Own machine: that machine's own recent account of it.
     | { readonly kind: "machine"; readonly report: HostReport; readonly standing: MachineStanding }
+    // Own machine: its keeper put it to sleep for want of use, and this visit has asked for it back. `patient` while the
+    // keeper may yet be starting it.
+    | { readonly kind: "asleep"; readonly report: HostReport; readonly patient: boolean }
     // Own machine: not dialled in, and nothing heard from the machine about it. `patient` while it may yet redial.
     | { readonly kind: "not-dialled"; readonly patient: boolean; readonly lastReport: HostReport | undefined }
     // Own machine: it answers on this very computer and not through Intentic, so this computer's way out is the fault.
@@ -90,6 +93,9 @@ export type Diagnosis =
 
 /* PATIENCE, per cause. Each is how long a wait is still a wait: past it, the reader is handed what they can do. */
 
+// A sandbox asleep on its own machine: the keeper there asks for wakes every fifteen seconds, and a start and a boot take
+// under a minute; past this the computer itself is likely off or asleep.
+export const ASLEEP_WAKE_PATIENCE_MS = 3 * 60_000;
 // A computer that restarted, or woke, redials within seconds; a machine agent that noticed the silence (it looks after
 // 60 s) has reported by well before this, and a report outranks this patience whenever it lands.
 export const OWN_REDIAL_PATIENCE_MS = 100_000;
@@ -157,8 +163,17 @@ const hostedDetached = (input: DiagnosisInput): Diagnosis => {
     return input.outageMs < patience ? { kind: `waking`, machine } : { kind: `hosted-down`, machine };
 };
 
-// Not dialled in, on somebody's own machine: its own report first, then this computer's loopback, then patience.
+// Whether the machine's newest word is that it put the sandbox to sleep: however old, since a sandbox sleeps for hours,
+// and nothing but a later report (the wake's own) says otherwise.
+const asleepReport = (report: HostReport | null | undefined): HostReport | undefined => (report?.asleep === true ? report : undefined);
+
+// Not dialled in, on somebody's own machine: asleep first, then its own report, then this computer's loopback, then
+// patience.
 const ownDetached = (input: DiagnosisInput): Diagnosis => {
+    const sleeping = asleepReport(input.hostReport);
+    if (sleeping !== undefined) {
+        return { kind: `asleep`, report: sleeping, patient: input.outageMs < ASLEEP_WAKE_PATIENCE_MS };
+    }
     const report = freshReport(input.hostReport, input.outageStartedAt, input.now);
     if (report !== undefined) {
         const standing = machineStanding(report);
@@ -181,7 +196,7 @@ const silent = (input: DiagnosisInput): Diagnosis => {
     if (input.lane === `hosted` && input.evidence?.hosted !== undefined && input.evidence.hosted !== `started`) {
         return hostedDetached(input);
     }
-    if (input.lane === `own` && freshReport(input.hostReport, input.outageStartedAt, input.now) !== undefined) {
+    if (input.lane === `own` && (asleepReport(input.hostReport) !== undefined || freshReport(input.hostReport, input.outageStartedAt, input.now) !== undefined)) {
         return ownDetached(input);
     }
     return { kind: `silent`, patient: input.outageMs < SILENT_PATIENCE_MS };

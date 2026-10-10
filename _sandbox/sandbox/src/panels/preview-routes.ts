@@ -5,7 +5,7 @@ import { escapeHtml } from "@intentic/base/format";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
 import { interstitial, type Refusal } from "./interstitial.js";
-import type { PanelServer, PanelUpstreamResolver } from "./panel-upstream.js";
+import type { PanelServer, PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
 
 // What a preview host (`preview-`, `port-`, `public-` labels) answers with, decided once when netd asks
 // (_sandbox/netd, proxy.rs): netd relays a serving upstream's bytes itself and writes a refusal or the probe's
@@ -30,6 +30,9 @@ export interface PreviewDeps {
     readonly slotTargetOf: SlotResolver;
     readonly sandboxId?: string | undefined;
     readonly outbox?: { readonly slot: string; readonly serve: PublicHandler } | undefined;
+    // A page of this panel was asked for (never a probe): true when that woke an app rested for want of visitors
+    // (scaffold/app-rest.ts), so the visitor is told it is starting rather than that it is not running.
+    readonly visit?: (panel: string) => boolean;
 }
 
 // What the probe reports: the sandbox's own view of the address. A browser only needs a readable response; curl gets
@@ -50,7 +53,10 @@ type Resolved =
 
 // Only an assigned port may keep the preview's Host; a self-pinned one's host check may only accept localhost.
 const panelUpstream = async (deps: PreviewDeps, panel: string, probing: boolean): Promise<Resolved> => {
-    const upstream = await deps.panelOf(panel);
+    const woke = !probing && deps.visit?.(panel) === true;
+    const resolved = await deps.panelOf(panel);
+    // The scan may not have seen the session the wake just opened, and "not running" would send the visitor away.
+    const upstream: PanelUpstream = woke && resolved.state === "stopped" ? { state: "starting" } : resolved;
     const name = escapeHtml(panel);
     if (probing) {
         return {
@@ -75,7 +81,11 @@ const panelUpstream = async (deps: PreviewDeps, panel: string, probing: boolean)
             kind: "refused",
             status: 502,
             title: "Preview is starting",
-            message: `"${name}" is starting and hasn't opened a port yet: its terminal in the sandbox shows how far it has got`,
+            message: woke
+                ? `"${name}" was resting while nobody used it and is starting again: this page reloads by itself once it answers`
+                : `"${name}" is starting and hasn't opened a port yet: its terminal in the sandbox shows how far it has got`,
+            // A starting server answers within seconds; the visitor should not have to know to reload.
+            refreshSeconds: 3,
         };
     }
     if (upstream.state === "several") {
@@ -126,7 +136,11 @@ const resolve = async (host: string | undefined, deps: PreviewDeps, probing: boo
 
 const HTML = { "content-type": "text/html; charset=utf-8" };
 
-const refusalPage = (refusal: Refusal): Page => ({ status: refusal.status, headers: HTML, body: interstitial(refusal.title, refusal.message) });
+const refusalPage = (refusal: Refusal): Page => ({
+    status: refusal.status,
+    headers: HTML,
+    body: interstitial(refusal.title, refusal.message, refusal.refreshSeconds),
+});
 
 // Cross-origin readable by design; carries no sandbox content, never cached since state changes by the second.
 const probePage = (body: ProbeBody): Page => ({

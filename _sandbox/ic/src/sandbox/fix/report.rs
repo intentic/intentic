@@ -149,13 +149,125 @@ fn agent(platform_url: &str, limit: Duration) -> ureq::Agent {
     crate::platform::agent_within(platform_url, limit)
 }
 
+/// The platform ic talks to when nothing names another.
+pub const DEFAULT_PLATFORM: &str = "https://api.intentic.dev";
+
 /// Where one sandbox's reports go.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
     pub platform: String,
     pub key: String,
     /// The 12-hex tunnel id.
     pub sandbox: String,
+}
+
+/// Where a sandbox's reports go, for a verb outside the fix engine (sleep.rs), read the way the engine reads it: the
+/// platform PLATFORM_URL forces, else the one its container names, else the one kept for it, else the default; the key
+/// its connect token yields, else the one kept for it. None for a slug that carries no tunnel id, or a sandbox with no
+/// key at all. Pure.
+pub fn target_of(
+    slug: &str,
+    token: Option<&str>,
+    container_platform: Option<&str>,
+    record: &crate::record::ChannelRecord,
+    forced: Option<&str>,
+) -> Option<Target> {
+    let sandbox = tunnel_id(slug)?;
+    let key = token
+        .filter(|token| !token.is_empty())
+        .map(report_key)
+        .or_else(|| record.report_key.clone())?;
+    let platform = forced
+        .filter(|url| !url.is_empty())
+        .map(|url| url.trim_end_matches('/').to_string())
+        .or_else(|| {
+            container_platform
+                .filter(|url| !url.is_empty())
+                .map(from_host)
+        })
+        .or_else(|| record.report_platform.clone())
+        .unwrap_or_else(|| DEFAULT_PLATFORM.to_string());
+    Some(Target {
+        platform,
+        key,
+        sandbox,
+    })
+}
+
+/// PLATFORM_URL, when it is set: it wins over what a container or a record says.
+pub fn forced_platform() -> Option<String> {
+    std::env::var("PLATFORM_URL")
+        .ok()
+        .filter(|url| !url.is_empty())
+}
+
+/// One report, sent now and waited for (bounded): for a verb that reports once and is done, where the poster's
+/// coalescing has nothing to coalesce. A failure is ignored, as every post's is.
+pub fn post_now(target: &Target, body: serde_json::Value) {
+    post(&Pending {
+        target: target.clone(),
+        stage: Stage::Done,
+        body,
+    });
+}
+
+/* THE WAKES THE PLATFORM HOLDS. Somebody opening a sandbox that sleeps on this computer (`ic sandbox sleep`) leaves a
+wake request on the platform, which has no way to reach this machine; the machine agent asks for them instead (`ic
+sandbox wakes`, every few seconds while anything here sleeps): `POST /host-report/wakes` with each sleeping sandbox's
+report key, which proves the asker is the host that runs it, answered with the ones somebody asked to wake. The platform
+clears each request as it answers it, so an answer is acted on once. Anything but a 200 with a body that reads is
+"nothing to wake": a wake missed now is asked for again at the next poll, and a sandbox started that nobody asked for is
+not. */
+
+/// How many sandboxes one ask may carry (the platform's cap).
+pub const WAKES_MAX: usize = 64;
+/// How long one ask may take: the poll comes round again in seconds.
+const WAKES_LIMIT: Duration = Duration::from_secs(10);
+
+/// The ask's body. Pure.
+pub fn wakes_body(asks: &[Target]) -> serde_json::Value {
+    let asks: Vec<serde_json::Value> = asks
+        .iter()
+        .map(|ask| serde_json::json!({ "sandbox": ask.sandbox, "key": ask.key }))
+        .collect();
+    serde_json::json!({ "asks": asks })
+}
+
+/// The tunnel ids an answer names, among the ones asked about, each once: an answer is never a licence to start a
+/// sandbox nobody asked about. Pure.
+pub fn woken_of(answer: &serde_json::Value, asked: &[Target]) -> Vec<String> {
+    let mut woken: Vec<String> = Vec::new();
+    for id in answer["wake"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+    {
+        if asked.iter().any(|ask| ask.sandbox == id) && !woken.iter().any(|seen| seen == id) {
+            woken.push(id.to_string());
+        }
+    }
+    woken
+}
+
+/// Ask one platform which of `asks` (all reporting to it) somebody asked to wake, at most [`WAKES_MAX`] to an ask.
+pub fn wakes(platform: &str, asks: &[Target]) -> Vec<String> {
+    let mut woken = Vec::new();
+    for chunk in asks.chunks(WAKES_MAX) {
+        let Ok(mut response) = agent(platform, WAKES_LIMIT)
+            .post(format!("{platform}/host-report/wakes"))
+            .send_json(wakes_body(chunk))
+        else {
+            continue;
+        };
+        if response.status().as_u16() != 200 {
+            continue;
+        }
+        if let Ok(answer) = response.body_mut().read_json::<serde_json::Value>() {
+            woken.extend(woken_of(&answer, chunk));
+        }
+    }
+    woken
 }
 
 struct Pending {
@@ -322,6 +434,97 @@ mod tests {
         );
         assert_eq!(tunnel_id("work"), None);
         assert_eq!(tunnel_id("sandbox-0123456789abc"), None);
+    }
+
+    fn record_with(key: Option<&str>, platform: Option<&str>) -> crate::record::ChannelRecord {
+        crate::record::ChannelRecord {
+            report_key: key.map(str::to_string),
+            report_platform: platform.map(str::to_string),
+            ..crate::record::ChannelRecord::default()
+        }
+    }
+
+    #[test]
+    fn a_report_goes_where_the_fix_engine_would_send_it() {
+        let slug = "sandbox-0123456789ab";
+        let kept = record_with(Some("kept"), Some("https://kept.example"));
+        let from_token = target_of(
+            slug,
+            Some("token"),
+            Some("http://host.docker.internal:6480/"),
+            &kept,
+            None,
+        )
+        .expect("a target");
+        assert_eq!(
+            from_token,
+            Target {
+                platform: "http://localhost:6480".to_string(),
+                key: report_key("token"),
+                sandbox: "0123456789ab".to_string(),
+            }
+        );
+        let from_record = target_of(slug, None, None, &kept, None).expect("a target");
+        assert_eq!(
+            (from_record.platform.as_str(), from_record.key.as_str()),
+            ("https://kept.example", "kept")
+        );
+        let forced = target_of(
+            slug,
+            None,
+            Some("https://c.example"),
+            &kept,
+            Some("https://f.example/"),
+        )
+        .expect("a target");
+        assert_eq!(forced.platform, "https://f.example");
+        let defaulted =
+            target_of(slug, None, None, &record_with(Some("k"), None), None).expect("a target");
+        assert_eq!(defaulted.platform, DEFAULT_PLATFORM);
+        assert_eq!(
+            target_of(
+                slug,
+                None,
+                None,
+                &record_with(None, Some("https://p")),
+                None
+            ),
+            None,
+            "no key, no report"
+        );
+        assert_eq!(
+            target_of("work", Some("token"), None, &kept, None),
+            None,
+            "no tunnel id, no report"
+        );
+    }
+
+    #[test]
+    fn a_wake_is_asked_with_each_key_and_only_what_was_asked_about_is_woken() {
+        let ask = |id: &str| Target {
+            platform: "https://p".to_string(),
+            key: format!("key-{id}"),
+            sandbox: id.to_string(),
+        };
+        let asked = vec![ask("0123456789ab"), ask("ba9876543210")];
+        assert_eq!(
+            wakes_body(&asked),
+            serde_json::json!({ "asks": [
+                { "sandbox": "0123456789ab", "key": "key-0123456789ab" },
+                { "sandbox": "ba9876543210", "key": "key-ba9876543210" },
+            ] })
+        );
+        assert_eq!(
+            woken_of(
+                &serde_json::json!({ "wake": ["ba9876543210", "ffffffffffff", "ba9876543210", 7] }),
+                &asked
+            ),
+            vec!["ba9876543210".to_string()],
+            "never one nobody asked about, and each once"
+        );
+        assert!(woken_of(&serde_json::json!({ "wake": [] }), &asked).is_empty());
+        assert!(woken_of(&serde_json::json!({ "error": "nope" }), &asked).is_empty());
+        assert!(woken_of(&serde_json::json!(["0123456789ab"]), &asked).is_empty());
     }
 
     #[test]

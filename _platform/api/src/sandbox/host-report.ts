@@ -95,12 +95,24 @@ export const withHostReport = (stored: unknown, report: HostReport): Prisma.Inpu
  * says the same stage and outcome. A change of either always lands, so `done` is never lost to the throttle. A stored
  * `at` from the future (another replica's clock) does not hold writes back. */
 export const skipsWrite = (held: HostReport | null, next: HostReportInput, nowMs: number): boolean => {
-    if (held === null || held.stage !== next.stage || held.outcome !== next.outcome) {
+    // Falling asleep or waking is a change too: a sleep reported a second after a healthy fix must land.
+    if (held === null || held.stage !== next.stage || held.outcome !== next.outcome || (held.asleep === true) !== (next.asleep === true)) {
         return false;
     }
     const age = nowMs - Date.parse(held.at);
     return age >= 0 && age < HOST_REPORT_INTERVAL_MS;
 };
+
+/* WAKING A SANDBOX ASLEEP ON ITS OWN MACHINE (2026-10-10). The platform never calls a machine, so a wake is a request
+ * left here (sandbox.wake stamps `wakeRequestedAt`) and collected by the machine's own keeper, which asks every few
+ * seconds while any sandbox of its sleeps (`ic sandbox wakes`). A request older than this is dropped unanswered: the
+ * browser that made it has given up or asked again since, and a sandbox started long after nobody waits for it is the
+ * sleep undone for nothing. */
+export const WAKE_REQUEST_TTL_MS = 10 * 60 * 1000;
+
+// Whether a stored request is still one to hand out. Pure.
+export const wakeIsLive = (requestedAt: Date | null, nowMs: number): boolean =>
+    requestedAt !== null && nowMs - requestedAt.getTime() <= WAKE_REQUEST_TTL_MS && requestedAt.getTime() - nowMs <= WAKE_REQUEST_TTL_MS;
 
 // A fresh code, replacing whatever the row held. The setup code's generator: the same kind of code, pasted the same way.
 export const mintFixCode = async (prisma: PrismaClient, sandboxId: string): Promise<{ code: string; expiresAt: string }> => {
@@ -178,6 +190,38 @@ export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
             data: { hostReport: withHostReport(sandbox.hostReport, { ...report, at: new Date().toISOString() }) },
         });
         return written.count === 0 ? kit.refuse(401, `that report key is not this sandbox's`) : c.body(null, 204);
+    });
+
+    // Which of a machine's sleeping sandboxes somebody wants back. Every ask is checked against its own sandbox's key,
+    // and one that fails is left out of the answer as one nobody asked for, so the answer says nothing about a sandbox
+    // the caller cannot prove it keeps. A request is handed out once: it is cleared, pinned to the stamp that was read,
+    // so a request made in between survives for the next ask.
+    ingress(`hostWakes`, async (_c, kit) => {
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `malformed wake ask`);
+        }
+        const keyOf = new Map(body.asks.map((ask) => [ask.sandbox, ask.key]));
+        const rows = await prisma.sandbox.findMany({
+            where: { tunnelId: { in: [...keyOf.keys()] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
+            select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+        });
+        const now = Date.now();
+        const wake: string[] = [];
+        for (const row of rows) {
+            const presented = keyOf.get(row.tunnelId);
+            const expected = reportKeyOf(config, row.token);
+            if (presented === undefined || expected === undefined || !keysMatch(presented, expected)) {
+                continue;
+            }
+            const live = wakeIsLive(row.wakeRequestedAt, now);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- a machine's few sleepers, each its own conditional clear
+            const cleared = await prisma.sandbox.updateMany({ where: { id: row.id, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
+            if (live && cleared.count > 0) {
+                wake.push(row.tunnelId);
+            }
+        }
+        return kit.answer({ wake });
     });
 
     return app;

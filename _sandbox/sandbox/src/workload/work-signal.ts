@@ -4,6 +4,7 @@ import { writeFileAtomic } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { opt } from "../opt.js";
 import type { DomainEvents } from "../seams/domain-events.js";
+import type { QuietReading } from "../system/quiet-watch.js";
 
 // HOW MUCH WORK IS IN FLIGHT, FOR THE HOST. The machine agent's keeper restarts a sandbox unasked when its tunnel or its
 // registration is broken (ic: sandbox/fix/chain.rs), and a restart cuts every turn in flight. ic reads this file
@@ -37,6 +38,9 @@ export interface WorkSignalDeps {
     readonly working: () => number;
     // This boot's facts once known; absent for a daemon that keeps no boot record.
     readonly boot?: () => Promise<WorkSignalBoot | undefined>;
+    // Since when nobody has needed the sandbox, and its soonest promised wake (system/quiet-watch.ts): what the host's
+    // keeper puts a sandbox to sleep on (ic: `sandbox sleep --idle`). Absent for a daemon that offers no sleep.
+    readonly quiet?: () => QuietReading;
     readonly events: Pick<DomainEvents, "subscribe">;
     readonly logger: Pick<Logger, "warn">;
     readonly path?: string;
@@ -49,8 +53,9 @@ export interface WorkSignal {
     readonly stop: () => void;
 }
 
-// `liveTurns` and `at` first and always, as every keeper reads them; the boot's facts after, when known.
-export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalBoot): string =>
+// `liveTurns` and `at` first and always, as every keeper reads them; the boot's facts after, when known, then the quiet
+// reading, whose fields are absent whenever they say nothing (busy, no wake promised).
+export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalBoot, quiet?: QuietReading): string =>
     `${JSON.stringify({
         liveTurns,
         at,
@@ -59,10 +64,12 @@ export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalB
         ...opt("bootsInWindow", boot?.bootsInWindow),
         ...opt("restartStorm", boot?.storm),
         ...opt("lastRestartAt", boot?.restartAskedAt),
+        ...opt("quietSince", quiet?.quietSince),
+        ...opt("nextWakeAt", quiet?.nextWakeAt),
     })}\n`;
 
-export const startWorkSignal = ({ working, events, logger, boot, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
-    let written: { liveTurns: number; at: number } | undefined;
+export const startWorkSignal = ({ working, events, logger, boot, quiet, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
+    let written: { liveTurns: number; at: number; quiet: QuietReading | undefined } | undefined;
     let failing = false;
     let chain: Promise<void> = Promise.resolve();
     // Read once: a boot's facts never change after it.
@@ -74,13 +81,15 @@ export const startWorkSignal = ({ working, events, logger, boot, path = WORK_SIG
     const write = async (): Promise<void> => {
         const liveTurns = working();
         const at = now();
-        if (written !== undefined && written.liveTurns === liveTurns && at - written.at < REFRESH_MS) {
+        const reading = quiet?.();
+        const quietSame = written?.quiet?.quietSince === reading?.quietSince && written?.quiet?.nextWakeAt === reading?.nextWakeAt;
+        if (written !== undefined && written.liveTurns === liveTurns && quietSame && at - written.at < REFRESH_MS) {
             return;
         }
         try {
             await mkdir(dirname(path), { recursive: true });
-            await writeFileAtomic(path, workSignalBody(liveTurns, at, await booted));
-            written = { liveTurns, at };
+            await writeFileAtomic(path, workSignalBody(liveTurns, at, await booted, reading));
+            written = { liveTurns, at, quiet: reading };
             failing = false;
         } catch (error) {
             // Said once per stretch: a daemon without /run/intentic (a dev daemon on a laptop) has no host to tell.

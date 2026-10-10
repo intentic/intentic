@@ -120,6 +120,9 @@
         "agentOnThisDevice": "Agent on this device"
     },
     "deviceDetail": {
+        "asleep": "asleep",
+        "asleepNote": "Nobody was using it, so this computer put it to sleep. Opening it wakes it.",
+        "asleepTitle": "Asleep",
         "backup": "backup: {folder}",
         "busyHere": "Busy here",
         "conflicts": "{count} conflict | {count} conflicts",

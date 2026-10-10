@@ -69,7 +69,7 @@ import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { filePushStore, pushDocument, type PushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { createPortForwards } from "./ports/port-forwards.js";
-import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
+import { cachedScan, type ListeningPort, listenerFingerprint, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
@@ -435,7 +435,7 @@ const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "worksp
         // ProcessesSlice: ports/ reaches processes/ back through system/. Slot names are salted with the connect token so
         // a port's hostname can't be guessed from the sandbox id.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
-        scanPorts: scanPortsWith(logger),
+        scanPorts: cachedScan(scanPortsWith(logger), () => listenerFingerprint()),
         // DepsSlice: the heavy queue is agent/'s terminal lane.
         queueHeavy: queueWhole(deps.heavyCommands.read),
         // AutomationsSlice: issues/ and webchat/ import automations/ back.

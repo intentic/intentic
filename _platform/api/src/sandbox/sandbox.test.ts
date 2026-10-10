@@ -374,6 +374,27 @@ describe(`sandbox routes`, () => {
     });
 });
 
+// A sandbox on somebody's own machine: the platform cannot start it, so the wake is a request its keeper collects.
+describe(`sandbox.wake on a sandbox intentic does not host`, () => {
+    it(`stamps a wake request and starts nothing`, async () => {
+        const update = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null }), update } });
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma }) })).toEqual({ ok: true });
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { wakeRequestedAt: expect.any(Date) } });
+    });
+
+    it(`is NOT_FOUND for a removed sandbox, and stamps nothing`, async () => {
+        const update = jest.fn();
+        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null, removedAt: new Date() }), update } });
+        const error = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+        expect((error as { code?: string }).code).toBe(`NOT_FOUND`);
+        expect(update).not.toHaveBeenCalled();
+    });
+});
+
 // PAYMENT_REQUIRED is the platform's own code; oRPC's unknown-code fallback would otherwise report 500 for this
 // ordinary refusal. Pinned here, not only in the Docker-gated e2e tier, since this must hold on a plain `pnpm test`.
 describe(`a metered owner whose month is spent`, () => {

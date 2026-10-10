@@ -56,6 +56,14 @@ describe(`a sandbox that is down`, () => {
         expect(present({ kind: `not-dialled`, patient: false, lastReport: undefined }, { owner: false }).action).toBeUndefined();
     });
 
+    it(`says a sleeping sandbox is being woken, and hands the owner the command only once waking has taken too long`, () => {
+        const slept = report({ outcome: `healthy`, checks: [], asleep: true });
+        expect(present({ kind: `asleep`, report: slept, patient: true })).toMatchObject({ title: `Waking acme`, waiting: true, action: undefined });
+        expect(present({ kind: `asleep`, report: slept, patient: true }).body).toContain(`rog put it to sleep`);
+        expect(present({ kind: `asleep`, report: slept, patient: false })).toMatchObject({ title: `acme is still asleep`, waiting: false, action: `fix` });
+        expect(present({ kind: `asleep`, report: slept, patient: false }, { owner: false }).action).toBeUndefined();
+    });
+
     it(`offers a machine we run a restart, and its rollback where the platform kept one`, () => {
         expect(present({ kind: `hosted-down`, machine: `failed` }, { lane: `hosted` })).toMatchObject({ action: `restart-hosted`, otherActions: [] });
         expect(present({ kind: `hosted-down`, machine: `started` }, { lane: `hosted`, canRollBack: true })).toMatchObject({

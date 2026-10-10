@@ -38,7 +38,9 @@
       "previousBootAt": 1791236730000,
       "bootsInWindow": 2,
       "restartStorm": false,
-      "lastRestartAt": 1791240240000
+      "lastRestartAt": 1791240240000,
+      "quietSince": 1791240300000,
+      "nextWakeAt": 1791247530000
     }
   }
 }

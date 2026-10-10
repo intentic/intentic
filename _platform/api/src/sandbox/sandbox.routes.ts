@@ -760,8 +760,15 @@ export const sandboxRoutes = {
             },
             include: { hosted: true, owner: { select: { email: true } } },
         });
-        if (!sandbox || sandbox.hosted === null) {
+        if (!sandbox || sandbox.removedAt !== null) {
             throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
+        }
+        // On somebody's own machine the platform cannot start anything: the request waits here for that machine's keeper,
+        // which asks while a sandbox of its sleeps (host-report.ts, POST /host-report/wakes). Restamped on every ask, so the
+        // newest browser's request is the one that lives.
+        if (sandbox.hosted === null) {
+            await context.prisma.sandbox.update({ where: { id: sandbox.id }, data: { wakeRequestedAt: new Date() } });
+            return { ok: true };
         }
         const { hosted } = sandbox;
         await requireHostedStanding(context, sandbox.ownerId);

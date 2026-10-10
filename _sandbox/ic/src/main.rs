@@ -464,6 +464,36 @@ enum SandboxCommand {
         #[arg(long = "no-resume")]
         no_resume: bool,
     },
+    /// Put a sandbox to sleep: stopped like `stop`, but started again as soon as somebody opens it (`ic sandbox
+    /// wakes`). With `--idle`, only sandboxes whose daemon says nobody has needed them for that long
+    Sleep {
+        /// The sandbox to put to sleep (omit when this machine runs exactly one; with `--idle`, omit for every
+        /// sandbox this side of the computer keeps)
+        slug: Option<String>,
+        /// Sleep only what has been quiet at least this many minutes, with no wake promised sooner (the machine
+        /// agent's keeper); a sandbox that stays awake is said, not an error
+        #[arg(long, value_name = "MINUTES", value_parser = clap::value_parser!(u64).range(1..))]
+        idle: Option<u64>,
+        /// One line of JSON per sandbox considered on stdout, `{"slug":…,"slept":…,"why":…}`; every human line goes
+        /// to stderr
+        #[arg(long)]
+        json: bool,
+        /// Who runs this, for the report the sandbox's page reads: the machine agent, a command (the default), or the
+        /// desktop app
+        #[arg(long, value_enum, default_value_t = FixSource::Command)]
+        source: FixSource,
+    },
+    /// Start every sandbox asleep on this side that somebody has opened since (asks the platform; polled by the
+    /// machine agent while anything sleeps)
+    Wakes {
+        /// One line of JSON per sandbox woken on stdout, `{"slug":…,"woke":…}`, then `{"asleep":<how many still
+        /// sleep>}`; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+        /// Who runs this, for the reports the woken sandboxes' pages read
+        #[arg(long, value_enum, default_value_t = FixSource::Command)]
+        source: FixSource,
+    },
     /// Print the tail of a sandbox's own log, both streams (read-only)
     Logs {
         /// The sandbox whose log to read (omit when this machine runs exactly one)
@@ -841,6 +871,23 @@ fn main() {
             SandboxCommand::Restart { slug, no_resume } => resumed(no_resume, || {
                 sandbox::power::run(sandbox::power::Power::Restart, slug)
             }),
+            SandboxCommand::Sleep {
+                slug,
+                idle,
+                json,
+                source,
+            } => sandbox::sleep::run(sandbox::sleep::Args {
+                slug,
+                idle,
+                json,
+                source: source.source(),
+            }),
+            SandboxCommand::Wakes { json, source } => {
+                sandbox::sleep::wakes(sandbox::sleep::WakesArgs {
+                    json,
+                    source: source.source(),
+                })
+            }
             SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
             SandboxCommand::Doctor { slug, json } => sandbox::fix::run(sandbox::fix::Args {
                 slug,
@@ -1664,6 +1711,70 @@ mod tests {
                 command: Command::Sandbox(SandboxCommand::List { json: false })
             })
         ));
+    }
+
+    #[test]
+    fn sleep_takes_an_optional_slug_and_idle_minutes_and_wakes_takes_json() {
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Sleep {
+                    slug,
+                    idle,
+                    json,
+                    source,
+                }),
+        }) = parse(&["sandbox", "sleep", "abc123"])
+        else {
+            panic!("sleep did not parse")
+        };
+        assert_eq!((slug.as_deref(), idle, json), (Some("abc123"), None, false));
+        assert_eq!(source, FixSource::Command);
+        // The machine agent's keeper's own command line.
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Sleep {
+                    slug,
+                    idle,
+                    json,
+                    source,
+                }),
+        }) = parse(&[
+            "sandbox", "sleep", "--idle", "30", "--json", "--source", "agent",
+        ])
+        else {
+            panic!("sleep --idle did not parse")
+        };
+        assert_eq!((slug, idle, json), (None, Some(30), true));
+        assert_eq!(source, FixSource::Agent);
+        assert!(
+            parse(&["sandbox", "sleep", "--idle", "0"]).is_err(),
+            "at least a minute"
+        );
+        assert!(parse(&["sandbox", "sleep", "--idle"]).is_err());
+        assert!(parse(&["sandbox", "sleep", "--idle", "soon"]).is_err());
+        assert!(parse(&["sandbox", "sleep", "a", "b"]).is_err());
+        assert!(matches!(
+            parse(&["sandbox", "wakes", "--json", "--source", "agent"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Wakes {
+                    json: true,
+                    source: FixSource::Agent,
+                })
+            })
+        ));
+        assert!(matches!(
+            parse(&["sandbox", "wakes"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Wakes {
+                    json: false,
+                    source: FixSource::Command,
+                })
+            })
+        ));
+        assert!(
+            parse(&["sandbox", "wakes", "abc123"]).is_err(),
+            "wakes takes no slug"
+        );
     }
 
     #[test]

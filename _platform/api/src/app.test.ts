@@ -456,6 +456,63 @@ describe(`POST /host-report`, () => {
     });
 });
 
+const askWakes = (prisma: PrismaClient, body: unknown) =>
+    createApp(config, prisma, logger).app.request(`/host-report/wakes`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify(body),
+    });
+
+// A sleeping own-machine sandbox's row as the wakes route selects it, asked for `agoMs` ago.
+const sleeperRow = (agoMs: number, token = `tok`) => ({ id: `s1`, tunnelId: TUNNEL_ID, token, wakeRequestedAt: new Date(Date.now() - agoMs) });
+
+describe(`POST /host-report/wakes`, () => {
+    it(`hands out a recent request under the right key, once, clearing exactly the stamp it read`, async () => {
+        const row = sleeperRow(5_000);
+        const findMany = jest.fn().mockResolvedValue([row]);
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const res = await askWakes(fakePrisma({ sandbox: { findMany, updateMany } }), { asks: [{ sandbox: TUNNEL_ID, key: REPORT_KEY }] });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ wake: [TUNNEL_ID] });
+        expect(findMany).toHaveBeenCalledWith({
+            where: { tunnelId: { in: [TUNNEL_ID] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
+            select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+        });
+        // Pinned to the stamp read, so a request made in between survives for the next ask.
+        expect(updateMany).toHaveBeenCalledWith({ where: { id: `s1`, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
+    });
+
+    it(`says nothing of a sandbox whose key does not match, and clears nothing for it`, async () => {
+        const updateMany = jest.fn();
+        const other = createHmac(`sha256`, `other`).update(`intentic/host-report/v1`).digest(`hex`);
+        const res = await askWakes(fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([sleeperRow(5_000)]), updateMany } }), {
+            asks: [{ sandbox: TUNNEL_ID, key: other }],
+        });
+        expect(await res.json()).toEqual({ wake: [] });
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it(`drops a request past its lifetime unanswered, and answers none when a newer ask already took it`, async () => {
+        const stale = await askWakes(
+            fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([sleeperRow(11 * 60_000)]), updateMany: jest.fn().mockResolvedValue({ count: 1 }) } }),
+            { asks: [{ sandbox: TUNNEL_ID, key: REPORT_KEY }] },
+        );
+        expect(await stale.json()).toEqual({ wake: [] });
+        const raced = await askWakes(
+            fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([sleeperRow(1_000)]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) } }),
+            { asks: [{ sandbox: TUNNEL_ID, key: REPORT_KEY }] },
+        );
+        expect(await raced.json()).toEqual({ wake: [] });
+    });
+
+    it(`400s an ask with nothing in it before touching the database`, async () => {
+        const findMany = jest.fn();
+        expect((await askWakes(fakePrisma({ sandbox: { findMany } }), { asks: [] })).status).toBe(400);
+        expect((await askWakes(fakePrisma({ sandbox: { findMany } }), {})).status).toBe(400);
+        expect(findMany).not.toHaveBeenCalled();
+    });
+});
+
 const presentation = (prisma: PrismaClient, token: string | undefined) =>
     createApp(config, prisma, logger).app.request(`/sandbox/presentation`, {
         method: `POST`,

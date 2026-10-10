@@ -143,6 +143,7 @@ pub enum Public {
     Unreachable(String),
 }
 
+#[derive(Clone)]
 pub struct ChainFacts {
     pub slug: String,
     pub record: ChannelRecord,
@@ -169,6 +170,9 @@ pub struct ChainFacts {
     pub ledger: Ledger,
     /// It stands stopped because a person stopped it outside ic (see `stopped_by_person`).
     pub stopped_outside: bool,
+    /// A person asked for this run (an attended `ic sandbox fix`): a sandbox asleep is started like any stopped one,
+    /// since asking for the fix is asking for it to run. The keeper's `--auto` and doctor leave it asleep (`asleep`).
+    pub attended: bool,
 }
 
 /* GATHERING. */
@@ -199,6 +203,7 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
         now_ms: crate::sandbox::now_ms(),
         ledger: Ledger::default(),
         stopped_outside: false,
+        attended: false,
     };
     if !engine_up {
         return facts;
@@ -255,10 +260,12 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
     )
     .said()
     .map(|running| running.trim() == "true");
+    let resting = sleeping(&facts);
     let Container::Present(state) = &facts.container else {
         return facts;
     };
-    if stop_worth_asking(state) {
+    // A sandbox the keeper put to sleep was stopped through Docker's API too, and is no person's stop to ask about.
+    if stop_worth_asking(state) && !resting {
         facts.stopped_outside = stopped_by_person(state, stop_heard(&container, state));
     }
     facts.oom_seen |= state.oom;
@@ -269,7 +276,7 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
             facts.health = ask_health(&container);
         }
     }
-    if !matches!(facts.health, Health::Answered(_)) {
+    if !resting && !matches!(facts.health, Health::Answered(_)) {
         facts.boot_failure = crate::sandbox::probation::boot_failure_since(
             &container,
             state.started_ms.unwrap_or(0),
@@ -287,9 +294,8 @@ pub fn gather(slug: &str, engine_up: bool, oom_seen: bool) -> ChainFacts {
     // Asked of every running daemon, answering or not (2026-10-05): one whose /health is wedged can still be running
     // turns, and a restart cuts them all the same.
     if state.running() {
-        facts.live_turns = docker::ask(&["exec", &container, "cat", WORK_SIGNAL], EXEC_LIMIT)
-            .said()
-            .and_then(|body| live_turns(&body, facts.now_ms));
+        facts.live_turns =
+            read_work_signal(&container).and_then(|signal| signal.turns(facts.now_ms));
     }
     if let (Health::Answered(_), Some(url)) = (&facts.health, facts.env.public_url.clone()) {
         facts.public = probe_public(&url);
@@ -347,17 +353,48 @@ pub const WORK_SIGNAL: &str = "/run/intentic/work.json";
 /// Older than this, the count is what a hung daemon left behind: nothing to protect, and nothing to believe.
 const WORK_SIGNAL_STALE_MS: u64 = 3 * 60_000;
 
-/// The live turns `body` says, when it says it recently enough. The container's clock is this machine's. Pure.
-pub fn live_turns(body: &str, now_ms: u64) -> Option<u32> {
-    let value: Value = serde_json::from_str(body.trim()).ok()?;
-    let at = value.get("at")?.as_u64()?;
-    if now_ms.saturating_sub(at) > WORK_SIGNAL_STALE_MS {
-        return None;
+/// The signal, read whole. `at` and `liveTurns` come from every daemon that writes it; `quietSince` (since when nothing
+/// has needed the sandbox, present only while that is so) and `nextWakeAt` (the soonest one-time wake it promised
+/// somebody) from one that says whether it may sleep (sleep.rs), and are absent otherwise, in epoch milliseconds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WorkSignal {
+    pub at: u64,
+    pub live_turns: u32,
+    pub quiet_since: Option<u64>,
+    pub next_wake_at: Option<u64>,
+}
+
+impl WorkSignal {
+    /// None for a body that is not the signal (no JSON, no `at`, no count). Pure.
+    pub fn parse(body: &str) -> Option<WorkSignal> {
+        let value: Value = serde_json::from_str(body.trim()).ok()?;
+        Some(WorkSignal {
+            at: value.get("at")?.as_u64()?,
+            live_turns: value
+                .get("liveTurns")?
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())?,
+            quiet_since: value.get("quietSince").and_then(Value::as_u64),
+            next_wake_at: value.get("nextWakeAt").and_then(Value::as_u64),
+        })
     }
-    value
-        .get("liveTurns")?
-        .as_u64()
-        .and_then(|n| u32::try_from(n).ok())
+
+    /// Written recently enough to be believed, against this machine's clock (the container's is the same). Pure.
+    pub fn fresh(&self, now_ms: u64) -> bool {
+        now_ms.saturating_sub(self.at) <= WORK_SIGNAL_STALE_MS
+    }
+
+    /// The live turns, when the signal says them recently enough. Pure.
+    pub fn turns(&self, now_ms: u64) -> Option<u32> {
+        self.fresh(now_ms).then_some(self.live_turns)
+    }
+}
+
+/// The signal off a running container, None when it will not say (no file, a daemon that does not write one).
+pub fn read_work_signal(container: &str) -> Option<WorkSignal> {
+    docker::ask(&["exec", container, "cat", WORK_SIGNAL], EXEC_LIMIT)
+        .said()
+        .and_then(|body| WorkSignal::parse(&body))
 }
 
 /// The restart a broken link gets: unasked while nothing runs inside, with a yes while agents are mid-turn, and with
@@ -626,9 +663,20 @@ pub fn container(facts: &ChainFacts, engine_up: bool, tried: &dyn Fn(&Repair) ->
             } else {
                 String::new()
             };
-            let problem = format!("the container is {status}, not running{oom}{exit}.");
+            if asleep(facts) {
+                return Check {
+                    note: Some(ASLEEP.to_string()),
+                    ..Check::ok(CONTAINER)
+                };
+            }
+            let slept = if sleeping(facts) {
+                " It was put to sleep for idleness, and starting it is what this run is for."
+            } else {
+                ""
+            };
+            let problem = format!("the container is {status}, not running{oom}{exit}.{slept}");
             let start = format!("start it: ic sandbox start {slug}");
-            if facts.record.held || facts.stopped_outside {
+            if !facts.record.asleep && (facts.record.held || facts.stopped_outside) {
                 let how = if facts.stopped_outside {
                     "It was stopped outside intentic (Docker Desktop's Stop button, or docker stop), so it is left for you to start."
                 } else {
@@ -723,8 +771,34 @@ fn running(facts: &ChainFacts) -> bool {
     matches!(&facts.container, Container::Present(state) if state.running())
 }
 
+/* ASLEEP. The keeper put it to sleep for idleness (`ic sandbox sleep`) and it starts again when somebody opens it
+(`ic sandbox wakes`): to the keeper's own run a container that stands down while its record says so is a sandbox doing
+what it was told, not one to start, ask about or remember as a person's stop, and every link that needs it running is
+unknowable rather than broken. A person who runs the fix (the command the recovery panel hands out, the desktop app's
+button) is asking for it to run, so an attended run starts it, unasked, like any sandbox nobody stopped. Found running
+again, it is awake whatever the record says, and the engine clears the record (fix/mod.rs). */
+
+/// The row's note for a sandbox asleep, and the skipped links' why.
+pub const ASLEEP: &str = "asleep: it starts again when somebody opens it";
+
+/// Its record says asleep and its container stands stopped, as a sleep leaves it, whoever asked for this run. Pure.
+pub fn sleeping(facts: &ChainFacts) -> bool {
+    facts.record.asleep
+        && matches!(&facts.container, Container::Present(state)
+            if !state.restarting && matches!(state.status.as_str(), "exited" | "created"))
+}
+
+/// Asleep, and left so: the keeper's run and doctor read it as well and report it asleep; an attended fix starts it
+/// instead (`attended`), and reports it as the stopped sandbox it is starting. Pure.
+pub fn asleep(facts: &ChainFacts) -> bool {
+    sleeping(facts) && !facts.attended
+}
+
 pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     let slug = &facts.slug;
+    if asleep(facts) {
+        return Check::skip(DAEMON, ASLEEP);
+    }
     if !running(facts) {
         return Check::skip(DAEMON, "unknowable while the container is not running");
     }
@@ -808,6 +882,9 @@ pub fn daemon(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
 /// The `announce` block of /health: whether this daemon reached the platform to register — the one link nothing
 /// outside the container can probe.
 pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
+    if asleep(facts) {
+        return Check::skip(REGISTRATION, ASLEEP);
+    }
     let Health::Answered(health) = &facts.health else {
         return Check::skip(REGISTRATION, "unknowable while the daemon does not answer");
     };
@@ -866,6 +943,9 @@ pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Chec
 
 pub fn tunnel(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
     let slug = &facts.slug;
+    if asleep(facts) {
+        return Check::skip(TUNNEL, ASLEEP);
+    }
     let Some(url) = &facts.env.public_url else {
         return match &facts.container {
             Container::Present(_) => Check::warn(
@@ -1006,6 +1086,7 @@ mod tests {
             now_ms: NOW,
             ledger: Ledger::default(),
             stopped_outside: false,
+            attended: false,
         }
     }
 
@@ -1393,6 +1474,7 @@ mod tests {
 
     #[test]
     fn the_work_signal_is_believed_only_while_it_is_fresh() {
+        let live_turns = |body: &str, now: u64| WorkSignal::parse(body).and_then(|s| s.turns(now));
         assert_eq!(
             live_turns(r#"{"liveTurns":2,"at":1000}"#, 1_000 + 60_000),
             Some(2)
@@ -1411,6 +1493,37 @@ mod tests {
             None
         );
         assert_eq!(live_turns(r#"{"at":1000}"#, 1_000), None);
+    }
+
+    #[test]
+    fn the_quiet_reading_rides_the_work_signal_and_an_older_daemon_names_none() {
+        assert_eq!(
+            WorkSignal::parse(
+                r#"{"liveTurns":0,"at":5000,"bootedAt":1,"quietSince":4000,"nextWakeAt":9000}"#
+            ),
+            Some(WorkSignal {
+                at: 5_000,
+                live_turns: 0,
+                quiet_since: Some(4_000),
+                next_wake_at: Some(9_000),
+            })
+        );
+        assert_eq!(
+            WorkSignal::parse(r#"{"liveTurns":1,"at":5000}"#),
+            Some(WorkSignal {
+                at: 5_000,
+                live_turns: 1,
+                quiet_since: None,
+                next_wake_at: None,
+            })
+        );
+        assert_eq!(
+            WorkSignal::parse(r#"{"liveTurns":0,"at":5000,"quietSince":"soon"}"#)
+                .and_then(|s| s.quiet_since),
+            None,
+            "a moment that is not a number says nothing"
+        );
+        assert_eq!(WorkSignal::parse(r#"{"liveTurns":-1,"at":5000}"#), None);
     }
 
     #[test]
@@ -1521,6 +1634,146 @@ mod tests {
             .problem
             .as_deref()
             .is_some_and(|p| p.contains("stopped outside intentic")));
+    }
+
+    #[test]
+    fn a_sandbox_put_to_sleep_is_well_and_the_links_that_need_it_running_are_skipped() {
+        use crate::sandbox::fix::model::{outcome, Outcome};
+        let slept = || Inspected {
+            status: "exited".to_string(),
+            exit_code: 143,
+            restart_policy: "unless-stopped".to_string(),
+            ..running_box()
+        };
+        let asleep_box = ChainFacts {
+            record: ChannelRecord {
+                asleep: true,
+                ..ChannelRecord::default()
+            },
+            ..facts(Container::Present(slept()))
+        };
+        assert!(asleep(&asleep_box));
+        let checks = vec![
+            container(&asleep_box, true, &never),
+            daemon(&asleep_box, &never),
+            registration(&asleep_box, &never),
+            tunnel(&asleep_box, &never),
+        ];
+        assert_eq!(checks[0].state, State::Ok);
+        assert_eq!(
+            checks[0].repair(),
+            None,
+            "nothing to start: a wake starts it"
+        );
+        assert_eq!(checks[0].note.as_deref(), Some(ASLEEP));
+        for check in &checks[1..] {
+            assert_eq!(check.state, State::Skip, "{}", check.id);
+            assert_eq!(check.note.as_deref(), Some(ASLEEP), "{}", check.id);
+        }
+        assert_eq!(outcome(&checks, 0, true), Outcome::Healthy);
+
+        // However it went down (docker stop's SIGKILL after the grace), and whatever the stop looked like from outside.
+        for other in [
+            ChainFacts {
+                container: Container::Present(Inspected {
+                    exit_code: 137,
+                    ..slept()
+                }),
+                ..asleep_box.clone()
+            },
+            ChainFacts {
+                stopped_outside: true,
+                ..asleep_box.clone()
+            },
+        ] {
+            let check = container(&other, true, &never);
+            assert_eq!((check.state, check.repair()), (State::Ok, None));
+        }
+
+        // Found running, it is awake whatever the record says; gone or crash-looping, it is that.
+        let woke = ChainFacts {
+            container: Container::Present(running_box()),
+            ..asleep_box.clone()
+        };
+        assert!(!asleep(&woke));
+        assert_eq!(container(&woke, true, &never).note, None);
+        let gone = ChainFacts {
+            container: Container::Missing { parked: false },
+            ..asleep_box.clone()
+        };
+        assert!(container(&gone, true, &never).failed());
+        let looping = ChainFacts {
+            container: Container::Present(Inspected {
+                restarting: true,
+                restarts: 6,
+                ..slept()
+            }),
+            ..asleep_box.clone()
+        };
+        assert!(!asleep(&looping));
+        assert!(container(&looping, true, &never).failed());
+
+        // And a stopped sandbox nobody put to sleep is still started.
+        let stopped = ChainFacts {
+            record: ChannelRecord::default(),
+            ..asleep_box
+        };
+        assert_eq!(
+            container(&stopped, true, &never).repair(),
+            Some(&Repair::Start)
+        );
+    }
+
+    #[test]
+    fn an_attended_fix_starts_a_sandbox_asleep_unasked_and_the_keeper_leaves_it() {
+        let asleep_box = |attended: bool| ChainFacts {
+            record: ChannelRecord {
+                asleep: true,
+                ..ChannelRecord::default()
+            },
+            attended,
+            ..facts(Container::Present(Inspected {
+                status: "exited".to_string(),
+                exit_code: 0,
+                restart_policy: "unless-stopped".to_string(),
+                ..running_box()
+            }))
+        };
+        // The keeper's run (and doctor): well, nothing to do.
+        let keeper = asleep_box(false);
+        assert!(asleep(&keeper));
+        let left = container(&keeper, true, &never);
+        assert_eq!((left.state, left.repair()), (State::Ok, None));
+
+        // A person's run: the ordinary start, no consent asked, and nothing said asleep.
+        let person = asleep_box(true);
+        assert!(sleeping(&person));
+        assert!(!asleep(&person), "its report does not say asleep");
+        let check = container(&person, true, &never);
+        assert!(check.failed());
+        assert_eq!(check.repair(), Some(&Repair::Start));
+        assert_eq!(check.who(), Some(Who::Auto));
+        assert!(check
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.contains("put to sleep")));
+        assert_eq!(daemon(&person, &never).state, State::Skip);
+        assert_eq!(
+            daemon(&person, &never).note.as_deref(),
+            Some("unknowable while the container is not running")
+        );
+        // Even had its stop been seen from outside: the keeper's sleep is no person's stop to ask about.
+        let seen = ChainFacts {
+            stopped_outside: true,
+            ..asleep_box(true)
+        };
+        assert_eq!(
+            container(&seen, true, &never).repair(),
+            Some(&Repair::Start)
+        );
+        // A start that did not hold goes the ordinary way.
+        let started = |r: &Repair| *r == Repair::Start;
+        assert_eq!(container(&person, true, &started).who(), Some(Who::You));
     }
 
     #[test]

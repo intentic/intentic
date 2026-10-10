@@ -1,6 +1,6 @@
 import { pino } from "pino";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { startIdleStop, type IdleStopProbes } from "./idle-stop.js";
+import { freshestPersonActivity, startIdleStop, type IdleStopProbes } from "./idle-stop.js";
 
 const logger = pino({ level: "silent" });
 
@@ -174,5 +174,14 @@ describe("startIdleStop", () => {
         await minutes(1);
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();
+    });
+});
+
+describe("freshestPersonActivity", () => {
+    test("a dev server's panel session is not a person: only the other sessions' stamps count", () => {
+        const listing = ["panel-site--landing 9000", "agent-abc 120", "job-build 300", ""].join("\n");
+        expect(freshestPersonActivity(listing)).toBe(300_000);
+        expect(freshestPersonActivity("panel-site--landing 9000\n")).toBe(0);
+        expect(freshestPersonActivity("")).toBe(0);
     });
 });

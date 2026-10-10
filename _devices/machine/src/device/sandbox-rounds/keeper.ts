@@ -9,6 +9,17 @@ import type { LinkReading } from "../config.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
 import { readChannelSlugs, readSwapRecords, swapsUnderway } from "./swap-records.js";
 import { fleet, holdIcFlow, icInFlight, runIc } from "../tools/sandboxes.js";
+import {
+    newSleepers,
+    runSleep,
+    SLEEP_DEADLINE_MS,
+    sleepArgs,
+    type Sleepers,
+    sleepMinutesOf,
+    startWakeRound,
+    WAKES_ARGS,
+    WAKES_DEADLINE_MS,
+} from "./sleep.js";
 
 // THE KEEPER: when a sandbox on this machine stops answering (Docker Desktop not started after a reboot, a container
 // that stopped, a daemon whose registration gave up, a full disk), `ic sandbox fix --auto` heals what is safe to heal
@@ -227,6 +238,8 @@ const people = (slugs: readonly string[]): string[] => slugs.filter((slug) => !s
 export interface ListedSandbox {
     readonly slug: string;
     readonly keptElsewhere?: string | undefined;
+    // Put to sleep for want of use (sleep.ts): its link is down on purpose, and the keeper leaves it be.
+    readonly asleep?: boolean | undefined;
 }
 
 /* WHOSE SANDBOXES THE KEEPER LOOKS AFTER (2026-10-05). On Windows, ic on Windows and ic in each WSL distro list every
@@ -326,6 +339,10 @@ export interface KeeperSeams {
     readonly hold: (slug: string) => () => void;
     // The clock, read after a run as well as before it: a wait is measured from when the run ended.
     readonly now: () => number;
+    // How long an unneeded sandbox stays up, and `ic sandbox sleep --idle` for that long (sleep.ts); absent, nothing
+    // is put to sleep.
+    readonly sleepMinutes?: () => Promise<number>;
+    readonly sleep?: (minutes: number) => Promise<IcRun>;
 }
 
 interface Wait {
@@ -354,9 +371,11 @@ export interface KeeperState {
     fixing: boolean;
     // The switch as last read, so turning it off or on is said once.
     on: boolean | undefined;
+    // What this agent knows sleeps, shared with the wake round.
+    readonly sleepers: Sleepers;
 }
 
-export const newKeeperState = (start: number): KeeperState => ({
+export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()): KeeperState => ({
     sweepDueAt: start + FIRST_SWEEP_MS,
     sweepFailures: 0,
     unavailable: { failures: 0, until: 0 },
@@ -366,6 +385,7 @@ export const newKeeperState = (start: number): KeeperState => ({
     trashed: undefined,
     fixing: false,
     on: undefined,
+    sleepers,
 });
 
 // Says `line` under `key` unless it is what was said there last.
@@ -530,6 +550,14 @@ const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly 
         return;
     }
     state.listed = listed;
+    // The listing is the truth about who sleeps on this side: a sandbox woken by hand is listed awake.
+    state.sleepers.slugs.clear();
+    for (const row of listed) {
+        if (row.asleep === true && row.keptElsewhere === undefined) {
+            state.sleepers.slugs.add(row.slug);
+        }
+    }
+    state.sleepers.counted = state.sleepers.slugs.size;
     const containers = new Set(listed.map((row) => row.slug));
     // allow(silent-catch): a trash that cannot be read is none (keeperScope): no record is taken for a sandbox on a guess
     state.trashed = records.some((slug) => !containers.has(slug)) ? await seams.trashed().catch(() => undefined) : [];
@@ -551,6 +579,29 @@ const sweep = async (state: KeeperState, seams: KeeperSeams, scope: KeeperScope,
     state.sweepDueAt = now + Math.max(SWEEP_EVERY_MS, backoffMs(state.sweepFailures));
 };
 
+// After a sweep: the sandboxes nobody has needed for the configured stretch go to sleep. Held like a fix, so no other
+// round starts work under a stop, and the listing is read again when anything fell asleep.
+const sleepUnneeded = async (state: KeeperState, seams: KeeperSeams, scope: KeeperScope, log: Log): Promise<void> => {
+    const { sleep, sleepMinutes } = seams;
+    if (sleep === undefined || sleepMinutes === undefined || scope.running.length === 0) {
+        return;
+    }
+    state.fixing = true;
+    const releases = scope.running.map((slug) => seams.hold(slug));
+    try {
+        const slept = await runSleep(state.sleepers, { minutes: sleepMinutes, sleep }, state.said, log);
+        for (const slug of slept) {
+            // Its link going down now is the sleep, not a fault: nothing of it is left to wait out.
+            state.waits.delete(slug);
+        }
+    } finally {
+        for (const release of releases) {
+            release();
+        }
+        state.fixing = false;
+    }
+};
+
 // The first sandbox of this machine whose link has failed for a minute, that still exists here and is this side's, and
 // that nothing is waiting out. A gone one is said once and left alone.
 const dueTarget = async (
@@ -567,7 +618,8 @@ const dueTarget = async (
             sayOnce(state, slug, `keeper ${slug}: its link is down, but this engine has no container and no trash entry for it, so there is nothing here to fix.`, log);
             return false;
         }
-        return !scope.elsewhere.has(slug);
+        // A sleeping sandbox's link is down on purpose: waking it is a visitor's to ask (sleep.ts), never a repair.
+        return !scope.elsewhere.has(slug) && !state.sleepers.slugs.has(slug);
     });
     const candidates = here.filter((slug) => !seams.busy.has(slug) && (state.waits.get(slug)?.until ?? 0) <= now);
     if (candidates.length === 0) {
@@ -597,6 +649,7 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
     if (sweepDue) {
         await sweep(state, seams, scope, log);
         if (scope.own.length > 0) {
+            await sleepUnneeded(state, seams, scope, log);
             return;
         }
     }
@@ -623,7 +676,7 @@ export const keeperOn = async (): Promise<boolean> => (await readMachineConfig()
 export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring): KeeperSeams => ({
     enabled: keeperOn,
     fix: async (slug, onLine) => await runIc(keeperFixArgs(slug), onLine, {}, { deadlineMs: FIX_DEADLINE_MS }),
-    listing: async () => (await fleet()).map(({ slug, keptElsewhere }) => ({ slug, keptElsewhere })),
+    listing: async () => (await fleet()).map(({ slug, keptElsewhere, asleep }) => ({ slug, keptElsewhere, asleep })),
     records: async () => await readChannelSlugs(),
     trashed: readTrashed,
     swapping: async () => swapsUnderway(await readSwapRecords(), Date.now()),
@@ -641,10 +694,26 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
        (swap-records.ts). */
     hold: (slug) => holdIcFlow(slug, KEEPER_HOLD),
     now: Date.now,
+    sleepMinutes: async () => sleepMinutesOf(await readMachineConfig()),
+    sleep: async (minutes) => await runIc(sleepArgs(minutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
 });
 
+// The keeper and its wake round, which runs whatever the switch says: a sandbox asleep when the keeper was switched off
+// must still come back when somebody opens it.
 export const startKeeper = (log: Log, wiring: KeeperWiring): Rounds => {
-    const state = newKeeperState(Date.now());
+    const sleepers = newSleepers();
+    const state = newKeeperState(Date.now(), sleepers);
     const seams = machineKeeperSeams(wiring);
-    return startRounds("keeper", log, FIRST_SWEEP_MS, () => LOOK_EVERY_MS, async () => await runKeeperRound(state, seams, log));
+    const keeper = startRounds("keeper", log, FIRST_SWEEP_MS, () => LOOK_EVERY_MS, async () => await runKeeperRound(state, seams, log));
+    const wakes = startWakeRound(log, sleepers, {
+        wakes: async () => await runIc(WAKES_ARGS, () => undefined, {}, { deadlineMs: WAKES_DEADLINE_MS }),
+        now: Date.now,
+    });
+    return {
+        stop: () => {
+            keeper.stop();
+            wakes.stop();
+        },
+        running: () => keeper.running() || wakes.running(),
+    };
 };

@@ -30,6 +30,10 @@ const store = (root: string) => openDocument(autostartDocument, join(root, autos
 
 export const readAutostart = async (root: string): Promise<readonly AutostartApp[]> => (await store(root).read()).apps;
 
+// The panel keys the list names, in the spelling the process manager and the preview hosts use.
+export const autostartKeys = async (root: string): Promise<readonly string[]> =>
+    (await readAutostart(root)).map((entry) => appPanelKey(entry.repo, entry.app));
+
 // Add an app to the list, once: the same repo/app pair recorded twice is one app to start.
 export const recordAutostart = async (root: string, entry: AutostartApp): Promise<void> => {
     await store(root).update((current) =>
@@ -55,15 +59,19 @@ export interface AutostartOutcome {
 // individually so a test only needs to stand up three members, not all of `Services`.
 export type AutostartDeps = Pick<Services, "config" | "processes" | "workspace">;
 
-// Starts everything the file names, using the same spec builder, zone and sandbox id as the Start button, so the result
-// matches a manual start. Per-entry failures are reported, not thrown, so one bad app does not block the rest.
-export const runAutostart = async (services: AutostartDeps): Promise<AutostartOutcome> => {
+// Starts everything the file names (or only the keys in `only`), using the same spec builder, zone and sandbox id as
+// the Start button, so the result matches a manual start. Per-entry failures are reported, not thrown, so one bad app
+// does not block the rest.
+export const runAutostart = async (services: AutostartDeps, only?: ReadonlySet<string>): Promise<AutostartOutcome> => {
     const root = services.workspace.root;
     const { zone, sandboxId } = publicAddressOf(services.config);
     const started: string[] = [];
     const skipped: { key: string; why: string }[] = [];
     for (const entry of await readAutostart(root)) {
         const key = appPanelKey(entry.repo, entry.app);
+        if (only !== undefined && !only.has(key)) {
+            continue;
+        }
         const repoDir = join(root, entry.repo);
         const appDir = join(repoDir, "_apps", entry.app);
         if (!existsSync(appDir)) {

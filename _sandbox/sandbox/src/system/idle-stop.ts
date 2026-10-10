@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/base/git";
+import { PANEL_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { connectedCount } from "./presence.js";
 
@@ -9,20 +10,30 @@ import { connectedCount } from "./presence.js";
 //   activity, and whether a one-time wake is due before this machine could plausibly be back
 // - quiet is a streak, not a snapshot: any busy answer resets the clock
 
-// Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server. A listing that failed throws, so
-// the check skips its pass instead of reading a terminal it could not see as idle and stopping the machine under it.
+// The freshest activity stamp in a `#{session_name} #{session_activity}` listing, in ms; 0 for none. A dev server's
+// panel session is left out: its output is a server talking to itself, not a person, and a chatty one would otherwise
+// hold a machine nobody uses awake for good (a workspace app in use is seen by its connections instead). Pure.
+export const freshestPersonActivity = (listing: string): number => {
+    const stamps = listing
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/u))
+        .filter(([session]) => session !== undefined && session !== "" && !session.startsWith(PANEL_SESSION_PREFIX))
+        .map(([, stamp]) => Number(stamp))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    return stamps.length === 0 ? 0 : Math.max(...stamps) * 1000;
+};
+
+// Freshest tmux session_activity across all panes but dev servers', in ms; 0 when tmux has no server. A listing that
+// failed throws, so the check skips its pass instead of reading a terminal it could not see as idle and stopping the
+// machine under it.
 export const lastTerminalActivity = async (): Promise<number> => {
-    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]).catch((error: unknown) => {
+    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_name} #{session_activity}"]).catch((error: unknown) => {
         if (isNoTmuxServer(error)) {
             return undefined;
         }
         throw error;
     });
-    const stamps = (listed?.stdout ?? "")
-        .split("\n")
-        .map((line) => Number(line.trim()))
-        .filter((value) => Number.isFinite(value) && value > 0);
-    return stamps.length === 0 ? 0 : Math.max(...stamps) * 1000;
+    return freshestPersonActivity(listed?.stdout ?? "");
 };
 
 export interface IdleStopProbes {

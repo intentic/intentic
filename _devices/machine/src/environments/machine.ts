@@ -31,6 +31,9 @@ export interface MachineConfig {
     readonly sandboxBackups?: boolean;
     readonly sandboxTidy?: boolean;
     readonly sandboxKeeper?: boolean;
+    // Minutes a sandbox this environment keeps goes unneeded before the keeper puts it to sleep (sandbox-rounds/sleep.ts);
+    // absent is the default, 0 never.
+    readonly sandboxSleepMinutes?: number;
     readonly upgradeFailure?: { readonly target: string; readonly count: number; readonly at: number };
     readonly skippedAgent?: { readonly version: string; readonly at: number };
 }

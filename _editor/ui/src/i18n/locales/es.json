@@ -109,6 +109,9 @@
         "agentOnThisDevice": "Agente en este dispositivo"
     },
     "deviceDetail": {
+        "asleep": "en reposo",
+        "asleepNote": "Nadie lo usaba, así que este equipo lo puso en reposo. Abrirlo lo despierta.",
+        "asleepTitle": "En reposo",
         "backup": "copia de seguridad: {folder}",
         "busyHere": "Ocupados aquí",
         "conflicts": "{count} conflicto | {count} conflictos",

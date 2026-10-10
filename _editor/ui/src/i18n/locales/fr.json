@@ -104,6 +104,9 @@
         "agentOnThisDevice": "Agent sur cet appareil"
     },
     "deviceDetail": {
+        "asleep": "en veille",
+        "asleepNote": "Personne ne l'utilisait, alors cet ordinateur l'a mis en veille. L'ouvrir le réveille.",
+        "asleepTitle": "En veille",
         "backup": "sauvegarde : {folder}",
         "busyHere": "Occupés ici",
         "conflicts": "{count} conflit | {count} conflits",

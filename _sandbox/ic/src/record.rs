@@ -137,6 +137,10 @@ pub struct ChannelRecord {
     /// The owner stopped this sandbox on purpose (`ic sandbox stop`). Set by stop, cleared by start, restart and
     /// every flow that moves the container; `ic sandbox fix` only starts a held sandbox when someone says yes.
     pub held: bool,
+    /// Put to sleep for idleness by the keeper (`ic sandbox sleep`): stopped through Docker so its restart policy leaves
+    /// it down, and started again by the next wake (`ic sandbox wakes`), a start, or a restart. Never set together with
+    /// `held`: a stop clears it, and every flow that moves the container clears both. (2026-10-10)
+    pub asleep: bool,
     /// The sandbox's host-report key (sandbox/fix/report.rs): derived wherever ic reads the container's env, and
     /// kept here so a later run can still report while Docker is down and the env cannot be read.
     pub report_key: Option<String>,
@@ -249,7 +253,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     // So are a kept target's image, version and environment build, and a swap's keys: a half-written group is no group.
     let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
-    let mut rest: [Option<String>; 10] = Default::default();
+    let mut rest: [Option<String>; 11] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -277,6 +281,7 @@ pub fn parse(content: &str) -> ChannelRecord {
             "side" => &mut rest[7],
             "previous_env" => &mut rest[8],
             "previous_env_hash" => &mut rest[9],
+            "asleep" => &mut rest[10],
             "kept_1" => &mut kept[0][0],
             "kept_1_version" => &mut kept[0][1],
             "kept_1_env" => &mut kept[0][2],
@@ -309,7 +314,7 @@ pub fn parse(content: &str) -> ChannelRecord {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash] =
+    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash, asleep] =
         rest;
     record.current_version = current_version;
     record.previous_version = previous_version;
@@ -317,6 +322,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     record.rolled_back_from = rolled_back_from;
     record.written = written.and_then(|value| value.parse().ok());
     record.held = held.as_deref() == Some("1");
+    record.asleep = asleep.as_deref() == Some("1");
     record.report_key = report_key.filter(|key| !key.is_empty());
     record.report_platform = report_platform.filter(|url| !url.is_empty());
     record.side = side.filter(|side| !side.is_empty());
@@ -446,6 +452,7 @@ pub fn serialize(record: &ChannelRecord) -> String {
         record.written.map(|written| written.to_string()).as_deref(),
     );
     put("held", record.held.then_some("1"));
+    put("asleep", record.asleep.then_some("1"));
     put("report_key", record.report_key.as_deref());
     put("report_platform", record.report_platform.as_deref());
     put("side", record.side.as_deref());
@@ -891,6 +898,30 @@ mod tests {
         assert!(!text.contains("report_"), "{text}");
         assert!(!parse("held=0\n").held, "only 1 holds");
         assert_eq!(parse("report_key=\n").report_key, None);
+    }
+
+    /* ASLEEP, the keeper's own stop: written like a hold, and as absent when it is not. */
+    #[test]
+    fn a_sleep_round_trips_and_an_awake_record_leaves_no_key() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        let asleep = ChannelRecord {
+            asleep: true,
+            ..swap("ghcr.io/intentic/sandbox:stable", None)
+        };
+        write_file(&path, &asleep).expect("write");
+        let read = read_file(&path).expect("read");
+        assert!(read.asleep);
+        assert!(!read.held, "asleep is not held");
+        assert!(std::fs::read_to_string(&path)
+            .expect("read")
+            .contains("asleep=1\n"));
+        let text = serialize(&ChannelRecord::default());
+        assert!(!text.contains("asleep"), "{text}");
+        assert!(!parse("asleep=0\n").asleep, "only 1 sleeps");
+        assert!(!parse("asleep=\n").asleep);
+        assert!(!parse("asleep=true\n").asleep);
+        assert!(parse("current=x\nasleep=1\n").asleep);
     }
 
     #[test]
