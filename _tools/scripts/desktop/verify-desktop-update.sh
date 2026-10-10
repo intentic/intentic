@@ -77,7 +77,7 @@ INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Carg
 INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
     onboarding::tests::prefetch_stop_
 INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
-    windows::tests::the_workspace_reports_the_stamped_release_version -- --exact
+    windows::loopback_tests::the_workspace_reports_the_stamped_release_version -- --exact
 
 # linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates
 # RELR relocations. Both are build-desktop.sh's, and needed here for the same container-shaped reasons.
