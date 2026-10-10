@@ -315,6 +315,15 @@ struct Tally {
 /// round, or `ic sandbox fix --auto`'s repair) it also moves unclaimed volumes into the trash.
 pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     docker::require_daemon()?;
+    // The copies a move between engines left on the other engine, once their days are up (engine/moves.rs): they sit
+    // where this tidy's own listing never looks, so they are named to the move's own cleanup instead.
+    if !dry_run {
+        if let Err(crate::util::Fail(reason)) = crate::engine::moves::cleanup(false) {
+            crate::ui::warn(&format!(
+                "the copies an engine move left behind were not removed this time: {reason}"
+            ));
+        }
+    }
     let unattended = auto || !crate::tty::have_tty();
     let Some(live) = live_slugs() else {
         bail!("docker could not list this machine's sandboxes, so nothing was removed.");

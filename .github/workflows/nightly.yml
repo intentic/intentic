@@ -496,6 +496,9 @@ jobs:
       # ic first, so the installer carries this same binary beside the app (build-desktop.sh stages it from dist-bin
       # rather than cross-building another), as in ci.yml's desktop-windows-build.
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
+      # Intentic's own engine (the WSL distro ic installs on a PC without Docker Desktop), from this checkout, for the
+      # Windows smoke's tier 4: before this the rootfs was only built by a release, so nothing ran it ahead of one.
+      - run: bash _tools/scripts/build/build-intentic-engine.sh
       - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
       # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
       # the paths' common ancestor, and the tiers below ask for these two by name.
@@ -503,6 +506,7 @@ jobs:
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp _sandbox/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: windows-desktop-artifacts-nightly
@@ -537,7 +541,9 @@ jobs:
       installer: Intentic-*-x64-setup.exe
       deep: true
       sandbox-image: ghcr.io/intentic/sandbox:latest
-      timeout-minutes: 120
+      # Tier 4 whole: our engine beside Docker Desktop, and the sandbox tier 2 made moved onto it and back.
+      engine: true
+      timeout-minutes: 150
 
   # The published images are readable WITHOUT a credential — the one thing no other job here can see. Every job
   # in this file and in ci.yml opens with a `docker login ghcr.io`, including desktop-setup above, which runs

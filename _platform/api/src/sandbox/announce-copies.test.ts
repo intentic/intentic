@@ -94,6 +94,12 @@ describe(`announcedCopyOf`, () => {
         expect(announcedCopyOf({ instance: ` i1 `, host: `x`.repeat(500), os: 7 })).toEqual({ instance: `i1` });
         expect(announcedCopyOf({ instance: `i1`, host: `rog`, os: `linux` })).toEqual({ instance: `i1`, host: `rog`, os: `linux` });
     });
+
+    it(`reads the engine a copy runs on, and keeps it on the copy`, () => {
+        const copy = announcedCopyOf({ instance: `i1`, host: `omen`, os: `windows`, engine: `intentic` });
+        expect(copy).toEqual({ instance: `i1`, host: `omen`, os: `windows`, engine: `intentic` });
+        expect(announcedCopyOf({ instance: `i1`, engine: `x`.repeat(41) })).toEqual({ instance: `i1` });
+    });
 });
 
 describe(`duplicateCopiesOf`, () => {

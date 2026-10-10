@@ -38,6 +38,7 @@
 // dragged in or picked. What it names freely, the folder they go into, is held to a plain relative path below /work.
 #![cfg_attr(not(windows), allow(dead_code))]
 
+use crate::scripts::Binds;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -852,10 +853,22 @@ struct StageHelper {
 }
 
 impl StageHelper {
-    fn start(name: &str, image: &str, volume: &str, stage: &Path) -> io::Result<Self> {
+    fn start(
+        name: &str,
+        image: &str,
+        volume: &str,
+        stage: &Path,
+        binds: Binds,
+    ) -> io::Result<Self> {
+        let args = stage_args(name, image, volume, stage, binds).ok_or_else(|| {
+            io::Error::other(format!(
+                "the container engine cannot mount {}",
+                stage.display()
+            ))
+        })?;
         let mut command = crate::scripts::docker_command();
         command
-            .args(stage_args(name, image, volume, stage))
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -929,19 +942,25 @@ fn parse_answer(line: &str) -> Answer {
     }
 }
 
-/// The staging helper's `docker run`.
-pub fn stage_args(name: &str, image: &str, volume: &str, stage: &Path) -> Vec<String> {
+/// The staging helper's `docker run`, or None when the engine cannot mount the staging folder.
+pub fn stage_args(
+    name: &str,
+    image: &str,
+    volume: &str,
+    stage: &Path,
+    binds: Binds,
+) -> Option<Vec<String>> {
     let mut args = run_args(name);
     args.extend([
         "-v".to_string(),
-        format!("{}:/stage:ro", stage.display()),
+        format!("{}:/stage:ro", binds.source(stage)?),
         "-v".to_string(),
         format!("{volume}:{WORK}"),
         image.to_string(),
         "-c".to_string(),
         STAGE_SCRIPT.to_string(),
     ]);
-    args
+    Some(args)
 }
 
 /// One staged archive: its file name, what went into it whole (folders and files), and the bytes of those files.
@@ -1183,6 +1202,7 @@ fn stage_into<'i>(
     id: &str,
     sandbox: &Sandbox,
     items: &[&'i Item],
+    binds: Binds,
     cancel: &AtomicBool,
     meter: &mut Meter,
 ) -> Result<Vec<&'i Item>, Stop> {
@@ -1190,7 +1210,7 @@ fn stage_into<'i>(
     let name = format!("intentic-drop-copy-{}-stage", &id[..id.len().min(12)]);
     let dir = std::env::temp_dir().join(format!("intentic-drop-copy-{id}"));
     let started = std::fs::create_dir_all(&dir)
-        .and_then(|()| StageHelper::start(&name, &sandbox.image, &sandbox.volume, &dir));
+        .and_then(|()| StageHelper::start(&name, &sandbox.image, &sandbox.volume, &dir, binds));
     let mut helper = match started {
         Ok(helper) => helper,
         Err(error) => {
@@ -1225,9 +1245,11 @@ const HELPER_SCRIPT: &str =
     | tar -C \"/work/$1\" -b 2048 -xf - --no-same-owner";
 
 /// Whether a dropped item's place can be bind-mounted: a path on one of this computer's drives. A network share is
-/// not something Docker Desktop mounts.
-fn mountable(place: &Path) -> bool {
-    place.is_absolute() && !place.to_string_lossy().starts_with(r"\\")
+/// not something Docker Desktop mounts, nor something our engine's distro sees.
+fn mountable(place: &Path, binds: Binds) -> bool {
+    place.is_absolute()
+        && !place.to_string_lossy().starts_with(r"\\")
+        && binds.source(place).is_some()
 }
 
 /// What the helpers need of the sandbox: the image it runs, which is already here, and the volume its /work is.
@@ -1293,11 +1315,17 @@ pub fn helper_args(
     volume: &str,
     mounts: &[(&Path, &str)],
     target: &str,
+    binds: Binds,
 ) -> Vec<String> {
     let mut args = run_args(name);
     for (place, root) in mounts {
+        // Only places `mountable` let through get here; one the engine cannot see after all fails the helper, and its
+        // files go the streamed route.
+        let source = binds
+            .source(place)
+            .unwrap_or_else(|| place.display().to_string());
         args.push("-v".to_string());
-        args.push(format!("{}:/src/{root}:ro", place.display()));
+        args.push(format!("{source}:/src/{root}:ro"));
     }
     args.push("-v".to_string());
     args.push(format!("{volume}:{WORK}"));
@@ -1345,12 +1373,14 @@ pub fn said(line: &str) -> Said<'_> {
 /// The big files, through the helper. Returns what is left for the streamed route: the files the helper had trouble
 /// with, and, when it could not do its job (it would not mount, Docker refused it), the file it was on and the rest. A
 /// failure of this route costs speed and never a file.
+#[allow(clippy::too_many_arguments)]
 fn mount<'i>(
     id: &str,
     sandbox: &Sandbox,
     target: &str,
     scan: &Scan,
     items: &[&'i Item],
+    binds: Binds,
     cancel: &AtomicBool,
     meter: &mut Meter,
 ) -> Result<Vec<&'i Item>, Stop> {
@@ -1373,6 +1403,7 @@ fn mount<'i>(
             &sandbox.volume,
             &mounts,
             target,
+            binds,
         ))
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -1661,12 +1692,12 @@ struct Routes<'s> {
     streamed: Vec<&'s Item>,
 }
 
-fn routes(scan: &Scan) -> Routes<'_> {
+fn routes(scan: &Scan, binds: Binds) -> Routes<'_> {
     let mut routes = Routes::default();
     for item in &scan.items {
         if item.kind == Kind::Dir || item.size < MOUNTED_FROM {
             routes.staged.push(item);
-        } else if mountable(&scan.places[item.root]) {
+        } else if mountable(&scan.places[item.root], binds) {
             routes.mounted.push(item);
         } else {
             routes.streamed.push(item);
@@ -1721,7 +1752,8 @@ fn copy_into(
             })).collect::<Vec<_>>(),
         }),
     ));
-    let routes = routes(&scan);
+    let binds = Binds::of_engine();
+    let routes = routes(&scan, binds);
     let mut tick = |copied: &Copied| emit(with(id, "progress", copied_json(copied)));
     let mut meter = Meter::new(scan.roots.len(), &mut tick);
     // Without the sandbox's image and volume no helper runs, and everything goes the streamed route.
@@ -1732,7 +1764,14 @@ fn copy_into(
         let mut left = routes.streamed.clone();
         match &helpers {
             Some(sandbox) => {
-                left.extend(stage_into(id, sandbox, &routes.staged, cancel, &mut meter)?);
+                left.extend(stage_into(
+                    id,
+                    sandbox,
+                    &routes.staged,
+                    binds,
+                    cancel,
+                    &mut meter,
+                )?);
                 if !routes.mounted.is_empty() {
                     left.extend(mount(
                         id,
@@ -1740,6 +1779,7 @@ fn copy_into(
                         &request.target,
                         &scan,
                         &routes.mounted,
+                        binds,
                         cancel,
                         &mut meter,
                     )?);
@@ -2201,7 +2241,7 @@ mod tests {
             .set_len(MOUNTED_FROM)
             .unwrap();
         let scan = scanned(&[marketing, loose], "");
-        let routes = routes(&scan);
+        let routes = routes(&scan, Binds::AsIs);
         assert_eq!(
             routes
                 .mounted
@@ -2226,7 +2266,8 @@ mod tests {
             ),
             (5, 6, 0)
         );
-        assert!(!mountable(Path::new(r"\\nas\films")));
+        assert!(!mountable(Path::new(r"\\nas\films"), Binds::AsIs));
+        assert!(!mountable(Path::new(r"\\nas\films"), Binds::Wsl));
     }
 
     /// Every item reaches the writer once: the folders first, then each file read whole, too big to hold, or failed.
@@ -2494,7 +2535,9 @@ mod tests {
             "sha256:abc",
             "intentic-workspace-x",
             Path::new("/tmp/stage"),
-        );
+            Binds::AsIs,
+        )
+        .expect("a local folder mounts");
         assert_eq!(
             &args[13..19],
             &[
@@ -2509,6 +2552,43 @@ mod tests {
     }
 
     #[test]
+    fn on_our_engine_every_bind_source_is_where_its_distro_sees_the_drive() {
+        let place = PathBuf::from(r"D:\movies\Moje filmy");
+        let args = helper_args(
+            "intentic-drop-copy-a1",
+            "sha256:abc",
+            "intentic-workspace-x",
+            &[(place.as_path(), "films")],
+            "media",
+            Binds::Wsl,
+        );
+        assert!(args.contains(&"/mnt/d/movies/Moje filmy:/src/films:ro".to_string()));
+        let staged = stage_args(
+            "intentic-drop-copy-a1-stage",
+            "sha256:abc",
+            "intentic-workspace-x",
+            Path::new(r"C:\Users\me\AppData\Local\Temp\intentic-drop-copy-a1"),
+            Binds::Wsl,
+        )
+        .expect("a temp folder on C: mounts");
+        assert!(staged.contains(
+            &"/mnt/c/Users/me/AppData/Local/Temp/intentic-drop-copy-a1:/stage:ro".to_string()
+        ));
+        // A staging folder on a share has no place in the distro: the helper is never started, and the small files
+        // are streamed instead.
+        assert_eq!(
+            stage_args(
+                "n",
+                "sha256:abc",
+                "v",
+                Path::new(r"\\nas\temp\stage"),
+                Binds::Wsl
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn the_helper_mounts_each_root_read_only_beside_the_workspace_volume() {
         let place = PathBuf::from("/home/me/Movies/marketing");
         let args = helper_args(
@@ -2517,6 +2597,7 @@ mod tests {
             "intentic-workspace-x",
             &[(place.as_path(), "marketing")],
             "media",
+            Binds::AsIs,
         );
         assert_eq!(
             args.iter()

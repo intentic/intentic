@@ -121,6 +121,10 @@ pub struct Facts {
     /// Intentic engine on this PC (`facts::read`, once per probe). Ignored when sandboxes use Docker Desktop.
     #[serde(default)]
     pub engine_installed: bool,
+    /// The Docker this PC's sandboxes run on is the person's own to keep running (engine/choice.rs): checked here,
+    /// never installed, started or repaired.
+    #[serde(default)]
+    pub bring_your_own: bool,
     #[serde(default)]
     pub engine_running: bool,
 }
@@ -562,11 +566,65 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
 
     match chosen_engine(facts) {
         crate::engine::Kind::Intentic => append_intentic_engine(&mut found, facts),
+        _ if facts.bring_your_own => append_own_engine(&mut found, facts),
         _ => append_docker_desktop(&mut found, facts),
     }
 
     found.extend(disk(facts));
     found
+}
+
+/// The person's own Docker (engine/choice.rs, bring your own): what is wrong with it is said, and every remedy is
+/// theirs. Nothing here installs, starts, switches or grants anything.
+fn append_own_engine(found: &mut Vec<Requirement>, facts: &Facts) {
+    let name = if facts.docker_desktop_path.is_empty() {
+        "Your Docker"
+    } else {
+        "Docker Desktop"
+    };
+    let instead = "Or let Intentic's own engine run your sandboxes: ic engine move --to intentic";
+    let requirement = if !facts.docker_cli {
+        Some(req(
+            "docker-own",
+            "Your Docker",
+            &format!(
+                "{name} cannot be reached from this account: there is no docker command here."
+            ),
+            &format!("Install or repair it yourself. {instead}"),
+            Action::User,
+        ))
+    } else if facts.docker_denied {
+        Some(req(
+            "docker-own",
+            "Your Docker",
+            &format!("{name} is running and turns this account away."),
+            &format!("Give this account access to it (on Docker Desktop: the docker-users group, then sign out and back in). {instead}"),
+            Action::User,
+        ))
+    } else if !facts.docker_daemon {
+        Some(req(
+            "docker-own",
+            "Your Docker",
+            &format!("{name} is not running."),
+            &format!("Start it, then check again. {instead}"),
+            Action::User,
+        ))
+    } else {
+        facts
+            .docker_server_os
+            .as_deref()
+            .filter(|os| *os != "linux")
+            .map(|os| {
+                req(
+                    "docker-own",
+                    "Your Docker",
+                    &format!("{name} runs {os} containers, and a sandbox is a Linux container."),
+                    &format!("Switch it to Linux containers. {instead}"),
+                    Action::User,
+                )
+            })
+    };
+    found.extend(requirement);
 }
 
 fn append_docker_desktop(found: &mut Vec<Requirement>, facts: &Facts) {
@@ -1149,6 +1207,7 @@ mod tests {
             docker_server_os: Some("linux".to_string()),
             engine_installed: false,
             engine_running: false,
+            bring_your_own: false,
             test_engine: None,
         }
     }
@@ -1175,6 +1234,48 @@ mod tests {
 
     fn ids(facts: &Facts) -> Vec<&'static str> {
         requirements(facts).into_iter().map(|r| r.id).collect()
+    }
+
+    #[test]
+    fn a_persons_own_docker_is_checked_and_never_installed_started_or_granted() {
+        let own = |facts: Facts| Facts {
+            bring_your_own: true,
+            test_engine: Some(crate::engine::Kind::DockerDesktop),
+            ..facts
+        };
+        assert!(requirements(&own(healthy())).is_empty());
+        let stopped = requirements(&own(Facts {
+            docker_daemon: false,
+            ..healthy()
+        }));
+        assert_eq!(stopped.len(), 1);
+        assert_eq!(stopped[0].id, "docker-own");
+        assert_eq!(stopped[0].action, Action::User);
+        assert!(stopped[0].problem.contains("Docker Desktop is not running"));
+        assert!(stopped[0].remedy.contains("ic engine move --to intentic"));
+        // A missing Docker is not one Intentic installs: the person is told, and nothing is offered to fetch.
+        let missing = requirements(&own(Facts {
+            docker_cli: false,
+            docker_daemon: false,
+            docker_desktop_path: String::new(),
+            ..healthy()
+        }));
+        assert!(missing.iter().all(|r| r.action == Action::User));
+        assert!(!missing.iter().any(|r| r.id == "docker-desktop"));
+        // Refused, and in Windows containers: both the person's, never a permission prompt or a switch.
+        let refused = requirements(&own(Facts {
+            docker_daemon: false,
+            docker_denied: true,
+            in_docker_users_group: false,
+            ..healthy()
+        }));
+        assert!(refused.iter().all(|r| r.action == Action::User));
+        let windows = requirements(&own(Facts {
+            docker_server_os: Some("windows".to_string()),
+            ..healthy()
+        }));
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].action, Action::User);
     }
 
     #[test]

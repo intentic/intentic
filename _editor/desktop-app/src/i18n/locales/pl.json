@@ -233,6 +233,73 @@
             "failed": "nie udało się dodać"
         }
     },
+    "engine": {
+        "runsOn": {
+            "dockerDesktop": "Twoje sandboxy działają w Docker Desktop",
+            "intentic": "Twoje sandboxy działają na silniku Intentic"
+        },
+        "offerTitle": "Przenieś swoje sandboxy na silnik Intentic",
+        "why": "Własny silnik Intentic uruchamia je bez Docker Desktop, a Intentic dba o to, żeby był aktualny i działał.",
+        "what": "Każdy sandbox zatrzymuje się na czas kopiowania jego plików. Docker Desktop zachowuje kopię przez 7 dni, a Ty możesz wrócić.",
+        "gpu": "Przeniesienie na silnik Intentic nie jest dostępne: sandbox na tym komputerze korzysta z karty graficznej (GPU), którą może mu udostępnić tylko Docker Desktop.",
+        "keptRunning": "Intentic dba o to, żeby był aktualny i działał.",
+        "moveToIntentic": "Przenieś na silnik Intentic",
+        "notNow": "Nie teraz",
+        "moveBack": "Przenieś z powrotem do Docker Desktop",
+        "confirm": {
+            "toIntenticTitle": "Przenieść sandboxy na silnik Intentic?",
+            "toIntentic": "Każdy sandbox zatrzymuje się na czas kopiowania jego plików, co może zająć kilka minut na każdy. Docker Desktop zachowuje kopię przez 7 dni, a Ty możesz wrócić.",
+            "toDockerDesktopTitle": "Przenieść sandboxy z powrotem do Docker Desktop?",
+            "toDockerDesktop": "Każdy sandbox zatrzymuje się na czas kopiowania jego plików, co może zająć kilka minut na każdy. Silnik Intentic zachowuje kopię przez 7 dni.",
+            "move": "Przenieś je"
+        },
+        "movingTo": {
+            "intentic": "Przenoszenie sandboxów na silnik Intentic",
+            "dockerDesktop": "Przenoszenie sandboxów z powrotem do Docker Desktop",
+            "other": "Przenoszenie sandboxów"
+        },
+        "whileMoving": "Każdy sandbox zatrzymuje się na czas kopiowania jego plików. Jeśli coś pójdzie nie tak, wszystkie sandboxy wrócą do stanu sprzed przeniesienia.",
+        "step": {
+            "engine": "Najpierw instalujemy silnik Intentic",
+            "begin": "Przygotowanie",
+            "stopping": "Zatrzymywanie",
+            "image": "Kopiowanie obrazu",
+            "volume": "Kopiowanie plików",
+            "starting": "Ponowne uruchamianie",
+            "moved": "Przeniesiony"
+        },
+        "position": "sandbox {index} z {count}",
+        "copied": "{done} z {total}",
+        "copiedAbout": "{done} z około {total}",
+        "copiedSoFar": "skopiowano {done}",
+        "keepsGoing": "Zamknięcie tego okna go nie zatrzyma.",
+        "moved": {
+            "intentic": "Gotowe: Twoje sandboxy działają teraz na silniku Intentic.",
+            "dockerDesktop": "Gotowe: Twoje sandboxy działają teraz w Docker Desktop."
+        },
+        "didntFinish": "Przenoszenie nie zostało dokończone",
+        "putBack": "Wszystko jest tam, gdzie było.",
+        "stoppedPartWay": "Przenoszenie zatrzymało się w połowie, więc któryś sandbox może nadal być zatrzymany. Dziennik pokazuje, dokąd doszło.",
+        "showLog": "Pokaż dziennik",
+        "busy": "Na tym komputerze trwa już inne przenoszenie. Spróbuj ponownie, gdy się zakończy.",
+        "didntStart": "Przenoszenie się nie rozpoczęło",
+        "kept": {
+            "dockerDesktop": "Docker Desktop zachowuje kopię Twojego sandboxa do {date}. | Docker Desktop zachowuje kopie Twoich sandboxów do {date}. | Docker Desktop zachowuje kopie Twoich sandboxów do {date}.",
+            "intentic": "Silnik Intentic zachowuje kopię Twojego sandboxa do {date}. | Silnik Intentic zachowuje kopie Twoich sandboxów do {date}. | Silnik Intentic zachowuje kopie Twoich sandboxów do {date}."
+        },
+        "removeNow": "Usuń teraz",
+        "removing": "Usuwanie…",
+        "removeCopies": {
+            "title": "Usunąć kopie teraz?",
+            "body": "To droga powrotu do stanu sandboxów sprzed przeniesienia. Sandboxy, których teraz używasz, pozostaną nietknięte.",
+            "remove": "Usuń je"
+        },
+        "copiesStay": {
+            "dockerDesktop": "Aby usunąć jego kopie, Docker Desktop musi działać. Uruchom go i spróbuj ponownie.",
+            "intentic": "Silnik Intentic się nie uruchomił, więc jego kopie zostają. Spróbuj ponownie później."
+        },
+        "movingBadge": "przenoszenie sandboxów"
+    },
     "account": {
         "profileUpdateFailed": "Nie udało się zaktualizować profilu.",
         "sessionCheckFailed": "Nie udało się sprawdzić Twojej sesji.",

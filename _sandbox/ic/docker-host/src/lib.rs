@@ -9,3 +9,4 @@
 pub mod desktop_app;
 pub mod powershell;
 pub mod refusal;
+pub mod wsl_path;

@@ -18,6 +18,7 @@ import { readChannelSlugs } from "./device/sandbox-rounds/swap-records.js";
 import { fleet } from "./device/tools/sandboxes.js";
 import { takeOverCommandLedger } from "./device/tools/command-ledger.js";
 import { stopRunningCommands } from "./device/tools/shell.js";
+import { syncEngineEnv } from "./engine-env.js";
 import { type Children, superviseChildren } from "./environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "./environments/auto-upgrade.js";
 import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
@@ -290,6 +291,8 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
         log("another machine agent took this environment over: leaving.");
         await runtime.finish(EXIT_REPLACED);
     }
+    // Every `docker` this round spawns goes to the engine the sandboxes run on now (engine-env.ts).
+    syncEngineEnv();
     const now = await readServed().catch((error: unknown) => {
         log(`config unreadable (${errorMessage(error)}): keeping what already runs.`);
         return undefined;

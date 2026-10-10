@@ -19,6 +19,12 @@ describe(`the This device tile`, () => {
         expect(deviceBadge({ ...AT_REST, fixing: `shop`, waiting: true, updateReady: true })).toEqual({ running: `desktop.fix.fixing` });
     });
 
+    it(`spins while the sandboxes move to another engine, behind a setup or a fix and ahead of what waits for the reader`, () => {
+        expect(deviceBadge({ ...AT_REST, movingSandboxes: true, waiting: true, startingDocker: true })).toEqual({ running: `desktop.engine.movingBadge` });
+        expect(deviceBadge({ ...AT_REST, movingSandboxes: true, fixing: `shop` })).toEqual({ running: `desktop.fix.fixing` });
+        expect(deviceBadge({ ...AT_REST, movingSandboxes: false })).toBeUndefined();
+    });
+
     it(`marks a setup or a sync that stopped for the reader, in the warning tone`, () => {
         expect(deviceBadge({ ...AT_REST, waiting: true, startingDocker: true })).toEqual({
             mark: `exclamation`,

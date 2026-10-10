@@ -215,6 +215,35 @@ flowchart LR
   first so `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, and the bundled `docker.exe` apply to this process
   only — nothing is added to the user's PATH. `ic engine status --json` answers for the desktop app; `ic sandbox fix`
   can start a stopped intentic engine automatically. Build: [engine/](engine/); implementation: [src/engine/](src/engine/).
+  - **Installed is not in use (2026-10-09).** `engine.json` has an `active` switch: only an active record points
+    `docker` at our engine (ic, the desktop app, the machine agent alike). A fresh PC's setup installs it active; on a
+    PC with Docker Desktop, `ic engine install` installs it inactive and switches nothing, since Docker Desktop's
+    sandboxes would otherwise vanish from every `docker` this account runs.
+  - **Moving between engines.** `ic engine move --to intentic|docker-desktop` carries every sandbox this side of the
+    PC keeps: stopped and set aside as `<name>.moved`, its exact image across by `docker save | docker load`, each
+    volume by a tar stream checked against a list of every file and its size, then made again by the ordinary reshape
+    (run contract, health waits). The PC switches only once all are across; any failure puts every sandbox back as it
+    was. The old copies stay for 7 days in `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
+    removes them. Sandboxes kept by a WSL-side `ic` stay on Docker Desktop. Measured on omen: 1.47 GB of volumes
+    with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
+    8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
+  - **Which engine, and the switch.** [src/engine/choice.rs](src/engine/choice.rs): `IC_ENGINE`, then
+    `ic engine prefer`, then what the PC already holds (sandboxes on Docker Desktop stay until moved; a GPU sandbox
+    keeps the PC on Docker Desktop), then `DOCKER_DESKTOP_PCS`, the one constant that flips new Docker Desktop PCs onto
+    our engine, offers the move after updates, and makes a Docker Desktop that stays the person's own: checked, never
+    installed or repaired (bring your own Docker). Rancher Desktop is that from the start.
+  - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
+    the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
+    `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
+  - **One network with every distro.** WSL's distros share one network namespace and Docker Desktop keeps its engine
+    in its own, so the keeper (written into the distro by every start, from [engine/rootfs/](engine/rootfs/)) leaves
+    Windows' connections to 127.0.0.1 to `docker-proxy` (mirrored networking otherwise loses them), puts its bridge
+    and networks on 192.168.239.0/24 and 192.168.240.0/20 rather than Docker's 172.17.0.0/16, and refuses to start
+    beside another Docker engine in WSL (one owning `docker0`). `ic engine remove` takes those out of WSL's network
+    before it unregisters the distro.
+  - **Tests and CI.** `IC_ENGINE_DISTRO` names another distro (its own disk folder and Run key value),
+    `IC_ENGINE_AUTOSTART=0` registers no sign-in start, and `INTENTIC_ENGINE_TARBALL` hands in a rootfs built from the
+    checkout. The Windows smoke's tier 4 (`_tools/desktop-smoke-windows`) runs it on the CI machine.
 
 ## Key files
 

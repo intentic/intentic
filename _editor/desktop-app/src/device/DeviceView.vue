@@ -18,10 +18,11 @@ import {
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted } from "vue";
 import DockerCard from "../components/DockerCard.vue";
+import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
-import { openUrl, signIn, workspaceOpen } from "../desktop";
+import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
 import MachineSandboxSection from "./MachineSandboxSection.vue";
 import { machineSandbox } from "./machineSandbox";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
@@ -47,7 +48,22 @@ const {
     dockerCardShown,
     startDocker,
     openDocker,
+    engineState,
+    engineMoving,
+    engineMoveEnd,
+    engineMoveError,
+    engineCleaning,
+    engineCleanupNote,
+    engineOfferError,
+    loadEngine,
+    followEngine,
+    moveEngine,
+    declineEngineMove,
+    removeEngineCopies,
+    dismissEngineMove,
+    engineOfferShown,
     engine,
+    sandboxes,
     listError,
     status,
     reportError,
@@ -135,6 +151,20 @@ const dockerMatters = computed(
     () => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined || machineNeedsDocker.value,
 );
 
+// Which engine the sandboxes run on, and the move to the other (engine.ts). It stands back while Docker's own card is up,
+// which is the one thing to act on then, but never from a move: its card is the move's while it runs and just after.
+const engineShown = computed(
+    () =>
+        engineState.value !== undefined &&
+        (!dockerCardShown.value || engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined),
+);
+// A sandbox by the name this app knows it by, else its slug: what a move says it is moving.
+const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
+// The transcript of a move that stopped part way, in the machine's own file manager.
+const showMoveLog = (path: string): void => {
+    revealLog(path).catch((error: unknown) => console.error(`[device] the move's log could not be shown:`, error));
+};
+
 // The way to a sandbox, from a computer that has none: the workspace's setup once there is an account, a sign-in before.
 const signedIn = computed(() => facts.value?.accountSeen === true);
 const toSetup = async (): Promise<void> => {
@@ -150,10 +180,13 @@ let timer: ReturnType<typeof setInterval> | undefined;
 const readWhenShown = (): void => {
     if (document.visibilityState === `visible`) {
         void refresh();
+        followEngine();
     }
 };
 onMounted(() => {
     void refresh();
+    // The engine on opening, not on the timer: `ic engine status` asks WSL and docker, and changes only by a move.
+    void loadEngine();
     timer = setInterval(readWhenShown, REFRESH_EVERY_MS);
     document.addEventListener(`visibilitychange`, readWhenShown);
 });
@@ -417,6 +450,26 @@ onUnmounted(() => {
                     <span class="min-w-0 flex-1">{{ t(`desktop.device.dockerIsntRunning`) }}</span>
                     <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
                 </Notice>
+                <!-- WHICH ENGINE THE SANDBOXES RUN ON: Docker Desktop or Intentic's own, and the move to the other, ahead of
+                     the sandboxes it would move. Quiet unless the move is worth making, runs, or has just ended. -->
+                <EngineCard
+                    v-if="engineShown && engineState"
+                    :status="engineState"
+                    :progress="engineMoving"
+                    :end="engineMoveEnd"
+                    :error="engineMoveError"
+                    :busy="running || busy !== undefined"
+                    :cleaning="engineCleaning"
+                    :cleanup-note="engineCleanupNote"
+                    :offer-error="engineOfferError"
+                    :name-of="sandboxName"
+                    @move="(to, offered) => void moveEngine(to, offered)"
+                    @decline="declineEngineMove"
+                    @cleanup="removeEngineCopies"
+                    @dismiss="dismissEngineMove"
+                    @log="showMoveLog"
+                    @shown="engineOfferShown"
+                />
             </template>
 
             <!-- One row per sandbox with its folder, ports, image and verbs, in the workspace Devices tab's own group. -->

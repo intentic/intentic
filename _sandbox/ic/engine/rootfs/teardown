@@ -1,0 +1,35 @@
+#!/bin/sh
+# What the keeper's dockerd left in WSL's shared network namespace, taken out before the distro goes (`ic engine
+# remove`): the loopback rule, its bridges and the routes on them, and Docker's iptables chains. A terminated distro takes
+# none of these with it; they would stay in every distro until WSL itself restarts. Only what is ours: a bridge holding
+# one of our addresses (192.168.239.1 for docker0, 192.168.240.0/20 for the networks dockerd made), and Docker's chains
+# only when docker0 is ours, since a person's own dockerd in another distro would be using the same ones.
+set +e
+pkill dockerd 2>/dev/null
+sleep 2
+ours_bridge() {
+  ip addr show dev "$1" 2>/dev/null | grep -qE 'inet 192\.168\.(239\.1|24[0-9]\.|25[0-5]\.)'
+}
+iptables -t nat -D PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null
+iptables -t nat -S POSTROUTING 2>/dev/null | grep -E ' -s 192\.168\.(239|24[0-9]|25[0-5])\.' | sed 's/^-A //' | while read -r rule; do
+  # shellcheck disable=SC2086
+  iptables -t nat -D $rule 2>/dev/null
+done
+if ours_bridge docker0; then
+  iptables -t nat -D PREROUTING -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null
+  iptables -t nat -D OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null
+  iptables -t nat -F DOCKER 2>/dev/null; iptables -t nat -X DOCKER 2>/dev/null
+  iptables -S FORWARD 2>/dev/null | grep -E 'DOCKER|docker0|br-' | sed 's/^-A //' | while read -r rule; do
+    # shellcheck disable=SC2086
+    iptables -D $rule 2>/dev/null
+  done
+  for chain in DOCKER DOCKER-ISOLATION-STAGE-1 DOCKER-ISOLATION-STAGE-2 DOCKER-USER DOCKER-FORWARD DOCKER-BRIDGE DOCKER-CT DOCKER-INTERNAL; do
+    iptables -F "$chain" 2>/dev/null; iptables -X "$chain" 2>/dev/null
+  done
+fi
+for link in $(ls /sys/class/net 2>/dev/null); do
+  case "$link" in
+    docker0|br-*) ours_bridge "$link" && ip link delete "$link" 2>/dev/null ;;
+  esac
+done
+exit 0

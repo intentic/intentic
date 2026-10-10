@@ -40,6 +40,9 @@ pub const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 pub const DIND_PREFIX: &str = "intentic-dind-host-";
 /// What a swap renames the container it is replacing to, until the new one has proved itself (recreate.rs).
 pub const PARKED_SUFFIX: &str = ".previous";
+/// What `ic engine move` renames a container it carried to the other engine to: the copy left behind, stopped, until
+/// its days are up (engine/moves.rs). Never a sandbox of its own.
+pub const MOVED_SUFFIX: &str = ".moved";
 
 /// Epoch milliseconds, the unit every record and the sandbox's own files use.
 pub fn now_ms() -> u64 {
@@ -77,7 +80,10 @@ pub fn live_slugs() -> Option<Vec<String>> {
 /// `ic sandbox update` that took `<slug>.previous` for the slug would boot it on new, empty volumes).
 pub(crate) fn slugs_of(names: &[String]) -> Vec<String> {
     let mut slugs: Vec<String> = Vec::new();
-    for name in names.iter().filter(|name| !name.starts_with(TUNNEL_PREFIX)) {
+    for name in names
+        .iter()
+        .filter(|name| !name.starts_with(TUNNEL_PREFIX) && !name.ends_with(MOVED_SUFFIX))
+    {
         let Some(slug) = name.strip_prefix(CONTAINER_PREFIX) else {
             continue;
         };
@@ -220,6 +226,14 @@ mod tests {
         assert_eq!(
             slugs_of(&names(&["intentic-sandbox-abc.previous"])),
             vec!["abc".to_string()]
+        );
+        // A copy a move between engines left behind is not a sandbox either.
+        assert_eq!(
+            slugs_of(&names(&[
+                "intentic-sandbox-abc.moved",
+                "intentic-sandbox-def"
+            ])),
+            vec!["def".to_string()]
         );
         // Tunnel sidecars are not sandboxes.
         assert_eq!(

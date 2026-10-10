@@ -1013,6 +1013,12 @@ fn recreate(
             if previous.is_some() {
                 println!("          Roll back with: ic sandbox rollback {slug}");
             }
+            // The migration's switch has flipped (engine/choice.rs): an update is the moment the move is offered, and
+            // the desktop app reads the line to put it on its card.
+            if crate::engine::move_offered() {
+                println!("          This PC can now run its sandboxes on Intentic's own engine instead of Docker Desktop: ic engine move --to intentic");
+                println!("intentic-offer: {}", serde_json::json!({ "offer": "engine-move", "to": "intentic" }));
+            }
         }
         Mode::Rollback { .. } => println!("intentic: sandbox rolled back to {target_image} — run rollback again to return."),
         Mode::Dev => println!("intentic: sandbox is live on {target_image} — docker logs -f {container}"),
@@ -1451,6 +1457,12 @@ pub(crate) fn stamp_args(slug: &str, stamp: &Restamp) -> Vec<String> {
     if let Some(env) = &stamp.env {
         extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
     }
+    // Stamped afresh on every recreate rather than replayed: a move between engines is a recreate, and the sandbox then
+    // runs on the other one (engine::stamp).
+    extra.extend([
+        "-e".to_string(),
+        format!("HOST_ENGINE={}", crate::engine::stamp()),
+    ]);
     extra
 }
 
@@ -1764,7 +1776,17 @@ mod tests {
         assert_eq!((windows.add_platform, windows.env), (None, None));
         let args = stamp_args("x", &theirs);
         assert!(args.contains(&"dev.intentic.side=linux/ubuntu".to_string()));
-        assert_eq!(&args[args.len() - 2..], ["-e", "HOST_ENV=ubuntu"]);
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-e", "HOST_ENV=ubuntu"]));
+        // The engine is this recreate's own, never the old container's (a move between engines is a recreate).
+        assert_eq!(
+            &args[args.len() - 2..],
+            [
+                "-e".to_string(),
+                format!("HOST_ENGINE={}", crate::engine::stamp())
+            ]
+        );
         assert!(
             !stamp_args("x", &restamp(Some(&Side::new("windows", None)), &here))
                 .iter()

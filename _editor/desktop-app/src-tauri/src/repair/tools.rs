@@ -13,12 +13,14 @@ use crate::scripts::Host;
 const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 const READ_LIMIT: Duration = Duration::from_secs(120);
 const FIX_LIMIT: Duration = Duration::from_secs(600);
+/// How much of a move's transcript the model reads, from its end.
+const MOVE_SAID: usize = 8000;
 const LOG_TAIL_MAX: u32 = 80;
 
 pub fn needs_approval(name: &str) -> bool {
     matches!(
         name,
-        "fix" | "engine_start" | "sandbox_restart" | "sandbox_rollback"
+        "fix" | "engine_start" | "engine_move" | "sandbox_restart" | "sandbox_rollback"
     )
 }
 
@@ -49,6 +51,7 @@ pub fn run_mutating(
     match name {
         "fix" => fix_tool(app, args, home),
         "engine_start" => ic_simple(app, &["engine", "start"], Duration::from_secs(180), home),
+        "engine_move" => engine_move(app, args, home),
         "sandbox_restart" => sandbox_power(app, args, "restart", home),
         "sandbox_rollback" => sandbox_rollback(app, args, home),
         _ => Err(format!("unknown mutating tool {name}")),
@@ -208,6 +211,36 @@ fn sandbox_rollback(app: &tauri::AppHandle, args: &Value, home: &str) -> Result<
         &format!("rollback started for {slug}"),
         home,
     ))
+}
+
+/// `ic engine move --to <to> --yes` through the card's own run (engine.rs `run_move`): the ic beside this app, one move
+/// at a time with the card's, and every step on the card while the model waits. The model reads how it ended, at the end
+/// of a transcript the copies' byte counts make long; a move that did not finish is this tool failing, in ic's words.
+/// No limit of its own: ic fails a copy that moves no byte for ten minutes and puts everything back, and killing it part
+/// way is the one ending that would leave sandboxes stopped.
+fn engine_move(app: &tauri::AppHandle, args: &Value, home: &str) -> Result<String, String> {
+    let to = args
+        .get("to")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "engine_move needs `to`: intentic or docker-desktop".to_string())?;
+    let to = crate::engine::move_target(to)?;
+    let _claim = crate::engine::claim()
+        .ok_or_else(|| "A move between engines is already running on this PC.".to_string())?;
+    let end = crate::engine::run_move(app, to)?;
+    let transcript = end
+        .log
+        .as_deref()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
+    let said = super::scrub::scrub(
+        &super::scrub::bound(crate::engine::move_digest(&transcript, MOVE_SAID)),
+        home,
+    );
+    if end.outcome == "moved" {
+        Ok(said)
+    } else {
+        Err(said)
+    }
 }
 
 fn ic_simple(

@@ -84,10 +84,11 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
 // ci images _tools/ci-base and _tools/ci-desktop are Dockerfiles for the job containers; the second trigger is a docker
 // probe the caller runs.
 // Scripts matched by family directory (`_tools/scripts/desktop/`, etc.), not by name, so a new file in a family needs
-// no new entry. `build-ic.sh` and `desktop-artifacts.sh` are named directly: genuinely shared across families.
+// no new entry. `build-ic.sh`, `build-intentic-engine.sh` and `desktop-artifacts.sh` are named directly: genuinely shared
+// across families (the engine's rootfs rides in the Windows desktop artifact its smoke tier runs).
 const LOOSE = {
     desktop:
-        /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
+        /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|build\/build-intentic-engine\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
     ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
     netd: /^(_sandbox\/netd\/|_sandbox\/sandbox\/src\/(netd|git\/feed)\/|_platform\/ingress\/|_shared\/relay\/|_shared\/sandbox-contract\/src\/(netd\/|ids\/hostnames\.fixture\.json|protocol\/ingress-contract\.(fixture\.json|ts))|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/netd\/|_shared\/relay\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,

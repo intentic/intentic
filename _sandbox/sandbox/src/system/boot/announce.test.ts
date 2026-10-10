@@ -96,6 +96,7 @@ describe("createAnnouncer", () => {
         afterEach(() => {
             delete process.env["INTENTIC_INSTANCE"];
             delete process.env["HOST_ENV"];
+            delete process.env["HOST_ENGINE"];
         });
 
         it("names the same instance on every announce of this process, its heartbeats included", async () => {
@@ -116,7 +117,14 @@ describe("createAnnouncer", () => {
         it("names the platform `ic` stamped as its side when no environment is set, and leaves out what is unknown", () => {
             createAnnouncer({ ...config, hostLabel: "", hostPlatform: "windows" } as typeof config, logger).start();
             expect(calls[0]?.body).not.toHaveProperty("host");
+            expect(calls[0]?.body).not.toHaveProperty("engine");
             expect(calls[0]?.body).toMatchObject({ os: "windows" });
+        });
+
+        it("names the container engine `ic` stamped (HOST_ENGINE), so outages are told apart by engine", () => {
+            process.env["HOST_ENGINE"] = "intentic";
+            createAnnouncer({ ...config, hostLabel: "omen", hostPlatform: "windows" } as typeof config, logger).start();
+            expect(calls[0]?.body).toMatchObject({ host: "omen", os: "windows", engine: "intentic" });
         });
     });
 

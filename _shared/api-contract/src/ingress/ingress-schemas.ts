@@ -83,6 +83,9 @@ export const AnnounceBodySchema = z.object({
     instance: label(80),
     host: label(120),
     os: label(40),
+    // The container engine the copy runs on (HOST_ENGINE, which `ic` stamps on every container it makes):
+    // `dockerDesktop`, `intentic` (Intentic's own engine in WSL), `own` (Rancher Desktop), `native`.
+    engine: label(40),
 });
 export type AnnounceBody = z.input<typeof AnnounceBodySchema>;
 

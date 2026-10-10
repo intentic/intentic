@@ -193,6 +193,11 @@ fn tool_summary(name: &str, args: &Value) -> String {
                 .unwrap_or_else(|| "Apply the fix doctor suggested".into())
         }
         "engine_start" => "Start the container engine".into(),
+        "engine_move" => match args.get("to").and_then(Value::as_str) {
+            Some("intentic") => "Move sandboxes to Intentic's engine".into(),
+            Some("docker-desktop") => "Move sandboxes back to Docker Desktop".into(),
+            _ => "Move sandboxes to another engine".into(),
+        },
         "sandbox_restart" => slug
             .map(|slug| format!("Restart sandbox {slug}"))
             .unwrap_or_else(|| "Restart a sandbox".into()),
@@ -895,5 +900,25 @@ mod tests {
     fn mutating_tools_are_named() {
         assert!(tools::needs_approval("fix"));
         assert!(!tools::needs_approval("doctor"));
+        // Minutes long, and every sandbox stops on the way: never without the reader's Allow.
+        assert!(tools::needs_approval("engine_move"));
+        assert!(!tools::needs_approval("engine_status"));
+    }
+
+    #[test]
+    fn a_move_is_named_by_where_it_goes() {
+        use serde_json::json;
+        assert_eq!(
+            super::tool_summary("engine_move", &json!({ "to": "intentic" })),
+            "Move sandboxes to Intentic's engine"
+        );
+        assert_eq!(
+            super::tool_summary("engine_move", &json!({ "to": "docker-desktop" })),
+            "Move sandboxes back to Docker Desktop"
+        );
+        assert_eq!(
+            super::tool_summary("engine_move", &json!({})),
+            "Move sandboxes to another engine"
+        );
     }
 }

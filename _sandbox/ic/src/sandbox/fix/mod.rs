@@ -323,6 +323,44 @@ fn own_trash(here: &Side) -> bool {
 
 /// A machine check as an unattended run leaves it on a side that keeps no sandbox: said, with nothing done about it,
 /// and never what the run fails on. Pure.
+/// A repair of Docker Desktop itself: what Intentic stops doing once Docker Desktop is the person's own engine
+/// (engine/choice.rs, bring your own Docker).
+fn repairs_docker_desktop(repair: &Repair) -> bool {
+    matches!(
+        repair,
+        Repair::StartDesktop
+            | Repair::RestartDesktop
+            | Repair::ShutdownWsl
+            | Repair::ReapplyIntegration
+            | Repair::LinuxContainers
+            | Repair::AutoStart
+            | Repair::Prerequisite("docker-users")
+    )
+}
+
+/// On a PC whose sandboxes run on the person's own Docker (Docker Desktop after the migration's switch, or Rancher
+/// Desktop), what ic would have done to it is said and left to them: the finding stays, its remedy is theirs. Pure.
+pub fn own_engine(check: Check) -> Check {
+    let Fix::Do(repair) = &check.fix else {
+        return check;
+    };
+    if !repairs_docker_desktop(repair) {
+        return check;
+    }
+    let remedy = check.remedy.clone().unwrap_or_default();
+    Check {
+        fix: Fix::You,
+        remedy: Some(
+            format!(
+                "{remedy} Docker here is your own engine, so Intentic leaves this to you (`ic engine move --to intentic` hands the sandboxes to Intentic's engine instead)."
+            )
+            .trim()
+            .to_string(),
+        ),
+        ..check
+    }
+}
+
 pub fn left_alone(check: Check) -> Check {
     if check.repair().is_none() || !matches!(check.state, State::Fail | State::Warn) {
         return check;
@@ -583,6 +621,7 @@ impl Engine {
         }
         let host_checks = {
             let tried = |repair: &Repair| self.tried.contains(&(None, repair.clone()));
+            let byo = crate::engine::bring_your_own();
             [
                 host::prerequisites(&host, &tried),
                 host::docker_app(&host, &tried),
@@ -593,6 +632,7 @@ impl Engine {
             ]
             .into_iter()
             .flatten()
+            .map(|check| if byo { own_engine(check) } else { check })
             .map(|check| {
                 if self.auto && !self.keeps_any {
                     left_alone(check)
@@ -1019,6 +1059,43 @@ fn row(check: &Check) {
 mod tests {
     use super::*;
     use model::Fix;
+
+    #[test]
+    fn a_persons_own_docker_keeps_its_findings_and_loses_its_repairs() {
+        use model::{DOCKER, DOCKER_APP};
+        let restart = Check::fail(
+            DOCKER,
+            "Docker Desktop is running, but its engine does not answer at all.",
+            "restart Docker Desktop.",
+            Fix::Do(Repair::RestartDesktop),
+        );
+        let theirs = own_engine(restart);
+        assert_eq!(theirs.fix, Fix::You);
+        assert!(theirs.failed());
+        assert!(theirs.remedy.as_deref().is_some_and(
+            |r| r.starts_with("restart Docker Desktop.") && r.contains("your own engine")
+        ));
+        // A sandbox's own repair, and our engine's, are still Intentic's to make.
+        let start = Check::fail(DOCKER_APP, "p", "r", Fix::Do(Repair::StartIntenticEngine));
+        assert_eq!(own_engine(start).fix, Fix::Do(Repair::StartIntenticEngine));
+        let users = Check::fail(
+            DOCKER,
+            "p",
+            "r",
+            Fix::Do(Repair::Prerequisite("docker-users")),
+        );
+        assert_eq!(own_engine(users).fix, Fix::You);
+        let wsl = Check::fail(
+            DOCKER,
+            "p",
+            "r",
+            Fix::Do(Repair::Prerequisite("wsl-features")),
+        );
+        assert_eq!(
+            own_engine(wsl).fix,
+            Fix::Do(Repair::Prerequisite("wsl-features"))
+        );
+    }
 
     fn host_facts() -> DeviceFacts {
         DeviceFacts {

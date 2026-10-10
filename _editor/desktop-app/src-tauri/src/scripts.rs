@@ -425,6 +425,9 @@ fn endpoint_path(host: Host, docker_host: &str) -> Option<String> {
 /// exists: [`docker_ready`] against a stopped daemon spends tens of seconds reaching the same answer, and a
 /// window that waits for it is a window that opens late on precisely the machines this is about.
 pub fn engine_listening() -> bool {
+    if let Some(engine) = engine_env() {
+        return tcp_listening(&engine.docker_host);
+    }
     let docker_host = std::env::var("DOCKER_HOST").ok();
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
@@ -432,6 +435,94 @@ pub fn engine_listening() -> bool {
     let endpoints = engine_endpoints(Host::current(), docker_host.as_deref(), home.as_deref());
     // Nothing local to probe is a daemon this app cannot start, so the docker CLI's own answer decides instead.
     endpoints.is_empty() || endpoints.iter().any(|endpoint| listening_at(endpoint))
+}
+
+/// Our engine's endpoint (`tcp://127.0.0.1:<port>`, forwarded by WSL into its distro) takes a connection: a port the
+/// keeper's `dockerd` holds. A refused or timed-out connect is an engine that is not running.
+fn tcp_listening(docker_host: &str) -> bool {
+    let Some(address) = docker_host
+        .strip_prefix("tcp://")
+        .and_then(|at| at.parse::<std::net::SocketAddr>().ok())
+    else {
+        return false;
+    };
+    std::net::TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok()
+}
+
+/// Our engine was stopped on purpose (`ic engine stop`): ic's `~/.intentic/engine/held`, which nothing that keeps the
+/// engine running may override.
+pub(crate) fn engine_held() -> bool {
+    engine_home().is_some_and(|home| home.join(".intentic").join("engine").join("held").exists())
+}
+
+/// A move between engines is running (ic's `~/.intentic/engine/moves.json`, a `moving` entry whose heartbeat is
+/// under ten minutes old): every container is in somebody's hands, and nothing here starts or restarts one.
+pub(crate) fn engine_move_running() -> bool {
+    let Some(home) = engine_home() else {
+        return false;
+    };
+    let Ok(text) =
+        std::fs::read_to_string(home.join(".intentic").join("engine").join("moves.json"))
+    else {
+        return false;
+    };
+    move_running_in(&text, now_ms())
+}
+
+fn move_running_in(text: &str, now: u64) -> bool {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|journal| journal["moving"]["heartbeat"].as_u64())
+        .is_some_and(|beat| now.saturating_sub(beat) < 10 * 60 * 1000)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn engine_home() -> Option<PathBuf> {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(PathBuf::from)
+}
+
+/// `ic engine start` for our engine, bounded: the installed ic, or the one beside this app. `quiet` is the background
+/// start, which leaves an engine stopped on purpose (or not switched on) alone; without it the start is a person's
+/// own, and ends any hold.
+pub(crate) fn start_our_engine(quiet: bool, limit: Duration) -> Result<(), String> {
+    let home = engine_home().map(|home| home.to_string_lossy().into_owned());
+    let installed = ic_candidates(Host::current(), home.as_deref())
+        .into_iter()
+        .find(|candidate| Path::new(candidate).is_file());
+    let ic = installed
+        .map(PathBuf::from)
+        .or_else(crate::commands::bundled_ic)
+        .ok_or_else(|| "ic is not installed on this computer.".to_string())?;
+    let mut command = quiet_command(&ic);
+    command.args(["engine", "start"]);
+    if quiet {
+        command.arg("--quiet");
+    }
+    match capture("ic engine start", command, limit) {
+        Ok(answer) if answer.success => Ok(()),
+        Ok(answer) => Err(answer
+            .stderr
+            .lines()
+            .chain(answer.stdout.lines())
+            .rfind(|line| !line.trim().is_empty())
+            .unwrap_or("ic engine start failed")
+            .trim()
+            .to_string()),
+        Err(silence) => Err(format!("ic engine start did not finish: {silence}")),
+    }
+}
+
+fn quiet_command(program: &Path) -> Command {
+    quiet(Command::new(program))
 }
 
 /// Three answers, all of them instant: the pipe opened (an engine), every instance is busy or this account is
@@ -570,6 +661,11 @@ fn parse_engine_record(text: &str) -> Option<EngineEnv> {
     if value.get("engine")?.as_str()? != "intentic" {
         return None;
     }
+    // Installed beside Docker Desktop and not switched on (ic's engine/record.rs `active`): the sandboxes still run on
+    // Docker Desktop, and so does every `docker` this app spawns. A record from before the switch is an active one.
+    if value.get("active").and_then(serde_json::Value::as_bool) == Some(false) {
+        return None;
+    }
     Some(EngineEnv {
         docker_host: value.get("host")?.as_str()?.to_string(),
         cert_path: value.get("certPath")?.as_str()?.to_string(),
@@ -589,6 +685,35 @@ fn path_with_bin_first(bin_dir: &Path) -> Option<String> {
 /// [`app_env`](crate::commands::app_env) carries the same TLS and PATH as [`docker`].
 pub(crate) fn engine_env_pairs() -> Vec<(String, String)> {
     engine_env().map(|env| env.as_pairs()).unwrap_or_default()
+}
+
+/// How the engine this app talks to reads a bind mount's source (`-v <source>:…`), decided once per job rather than
+/// per file. Docker Desktop rewrites a Windows path itself, and an engine on Linux or macOS reads the path as it is;
+/// our engine's `dockerd` runs inside its WSL distro, sees the PC's drives under `/mnt/`, and refuses `C:\…` as an
+/// invalid volume specification (`intentic_docker_host::wsl_path`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Binds {
+    AsIs,
+    Wsl,
+}
+
+impl Binds {
+    pub(crate) fn of_engine() -> Binds {
+        if engine_env().is_some() {
+            Binds::Wsl
+        } else {
+            Binds::AsIs
+        }
+    }
+
+    /// `path` as this engine reads a bind source; None when it cannot see the place (a network share).
+    pub(crate) fn source(self, path: &Path) -> Option<String> {
+        let text = path.to_string_lossy();
+        match self {
+            Binds::AsIs => Some(text.into_owned()),
+            Binds::Wsl => intentic_docker_host::wsl_path::wsl_mount_path(&text),
+        }
+    }
 }
 
 /// Docker Desktop's own CLI, when this process's PATH cannot find one. A PATH is copied into a process when it
@@ -820,6 +945,16 @@ impl Erroring {
 /// `spawn_blocking`. Safe to run twice at once: Docker Desktop is single-instance, so the second start is a
 /// no-op and both waits reach the same answer.
 pub fn bring_engine_up(limit: Duration) -> EngineOutcome {
+    // Our engine is started by ic, which knows its distro and its keeper; Docker Desktop is never what this PC needs.
+    if engine_env().is_some() {
+        if engine_listening() && daemon_refusal().is_none() {
+            return EngineOutcome::Ready;
+        }
+        if let Err(problem) = start_our_engine(false, limit) {
+            return EngineOutcome::WouldNotStart(problem);
+        }
+        return wait_for_engine(limit);
+    }
     if engine_listening() {
         match daemon_refusal() {
             None => return EngineOutcome::Ready,

@@ -1,6 +1,6 @@
 # desktop-smoke-windows
 
-Installs the shipped NSIS installer on a real Windows machine, runs the sandbox setup it ships and drives one `/agents` turn, one tier per subcommand.
+Installs the shipped NSIS installer on a real Windows machine, runs the sandbox setup it ships, drives one `/agents` turn, and runs Intentic's own container engine beside Docker Desktop, one tier per subcommand.
 
 ```mermaid
 flowchart LR
@@ -9,6 +9,7 @@ flowchart LR
     main --> install["install · tier 1<br/>installer, deep link"]
     main --> setup["setup · tier 2<br/>connect.ps1 on Docker"]
     main --> agents["agents · tier 3<br/>one /agents turn"]
+    main --> engine["engine · tier 4<br/>our engine, a sandbox moved"]
     main --> teardown["teardown<br/>machine put back"]
 ```
 
@@ -18,6 +19,11 @@ flowchart LR
   faults before any tier runs.
 - Tier 1 needs no Docker and no credentials, so it gates every release. Tiers 2 and 3 need a Windows Docker daemon
   and a shared agent-auth volume, so they run nightly.
+- Tier 4 installs Intentic's engine (a dockerd in a WSL distro of ours) from the rootfs the build job made, beside the
+  runner's Docker Desktop, and checks Windows reaches a port it publishes; on main pushes that much, nightly also a
+  sandbox moved onto it and back with its files. It runs `ic` with a home, a disk and a distro of its own
+  (`engine.ts`), so the runner's own `~/.intentic`, a real engine and the Run key are never touched, and it removes
+  what its engine put into WSL's network, which the runner's Linux fleet shares.
 - Each assertion polls to its own deadline, a failure does not stop the run, and the exit code is the failure
   count. `parse.ts` keeps what the machine answers pure, so it is tested off Windows.
 - `constants.ts` holds the strings this tier shares with the Linux tier's `_tools/desktop-smoke/smoke.sh`.
@@ -32,6 +38,8 @@ node _tools/desktop-smoke-windows/dist/main.js install --installer <Intentic-<ve
     [--expected-version <version>] [--app-url <origin>] [--keep-installed]
 node _tools/desktop-smoke-windows/dist/main.js setup [--sandbox-image <ref>] [--ic-bin <ic.exe>] [--web-origin <url>]
 node _tools/desktop-smoke-windows/dist/main.js agents [--turn-seconds <n>]
+node _tools/desktop-smoke-windows/dist/main.js engine --ic-bin <ic.exe> --engine-tarball <intentic-engine-*.tar.gz> \
+    [--sandbox-image <ref>] [--web-origin <url>] [--move]
 node _tools/desktop-smoke-windows/dist/main.js teardown
 ```
 
@@ -44,5 +52,7 @@ reads `INTENTIC_AGENT_AUTH_VOLUME` and stands the turn down without it. `teardow
 - [src/tier-install.ts](src/tier-install.ts) — tier 1: install, files on disk, `intentic://` before and after launch.
 - [src/tier-setup.ts](src/tier-setup.ts) — tier 2: the installed `connect.ps1` brings a sandbox up.
 - [src/tier-agents.ts](src/tier-agents.ts) — tier 3: the sandbox is reachable, gated, and runs a turn.
+- [src/tier-engine.ts](src/tier-engine.ts) — tier 4: Intentic's engine installs, publishes to Windows, and carries a
+  sandbox across and back.
 - [src/doctor.ts](src/doctor.ts) — whether this machine can answer what the tiers ask.
 - [src/harness.ts](src/harness.ts) — per-assertion deadlines and the failure count.

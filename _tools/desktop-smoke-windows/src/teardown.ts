@@ -5,13 +5,16 @@
 import { LOCAL_PORT } from "@intentic/constants";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
+import { readFileSync, rmSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { uninstallSilently } from "./app.js";
 import { CONNECT_TOKEN, PRODUCT_NAME, SANDBOX_HOSTNAME } from "./constants.js";
+import { ENGINE_DISTRO, ENGINE_RUN_VALUE, ENGINE_SANDBOX_HOSTNAME } from "./engine.js";
 import type { Harness } from "./harness.js";
 import { lockScreenHolds, sandboxContainerName, SANDBOX_CONTAINER_PREFIX } from "./parse.js";
 import { containersPublishing, dismissLockScreen, findInstalledApp, removeContainer, sessionState } from "./probe.js";
-import { powershell } from "./run.js";
+import { powershell, run } from "./run.js";
+import { ENGINE_ROOT } from "./tier-engine.js";
 
 // A stale sandbox under another name squats this tier's derived port (the connect token is a constant, so every run
 // wants the same one) and answers in today's place, since ic retries without -p. Removed by container-name prefix only.
@@ -61,9 +64,40 @@ const clearLockScreen = async (harness: Harness): Promise<void> => {
     }
 };
 
+/* WHAT THE ENGINE TIER LEAVES when it is cut short: its distro, the bridge and rules its dockerd put into WSL's shared
+network (which every distro on this machine, the Linux fleet's included, would otherwise keep until WSL restarts), its
+Run key value, its isolated home, and its sandbox on Docker Desktop. Each step may find nothing. */
+const removeEngine = async (harness: Harness): Promise<void> => {
+    const listed = await run(`wsl.exe`, [`--list`, `--quiet`], { env: { WSL_UTF8: `1` }, timeoutMs: 30_000 });
+    if (listed.stdout.replace(/\0/g, ``).split(/\r?\n/).some((name) => name.trim() === ENGINE_DISTRO)) {
+        let teardown = ``;
+        try {
+            teardown = readFileSync(new URL(`../../../_sandbox/ic/engine/rootfs/teardown`, import.meta.url), `utf8`);
+        } catch {
+            // Without the script the distro still goes; its rules go when WSL next restarts.
+        }
+        if (teardown !== ``) {
+            await run(`wsl.exe`, [`-d`, ENGINE_DISTRO, `-u`, `root`, `--exec`, `sh`, `-c`, teardown], { timeoutMs: 60_000 });
+        }
+        await run(`wsl.exe`, [`--unregister`, ENGINE_DISTRO], { timeoutMs: 120_000 });
+        harness.pass(`the engine tier's distro (${ENGINE_DISTRO}) and what it put into WSL's network are gone`);
+    }
+    await run(`reg.exe`, [`delete`, `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`, `/v`, ENGINE_RUN_VALUE, `/f`], { timeoutMs: 15_000 });
+    rmSync(ENGINE_ROOT, { recursive: true, force: true });
+    const sandbox = sandboxContainerName(ENGINE_SANDBOX_HOSTNAME);
+    const slug = sandbox.slice(SANDBOX_CONTAINER_PREFIX.length);
+    for (const name of [sandbox, `${sandbox}.moved`]) {
+        await removeContainer(name);
+    }
+    await run(`docker`, [`volume`, `rm`, `-f`, `intentic-workspace-${slug}`, `intentic-history-${slug}`, `intentic-docker-${slug}`]);
+    // ic names a sandbox's network as its workspace volume (ic's sandbox/trash.rs `network`).
+    await run(`docker`, [`network`, `rm`, `intentic-workspace-${slug}`]);
+};
+
 export const runTeardown = async (harness: Harness): Promise<void> => {
     harness.section(`putting the machine back`);
     await clearLockScreen(harness);
+    await removeEngine(harness);
 
     const container = sandboxContainerName(SANDBOX_HOSTNAME);
     await removeContainer(container);

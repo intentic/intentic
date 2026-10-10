@@ -54,6 +54,14 @@ on:
         required: false
         default: ""
         type: string
+      engine:
+        description: >-
+          Run tier 4 as well: Intentic's own container engine (a dockerd in a WSL distro of ours) installed beside
+          this machine's Docker Desktop from the rootfs the build job put into the artifact, and a port it publishes
+          reached from Windows. On a deep run it also moves a sandbox from Docker Desktop onto the engine and back.
+        required: false
+        default: false
+        type: boolean
       timeout-minutes:
         required: false
         default: 45
@@ -179,6 +187,19 @@ jobs:
       # proves the gate is real, drives it with the credential a program is meant to hold, and runs one turn.
       - run: node _tools/desktop-smoke-windows/dist/main.js agents
         if: inputs.deep
+
+      # TIER 4 — Intentic's own engine, beside Docker Desktop, under a distro name and a home of its own (the tier's
+      # engine.ts), so this machine's Docker Desktop, its Linux fleet and anything a person installed stay as they
+      # were. The engine shares WSL's network with the fleet's distro: the tier removes what it put there, and the
+      # teardown below does too when a run is cut short.
+      - run: |
+          $engineArgs = @("engine", "--ic-bin", "windows-artifacts/ic-windows-amd64.exe", "--engine-tarball", (Resolve-Path windows-artifacts/intentic-engine-*-x86_64.tar.gz).Path)
+          if ($env:SANDBOX_E2E_IMAGE) { $engineArgs += @("--sandbox-image", $env:SANDBOX_E2E_IMAGE) }
+          if ($env:DEEP -eq "true") { $engineArgs += "--move" }
+          node _tools/desktop-smoke-windows/dist/main.js @engineArgs
+        if: inputs.engine
+        env:
+          DEEP: ${{ inputs.deep }}
 
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
       # reconcile above to notice — and because a deep run deliberately left the app installed.

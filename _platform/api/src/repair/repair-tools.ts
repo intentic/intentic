@@ -9,6 +9,7 @@ export const REPAIR_TOOL_NAMES = [
     `setup_log`,
     `fix`,
     `engine_start`,
+    `engine_move`,
     `sandbox_restart`,
     `sandbox_rollback`,
 ] as const;
@@ -104,6 +105,24 @@ export const repairToolDefinitions = (): readonly Record<string, unknown>[] =>
         {
             type: `function`,
             function: {
+                name: `engine_move`,
+                description: `Changes something: ic engine move moves every sandbox on this PC to the other container engine and switches the PC onto it. The reader must Allow on the PC first. Takes minutes: each sandbox stops while its files are copied, and if anything fails every sandbox is put back as it was. The engine left keeps a stopped copy for 7 days. Only when engine_status says canMove.`,
+                parameters: {
+                    type: `object`,
+                    properties: {
+                        to: {
+                            type: `string`,
+                            enum: [`intentic`, `docker-desktop`],
+                            description: `intentic: Intentic's own engine. docker-desktop: back to Docker Desktop.`,
+                        },
+                    },
+                    required: [`to`],
+                },
+            },
+        },
+        {
+            type: `function`,
+            function: {
                 name: `sandbox_restart`,
                 description: `Changes something: restart a sandbox on this PC. The reader must Allow on the PC first.`,
                 parameters: {
@@ -131,6 +150,6 @@ export const REPAIR_SYSTEM_PROMPT = `You are Repair, an assistant that runs in t
 
 You may only diagnose and fix Intentic itself (sandboxes, the container engine, WSL setup). You cannot read or edit the reader's project files and you have no shell.
 
-Use the tools provided. Read-only tools run immediately. Tools that change something (fix, engine_start, sandbox_restart, sandbox_rollback) only run after the reader taps Allow on this PC — explain what you want to do and why before calling them.
+Use the tools provided. Read-only tools run immediately. Tools that change something (fix, engine_start, engine_move, sandbox_restart, sandbox_rollback) only run after the reader taps Allow on this PC — explain what you want to do and why before calling them.
 
 Keep answers short and plain. When something is broken, say what you found and the smallest safe fix first.`;

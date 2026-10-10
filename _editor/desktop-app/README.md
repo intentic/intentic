@@ -617,6 +617,8 @@ reloaded onto their new address and token.
 - [explorer-menu](explorer-menu) — "Open with Intentic" in Windows 11's own context menu: the menu command and the identity package it needs.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
+- [src-tauri/src/engine.rs](src-tauri/src/engine.rs) and [src/components/EngineCard.vue](src/components/EngineCard.vue) — which engine this PC's sandboxes run on (Docker Desktop or Intentic's own), and the move between them (`ic engine move`), step by step on the card.
+- [src-tauri/src/engine_keeper.rs](src-tauri/src/engine_keeper.rs) — Intentic's engine started again when it stops while this app runs.
 
 ## Building
 
@@ -693,8 +695,26 @@ pnpm --filter @intentic/desktop-app check:rust       # rustfmt, clippy, cargo te
 pnpm --filter @intentic/desktop-app stage:downloads  # local installers into _site/site/public/desktop/
 ```
 
+## Intentic's engine (2026-10-09)
+
+On a PC whose sandboxes run on Intentic's engine (`~/.intentic/engine/engine.json`, `active`), every `docker` this app
+spawns goes to it (`scripts.rs` `docker`), the engine counts as listening when its TLS port takes a connection rather
+than when Docker Desktop's pipe exists, and the Docker card's Start runs `ic engine start` instead of launching Docker
+Desktop. A record that is installed but not switched on (a Docker Desktop PC holding the engine ready for a move)
+changes nothing.
+
+The engine keeper (`engine_keeper.rs`) looks every 20 seconds and, after two misses in a row, runs
+`ic engine start --quiet`, waiting longer after each failed start (1, 2, 5, then 15 minutes). It leaves alone an engine
+stopped on purpose (`held`), one the PC does not run on, and everything while a move or a setup runs; each start it
+makes is reported as `desktop_engine_restarted`. Every desktop event carries `desktop_engine`.
+
+The engine card on This device says which engine the sandboxes run on and moves them (`ic engine move`, confirmed
+first): onto Intentic's engine from Docker Desktop, or back. While the migration's switch is off (`ic`'s
+`engine/choice.rs`) the move is only kept in reach; once it flips, the card offers it, and "Not now" saves a preference
+for Docker Desktop (`ic engine prefer`). A sandbox handed the GPU keeps the PC on Docker Desktop.
+
 ## Repair
 
-Repair is an agent that runs in this app on the reader's PC, outside every sandbox. It can run read-only checks (`ic sandbox doctor`, `ic engine status`, `ic docker prepare --dry-run`, sandbox list/logs, setup transcript) and, after the reader taps **Allow**, mutating fixes (`ic sandbox fix`, `ic engine start`, sandbox restart/rollback). It has no shell and cannot edit project files.
+Repair is an agent that runs in this app on the reader's PC, outside every sandbox. It can run read-only checks (`ic sandbox doctor`, `ic engine status`, `ic docker prepare --dry-run`, sandbox list/logs, setup transcript) and, after the reader taps **Allow**, mutating fixes (`ic sandbox fix`, `ic engine start`, `ic engine move` between Docker Desktop and Intentic's engine, sandbox restart/rollback). It has no shell and cannot edit project files. A move it starts runs through the engine card's own run (`engine.rs` `run_move`), so the card shows its steps.
 
 Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**Repair**), or `intentic://repair?slug=…&from=…&reason=…`. The web route is `/repair` in the local shell; Rust lives in `src-tauri/src/repair/`, TypeScript in `src/repair.ts`.

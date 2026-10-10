@@ -1467,6 +1467,9 @@ jobs:
       # the fresh binary this leaves in _sandbox/ic/dist-bin rather than cross-building a second one. The same file is
       # what the Windows tier hands the shim through IC_BIN below.
       - run: bash _tools/scripts/build/build-ic.sh windows-x64
+      # Intentic's own engine (the WSL distro ic installs on a PC without Docker Desktop), from this checkout, for the
+      # Windows smoke's tier 4: before this the rootfs was only built by a release, so nothing ran it ahead of one.
+      - run: bash _tools/scripts/build/build-intentic-engine.sh
       - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only
       # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
       # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
@@ -1479,6 +1482,7 @@ jobs:
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp _sandbox/ic/dist-bin/intentic-engine-*-x86_64.tar.gz windows-artifacts/
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: windows-desktop-artifacts
@@ -1522,6 +1526,9 @@ jobs:
     with:
       artifact-name: windows-desktop-artifacts
       installer: Intentic-*-x64-setup.exe
+      # Tier 4's quick half on every main push: our engine installs beside Docker Desktop and Windows reaches a port
+      # it publishes. The engine is what a new PC without Docker Desktop gets, so a regression there is every new user.
+      engine: true
 
   # The money path end to end, and the one suite that gates the platform deploy (`images-platform` needs it).
   # The real api on a Postgres testcontainer with the migration history replayed, Stripe stood in for at the

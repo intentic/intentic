@@ -197,6 +197,8 @@ fn read(output: shell::Output) -> Result<Facts, String> {
         let status = crate::engine::status();
         facts.engine_installed = status.installed;
         facts.engine_running = status.running;
+    } else {
+        facts.bring_your_own = crate::engine::bring_your_own();
     }
     Ok(facts)
 }

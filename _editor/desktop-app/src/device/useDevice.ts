@@ -5,6 +5,7 @@ import {
     desktopInfo,
     deviceAgentRestart,
     dockerReady as dockerReadyProbe,
+    onEngineMove,
     onPendingFix,
     onPendingRecreate,
     onPendingSetup,
@@ -18,6 +19,7 @@ import {
     type UpdateStage,
 } from "../desktop";
 import * as docker from "./docker";
+import * as engine from "./engine";
 import * as fixing from "./fix";
 import * as machine from "./machine";
 import * as runs from "./runs";
@@ -31,8 +33,8 @@ import { titleTheSetup } from "./title";
 // What the launcher window's card used to hold, as one store the This device view draws (DeviceView.vue) and the rail's
 // tile reads its badge from (host.ts), so a setup keeps its progress while the reader is looking at their files. Its
 // parts are modules of their own: the machine's reading (machine.ts), the app's runs on it (runs.ts), the engine
-// (docker.ts), a setup (setup.ts), the sandboxes' verbs (sandboxes.ts), a sync enrollment (sync.ts) and the recovery
-// panel's fix (fix.ts). This one starts them.
+// (docker.ts), which engine the sandboxes run on and the move to the other (engine.ts), a setup (setup.ts), the
+// sandboxes' verbs (sandboxes.ts), a sync enrollment (sync.ts) and the recovery panel's fix (fix.ts). This one starts them.
 //
 // Only the app's main window TAKES WORK (`takesWork`): a setup, a recreate, a sync or a fix the app parked for its own
 // face, and the Docker start a launch asked for. Every other local window draws the same view of the machine and runs
@@ -130,8 +132,11 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     machine.info.value = await desktopInfo();
     initAnalytics(machine.info.value);
     void machine.loadFacts();
-    // Registered before a parked setup can start a run, or its first seconds would show an empty log.
-    const listening = [onRun(onRunEvent), onUpdate((stage) => (update.value = stage))];
+    // Early, and in every window: every event this window sends says which engine the sandboxes run on (analytics.ts).
+    void engine.loadEngine();
+    // Registered before a parked setup can start a run, or its first seconds would show an empty log. A move between
+    // engines is heard by every window, whichever started it.
+    const listening = [onRun(onRunEvent), onUpdate((stage) => (update.value = stage)), onEngineMove(engine.hearEngineMove)];
     const parked = options.takesWork
         ? [
               onPendingSetup(() => void setup.loadPending()),
@@ -163,6 +168,7 @@ const device = {
     startDevice,
     ...machine,
     ...docker,
+    ...engine,
     running: runs.running,
     activeRun: runs.activeRun,
     eventsOf: runs.eventsOf,

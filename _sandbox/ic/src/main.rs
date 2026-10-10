@@ -119,10 +119,29 @@ enum EngineCommand {
         #[arg(long)]
         quiet: bool,
     },
-    /// Stop the engine (`wsl --terminate intentic-engine`)
+    /// Stop the engine and keep it stopped until `ic engine start` (nothing restarts it by itself meanwhile)
     Stop,
     /// Stop the engine without removing it (same as stop today)
     Hold,
+    /// Stop the engine and start it again: for one that is up and does not answer
+    Restart,
+    /// Move every sandbox this side of the PC keeps to another engine, and switch the PC onto it. The engine left
+    /// keeps its copies, stopped, for 7 days; moving back is a move the other way
+    Move {
+        /// The engine to move onto: `intentic` (Intentic's own) or `docker-desktop`
+        #[arg(long)]
+        to: String,
+        /// Skip the confirmation (the desktop app asks it on its own card)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+    },
+    /// Remove the copies a move left on the other engine once their days are up (`--now`: all of them)
+    Cleanup {
+        #[arg(long)]
+        now: bool,
+    },
+    /// Say which engine this PC's new sandboxes should use from now on: `intentic` or `docker-desktop` (moves nothing)
+    Prefer { engine: String },
     /// Fetch newer docker binaries into the running distro and restart
     Update,
     /// Unregister the WSL distro and remove the engine record
@@ -670,6 +689,12 @@ fn main() {
     #[cfg(windows)]
     docker::adopt_program_folder();
     let cli = Cli::parse();
+    // A move between engines stops sandboxes and copies their volumes: nothing else may change them meanwhile, and a
+    // background round (the machine agent's watch, keeper, tidy) is told so rather than restarting one mid-copy.
+    if engine::moves::in_progress() && !allowed_during_a_move(&cli.command) {
+        ui::error("a move between container engines is running on this PC: try again once it has finished (`ic engine status` shows it).");
+        std::process::exit(3);
+    }
     let result = match cli.command {
         Command::Sandbox(command) => match command {
             SandboxCommand::Connect {
@@ -901,6 +926,12 @@ fn main() {
             Some(EngineCommand::Start { quiet }) => engine::run_start(quiet),
             Some(EngineCommand::Stop) => engine::run_stop(),
             Some(EngineCommand::Hold) => engine::run_hold(),
+            Some(EngineCommand::Restart) => engine::run_restart(),
+            Some(EngineCommand::Move { to, yes }) => {
+                engine::moves::run(engine::moves::Args { to, yes })
+            }
+            Some(EngineCommand::Cleanup { now }) => engine::moves::cleanup(now),
+            Some(EngineCommand::Prefer { engine }) => engine::run_prefer(&engine),
             Some(EngineCommand::Update) => engine::run_update(),
             Some(EngineCommand::Remove { yes }) => engine::run_remove(yes),
         },
@@ -908,6 +939,27 @@ fn main() {
     if let Err(util::Fail(message)) = result {
         ui::error(&message);
         std::process::exit(1);
+    }
+}
+
+/// What may run while a move between engines is in progress: reading, never changing a sandbox or an engine.
+fn allowed_during_a_move(command: &Command) -> bool {
+    match command {
+        Command::Sandbox(command) => matches!(
+            command,
+            SandboxCommand::Versions { .. }
+                | SandboxCommand::Backups { .. }
+                | SandboxCommand::Logs { .. }
+                | SandboxCommand::Doctor { .. }
+                | SandboxCommand::List { .. }
+        ),
+        Command::Engine { command } => matches!(
+            command,
+            None | Some(EngineCommand::Status { .. }) | Some(EngineCommand::Fetch)
+        ),
+        Command::Image(_) => true,
+        Command::Docker(DockerCommand::Prepare { dry_run, .. }) => *dry_run,
+        _ => false,
     }
 }
 

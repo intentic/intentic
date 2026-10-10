@@ -2,10 +2,10 @@ import type { LocalView } from "@intentic/web/local-host";
 import { t } from "@intentic/ui/i18n";
 import type { MachineStanding } from "../desktop";
 
-// WHAT THE RAIL'S THIS DEVICE TILE SAYS while the reader is elsewhere (host.ts): a setup or a fix running here (the
-// rail's spinning mark), this computer's own sandbox being made, a setup, a sync or this computer's sandbox stopped for
-// the reader, Docker being started, an update waiting for a restart. Nothing at rest. Pure, so each case is tested by
-// value (badge.test.ts).
+// WHAT THE RAIL'S THIS DEVICE TILE SAYS while the reader is elsewhere (host.ts): a setup, a fix or a move between engines
+// running here (the rail's spinning mark), this computer's own sandbox being made, a setup, a sync or this computer's
+// sandbox stopped for the reader, Docker being started, an update waiting for a restart. Nothing at rest. Pure, so each
+// case is tested by value (badge.test.ts).
 
 export type DeviceBadge = NonNullable<LocalView[`badge`]>[`value`];
 
@@ -17,6 +17,8 @@ export interface DeviceSigns {
     readonly sandbox: string | undefined;
     /** The sandbox the recovery panel's fix is running for (fix.ts), while it runs. */
     readonly fixing: string | undefined;
+    /** The sandboxes are moving to another engine (engine.ts), from whichever window or Repair. */
+    readonly movingSandboxes?: boolean;
     /** A setup's card is on This device (finished or not), or a sync enrollment failed: both wait for the reader. */
     readonly waiting: boolean;
     readonly startingDocker: boolean;
@@ -36,6 +38,9 @@ export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
     }
     if (signs.fixing !== undefined) {
         return { running: t(`desktop.fix.fixing`, { sandbox: signs.fixing }) };
+    }
+    if (signs.movingSandboxes === true) {
+        return { running: t(`desktop.engine.movingBadge`) };
     }
     if (signs.machine === `creating` || signs.machine === `interrupted`) {
         return { running: t(`desktop.device.machineBadge`) };

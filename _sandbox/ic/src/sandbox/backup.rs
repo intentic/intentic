@@ -217,8 +217,8 @@ fn restic(slug: &str, mounts: &[String], script: &str, log: &Log) -> Result<dock
     let chown = owner_ids()
         .map(|ids| format!(" ; status=$?; chown -R {ids} /repo; exit $status"))
         .unwrap_or_default();
-    let repo_mount = format!("{}:/repo", repo.display());
-    let key_mount = format!("{}:/key:ro", key.display());
+    let repo_mount = docker::bind_spec(&repo, "/repo")?;
+    let key_mount = docker::bind_spec(&key, "/key:ro")?;
     let full_script = format!("{script}{chown}");
     let mut args: Vec<&str> = vec!["run"];
     args.extend(labels.iter().map(String::as_str));
@@ -654,7 +654,9 @@ pub fn restore(
     match (to, into) {
         (Some(folder), None) => {
             std::fs::create_dir_all(&folder)?;
-            let target = format!("{}:/out", folder.display());
+            // A relative folder would reach docker as a volume NAME, and the files would land somewhere nobody looks.
+            let folder = std::path::absolute(&folder)?;
+            let target = docker::bind_spec(&folder, "/out")?;
             let ran = restic(
                 &from,
                 &[target],

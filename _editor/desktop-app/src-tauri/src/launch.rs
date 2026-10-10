@@ -114,6 +114,15 @@ pub enum Report {
         location: String,
         version: String,
     },
+    /// `desktop_engine_restarted`: Intentic's engine stopped answering while this app ran, and the engine keeper
+    /// started it again (engine_keeper.rs). `engine` names it, the property every engine event carries.
+    EngineRestarted {
+        ok: bool,
+        seconds: u64,
+        attempt: u32,
+        reason: Option<String>,
+        version: String,
+    },
 }
 
 /// A running copy is only ever ended once it has had this long to come up: a copy that is still starting may be
@@ -335,6 +344,29 @@ pub fn note_unreachable(status: &str) {
     }
 }
 
+/// The engine keeper started Intentic's engine again: kept, then sent right away when there is someone to send to.
+pub fn note_engine_restart(
+    app: &AppHandle,
+    ok: bool,
+    seconds: u64,
+    attempt: u32,
+    reason: Option<String>,
+) {
+    if let Some(dir) = config_dir() {
+        keep_report(
+            &dir,
+            Report::EngineRestarted {
+                ok,
+                seconds,
+                attempt,
+                reason,
+                version: crate::commands::VERSION.to_string(),
+            },
+        );
+    }
+    send_reports(app);
+}
+
 fn keep_report(dir: &Path, report: Report) {
     let path = reports_path(dir);
     let mut reports: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
@@ -464,6 +496,23 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
                 "stage": stage.word(),
                 "message": message,
                 "location": location,
+                "launchVersion": version,
+            }),
+        ),
+        Report::EngineRestarted {
+            ok,
+            seconds,
+            attempt,
+            reason,
+            version,
+        } => (
+            "desktop_engine_restarted",
+            serde_json::json!({
+                "engine": "intentic",
+                "ok": ok,
+                "seconds": seconds,
+                "attempt": attempt,
+                "reason": reason,
                 "launchVersion": version,
             }),
         ),

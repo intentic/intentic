@@ -28,18 +28,52 @@ fn lock_path(dir: &Path) -> PathBuf {
     dir.join("lock")
 }
 
-pub fn try_lock(dir: &Path) -> Result<Option<File>, String> {
+/// The cache's lock: an OS lock on the `lock` file, held for as long as this value lives and released by the OS
+/// itself if the process dies (the image cache's pattern, image_cache.rs). Before 2026-10-09 the lock was the file's
+/// existence, never removed, so every fetch after the first one on a PC reported the cache held by another; and on omen
+/// the same day an ic that crashed mid-install would have left one behind for good.
+pub struct CacheLock {
+    _file: File,
+}
+
+pub fn try_lock(dir: &Path) -> Result<Option<CacheLock>, String> {
     paths::ensure_dir(dir)?;
-    let path = lock_path(dir);
-    match std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
         .write(true)
-        .create_new(true)
-        .open(&path)
-    {
-        Ok(file) => Ok(Some(file)),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
-        Err(error) => Err(format!("could not lock {}: {error}", path.display())),
+        .open(lock_path(dir))
+        .map_err(|error| format!("could not open the engine cache's lock: {error}"))?;
+    match file.try_lock() {
+        Ok(()) => Ok(Some(CacheLock { _file: file })),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(error)) => {
+            Err(format!("could not lock the engine cache: {error}"))
+        }
     }
+}
+
+/// How long a fetch waits on another one before giving up: the engine is 95 MB.
+const WAIT_FOR_OTHER: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// Another process is fetching into the cache: wait for it to finish (its lock is released), reporting the bytes on
+/// disk, then fetch whatever it left missing.
+pub fn wait_for_other(progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
+    let dir = paths::cache_dir().ok_or("could not find this account's home folder.")?;
+    let deadline = std::time::Instant::now() + WAIT_FOR_OTHER;
+    let total = pins::prefetch_total_bytes();
+    while std::time::Instant::now() < deadline {
+        match fetch_all(progress)? {
+            FetchOutcome::Complete => return Ok(()),
+            FetchOutcome::HeldByAnother => {
+                let done = http_fetch::on_disk(&dir.join(pins::TARBALL_NAME))
+                    + http_fetch::on_disk(&dir.join("docker-cli.zip"));
+                progress(done.min(total), total);
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        }
+    }
+    Err("another ic has been downloading the engine for half an hour; try again later.".to_string())
 }
 
 pub fn verify_sha256_file(path: &Path, want: &str) -> Result<(), String> {
@@ -49,7 +83,9 @@ pub fn verify_sha256_file(path: &Path, want: &str) -> Result<(), String> {
 fn verify_sha256(path: &Path, want: &str) -> Result<(), String> {
     let mut file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    // On the heap: a Windows main thread has a 1 MB stack, and a 1 MiB array on it overflowed it on the first real
+    // install (omen, 2026-10-09).
+    let mut buffer = vec![0u8; 1024 * 1024];
     loop {
         let read = file
             .read(&mut buffer)
@@ -108,13 +144,13 @@ pub fn fetch_all(progress: &mut dyn FnMut(u64, u64)) -> Result<FetchOutcome, Str
         let whole = total.max(part_total);
         progress(done, whole);
     };
-    if !tarball.exists() {
-        if let Ok(local) = std::env::var("INTENTIC_ENGINE_TARBALL") {
-            let local = PathBuf::from(local);
-            if local.exists() {
-                std::fs::copy(&local, &tarball)
-                    .map_err(|error| format!("could not copy {}: {error}", local.display()))?;
-            }
+    // A tarball handed in (CI, a test PC) replaces whatever the cache holds: it is the build under test, and a cached
+    // one from an earlier run would quietly test the old engine.
+    if let Ok(local) = std::env::var("INTENTIC_ENGINE_TARBALL") {
+        let local = PathBuf::from(local);
+        if local.exists() {
+            std::fs::copy(&local, &tarball)
+                .map_err(|error| format!("could not copy {}: {error}", local.display()))?;
         }
     }
     if !tarball.exists() {

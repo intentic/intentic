@@ -229,6 +229,11 @@ fn locate_on_windows(os: Os) -> Option<String> {
 }
 
 fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
+    // A PC whose sandboxes run on our engine: Docker Desktop may still be installed, and used by its owner, but it is
+    // not what runs Docker here, so nothing about it is a finding.
+    if os == Os::Windows && crate::engine::in_use() == crate::engine::Kind::Intentic {
+        return (Desktop::Absent, None);
+    }
     match os {
         Os::Windows => {
             let installed = windows.is_some_and(|facts| !facts.docker_desktop_path.is_empty())
@@ -308,7 +313,7 @@ fn desktop(os: Os, windows: Option<&plan::Facts>) -> (Desktop, Option<bool>) {
 
 /// Docker Desktop's processes, off `tasklist` (inside WSL, the Windows one through interop). Its engine is asked
 /// separately: the process list says yes long before the engine answers, and keeps saying it after it has died.
-fn running_on_windows(tasklist: &str) -> Desktop {
+pub(super) fn running_on_windows(tasklist: &str) -> Desktop {
     let ran = docker::run_bounded(
         tasklist,
         &["/FI", "IMAGENAME eq Docker Desktop.exe", "/NH"],
@@ -811,6 +816,11 @@ fn engine_down(
     windowsish: bool,
     tried: &dyn Fn(&Repair) -> bool,
 ) -> Check {
+    if facts.os == Os::Windows
+        && crate::engine::EngineRecord::load().is_some_and(|record| record.is_active())
+    {
+        return intentic_engine_down(engine, crate::engine::held(), tried);
+    }
     if matches!(engine, Engine::Silent) {
         return Check::fail(
             DOCKER,
@@ -832,18 +842,6 @@ fn engine_down(
             Fix::Do(Repair::StartEngine),
         );
     }
-    if facts.os == Os::Windows
-        && facts.desktop == Desktop::Absent
-        && !tried(&Repair::StartIntenticEngine)
-        && crate::engine::EngineRecord::load().is_some_and(|record| record.is_ours())
-    {
-        return Check::fail(
-            DOCKER,
-            problem,
-            "start the intentic engine: `ic sandbox fix` does this by itself.",
-            Fix::Do(Repair::StartIntenticEngine),
-        );
-    }
     Check::fail(
         DOCKER,
         problem,
@@ -854,6 +852,58 @@ fn engine_down(
         } else {
             "start it (sudo systemctl start docker, or sudo service docker start), then run `ic sandbox fix` again."
         },
+        Fix::You,
+    )
+}
+
+/// Our WSL engine, which this PC's sandboxes run on, does not answer. Down: started (by itself, unless a person stopped
+/// it on purpose). Up and not answering: restarted, with a yes, since every sandbox restarts with it. Either way, WSL
+/// itself restarted next, and after that the person. Pure.
+pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair) -> bool) -> Check {
+    let stuck = matches!(engine, Engine::Silent | Engine::Erroring(_));
+    if held && !stuck {
+        return Check::fail(
+            DOCKER,
+            "The intentic engine was stopped on purpose (`ic engine stop`), and your sandboxes run on it.",
+            "start it again: ic engine start",
+            Fix::You,
+        );
+    }
+    let (problem, first) = if stuck {
+        (
+            "The intentic engine is running but does not answer.",
+            Repair::RestartIntenticEngine,
+        )
+    } else {
+        (
+            "The intentic engine is not running.",
+            Repair::StartIntenticEngine,
+        )
+    };
+    if !tried(&first) {
+        return Check::fail(
+            DOCKER,
+            problem,
+            if stuck {
+                "restart it: `ic sandbox fix` does this once you say yes."
+            } else {
+                "start it: `ic sandbox fix` does this by itself."
+            },
+            Fix::Do(first),
+        );
+    }
+    if !tried(&Repair::ShutdownWsl) {
+        return Check::fail(
+            DOCKER,
+            format!("{problem} Starting it again did not help."),
+            "restart WSL under it (`ic sandbox fix` does this once you say yes): every WSL distro on this PC stops for a moment.",
+            Fix::Do(Repair::ShutdownWsl),
+        );
+    }
+    Check::fail(
+        DOCKER,
+        format!("{problem} Restarting WSL did not help either."),
+        "restart this PC; if that does not bring it back, run `ic engine status` and send its output with `ic sandbox doctor`'s.",
         Fix::You,
     )
 }
@@ -890,14 +940,14 @@ pub fn wsl_check(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option
     let check = match &facts.wsl {
         Wsl::NotApplicable => return None,
         Wsl::Windows { running: None } => {
-            let problem = "WSL does not answer (`wsl --list --running` did not finish in 15 seconds), and Docker Desktop runs inside it.";
+            let problem = "WSL does not answer (`wsl --list --running` did not finish in 15 seconds), and the container engine runs inside it.";
             if tried(&Repair::ShutdownWsl) {
                 Check::fail(WSL, problem, "restart this PC.", Fix::You)
             } else {
                 Check::fail(
                     WSL,
                     problem,
-                    "restart WSL: quit Docker Desktop, run `wsl --shutdown`, then open Docker Desktop (`ic sandbox fix` does this once you say yes).",
+                    "restart WSL: quit Docker Desktop if it runs, run `wsl --shutdown`, then start the engine again (`ic sandbox fix` does this once you say yes).",
                     Fix::Do(Repair::ShutdownWsl),
                 )
             }
@@ -1225,6 +1275,42 @@ mod tests {
             .remedy
             .as_deref()
             .is_some_and(|r| r.contains("finish what it shows")));
+    }
+
+    #[test]
+    fn our_engine_down_is_started_unasked_then_wsl_then_a_person() {
+        let down = Engine::Down("cannot connect".to_string());
+        let first = intentic_engine_down(&down, false, &never);
+        assert_eq!(repair_of(&first), Some(Repair::StartIntenticEngine));
+        assert_eq!(first.who(), Some(Who::Auto));
+        let started = |r: &Repair| *r == Repair::StartIntenticEngine;
+        let second = intentic_engine_down(&down, false, &started);
+        assert_eq!(repair_of(&second), Some(Repair::ShutdownWsl));
+        assert_eq!(second.who(), Some(Who::Consent));
+        assert_eq!(
+            intentic_engine_down(&down, false, &always).who(),
+            Some(Who::You)
+        );
+    }
+
+    #[test]
+    fn our_engine_up_and_silent_is_restarted_only_with_a_yes() {
+        let first = intentic_engine_down(&Engine::Silent, false, &never);
+        assert_eq!(repair_of(&first), Some(Repair::RestartIntenticEngine));
+        assert_eq!(first.who(), Some(Who::Consent));
+        // A hold is about a stopped engine; one that is up and stuck is still put right.
+        let held = intentic_engine_down(&Engine::Silent, true, &never);
+        assert_eq!(repair_of(&held), Some(Repair::RestartIntenticEngine));
+    }
+
+    #[test]
+    fn our_engine_stopped_on_purpose_is_left_to_the_person_who_stopped_it() {
+        let held = intentic_engine_down(&Engine::Down("cannot connect".to_string()), true, &never);
+        assert_eq!(held.who(), Some(Who::You));
+        assert!(held
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.contains("ic engine start")));
     }
 
     #[test]

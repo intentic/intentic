@@ -967,6 +967,12 @@ fn stamped_run(slug: &str, here: &crate::sandbox::side::Side) -> Vec<String> {
     if let Some(env) = &here.env {
         extra.extend(["-e".to_string(), format!("HOST_ENV={env}")]);
     }
+    // The engine it runs on, which the daemon announces with its host (system/boot/announce.ts): how outages and setups
+    // are told apart by engine on the platform's side.
+    extra.extend([
+        "-e".to_string(),
+        format!("HOST_ENGINE={}", crate::engine::stamp()),
+    ]);
     extra
 }
 
@@ -1734,7 +1740,10 @@ mod tests {
         assert!(extra.contains(&"dev.intentic.sandbox=sandbox-abc".to_string()));
         assert!(extra.contains(&"dev.intentic.kind=sandbox".to_string()));
         assert!(extra.contains(&"dev.intentic.side=linux/archlinux".to_string()));
-        assert_eq!(&extra[extra.len() - 2..], ["-e", "HOST_ENV=archlinux"]);
+        assert!(extra
+            .windows(2)
+            .any(|pair| pair == ["-e", "HOST_ENV=archlinux"]));
+        assert_eq!(&extra[extra.len() - 2..], ["-e", "HOST_ENGINE=native"]);
         // An environment that is not known is not guessed at.
         let unknown = stamped_run("x", &Side::new("linux", None));
         assert!(!unknown.iter().any(|arg| arg.starts_with("HOST_ENV")));

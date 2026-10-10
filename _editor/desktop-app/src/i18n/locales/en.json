@@ -233,6 +233,73 @@
             "failed": "couldn't be added"
         }
     },
+    "engine": {
+        "runsOn": {
+            "dockerDesktop": "Your sandboxes run on Docker Desktop",
+            "intentic": "Your sandboxes run on Intentic's engine"
+        },
+        "offerTitle": "Move your sandboxes to Intentic's engine",
+        "why": "Intentic's own engine runs them without Docker Desktop, and Intentic keeps it updated and running.",
+        "what": "Each sandbox stops while its files are copied. Docker Desktop keeps a copy for 7 days, and you can move back.",
+        "gpu": "Moving them to Intentic's engine isn't available: a sandbox here uses this computer's graphics card (GPU), which only Docker Desktop can give it.",
+        "keptRunning": "Intentic keeps it updated and running.",
+        "moveToIntentic": "Move to Intentic's engine",
+        "notNow": "Not now",
+        "moveBack": "Move back to Docker Desktop",
+        "confirm": {
+            "toIntenticTitle": "Move your sandboxes to Intentic's engine?",
+            "toIntentic": "Each sandbox stops while its files are copied, which can take a few minutes for each. Docker Desktop keeps a copy for 7 days, and you can move back.",
+            "toDockerDesktopTitle": "Move your sandboxes back to Docker Desktop?",
+            "toDockerDesktop": "Each sandbox stops while its files are copied, which can take a few minutes for each. Intentic's engine keeps a copy for 7 days.",
+            "move": "Move them"
+        },
+        "movingTo": {
+            "intentic": "Moving your sandboxes to Intentic's engine",
+            "dockerDesktop": "Moving your sandboxes back to Docker Desktop",
+            "other": "Moving your sandboxes"
+        },
+        "whileMoving": "Each sandbox stops while its files are copied. If anything goes wrong, every sandbox is put back as it was.",
+        "step": {
+            "engine": "Installing Intentic's engine first",
+            "begin": "Getting ready",
+            "stopping": "Stopping it",
+            "image": "Copying its image",
+            "volume": "Copying its files",
+            "starting": "Starting it again",
+            "moved": "Moved"
+        },
+        "position": "sandbox {index} of {count}",
+        "copied": "{done} of {total}",
+        "copiedAbout": "{done} of about {total}",
+        "copiedSoFar": "{done} copied",
+        "keepsGoing": "Closing this window doesn't stop it.",
+        "moved": {
+            "intentic": "Done: your sandboxes now run on Intentic's engine.",
+            "dockerDesktop": "Done: your sandboxes now run on Docker Desktop."
+        },
+        "didntFinish": "The move didn't finish",
+        "putBack": "Everything is back where it was.",
+        "stoppedPartWay": "It stopped part way, so a sandbox may still be stopped. The log says where it got to.",
+        "showLog": "Show log",
+        "busy": "Another move is already running on this computer. Try again once it's finished.",
+        "didntStart": "The move didn't start",
+        "kept": {
+            "dockerDesktop": "Docker Desktop keeps a copy of your sandbox until {date}. | Docker Desktop keeps a copy of your sandboxes until {date}.",
+            "intentic": "Intentic's engine keeps a copy of your sandbox until {date}. | Intentic's engine keeps a copy of your sandboxes until {date}."
+        },
+        "removeNow": "Remove now",
+        "removing": "Removing…",
+        "removeCopies": {
+            "title": "Remove the copies now?",
+            "body": "They're the way back to how your sandboxes were before the move. The sandboxes you use now aren't touched.",
+            "remove": "Remove them"
+        },
+        "copiesStay": {
+            "dockerDesktop": "Docker Desktop has to be running to remove its copies. Start it, then try again.",
+            "intentic": "Intentic's engine didn't start, so its copies stay. Try again later."
+        },
+        "movingBadge": "moving sandboxes"
+    },
     "account": {
         "profileUpdateFailed": "Profile update failed.",
         "sessionCheckFailed": "Couldn't check your session.",

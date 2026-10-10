@@ -5,6 +5,8 @@ mod auth;
 mod badge;
 mod commands;
 mod drop_copy;
+mod engine;
+mod engine_keeper;
 mod first_task;
 mod fix;
 mod found;
@@ -221,6 +223,11 @@ pub fn run() {
             repair::repair_send,
             repair::repair_answer,
             repair::repair_reset,
+            // Which engine this PC's sandboxes run on, and the move to the other (engine.rs).
+            engine::engine_status,
+            engine::engine_move,
+            engine::engine_prefer,
+            engine::engine_cleanup,
         ])
         .setup(|app| {
             // The plugins are up, the single-instance handoff among them: this launch is the copy that runs.
@@ -317,6 +324,8 @@ pub fn run() {
             // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
             onboarding::begin(app.handle());
             machine_sandbox::start(app.handle());
+            // Intentic's engine, started again when it stops while this app runs (engine_keeper.rs).
+            engine_keeper::start(app.handle());
             // What earlier runs left on disk (2026-10-05): run transcripts past the newest few (scripts.rs), and the paths
             // files of bring-backs a crash cut short (project.rs). Off the launch's thread: it is a folder or two read.
             let sweeping = app.handle().clone();

@@ -54,6 +54,95 @@ fn apply_intentic_env(command: &mut Command) {
     apply_tls_env(command, &env.host, &env.cert_path, &env.bin);
 }
 
+/// The variables that point a docker CLI at an engine. A process the desktop app started while our engine was active
+/// carries them; one asked to reach Docker Desktop must not.
+const ENGINE_VARS: [&str; 4] = [
+    "DOCKER_HOST",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "DOCKER_CONTEXT",
+];
+
+/// One engine named explicitly, for the one flow that talks to two at once (`ic engine move`): every other `docker`
+/// goes to the engine this account's sandboxes run on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// Whatever `docker` reaches with no engine variables: Docker Desktop on Windows.
+    DockerDesktop,
+    Intentic(EngineEnv),
+}
+
+/// `docker <args>` against `target`, whatever this process's own engine is.
+pub fn command_on(target: &Target, args: &[&str]) -> Command {
+    let mut command = docker_command(args);
+    match target {
+        Target::DockerDesktop => {
+            for name in ENGINE_VARS {
+                command.env_remove(name);
+            }
+        }
+        Target::Intentic(env) => apply_tls_env(&mut command, &env.host, &env.cert_path, &env.bin),
+    }
+    command
+}
+
+/// Point every later `docker` of this process at `target`: the move hands a sandbox's recreate to the engine it is
+/// moving onto, and goes back on the way out.
+pub fn adopt_target(target: &Target) {
+    match target {
+        Target::DockerDesktop => {
+            set_intentic_engine(None);
+            forget_engine_vars();
+        }
+        Target::Intentic(env) => set_intentic_engine(Some(env.clone())),
+    }
+}
+
+/// Drop the engine variables this process was started with, so a `docker` with no engine of ours reaches the default
+/// one. Called before any thread starts (`engine::adopt`) or while a move is the only thing running.
+pub fn forget_engine_vars() {
+    for name in ENGINE_VARS {
+        std::env::remove_var(name);
+    }
+}
+
+/// [`capture_bounded`] against an explicit engine.
+pub fn capture_on(target: &Target, args: &[&str], limit: Duration) -> Result<Bounded> {
+    bounded(command_on(target, args), limit)
+}
+
+/// Whether this process's `docker` children go to our WSL engine.
+pub fn intentic_engine_in_use() -> bool {
+    INTENTIC_ENGINE
+        .read()
+        .map(|guard| guard.is_some())
+        .unwrap_or(false)
+}
+
+/// A host path the way the engine in use reads a bind source (`-v <source>:…`). Docker Desktop rewrites a Windows path
+/// itself, and an engine on Linux or macOS reads the path as it is; our engine's `dockerd` runs inside its WSL distro and
+/// sees the PC's drives under `/mnt/` (`intentic_docker_host::wsl_path`). None when our engine cannot see the place: a
+/// network share, another distro's files.
+pub fn bind_source(path: &Path) -> Option<String> {
+    let text = path.to_string_lossy();
+    if intentic_engine_in_use() {
+        intentic_docker_host::wsl_path::wsl_mount_path(&text)
+    } else {
+        Some(text.into_owned())
+    }
+}
+
+/// [`bind_source`] as a `-v` spec, `<source>:<rest>`, or the reason it cannot be one.
+pub fn bind_spec(path: &Path, rest: &str) -> Result<String> {
+    match bind_source(path) {
+        Some(source) => Ok(format!("{source}:{rest}")),
+        None => bail!(
+            "the container engine cannot reach {} (a network share, or another WSL distro's files).",
+            path.display()
+        ),
+    }
+}
+
 fn docker_command(args: &[&str]) -> Command {
     let mut command = Command::new("docker");
     command.args(args);

@@ -45,12 +45,18 @@ const instanceId = (): string => {
     return set === "" ? PROCESS_INSTANCE : set.slice(0, 80);
 };
 
-// What the announce says about where this copy runs: the machine's own name (HOST_LABEL, which `ic` sets from the host)
-// and its side (HOST_ENV, a WSL distro's name where netd sets it, else HOST_PLATFORM). Each left out when unset.
-const whereThisRuns = (config: Config): { host?: string; os?: string } => {
+// What the announce says about where this copy runs: the machine's own name (HOST_LABEL, which `ic` sets from the host),
+// its side (HOST_ENV, a WSL distro's name where netd sets it, else HOST_PLATFORM), and the container engine under it
+// (HOST_ENGINE, which `ic` stamps on every container it makes). Each left out when unset.
+export const whereThisRuns = (config: Config, env: NodeJS.ProcessEnv = process.env): { host?: string; os?: string; engine?: string } => {
     const host = (config.hostLabel ?? "").trim();
-    const os = (process.env["HOST_ENV"] ?? "").trim() || (config.hostPlatform ?? "").trim();
-    return { ...(host === "" ? {} : { host: host.slice(0, 120) }), ...(os === "" ? {} : { os: os.slice(0, 40) }) };
+    const os = (env["HOST_ENV"] ?? "").trim() || (config.hostPlatform ?? "").trim();
+    const engine = (env["HOST_ENGINE"] ?? "").trim();
+    return {
+        ...(host === "" ? {} : { host: host.slice(0, 120) }),
+        ...(os === "" ? {} : { os: os.slice(0, 40) }),
+        ...(engine === "" ? {} : { engine: engine.slice(0, 40) }),
+    };
 };
 
 // What the owner's Reconnect carries when the platform may need to adopt this sandbox (POST /platform/relink).

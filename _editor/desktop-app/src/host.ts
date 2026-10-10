@@ -49,6 +49,7 @@ const badge = computed(() => {
         settingUp: device.activeRun.value === `setup`,
         sandbox: device.pending.value?.name,
         fixing: device.fixRunning.value ? device.fixName.value : undefined,
+        movingSandboxes: device.engineMoving.value !== undefined,
         waiting: device.setupMode.value || device.syncSetup.value?.error !== undefined,
         startingDocker: device.dockerStarting.value,
         // A deb or rpm upgrade installed under the running app is one restart away too.

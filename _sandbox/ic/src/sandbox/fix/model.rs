@@ -106,8 +106,8 @@ pub enum Repair {
     StartDesktop,
     /// Stop every Docker Desktop process and start it again: an app that is up with an engine that is not.
     RestartDesktop,
-    /// Windows' last resort: Docker Desktop stopped, `wsl --shutdown`, Docker Desktop started. Takes every WSL
-    /// distro down with it.
+    /// Windows' last resort: Docker Desktop stopped, `wsl --shutdown`, the engine in use started again (Docker
+    /// Desktop, or Intentic's). Takes every WSL distro down with it.
     ShutdownWsl,
     /// Inside WSL: `docker desktop restart` from the Windows side, which re-applies an integration that is switched
     /// on and merely absent.
@@ -118,6 +118,8 @@ pub enum Repair {
     StartEngine,
     /// The intentic engine in WSL (`ic engine start`).
     StartIntenticEngine,
+    /// The intentic engine stopped and started again (`ic engine restart`): up, and not answering.
+    RestartIntenticEngine,
     /// Docker Desktop's own start-at-sign-in switched on, so a reboot does not take the sandbox down with it.
     AutoStart,
     /// One of `ic docker prepare`'s elevated Windows fixes, by its requirement id.
@@ -183,13 +185,14 @@ impl Repair {
         match self {
             Repair::StartDesktop => "Starting Docker Desktop".to_string(),
             Repair::RestartDesktop => "Restarting Docker Desktop".to_string(),
-            Repair::ShutdownWsl => "Restarting WSL and Docker Desktop".to_string(),
+            Repair::ShutdownWsl => "Restarting WSL and the container engine".to_string(),
             Repair::ReapplyIntegration => {
                 "Re-applying Docker Desktop's WSL integration".to_string()
             }
             Repair::LinuxContainers => "Switching Docker to Linux containers".to_string(),
             Repair::StartEngine => "Starting Docker's engine".to_string(),
             Repair::StartIntenticEngine => "Starting the intentic engine".to_string(),
+            Repair::RestartIntenticEngine => "Restarting the intentic engine".to_string(),
             Repair::AutoStart => "Turning on Docker Desktop's start at sign-in".to_string(),
             Repair::Prerequisite(id) => format!("Fixing a Windows prerequisite ({id})"),
             Repair::Tidy => "Removing what updates left behind".to_string(),
@@ -215,7 +218,10 @@ impl Repair {
             Repair::RestartDesktop => {
                 "Restart Docker Desktop? Every sandbox on this machine restarts with it.".to_string()
             }
-            Repair::ShutdownWsl => "Restart WSL and Docker Desktop? This stops every WSL distro on this PC, including anything running in them.".to_string(),
+            Repair::ShutdownWsl => "Restart WSL and the container engine? This stops every WSL distro on this PC, including anything running in them.".to_string(),
+            Repair::RestartIntenticEngine => {
+                "Restart the intentic engine? Every sandbox on this PC restarts with it.".to_string()
+            }
             Repair::ReapplyIntegration => {
                 "Restart Docker Desktop to re-apply its WSL integration?".to_string()
             }
@@ -882,6 +888,7 @@ mod tests {
         }
         for consent in [
             Repair::RestartDesktop,
+            Repair::RestartIntenticEngine,
             Repair::ShutdownWsl,
             Repair::ReapplyIntegration,
             Repair::LinuxContainers,

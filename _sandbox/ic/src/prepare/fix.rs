@@ -101,7 +101,8 @@ exit 1\n";
 #[cfg(windows)]
 pub fn install_intentic_engine() -> Fixed {
     let mut progress = |sentence: &str, _percent: Option<u64>| super::progress(sentence);
-    crate::engine::install(&mut progress)
+    // `ic docker prepare` installs the engine only where it chose it: this PC's sandboxes run on it.
+    crate::engine::install(&mut progress, true)
         .map(|_| Done::Now)
         .map_err(Trouble::Failed)
 }

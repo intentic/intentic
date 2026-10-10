@@ -1,5 +1,6 @@
 #!/bin/sh
-# Foreground keeper: dockerd for the intentic-engine WSL distro. Started by `ic engine start` on Windows.
+# Foreground keeper: dockerd for the intentic-engine WSL distro. Started by `ic engine start` on Windows, which writes
+# this file into the distro before every start (engine/windows.rs `KEEPER`), so a change here ships with ic.
 set -eu
 
 PORT="${1:-${INTENTIC_ENGINE_PORT:-2378}}"
@@ -8,6 +9,11 @@ LOG="/var/log/intentic-engine.log"
 
 mkdir -p /var/run "$TLS_DIR" /var/lib/docker /var/log
 chmod 700 "$TLS_DIR"
+
+# A log that only grows: the last one is kept, the one before it goes.
+if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 10485760 ]; then
+  mv -f "$LOG" "$LOG.1"
+fi
 
 # cgroup v2 on Alpine without OpenRC: mount if the kernel did not already.
 if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
@@ -21,6 +27,29 @@ if [ ! -f "$TLS_DIR/server-cert.pem" ]; then
   exit 1
 fi
 
+# THIS DISTRO SHARES WSL'S NETWORK WITH EVERY OTHER ONE (one VM, one network namespace; Docker Desktop keeps its engine
+# in a namespace of its own, this one does not), so what dockerd adds there is seen by all of them:
+# - Windows' connections to 127.0.0.1 arrive on an interface (mirrored networking's loopback0, NAT's localhost relay),
+#   where Docker's DNAT for a port published on 127.0.0.1 sends them to the container and the reply never makes it
+#   back (omen, 2026-10-09). Loopback traffic is left to docker-proxy, which listens there for every published port.
+# - Docker's own 172.17.0.0/16 is the range most often routed by VPNs and office networks, and a bridge on it would
+#   shadow those routes in every distro: the bridge and the networks dockerd makes come from a rarely used range.
+# - Another Docker engine already running in WSL (Docker Engine in a person's own Ubuntu, Rancher Desktop) owns docker0
+#   and the iptables chains named DOCKER, and two daemons there flush each other's rules on every start. Its bridge is
+#   the sign: docker0 holding an address that is not ours. This engine then does not start, and says why (exit 3,
+#   which `ic engine start` turns into the sentence a person reads).
+rm -f /var/run/intentic-engine.refused
+if ip addr show dev docker0 2>/dev/null | grep -q 'inet ' \
+  && ! ip addr show dev docker0 2>/dev/null | grep -q 'inet 192\.168\.239\.1/'; then
+  owner="$(ip addr show dev docker0 | sed -n 's/.*inet \([0-9.\/]*\).*/\1/p' | head -n 1)"
+  echo "another Docker engine in WSL owns docker0 ($owner): not starting beside it." >>"$LOG"
+  echo "$owner" >/var/run/intentic-engine.refused
+  exit 3
+fi
+
+iptables -t nat -C PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null \
+  || iptables -t nat -I PREROUTING 1 -d 127.0.0.0/8 -j RETURN 2>>"$LOG" || true
+
 exec dockerd \
   --host="unix:///var/run/docker.sock" \
   --host="tcp://127.0.0.1:${PORT}" \
@@ -29,4 +58,8 @@ exec dockerd \
   --tlscert="$TLS_DIR/server-cert.pem" \
   --tlskey="$TLS_DIR/server-key.pem" \
   --data-root=/var/lib/docker \
+  --bip=192.168.239.1/24 \
+  --default-address-pool=base=192.168.240.0/20,size=26 \
+  --log-opt=max-size=20m \
+  --log-opt=max-file=3 \
   >>"$LOG" 2>&1

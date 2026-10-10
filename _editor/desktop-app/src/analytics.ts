@@ -9,6 +9,16 @@ const CAPTURE_URL = `https://us.i.posthog.com/i/v0/e/`;
 
 let context: { installId: string; shared: Record<string, unknown> } | undefined;
 
+// Which engine this PC's sandboxes run on (`ic engine status`, device/engine.ts), sent with every event as
+// `desktop_engine` once it is known: the one fact that splits every funnel here in two. Kept apart from `context`, since
+// the status can arrive before or after `initAnalytics`.
+let engine: string | undefined;
+
+/** Name the engine every later event is sent with; undefined while it is not known (no status, or not a Windows PC). */
+export const setEngine = (id: string | undefined): void => {
+    engine = id;
+};
+
 export const initAnalytics = (info: DesktopInfo): void => {
     if (__POSTHOG_KEY__ === ``) {
         return;
@@ -43,7 +53,7 @@ const send = (event: string, properties?: Record<string, unknown>): Promise<void
         api_key: __POSTHOG_KEY__,
         event,
         distinct_id: context.installId,
-        properties: { ...context.shared, ...properties },
+        properties: { ...context.shared, ...(engine === undefined ? {} : { desktop_engine: engine }), ...properties },
         timestamp: new Date().toISOString(),
     });
     return fetch(CAPTURE_URL, { method: `POST`, headers: { "content-type": `application/json` }, body, keepalive: true }).then(

@@ -1267,6 +1267,10 @@ pub fn run_said(run: &str) -> String {
         "recreate" => format!("updating {slug}"),
         "remove" => format!("removing {slug}"),
         "fix" => "fixing a sandbox".to_string(),
+        // This device's move (engine.rs) or Repair's: every sandbox stopped in turn while its files are copied.
+        "engine-move" | "repair-engine-move" => {
+            "moving your sandboxes to another engine".to_string()
+        }
         "sync-setup" | "project-sync" => "setting up folder sync".to_string(),
         "project" => "bringing changes back to a folder".to_string(),
         _ => "a task on this computer".to_string(),
@@ -2009,6 +2013,14 @@ mod unsaved_tests {
         assert_eq!(run_said("power:work"), "starting or stopping work");
         assert_eq!(run_said("setup"), "setting up a sandbox");
         assert_eq!(run_said("anything-new"), "a task on this computer");
+        assert_eq!(
+            run_said(crate::engine::RUN),
+            "moving your sandboxes to another engine"
+        );
+        assert_eq!(
+            run_said("repair-engine-move"),
+            "moving your sandboxes to another engine"
+        );
     }
 
     /// A close is held only while the page says it has changes and has not itself asked about them, and it is the

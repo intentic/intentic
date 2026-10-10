@@ -150,15 +150,33 @@ pub fn restart(facts: &DeviceFacts) -> Done {
 }
 
 /// Windows' last resort: Docker Desktop stopped FIRST (a `wsl --shutdown` under a running Docker Desktop is what
-/// wedges it), WSL shut down, Docker Desktop started. Never offered from inside WSL, where it would end this run too.
+/// wedges it), WSL shut down, then the engine the sandboxes run on started again: Docker Desktop, or Intentic's (with
+/// Docker Desktop started again beside it when it was running, since a person may be using it). Never offered from
+/// inside WSL, where it would end this run too.
 pub fn shutdown_wsl(facts: &DeviceFacts) -> Done {
     if facts.os != Os::Windows {
         return Err("WSL is restarted from Windows.".to_string());
     }
-    stop(facts.os)?;
-    std::thread::sleep(Duration::from_secs(3));
+    let ours = crate::engine::in_use() == crate::engine::Kind::Intentic;
+    // With our engine in use the facts call Docker Desktop absent (it is not what runs the sandboxes), so whether it
+    // runs is read off the task list here.
+    let desktop_ran = facts.desktop == super::host::Desktop::Running
+        || (ours
+            && super::host::windows_desktop_exe(Os::Windows).is_some()
+            && super::host::running_on_windows("tasklist.exe") == super::host::Desktop::Running);
+    if !ours || desktop_ran {
+        stop(facts.os)?;
+        std::thread::sleep(Duration::from_secs(3));
+    }
     run("wsl.exe", &["--shutdown"], Duration::from_secs(120))?;
     std::thread::sleep(Duration::from_secs(5));
+    if ours {
+        crate::engine::start()?;
+        if desktop_ran {
+            let _ = launch(facts);
+        }
+        return Ok(Applied::Now);
+    }
     launch(facts)?;
     wait_engine(START_WAIT)
 }
@@ -216,6 +234,10 @@ pub fn prerequisite(facts: &DeviceFacts, id: &str) -> Done {
 /// Linux Docker Engine under systemd. `sudo` asks for its password on the terminal itself when it needs one.
 pub fn start_intentic_engine() -> Done {
     crate::engine::start().map(|()| Applied::Now)
+}
+
+pub fn restart_intentic_engine() -> Done {
+    crate::engine::restart().map(|()| Applied::Now)
 }
 
 pub fn start_engine() -> Done {

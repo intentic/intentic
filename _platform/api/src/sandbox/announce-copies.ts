@@ -36,6 +36,7 @@ const SeenCopySchema = z.object({
     instance: z.string(),
     host: z.string().optional(),
     os: z.string().optional(),
+    engine: z.string().optional(),
     firstAt: z.string(),
     at: z.string(),
 });
@@ -51,6 +52,7 @@ export interface AnnouncedCopy {
     readonly instance: string;
     readonly host?: string;
     readonly os?: string;
+    readonly engine?: string;
 }
 
 // One optional field of the body, trimmed and held to the contract's own bounds; dropped, never fatal, when it is not
@@ -62,7 +64,7 @@ const fieldOf = (schema: z.ZodType<string | undefined>, value: unknown): string 
 
 // Which copy sent this announce, or undefined from a daemon too old to name its instance.
 export const announcedCopyOf = (
-    body: { readonly instance?: unknown; readonly host?: unknown; readonly os?: unknown } | undefined,
+    body: { readonly instance?: unknown; readonly host?: unknown; readonly os?: unknown; readonly engine?: unknown } | undefined,
 ): AnnouncedCopy | undefined => {
     const instance = fieldOf(AnnounceBodySchema.shape.instance, body?.instance);
     if (instance === undefined) {
@@ -70,7 +72,13 @@ export const announcedCopyOf = (
     }
     const host = fieldOf(AnnounceBodySchema.shape.host, body?.host);
     const os = fieldOf(AnnounceBodySchema.shape.os, body?.os);
-    return { instance, ...(host === undefined ? {} : { host }), ...(os === undefined ? {} : { os }) };
+    const engine = fieldOf(AnnounceBodySchema.shape.engine, body?.engine);
+    return {
+        instance,
+        ...(host === undefined ? {} : { host }),
+        ...(os === undefined ? {} : { os }),
+        ...(engine === undefined ? {} : { engine }),
+    };
 };
 
 export interface CopiesState {
@@ -88,10 +96,13 @@ export const noteAnnounce = (held: CopiesState, copy: AnnouncedCopy, now: Date):
     const known = held.seen.find((entry) => entry.instance === copy.instance);
     const host = copy.host ?? known?.host;
     const os = copy.os ?? known?.os;
+    // The engine as it is now, not as it was: a move between engines keeps the instance only until the next start.
+    const engine = copy.engine ?? known?.engine;
     const self: SeenCopy = {
         instance: copy.instance,
         ...(host === undefined ? {} : { host }),
         ...(os === undefined ? {} : { os }),
+        ...(engine === undefined ? {} : { engine }),
         firstAt: known?.firstAt ?? at,
         at,
     };

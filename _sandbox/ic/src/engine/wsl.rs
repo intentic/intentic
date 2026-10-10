@@ -1,8 +1,6 @@
 use std::process::{Command, Stdio}; // Command used in listed_distros
 use std::time::Duration;
 
-use super::DISTRO;
-
 /// Decode UTF-16LE bytes (NUL-terminated lines) from `wsl.exe -l -q`.
 pub fn decode_utf16le(bytes: &[u8]) -> String {
     let mut units = Vec::new();
@@ -49,11 +47,11 @@ pub fn run_wsl(args: &[&str], limit: Duration) -> Result<(i32, String, String), 
 }
 
 /// Keeper command line `ic engine start` spawns (hidden, detached).
-pub fn keeper_argv(port: u16) -> Vec<String> {
+pub fn keeper_argv(distro: &str, port: u16) -> Vec<String> {
     vec![
         "wsl.exe".into(),
         "-d".into(),
-        DISTRO.into(),
+        distro.into(),
         "-u".into(),
         "root".into(),
         "--exec".into(),
@@ -78,12 +76,12 @@ mod tests {
 
     #[test]
     fn keeper_argv_names_distro_and_entry() {
-        let argv = keeper_argv(2378);
+        let argv = keeper_argv(super::super::DISTRO, 2378);
         assert_eq!(argv[0], "wsl.exe");
         assert!(argv.contains(&"-d".to_string()));
         assert!(argv.contains(&"-u".to_string()));
         assert!(argv.contains(&"root".to_string()));
-        assert!(argv.contains(&DISTRO.to_string()));
+        assert!(argv.contains(&super::super::DISTRO.to_string()));
         assert!(argv.contains(&"/usr/local/bin/intentic-engine".to_string()));
     }
 }

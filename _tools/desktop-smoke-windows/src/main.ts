@@ -8,6 +8,7 @@ import { createHarness } from "./harness.js";
 import { nonEmpty, sandboxContainerName } from "./parse.js";
 import { runAgentsTier } from "./tier-agents.js";
 import { runInstallTier } from "./tier-install.js";
+import { runEngineTier } from "./tier-engine.js";
 import { runSetupTier } from "./tier-setup.js";
 import { runTeardown } from "./teardown.js";
 
@@ -18,7 +19,7 @@ const flag = (argv: readonly string[], name: string): string | undefined => {
 
 const present = (argv: readonly string[], name: string): boolean => argv.includes(`--${name}`);
 
-const USAGE = `usage: main.js doctor|install|setup|agents|teardown [flags], see the package README`;
+const USAGE = `usage: main.js doctor|install|setup|agents|engine|teardown [flags], see the package README`;
 
 const main = async (): Promise<number> => {
     const [command, ...argv] = process.argv.slice(2);
@@ -61,6 +62,23 @@ const main = async (): Promise<number> => {
             turnSeconds: Number(flag(argv, `turn-seconds`) ?? 300),
         });
         return harness.report(`the sandbox is reachable, gated, and runs an /agents turn`);
+    }
+
+    if (command === `engine`) {
+        const icBin = flag(argv, `ic-bin`);
+        const tarball = flag(argv, `engine-tarball`);
+        if (icBin === undefined || tarball === undefined) {
+            process.stderr.write(`error: --ic-bin <ic.exe> and --engine-tarball <intentic-engine-*.tar.gz> are required\n`);
+            return 2;
+        }
+        await runEngineTier(harness, {
+            icBin,
+            tarball,
+            sandboxImage: flag(argv, `sandbox-image`) ?? `ghcr.io/intentic/sandbox:stable`,
+            webOrigin: flag(argv, `web-origin`) ?? `https://app.intentic.dev`,
+            move: present(argv, `move`),
+        });
+        return harness.report(`Intentic's engine installs beside Docker Desktop, publishes to Windows, and carries a sandbox`);
     }
 
     if (command === `teardown`) {

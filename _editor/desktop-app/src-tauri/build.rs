@@ -96,4 +96,9 @@ const COMMANDS: &[&str] = &[
     "repair_send",
     "repair_answer",
     "repair_reset",
+    // Which engine this PC's sandboxes run on, and the move to the other (engine.rs).
+    "engine_status",
+    "engine_move",
+    "engine_prefer",
+    "engine_cleanup",
 ];
