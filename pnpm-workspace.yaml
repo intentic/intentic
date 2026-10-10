@@ -135,15 +135,15 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk@0.3.295'
+  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk@0.3.296'
   - image-size@2.0.4
   - "@opencode/client@2.0.26"
   - "@opencode/protocol@2.0.26"
@@ -175,8 +175,8 @@ minimumReleaseAgeExclude:
   - marked@18.1.0
   - oxlint@1.87.0
   - posthog-js@1.436.1
-  - "@openai/codex-sdk@0.162.0"
-  - "@openai/codex@0.162.0-darwin-arm64 || 0.162.0-darwin-x64 || 0.162.0-linux-arm64 || 0.162.0-linux-x64 || 0.162.0-win32-arm64 || 0.162.0-win32-x64 || 0.162.0"
+  - "@openai/codex-sdk@0.162.1"
+  - "@openai/codex@0.162.1-darwin-arm64 || 0.162.1-darwin-x64 || 0.162.1-linux-arm64 || 0.162.1-linux-x64 || 0.162.1-win32-arm64 || 0.162.1-win32-x64 || 0.162.1"
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -222,7 +222,7 @@ catalogPrune: true
 # what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 1.7.0
-  "@anthropic-ai/claude-agent-sdk": 0.3.295
+  "@anthropic-ai/claude-agent-sdk": 0.3.296
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.3
@@ -242,7 +242,7 @@ catalog:
   "@hono/otel": 1.2.0
   "@huggingface/hub": 2.17.5
   "@huggingface/transformers": 4.3.0
-  "@openai/codex-sdk": 0.162.0
+  "@openai/codex-sdk": 0.162.1
   "@opencode/client": 2.0.26
   "@opentelemetry/api": 1.9.1
   "@opentelemetry/context-async-hooks": 2.11.0
