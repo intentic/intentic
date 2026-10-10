@@ -25,6 +25,9 @@ const RUN_SETUP: &str = "pc-setup";
 const RUN_ENGINE: &str = "pc-engine";
 const RUN_IMAGE: &str = "pc-image";
 
+/// Cache downloads that an update may pause and resume on the next launch. The PC setup itself is never in this set.
+pub const PREFETCH_RUNS: [&str; 2] = [RUN_ENGINE, RUN_IMAGE];
+
 #[cfg_attr(not(windows), allow(dead_code))]
 const PREPARE_DEADLINE: Duration = Duration::from_secs(120);
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -51,6 +54,7 @@ const RESTART_NOTICE_KEY: &str = "onboarding-restart-soon";
 
 static SETUP_RUNNING: AtomicBool = AtomicBool::new(false);
 static PREFETCH_PAUSED: AtomicBool = AtomicBool::new(false);
+static PREFETCH_ACTIVE: AtomicBool = AtomicBool::new(false);
 static RESTART_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -374,6 +378,39 @@ pub fn onboarding_pause(app: AppHandle, paused: bool) -> Result<(), String> {
     }
     emit(&app);
     Ok(())
+}
+
+/// Stop the resumable cache downloads before replacing this app. Wait for the worker as well as its current child:
+/// a pause can land just before the child starts, or between the engine and image phases. No new worker can start
+/// while paused. Return whether a failed update should resume a download the person had not paused themselves.
+pub fn pause_for_update(app: &AppHandle) -> Result<bool, String> {
+    let resume = !PREFETCH_PAUSED.load(Ordering::SeqCst);
+    onboarding_pause(app.clone(), true)?;
+    let until = std::time::Instant::now() + Duration::from_secs(5);
+    while PREFETCH_ACTIVE.load(Ordering::SeqCst) {
+        for id in PREFETCH_RUNS {
+            if scripts::is_running(id) {
+                if let Err(error) = scripts::stop(id) {
+                    if scripts::is_running(id) {
+                        if resume {
+                            let _ = onboarding_pause(app.clone(), false);
+                        }
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        if std::time::Instant::now() >= until {
+            if resume {
+                let _ = onboarding_pause(app.clone(), false);
+            }
+            return Err(
+                "The background download has not stopped yet. Try the update again.".into(),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Ok(resume)
 }
 
 fn cancel_scheduled_restart(app: &AppHandle) {
@@ -774,15 +811,27 @@ fn run_prefetch_loop(app: &AppHandle) {
 
 fn run_prefetch_once(app: &AppHandle) {
     let should_run = lock_store(|store| {
-        if matches!(store.prefetch.state.as_str(), "done" | "running") {
+        if PREFETCH_PAUSED.load(Ordering::SeqCst)
+            || PREFETCH_ACTIVE.load(Ordering::SeqCst)
+            || matches!(store.prefetch.state.as_str(), "done" | "running")
+        {
             return false;
         }
+        PREFETCH_ACTIVE.store(true, Ordering::SeqCst);
         store.prefetch.state = "running".into();
         true
     });
     if !should_run {
         return;
     }
+    // Released on every outcome, including a pause or a failed download.
+    struct Active;
+    impl Drop for Active {
+        fn drop(&mut self) {
+            PREFETCH_ACTIVE.store(false, Ordering::SeqCst);
+        }
+    }
+    let _active = Active;
     emit(app);
     let base = Arc::new(Mutex::new((0u64, 0u64)));
     if let Err(()) = run_engine_fetch(app, Arc::clone(&base)) {
@@ -790,6 +839,9 @@ fn run_prefetch_once(app: &AppHandle) {
             return;
         }
         fail_prefetch(app);
+        return;
+    }
+    if prefetch_was_paused() {
         return;
     }
     if let Err(()) = run_image_prefetch(app, base) {

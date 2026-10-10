@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 import { Button, ui, Icon, Modal } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -8,7 +9,7 @@ import { useRunTargets } from "./useRunTargets";
 const t = useT();
 
 /* WHAT THIS REPOSITORY CAN RUN ON YOUR COMPUTERS, opened from its own row in the tree: each target its
-   `.intentic/run.json` declares, and a button per computer. A run opens the terminal it happens in. */
+   the run-targets file declares, and a button per computer. A run opens the terminal it happens in. */
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -58,7 +59,9 @@ const EXAMPLE = `{
         <div class="flex flex-col gap-4">
             <template v-if="entry !== undefined">
                 <i18n-t keypath="workspace.directoryRuns.declaredIn" tag="p" class="text-xs text-subtle" scope="global">
-                    <template #path><code class="ui-code">{{ entry.path }}</code></template>
+                    <template #path
+                        ><code class="ui-code">{{ entry.path }}</code></template
+                    >
                 </i18n-t>
                 <p v-if="entry.error !== undefined" class="text-sm text-danger">{{ entry.error }}</p>
                 <p v-if="devices.length === 0" class="text-sm text-muted">{{ t(`workspace.directoryRuns.noComputers`) }}</p>
@@ -91,7 +94,7 @@ const EXAMPLE = `{
             <template v-else>
                 <p class="text-sm text-muted">
                     {{ t(`workspace.directoryRuns.declaresNothing`) }}
-                    <span class="font-mono text-content">{{ dir }}/.intentic/run.json</span>
+                    <span class="font-mono text-content">{{ dir }}/{{ RUN_TARGETS_FILE }}</span>
                 </p>
                 <pre class="overflow-x-auto rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
             </template>

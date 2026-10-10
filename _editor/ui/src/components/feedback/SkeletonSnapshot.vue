@@ -1,8 +1,8 @@
 <!-- A loading placeholder drawn exactly as its content last looked (the imprint `v-skeleton-source` took under the same name), and the slot's hand-drawn one until there is an imprint to draw. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { SkeletonGhost } from "../../lib/skeletonGhost.js";
-import { imprintOf } from "../../lib/skeletonStore.js";
+import { SkeletonGhost } from "../../lib/skeleton/skeletonGhost.js";
+import { imprintOf } from "../../lib/skeleton/skeletonStore.js";
 
 defineOptions({ inheritAttrs: false });
 

@@ -469,7 +469,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
     if app.state::<UpdateState>().installing.load(Ordering::SeqCst) {
         return Some("Intentic is already installing an update.");
     }
-    if crate::scripts::busy() || crate::project::busy() {
+    if crate::scripts::busy_except(&crate::onboarding::PREFETCH_RUNS) || crate::project::busy() {
         return Some("Something is running on this device. Intentic will update once it finishes.");
     }
     if crate::windows::unsaved_windows() > 0 {
@@ -499,16 +499,40 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
         *app.state::<UpdateState>().ready.lock().unwrap() = Some(staged);
         return Err(UNSAVED.to_string());
     }
+    // First-launch cache downloads can run for minutes. They are resumable, so pause and join them rather than
+    // treating them like a setup someone asked for. Recheck the real work after the pause, before spending the update.
+    let resume_prefetch = match crate::onboarding::pause_for_update(app) {
+        Ok(resume) => resume,
+        Err(error) => {
+            *app.state::<UpdateState>().ready.lock().unwrap() = Some(staged);
+            return Err(error);
+        }
+    };
+    if let Some(refusal) = refusal(app) {
+        *app.state::<UpdateState>().ready.lock().unwrap() = Some(staged);
+        if resume_prefetch {
+            let _ = crate::onboarding::onboarding_pause(app.clone(), false);
+        }
+        return Err(refusal.to_string());
+    }
     app.state::<UpdateState>()
         .installing
         .store(true, Ordering::SeqCst);
     let _ = std::fs::remove_file(&staged.file);
     if let Err(error) = staged.update.install(bytes) {
+        if resume_prefetch {
+            let _ = crate::onboarding::onboarding_pause(app.clone(), false);
+        }
         return Err(abandon(app, version, &error.to_string()));
     }
     // Windows never reaches this line. Linux does, having just replaced the file this process is running from.
     if restart {
-        restart_onto_update(app)?;
+        if let Err(error) = restart_onto_update(app) {
+            if resume_prefetch {
+                let _ = crate::onboarding::onboarding_pause(app.clone(), false);
+            }
+            return Err(error);
+        }
     }
     Ok(())
 }
@@ -523,6 +547,7 @@ fn restart_onto_update(app: &AppHandle) -> Result<(), String> {
             .store(true, Ordering::SeqCst);
         return Err(RESTART_HELD.to_string());
     }
+    crate::onboarding::pause_for_update(app)?;
     app.restart();
 }
 

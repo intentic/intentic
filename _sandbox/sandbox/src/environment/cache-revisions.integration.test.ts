@@ -4,6 +4,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { synthesizeCacheRevisions } from "./cache-revisions.js";
@@ -27,12 +28,12 @@ RUN curl -fsSL https://bun.sh/install | bash
 
 const setup = async () => {
     const root = mkdtempSync(join(tmpdir(), "cache-revisions-"));
-    await writeWorkspaceFile(join(root, ".intentic/config/environment.custom.Dockerfile"), CUSTOM);
+    await writeWorkspaceFile(join(root, STATE_DIR, "config", "environment.custom.Dockerfile"), CUSTOM);
     const runtimeInstalls = fileRuntimeInstallsStore(join(root, "runtime-installs.json"));
     return { root, deps: { workspace: { root }, files: { read: readWorkspaceFile, write: writeWorkspaceFile }, runtimeInstalls } };
 };
 
-const draftPath = (root: string, block: string) => join(root, ".intentic/config/environment.d", `${block}.Dockerfile`);
+const draftPath = (root: string, block: string) => join(root, STATE_DIR, "config", "environment.d", `${block}.Dockerfile`);
 
 test("drafts a revision for the block that breaks the rule, and only that one", async () => {
     const { root, deps } = await setup();
@@ -60,6 +61,6 @@ test("a revision the owner declined is not offered again", async () => {
     // What rejectDraft records: the block's name and the hash of exactly the steps it was shown.
     await deps.runtimeInstalls.settle([{ tool: "ffmpeg", hash: sha256Hex(offered.trim()) }], Date.now());
     const otherRoot = mkdtempSync(join(tmpdir(), "cache-revisions-"));
-    await writeWorkspaceFile(join(otherRoot, ".intentic/config/environment.custom.Dockerfile"), CUSTOM);
+    await writeWorkspaceFile(join(otherRoot, STATE_DIR, "config", "environment.custom.Dockerfile"), CUSTOM);
     expect(await synthesizeCacheRevisions({ ...deps, workspace: { root: otherRoot } })).toEqual([]);
 });

@@ -190,9 +190,15 @@ fn forget(id: &str) {
 /// A poisoned lock answers "busy": the wrong answer costs one deferred update, and the other wrong answer
 /// costs somebody's install.
 pub fn busy() -> bool {
+    busy_except(&[])
+}
+
+/// Runs other than the ones the caller can safely stop first. The updater pauses onboarding's resumable downloads;
+/// a setup, a project change, or any other run still holds it. A poisoned lock remains a refusal.
+pub fn busy_except(except: &[&str]) -> bool {
     running()
         .lock()
-        .map(|live| !live.is_empty())
+        .map(|live| live.keys().any(|id| !except.contains(&id.as_str())))
         .unwrap_or(true)
 }
 
@@ -1705,6 +1711,23 @@ fn quiet(mut command: Command) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resumable_downloads_can_be_paused_but_setup_still_holds_an_update() {
+        for id in crate::onboarding::PREFETCH_RUNS {
+            remember(id, std::process::id());
+        }
+        assert!(busy(), "the downloads are still running");
+        assert!(!busy_except(&crate::onboarding::PREFETCH_RUNS));
+        remember("pc-setup", std::process::id());
+        assert!(busy_except(&crate::onboarding::PREFETCH_RUNS));
+        for id in crate::onboarding::PREFETCH_RUNS {
+            forget(id);
+        }
+        assert!(busy_except(&crate::onboarding::PREFETCH_RUNS));
+        forget("pc-setup");
+        assert!(!busy());
+    }
 
     #[test]
     fn each_host_picks_its_own_sibling() {

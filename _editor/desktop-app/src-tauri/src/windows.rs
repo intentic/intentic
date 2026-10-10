@@ -307,7 +307,7 @@ fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     };
     format!(
         "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {} }}); }} }})();",
-        env!("CARGO_PKG_VERSION"),
+        crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
         cfg!(windows)
     )
@@ -1932,6 +1932,17 @@ mod loopback_tests {
     fn the_page_is_told_the_reach_is_ungated() {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("loopbackUngated: true"), "{script}");
+    }
+
+    /// Cargo's package stays at 0.0.0; build.rs stamps the version shipped in the bundle. The restarted workspace
+    /// reports that version so the updater smoke can distinguish it from the old window still being on screen.
+    #[test]
+    fn the_workspace_reports_the_stamped_release_version() {
+        let script = workspace_init_script("install-1", None);
+        assert!(
+            script.contains(&format!("version: \"{}\"", crate::commands::VERSION)),
+            "{script}"
+        );
     }
 
     /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
