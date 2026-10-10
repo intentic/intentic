@@ -19,7 +19,10 @@ mod wsl;
 mod relay;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+mod wsl_integration;
 
+pub use moves::CopyArgs;
 pub use record::EngineRecord;
 
 /// The WSL distro our engine runs in, one per Windows account.
@@ -304,6 +307,24 @@ pub fn start() -> Result<(), String> {
     }
 }
 
+/// `ic engine wsl [enable|disable] <distro>`: this engine as a WSL distro's Docker (engine/wsl_integration.rs).
+pub fn wsl(action: Option<&str>, distro: Option<&str>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        match (action, distro) {
+            (Some("enable"), Some(distro)) => wsl_integration::enable(distro),
+            (Some("disable"), Some(distro)) => wsl_integration::disable(distro),
+            (None, _) => wsl_integration::list(),
+            _ => Err("usage: ic engine wsl [enable|disable <distro>]".to_string()),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (action, distro);
+        Err("WSL integration is set up from Windows: ic engine wsl enable <distro>".to_string())
+    }
+}
+
 /// `ic engine relay`: the engine's named pipe (engine/relay.rs). Windows only.
 pub fn relay() -> Result<(), String> {
     #[cfg(windows)]
@@ -438,6 +459,7 @@ pub fn adopt() {
 }
 
 pub use commands::{
-    default_action, docker_desktop_installed, run_fetch, run_hold, run_install, run_prefer,
-    run_relay, run_remove, run_restart, run_start, run_status, run_stop, run_update,
+    default_action, docker_desktop_installed, run_copy, run_fetch, run_hold, run_install,
+    run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop, run_update,
+    run_wsl,
 };

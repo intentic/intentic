@@ -29,6 +29,9 @@ pub struct EngineRecord {
     /// every client uses while it is there and the TLS `host` otherwise. Missing until a start has run the relay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pipe: Option<String>,
+    /// The WSL distros this engine serves as their Docker (`ic engine wsl enable`, engine/wsl_integration.rs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wsl: Vec<String>,
 }
 
 fn yes() -> bool {
@@ -117,6 +120,7 @@ mod tests {
             active: false,
             distro: "intentic-engine".to_string(),
             pipe: Some("npipe:////./pipe/intentic-engine.me".to_string()),
+            wsl: vec!["Ubuntu".to_string()],
         };
         let json = serde_json::to_string(&record).unwrap();
         let back: EngineRecord = serde_json::from_str(&json).unwrap();
@@ -149,6 +153,7 @@ mod tests {
             active: true,
             distro: "d".into(),
             pipe: Some("p".into()),
+            wsl: Vec::new(),
         })
         .unwrap();
         for key in [

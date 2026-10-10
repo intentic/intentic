@@ -949,6 +949,13 @@ fn prepare_volume(
         }
         VolumeAction::Refuse => bail!("a volume named {volume} already exists on the other engine and no earlier move left it there — remove or rename it, then try again."),
     }
+    create_like(source, target, volume)?;
+    carry.created_volumes.push(volume.to_string());
+    Ok(())
+}
+
+/// `volume` made on `target` with the labels it has on `source` (compose finds its own volumes by them).
+fn create_like(source: &Target, target: &Target, volume: &str) -> Result<()> {
     let labels = docker::capture_on(
         source,
         &["volume", "inspect", "--format", "{{json .Labels}}", volume],
@@ -966,8 +973,245 @@ fn prepare_volume(
     }
     args.push(volume.to_string());
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_on(target, &refs, docker::READ_LIMIT)?;
-    carry.created_volumes.push(volume.to_string());
+    run_on(target, &refs, docker::READ_LIMIT)
+}
+
+/// `ic engine copy`: what to carry, and onto which engine.
+pub struct CopyArgs {
+    pub to: String,
+    pub volumes: Vec<String>,
+    pub images: Vec<String>,
+    pub helper: Option<String>,
+    /// Containers to carry as a stopped placeholder each (their image, labels, env and named volumes, the volumes
+    /// copied too), which the ordinary recreate makes the container from on the other engine, as after a move.
+    pub containers: Vec<String>,
+    /// Both engines named by their sockets instead (`unix:///run/docker.sock`, `unix:///mnt/wsl/intentic-engine/
+    /// docker.sock`): the copy then runs where both are, inside WSL, with no Windows hop between them.
+    pub from_host: Option<String>,
+    pub to_host: Option<String>,
+}
+
+/// An engine named by its socket or pipe, as `ic engine copy --from-host/--to-host` takes one.
+fn by_host(host: &str) -> Target {
+    Target::Intentic(docker::EngineEnv {
+        host: host.to_string(),
+        cert_path: String::new(),
+        bin: std::path::PathBuf::new(),
+        pipe: None,
+    })
+}
+
+/// Named volumes and images from one engine to the other, the way a move carries a sandbox's (each image's layers
+/// compared after, each volume's every file and size), for what a move leaves alone: the containers a WSL distro keeps
+/// for itself, such as a developer's dev sandbox and the database its `docker compose` runs. Nothing is switched, stopped
+/// or removed: a volume something still runs on is refused, one already on the other engine is never overwritten, and
+/// the containers are made again by whoever made them (`pnpm swap:sandbox`, `docker compose up`) once the distro's
+/// docker reaches the other engine (`ic engine wsl enable`).
+pub fn copy(args: CopyArgs) -> Result<()> {
+    let explicit = match (&args.from_host, &args.to_host) {
+        (Some(from), Some(to)) => Some((from.clone(), to.clone())),
+        (None, None) => None,
+        _ => bail!("name both engines by their sockets (--from-host and --to-host), or neither."),
+    };
+    if explicit.is_none() && !cfg!(windows) {
+        bail!("ic engine copy runs on Windows, where both engines are reachable, or anywhere with --from-host and --to-host.");
+    }
+    let to = Kind::parse(&args.to)
+        .filter(|kind| *kind != Kind::Native)
+        .unwrap_or(Kind::Intentic);
+    if explicit.is_none() && Kind::parse(&args.to).is_none() {
+        bail!("copy to `intentic` or `docker-desktop`, not '{}'.", args.to);
+    }
+    let from = if to == Kind::Intentic {
+        Kind::DockerDesktop
+    } else {
+        Kind::Intentic
+    };
+    if args.volumes.is_empty() && args.images.is_empty() && args.containers.is_empty() {
+        bail!("name what to copy: --container, --volume and --image, each as often as needed.");
+    }
+    let helper = args.helper.clone().or_else(|| args.images.first().cloned());
+    if helper.is_none() && !args.volumes.is_empty() {
+        bail!("name the image that copies the volumes (--helper, or an --image): one with GNU tar and find, as the sandbox image has.");
+    }
+    let log = Log::create_named("engine", "copy")?;
+    let (source, target) = match &explicit {
+        Some((from_host, to_host)) => {
+            let (source, target) = (by_host(from_host), by_host(to_host));
+            for (end, host) in [(&source, from_host), (&target, to_host)] {
+                if !answers(end) {
+                    bail!("no engine answers at {host}.");
+                }
+            }
+            (source, target)
+        }
+        None => (ready_source(from)?, ready_target(to, &log)?),
+    };
+    let from_name = explicit
+        .as_ref()
+        .map(|(host, _)| host.clone())
+        .unwrap_or_else(|| from.name().to_string());
+    let to_name = explicit
+        .as_ref()
+        .map(|(_, host)| host.clone())
+        .unwrap_or_else(|| to.name().to_string());
+    // A container brings its image and its named volumes along.
+    let mut args = args;
+    let mut placeholders: Vec<(String, Value)> = Vec::new();
+    for name in &args.containers {
+        let inspect = inspect_on(&source, name)?;
+        if inspect["State"]["Running"].as_bool() == Some(true) {
+            bail!(
+                "{name} is running on {}: stop it first, so its volumes are copied as they stay.",
+                from_name
+            );
+        }
+        if docker::capture_on(&target, &["container", "inspect", name], docker::READ_LIMIT)
+            .is_ok_and(|ran| ran.code == Some(0))
+        {
+            bail!("a container named {name} is on {} already.", to_name);
+        }
+        if let Some(image) = inspect["Config"]["Image"].as_str() {
+            if !args.images.iter().any(|known| known == image) {
+                args.images.push(image.to_string());
+            }
+        }
+        for (volume, _) in named_volumes(&inspect) {
+            if !args.volumes.contains(&volume) {
+                args.volumes.push(volume);
+            }
+        }
+        placeholders.push((name.clone(), inspect));
+    }
+    let helper = helper.or_else(|| args.images.first().cloned());
+    for volume in &args.volumes {
+        if docker::capture_on(&source, &["volume", "inspect", volume], docker::READ_LIMIT)
+            .map(|ran| ran.code != Some(0))
+            .unwrap_or(true)
+        {
+            bail!("there is no volume named {volume} on {}.", from_name);
+        }
+        let users = docker::capture_on(
+            &source,
+            &[
+                "ps",
+                "--format",
+                "{{.Names}}",
+                "--filter",
+                &format!("volume={volume}"),
+            ],
+            docker::READ_LIMIT,
+        )
+        .map(|ran| ran.stdout.split_whitespace().collect::<Vec<_>>().join(", "))
+        .unwrap_or_default();
+        if !users.is_empty() {
+            bail!("{volume} is in use by {users} on {}: stop it first, so the copy is of files that stay put.", from_name);
+        }
+        if docker::capture_on(&target, &["volume", "inspect", volume], docker::READ_LIMIT)
+            .is_ok_and(|ran| ran.code == Some(0))
+        {
+            bail!("a volume named {volume} is on {} already: remove it there first if it is to be replaced.", to_name);
+        }
+    }
+    let mut images = args.images.clone();
+    if let Some(helper) = &helper {
+        if !args.volumes.is_empty()
+            && image_id_on(&target, helper).is_none()
+            && !images.contains(helper)
+        {
+            images.push(helper.clone());
+        }
+    }
+    let missing: Vec<String> = images
+        .iter()
+        .filter(|image| !same_image(&source, &target, image))
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        let total: u64 = missing
+            .iter()
+            .filter_map(|image| image_bytes(&source, image))
+            .sum();
+        println!(
+            "Copying {} ({}) to {}…",
+            missing.join(", "),
+            gigabytes(total),
+            to_name
+        );
+        let mut save: Vec<&str> = vec!["save"];
+        save.extend(missing.iter().map(String::as_str));
+        pipe(
+            docker::command_on(&source, &save),
+            docker::command_on(&target, &["load", "-q"]),
+            "copy",
+            "image",
+            total,
+            &log,
+        )?;
+        for image in &missing {
+            if !same_image(&source, &target, image) {
+                bail!("{image} did not arrive whole on {}.", to_name);
+            }
+        }
+    }
+    let Some(helper) = helper else {
+        println!("Copied to {}.", to_name);
+        return Ok(());
+    };
+    let helper_image = helper.clone();
+    for volume in &args.volumes {
+        let docker_data = volume.starts_with("intentic-docker-");
+        let total = volume_bytes(&source, volume, &helper).unwrap_or(0);
+        println!(
+            "Copying volume {volume} ({}) to {}…",
+            gigabytes(total),
+            to_name
+        );
+        create_like(&source, &target, volume)?;
+        let copied = copy_volume(
+            &source,
+            &target,
+            volume,
+            docker_data,
+            &helper,
+            "copy",
+            total,
+            &log,
+        )
+        .and_then(|()| {
+            let theirs = manifest(&source, volume, &helper, docker_data)?;
+            let ours = manifest(&target, volume, &helper, docker_data)?;
+            if theirs != ours {
+                bail!(
+                    "{volume} on {} does not list the same files as on {}.",
+                    to_name,
+                    from_name
+                );
+            }
+            Ok(theirs.0)
+        });
+        match copied {
+            Ok(files) => println!("  {volume}: {files} files, the same on both."),
+            Err(error) => {
+                let _ = docker::capture_on(&target, &["volume", "rm", volume], docker::READ_LIMIT);
+                return Err(error);
+            }
+        }
+    }
+    for (name, inspect) in &placeholders {
+        let image = inspect["Config"]["Image"].as_str().unwrap_or(&helper_image);
+        let create = placeholder_args(inspect, name, image);
+        let refs: Vec<&str> = create.iter().map(String::as_str).collect();
+        run_on(&target, &refs, docker::READ_LIMIT)?;
+        println!(
+            "  {name}: a stopped placeholder on {}, for its recreate to make it from.",
+            to_name
+        );
+    }
+    println!(
+        "Copied to {}. {} keeps its own copies until you remove them.",
+        to_name, from_name
+    );
     Ok(())
 }
 

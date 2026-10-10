@@ -88,7 +88,7 @@ pub fn download_bytes() -> u64 {
     if !dir.join(pins::TARBALL_NAME).exists() {
         need += pins::DISTRO_TARBALL_BYTES;
     }
-    if !dir.join("docker-cli.zip").exists() {
+    if !dir.join(pins::cli_zip_name()).exists() {
         need += pins::DOCKER_CLI_ZIP_BYTES;
     }
     need
@@ -177,7 +177,10 @@ pub fn start_quiet() -> Result<(), String> {
     let Some(record) = EngineRecord::load() else {
         return Ok(());
     };
-    if !record.is_active() || record::held() {
+    // Wanted when this account's sandboxes run on it, or when a WSL distro uses it as its Docker
+    // (engine/wsl_integration.rs), whichever engine the Windows side's sandboxes are on.
+    let wanted = record.is_active() || (record.is_ours() && !record.wsl.is_empty());
+    if !wanted || record::held() {
         return Ok(());
     }
     start_internal(true)
@@ -193,10 +196,27 @@ fn start_internal(quiet: bool) -> Result<(), String> {
     record::release();
     if engine_answers(&record) {
         keep_relay(&mut record, quiet);
+        super::wsl_integration::apply_all(&record, quiet);
         return Ok(());
     }
     if !quiet {
         println!("Starting the intentic engine…");
+    }
+    // An engine from an older ic is brought up to this one's docker as it starts: it is down already, so nothing that
+    // runs on it is interrupted for it. One that cannot be (offline) starts as it is, and is tried again next time.
+    if record.version != pins::ENGINE_VERSION {
+        if !quiet {
+            println!(
+                "Updating the engine from {} to {} (docker {})…",
+                record.version,
+                pins::ENGINE_VERSION,
+                pins::DOCKER_CLI_VERSION
+            );
+        }
+        let _ = terminate();
+        if let Err(problem) = upgrade_in_place(&mut record) {
+            println!("Note: the engine was not updated ({problem}); starting the docker it has.");
+        }
     }
     if let Err(problem) = write_into_distro(&record.distro, KEEPER_PATH, KEEPER) {
         // The rootfs carries a keeper of its own: an older one, but one that runs.
@@ -207,6 +227,7 @@ fn start_internal(quiet: bool) -> Result<(), String> {
     let mut keeper = spawn_keeper(&record.distro, port_from_host(&record.host))?;
     wait_for_engine(&record, START_WAIT, &mut keeper)?;
     keep_relay(&mut record, quiet);
+    super::wsl_integration::apply_all(&record, quiet);
     Ok(())
 }
 
@@ -261,21 +282,31 @@ pub fn restart() -> Result<(), String> {
 }
 
 pub fn update() -> Result<(), String> {
-    fetch(&mut |_, _| {})?;
+    let mut record =
+        EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
     let was_held = record::held();
     terminate()?;
-    replace_linux_binaries(&distro())?;
-    if let Some(mut record) = EngineRecord::load() {
-        record.version = pins::ENGINE_VERSION.to_string();
-        record.save()?;
-        if record.is_active() {
-            sync_docker_env(&record);
-        }
+    upgrade_in_place(&mut record)?;
+    if record.is_active() {
+        sync_docker_env(&record);
     }
     if was_held {
         return Ok(());
     }
     start()
+}
+
+/// The pinned docker binaries into the stopped distro, the pinned CLI beside them, and the record's version: an engine
+/// imported from an older rootfs brought up to this ic's, its images, volumes and containers kept (they live in the
+/// distro's `/var/lib/docker`). The keeper needs nothing here: every start writes the current one.
+fn upgrade_in_place(record: &mut EngineRecord) -> Result<(), String> {
+    replace_linux_binaries(&record.distro)?;
+    if !cli_version_matches() {
+        fetch::ensure_cli_zip()?;
+        install_cli()?;
+    }
+    record.version = pins::ENGINE_VERSION.to_string();
+    record.save()
 }
 
 /// Switch this account's sandboxes onto our engine (`on`) or off it, which every `docker` spawned from now on obeys.
@@ -525,7 +556,7 @@ openssl x509 -req -days 3650 -sha256 -in client.csr -CA ca.pem -CAkey ca-key.pem
 
 /// `text` into `path` inside the distro, as root, executable: written beside it and moved over it, so a keeper that is
 /// starting never reads half a file. Bounded, since a wedged WSL answers nothing at all.
-fn write_into_distro(distro: &str, path: &str, text: &str) -> Result<(), String> {
+pub(super) fn write_into_distro(distro: &str, path: &str, text: &str) -> Result<(), String> {
     let script =
         format!("cat > '{path}.new' && chmod 755 '{path}.new' && mv -f '{path}.new' '{path}'");
     let mut child = Command::new("wsl.exe")
@@ -560,7 +591,16 @@ fn write_into_distro(distro: &str, path: &str, text: &str) -> Result<(), String>
     }
 }
 
+/// `remote` out of the distro into `local`, tried twice: on rog (2026-10-10) the first `cat` after a fresh import's
+/// TLS step failed once with nothing on stderr, and the same install run again copied all three files.
 fn copy_from_distro(distro: &str, remote: &str, local: &Path) -> Result<(), String> {
+    copy_from_distro_once(distro, remote, local).or_else(|_| {
+        std::thread::sleep(Duration::from_secs(2));
+        copy_from_distro_once(distro, remote, local)
+    })
+}
+
+fn copy_from_distro_once(distro: &str, remote: &str, local: &Path) -> Result<(), String> {
     let mut cmd = Command::new("wsl.exe");
     cmd.args(["-d", distro, "-u", "root", "--exec", "cat", remote]);
     cmd.stdout(Stdio::piped());
@@ -569,7 +609,16 @@ fn copy_from_distro(distro: &str, remote: &str, local: &Path) -> Result<(), Stri
         .output()
         .map_err(|error| format!("wsl cat {remote}: {error}"))?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        let said = String::from_utf8_lossy(&output.stderr).replace('\0', "");
+        let said = said.trim();
+        return Err(if said.is_empty() {
+            format!(
+                "copying {remote} out of {distro} failed (wsl exited {}).",
+                output.status.code().unwrap_or(-1)
+            )
+        } else {
+            said.to_string()
+        });
     }
     let mut file =
         std::fs::File::create(local).map_err(|error| format!("{}: {error}", local.display()))?;
@@ -582,7 +631,7 @@ fn install_cli() -> Result<(), String> {
     let bin = paths::bin_dir().ok_or("could not find this account's home folder.")?;
     paths::ensure_dir(&bin)?;
     let cache = paths::cache_dir().ok_or("could not find this account's home folder.")?;
-    let zip_path = cache.join("docker-cli.zip");
+    let zip_path = cache.join(pins::cli_zip_name());
     if !zip_path.exists() {
         return Err("docker CLI zip missing from the engine cache.".to_string());
     }
@@ -625,6 +674,7 @@ fn write_record(port: u16, active: bool, distro: &str) -> Result<EngineRecord, S
         active,
         distro: distro.to_string(),
         pipe: None,
+        wsl: existing_wsl(),
     };
     record.save()?;
     Ok(record)
@@ -864,30 +914,30 @@ fn unregister_autostart(distro: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The WSL distros a record about to be rewritten serves (an install over an existing engine keeps them).
+fn existing_wsl() -> Vec<String> {
+    EngineRecord::load()
+        .map(|record| record.wsl)
+        .unwrap_or_default()
+}
+
 fn replace_linux_binaries(distro: &str) -> Result<(), String> {
-    let cache = paths::cache_dir().ok_or("could not find this account's home folder.")?;
-    let tgz = cache.join("docker-linux.tgz");
-    if !tgz.exists() {
-        let agent = crate::fetch::agent();
-        crate::fetch::resumable(
-            &agent,
-            pins::DOCKER_LINUX_URL,
-            &[],
-            &tgz,
-            true,
-            &mut |_, _| {},
-        )?;
-        fetch::verify_sha256_file(&tgz, pins::DOCKER_LINUX_SHA256)?;
-    }
+    let tgz = fetch::ensure_pinned(
+        pins::DOCKER_LINUX_URL,
+        &pins::linux_tgz_name(),
+        pins::DOCKER_LINUX_SHA256,
+    )?;
     let tgz_win = tgz.to_string_lossy();
     let script = format!(
         r#"set -eu
 TGZ="$(wslpath -a '{tgz_win}')"
-cd "$(dirname "$TGZ")"
-tar -xzf "$(basename "$TGZ")"
+WORK=/tmp/intentic-engine-update
+rm -rf "$WORK" && mkdir -p "$WORK"
+tar -xzf "$TGZ" -C "$WORK"
 for b in dockerd containerd containerd-shim-runc-v2 runc docker-init docker-proxy; do
-  install -m 755 docker/$b /usr/local/bin/$b
+  install -m 755 "$WORK/docker/$b" "/usr/local/bin/$b"
 done
+rm -rf "$WORK"
 "#
     );
     wsl::run_wsl(
@@ -919,6 +969,7 @@ mod tests {
             active: true,
             distro: "intentic-engine".into(),
             pipe: None,
+            wsl: Vec::new(),
         };
         let waiting = not_answering(&record, Duration::from_secs(120), true);
         assert!(waiting.contains("keeper is already running in the intentic-engine distro"));

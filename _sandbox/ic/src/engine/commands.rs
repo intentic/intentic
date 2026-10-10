@@ -112,6 +112,14 @@ pub fn run_start(quiet: bool) -> Result<()> {
     }
 }
 
+pub fn run_wsl(action: Option<String>, distro: Option<String>) -> Result<()> {
+    super::wsl(action.as_deref(), distro.as_deref()).map_err(Fail::from)
+}
+
+pub fn run_copy(args: super::moves::CopyArgs) -> Result<()> {
+    super::moves::copy(args)
+}
+
 pub fn run_relay() -> Result<()> {
     super::relay().map_err(Fail::from)
 }

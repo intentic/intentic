@@ -10,6 +10,9 @@ STATE="/run/intentic-engine"
 NS_NAME="intentic"
 NS="/run/netns/$NS_NAME"
 FORWARDS="$STATE/forwards"
+# What the PC's other WSL distros see of this engine (`ic engine wsl enable <distro>`): /mnt/wsl is one tmpfs every
+# distro of this account mounts, shared, so a socket and a bind mount made there are seen from all of them.
+SHARED="/mnt/wsl/${WSL_DISTRO_NAME:-intentic-engine}"
 # What `host.docker.internal` means inside the engine's namespace: one address pasta hands to this distro's loopback,
 # as Docker Desktop's name reaches the host (`ic` rewrites a platform on localhost to that name, sandbox-run adds it).
 HOST_ALIAS="169.254.231.1"
@@ -54,10 +57,56 @@ fi
 
 # Docker's own 172.17.0.0/16 is the range VPNs and office networks most often route, and the routes of this PC's network
 # are copied into the namespace too (pasta): the bridge and the networks dockerd makes come from a rarely used range.
+# The image store: the containerd one, as Docker Desktop's and every fresh Docker 29's, for a new engine. Not overlay2,
+# whose graph driver refuses an image of more than 125 layers ("max depth exceeded"): a released sandbox image is 113
+# and its environment's overlay adds its own (rog, 2026-10-10: a dev sandbox's image of 137 layers would not load). It
+# keeps an image twice (its compressed layers and their snapshots), as Docker Desktop does, and gives an image the ID
+# Docker Desktop gives it. An engine that already holds images on overlay2 (1.1.0's, and 1.2.0's before this) keeps
+# them there.
+STORE=""
+if [ -d /var/lib/docker/image/overlay2 ]; then
+  STORE="--storage-driver=overlay2"
+fi
 DOCKERD_ARGS="--host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:${PORT} --tlsverify \
   --tlscacert=$TLS_DIR/ca.pem --tlscert=$TLS_DIR/server-cert.pem --tlskey=$TLS_DIR/server-key.pem \
-  --data-root=/var/lib/docker --bip=192.168.239.1/24 --default-address-pool=base=192.168.240.0/20,size=26 \
+  --data-root=/var/lib/docker $STORE \
+  --bip=192.168.239.1/24 --default-address-pool=base=192.168.240.0/20,size=26 \
   --log-opt=max-size=20m --log-opt=max-file=3"
+
+# ---------------------------------------------------------------------------------------------------------------------
+# OTHER WSL DISTROS (2026-10-10), as Docker Desktop's WSL integration serves them, for a distro `ic engine wsl enable`
+# names (its rootfs/integrate runs there at every start of that distro):
+# - the API on a socket in $SHARED, which that distro links as its own /run/docker.sock, its group that distro's docker
+#   group (the gid it writes to $SHARED/socket-gid). Unix sockets know no network namespace;
+# - that distro's /home bind-mounted under $SHARED/distros/<distro>/home there, and linked here as /home/<user>, so a
+#   bind mount `docker run -v /home/me/project:/x` names from there resolves here by the same path (the dev sandbox
+#   mounts its build output from its checkout that way). Paths under /mnt/<drive> are the same in every distro already.
+# ---------------------------------------------------------------------------------------------------------------------
+if mkdir -p "$SHARED" 2>/dev/null; then
+  DOCKERD_ARGS="$DOCKERD_ARGS --host=unix://$SHARED/docker.sock"
+  gid="$(cat "$SHARED/socket-gid" 2>/dev/null || true)"
+  case "$gid" in
+    '' | *[!0-9]*) ;;
+    *) DOCKERD_ARGS="$DOCKERD_ARGS --group=$gid" ;;
+  esac
+fi
+
+# /home/<user> for every user of every integrated distro, first come first linked; what this distro has itself stays.
+link_homes() {
+  for home in "$SHARED"/distros/*/home/*; do
+    [ -d "$home" ] || continue
+    target="/home/${home##*/}"
+    if [ -L "$target" ]; then
+      [ -e "$target" ] && continue
+      rm -f "$target"
+    elif [ -e "$target" ]; then
+      continue
+    fi
+    mkdir -p /home && ln -s "$home" "$target" 2>/dev/null
+  done
+  return 0
+}
+link_homes
 
 # ---------------------------------------------------------------------------------------------------------------------
 # ITS OWN NETWORK (2026-10-10), as Docker Desktop's engine has. Every WSL distro on a PC shares one VM and, without
@@ -150,6 +199,13 @@ start_forward() {
     </dev/null >/dev/null 2>>/var/log/intentic-forwards.log 9>&- &
   pid=$!
   echo "$pid" >"$FORWARDS/$port"
+  # ::1 too, as Docker publishes on [::] beside 0.0.0.0: a client that tries `localhost` as ::1 first finds it there.
+  # Best effort, never retried: a distro without IPv6 loopback just has the 127.0.0.1 one.
+  if [ -n "$IPV6_LOOPBACK" ]; then
+    socat -d0 TCP6-LISTEN:"$port",bind=[::1],ipv6only=1,reuseaddr,fork TCP:127.0.0.1:"$port",netns="$NS_NAME" \
+      </dev/null >/dev/null 2>/dev/null 9>&- &
+    echo "$!" >"$FORWARDS/$port.6"
+  fi
   # A port this distro's loopback already has (another distro's server, an older forward) does not bind: tried again in
   # ten seconds rather than every second.
   sleep 0.3
@@ -172,6 +228,8 @@ keep_forwards() {
   set +e
   mkdir -p "$FORWARDS"
   rm -f "$FORWARDS"/*
+  IPV6_LOOPBACK=""
+  grep -q '^00000000000000000000000000000001 ' /proc/net/if_inet6 2>/dev/null && IPV6_LOOPBACK=1
   while :; do
     ports="$(listening_ports || true)"
     for port in $ports; do
@@ -183,12 +241,17 @@ keep_forwards() {
     for held in "$FORWARDS"/*; do
       [ -f "$held" ] || continue
       port="${held##*/}"
-      case "$port" in *.failed) continue ;; esac
+      case "$port" in *.*) continue ;; esac
       case " $(echo $ports) " in
         *" $port "*) ;;
-        *) kill "$(cat "$held")" 2>/dev/null; rm -f "$held" ;;
+        *)
+          kill "$(cat "$held")" 2>/dev/null
+          pid_alive "$held.6" socat && kill "$(cat "$held.6")" 2>/dev/null
+          rm -f "$held" "$held.6"
+          ;;
       esac
     done
+    link_homes
     if ! pasta_alive; then
       say "pasta ended; starting it again"
       start_pasta || say "pasta would not start again"

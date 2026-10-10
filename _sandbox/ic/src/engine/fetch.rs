@@ -67,17 +67,13 @@ pub fn wait_for_other(progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> 
             FetchOutcome::Complete => return Ok(()),
             FetchOutcome::HeldByAnother => {
                 let done = http_fetch::on_disk(&dir.join(pins::TARBALL_NAME))
-                    + http_fetch::on_disk(&dir.join("docker-cli.zip"));
+                    + http_fetch::on_disk(&dir.join(pins::cli_zip_name()));
                 progress(done.min(total), total);
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
         }
     }
     Err("another ic has been downloading the engine for half an hour; try again later.".to_string())
-}
-
-pub fn verify_sha256_file(path: &Path, want: &str) -> Result<(), String> {
-    verify_sha256(path, want)
 }
 
 fn verify_sha256(path: &Path, want: &str) -> Result<(), String> {
@@ -129,6 +125,32 @@ fn download_pinned(
     Ok(())
 }
 
+/// The pinned Windows CLI's zip in the engine cache (fetched when it is not there yet): what an in-place update of an
+/// engine installs, without the distro tarball a fresh install needs.
+pub fn ensure_cli_zip() -> Result<PathBuf, String> {
+    ensure_pinned(
+        pins::DOCKER_CLI_URL,
+        &pins::cli_zip_name(),
+        pins::DOCKER_CLI_SHA256,
+    )
+}
+
+/// A pinned download in the engine cache under `name`, checked against `sha256`: kept when it is the pinned file,
+/// fetched again when it is not there or is not (a copy cut short, or one of another version under the same name).
+pub fn ensure_pinned(url: &str, name: &str, sha256: &str) -> Result<PathBuf, String> {
+    let dir = paths::cache_dir().ok_or("could not find this account's home folder.")?;
+    paths::ensure_dir(&dir)?;
+    let file = dir.join(name);
+    if file.exists() {
+        if verify_sha256(&file, sha256).is_ok() {
+            return Ok(file);
+        }
+        let _ = std::fs::remove_file(&file);
+    }
+    download_pinned(url, &file, sha256, &mut |_, _| {})?;
+    Ok(file)
+}
+
 /// Fetch the distro tarball and Windows docker CLI into the engine cache. Never prints; the `ic engine fetch`
 /// command drives `intentic-prefetch:` lines from the progress callback.
 pub fn fetch_all(progress: &mut dyn FnMut(u64, u64)) -> Result<FetchOutcome, String> {
@@ -138,7 +160,7 @@ pub fn fetch_all(progress: &mut dyn FnMut(u64, u64)) -> Result<FetchOutcome, Str
         return Ok(FetchOutcome::HeldByAnother);
     };
     let tarball = dir.join(pins::TARBALL_NAME);
-    let cli_zip = dir.join("docker-cli.zip");
+    let cli_zip = dir.join(pins::cli_zip_name());
     let total = pins::prefetch_total_bytes();
     let mut report = |done: u64, part_total: u64| {
         let whole = total.max(part_total);

@@ -1,7 +1,7 @@
 # Single source for the intentic-engine rootfs build and ic's fetch pins. Bump engine_version when the rootfs changes;
 # ic release attaches intentic-engine-<engine_version>-x86_64.tar.gz beside the ic binaries.
 
-engine_version = "1.1.0"
+engine_version = "1.2.0"
 
 # Alpine minirootfs (x86_64)
 alpine_version = "3.21.3"
@@ -9,11 +9,20 @@ alpine_url = "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine
 alpine_sha256 = "1a694899e406ce55d32334c47ac0b2efb6c06d7e878102d1840892ad44cd5239"
 
 # Static Docker engine bundle (linux x86_64), from download.docker.com
-docker_version = "27.5.1"
-docker_tgz_url = "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz"
-docker_tgz_sha256 = "4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"
+docker_version = "29.9.0"
+docker_tgz_url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz"
+docker_tgz_sha256 = "33e1ab8b63d14bca449f7a3d30d7f6aa669daa544e60a86b17fec87f61afe2b4"
 
 # Windows docker CLI (static)
-docker_cli_version = "27.5.1"
-docker_cli_zip_url = "https://download.docker.com/win/static/stable/x86_64/docker-27.5.1.zip"
-docker_cli_zip_sha256 = "a573be076030c8babe34ffcd89c7ad6e720cfb4f876a0f8412dba7ecdd368926"
+docker_cli_version = "29.9.0"
+docker_cli_zip_url = "https://download.docker.com/win/static/stable/x86_64/docker-29.9.0.zip"
+docker_cli_zip_sha256 = "e3ff5d2e4cd1ad7e1c9bcb76f0df28a84853c43416a915323f08659d8487ad83"
+
+# The Linux CLI's plugins `ic engine wsl enable <distro>` installs beside the static `docker` from the bundle above, so a
+# distro has `docker compose` and `docker buildx` without Docker Desktop's WSL integration (GitHub releases).
+docker_compose_version = "5.6.0"
+docker_compose_url = "https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64"
+docker_compose_sha256 = "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a"
+docker_buildx_version = "0.38.0"
+docker_buildx_url = "https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.linux-amd64"
+docker_buildx_sha256 = "4fe4cc38adf48169132749b6ca22a990928db0118e3407584ee553723115d287"

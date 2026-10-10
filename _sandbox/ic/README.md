@@ -262,6 +262,12 @@ flowchart LR
     [src/engine/relay.rs](src/engine/relay.rs)) that serves the engine on `\\.\pipe\<distro>.<user>` and carries
     each connection to the TLS endpoint. `engine.json` names it (`pipe`), and ic, the desktop app and the machine agent
     use it while it is there and TLS on TCP otherwise. See [engine/README.md](engine/README.md#its-named-pipe).
+  - **WSL distros, and what they keep.** `ic engine wsl enable <distro>` makes the engine a WSL distro's Docker as
+    Docker Desktop's integration does (its socket, its `/home` paths for bind mounts, `docker` with compose and
+    buildx, a systemd unit that redoes it at every start; beside Docker Desktop's integration, a docker context instead
+    of the socket); `ic engine copy` carries what a move leaves alone (a distro's
+    own volumes, images and stopped containers), also from inside WSL between the two sockets. See
+    [engine/README.md](engine/README.md#wsl-distros).
   - **Tests and CI.** `IC_ENGINE_DISTRO` names another distro (its own disk folder and Run key value),
     `IC_ENGINE_AUTOSTART=0` registers no sign-in start, and `INTENTIC_ENGINE_TARBALL` hands in a rootfs built from the
     checkout. The Windows smoke's tier 4 (`_tools/desktop-smoke-windows`) runs it on the CI machine.

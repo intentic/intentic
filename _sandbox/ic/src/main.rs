@@ -149,9 +149,44 @@ enum EngineCommand {
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
+    /// Copy named volumes and images to the other engine (each checked after), for what `move` leaves alone: the
+    /// containers a WSL distro keeps itself, such as a dev sandbox and its compose database. Stops, switches and
+    /// removes nothing; whoever made the containers makes them again on the other engine
+    Copy {
+        /// The engine to copy onto: `intentic` or `docker-desktop`
+        #[arg(long, default_value = "intentic")]
+        to: String,
+        /// A named volume to copy (as often as needed); nothing may be running on it
+        #[arg(long = "volume")]
+        volumes: Vec<String>,
+        /// An image to copy (as often as needed)
+        #[arg(long = "image")]
+        images: Vec<String>,
+        /// The image whose GNU tar and find copy and check the volumes (default: the first --image)
+        #[arg(long)]
+        helper: Option<String>,
+        /// A stopped container to carry as a placeholder, with its image and named volumes (as often as needed)
+        #[arg(long = "container")]
+        containers: Vec<String>,
+        /// The engine to copy from, by its socket (with --to-host): run inside WSL, where both sockets are
+        #[arg(long = "from-host")]
+        from_host: Option<String>,
+        /// The engine to copy onto, by its socket (with --from-host)
+        #[arg(long = "to-host")]
+        to_host: Option<String>,
+    },
     /// Serve the engine on its named pipe (started by `ic engine start`, from a copy of ic; not for people to run)
     #[command(hide = true)]
     Relay,
+    /// This engine as a WSL distro's Docker, as Docker Desktop's WSL integration gives it: `enable <distro>` (its
+    /// /run/docker.sock, its /home paths for bind mounts, and the docker CLI with compose and buildx), `disable <distro>`,
+    /// or with nothing after it the distros it serves
+    Wsl {
+        /// `enable` or `disable`
+        action: Option<String>,
+        /// The WSL distro, as `wsl -l` names it
+        distro: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -985,6 +1020,24 @@ fn main() {
             Some(EngineCommand::Update) => engine::run_update(),
             Some(EngineCommand::Remove { yes }) => engine::run_remove(yes),
             Some(EngineCommand::Relay) => engine::run_relay(),
+            Some(EngineCommand::Copy {
+                to,
+                volumes,
+                images,
+                helper,
+                containers,
+                from_host,
+                to_host,
+            }) => engine::run_copy(engine::CopyArgs {
+                to,
+                volumes,
+                images,
+                helper,
+                containers,
+                from_host,
+                to_host,
+            }),
+            Some(EngineCommand::Wsl { action, distro }) => engine::run_wsl(action, distro),
         },
     };
     if let Err(util::Fail(message)) = result {

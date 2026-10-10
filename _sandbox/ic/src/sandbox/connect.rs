@@ -1743,7 +1743,11 @@ mod tests {
         assert!(extra
             .windows(2)
             .any(|pair| pair == ["-e", "HOST_ENV=archlinux"]));
-        assert_eq!(&extra[extra.len() - 2..], ["-e", "HOST_ENGINE=native"]);
+        // The engine this PC runs containers on: `native` off Windows, the chosen one on it.
+        assert_eq!(
+            &extra[extra.len() - 2..],
+            ["-e", &format!("HOST_ENGINE={}", crate::engine::stamp())]
+        );
         // An environment that is not known is not guessed at.
         let unknown = stamped_run("x", &Side::new("linux", None));
         assert!(!unknown.iter().any(|arg| arg.starts_with("HOST_ENV")));

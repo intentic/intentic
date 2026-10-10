@@ -39,8 +39,17 @@ fn path_with_bin_first(bin_dir: &Path) -> Option<OsString> {
 
 fn apply_tls_env(command: &mut Command, host: &str, cert_path: &str, bin: &Path) {
     command.env("DOCKER_HOST", host);
-    command.env("DOCKER_TLS_VERIFY", "1");
-    command.env("DOCKER_CERT_PATH", cert_path);
+    // A socket or a pipe is reached as it is: TLS is for the TCP endpoint only.
+    if host.starts_with("unix://") || host.starts_with("npipe://") {
+        command.env_remove("DOCKER_TLS_VERIFY");
+        command.env_remove("DOCKER_CERT_PATH");
+    } else {
+        command.env("DOCKER_TLS_VERIFY", "1");
+        command.env("DOCKER_CERT_PATH", cert_path);
+    }
+    if bin.as_os_str().is_empty() {
+        return;
+    }
     if let Some(path) = path_with_bin_first(bin) {
         command.env("PATH", path);
     }

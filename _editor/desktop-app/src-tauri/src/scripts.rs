@@ -668,6 +668,37 @@ impl EngineEnv {
     }
 }
 
+/// Our engine's record as it is, active or not: what it answers on, and the WSL distros it serves (ic's
+/// engine/wsl_integration.rs). `None` when there is none, or it is not ours.
+fn our_engine_record() -> Option<serde_json::Value> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let text = std::fs::read_to_string(engine_record_path(Path::new(&home))).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    (value.get("engine")?.as_str()? == "intentic").then_some(value)
+}
+
+/// Our engine is some WSL distro's Docker (`ic engine wsl enable`), so it is to be kept up even while this PC's own
+/// sandboxes run on Docker Desktop.
+pub(crate) fn engine_serves_wsl() -> bool {
+    our_engine_record()
+        .and_then(|record| {
+            record
+                .get("wsl")?
+                .as_array()
+                .map(|distros| !distros.is_empty())
+        })
+        .unwrap_or(false)
+}
+
+/// Our engine's TLS endpoint takes a connection, active or not.
+pub(crate) fn our_engine_listening() -> bool {
+    our_engine_record()
+        .and_then(|record| record.get("host")?.as_str().map(tcp_listening))
+        .unwrap_or(false)
+}
+
 /// The intentic engine record, when present and valid. `None` when the file is missing, malformed, or not our engine.
 pub(crate) fn engine_env() -> Option<EngineEnv> {
     let home = std::env::var("USERPROFILE")

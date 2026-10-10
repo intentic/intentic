@@ -1,0 +1,54 @@
+#!/bin/sh
+# Docker from Intentic's engine for THIS WSL distro, as Docker Desktop's WSL integration gives it (`ic engine wsl enable
+# <distro>` on Windows writes this file to /usr/local/lib/intentic/engine-integration and runs it; a systemd unit runs it
+# again at every start of the distro, and `ic engine start` once more after the engine is up).
+#
+#   engine-integration <engine distro> <this distro>
+#
+# - this distro's /home bind-mounted to /mnt/wsl/<engine>/distros/<this distro>/home, which the engine's keeper links as
+#   /home/<user>: a bind mount named by its path here (`docker run -v ~/project:/x`) resolves there by the same path;
+# - the engine's socket (/mnt/wsl/<engine>/docker.sock) as this distro's /run/docker.sock, in its docker group (made if
+#   the distro has none), whose gid the keeper gives the socket from its next start on; while another engine serves
+#   that socket, it is left to it (below).
+# Idempotent, and quiet: a run before the engine is up leaves a link that answers once it is.
+set -u
+ENGINE="${1:?the engine distro}"
+DISTRO="${2:?this distro}"
+SHARED="/mnt/wsl/$ENGINE"
+
+[ -d /mnt/wsl ] || exit 0
+mkdir -p "$SHARED/distros/$DISTRO/home"
+if ! mountpoint -q "$SHARED/distros/$DISTRO/home"; then
+  mount --bind /home "$SHARED/distros/$DISTRO/home"
+fi
+
+if ! getent group docker >/dev/null 2>&1; then
+  groupadd -r docker 2>/dev/null || addgroup -S docker 2>/dev/null || true
+fi
+gid="$(getent group docker 2>/dev/null | cut -d: -f3)"
+if [ -n "$gid" ]; then
+  echo "$gid" >"$SHARED/socket-gid"
+  if [ -S "$SHARED/docker.sock" ]; then
+    chgrp "$gid" "$SHARED/docker.sock" && chmod 660 "$SHARED/docker.sock"
+  fi
+fi
+
+# Another engine serving this distro (Docker Desktop's integration, whose proxy runs here, or the distro's own dockerd)
+# keeps its socket: the distro then reaches this engine by the docker context `ic engine wsl enable` makes, and this
+# says so ("foreign") for it to. A socket file nothing serves any more is replaced.
+foreign() {
+  [ -S "$1" ] && [ ! -L "$1" ] || return 1
+  pgrep -f '[d]ocker-desktop-user-distro' >/dev/null 2>&1 || pgrep -x dockerd >/dev/null 2>&1
+}
+# /var/run is /run on every current distro; one where it is not gets the link in both places.
+for sock in /run/docker.sock /var/run/docker.sock; do
+  [ "$sock" = /var/run/docker.sock ] && [ "$(readlink -f /var/run)" = /run ] && continue
+  [ "$(readlink "$sock" 2>/dev/null)" = "$SHARED/docker.sock" ] && continue
+  if foreign "$sock"; then
+    echo "foreign $sock"
+    continue
+  fi
+  rm -f "$sock"
+  ln -s "$SHARED/docker.sock" "$sock"
+done
+exit 0

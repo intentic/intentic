@@ -112,11 +112,12 @@ fn run(app: AppHandle) {
     let mut was_down = false;
     loop {
         std::thread::sleep(EVERY);
-        let ours = scripts::engine_env().is_some();
+        // Ours when this PC's sandboxes run on it, or a WSL distro uses it as its Docker (ic engine wsl enable).
+        let ours = scripts::engine_env().is_some() || scripts::engine_serves_wsl();
         let held = ours && scripts::engine_held();
         let moving = ours && scripts::engine_move_running();
         let setting_up = crate::onboarding::setup_running();
-        let listening = ours && !held && !moving && scripts::engine_listening();
+        let listening = ours && !held && !moving && scripts::our_engine_listening();
         let sight = Sight {
             ours,
             held,
