@@ -34,7 +34,7 @@ const keepBoth = (): void => {
 <template>
     <div
         v-if="editing !== undefined"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-primary-600/10 px-3 py-2 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-card px-3 py-2 text-2xs text-muted shadow-sm"
     >
         <Icon name="pencil" class="shrink-0 text-link" />
         <span class="min-w-0 flex-1">
