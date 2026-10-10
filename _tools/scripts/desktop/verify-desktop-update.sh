@@ -75,6 +75,8 @@ bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh"
 INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
     scripts::tests::resumable_downloads_can_be_paused_but_setup_still_holds_an_update -- --exact
 INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
+    onboarding::tests::prefetch_stop_
+INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
     windows::tests::the_workspace_reports_the_stamped_release_version -- --exact
 
 # linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates
