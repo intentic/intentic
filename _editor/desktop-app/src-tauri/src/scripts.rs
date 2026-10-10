@@ -904,7 +904,7 @@ pub fn run_ic_heard(
     let ic = crate::commands::bundled_ic().ok_or_else(|| {
         "Intentic's own ic is not beside this app, so this step cannot run.".to_string()
     })?;
-    let mut command = Command::new(&ic);
+    let mut command = own_group(Command::new(&ic));
     if let Some(dir) = ic.parent() {
         command.current_dir(dir);
     }
