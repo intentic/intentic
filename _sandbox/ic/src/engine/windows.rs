@@ -534,15 +534,17 @@ fn install_cli() -> Result<(), String> {
     let extract = cache.join("docker-cli-extract");
     let _ = std::fs::remove_dir_all(&extract);
     paths::ensure_dir(&extract)?;
-    let zip = zip_path.to_string_lossy();
-    let extract = extract.to_string_lossy();
+    let zip_ps = zip_path.to_string_lossy().replace('\'', "''");
+    let extract_ps = extract.to_string_lossy().replace('\'', "''");
+    // Archive's script module may not load under the caller's PowerShell policy or module path. The framework's
+    // ZIP reader needs only its assembly, and the fresh extraction directory needs no overwrite mode.
+    let script = format!(
+        "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; \
+         [System.IO.Compression.ZipFile]::ExtractToDirectory('{zip_ps}', '{extract_ps}')"
+    );
     let (code, _, stderr) = docker::run_bounded(
         "powershell",
-        &[
-            "-NoProfile",
-            "-Command",
-            &format!("Expand-Archive -Force -Path '{zip}' -DestinationPath '{extract}'"),
-        ],
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
         Duration::from_secs(120),
     )
     .map(|ran| (ran.code.unwrap_or(-1), ran.stdout, ran.stderr))
@@ -550,7 +552,7 @@ fn install_cli() -> Result<(), String> {
     if code != 0 {
         return Err(stderr);
     }
-    let src = extract.to_string() + "\\docker\\docker.exe";
+    let src = extract.join("docker").join("docker.exe");
     std::fs::copy(&src, bin.join("docker.exe"))
         .map_err(|error| format!("could not install docker.exe: {error}"))?;
     Ok(())

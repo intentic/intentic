@@ -24,6 +24,8 @@ flowchart LR
   sandbox moved onto it and back with its files. It runs `ic` with a home, a disk and a distro of its own
   (`engine.ts`), so the runner's own `~/.intentic`, a real engine and the Run key are never touched, and it removes
   what its engine put into WSL's network, which the runner's Linux fleet shares.
+  Dispatch Nightly with `only: desktop-engine` to build the current `ic` and rootfs and run this install-and-port
+  check alone. The `desktop-windows` choice also builds the app and runs the desktop and sandbox tiers.
 - Each assertion polls to its own deadline, a failure does not stop the run, and the exit code is the failure
   count. `parse.ts` keeps what the machine answers pure, so it is tested off Windows.
 - `constants.ts` holds the strings this tier shares with the Linux tier's `_tools/desktop-smoke/smoke.sh`.
