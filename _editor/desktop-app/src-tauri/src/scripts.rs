@@ -620,24 +620,47 @@ pub(crate) struct EngineEnv {
     pub docker_host: String,
     pub cert_path: String,
     pub bin_dir: PathBuf,
+    /// The engine's named pipe, served by `ic engine relay` (ic's engine/relay.rs): what `docker` uses while it is
+    /// there, at several times the speed of the TLS endpoint (intentic_docker_host::engine_pipe has the measurements).
+    pub pipe: Option<String>,
 }
 
 impl EngineEnv {
+    /// `DOCKER_HOST`, and the TLS pair when it is the TLS endpoint: the pipe while the relay serves it, asked per spawn.
+    fn endpoint(&self) -> (&str, bool) {
+        use intentic_docker_host::engine_pipe::{self, Endpoint};
+        match engine_pipe::choose(
+            &self.docker_host,
+            self.pipe.as_deref(),
+            engine_pipe::present,
+        ) {
+            Endpoint::Pipe(pipe) => (pipe, false),
+            Endpoint::Tcp(host) => (host, true),
+        }
+    }
+
     fn apply_to(&self, command: &mut Command) {
-        command.env("DOCKER_HOST", &self.docker_host);
-        command.env("DOCKER_TLS_VERIFY", "1");
-        command.env("DOCKER_CERT_PATH", &self.cert_path);
+        let (host, tls) = self.endpoint();
+        command.env("DOCKER_HOST", host);
+        if tls {
+            command.env("DOCKER_TLS_VERIFY", "1");
+            command.env("DOCKER_CERT_PATH", &self.cert_path);
+        } else {
+            command.env_remove("DOCKER_TLS_VERIFY");
+            command.env_remove("DOCKER_CERT_PATH");
+        }
         if let Some(path) = path_with_bin_first(&self.bin_dir) {
             command.env("PATH", path);
         }
     }
 
     fn as_pairs(&self) -> Vec<(String, String)> {
-        let mut pairs = vec![
-            ("DOCKER_HOST".into(), self.docker_host.clone()),
-            ("DOCKER_TLS_VERIFY".into(), "1".into()),
-            ("DOCKER_CERT_PATH".into(), self.cert_path.clone()),
-        ];
+        let (host, tls) = self.endpoint();
+        let mut pairs = vec![("DOCKER_HOST".into(), host.to_string())];
+        if tls {
+            pairs.push(("DOCKER_TLS_VERIFY".into(), "1".into()));
+            pairs.push(("DOCKER_CERT_PATH".into(), self.cert_path.clone()));
+        }
         if let Some(path) = path_with_bin_first(&self.bin_dir) {
             pairs.push(("PATH".into(), path));
         }
@@ -676,6 +699,10 @@ fn parse_engine_record(text: &str) -> Option<EngineEnv> {
         docker_host: value.get("host")?.as_str()?.to_string(),
         cert_path: value.get("certPath")?.as_str()?.to_string(),
         bin_dir: PathBuf::from(value.get("bin")?.as_str()?),
+        pipe: value
+            .get("pipe")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
     })
 }
 
@@ -2461,6 +2488,22 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
         assert_eq!(engine_env_at(&dir), None);
+    }
+
+    #[test]
+    fn the_engines_pipe_is_read_and_used_only_while_its_relay_serves_it() {
+        let record = r#"{"engine":"intentic","host":"tcp://127.0.0.1:2378","certPath":"C:\\tls","bin":"C:\\bin","version":"1.1.0","pipe":"npipe:////./pipe/intentic-engine.me"}"#;
+        let env = parse_engine_record(record).expect("intentic record");
+        assert_eq!(
+            env.pipe.as_deref(),
+            Some("npipe:////./pipe/intentic-engine.me")
+        );
+        // No relay serves that pipe here (and off Windows there are no pipes): the TLS endpoint, with its pair.
+        let pairs = env.as_pairs();
+        assert!(pairs.contains(&("DOCKER_HOST".into(), "tcp://127.0.0.1:2378".into())));
+        assert!(pairs.iter().any(|(name, _)| name == "DOCKER_TLS_VERIFY"));
+        let older = r#"{"engine":"intentic","host":"tcp://127.0.0.1:2378","certPath":"c","bin":"b","version":"1.0.0"}"#;
+        assert_eq!(parse_engine_record(older).expect("record").pipe, None);
     }
 
     /// The `Add-IntenticPath` function, up to the brace that closes it. None for a script that has no such

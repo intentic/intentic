@@ -149,6 +149,9 @@ enum EngineCommand {
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
+    /// Serve the engine on its named pipe (started by `ic engine start`, from a copy of ic; not for people to run)
+    #[command(hide = true)]
+    Relay,
 }
 
 #[derive(Subcommand)]
@@ -981,6 +984,7 @@ fn main() {
             Some(EngineCommand::Prefer { engine }) => engine::run_prefer(&engine),
             Some(EngineCommand::Update) => engine::run_update(),
             Some(EngineCommand::Remove { yes }) => engine::run_remove(yes),
+            Some(EngineCommand::Relay) => engine::run_relay(),
         },
     };
     if let Err(util::Fail(message)) = result {

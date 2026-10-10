@@ -17,6 +17,8 @@ pub struct EngineEnv {
     pub host: String,
     pub cert_path: String,
     pub bin: PathBuf,
+    /// The engine's named pipe, used while its relay serves it (engine/relay.rs); `host` otherwise.
+    pub pipe: Option<String>,
 }
 
 static INTENTIC_ENGINE: RwLock<Option<EngineEnv>> = RwLock::new(None);
@@ -44,6 +46,23 @@ fn apply_tls_env(command: &mut Command, host: &str, cert_path: &str, bin: &Path)
     }
 }
 
+/// Our engine for one `docker`: its named pipe while the relay serves it (plain HTTP over the pipe, so no TLS
+/// variables), its TLS endpoint otherwise. Asked per spawn, so a relay that ends mid-run costs speed, not commands.
+fn apply_engine_env(command: &mut Command, env: &EngineEnv) {
+    use intentic_docker_host::engine_pipe::{self, Endpoint};
+    match engine_pipe::choose(&env.host, env.pipe.as_deref(), engine_pipe::present) {
+        Endpoint::Pipe(pipe) => {
+            command.env("DOCKER_HOST", pipe);
+            command.env_remove("DOCKER_TLS_VERIFY");
+            command.env_remove("DOCKER_CERT_PATH");
+            if let Some(path) = path_with_bin_first(&env.bin) {
+                command.env("PATH", path);
+            }
+        }
+        Endpoint::Tcp(host) => apply_tls_env(command, host, &env.cert_path, &env.bin),
+    }
+}
+
 fn apply_intentic_env(command: &mut Command) {
     let Ok(guard) = INTENTIC_ENGINE.read() else {
         return;
@@ -51,7 +70,7 @@ fn apply_intentic_env(command: &mut Command) {
     let Some(env) = guard.as_ref() else {
         return;
     };
-    apply_tls_env(command, &env.host, &env.cert_path, &env.bin);
+    apply_engine_env(command, env);
 }
 
 /// The variables that point a docker CLI at an engine. A process the desktop app started while our engine was active
@@ -81,7 +100,7 @@ pub fn command_on(target: &Target, args: &[&str]) -> Command {
                 command.env_remove(name);
             }
         }
-        Target::Intentic(env) => apply_tls_env(&mut command, &env.host, &env.cert_path, &env.bin),
+        Target::Intentic(env) => apply_engine_env(&mut command, env),
     }
     command
 }

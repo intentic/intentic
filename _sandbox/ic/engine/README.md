@@ -58,15 +58,41 @@ the hour, and against Docker Desktop):
 | 1 GiB download from a published port | 540–570 MB/s | | 510–540 MB/s |
 | 1 GiB `docker cp` into a container | 60–74 MB/s | 69–85 MB/s | |
 | 1 GiB piped into `docker run -i` (how a move writes a volume) | 71–73 MB/s | 79–80 MB/s | |
-| 1 GiB `docker cp` out of a container | 36–39 MB/s | 40–42 MB/s | 140–143 MB/s |
+| 1 GiB `docker cp` out of a container, over TCP | 36–39 MB/s | 40–42 MB/s | 140–143 MB/s |
 | drop copy's mounted route, 2000 files of 8 KiB / one of 1 GiB, warm | 3.2 s / 16.4 s | | 3.1 s / 17.0 s |
 
-WSL's own loopback relay carries uploads from Windows at about 90 MB/s with or without the forward. `docker cp` out is
-the one place the engine trails Docker Desktop, in either network: dockerd's archive endpoint serves about 90 MB/s inside
-the distro itself (over its unix socket, without TLS or the forward), and less reaches Windows. A sandbox moved from
+WSL's own loopback relay carries uploads from Windows at about 90 MB/s with or without the forward. `docker cp` out
+trailed Docker Desktop in either network over TCP; the docker CLI's reading of TCP was the cause, and the engine's named
+pipe ([below](#its-named-pipe)) takes it past Docker Desktop. A sandbox moved from
 Docker Desktop answered `/health` from Windows, reached the internet, and ran Docker in Docker. Two starts at once ended
 with one keeper and both `ic engine start`s answered in 3.6 s; a start after the keeper was killed stopped the dockerd
 and pasta it left and answered in 7.7 s; the desktop app's keeper brought a killed engine back in 34 s.
+
+## Its named pipe
+
+`docker cp` out of our engine ran at 36–40 MB/s, a quarter of Docker Desktop. Measured on omen, 2026-10-10, the
+engine was not the cause: dockerd hands out the archive at ~356 MB/s inside the distro, and curl.exe and .NET pulled it
+from Windows over the same TCP forward at 290–313 MB/s. docker.exe was: any version of it, Docker's signed build
+included, read the TCP endpoint at 36–40 MB/s, and read Docker Desktop at 38 MB/s too once Docker Desktop was put
+behind a TCP proxy on Windows' own loopback. Over a named pipe, the same docker.exe read our engine at 284–286 MB/s.
+Docker Desktop's CLI talks to a named pipe; ours talked TCP. (omen runs FortiClient's network filter, which may make
+TCP worse there than elsewhere; the pipe is the way Docker Desktop goes on every PC, so ours goes it too.)
+
+So `ic engine start` keeps a relay running (`ic engine relay`, [src/engine/relay.rs](../src/engine/relay.rs)): it
+serves the engine on `\\.\pipe\<distro>.<user>` and carries each connection to the TLS endpoint with the account's
+client certificate. The pipe lets in only this account and SYSTEM and refuses remote clients; it is message mode, as
+Docker's own pipes are, so a client's end of stdin reaches the engine. The relay runs from a copy of ic named by its hash
+(`~/.intentic/engine/relay/`), so the ic the machine agent updates is never locked, and a newer ic's start hands the
+pipe over to its own copy. `engine.json` names the pipe (`pipe`); ic, the desktop app and the machine agent use it while
+it is there and the TLS endpoint otherwise (`intentic_docker_host::engine_pipe`), so a relay that is not running costs
+speed, not commands. `ic engine stop`, `hold` and `remove` end it; `ic engine status` shows it (`pipe`).
+
+Measured on omen the same evening, runs interleaved on a laptop busy with other work (1 GiB each):
+
+| | Through the pipe | TCP + TLS | Docker Desktop |
+| --- | --- | --- | --- |
+| `docker cp` out of a container | 141–163 MB/s | 31–34 MB/s | 53–106 MB/s |
+| piped into `docker run -i` | 36–53 MB/s | 38–39 MB/s | 13–26 MB/s |
 
 `ic engine remove` runs the teardown first: what an engine in the shared namespace left there. The namespace itself,
 pasta and the forwards end with the distro.

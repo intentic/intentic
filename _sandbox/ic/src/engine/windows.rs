@@ -42,6 +42,13 @@ pub fn status() -> Status {
         .filter(|record| record.is_ours())
         .is_some_and(engine_answers);
     let network = running.then(|| network_of(&distro)).flatten();
+    let pipe = record
+        .as_ref()
+        .and_then(|record| record.pipe.clone())
+        .filter(|pipe| {
+            intentic_docker_host::engine_pipe::path_of(pipe)
+                .is_some_and(|path| intentic_docker_host::engine_pipe::present(&path))
+        });
     Status {
         installed,
         running,
@@ -50,6 +57,7 @@ pub fn status() -> Status {
         held: record::held(),
         distro,
         network,
+        pipe,
     }
 }
 
@@ -176,16 +184,15 @@ pub fn start_quiet() -> Result<(), String> {
 }
 
 fn start_internal(quiet: bool) -> Result<(), String> {
-    let record = EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
+    let mut record =
+        EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
     if !record.is_ours() {
         return Err("this account's engine record is not intentic's.".to_string());
     }
     // A start asked for is the end of any hold.
     record::release();
-    if record.is_active() {
-        sync_docker_env(&record);
-    }
     if engine_answers(&record) {
+        keep_relay(&mut record, quiet);
         return Ok(());
     }
     if !quiet {
@@ -198,19 +205,42 @@ fn start_internal(quiet: bool) -> Result<(), String> {
         );
     }
     let mut keeper = spawn_keeper(&record.distro, port_from_host(&record.host))?;
-    wait_for_engine(&record, START_WAIT, &mut keeper)
+    wait_for_engine(&record, START_WAIT, &mut keeper)?;
+    keep_relay(&mut record, quiet);
+    Ok(())
+}
+
+/// The engine's named pipe (engine/relay.rs) served by this ic's relay, and the record naming it; then every `docker`
+/// of this run pointed the way the record now says. A relay that will not run costs speed, never the start: clients
+/// reach the TLS endpoint without it.
+fn keep_relay(record: &mut EngineRecord, quiet: bool) {
+    if let Err(problem) = super::relay::ensure(record) {
+        if !quiet {
+            println!("Note: the engine's named pipe is not up ({problem}); docker reaches it over TCP meanwhile.");
+        }
+    }
+    if record.is_active() {
+        sync_docker_env(record);
+    }
 }
 
 /// The engine down, and held down: nothing that keeps it running (the desktop app, the machine agent's repairs, the
 /// sign-in start) brings it back until `ic engine start`.
 pub fn stop() -> Result<(), String> {
     record::hold_as("stopped by `ic engine stop`")?;
+    super::relay::stop();
     terminate()
 }
 
 pub fn hold() -> Result<(), String> {
     record::hold_as("held by `ic engine hold`")?;
+    super::relay::stop();
     terminate()
+}
+
+/// `ic engine relay`: serve the engine on its named pipe until a newer relay or a stop takes over (engine/relay.rs).
+pub fn relay() -> Result<(), String> {
+    super::relay::run()
 }
 
 /// The distro stopped, with no hold: what a restart does before it starts the engine again.
@@ -302,6 +332,7 @@ pub fn remove(yes: bool) -> Result<(), String> {
     }
     EngineRecord::remove_file()?;
     record::release();
+    super::relay::remove_files();
     // The client half of the TLS pair and the CLI go with the engine they reach; the download cache stays, so a
     // reinstall does not fetch the same 90 MB again.
     for dir in [paths::tls_dir(), paths::bin_dir()].into_iter().flatten() {
@@ -322,8 +353,10 @@ pub fn adopt_env() {
     }
     // Started by an app that read the record while it was active (before a move back to Docker Desktop): its engine
     // variables would send every `docker` of this run to an engine no sandbox runs on.
+    let inherited = std::env::var("DOCKER_HOST").ok();
     if record.is_ours()
-        && std::env::var("DOCKER_HOST").ok().as_deref() == Some(record.host.as_str())
+        && (inherited.as_deref() == Some(record.host.as_str())
+            || (inherited.is_some() && inherited == record.pipe))
     {
         docker::forget_engine_vars();
     }
@@ -334,6 +367,7 @@ fn env_of(record: &EngineRecord) -> EngineEnv {
         host: record.host.clone(),
         cert_path: record.cert_path.clone(),
         bin: PathBuf::from(&record.bin),
+        pipe: record.pipe.clone(),
     }
 }
 
@@ -590,12 +624,13 @@ fn write_record(port: u16, active: bool, distro: &str) -> Result<EngineRecord, S
         version: pins::ENGINE_VERSION.to_string(),
         active,
         distro: distro.to_string(),
+        pipe: None,
     };
     record.save()?;
     Ok(record)
 }
 
-fn port_from_host(host: &str) -> u16 {
+pub(super) fn port_from_host(host: &str) -> u16 {
     host.trim_start_matches("tcp://127.0.0.1:")
         .parse()
         .unwrap_or(2378)
@@ -605,7 +640,7 @@ fn port_from_host(host: &str) -> u16 {
 /// inheritable handle of its parent whatever its own stdio is set to, so the keeper, which outlives this run by days,
 /// kept a copy of ic's stdout: whoever read ic's output to its end (a PowerShell pipeline, a CI step) waited forever
 /// (omen, 2026-10-09). Every later child still gets these: std duplicates an inherited handle for each spawn.
-fn keep_own_handles() {
+pub(super) fn keep_own_handles() {
     extern "system" {
         fn GetStdHandle(which: u32) -> *mut std::ffi::c_void;
         fn SetHandleInformation(handle: *mut std::ffi::c_void, mask: u32, flags: u32) -> i32;
@@ -883,6 +918,7 @@ mod tests {
             version: "1.1.0".into(),
             active: true,
             distro: "intentic-engine".into(),
+            pipe: None,
         };
         let waiting = not_answering(&record, Duration::from_secs(120), true);
         assert!(waiting.contains("keeper is already running in the intentic-engine distro"));

@@ -90,6 +90,19 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
         }
     }
 
+    // Its own network namespace, so nothing of it shows in this runner's other distros, and its named pipe, which is
+    // how docker reaches it at speed (TLS on TCP stays the fallback, so neither failing stops the tier).
+    if (after.network === `isolated`) {
+        harness.pass(`the engine runs in a network namespace of its own`);
+    } else {
+        harness.fail(`the engine runs in WSL's shared network (${after.network ?? `unknown`}): see /var/log/intentic-engine.log in its distro`);
+    }
+    if (after.pipe !== undefined) {
+        harness.pass(`the engine is served on its named pipe (${after.pipe})`);
+    } else {
+        harness.fail(`no relay serves the engine's named pipe: docker reaches it over TCP only`, JSON.stringify(after));
+    }
+
     harness.section(`a port published on 127.0.0.1 reaches Windows`);
     let record = ``;
     try {

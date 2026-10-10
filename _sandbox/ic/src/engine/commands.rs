@@ -46,6 +46,7 @@ pub fn status_json(
         "held": status.held,
         "distro": status.distro,
         "network": status.network,
+        "pipe": status.pipe,
         "dockerDesktop": facts.docker_desktop,
         "ownEngine": facts.own_engine,
         "preferred": facts.preferred.map(Kind::id),
@@ -109,6 +110,10 @@ pub fn run_start(quiet: bool) -> Result<()> {
     } else {
         super::start().map_err(Fail::from)
     }
+}
+
+pub fn run_relay() -> Result<()> {
+    super::relay().map_err(Fail::from)
 }
 
 pub fn run_stop() -> Result<()> {
@@ -223,6 +228,9 @@ fn print_human_status(kind: Kind, status: &Status) {
         if let Some(record) = record::EngineRecord::load() {
             println!("Endpoint: {}", record.host);
         }
+        if let Some(pipe) = &status.pipe {
+            println!("Named pipe: {pipe} (what docker uses while it is there)");
+        }
     }
     if kind == Kind::DockerDesktop {
         println!("Sandboxes on this PC run on Docker Desktop.");
@@ -249,6 +257,7 @@ mod tests {
             held: false,
             distro: "intentic-engine".into(),
             network: Some("isolated".into()),
+            pipe: Some("npipe:////./pipe/intentic-engine.me".into()),
         };
         let facts = super::super::choice::Facts {
             docker_desktop: true,
@@ -263,6 +272,7 @@ mod tests {
         assert_eq!(json["dockerDesktop"], true);
         assert_eq!(json["distro"], "intentic-engine");
         assert_eq!(json["network"], "isolated");
+        assert_eq!(json["pipe"], "npipe:////./pipe/intentic-engine.me");
         assert_eq!(json["canMove"], true);
         assert_eq!(json["offerMove"], false);
         assert_eq!(json["bringYourOwn"], false);

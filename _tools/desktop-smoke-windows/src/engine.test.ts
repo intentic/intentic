@@ -5,6 +5,16 @@ describe(`the engine tier's readings`, () => {
     test(`the status is the last JSON line ic printed`, () => {
         const said = `Starting the intentic engine…\n{"engine":"dockerDesktop","installed":true,"running":true,"active":false,"held":false,"canMove":true}\n`;
         expect(engineStatusOf(said)).toEqual({ engine: `dockerDesktop`, installed: true, running: true, active: false, held: false });
+        const piped = `{"engine":"intentic","installed":true,"running":true,"active":true,"held":false,"network":"isolated","pipe":"npipe:////./pipe/intentic-engine-ci.runner"}`;
+        expect(engineStatusOf(piped)).toEqual({
+            engine: `intentic`,
+            installed: true,
+            running: true,
+            active: true,
+            held: false,
+            network: `isolated`,
+            pipe: `npipe:////./pipe/intentic-engine-ci.runner`,
+        });
         expect(engineStatusOf(`no json here`)).toBeUndefined();
         expect(engineStatusOf(`{"installed":true}`)).toBeUndefined();
     });

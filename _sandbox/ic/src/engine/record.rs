@@ -25,6 +25,10 @@ pub struct EngineRecord {
     /// The WSL distro the engine runs in. Missing on records from before the name could be chosen: the default one.
     #[serde(default = "default_distro")]
     pub distro: String,
+    /// The named pipe `ic engine relay` serves the engine on (`npipe:////./pipe/<distro>.<user>`, engine/relay.rs), which
+    /// every client uses while it is there and the TLS `host` otherwise. Missing until a start has run the relay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipe: Option<String>,
 }
 
 fn yes() -> bool {
@@ -112,6 +116,7 @@ mod tests {
             version: "1.0.0".to_string(),
             active: false,
             distro: "intentic-engine".to_string(),
+            pipe: Some("npipe:////./pipe/intentic-engine.me".to_string()),
         };
         let json = serde_json::to_string(&record).unwrap();
         let back: EngineRecord = serde_json::from_str(&json).unwrap();
@@ -126,6 +131,9 @@ mod tests {
         assert!(record.active);
         assert!(record.is_active());
         assert_eq!(record.distro, "intentic-engine");
+        // No relay has run yet: clients reach the TLS endpoint, and the record says no pipe when written back.
+        assert_eq!(record.pipe, None);
+        assert!(serde_json::to_value(&record).unwrap().get("pipe").is_none());
     }
 
     #[test]
@@ -140,9 +148,12 @@ mod tests {
             version: "v".into(),
             active: true,
             distro: "d".into(),
+            pipe: Some("p".into()),
         })
         .unwrap();
-        for key in ["engine", "host", "certPath", "bin", "active", "distro"] {
+        for key in [
+            "engine", "host", "certPath", "bin", "active", "distro", "pipe",
+        ] {
             assert!(json.get(key).is_some(), "{key}");
         }
     }

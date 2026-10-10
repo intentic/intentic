@@ -17,6 +17,10 @@ export interface EngineStatus {
     readonly running: boolean;
     readonly active: boolean;
     readonly held: boolean;
+    /** `isolated` (its own network namespace) or `shared` (WSL's, the fallback); absent while it is not running. */
+    readonly network?: string;
+    /** The named pipe its relay serves it on, when the relay is up (ic's engine/relay.rs). */
+    readonly pipe?: string;
 }
 
 /** The status line out of whatever else ic printed, or undefined when there is none. */
@@ -40,6 +44,8 @@ export const engineStatusOf = (stdout: string): EngineStatus | undefined => {
             running: value[`running`] === true,
             active: value[`active`] === true,
             held: value[`held`] === true,
+            ...(typeof value[`network`] === `string` ? { network: value[`network`] } : {}),
+            ...(typeof value[`pipe`] === `string` ? { pipe: value[`pipe`] } : {}),
         };
     } catch {
         return undefined;

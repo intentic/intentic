@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { win32 } from "node:path";
-import { activeEngine, engineEnvChanges } from "./engine-env.js";
+import { activeEngine, endpointOf, engineEnvChanges, pipePath } from "./engine-env.js";
 
 const delimiter = win32.delimiter;
 
@@ -28,6 +28,20 @@ describe("the engine this agent's docker reaches", () => {
         expect(changes["PATH"]?.split(delimiter)[0]).toBe(record.bin);
         const again = engineEnvChanges({ PATH: `${record.bin}${delimiter}C:\\Windows` }, record, record.host);
         expect(again["PATH"]).toBeUndefined();
+    });
+
+    test("the relay's pipe is read from the record, and used only while it is there", () => {
+        const pipe = "npipe:////./pipe/intentic-engine.me";
+        const piped = activeEngine(JSON.stringify({ engine: "intentic", ...record, pipe }));
+        expect(piped).toEqual({ ...record, pipe });
+        expect(pipePath(pipe)).toBe("\\\\.\\pipe\\intentic-engine.me");
+        expect(pipePath(record.host)).toBeUndefined();
+        expect(endpointOf(piped!, () => true)).toEqual({ host: pipe, tls: false });
+        expect(endpointOf(piped!, () => false)).toEqual({ host: record.host, tls: true });
+        const over = engineEnvChanges({ PATH: record.bin, DOCKER_TLS_VERIFY: "1" }, piped, record.host, () => true);
+        expect(over).toEqual({ DOCKER_HOST: pipe, DOCKER_TLS_VERIFY: undefined, DOCKER_CERT_PATH: undefined });
+        // The relay gone: back to TLS, by itself, on the next round.
+        expect(engineEnvChanges({ PATH: record.bin }, piped, pipe, () => false)["DOCKER_HOST"]).toBe(record.host);
     });
 
     test("after a move back, only the host this agent set is taken back", () => {

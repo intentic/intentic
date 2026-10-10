@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, win32 } from "node:path";
 import { homeDir } from "@intentic/local-agent";
 
@@ -11,6 +11,11 @@ const delimiter = win32.delimiter;
 // environment, so the agent keeps that environment in step with the record once per round: a move between engines
 // (`ic engine move`) switches the record while the agent runs, and a stale DOCKER_HOST would send its port mirror, its
 // sync and its keeper to an engine no sandbox runs on any more.
+//
+// THE PIPE (2026-10-10). Since ic's relay (_sandbox/ic/src/engine/relay.rs) serves the engine on a named pipe, the
+// record names that too (`pipe`), and `docker` goes through it while it is there: docker.exe reads the TLS endpoint at
+// 31–40 MB/s on omen and the pipe at 140–160 (_sandbox/ic/docker-host/src/engine_pipe.rs), which is the speed of this
+// agent's sync (`docker exec -i`). Over the pipe there is no TLS: the relay holds the certificate.
 
 const VARS = ["DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"] as const;
 
@@ -18,6 +23,8 @@ export interface EngineRecord {
     readonly host: string;
     readonly certPath: string;
     readonly bin: string;
+    /** `npipe:////./pipe/<distro>.<user>`, once a start has run the relay. */
+    readonly pipe?: string;
 }
 
 // The record when this account's sandboxes run on our engine: written by ic, `engine: intentic`, and not switched off
@@ -40,14 +47,34 @@ export const activeEngine = (text: string | undefined): EngineRecord | undefined
     if (fields["engine"] !== "intentic" || fields["active"] === false) {
         return undefined;
     }
-    const { host, certPath, bin } = fields;
-    return typeof host === "string" && typeof certPath === "string" && typeof bin === "string" ? { host, certPath, bin } : undefined;
+    const { host, certPath, bin, pipe } = fields;
+    if (typeof host !== "string" || typeof certPath !== "string" || typeof bin !== "string") {
+        return undefined;
+    }
+    return typeof pipe === "string" ? { host, certPath, bin, pipe } : { host, certPath, bin };
+};
+
+// `\\.\pipe\x` for `npipe:////./pipe/x`, the path a presence check looks at. Pure.
+export const pipePath = (host: string): string | undefined => {
+    const leaf = host.startsWith("npipe:////./pipe/") ? host.slice("npipe:////./pipe/".length) : "";
+    return leaf !== "" && !/[\\/]/.test(leaf) ? `\\\\.\\pipe\\${leaf}` : undefined;
+};
+
+// The way `docker` reaches `record`: its pipe while the relay serves it (`present`), its TLS endpoint otherwise. Pure.
+export const endpointOf = (record: EngineRecord, present: (path: string) => boolean): { readonly host: string; readonly tls: boolean } => {
+    const path = record.pipe === undefined ? undefined : pipePath(record.pipe);
+    return record.pipe !== undefined && path !== undefined && present(path) ? { host: record.pipe, tls: false } : { host: record.host, tls: true };
 };
 
 // What to set (a string) and unset (undefined) in an environment so `docker` reaches `record`, or, without one, the
 // engine `docker` finds by itself. `ours` is the host this agent last pointed `docker` at, the only DOCKER_HOST it
 // takes back: one a person set for their own reasons is theirs. Pure.
-export const engineEnvChanges = (env: Readonly<Record<string, string | undefined>>, record: EngineRecord | undefined, ours: string | undefined): Record<string, string | undefined> => {
+export const engineEnvChanges = (
+    env: Readonly<Record<string, string | undefined>>,
+    record: EngineRecord | undefined,
+    ours: string | undefined,
+    present: (path: string) => boolean = () => false,
+): Record<string, string | undefined> => {
     if (record === undefined) {
         if (ours === undefined || env["DOCKER_HOST"] !== ours) {
             return {};
@@ -56,10 +83,11 @@ export const engineEnvChanges = (env: Readonly<Record<string, string | undefined
     }
     const path = env["PATH"] ?? env["Path"] ?? "";
     const first = path.split(delimiter)[0];
+    const endpoint = endpointOf(record, present);
     return {
-        DOCKER_HOST: record.host,
-        DOCKER_TLS_VERIFY: "1",
-        DOCKER_CERT_PATH: record.certPath,
+        DOCKER_HOST: endpoint.host,
+        DOCKER_TLS_VERIFY: endpoint.tls ? "1" : undefined,
+        DOCKER_CERT_PATH: endpoint.tls ? record.certPath : undefined,
         ...(first === record.bin ? {} : { PATH: [record.bin, path].filter((part) => part !== "").join(delimiter) }),
     };
 };
@@ -79,12 +107,13 @@ export const syncEngineEnv = (env: NodeJS.ProcessEnv = process.env, home: string
         text = undefined;
     }
     const record = activeEngine(text);
-    for (const [name, value] of Object.entries(engineEnvChanges(env, record, pointedAt))) {
+    const changes = engineEnvChanges(env, record, pointedAt, existsSync);
+    for (const [name, value] of Object.entries(changes)) {
         if (value === undefined) {
             delete env[name];
         } else {
             env[name] = value;
         }
     }
-    pointedAt = record?.host;
+    pointedAt = record === undefined ? undefined : changes["DOCKER_HOST"];
 };

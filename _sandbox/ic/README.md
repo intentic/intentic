@@ -257,6 +257,11 @@ flowchart LR
     and a person's own Docker Engine in WSL no longer clashes with it. Where the namespace cannot be made, the keeper
     falls back to the shared network as before (and there refuses to start beside another engine owning `docker0`);
     `ic engine status` names the mode (`network`). One keeper per distro, by a lock.
+  - **A named pipe, as Docker Desktop has.** docker.exe reads a TCP endpoint at a fraction of the speed it reads a
+    pipe (36–40 against 284 MB/s on omen), so `ic engine start` keeps a relay running (`ic engine relay`,
+    [src/engine/relay.rs](src/engine/relay.rs)) that serves the engine on `\\.\pipe\<distro>.<user>` and carries
+    each connection to the TLS endpoint. `engine.json` names it (`pipe`), and ic, the desktop app and the machine agent
+    use it while it is there and TLS on TCP otherwise. See [engine/README.md](engine/README.md#its-named-pipe).
   - **Tests and CI.** `IC_ENGINE_DISTRO` names another distro (its own disk folder and Run key value),
     `IC_ENGINE_AUTOSTART=0` registers no sign-in start, and `INTENTIC_ENGINE_TARBALL` hands in a rootfs built from the
     checkout. The Windows smoke's tier 4 (`_tools/desktop-smoke-windows`) runs it on the CI machine.

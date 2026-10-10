@@ -16,6 +16,8 @@ mod record;
 mod wsl;
 
 #[cfg(windows)]
+mod relay;
+#[cfg(windows)]
 mod windows;
 
 pub use record::EngineRecord;
@@ -87,6 +89,9 @@ pub struct Status {
     /// The network the running engine's dockerd is in, as its keeper wrote it: `isolated` (a namespace of its own, the
     /// way it runs since 2026-10-10) or `shared` (WSL's, the fallback). None when it is not running.
     pub network: Option<String>,
+    /// The named pipe the relay serves the engine on (engine/relay.rs), when it is there now: docker reaches the
+    /// engine through it, and over TLS on TCP without it.
+    pub pipe: Option<String>,
 }
 
 /// The engine a fresh setup on this PC would put sandboxes on (choice.rs has the rules and the migration's switch).
@@ -299,6 +304,18 @@ pub fn start() -> Result<(), String> {
     }
 }
 
+/// `ic engine relay`: the engine's named pipe (engine/relay.rs). Windows only.
+pub fn relay() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows::relay()
+    }
+    #[cfg(not(windows))]
+    {
+        Err("the engine's named pipe exists only on Windows.".to_string())
+    }
+}
+
 pub fn start_quiet() -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -422,5 +439,5 @@ pub fn adopt() {
 
 pub use commands::{
     default_action, docker_desktop_installed, run_fetch, run_hold, run_install, run_prefer,
-    run_remove, run_restart, run_start, run_status, run_stop, run_update,
+    run_relay, run_remove, run_restart, run_start, run_status, run_stop, run_update,
 };

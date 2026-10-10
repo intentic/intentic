@@ -19,6 +19,11 @@ intentic-bounded = { path = "bounded" }
 # What docker's refusals mean and where Docker Desktop lives, read the same way by the desktop app (docker-host/src/lib.rs).
 intentic-docker-host = { path = "docker-host" }
 
+# The engine's named-pipe relay (src/engine/relay.rs) speaks TLS to the engine with its client certificate. ureq already
+# builds this rustls with ring, so naming it here adds no crate and no bytes.
+[target.'cfg(windows)'.dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
 # The bootstrap shims download this binary on EVERY run, so size is user-visible; thin LTO + strip for the
 # same build-time/size trade the desktop crate settled on (its Cargo.toml carries the measurements).
 [profile.release]

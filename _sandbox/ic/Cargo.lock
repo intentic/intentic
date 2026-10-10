@@ -361,6 +361,7 @@ dependencies = [
  "http",
  "intentic-bounded",
  "intentic-docker-host",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
