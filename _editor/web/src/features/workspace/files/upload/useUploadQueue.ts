@@ -627,9 +627,12 @@ const copyViaApp = async (drop: NativeDrop, targetDir: string, signal: AbortSign
         } else if (event.kind === `finished`) {
             advance(event);
             now.reported.push(...(event.failures ?? []).slice(0, Math.max(0, MAX_FAILURES_SHOWN - now.reported.length)));
-            // A copy that stopped short: what it never reached did not land, and is counted with the failures.
+            // A copy that stopped short: what it never reached did not land, and is counted with the failures. One that
+            // ends in an error with no file counted failed is itself the failure, counted once, or the card read it as a
+            // clean import, left the error unshown and retired itself.
             if (event.error !== undefined && !event.cancelled) {
-                now.failed += Math.max(0, total - added.done - added.failed);
+                const unreached = Math.max(0, total - added.done - added.failed);
+                now.failed += unreached === 0 && added.failed === 0 ? 1 : unreached;
                 for (const row of rows) {
                     const group = now.groups.get(row.key);
                     if (group !== undefined) {

@@ -440,13 +440,21 @@ const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting
 };
 
 // The hold's one dispatch, stamped before the start so it holds even if starting conflicts; a ladder rung spends a try.
+// The stamp names the record judged, and the actor refuses it unless that record is still the one held (onHeldFired),
+// so a pass that read a hold before awaiting other conversations' starts never fires a copy since superseded.
 const dispatch =
     (ladder: boolean): Rung["fire"] =>
     async (services, held, routing) => {
-        if (services.conversations.send(held.input.conversationId, { kind: "held-fired", ladder }).reply) {
+        if (services.conversations.send(held.input.conversationId, { kind: "held-fired", ladder, judged: held }).reply) {
             await rerun(services, held, routing);
         }
     };
+
+// Whether the conversation still holds the very record the pass read: every change to a hold makes a new record, so a
+// different one is a hold replaced, re-pointed or fired since, which the next pass judges as it stands. Asked right
+// before acting, with no await in between, where an act other than a fire (a drop, a give-up) would land on it.
+const stillHeld = (services: Pick<Services, "conversations">, conversationId: string, held: HeldRecord): boolean =>
+    services.conversations.state(conversationId)?.resume.held === held;
 
 // `retry` keeps the hold: a throw never asked the question, and a turn still unwinding cannot yet be told the answer.
 const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"done" | "retry"> => {
@@ -472,7 +480,7 @@ const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"done
 // One re-mint in flight per conversation, so a slow one isn't refired by the next pass underneath itself.
 const fireAuthResume: Rung["fire"] = async (services, held) => {
     const { conversationId } = held.input;
-    if (services.conversations.state(conversationId)?.resume.authFiring === true) {
+    if (services.conversations.state(conversationId)?.resume.authFiring === true || !stillHeld(services, conversationId, held)) {
         return;
     }
     services.conversations.send(conversationId, { kind: "auth-firing", firing: true });
@@ -483,6 +491,13 @@ const fireAuthResume: Rung["fire"] = async (services, held) => {
     } finally {
         services.conversations.send(conversationId, { kind: "auth-firing", firing: false });
     }
+};
+
+// The instant (ms) a spent allowance's hold is booked to go at its reset, or undefined: none named, or one already past
+// at the refusal, which would loop. One answer for the pass that fires it and the wake that keeps the machine up for it.
+const limitReopensAt = (held: HeldRecord): number | undefined => {
+    const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
+    return reopensAt === undefined || reopensAt <= held.recordedAt ? undefined : reopensAt;
 };
 
 // A door hold has no rung: whether a turn goes past the wall that stopped it is a person's call, not a clock's. The one
@@ -507,6 +522,9 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
         spent: "resume-dropped",
         // Counted and dropped at dispatch, so the breaker's window closes even if starting conflicts.
         fire: async (services, held, _routing, now) => {
+            if (!stillHeld(services, held.input.conversationId, held)) {
+                return;
+            }
             outageRetryFired(providerOf(held), now);
             services.conversations.send(held.input.conversationId, { kind: "resume-dropped" });
             await rerun(services, held);
@@ -534,8 +552,8 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
                 const { agent, harness } = withRuntimeDefaults(input);
                 return { routing: { agent, harness, account: move.account, carry: move.carry } };
             }
-            const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
-            if (reopensAt === undefined || reopensAt > now || reopensAt <= held.recordedAt) {
+            const reopensAt = limitReopensAt(held);
+            if (reopensAt === undefined || reopensAt > now) {
                 return undefined;
             }
             // Re-pointed since the refusal: it goes where the person picked, not back to the account that refused it.
@@ -568,7 +586,13 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
         await rung.fire(services, held, verdict.routing, now);
         return;
     }
+    if (!stillHeld(services, conversationId, held)) {
+        return;
+    }
     if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: verdict.gaveUp }, now).settled) {
+        if (!stillHeld(services, conversationId, held)) {
+            return;
+        }
         services.conversations.send(conversationId, { kind: rung.spent });
         services.logger.warn({ conversationId, reason: held.reason }, "resume pass gave up the held turn, the request is settled as failed");
     }
@@ -702,9 +726,29 @@ const releaseRoomHolds = async (services: Services, now: number): Promise<void> 
     await services.turns.drain(conversationId);
 };
 
-/** The soonest instant a scheduled send is booked for (ms), or 0 for none: a wake the machine must not sleep through. */
-export const nextBookedSendAt = (services: Pick<Services, "conversations">): number => {
-    const instants = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
+// When a spent allowance's unfired hold goes by itself, read the way the pass reads it (RUNGS.limit, runRung): a booked
+// move at once while the conversation still answers the limit with a move, else its reset where it answers with any send.
+// Undefined for a hold only a press sends.
+const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> => {
+    if (held.reason !== "limit" || held.fired) {
+        return undefined;
+    }
+    const policy = await breakPolicyFor(services, conversationId, "limit");
+    if (!breakArmed(policy)) {
+        return undefined;
+    }
+    return held.move !== undefined && policy === "move" ? held.recordedAt : limitReopensAt(held);
+};
+
+/**
+ * The soonest instant the sandbox's own clock sends something a conversation is waiting on (ms), or 0 for none: a
+ * person's scheduled send, and a spent allowance's held turn booked to go again at its reset. A wake the machine must not
+ * sleep through, since nothing outside restarts it for either.
+ */
+export const nextBookedSendAt = async (services: Pick<Services, "agents" | "conversations" | "sandboxSettings">): Promise<number> => {
+    const scheduled = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
+    const held = await Promise.all(services.conversations.stranded().map(({ conversationId, record }) => heldSendAt(services, conversationId, record)));
+    const instants = [...scheduled, ...held.filter((at): at is number => at !== undefined)];
     return instants.length === 0 ? 0 : Math.min(...instants);
 };
 

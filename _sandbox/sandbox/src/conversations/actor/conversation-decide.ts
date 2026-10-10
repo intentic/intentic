@@ -149,8 +149,9 @@ export type ConversationEvent =
     | { readonly kind: "auth-firing"; readonly firing: boolean }
     // The held turn the resume pass is finished with.
     | { readonly kind: "resume-dropped" }
-    // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go.
-    | { readonly kind: "held-fired"; readonly ladder: boolean }
+    // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go. `judged` is
+    // the record the dispatcher decided on, as it read it: only that very record fires (onHeldFired).
+    | { readonly kind: "held-fired"; readonly ladder: boolean; readonly judged: HeldRecord }
     // A spent allowance's hold the entry kept across a restart (limit-hold.ts), put back at boot; nothing for a
     // conversation that already holds a turn or is running one.
     | { readonly kind: "hold-restored"; readonly held: HeldRecord }
@@ -244,7 +245,8 @@ export type ConversationEffect =
     | { readonly kind: "conversation-prompt"; readonly prompt: string }
     // The queue onto the entry, for the persist after it to carry.
     | { readonly kind: "queue-written"; readonly queue: TurnQueue }
-    // A spent allowance's unfired hold onto the entry (undefined takes it off), for the persist after it to carry.
+    // A kept hold (a spent allowance's or a door's, unfired: limit-hold.ts) onto the entry (undefined takes it off), for
+    // the persist after it to carry.
     | { readonly kind: "hold-written"; readonly hold: StoredLimitHold | undefined };
 
 // What each event answers; every other event answers nothing.
@@ -619,9 +621,15 @@ const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision
 
 // The one dispatch a hold gets, stamped before the fire so it holds even if starting conflicts. A ladder rung also
 // spends one try, and a spent ladder fires no more whatever the pass asks.
-const onHeldFired = (state: ConversationState, ladder: boolean): Decision<boolean> => {
+// Only the record the dispatcher judged fires. A record is immutable and every change to a hold makes a new one (a new
+// refusal replaces it, a pick re-points it, a hand-off choice or a fire stamps it), so identity is exactly "nothing
+// changed since it was read". The resume pass snapshots every hold and awaits each re-run's start in turn: a hold
+// replaced or re-pointed meanwhile was once stamped fired while the pass ran the copy it had read, so the superseded
+// words went out, on the account the person had moved them off, and the new hold's own booking never fired
+// (2026-10-10). Refused, the pass judges the hold as it now stands on its next round.
+const onHeldFired = (state: ConversationState, ladder: boolean, judged: HeldRecord): Decision<boolean> => {
     const { held } = state.resume;
-    if (held === undefined || held.fired || (ladder && held.tries >= RETRY_LADDER_TRIES)) {
+    if (held === undefined || held !== judged || held.fired || (ladder && held.tries >= RETRY_LADDER_TRIES)) {
         return unchanged(state, false);
     }
     return unchanged(withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), true);
@@ -771,7 +779,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
         state.resume.held === undefined
             ? unchanged(state, undefined)
             : { state: withResume(state, { held: undefined }), effects: BROADCAST, reply: undefined },
-    "held-fired": (state, event) => onHeldFired(state, event.ladder),
+    "held-fired": (state, event) => onHeldFired(state, event.ladder, event.judged),
     "hold-restored": (state, event) =>
         state.resume.held === undefined && state.phase.kind === "idle"
             ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
@@ -832,9 +840,9 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "keep-warm-ended": (state, event, now) => onKeepWarmEnded(state, event, now),
 };
 
-// A spent allowance's hold goes onto the entry whenever it changes, whichever event changed it (a refusal holds it, a
-// pick re-points it, a fire, a new turn or a drop ends it), so a restart finds the booking the owner answered for
-// (limit-hold.ts). Read off the two states rather than told by each handler, so no way of moving a hold can forget it.
+// A kept hold (a spent allowance's, or a door's) goes onto the entry whenever it changes, whichever event changed it (a
+// refusal holds it, a pick re-points it, a fire, a new turn or a drop ends it), so a restart finds the booking the owner
+// answered for (limit-hold.ts). Read off the two states rather than told by each handler, so no way of moving a hold can forget it.
 const keepLimitHold = <R>(before: ConversationState, decision: Decision<R>): Decision<R> => {
     const was = before.resume.held;
     const is = decision.state.resume.held;

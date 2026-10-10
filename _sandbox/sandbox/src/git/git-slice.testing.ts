@@ -22,6 +22,8 @@ const cleanRepo = {
     stageAll: async () => {},
     scratchOf: async () => [],
     unstagePaths: async () => {},
+    indexEntries: async () => new Map(),
+    writeIndexEntries: async () => {},
     commitIndex: async () => false,
     // The real one: a settings page commits its own write (seams/settings-versions.ts), and the suites that check it do
     // so on a repo of their own; best-effort, so a suite with no repo only logs that its write stays uncommitted.

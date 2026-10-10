@@ -61,6 +61,9 @@ export interface TurnShield {
     // The same for a picture, read on this machine; `unreadable` when it could not be read to be checked, which refuses
     // it as surely, since it would otherwise go unchecked.
     readonly refusesImage: (data: Buffer, channel: string) => Promise<readonly PersonalDataClass[] | "unreadable">;
+    // The same for a PDF, read on this machine (its text layer, or its pages through OCR); `unreadable` when neither
+    // yields text, which refuses it as surely.
+    readonly refusesDocument: (data: Buffer, channel: string) => Promise<readonly PersonalDataClass[] | "unreadable">;
     // Tokens in what the model wrote back to the values they stand for.
     readonly restore: (text: string) => string;
     // Whether masking is in force right now: the shield on and the provider untrusted here. False while it watches.
@@ -218,6 +221,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         readonly counts: ClassCounts;
         readonly found: readonly Replacement[];
         readonly images?: number;
+        readonly documents?: number;
         readonly detail?: string;
     }): void => {
         void deps.ledger
@@ -229,7 +233,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                 action: fields.action,
                 counts: fields.counts,
                 images: fields.images ?? 0,
-                documents: 0,
+                documents: fields.documents ?? 0,
                 protocol: fields.protocol,
                 ...opt("detail", fields.detail),
                 ...opt("replacements", fields.found.length > 0 ? fields.found.slice(0, PRIVACY_REPLACEMENTS_MAX) : undefined),
@@ -331,6 +335,44 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                 found: found.found,
                 images: 1,
                 ...opt("detail", masking ? "an image read was refused: it shows personal data" : undefined),
+            });
+            return masking ? kindsOf(found.spans) : [];
+        },
+        refusesDocument: async (data, channel) => {
+            const { policy, masking, watching } = await standing(provider, conversationId);
+            if (!masking && !watching) {
+                return [];
+            }
+            const text = await deps.readers.readPdf(data);
+            if (text === undefined) {
+                if (masking) {
+                    record({
+                        provider,
+                        conversationId,
+                        action: "refused",
+                        protocol: `hooks:${channel}`,
+                        counts: {},
+                        found: [],
+                        documents: 1,
+                        detail: "a document read was refused: it could not be read on this machine to be checked",
+                    });
+                }
+                return masking ? "unreadable" : [];
+            }
+            const found = await (await masker(policy)).find(text);
+            if (found.spans.length === 0) {
+                return [];
+            }
+            await deps.vault.commit();
+            record({
+                provider,
+                conversationId,
+                action: masking ? "refused" : "watched",
+                protocol: `hooks:${channel}`,
+                counts: countsOf(found.spans),
+                found: found.found,
+                documents: 1,
+                ...opt("detail", masking ? "a document read was refused: it holds personal data" : undefined),
             });
             return masking ? kindsOf(found.spans) : [];
         },

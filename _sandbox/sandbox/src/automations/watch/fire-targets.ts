@@ -36,13 +36,16 @@ const conversationWake = (automation: AutomationRecord, outcome: "met" | "timeou
 };
 
 // Continues the named conversation on its own model and routing, through the one door every sandbox-spoken wake takes:
-// said into its live turn, a turn of its own when it is idle, queued behind a busy one.
+// said into its live turn, a turn of its own when it is idle, queued behind a busy one. `fire` names this one fire:
+// admission answers a message id it has seen with the first delivery's receipt and delivers nothing, so two fires must
+// never share one (two held wakes approved together are two fires, though both read the same record).
 export const continueConversation = async (
     services: Services,
     automation: AutomationRecord,
     conversationId: string,
     outcome: "met" | "timeout",
     observed: { readonly text?: string; readonly outside?: string },
+    fire: string,
 ): Promise<TargetOutcome> => {
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
@@ -59,8 +62,8 @@ export const continueConversation = async (
             prompt: conversationWake(automation, outcome, observed.text, now),
             voice: "sandbox",
             source: `automation:${automation.id}`,
-            // One per fire, so a restart that delivers it again is met with the first delivery's receipt.
-            messageId: `automation-${automation.id}-${outcome}-${automation.watch?.firedAt ?? now}`,
+            // One per fire, so a delivery repeated for the same fire is met with the first one's receipt.
+            messageId: `automation-${automation.id}-${outcome}-${fire}`,
             ...(observed.outside === undefined ? {} : { outside: observed.outside }),
             profile: conversationProfile(entry),
         },
@@ -86,10 +89,12 @@ export const notifyOwner = async (services: Services, automation: AutomationReco
 };
 
 // Its end date reached: switched off, its history says so, and whoever it was for hears it, since a watch that stops
-// without a word reads exactly like one still waiting.
-export const expireAutomation = async (services: Services, automation: AutomationRecord): Promise<void> => {
-    if (!(await services.automations.setEnabled(automation.id, false))) {
-        return;
+// without a word reads exactly like one still waiting. Only the call that switches it off says so: one already off has
+// ended (or was switched off by hand) and been told, and a "Run now" pressed on it must not tell anybody again. False
+// when this call ended nothing.
+export const expireAutomation = async (services: Services, automation: AutomationRecord): Promise<boolean> => {
+    if ((await services.automations.setEnabled(automation.id, false)) !== "changed") {
+        return false;
     }
     const fired = automation.watch?.firedAt !== undefined;
     const ended = new Date(automation.expiresAt ?? Date.now()).toISOString();
@@ -102,12 +107,13 @@ export const expireAutomation = async (services: Services, automation: Automatio
     });
     const target = automation.target ?? { kind: "agent" as const };
     if (target.kind === "conversation") {
-        const told = await continueConversation(services, automation, target.conversationId, "timeout", {});
+        const told = await continueConversation(services, automation, target.conversationId, "timeout", {}, String(automation.expiresAt));
         if (!told.ok) {
             services.logger.warn({ automation: automation.id, error: told.error }, "automation expiry could not be told to its conversation");
         }
-        return;
+        return true;
     }
     const notice = automationExpired(automation, fired);
     void (target.kind === "notify" ? services.pushSender.notify(notice) : services.pushSender.notifyIfAway(notice));
+    return true;
 };

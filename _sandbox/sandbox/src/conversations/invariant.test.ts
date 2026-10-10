@@ -6,7 +6,7 @@ import { checks } from "./invariant.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationEntry, isolatedAgent } from "../testing.js";
 import type { PersistedAgent } from "./registry/agents-store.js";
-import { idleConversation } from "./actor/conversation-state.js";
+import { type HeldRecord, idleConversation } from "./actor/conversation-state.js";
 
 /* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's allowance. */
 
@@ -152,4 +152,40 @@ test("a conversation with no branch of its own is not held to one", async () => 
 test("the check runs at turn-settled, after the turn's carry, and on the sweep", () => {
     const check = checkNamed("stray-work-reaches-its-own-branch", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees: SETTLED });
     expect([...check.on].sort()).toEqual(["sweep", "turn-settled"]);
+});
+
+// A spent allowance's hold the entry cannot keep lives only as long as the daemon; the check names it and the field the
+// schema refused, and passes over every hold it can keep, every other hold and every fired one.
+describe("held-limit-turns-are-kept-for-a-restart", () => {
+    const files = (count: number): string[] => Array.from({ length: count }, (_, index) => `f${String(index)}.png`);
+    const held = (attachments: number, over: Partial<HeldRecord> = {}): HeldRecord => ({
+        input: { conversationId: "c1", prompt: "go", attachments: files(attachments) },
+        reason: "limit",
+        ran: true,
+        reopensAt: 9_000,
+        recordedAt: 1_000,
+        fired: false,
+        tries: 0,
+        ...over,
+    });
+    const runWith = async (record: HeldRecord): Promise<void> => {
+        const check = checkNamed("held-limit-turns-are-kept-for-a-restart", {
+            agents: registryOf({ c1: false }),
+            conversations: { ...actorsOf({}), state: () => ({ ...idleConversation(), resume: { ...idleConversation().resume, held: record } }) },
+            agentWorktrees: SETTLED,
+            live: () => [],
+            now: () => NOW,
+        });
+        await check.run({ moment: "turn-settled", fail });
+    };
+
+    it("passes a hold the entry keeps, a hold of another wall, and a fired one", async () => {
+        await runWith(held(20));
+        await runWith(held(21, { reason: "stopped" }));
+        await runWith(held(21, { fired: true }));
+    });
+
+    it("names a hold the schema refuses, and why", async () => {
+        await expect(runWith(held(21))).rejects.toThrow(/c1 \(input\.attachments: /);
+    });
 });

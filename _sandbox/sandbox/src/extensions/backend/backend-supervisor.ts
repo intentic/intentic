@@ -114,6 +114,9 @@ const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
 // How often every running backend is asked how it is; the first ask follows the host becoming healthy at once.
 const HEALTH_SWEEP_MS = 30_000;
+// What a host's key reads once a reload it was sent went unanswered or refused: no set of backends hashes to it, so the
+// next converge never takes that host for one already running what it wants.
+const UNKNOWN_HOST_KEY = "unknown";
 const RESTART_DEBOUNCE_MS = 300;
 const BACKOFF_START_MS = 1_000;
 const BACKOFF_CAP_MS = 30_000;
@@ -394,6 +397,8 @@ export const createExtensionBackend = (
         }
     };
     let sweep: NodeJS.Timeout | undefined;
+    // The in-place reload in flight, if any, settling once what the host runs is recorded.
+    let reloadLanding: Promise<unknown> | undefined;
 
     // The in-place half of a converge: `done` when the running host took the new set, `superseded` when a later converge
     // started meanwhile, `restart` when it could not or would not, which the caller answers by replacing the host.
@@ -407,16 +412,36 @@ export const createExtensionBackend = (
         if (spawned === undefined || state.state !== "running" || collected.runnable.length === 0 || !reloadableTo(spawned, workspaceRoot, collected.runnable)) {
             return "restart";
         }
-        const statuses = await reloadInPlace(spawned, collected.runnable);
+        // What the host runs is recorded as the reload lands, whether or not this converge is still wanted by then: the
+        // host applies a reload it was sent either way, and the converge that superseded this one waits for this landing
+        // before it compares against the host.
+        const landing = (async (): Promise<readonly BackendExtensionStatus[] | undefined> => {
+            const statuses = await reloadInPlace(spawned, collected.runnable);
+            if (host === spawned) {
+                if (statuses === undefined) {
+                    // Refused or unanswered, the host runs something nobody can name: no converge may read it as
+                    // already running what it wants.
+                    spawned.key = UNKNOWN_HOST_KEY;
+                } else {
+                    spawned.key = key;
+                    spawned.runnable = collected.runnable;
+                    hostStatuses = statuses;
+                }
+            }
+            return statuses;
+        })();
+        reloadLanding = landing;
+        const statuses = await landing.finally(() => {
+            if (reloadLanding === landing) {
+                reloadLanding = undefined;
+            }
+        });
         if (signal.aborted) {
             return "superseded";
         }
         if (statuses === undefined || host !== spawned) {
             return "restart";
         }
-        spawned.key = key;
-        spawned.runnable = collected.runnable;
-        hostStatuses = statuses;
         state = { state: "running", extensions: [...statuses, ...collected.reported] };
         void sweepHealth();
         return "done";
@@ -435,6 +460,12 @@ export const createExtensionBackend = (
                 state = { state: "error", detail: errorMessage(error), extensions: [] };
             }
             return;
+        }
+        // A reload a superseded converge already sent lands on the host whatever happens to that converge: waited for,
+        // so the host is compared as it will be rather than as it was.
+        const pending = reloadLanding;
+        if (pending !== undefined && !signal.aborted) {
+            await pending;
         }
         if (signal.aborted) {
             return;

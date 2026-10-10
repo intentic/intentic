@@ -33,6 +33,14 @@ describe(`summarizeOrigins`, () => {
         expect(summarizeOrigins(repos)).toEqual({ agents: [{ id: `agent-1`, files: 1 }], yours: 0 });
     });
 
+    // The daemon's origin scope claims a rename through either leg; counting by the new path alone made the legend call
+    // it the owner's while the agent's discard took it.
+    test(`a file renamed out of an agent's landing counts for that agent, not for you`, () => {
+        const repos = [repo(`root`, { staged: [{ path: `helpers.ts`, from: `util.ts`, status: `renamed` }], origins: { "util.ts": [`agent-1`] } })];
+        expect(summarizeOrigins(repos)).toEqual({ agents: [{ id: `agent-1`, files: 1 }], yours: 0 });
+        expect(originsOf(repos[0]!, repos[0]!.staged[0]!)).toEqual([`agent-1`]);
+    });
+
     test(`a file two agents landed counts for both`, () => {
         const repos = [repo(`root`, { unstaged: [change(`a.ts`)], origins: { "a.ts": [`agent-2`, `agent-1`] } })];
         expect(summarizeOrigins(repos)).toEqual({

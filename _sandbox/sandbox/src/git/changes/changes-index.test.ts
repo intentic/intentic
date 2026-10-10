@@ -1,5 +1,5 @@
 import type { GitRunner } from "@intentic/base/git";
-import { discardPaths, unstagePaths } from "./changes-index.js";
+import { chunkPaths, discardPaths, unstagePaths } from "./changes-index.js";
 import { headSha } from "./changes.js";
 
 // Only an answer from git may read as "no HEAD"; the unborn spelling of discard untracks the tree and cleans it.
@@ -47,4 +47,23 @@ test("an unborn HEAD still takes the unborn spelling", async () => {
     const { git, verbs } = gitWithHead(exited(1));
     await discardPaths("/repo", undefined, git);
     expect(verbs).toEqual(["rm -r -q --cached --ignore-unmatch -- .", "clean -q -f -f -d"]);
+});
+
+test("paths are split into runs that each fit one command line, in order and losing nothing", () => {
+    // 40 KiB per path; three of five exceed the ~96 KiB budget this splits on.
+    const long = Array.from({ length: 5 }, (_, index) => `${index}/${"p".repeat(40 * 1024)}`);
+    const chunks = chunkPaths(long);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.flat()).toEqual(long);
+    for (const chunk of chunks) {
+        expect(chunk.reduce((total, path) => total + Buffer.byteLength(path, "utf8") + 1, 0)).toBeLessThanOrEqual(96 * 1024);
+    }
+    // An ordinary short list must stay one call, not one process per path.
+    expect(chunkPaths(["a.ts", "b.ts"])).toEqual([["a.ts", "b.ts"]]);
+    expect(chunkPaths([])).toEqual([]);
+});
+
+test("a single path past the budget still gets a call of its own rather than being dropped", () => {
+    const huge = "x".repeat(200 * 1024);
+    expect(chunkPaths([huge, "a.ts"])).toEqual([[huge], ["a.ts"]]);
 });

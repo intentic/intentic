@@ -8,7 +8,10 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService, type CursorHookShield } from "./cursor-hooks.js";
-import { shieldedCommand, unshieldedCommand } from "./cursor-hook-script.js";
+import { unshieldedCommand } from "./cursor-hook-script.js";
+import { cursorHookShield } from "./cursor-shield.js";
+import { pesel } from "../../privacy/detect/tests/ids.testing.js";
+import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 // Cursor's turn hooks end to end: the generated script runs as a real child process, not a stub. Cursor itself reading
 // /etc/cursor/hooks.json is the one part no test here can drive; the file's content is pinned instead.
@@ -314,8 +317,9 @@ test("retiring an older registration preserves the replacement turn's gate", asy
 const SECRET = "SECRET-VALUE";
 const TOKEN = "\u27e6NATIONAL_ID_1\u27e7";
 const standInShield = (calls: string[] = []): CursorHookShield => ({
-    read: async ({ path, content, image }) => {
-        calls.push(`read ${path} ${image === undefined ? "text" : `image:${image.length}`}`);
+    read: async ({ path, content, image, document, opaque }) => {
+        const kind = image !== undefined ? `image:${image.length}` : document !== undefined ? `document:${document.length}` : opaque === true ? "opaque" : "text";
+        calls.push(`read ${path} ${kind}`);
         return content?.includes(SECRET) === true ? `${path} holds personal data.` : undefined;
     },
     toolCall: async ({ tool, input, existing }) => {
@@ -329,6 +333,17 @@ const standInShield = (calls: string[] = []): CursorHookShield => ({
     shellOutput: async (output) => output.replaceAll(SECRET, TOKEN),
     edited: (content) => (content.includes(TOKEN) ? content.replaceAll(TOKEN, SECRET) : undefined),
 });
+
+// A minimal PDF whose one page shows the text, the way an invoice or a contract does.
+const pdfShowing = (text: string): Buffer => {
+    const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+    return Buffer.from(
+        `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n` +
+            `3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n` +
+            `4 0 obj<</Length ${stream.length}>>stream\n${stream}\nendstream endobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`,
+    );
+};
+const PNG_BYTES = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
 
 // Runs a hook mode with no JSON answer expected (edited) or a raw command line (a wrapped shell command), as Cursor would.
 const runScript = async (args: readonly string[], stdin?: string): Promise<{ stdout: string; code: number | null }> => {
@@ -369,6 +384,61 @@ describe("the privacy shield's hooks", () => {
         expect(calls).toEqual([`read ${picture} image:4`]);
     });
 
+    // Cursor's read tool sends a PDF (by extension) and a picture (by its signature, whatever its name) to its model as
+    // bytes, and tells the read hook content "". The script hands those bytes over, and marks any other file Cursor
+    // read that way (a video) opaque; an empty file goes as it is.
+    test("a read Cursor hands over as bytes is read by the script: a PDF, a picture by its signature, anything else opaque", async () => {
+        const { service: hooks, dir } = await started();
+        const calls: string[] = [];
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield(calls) });
+        const files = {
+            pdf: join(dir, "contract.pdf"),
+            sniffed: join(dir, "scan.jfif"),
+            video: join(dir, "call.mp4"),
+            empty: join(dir, "empty.txt"),
+        };
+        writeFileSync(files.pdf, pdfShowing("hello"));
+        writeFileSync(files.sniffed, PNG_BYTES);
+        writeFileSync(files.video, Buffer.from([0, 0, 0, 24, 102, 116, 121, 112]));
+        writeFileSync(files.empty, "");
+        for (const path of Object.values(files)) {
+            await askHook(dir, "read", { conversation_id: "agent-1", file_path: path, content: "" });
+        }
+        await askHook(dir, "read", { conversation_id: "agent-1", file_path: join(dir, "gone.bin"), content: "" });
+        expect(calls).toEqual([
+            `read ${files.pdf} document:${pdfShowing("hello").length}`,
+            `read ${files.sniffed} image:${PNG_BYTES.length}`,
+            `read ${files.video} opaque`,
+            `read ${files.empty} text`,
+            `read ${join(dir, "gone.bin")} opaque`,
+        ]);
+    });
+
+    // End to end over the real shield, with no local reader installed: what can't be checked is refused.
+    test("a PDF or a sniffed picture holding what can't be checked is refused on a shielded turn, like the same text", async () => {
+        const { service: hooks, dir } = await started();
+        const NUMBER = pesel(1985, 3, 14, 4562);
+        const privacy = await privacySliceFake({ policy: { mode: "on" } }).privacyShield.forTurn("cursor", "native", "c-1");
+        if (privacy === undefined) {
+            throw new Error("no shield");
+        }
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: cursorHookShield(privacy) });
+        const text = join(dir, "contract.txt");
+        writeFileSync(text, `PESEL ${NUMBER}`);
+        const pdf = join(dir, "contract.pdf");
+        writeFileSync(pdf, pdfShowing(`PESEL ${NUMBER}`));
+        const png = join(dir, "scan.png");
+        writeFileSync(png, PNG_BYTES);
+        const sniffed = join(dir, "scan.jfif");
+        writeFileSync(sniffed, PNG_BYTES);
+        const verdict = (path: string, content: string): Promise<unknown> => askHook(dir, "read", { conversation_id: "agent-1", file_path: path, content });
+
+        expect(await verdict(text, `PESEL ${NUMBER}`)).toMatchObject({ permission: "deny" });
+        expect(await verdict(png, "")).toMatchObject({ permission: "deny" });
+        expect(await verdict(pdf, "")).toMatchObject({ permission: "deny", user_message: expect.stringContaining("is a document") });
+        expect(await verdict(sniffed, "")).toMatchObject({ permission: "deny", user_message: expect.stringContaining("is a picture") });
+    }, 30_000);
+
     test("a refused tool is denied in both messages, and a tool's input comes back with its tokens read back", async () => {
         const { service: hooks, dir } = await started();
         hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
@@ -405,7 +475,8 @@ describe("the privacy shield's hooks", () => {
         expect(answer.updated_input.cwd).toBe(dir);
         const wrapped = answer.updated_input.command;
         expect(wrapped).not.toContain(SECRET);
-        expect(unshieldedCommand(wrapped)).toBe(`echo "id ${SECRET}"; echo oops >&2; exit 3`);
+        // What shows the call reads the command as the model wrote it.
+        expect(unshieldedCommand(wrapped)).toBe(`echo "id ${TOKEN}"; echo oops >&2; exit 3`);
         // Run as Cursor's shell would run it: the real value goes into the command, its echo comes back as the token,
         // stderr folded in where it was printed.
         const run = await new Promise<{ stdout: string; code: number | null }>((settle) => {
@@ -416,6 +487,57 @@ describe("the privacy shield's hooks", () => {
         });
         expect(run.stdout).toBe(`id ${TOKEN}\noops\n`);
         expect(run.code).toBe(3);
+    });
+
+    // A line too long to wait for (minified JSON, a CSV with no newlines) is cut before its end; a value the pipe's read
+    // split must still be masked whole, so the cut falls in a gap well before where the read ended.
+    describe("a long output line, cut while the command runs", () => {
+        const NUMBER = pesel(1985, 3, 14, 4562);
+        const shieldedTurn = async (): Promise<string> => {
+            const { service: hooks, dir } = await started();
+            const privacy = await privacySliceFake({ policy: { mode: "on" } }).privacyShield.forTurn("cursor", "native", "c-1");
+            if (privacy === undefined) {
+                throw new Error("no shield");
+            }
+            hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: cursorHookShield(privacy) });
+            return dir;
+        };
+        const runWrapped = async (dir: string, command: string): Promise<string> => {
+            const answer = (await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Shell", tool_input: { command } })) as {
+                updated_input: { command: string };
+            };
+            return new Promise((settle) => {
+                const child = execFile("/bin/sh", ["-c", answer.updated_input.command], { maxBuffer: 16 * 1024 * 1024 });
+                let stdout = "";
+                child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+                child.on("close", () => settle(stdout));
+            });
+        };
+
+        test("masks a value the first 64 KiB read ends inside, with no gap before it to cut at", async () => {
+            const dir = await shieldedTurn();
+            const short = await runWrapped(dir, `printf 'PESEL ${NUMBER} ok\\n'`);
+            expect(short).not.toContain(NUMBER);
+            expect(short).toContain("NATIONAL_ID");
+            // The first pipe read ends five digits into the number.
+            const pad = 65536 - 1 - 5;
+            const long = await runWrapped(dir, `node -e "process.stdout.write('x'.repeat(${pad}) + ' ${NUMBER} tail\\n')"`);
+            expect(long.length).toBeGreaterThan(pad);
+            expect(long).not.toContain(NUMBER);
+            expect(long.endsWith(" tail\n")).toBe(true);
+        }, 30_000);
+
+        test("masks every value of a line many cuts long, and loses nothing between the cuts", async () => {
+            const dir = await shieldedTurn();
+            const row = `{"note":"klient prosi o kontakt","pesel":"${NUMBER}","ok":true},`;
+            const script = join(dir, "long-line.cjs");
+            writeFileSync(script, `process.stdout.write(${JSON.stringify(row)}.repeat(4000) + "\\n");`);
+            const out = await runWrapped(dir, `node ${script}`);
+            expect(out).not.toContain(NUMBER);
+            const masked = out.split("},").filter((part) => part !== "\n");
+            expect(masked).toHaveLength(4000);
+            expect(masked.every((part) => part.includes("NATIONAL_ID"))).toBe(true);
+        }, 30_000);
     });
 
     test("the command gate reads what the model asked for, not the shield's wrapper", async () => {
@@ -430,23 +552,85 @@ describe("the privacy shield's hooks", () => {
             },
         };
         hooks.register({ conversationId: "agent-1", gate: recording, push: () => {}, shield: standInShield() });
-        const wrapped = shieldedCommand(join(dir, "intentic-command-guard.mjs"), "agent-1", "rm -rf build");
-        await askGate(dir, { command: wrapped, conversation_id: "agent-1", cwd: WORKSPACE_ROOT });
-        expect(consulted).toEqual(["rm -rf build"]);
+        const answer = (await askHook(dir, "pre-tool", {
+            conversation_id: "agent-1",
+            tool_name: "Shell",
+            tool_input: { command: `rm -rf build/${TOKEN}` },
+        })) as { updated_input: { command: string } };
+        await askGate(dir, { command: answer.updated_input.command, conversation_id: "agent-1", cwd: WORKSPACE_ROOT });
+        // The command that will run, with its values: the rules judge what runs.
+        expect(consulted).toEqual([`rm -rf build/${SECRET}`]);
     });
 
-    test("output that outlives its turn is withheld, and a daemon that is gone withholds the rest", async () => {
+    // Cursor writes the wrapper into the call's own arguments and sends it back to its servers with the shell's result
+    // (@cursor/sdk executeWithPolicy: `command: t.command`), so the wrapper holds no real value, not even encoded: the
+    // script fetches the command with its values from the daemon, once, by an id.
+    test("the wrapper Cursor records carries no real value, and the command it stands for runs once", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        const answer = (await askHook(dir, "pre-tool", {
+            conversation_id: "agent-1",
+            tool_name: "Shell",
+            tool_input: { command: `echo "${TOKEN}"`, cwd: dir },
+        })) as { updated_input: { command: string; cwd: string } };
+        const wrapped = answer.updated_input.command;
+        const decoded = [...wrapped.matchAll(/[A-Za-z0-9+/=]{16,}/gu)].map((match) => Buffer.from(match[0], "base64").toString("utf8")).join(" ");
+        expect(`${wrapped} ${decoded}`).not.toContain(SECRET);
+        const run = (): Promise<{ stdout: string; code: number | null }> =>
+            new Promise((settle) => {
+                const child = execFile("/bin/sh", ["-c", wrapped]);
+                let stdout = "";
+                child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+                child.on("close", (code) => settle({ stdout, code }));
+            });
+        expect(await run()).toEqual({ stdout: `${TOKEN}\n`, code: 0 });
+        const again = await run();
+        expect(again.stdout).toContain("no longer holds this command");
+        expect(again.code).toBe(1);
+    });
+
+    test("a working directory whose token was read back stays out of Cursor's arguments, and the command runs in it", async () => {
+        const { service: hooks, dir } = await started();
+        hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        const real = mkdtempSync(join(dir, `${SECRET}-`));
+        const answer = (await askHook(dir, "pre-tool", {
+            conversation_id: "agent-1",
+            tool_name: "Shell",
+            tool_input: { command: "pwd", cwd: real.replace(SECRET, TOKEN) },
+        })) as { updated_input: { command: string; cwd: string } };
+        expect(JSON.stringify(answer)).not.toContain(SECRET);
+        const out = await new Promise<string>((settle) => {
+            const child = execFile("/bin/sh", ["-c", answer.updated_input.command], { cwd: answer.updated_input.cwd });
+            let stdout = "";
+            child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+            child.on("close", () => settle(stdout));
+        });
+        expect(out).toBe(`${real.replace(SECRET, TOKEN)}\n`);
+    });
+
+    test("a command that outlives its turn is not run, and one the daemon can't hand over is not run either", async () => {
         const { service: hooks, dir } = await started();
         const script = join(dir, "intentic-command-guard.mjs");
-        const orphaned = await runScript([script, "shield", "agent-gone", Buffer.from(`echo ${SECRET}`).toString("base64")]);
-        expect(orphaned.stdout).toContain("the turn that ran this command has ended");
-        expect(orphaned.stdout).not.toContain(SECRET);
+        const retire = hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {}, shield: standInShield() });
+        const answer = (await askHook(dir, "pre-tool", {
+            conversation_id: "agent-1",
+            tool_name: "Shell",
+            tool_input: { command: `echo ${TOKEN}` },
+        })) as { updated_input: { command: string } };
+        retire();
+        const orphaned = await new Promise<{ stdout: string; code: number | null }>((settle) => {
+            const child = execFile("/bin/sh", ["-c", answer.updated_input.command]);
+            let stdout = "";
+            child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+            child.on("close", (code) => settle({ stdout, code }));
+        });
+        expect(orphaned.stdout).toContain("no longer holds this command");
+        expect(orphaned.code).toBe(1);
         await hooks.close();
         service = undefined;
-        const unreachable = await runScript([script, "shield", "agent-1", Buffer.from(`echo ${SECRET}; exit 4`).toString("base64")]);
-        expect(unreachable.stdout).toContain("withheld");
-        expect(unreachable.stdout).not.toContain(SECRET);
-        expect(unreachable.code).toBe(4);
+        const unreachable = await runScript([script, "shield", "agent-1", "some-id", Buffer.from("echo hi").toString("base64")]);
+        expect(unreachable.stdout).toContain("could not be reached");
+        expect(unreachable.code).toBe(1);
     });
 
     test("an edit whose new lines carry tokens is written back with their values, and nothing is answered", async () => {

@@ -42,6 +42,27 @@ describe("a file Cursor's read tool opens", () => {
         expect(refusal).toContain("shaped like the privacy shield's tokens");
     });
 
+    test("is refused as a PDF holding personal data, one the shield can't read, or a file it can't check at all", async () => {
+        const reading = await privacySliceFake({
+            policy: { mode: "on" },
+            readers: { ocr: async () => false, readImage: async () => undefined, readPdf: async (data) => (data.toString() === "clean" ? "Invoice" : `PESEL ${NUMBER}`) },
+        }).privacyShield.forTurn("cursor", "native", "c-1");
+        if (reading === undefined) {
+            throw new Error("no shield");
+        }
+        const shield = cursorHookShield(reading);
+        expect(await shield.read({ path: "contract.pdf", content: "", image: undefined, document: Buffer.from("pdf") })).toContain(
+            "contract.pdf is a document holding personal data (national identity numbers)",
+        );
+        expect(await shield.read({ path: "invoice.pdf", content: "", image: undefined, document: Buffer.from("clean") })).toBeUndefined();
+        expect(await shield.read({ path: "huge.pdf", content: "", image: undefined, document: Buffer.alloc(0) })).toContain("could not read on this machine");
+        const unread = cursorHookShield(await shieldFor());
+        expect(await unread.read({ path: "scan.pdf", content: "", image: undefined, document: Buffer.from("pdf") })).toContain("could not read on this machine");
+        expect(await unread.read({ path: "call.mp4", content: "", image: undefined, opaque: true })).toContain("cannot check for personal data");
+        // While the shield only watches, nothing is refused.
+        expect(await cursorHookShield(await shieldFor("watch")).read({ path: "call.mp4", content: "", image: undefined, opaque: true })).toBeUndefined();
+    });
+
     test("is refused as a picture the shield can't read, or one too large to have been read", async () => {
         const shield = cursorHookShield(await shieldFor());
         expect(await shield.read({ path: "scan.png", content: undefined, image: Buffer.from("png") })).toContain("could not read on this machine");

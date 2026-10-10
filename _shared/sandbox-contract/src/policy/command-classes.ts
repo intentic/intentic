@@ -404,6 +404,23 @@ const findAndXargsDeletes = (command: string): CommandSpan[] => [
     ...spansOf([XARGS_RM], command),
 ];
 
+// The same tree delete in Windows' own shells, which is what a device's run_command runs there: PowerShell's
+// Remove-Item (and its aliases) with -Recurse, which it answers without asking, and cmd's rd/rmdir /s and del /s. Only
+// PowerShell's own names are read with a bare -r (any prefix of -Recurse, which PowerShell accepts), since `rm -r` is
+// also POSIX rm, whose bare -r asks before anything write-protected and is left to the rm rule above. And .NET's
+// Directory.Delete(path, true), the same delete from a script.
+const POWERSHELL_RECURSE = String.raw`\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?::\$true)?(?![\w-])`;
+const WINDOWS_RECURSIVE_DELETES = [
+    new RegExp(String.raw`(?<![\w-])(?:Remove-Item|ri|rd|rmdir|del|erase)\b[^|;&\n]*?${POWERSHELL_RECURSE}`, "i"),
+    new RegExp(String.raw`(?<![\w-])rm\b[^|;&\n]*?\s-recurse(?![\w-])`, "i"),
+    /(?<![\w-])(?:rd|rmdir|del|erase)\b[^|;&\n]*?\s\/s\b/i,
+    /\[(?:System\.)?IO\.Directory\]::Delete\s*\([^)]*,\s*\$true\s*\)/i,
+];
+const windowsDeletes = (command: string): CommandSpan[] => spansOf(globally(WINDOWS_RECURSIVE_DELETES), command);
+
+// A disk wiped by Windows' own tools: a volume formatted, a disk cleared, from PowerShell or cmd.
+const WINDOWS_DISK_WIPES = [/(?<![\w-])(?:Format-Volume|Clear-Disk)\b/i, /(?<![\w-])format(?:\.com)?\s+[A-Za-z]:/i];
+
 // What cuts a checkout off from its repository's history: deleting its `.git` (for a worktree, a one-line pointer
 // whose loss strands every commit the checkout was reading), or `git init` over the folder it stands in, which makes
 // a standalone repository sharing nothing with the one it came from. A `git init <new-dir>` for a new project is not
@@ -500,8 +517,17 @@ const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandC
     "git.destructive": (command) => [...spansOf(GIT_DESTRUCTIVE_G, command), ...checkoutUnlinks(command)],
     // The only class that can answer "not here": in its own copy a conversation's checkout is its own to move.
     "git.branch-switch": (command, context) => (context.ownCheckout === true ? [] : spansOf(GIT_BRANCH_SWITCH_G, command)),
-    "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command), ...findAndXargsDeletes(command)],
-    "system.destructive": (command, context) => [...spansOf(BLOCK_DEVICE_G, command), ...rootDeletes(command, context.locus)],
+    "files.destructive": (command) => [
+        ...recursiveForceRms(command),
+        ...recursiveDeletes(command),
+        ...findAndXargsDeletes(command),
+        ...windowsDeletes(command),
+    ],
+    "system.destructive": (command, context) => [
+        ...spansOf(BLOCK_DEVICE_G, command),
+        ...spansOf(globally(WINDOWS_DISK_WIPES), command),
+        ...rootDeletes(command, context.locus),
+    ],
     "container.state": (command) => spansOf(CONTAINER_STATE_G, command),
     "secrets.access": credentialReads,
     "package.publish": (command) => spansOf(PACKAGE_PUBLISH_G, command),
@@ -565,6 +591,9 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "rimraf(<path>)" },
         { code: "find <path> -delete", qualifier: "also -exec rm and -execdir rm" },
         { code: "xargs rm" },
+        { code: "Remove-Item -Recurse <path>", qualifier: "also its aliases ri, rd, rmdir, del, erase, and rm -Recurse" },
+        { code: "rd /s <path>", qualifier: "also rmdir /s and del /s" },
+        { code: "[IO.Directory]::Delete(<path>, $true)" },
     ],
     "system.destructive": [
         { code: "mkfs" },
@@ -574,6 +603,7 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "dd of=/dev/…" },
         { code: "shred /dev/…" },
         { code: "> /dev/sda" },
+        { code: "Format-Volume", qualifier: "also Clear-Disk, and format C:" },
         { code: "rm -rf /", qualifier: "also find / -delete; only when the target is a root, listed below" },
     ],
     "container.state": [

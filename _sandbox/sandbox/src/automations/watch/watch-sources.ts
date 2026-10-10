@@ -1,3 +1,4 @@
+import { Script, createContext } from "node:vm";
 import type { WatchSource } from "@intentic/sandbox-contract";
 import { maxSatisfying, validRange } from "semver";
 
@@ -170,6 +171,27 @@ export const pageText = (html: string): string =>
         .replace(/\s+/g, " ")
         .trim();
 
+// How long one `select` pattern may run against a page. A pattern that backtracks (`(a+)+$`) on a page that feeds it
+// takes exponential time, and on the daemon's own thread that is every conversation frozen, so it is stopped instead.
+const SELECT_TIMEOUT_MS = 1_000;
+const selectRun = new Script("match = pattern.exec(text)");
+
+// The pattern's first match on the page, or "timeout" when it would not finish in time. Run inside a context of its own
+// only for the deadline, which V8 enforces even mid-backtrack; the pattern and page are plain values, nothing escapes.
+const boundedMatch = (pattern: string, text: string): RegExpExecArray | null | "timeout" => {
+    const scope: { pattern: RegExp; text: string; match: RegExpExecArray | null } = { pattern: new RegExp(pattern), text, match: null };
+    const context = createContext(scope);
+    try {
+        selectRun.runInContext(context, { timeout: SELECT_TIMEOUT_MS });
+    } catch (error) {
+        if ((error as { code?: unknown }).code === "ERR_SCRIPT_EXECUTION_TIMEOUT") {
+            return "timeout";
+        }
+        throw error;
+    }
+    return scope.match;
+};
+
 const checkUrl = async (source: Extract<WatchSource, { kind: "url" }>, context: SourceContext): Promise<SourceCheck> => {
     const response = await timed(context, source.url, { accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5" });
     if (typeof response === "string") {
@@ -184,7 +206,13 @@ const checkUrl = async (source: Extract<WatchSource, { kind: "url" }>, context: 
         return { pass: true, output: html ? pageText(body) : body.trim() };
     }
     // Matched against the page as served, so a pattern can anchor on markup; its first group when it has one.
-    const match = new RegExp(source.select).exec(body);
+    const match = boundedMatch(source.select, body);
+    if (match === "timeout") {
+        return {
+            pass: false,
+            detail: `matching ${source.select} against the page took longer than ${SELECT_TIMEOUT_MS / 1_000}s, so it was stopped: simplify the pattern`,
+        };
+    }
     if (match === null) {
         return { pass: false, detail: `nothing on the page matches ${source.select}` };
     }

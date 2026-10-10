@@ -252,13 +252,20 @@ export const withDeadline = async <T>(
     const cut = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
             const error = new TimeoutError(options?.message ?? `timed out after ${ms}ms`);
-            deadline.abort(error);
+            // Settled before the work is told to stop: work that rejects on its signal's abort does so synchronously,
+            // and must not beat the deadline's own TimeoutError to the race.
             reject(error);
+            deadline.abort(error);
         }, ms);
         unsubscribe = whenAborted(options?.signal, () => reject(options?.signal?.reason));
     });
+    // Heard here too, so a stop that lands while the work is still being started leaves no rejection unhandled.
+    cut.catch(() => {});
+    // A task that throws before returning its promise is a rejection like any other, not a throw past the race.
+    const work = (async (): Promise<T> => task(signal))();
     try {
-        return await Promise.race([task(signal), cut]);
+        // `cut` first: when both have already settled (a caller stopped before it started), the stop is the answer.
+        return await Promise.race([cut, work]);
     } finally {
         clearTimeout(timer);
         unsubscribe();

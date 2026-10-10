@@ -7903,6 +7903,9 @@
             },
             "qualifiers": {
                 "alsoExecRm": "also -exec rm and -execdir rm",
+                "alsoRemoveItemAliases": "also its aliases ri, rd, rmdir, del, erase, and rm -Recurse",
+                "alsoRmdirS": "also rmdir /s and del /s",
+                "alsoClearDisk": "also Clear-Disk, and format C:",
                 "alsoFindDelete": "also find / -delete; only when the target is a root, listed below",
                 "alsoForceWithLease": "also -f and --force-with-lease",
                 "alsoNetcat": "also ncat, netcat, telnet, ftp and ssh",

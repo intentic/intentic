@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import {
+    DISCARDABLE_SIDES,
+    discardOutcome,
     isScratch,
+    scopedPaths,
     type GitChange,
     type GitDiffSide,
     type LandedMessage,
@@ -143,6 +146,11 @@ watch(
     { immediate: true },
 );
 
+// The chip row earns its place once an agent has files to tell apart from the owner's, and stays while "You" is lit
+// with files left, so the chip that lit it is there to clear it (and take back its staging) after the last agent's
+// work leaves the tree; an agent's lit chip retires above as its files do.
+const chipRowShown = computed(() => legend.value.agents.length > 0 || (originFilter.value === YOURS && legend.value.yours > 0));
+
 // Resolves an id via the live fleet card first (repaints on a rename instantly), then the review's own
 // `originAgents`, which survives archiving. An id-shaped fallback still draws a chip rather than reattributing the file
 // to the user.
@@ -183,28 +191,26 @@ const originMessage = (id: string): string | undefined => commitMessageOf(landed
 // rows may be that origin's.
 const originTargets = (id: string, side: GitDiffSide): readonly RepoTarget[] =>
     scannable.value
-        .filter((repo) => truncatedTotal(repo) > 0 || ALL_SIDES.some((held) => repo[held].some((change) => isFrom(repo, change.path, id))))
+        .filter((repo) => truncatedTotal(repo) > 0 || ALL_SIDES.some((held) => repo[held].some((change) => isFrom(repo, change, id))))
         .map((repo) => ({ repo: repo.repo, scope: { side, origin: id } }));
 
-// A chip is the "+" on one origin's work, not a view over it. Lighting it stages that work, clearing it unstages that
-// work again, and moving to another chip swaps one for the other. Staging stays the only selection Commit reads, and
-// the Staged list shows exactly what the commit will take. The lit chip still narrows the list and names the commit,
-// recorded outside this component (nameCommitAfter) so the name holds after the panel closes. Conflicts are left
-// alone: staging one marks it resolved, which no chip should do for the owner.
+// A chip is the "+" on one origin's work, not a view over it. Lighting it stages that work, clearing it takes back
+// exactly what lighting it staged, and moving to another chip swaps one for the other. The daemon remembers what each
+// path held before (GitIndexMove.chip), so a file staged by hand, a partial `git add -p` or a merge's own staged result
+// is as it was after one on/off; held there rather than here, so a reload or a second tab clears what the first lit.
+// Staging stays the only selection Commit reads, and the Staged list shows exactly what the commit will take. The lit
+// chip still narrows the list and names the commit, recorded outside this component (nameCommitAfter) so the name holds
+// after the panel closes. Conflicts are left alone: staging one marks it resolved, which no chip should do for the owner.
 const toggleOrigin = async (id: string): Promise<void> => {
     const was = originFilter.value;
     const next = was === id ? undefined : id;
     originFilter.value = next;
     nameCommitAfter(next === YOURS ? undefined : next);
-    // One after the other: the second batch would be dropped while the first holds the busy span.
-    const out = was === undefined ? [] : originTargets(was, `staged`);
-    if (out.length > 0) {
-        await changes.stageGroups(out, false);
-    }
-    const into = next === undefined ? [] : originTargets(next, `unstaged`);
-    if (into.length > 0) {
-        await changes.stageGroups(into, true);
-    }
+    // Clearing asks every listed repo, since the daemon alone knows where the chip staged; one with no memory of it
+    // answers with a no-op. Lighting asks only the repos holding that origin's work.
+    const clearing = was === undefined ? [] : scannable.value.map((repo) => repo.repo);
+    const lighting = next === undefined ? [] : originTargets(next, `unstaged`).map((target) => target.repo);
+    await changes.swapChip({ origin: was, repos: clearing }, { origin: next, repos: lighting });
 };
 
 // Computed, not read at the click: recomputes as the review updates, so a message drafted seconds after
@@ -286,13 +292,13 @@ const chipNotice = computed<string | undefined>(() =>
 );
 
 const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
-    return originFilter.value === undefined || isFrom(repo, change.path, originFilter.value);
+    return originFilter.value === undefined || isFrom(repo, change, originFilter.value);
 };
 
 // Quiet when the row's only origin is the lit chip (already said by the filter); a file two agents landed
 // still shows both, since that's information the filter alone doesn't give.
-const showRowOrigins = (repo: RepoChanges, path: string): boolean => {
-    const ids = originsOf(repo, path);
+const showRowOrigins = (repo: RepoChanges, change: GitChange): boolean => {
+    const ids = originsOf(repo, change);
     if (ids.length === 0) {
         return false;
     }
@@ -611,14 +617,20 @@ const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((re
 const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
 
 const runCommit = async (target: readonly RepoTarget[]): Promise<void> => {
-    await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
-    // Keeps the message on failure — it's the one thing here the user typed by hand.
-    if (!changes.failures.value.has(COMMIT_SCOPE)) {
-        commitMessage.value = ``;
-        // Ends the naming ask with the commit that fulfilled it, or a message still being drafted would fill the NEXT
-        // commit's box.
-        nameCommitAfter(undefined);
+    const recorded = await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
+    // Keeps the message on failure — it's the one thing here the user typed by hand — and when no repo recorded
+    // anything (a "Commit all" over nothing but scratch stages nothing), saying so where a refused press would.
+    if (changes.failures.value.has(COMMIT_SCOPE)) {
+        return;
     }
+    if (!recorded) {
+        blockerNotice.value = t(`workspace.reviewPanel.nothingToCommit`);
+        return;
+    }
+    commitMessage.value = ``;
+    // Ends the naming ask with the commit that fulfilled it, or a message still being drafted would fill the NEXT
+    // commit's box.
+    nameCommitAfter(undefined);
 };
 // Ctrl+Enter reaches this too, so a silently-ignored chord just gets retried harder; this names which of the
 // three reasons applied instead.
@@ -783,21 +795,24 @@ interface DiscardTarget {
 }
 const pendingDiscard = ref<DiscardTarget | undefined>(undefined);
 
-// "added" on the unstaged side means untracked — a tracked file can never report added there, so this is exact.
-const untrackedIn = (repo: string): ReadonlySet<string> =>
-    new Set(
-        scannable.value
-            .find((candidate) => candidate.repo === repo)
-            ?.unstaged.filter((change) => change.status === `added`)
-            .map((change) => change.path) ?? [],
-    );
+// What discarding a selection does, read as the daemon's discard reads it: a staged rename picked by either leg takes
+// both, and a path the last commit does not hold (untracked, newly added, a rename's new leg) leaves the disk.
+const selectionOutcome = (group: RepoTarget): { readonly deletes: readonly string[]; readonly restores: number } => {
+    const repo = scannable.value.find((candidate) => candidate.repo === group.repo);
+    if (repo === undefined) {
+        return { deletes: [], restores: group.paths?.length ?? 0 };
+    }
+    const picked = new Set(group.paths ?? []);
+    const legs = repo.staged.flatMap((change) => (change.from !== undefined && picked.has(change.path) ? [change.from] : []));
+    const { deletes, restores } = discardOutcome(repo, [...picked, ...legs]);
+    return { deletes: deletes.map((path) => (group.repo === `root` ? path : `${group.repo}/${path}`)), restores: restores.length };
+};
 
 const askDiscardRow = (row: Row, change: GitChange): void => {
     const groups = byRepo(actingRows(row, false));
-    const deletes = groups.flatMap((group) => {
-        const untracked = untrackedIn(group.repo);
-        return (group.paths ?? []).filter((path) => untracked.has(path)).map((path) => (group.repo === `root` ? path : `${group.repo}/${path}`));
-    });
+    const outcomes = groups.map(selectionOutcome);
+    const deletes = outcomes.flatMap((outcome) => outcome.deletes);
+    const restores = outcomes.reduce((total, outcome) => total + outcome.restores, 0);
     // `byRepo` already deduped a path selected on both sides, so this counts worktree paths, not rows.
     const paths = groups.reduce((total, group) => total + (group.paths?.length ?? 0), 0);
     pendingDiscard.value = {
@@ -806,7 +821,7 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
                 ? t(`workspace.reviewPanel.discardSelected`, { count: paths }, paths)
                 : t(`workspace.reviewPanel.discard3`, { what: changeLabel(row.repo, change) }),
         deletes,
-        restores: paths - deletes.length,
+        restores,
         // A selection is exactly as long as the rows clicked, so it's never a floor.
         partial: false,
         groups,
@@ -838,20 +853,20 @@ const discardRepoQuestion = (repo: string, files: number, partial: boolean): str
 const discardable = (repo: RepoChanges): boolean =>
     originFilter.value === undefined || sidesOf(repo).some((section) => section.changes.some((change) => matchesFilter(repo, change)));
 
+// Resolved as the daemon resolves the scope it sends (the contract's scopedPaths and changeIsFrom over this repo's own
+// status), so the question lists exactly what the action touches: both legs of a rename the filter's origin landed
+// either leg of, the new leg named among the files that leave the disk.
 const askDiscardRepo = (repo: RepoChanges): void => {
-    // Distinct paths: a path staged and edited again is two rows but one file on disk, and this counts disk effect.
-    // Only the filter's own: the staged rows from other work it leaves on screen are not in the scope this discards.
-    const paths = new Set(
-        sidesOf(repo).flatMap((section) => section.changes.filter((change) => matchesFilter(repo, change)).map((change) => change.path)),
-    );
-    const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
+    const group = originFilter.value === undefined ? { repo: repo.repo } : scoped(repo.repo);
+    const paths = scopedPaths(repo, DISCARDABLE_SIDES, group.scope ?? {}, repo.origins ?? {});
+    const { deletes, restores } = discardOutcome(repo, paths);
     const partial = truncatedTotal(repo) > 0;
     pendingDiscard.value = {
-        question: discardRepoQuestion(repo.repo, paths.size, partial),
+        question: discardRepoQuestion(repo.repo, paths.length, partial),
         deletes,
-        restores: paths.size - deletes.length,
+        restores: restores.length,
         partial,
-        groups: [originFilter.value === undefined ? { repo: repo.repo } : scoped(repo.repo)],
+        groups: [group],
     };
 };
 
@@ -1298,7 +1313,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
              one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
-        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
+        <div v-if="chipRowShown" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
                  wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
@@ -1588,20 +1603,20 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                                         }}</span>
                                         <!-- Provider chips show before the file name when the panel has room. -->
                                         <span
-                                            v-if="showRowOrigins(group, change.path)"
+                                            v-if="showRowOrigins(group, change)"
                                             class="flex shrink-0 items-center gap-0.5"
-                                            @mouseenter="showOrigins($event, originsOf(group, change.path))"
+                                            @mouseenter="showOrigins($event, originsOf(group, change))"
                                             @mouseleave="hoverCard?.hide()"
                                         >
                                             <span
-                                                v-if="wide && originsOf(group, change.path).length === 1"
+                                                v-if="wide && originsOf(group, change).length === 1"
                                                 class="max-w-24 truncate text-2xs"
-                                                :class="originHue(originsOf(group, change.path)[0]!).text"
+                                                :class="originHue(originsOf(group, change)[0]!).text"
                                             >
-                                                {{ originLabel(originsOf(group, change.path)[0]!) }}
+                                                {{ originLabel(originsOf(group, change)[0]!) }}
                                             </span>
                                             <span
-                                                v-for="id in originsOf(group, change.path).slice(0, 2)"
+                                                v-for="id in originsOf(group, change).slice(0, 2)"
                                                 :key="id"
                                                 class="flex h-3.5 w-3.5 items-center justify-center rounded-full"
                                                 :class="originHue(id).chip"
@@ -1609,8 +1624,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                                                 <ProviderLogo v-if="originProvider(id)" :provider="originProvider(id)!" class="text-[0.55rem]" />
                                                 <Icon v-else name="sparkles" class="text-[0.55rem]" />
                                             </span>
-                                            <span v-if="originsOf(group, change.path).length > 2" class="text-2xs text-subtle">
-                                                +{{ originsOf(group, change.path).length - 2 }}
+                                            <span v-if="originsOf(group, change).length > 2" class="text-2xs text-subtle">
+                                                +{{ originsOf(group, change).length - 2 }}
                                             </span>
                                         </span>
                                         <!-- The `of` value scales the badge against the largest addition. -->

@@ -26,6 +26,9 @@ import {
     instructionRefusal,
     SHIELD_WITHHELD,
     shieldedCustomTools,
+    projectMcp,
+    shieldedSession,
+    UnmaskedMessage,
 } from "./cursor-shield.js";
 
 // Cursor provider adapter: same AgentRequest-in/AgentEvent-out seam as createCodexAgent/createOpenCodeAgent/runPiAgent,
@@ -56,6 +59,9 @@ const CURSOR_STALLED = "Cursor took the turn and then sent nothing at all; treat
 // SDK's exported error classes, not message text (which is not public API).
 const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorSdk>>): Promise<Extract<AgentEvent, { kind: "error" }>> => {
     const message = error instanceof Error && error.message !== "" ? error.message : "The Cursor turn failed.";
+    if (error instanceof UnmaskedMessage) {
+        return { kind: "error", message, code: "privacy-unshielded" };
+    }
     if (sdk === undefined) {
         return { kind: "error", message };
     }
@@ -125,25 +131,18 @@ const steerInto = async (
     channel: SteeringChannel,
     settled: () => boolean,
     logger: Logger,
-    // The words as the run may read them: masked while the privacy shield reads the turn. Words it could not mask are
-    // handed back rather than steered, and the follow-up they become is masked again before it is sent.
-    prepare: (text: string) => Promise<string>,
 ): Promise<readonly string[]> => {
     const handedBack: string[] = [];
     for await (const text of channel.steering) {
         const run = await started;
-        const sent = await prepare(text).catch((error: unknown) => {
-            logger.warn({ err: error }, "cursor: a steering message could not be masked, handing it back");
-            return undefined;
-        });
-        // A run that has already settled can take nothing, so it is not asked.
-        const outcome =
-            settled() || sent === undefined
-                ? undefined
-                : await run?.steer?.(sent).catch((error: unknown) => {
-                      logger.warn({ err: error }, "cursor: steering message rejected by the run");
-                      return undefined;
-                  });
+        // A run that has already settled can take nothing, so it is not asked. On a shielded turn the run masks what it
+        // is steered with (shieldedSession), and a message it could not mask is refused here and handed back.
+        const outcome = settled()
+            ? undefined
+            : await run?.steer?.(text).catch((error: unknown) => {
+                  logger.warn({ err: error }, "cursor: steering message rejected by the run");
+                  return undefined;
+              });
         if (outcome !== "complete_delivered") {
             handedBack.push(text);
         }
@@ -157,15 +156,22 @@ const CURSOR_HOOKS_MISSING =
     "The privacy shield could not read this turn: its hooks into Cursor are not installed in this sandbox, so Cursor's file reads and commands would go to Cursor unchecked. Restart the sandbox to reinstall them, or let Cursor read this conversation as it is.";
 
 // A shielded turn's opening (cursor-shield.ts): refused when the shield's hooks are not in place, or when the rules
-// Cursor loads itself hold personal data; otherwise the prompt and the instructions as the model may read them, masked
-// while the shield masks, with the note that tells the model what a token is and where its tools stand.
+// Cursor loads itself hold personal data; otherwise the instructions as the model may read them, masked while the
+// shield masks, with the note that tells the model what a token is and where its tools stand. The prompt is not masked
+// here: every message the turn sends is masked by its session (shieldedSession).
 const shieldedStart = async (
     shield: TurnShield,
     request: AgentRequest<CursorCredential>,
     anchor: { readonly pid: number } | undefined,
-    words: string,
-    attachments: readonly string[],
-): Promise<{ readonly refused: Extract<AgentEvent, { kind: "error" }> } | { readonly prompt: string; readonly append: string | undefined; readonly masking: boolean }> => {
+): Promise<
+    | { readonly refused: Extract<AgentEvent, { kind: "error" }> }
+    | {
+          readonly append: string | undefined;
+          readonly masking: boolean;
+          // The project's MCP servers through the masking proxy, or `withhold`: the project's settings not loaded at all.
+          readonly project: Awaited<ReturnType<typeof projectMcp>>;
+      }
+> => {
     try {
         // An anchored turn's folder as its namespace sees it, which is the tree Cursor's own rule loader reads.
         const root = anchor === undefined ? request.spec.cwd : join("/proc", String(anchor.pid), "root", request.spec.cwd);
@@ -174,10 +180,9 @@ const shieldedStart = async (
             return { refused: { kind: "error", code: "privacy-instructions", message: instructions } };
         }
         const masking = await shield.masking();
-        const prompt = await shield.mask(withFileNote(words, attachments), "prompt");
         const own = request.spec.systemAppend === undefined || request.spec.systemAppend === "" ? undefined : await shield.mask(request.spec.systemAppend, "instructions");
         const append = masking ? (own === undefined ? CURSOR_SHIELD_NOTE : `${own}\n\n${CURSOR_SHIELD_NOTE}`) : own;
-        return { prompt, append, masking };
+        return { append, masking, project: await projectMcp(shield, root) };
     } catch (error) {
         const message = `The privacy shield could not read this turn, so it was not sent to Cursor. ${error instanceof Error ? error.message : ""}`.trim();
         return { refused: { kind: "error", code: "privacy-unshielded", message } };
@@ -279,8 +284,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         let settled = false;
 
         // Not awaited: it lives as long as this phase's channel, and the frames below are what the turn is waiting on.
-        const prepare = (text: string): Promise<string> => (shield === undefined ? Promise.resolve(text) : shield.mask(text, "prompt"));
-        const handedBack = channel === undefined ? Promise.resolve([]) : steerInto(started, channel, () => settled, deps.logger, prepare);
+        const handedBack = channel === undefined ? Promise.resolve([]) : steerInto(started, channel, () => settled, deps.logger);
 
         const finished = (async () => {
             const handle = await started;
@@ -367,13 +371,13 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // The privacy shield, reading this turn channel by channel (cursor-shield.ts). A sealed request was read whole
         // by the shield before it got here (privacy-shield.ts `seal`), so only a turn carries one.
         const shield = request.policy.sealed === true ? undefined : request.hooks.privacy;
-        let shielded: { readonly prompt: string; readonly append: string | undefined; readonly masking: boolean } | undefined;
+        let shielded: Exclude<Awaited<ReturnType<typeof shieldedStart>>, { readonly refused: unknown }> | undefined;
         if (shield !== undefined) {
             // The hooks are how the shield reads this runtime at all: without them it would read nothing past the prompt.
             // allow(silent-catch): hooks that cannot be read are hooks that do not cover the turn, which is refused just below with why.
             const covered = deps.hooks.ready() && (await deps.hooks.covers().catch(() => false));
             const refusal = covered
-                ? await shieldedStart(shield, request, anchor, words, [...images, ...others])
+                ? await shieldedStart(shield, request, anchor)
                 : { refused: { kind: "error" as const, code: "privacy-unshielded" as const, message: CURSOR_HOOKS_MISSING } };
             if ("refused" in refusal) {
                 yield refusal.refused;
@@ -382,7 +386,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             }
             shielded = refusal;
         }
-        const basePrompt = shielded?.prompt ?? withFileNote(words, [...images, ...others]);
+        const basePrompt = withFileNote(words, [...images, ...others]);
         const systemAppend = shield === undefined ? request.spec.systemAppend : shielded?.append;
 
         // One stream for the turn, two producers: the SDK's mapped deltas, and the custom tool handlers and hooks that
@@ -402,6 +406,16 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // nothing Cursor can do: it only reads what passes.
         const customTools = cursorCustomTools(request, { gate, taint }, push);
         const mcpServers = cursorMcpServers(request);
+        // Cursor starts the project's own MCP servers with its project settings, unproxied: each is given again under its
+        // name through the proxy, or, where one can't be, the project's settings are not loaded on this turn at all.
+        const project = shielded?.project;
+        const withheldProject = project !== undefined && "withhold" in project;
+        if (withheldProject) {
+            deps.logger.warn(
+                { servers: project.withhold },
+                "cursor: the project's MCP servers can't all be reached through the privacy shield, so its project settings are not loaded on this turn",
+            );
+        }
         const options: AgentOptions =
             request.policy.sealed === true
                 ? sealedOptions(selection, apiKey, request.spec.cwd)
@@ -412,11 +426,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                       local: {
                           cwd: request.spec.cwd,
                           // mdm carries the command gate (cursor-hooks.ts); user is skipped, it also reads this daemon's
-                          // Claude settings.
-                          settingSources: ["mdm", "project"],
+                          // Claude settings; project is skipped on a shielded turn whose MCP servers can't be proxied.
+                          settingSources: withheldProject ? ["mdm"] : ["mdm", "project"],
                           customTools: shield === undefined ? customTools : shieldedCustomTools(customTools, shield),
                       },
-                      mcpServers: shield === undefined ? mcpServers : await proxiedMcpServers(mcpServers, shield),
+                      mcpServers:
+                          shield === undefined
+                              ? mcpServers
+                              : { ...(project !== undefined && "servers" in project ? project.servers : {}), ...(await proxiedMcpServers(mcpServers, shield)) },
                   };
 
         // An anchored turn's agent runs in a runtime process born in its namespace, so the shell the SDK spawns and the
@@ -437,7 +454,10 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
 
         let agent: CursorSession | undefined;
         try {
-            agent = await host(request.spec.sessionId, options);
+            const opened = await host(request.spec.sessionId, options);
+            // While the shield reads the turn, everything sent to the agent goes through it: the prompt, a plan's
+            // revision, the approval, steering and follow-ups alike.
+            agent = shield === undefined ? opened : shieldedSession(opened, shield);
         } catch (error) {
             release();
             yield await codedError(error, sdk);
@@ -500,15 +520,8 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                         return { errored: outcome.errored, ...opt("planText", outcome.planText) };
                     }
                     // Sent on the same agent and in the same mode, so a plan still ends in a plan; it has no steering of
-                    // its own, since admission already closed. Masked again while the shield reads the turn.
-                    const typed = handedBack.join("\n\n");
-                    // allow(silent-catch): a mask that fails sends nothing, and the turn says so on the next line.
-                    const followUpPrompt = shield === undefined ? typed : await shield.mask(typed, "prompt").catch(() => undefined);
-                    if (followUpPrompt === undefined) {
-                        yield { kind: "error", message: "The privacy shield could not mask the messages sent during this turn, so they were not sent." };
-                        return { errored: true, ...opt("planText", outcome.planText) };
-                    }
-                    const followUp = yield* runPhase(live, request, queue, followUpPrompt, selection, planning, undefined, false, shield);
+                    // its own, since admission already closed. The session masks it like any other message.
+                    const followUp = yield* runPhase(live, request, queue, handedBack.join("\n\n"), selection, planning, undefined, false, shield);
                     return { errored: followUp.errored, ...opt("planText", followUp.planText ?? outcome.planText) };
                 } finally {
                     channel?.close();

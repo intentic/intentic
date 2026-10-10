@@ -118,3 +118,14 @@ test("a connected GitHub card's credential gateway answers a releases check befo
     });
     expect(asked).toEqual(["http://127.0.0.1:8790/gh/repos/oven-sh/bun/releases?per_page=20"]);
 });
+
+test("a select pattern that backtracks without end on the page is stopped, rather than freezing the daemon", async () => {
+    // `(a+)+$` against a run of a's that ends in something else takes exponential time on V8, the daemon's engine: 40 of
+    // them is hours. Bun's own engine gives up by itself and answers "no match", so here only the bound is portable;
+    // under Node the answer is the deadline's.
+    const fetch = answering({ "https://status.example.com/": { body: `${"a".repeat(40)}!`, type: "text/plain" } });
+    const started = Date.now();
+    const checked = await checkSource({ kind: "url", url: "https://status.example.com/", select: "(a+)+$" }, { fetch, env: {} });
+    expect(checked.pass).toBe(false);
+    expect(Date.now() - started).toBeLessThan(10_000);
+});

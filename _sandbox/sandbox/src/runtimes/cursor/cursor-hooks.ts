@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -5,7 +6,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
-import { GATE_SCRIPT_NAME, gateScript, hooksJson, shieldedCommand, unshieldedCommand } from "./cursor-hook-script.js";
+import { GATE_SCRIPT_NAME, gateScript, hooksJson, shieldedCommand, unshieldedCommand, wrappedCommand } from "./cursor-hook-script.js";
 
 // Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, the owner's standing
 // instructions folded onto Cursor's base prompt via beforeSubmitPrompt, and the privacy shield's hand on every file read,
@@ -17,13 +18,23 @@ import { GATE_SCRIPT_NAME, gateScript, hooksJson, shieldedCommand, unshieldedCom
 // points the suite at a temp dir instead of writing a real machine-global file.
 const enterpriseHooksPath = (): string => process.env["INTENTIC_CURSOR_HOOKS_FILE"] ?? "/etc/cursor/hooks.json";
 
+export interface CursorRead {
+    readonly path: string;
+    readonly content: string | undefined;
+    readonly image: Buffer | undefined;
+    readonly document?: Buffer | undefined;
+    readonly opaque?: boolean;
+}
+
 // The privacy shield's side of one turn's hooks (cursor-shield.ts builds it), present while the shield reads the turn.
 // Absent, every hook it answers lets the call through untouched.
 export interface CursorHookShield {
     // A file Cursor's model opens with its own read tool, which can be refused but not changed: the sentence that
-    // refuses it, or undefined to let it through. `image` is the picture's bytes, read where the path means what Cursor
-    // meant; empty when it was too large to read.
-    readonly read: (file: { readonly path: string; readonly content: string | undefined; readonly image: Buffer | undefined }) => Promise<string | undefined>;
+    // refuses it, or undefined to let it through. Cursor hands the hook a picture's or a PDF's content as "" and sends
+    // the bytes, so the script reads them where the path means what Cursor meant: `image` is a picture's bytes,
+    // `document` a PDF's, each empty when too large to read; `opaque` a file Cursor read whose bytes are neither (or
+    // could not be looked at), which nothing here can check.
+    readonly read: (file: CursorRead) => Promise<string | undefined>;
     // A tool call before it runs: refused with a sentence, run with its input changed (tokens read back to their
     // values), or run as it is. A shell command's wrapping is the service's, which alone knows the script it runs.
     readonly toolCall: (call: {
@@ -90,11 +101,16 @@ interface ReadRequest extends TurnScopedRequest {
     readonly file_path?: unknown;
     readonly content?: unknown;
     readonly image_base64?: unknown;
+    readonly document_base64?: unknown;
+    readonly opaque?: unknown;
 }
 interface ToolRequest extends TurnScopedRequest {
     readonly tool_name?: unknown;
     readonly tool_input?: unknown;
     readonly existing_content?: unknown;
+}
+interface ShellCommandRequest extends TurnScopedRequest {
+    readonly id?: unknown;
 }
 interface ShellOutputRequest extends TurnScopedRequest {
     readonly output?: unknown;
@@ -107,6 +123,21 @@ interface EditedRequest extends TurnScopedRequest {
 // Said to the model in place of a shielded command's output when its turn is gone: it ran past the turn that started it.
 const SHELL_OUTPUT_ORPHANED = "[Output withheld by the privacy shield: the turn that ran this command has ended.]\n";
 const SHELL_OUTPUT_FAILED = "[Output withheld: the privacy shield could not mask it.]\n";
+const SHELL_COMMAND_GONE = "[Not run: the privacy shield no longer holds this command; its turn has ended, or it already ran.]\n";
+
+// A shielded command with its values, held for the script that runs it to fetch once (POST /shell-command). Never in
+// what Cursor records: Cursor writes a hook's rewrite into the call's own arguments and echoes it to its servers in the
+// shell's result. Dropped when fetched, when its turn retires, or after a day nobody ran it.
+interface HeldCommand {
+    readonly turn: string;
+    readonly command: string;
+    readonly cwd: string | undefined;
+    readonly at: number;
+}
+const HELD_COMMAND_MS = 24 * 60 * 60 * 1000;
+// Where Cursor starts a shielded command whose working directory held a token: one that exists, since the real one
+// stays out of its arguments too; the script then runs the command in the real one.
+const NEUTRAL_CWD = "/";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const editsOf = (value: unknown): { old_string: string; new_string: string }[] =>
@@ -123,13 +154,24 @@ const asString = (value: unknown): string | undefined => (typeof value === "stri
 // The hooks the privacy shield reads a Cursor turn through; each must name this daemon's script for a shielded turn to run.
 const SHIELD_HOOKS = ["preToolUse", "beforeReadFile", "afterFileEdit"] as const;
 
-const ENDPOINTS: ReadonlySet<string> = new Set(["/gate", "/session-env", "/prompt", "/read", "/pre-tool", "/shell-output", "/edited"]);
+const ENDPOINTS: ReadonlySet<string> = new Set(["/gate", "/session-env", "/prompt", "/read", "/pre-tool", "/shell-command", "/shell-output", "/edited"]);
 
 export const createCursorHookService = (socketDir: string, logger: Logger): CursorHookService => {
     const socketPath = join(socketDir, "command-guard.sock");
     const scriptPath = join(socketDir, GATE_SCRIPT_NAME);
     const turns = new Map<string, CursorGateTurn>();
+    const held = new Map<string, HeldCommand>();
     let server: Server | undefined;
+    const hold = (command: HeldCommand): string => {
+        for (const [id, each] of held) {
+            if (command.at - each.at > HELD_COMMAND_MS) {
+                held.delete(id);
+            }
+        }
+        const id = randomUUID();
+        held.set(id, command);
+        return id;
+    };
 
     // With exactly one live turn, an unlabelled consult can only be from it. With two or more, there's nothing to
     // reason from, so it allows and logs: a wrong card in the wrong conversation is worse than an unenforced, logged
@@ -151,9 +193,12 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
     };
 
     const verdictFor = async (payload: GateRequest): Promise<{ permission: "allow" | "deny"; agent_message?: string; user_message?: string }> => {
-        // preToolUse runs first and may have wrapped the command for the shield: the rules read what the model asked for.
+        // preToolUse runs first and may have wrapped the command for the shield: the rules read the command that will
+        // run, with its values, which the daemon holds by the wrapper's id.
         const raw = asString(payload.command);
-        const command = raw === undefined ? undefined : unshieldedCommand(raw);
+        const wrapped = raw === undefined ? undefined : wrappedCommand(raw);
+        const holding = wrapped === undefined ? undefined : held.get(wrapped.id);
+        const command = wrapped === undefined ? raw : (holding?.command ?? wrapped.shown);
         const turn = turnFor(asString(payload.conversation_id));
         if (command === undefined || turn === undefined) {
             return { permission: "allow" };
@@ -164,7 +209,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         }
         // Named for Cursor's own tool, so the card, transcript and runtime all agree on what ran. The shell's own cwd
         // places an install the way Claude Code's hook input does.
-        const outcome = await consultWith(turn.gate, command, vendorSubject("Shell"), turn.push, { cwd: asString(payload.cwd) });
+        const outcome = await consultWith(turn.gate, command, vendorSubject("Shell"), turn.push, { cwd: holding?.cwd ?? asString(payload.cwd) });
         if (outcome.allow) {
             // What the gate had to say about an allowed command (where an install writes) goes to the agent alone.
             return outcome.context === undefined ? { permission: "allow" } : { permission: "allow", agent_message: outcome.context };
@@ -212,8 +257,14 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         if (turn === undefined || path === undefined) {
             return { permission: "allow" };
         }
-        const image = typeof payload.image_base64 === "string" ? Buffer.from(payload.image_base64, "base64") : undefined;
-        const refusal = await turn.shield.read({ path, content: typeof payload.content === "string" ? payload.content : undefined, image });
+        const bytes = (field: unknown): Buffer | undefined => (typeof field === "string" ? Buffer.from(field, "base64") : undefined);
+        const refusal = await turn.shield.read({
+            path,
+            content: typeof payload.content === "string" ? payload.content : undefined,
+            image: bytes(payload.image_base64),
+            document: bytes(payload.document_base64),
+            opaque: payload.opaque === true,
+        });
         return refusal === undefined ? { permission: "allow" } : { permission: "deny", user_message: refusal };
     };
 
@@ -236,9 +287,31 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         const input = verdict.input ?? payload.tool_input;
         const command = input["command"];
         if (tool === "Shell" && typeof command === "string" && command !== "") {
-            return { updated_input: { ...input, command: shieldedCommand(scriptPath, turn.key, unshieldedCommand(command)) } };
+            // Cursor's arguments keep the command as the model wrote it, inside a wrapper naming the held one; a
+            // working directory whose token was read back stays out of them too.
+            const shown = typeof payload.tool_input["command"] === "string" ? unshieldedCommand(payload.tool_input["command"]) : "";
+            const cwd = typeof input["cwd"] === "string" && input["cwd"] !== payload.tool_input["cwd"] ? input["cwd"] : undefined;
+            const id = hold({ turn: turn.key, command: unshieldedCommand(command), cwd, at: Date.now() });
+            return {
+                updated_input: {
+                    ...payload.tool_input,
+                    ...(cwd === undefined ? {} : { cwd: NEUTRAL_CWD }),
+                    command: shieldedCommand(scriptPath, turn.key, id, shown),
+                },
+            };
         }
         return verdict.input === undefined ? {} : { updated_input: verdict.input };
+    };
+
+    // Exact turn and id only, and once: the script that runs a wrapped command takes it from here.
+    const shellCommandFor = (payload: ShellCommandRequest): { command: string; cwd?: string } | { refused: string } => {
+        const id = asString(payload.id);
+        const command = id === undefined ? undefined : held.get(id);
+        if (id === undefined || command === undefined || command.turn !== asString(payload.conversation_id) || !turns.has(command.turn)) {
+            return { refused: SHELL_COMMAND_GONE };
+        }
+        held.delete(id);
+        return command.cwd === undefined ? { command: command.command } : { command: command.command, cwd: command.cwd };
     };
 
     // Exact id only: the wrapper names the turn it was made for, and output that outlived its turn is withheld.
@@ -324,6 +397,10 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                             );
                             return;
                         }
+                        if (endpoint === "/shell-command") {
+                            answer(shellCommandFor(payload as ShellCommandRequest));
+                            return;
+                        }
                         if (endpoint === "/shell-output") {
                             answer(
                                 await shellOutputFor(payload as ShellOutputRequest).catch((error: unknown) => {
@@ -372,6 +449,11 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             return () => {
                 if (turns.get(turn.conversationId) === turn) {
                     turns.delete(turn.conversationId);
+                    for (const [id, command] of held) {
+                        if (command.turn === turn.conversationId) {
+                            held.delete(id);
+                        }
+                    }
                 }
             };
         },

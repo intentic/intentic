@@ -7,7 +7,8 @@ import { writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { assertPath, assertScope } from "../../policy.js";
+import { assertPath, assertScope, ScopeError } from "../../policy.js";
+import { destructiveClasses, destructiveRefusal } from "../shell.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
@@ -116,15 +117,68 @@ const pidAlive = (pid: number): boolean => {
     }
 };
 
-const isRunning = (run: AppRun): boolean => {
+// How far apart a run's recorded start and its process's own may be and still be one process: the record is written
+// just after the spawn, so seconds at most, where a process handed a recycled id began long after or long before.
+const SAME_PROCESS_MS = 10_000;
+
+// When the process holding `pid` began, in epoch milliseconds, as the operating system says; undefined when it cannot
+// say (no such process, or no way to ask).
+const processStartedAt = async (pid: number): Promise<number | undefined> => {
+    try {
+        if (process.platform === "win32") {
+            const { stdout } = await exec(
+                "powershell.exe",
+                ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`],
+                { windowsHide: true },
+            );
+            const at = Date.parse(stdout.trim());
+            return Number.isNaN(at) ? undefined : at;
+        }
+        // `lstart` is the start in local time, to the second, on Linux and macOS alike.
+        const { stdout } = await exec("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C", LANG: "C" } });
+        const at = Date.parse(stdout.trim().replace(/\s+/g, " "));
+        return Number.isNaN(at) ? undefined : at;
+    } catch {
+        // allow(silent-catch): no such process, or no `ps`: the caller treats an unknown start as not this run's
+        return undefined;
+    }
+};
+
+// Whether a run is still going. A run this agent started is judged by the handle it holds; one an earlier agent process
+// started (the machine rebooted, the agent was upgraded or crashed) only by its pid, which the system hands to another
+// program once the run ends, so the pid counts only while the process holding it began when the run did. `unknown` is
+// a live pid whose start cannot be read: nothing is signalled on its say-so.
+type RunState = "running" | "ended" | "unknown";
+
+const runState = async (run: AppRun): Promise<RunState> => {
     if (run.endedAt !== undefined) {
-        return false;
+        return "ended";
     }
     if (run.isolated === true) {
-        return true;
+        return "running";
     }
     const child = children.get(run.id);
-    return child !== undefined ? child.exitCode === null && child.signalCode === null : pidAlive(run.pid);
+    if (child !== undefined) {
+        return child.exitCode === null && child.signalCode === null ? "running" : "ended";
+    }
+    if (!pidAlive(run.pid)) {
+        return "ended";
+    }
+    const began = await processStartedAt(run.pid);
+    if (began === undefined) {
+        return "unknown";
+    }
+    return Math.abs(began - Date.parse(run.startedAt)) <= SAME_PROCESS_MS ? "running" : "ended";
+};
+
+// A run found ended without this agent hearing it is recorded so, its exit unknown, so it is not asked about again.
+const settle = async (sandboxUrl: string, run: AppRun, state: RunState): Promise<AppRun> => {
+    if (state !== "ended" || run.endedAt !== undefined || children.has(run.id)) {
+        return run;
+    }
+    const endedAt = new Date().toISOString();
+    await updateRuns(sandboxUrl, (runs) => runs.map((entry) => (entry.id === run.id && entry.endedAt === undefined ? { ...entry, endedAt } : entry)));
+    return { ...run, endedAt };
 };
 
 // The Windows NTSTATUS codes a crashing program most often ends with, said as a person would look them up.
@@ -191,15 +245,36 @@ const startablesIn = async (dir: string): Promise<string[]> => {
 
 const idFor = (name: string): string => `${name.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 40) || "app"}-${randomBytes(3).toString("hex")}`;
 
+// The program and its arguments as the one command line they amount to, for the classifier run_command's commands go
+// through: the program by the name it is known by (`rm`, `powershell`), each argument quoted only where a shell would
+// need it, so the line reads the way a person would type it.
+const commandLineOf = (program: string, args: readonly string[]): string =>
+    [basename(program).replace(/\.exe$/i, ""), ...args.map((arg) => (arg === "" || /[\s'"|;&<>()$`\\]/.test(arg) ? (arg.includes("'") ? `"${arg}"` : `'${arg}'`) : arg))].join(" ");
+
+// A program already on this machine started with these arguments is a command by another door, so it answers to the
+// same "Run destructive commands" switch run_command does: `rm -rf ~/x`, or a shell handed one, is refused alike.
+const assertNotDestructive = (program: string, args: readonly string[], scopes: DeviceScopes): void => {
+    const destructive = destructiveClasses(commandLineOf(program, args));
+    if (destructive.length > 0 && scopes.destructive !== "on") {
+        throw new ScopeError(destructiveRefusal(destructive));
+    }
+};
+
 // The program as given resolved to a path where it is one, and the switch that covers starting it.
-const judgeProgram = async (program: string, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
+const judgeProgram = async (program: string, args: readonly string[], scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     if (!isAbsolute(program)) {
         // A bare name (`notepad`) is a program already on this machine, found on its PATH: a command's business.
         assertScope(scopes, "shell");
+        assertNotDestructive(program, args, scopes);
         return program;
     }
     const path = resolve(program);
-    assertScope(scopes, inRuns(path, sandboxUrl) ? "programs" : "shell");
+    const pushed = inRuns(path, sandboxUrl);
+    assertScope(scopes, pushed ? "programs" : "shell");
+    // A build this sandbox pushed is its own to run as it likes; any other program is a command like run_command's.
+    if (!pushed) {
+        assertNotDestructive(path, args, scopes);
+    }
     const stats = await stat(path).catch(undefinedIfMissing);
     if (stats === undefined) {
         throw new Error(`Nothing at ${path}. A pushed build's path is what \`devices push\` printed.`);
@@ -219,7 +294,7 @@ const judgeProgram = async (program: string, scopes: DeviceScopes, sandboxUrl: s
 };
 
 export const startApp = async (request: StartRequest, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
-    const program = await judgeProgram(request.program, scopes, sandboxUrl);
+    const program = await judgeProgram(request.program, request.args ?? [], scopes, sandboxUrl);
     if (request.isolated === true) {
         return await startIsolated(program, request, sandboxUrl);
     }
@@ -407,10 +482,21 @@ const assertEither = (scopes: DeviceScopes): void => {
     }
 };
 
-const runLine = (run: AppRun): string => {
-    const running = isRunning(run);
-    const state = running ? `running, pid ${run.pid}` : describeExit(run);
-    return `${running ? "▶" : "■"} ${run.id}  ${run.name}  ${state}  (started ${run.startedAt}${run.endedAt === undefined ? "" : `, ended ${run.endedAt}`})`;
+const runLine = (run: AppRun, state: RunState): string => {
+    const said =
+        state === "running"
+            ? `running, pid ${run.pid}`
+            : state === "unknown"
+              ? `perhaps running: pid ${run.pid} is alive, but whether it is still this run cannot be checked, so app_stop will not signal it`
+              : describeExit(run);
+    return `${state === "running" ? "▶" : state === "unknown" ? "?" : "■"} ${run.id}  ${run.name}  ${said}  (started ${run.startedAt}${run.endedAt === undefined ? "" : `, ended ${run.endedAt}`})`;
+};
+
+// A run as it stands now, its end recorded if it was found ended unheard, with the line that says so.
+const judged = async (sandboxUrl: string, run: AppRun): Promise<{ readonly run: AppRun; readonly state: RunState; readonly line: string }> => {
+    const state = await runState(run);
+    const settled = await settle(sandboxUrl, run, state);
+    return { run: settled, state, line: runLine(settled, state) };
 };
 
 export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sandboxUrl: string, screen: () => Desktop): Promise<string> => {
@@ -421,20 +507,20 @@ export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sa
         const builds = await listArtifacts(sandboxUrl);
         const lines = [
             runs.length === 0 ? "Nothing has been started here by this sandbox." : `${runs.length} program run(s), newest first:`,
-            ...runs.map(runLine),
+            ...(await Promise.all(runs.map(async (run) => (await judged(sandboxUrl, run)).line))),
         ];
         if (builds.length > 0) {
             lines.push("", "Builds pushed here (devices push), newest first:", ...builds.slice(0, 10).map((build) => `  ${build.name}/${build.version}  ${build.path}`));
         }
         return lines.join("\n");
     }
-    const run = await findRun(id, sandboxUrl);
-    const lines = [runLine(run), `program: ${run.program}${run.args.length === 0 ? "" : ` ${run.args.join(" ")}`}`, `folder: ${run.cwd}`, `log: ${run.log}`];
+    const { run, state, line } = await judged(sandboxUrl, await findRun(id, sandboxUrl));
+    const lines = [line, `program: ${run.program}${run.args.length === 0 ? "" : ` ${run.args.join(" ")}`}`, `folder: ${run.cwd}`, `log: ${run.log}`];
     const inside = await insideExit(run);
     if (run.isolated === true) {
         lines.push(`isolated in Windows Sandbox${inside === undefined ? "" : `; ${inside}`}`);
     }
-    if (isRunning(run)) {
+    if (state === "running") {
         if (scopes.screen !== "on") {
             lines.push(`(Its windows are not listed: "See the screen" is off for this device.)`);
         } else {
@@ -461,7 +547,7 @@ export const appStatus = async (id: string | undefined, scopes: DeviceScopes, sa
 export const appLogs = async (id: string, lines: number, grep: string | undefined, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     assertEither(scopes);
     await refreshIsolated(sandboxUrl);
-    const run = await findRun(id, sandboxUrl);
+    const { run, line } = await judged(sandboxUrl, await findRun(id, sandboxUrl));
     const { text, total } = await runOutput(run, grep === undefined ? lines : MAX_LOG_LINES * 5);
     let shown = text;
     if (grep !== undefined) {
@@ -477,19 +563,19 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
             .slice(-lines)
             .join("\n");
     }
-    const head = `${runLine(run)}\n${run.log}, ${total} bytes${grep === undefined ? "" : `, lines matching /${grep}/i`}:`;
+    const head = `${line}\n${run.log}, ${total} bytes${grep === undefined ? "" : `, lines matching /${grep}/i`}:`;
     return shown === "" ? `${head}\n(nothing${grep === undefined ? " printed yet" : " matches"}; a GUI program often prints nothing at all)` : `${head}\n${shown}`;
 };
 
 const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
-        if (!isRunning(run)) {
+        if ((await runState(run)) === "ended") {
             return true;
         }
         await new Promise((done) => setTimeout(done, 200));
     }
-    return !isRunning(run);
+    return (await runState(run)) === "ended";
 };
 
 const signalTree = async (pid: number, force: boolean): Promise<void> => {
@@ -509,9 +595,16 @@ const signalTree = async (pid: number, force: boolean): Promise<void> => {
 export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     assertEither(scopes);
     await refreshIsolated(sandboxUrl);
-    const run = await findRun(id, sandboxUrl);
-    if (!isRunning(run)) {
+    const { run, state } = await judged(sandboxUrl, await findRun(id, sandboxUrl));
+    if (state === "ended") {
         return `${run.id} is not running: it ${describeExit(run)}.`;
+    }
+    if (state === "unknown") {
+        // Signalling a pid on no better word than "alive" is how an agent restarted after a reboot kills a program
+        // the system has since handed that id to.
+        throw new Error(
+            `${run.id} was started by an earlier run of this machine's agent, and whether pid ${run.pid} is still that program cannot be checked here, so it was not signalled. If it is, close it on the machine itself.`,
+        );
     }
     if (run.isolated === true) {
         await stopWindowsSandbox();

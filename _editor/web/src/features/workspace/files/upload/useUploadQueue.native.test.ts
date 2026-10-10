@@ -139,6 +139,42 @@ describe(`a drop the desktop app copies itself`, () => {
         ]);
     });
 
+    // Counted as no failure, the card read "uploaded", never drew the failures list holding the error, and retired
+    // itself after three seconds.
+    it(`that ends in an error after counting every file done is still a failed import, its error shown`, async () => {
+        const error = `Docker stopped the copy: tar: media/marketing/a.jpg: Cannot write: No space left on device`;
+        script = [
+            { kind: `copying`, files: 2000, bytes: GB, unreadable: 0, manifests: [], roots: [{ name: `marketing`, dir: true, files: 2000, bytes: GB }] },
+            { kind: `finished`, done: 2000, doneBytes: GB, sentBytes: GB, failed: 0, roots: [{ done: 2000, failed: 0 }], failures: [], error },
+        ];
+        const queue = mounted(() => useUploadQueue());
+        queue.setInstallAfterUpload(false);
+        queue.enqueueFromDataTransfer(`media`, dropOf([]));
+        await waitFor(() => expect(queue.finished.value).toBe(true));
+        expect([queue.doneCount.value, queue.failedCount.value, queue.failures.value]).toEqual([2000, 1, [{ path: `media`, error }]]);
+    });
+
+    it(`that ends in an error with its files already counted failed adds no failure of its own`, async () => {
+        script = [
+            { kind: `copying`, files: 10, bytes: GB, unreadable: 0, manifests: [], roots: [{ name: `marketing`, dir: true, files: 10, bytes: GB }] },
+            {
+                kind: `finished`,
+                done: 8,
+                doneBytes: GB / 2,
+                sentBytes: GB,
+                failed: 2,
+                roots: [{ done: 8, failed: 2 }],
+                failures: [{ path: `marketing/a.mov`, error: `Docker stopped the copy` }],
+                error: `Docker stopped the copy`,
+            },
+        ];
+        const queue = mounted(() => useUploadQueue());
+        queue.setInstallAfterUpload(false);
+        queue.enqueueFromDataTransfer(``, dropOf([]));
+        await waitFor(() => expect(queue.finished.value).toBe(true));
+        expect([queue.doneCount.value, queue.failedCount.value]).toEqual([8, 2]);
+    });
+
     it(`goes back to the browser's upload when the app declines it, counted once`, async () => {
         script = `declined`;
         const queue = mounted(() => useUploadQueue());

@@ -212,8 +212,11 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // One real commit per group (git can't span repos); stageFirst stages the group's target first when nothing's staged
 // yet.
 // No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
-const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<void> => {
+// Answers whether any repo recorded a commit: a "Commit all" over nothing but scratch stages nothing, and git's
+// `committed: false` is then the only sign the typed message went nowhere.
+const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<boolean> => {
     committingHere.value = groups.map((group) => group.repo);
+    let recorded = false;
     try {
         await runBatch(
             groups.map((group) => ({
@@ -225,6 +228,7 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
                         message,
                         ...(stageFirst ? { stage: targetBody(group) } : {}),
                     });
+                    recorded ||= result.committed;
                     await applyCommitResult(group.repo, result);
                 },
             })),
@@ -233,6 +237,7 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
     } finally {
         committingHere.value = [];
     }
+    return recorded;
 };
 
 // Discards a selection: tracked content resets to HEAD, untracked files are deleted; an empty target discards the whole
@@ -289,6 +294,37 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
             })),
         invalidateChanges,
     );
+
+// An origin chip's reversible move (GitIndexMove.chip): clearing writes back what the daemon remembers that chip
+// replaced, lighting stages the origin's unstaged files and remembers. One task per repo, the clear before the light, so
+// swapping chips over a file both landed ends with the new chip's staging.
+interface ChipMove {
+    readonly origin: string | undefined;
+    readonly repos: readonly string[];
+}
+const swapChip = (clear: ChipMove, light: ChipMove): Promise<void> => {
+    const clearIn = clear.origin === undefined ? [] : clear.repos;
+    const lightIn = light.origin === undefined ? [] : light.repos;
+    const repos = [...new Set([...clearIn, ...lightIn])];
+    if (repos.length === 0) {
+        return Promise.resolve();
+    }
+    return runBatch(
+        repos.map((repo) => ({
+            scope: repo,
+            action: lightIn.includes(repo) ? t(`workspace.useChanges.stageFailed`) : t(`workspace.useChanges.unstageFailed`),
+            run: async (): Promise<void> => {
+                if (clear.origin !== undefined && clearIn.includes(repo)) {
+                    await sandboxRpc.git.unstage({ repo, chip: clear.origin });
+                }
+                if (light.origin !== undefined && lightIn.includes(repo)) {
+                    await sandboxRpc.git.stage({ repo, chip: light.origin });
+                }
+            },
+        })),
+        invalidateChanges,
+    );
+};
 
 // Pull is the only sync verb that touches the worktree, so only it resets buffers and refetches the tree.
 // Fetch and push move refs the worktree never sees, so they need neither.
@@ -421,6 +457,7 @@ export function useChanges() {
         discardGroups,
         abortOperation,
         stageGroups,
+        swapChip,
         fetchRepos,
         syncAll,
         actionBusy,

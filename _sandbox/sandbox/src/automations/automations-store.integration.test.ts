@@ -46,9 +46,11 @@ test("setEnabled changes only the switch on the current record", async () => {
         throw new Error("the automation just upserted must read back");
     }
 
-    expect(await store.setEnabled("missing", false)).toBe(false);
-    expect(await store.setEnabled("support", false)).toBe(true);
+    expect(await store.setEnabled("missing", false)).toBe("missing");
+    expect(await store.setEnabled("support", false)).toBe("changed");
     expect(await store.get("support")).toEqual({ ...before, enabled: false });
+    // Already off: said as such, so a caller telling somebody it switched off does not tell them twice.
+    expect(await store.setEnabled("support", false)).toBe("unchanged");
 });
 
 test("recordRun prepends newest-first, caps the history, and drops runs for removed automations", async () => {

@@ -589,7 +589,14 @@ interface Preflight {
     // How a spent allowance's held turn continued, where a person had a choice of ways (agent/providers/limit-handoff.ts).
     readonly handedOff: HandedOff | undefined;
     readonly repoSync: Promise<RepoSync[]> | undefined;
+    readonly carriedOff: boolean;
 }
+
+// Whether this turn re-runs a held one with its session onto another account than the one it was held on: the carry an
+// unanswered death reads as that account refusing it (classify-failure.ts, dressDeath). Read off the hold it replaces
+// rather than the note, since a trimmed hand-off is sent with the same note whether or not the account changed.
+const carriedOffOf = (input: RoutedTurn, held: HeldTurn | undefined): boolean =>
+    held !== undefined && (input.resume === "carried" || input.resume === "trimmed") && held.input.account !== input.account;
 
 const preflight = async (
     services: Services,
@@ -656,7 +663,7 @@ const preflight = async (
         ...opt("children", childrenOf(services, input, localCwd)),
     };
     const handoffNotes = [...(summarized?.note === undefined ? [] : [summarized.note]), ...(handoffNote === undefined ? [] : [handoffNote])];
-    return { context, isolation, effectiveCwd, frames, handoffNotes, handedOff, repoSync };
+    return { context, isolation, effectiveCwd, frames, handoffNotes, handedOff, repoSync, carriedOff: carriedOffOf(input, held) };
 };
 
 // A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
@@ -756,6 +763,7 @@ interface PreparedTurn {
     readonly isolation: TurnPlacement | undefined;
     readonly effectiveCwd: string;
     readonly frames: TurnFrames;
+    readonly carriedOff: boolean;
 }
 
 // Preflight, then the plan, then the notes the message grew and the checkpoint it can be rewound to; a refusal at any
@@ -807,7 +815,7 @@ async function* prepareTurn(
     }
     clock.mark("snapshot");
     clock.report(services.logger);
-    return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, frames: ready.frames };
+    return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, frames: ready.frames, carriedOff: ready.carriedOff };
 }
 
 // Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
@@ -846,6 +854,7 @@ interface TurnState {
     readonly request: AgentRequest;
     readonly remint: FailureContext["remint"];
     readonly frames: TurnFrames;
+    readonly carriedOff: boolean;
 }
 
 // A failure frame as the window reads it: counted against the provider's breaker when it is an outage on a
@@ -865,6 +874,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             attribution: turn.attribution,
             sessionId: readings.sessionId,
             answered: readings.silence.answered,
+            carriedOff: turn.carriedOff,
             remint: turn.remint,
             limitReset: readings.limitReset,
             outage,
@@ -926,7 +936,7 @@ async function* runPreparedTurn(
     prepared: PreparedTurn,
     reach: ReachWatch | undefined,
 ): AsyncGenerator<AgentEvent> {
-    const { plan, request, isolation, effectiveCwd, frames } = prepared;
+    const { plan, request, isolation, effectiveCwd, frames, carriedOff } = prepared;
     assertAgentExecution(request.execution, request.spec);
     const provider = input.agent;
     const account = plan.account;
@@ -936,7 +946,7 @@ async function* runPreparedTurn(
     // Tees every frame past the activity sniffer: outbound provider calls are only visible here.
     const sniffer = createOutboundSniffer(services, turnId);
     const record = turnActivity(services, { input, provider, turnId, attribution, sessionId: () => frames.readings().sessionId });
-    const state: TurnState = { input, turnId, provider, account, attribution, request, remint: remintFor(input, account, request), frames };
+    const state: TurnState = { input, turnId, provider, account, attribution, request, remint: remintFor(input, account, request), frames, carriedOff };
     const aborted = (): boolean => signal?.aborted === true;
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });

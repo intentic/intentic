@@ -8,10 +8,11 @@ import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
 // The sooner of two wakes, either 0 for none.
 const sooner = (a: number, b: number): number => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
 
-// The soonest moment this sandbox promised somebody, 0 for none: a one-time automation, and a person's scheduled send,
-// since the sandbox's own clock is all that lets either go. What a stop for idleness must not sleep through.
+// The soonest moment this sandbox promised somebody, 0 for none: a one-time automation, a person's scheduled send, and a
+// held turn booked to go again when its allowance reopens, since the sandbox's own clock is all that lets any of them go.
+// What a stop for idleness must not sleep through.
 export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promise<number> =>
-    sooner(await nextOneTimeWakeAt(services), nextBookedSendAt(services));
+    sooner(await nextOneTimeWakeAt(services), await nextBookedSendAt(services));
 
 // Container role only: a guest daemon or a local folder speaks for nobody.
 export const startPlatformPresence = ({ config, logger, role, services, shutdown }: BootPhase, reach: ReachPosture): void => {

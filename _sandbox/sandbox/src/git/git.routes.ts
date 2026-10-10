@@ -3,7 +3,12 @@ import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import {
+    DISCARDABLE_SIDES,
     gitContract,
+    isWholeRepo,
+    scopedPaths,
+    STAGEABLE_SIDES,
+    UNSTAGEABLE_SIDES,
     type GitChange,
     type GitChanges,
     type GitDiffSide,
@@ -23,7 +28,7 @@ import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { ActionResult } from "./changes/changes-commits.js";
-import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
+import { createChipStaging } from "./changes/chip-staging.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { scratchScopeOf } from "./changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
@@ -147,8 +152,27 @@ export const createGitRoutes = (services: Services) => {
     const scopeToPaths = async (repo: string, dir: string, scope: GitScope, sides: readonly GitDiffSide[]): Promise<readonly string[]> => {
         const { head, conflicted, staged, unstaged } = await services.git.changedFiles(dir);
         const origins = scope.origin === undefined ? {} : await services.agentOrigins.forRepo(repo, dir, head);
-        return scopedPaths({ conflicted, staged, unstaged }, sides, scope, origins);
+        // The worktree rows the scan shows (ownWork), so a scope never reaches a build-output row the panel hid.
+        return scopedPaths({ conflicted, staged, unstaged: ownWork(repo, unstaged) }, sides, scope, origins);
     };
+
+    // An origin chip's staging, remembered per repo and origin so clearing the chip puts back exactly what lighting it
+    // replaced (chip-staging.ts). Only the unstaged side: staging a conflict marks it resolved, which no chip does for
+    // the owner. Callers hold the repo lock.
+    const chips = createChipStaging({
+        indexEntries: services.git.indexEntries,
+        writeIndexEntries: services.git.writeIndexEntries,
+        stagePaths: services.git.stagePaths,
+    });
+    const lightChip = async (repo: string, dir: string, origin: string): Promise<void> => {
+        const { head, unstaged } = await services.git.changedFiles(dir);
+        const origins = await services.agentOrigins.forRepo(repo, dir, head);
+        const scratch = await scratchIn(repo, dir);
+        const paths = scopedPaths({ conflicted: [], staged: [], unstaged: ownWork(repo, unstaged) }, ["unstaged"], { origin }, origins);
+        await chips.light(repo, dir, origin, head, paths.filter((path) => !isScratch(path, scratch)));
+    };
+    const clearChip = (repo: string, dir: string, origin: string): Promise<void> =>
+        chips.clear(repo, dir, origin, async () => (await services.git.changedFiles(dir)).head);
 
     // Stage-all/discard-all use single-command spellings that never enumerate paths; unstage has none (a bare `reset`
     // also clears MERGE_HEAD) so it always resolves to paths. Callers must hold the repo lock.
@@ -578,14 +602,14 @@ export const createGitRoutes = (services: Services) => {
         // side, not just the rows a response could fit.
         stage: i.stage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await stageTarget(input.repo, dir, input);
+                await (input.chip === undefined ? stageTarget(input.repo, dir, input) : lightChip(input.repo, dir, input.chip));
                 invalidateScan();
                 return { ok: true } as const;
             }),
         ),
         unstage: i.unstage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await unstageTarget(input.repo, dir, input);
+                await (input.chip === undefined ? unstageTarget(input.repo, dir, input) : clearChip(input.repo, dir, input.chip));
                 invalidateScan();
                 return { ok: true } as const;
             }),

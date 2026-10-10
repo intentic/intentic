@@ -224,6 +224,7 @@ export * from "./schemas/extension-updates.js";
 export * from "./schemas/providers/fast-mode.js";
 export * from "./schemas/diff.js";
 export * from "./schemas/git/git.js";
+export * from "./schemas/git/git-scope.js";
 export * from "./schemas/git/git-history.js";
 export * from "./schemas/history.js";
 export * from "./schemas/hosts.js";

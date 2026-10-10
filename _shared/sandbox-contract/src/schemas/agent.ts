@@ -128,6 +128,10 @@ export const ForkedFromSchema = z.object({
 });
 export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 // The turn's fields before the cross-field refinements below, so a subset (TurnProfileSchema) can be picked from them.
+// How many files one turn may carry. A batch of a person's queued messages joins their files, so the admission splits a
+// batch rather than build a turn past this (turn-admission.ts, together): a turn the daemon makes must parse back.
+export const ATTACHMENT_LIMIT = 20;
+
 const AgentTurnFieldsSchema = z.object({
     prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
     errand: TurnErrandSchema.optional().describe(
@@ -151,7 +155,7 @@ const AgentTurnFieldsSchema = z.object({
     // Already uploaded via /workspace/upload; Claude reads them via Read, Codex gets images as native input.
     attachments: z
         .array(z.string().min(1))
-        .max(20)
+        .max(ATTACHMENT_LIMIT)
         .optional()
         .describe("Files to hand the agent along with the prompt, as workspace paths. Upload them first."),
     // Read out of the prompt's own `@path` tokens rather than chosen: a tokenizer over pasted text guesses, so a

@@ -164,3 +164,24 @@ test("a device that refuses to dial costs that one connection, which is closed",
         await stood.close();
     }
 });
+
+test("closing a tunnel with a connection still open returns at once and cuts that connection, rather than waiting on it", async () => {
+    const stood = await stand();
+    try {
+        const free = await freePort();
+        await stood.tunnels.open("pc", deviceProgramPort, free);
+        // A connection left open, the way a test's keep-alive client or a held stream is.
+        const socket = connect(free, "127.0.0.1");
+        await once(socket, "connect");
+        socket.write("still here");
+        await once(socket, "data");
+        const cut = once(socket, "close");
+        const closing = stood.tunnels.close("pc", deviceProgramPort);
+        const closed = await Promise.race([closing, new Promise<"still waiting">((done) => setTimeout(() => done("still waiting"), 2_000))]);
+        expect(closed).toBe(true);
+        await cut;
+        expect(stood.tunnels.list()).toEqual([]);
+    } finally {
+        await stood.close();
+    }
+});

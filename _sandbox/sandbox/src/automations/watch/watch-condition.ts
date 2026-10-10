@@ -8,7 +8,7 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
 import { outputTail, runCheck, shellArgv } from "../../workload/run-check.js";
-import type { AutomationRecord } from "../automations-store.js";
+import { type AutomationRecord, sawSame, WATCH_VALUE_MAX, watchDigest } from "../automations-store.js";
 import { guardCapabilityEnv } from "./guard-env.js";
 import { checkSource, sourceLabel } from "./watch-sources.js";
 
@@ -142,7 +142,12 @@ const observedOf = (value: string, previous: string | undefined, outside: string
     if (short) {
         return `It was: ${seal(previous)}\nIt is now: ${seal(value)}`;
     }
-    return `What changed since the last check (- gone, + new):\n${seal(capped(lineDiff(previous, value)))}\n\nWhat it sees now:\n${seal(capped(value))}`;
+    // Of a long value only its head is remembered, so heads are what is compared; the digest already said it changed,
+    // and a change past the head is said as one rather than as an empty diff.
+    const diff = lineDiff(previous, previous.length >= WATCH_VALUE_MAX ? value.slice(0, WATCH_VALUE_MAX) : value);
+    const changed =
+        diff === "" ? `(the change lies past the first ${WATCH_VALUE_MAX} characters, which is as much as is kept to compare)` : seal(capped(diff));
+    return `What changed since the last check (- gone, + new):\n${changed}\n\nWhat it sees now:\n${seal(capped(value))}`;
 };
 
 // Where a check's words come from when they come from outside: every source fetches; a guard does when the command
@@ -182,25 +187,28 @@ export const checkCondition = async (services: Services, automation: AutomationR
     }
     const value = checked.output;
     const outside = conditionOutside(automation);
+    const digest = watchDigest(value);
     if (automation.fireOn === "change") {
         if (previous?.value === undefined) {
-            await remember(services, automation.id, now, () => ({ value, changedAt: now }));
+            await remember(services, automation.id, now, () => ({ value, digest, changedAt: now }));
             return {
                 kind: "skip",
                 detail: `First check: noted ${firstLine(value) === "" ? "an empty answer" : `"${firstLine(value)}"`} to compare against from now on.`,
             };
         }
-        if (previous.value === value) {
-            await remember(services, automation.id, now, () => ({}));
+        if (sawSame(previous, value)) {
+            // Written again with its digest, so a state from before digests were kept compares whole from now on.
+            await remember(services, automation.id, now, () => ({ digest }));
             return { kind: "quiet", detail: `Unchanged: still ${firstLine(value) === "" ? "empty" : `"${firstLine(value)}"`}.` };
         }
-        await remember(services, automation.id, now, () => ({ value, changedAt: now, firedAt: now }));
+        await remember(services, automation.id, now, () => ({ value, digest, changedAt: now, firedAt: now }));
         const observed = observedOf(value, previous.value, outside);
         return { kind: "go", value, ...(observed === undefined ? {} : { observed }), ...(outside === undefined ? {} : { outside }) };
     }
     await remember(services, automation.id, now, (before) => ({
         value,
-        changedAt: before?.value === value ? (before.changedAt ?? now) : now,
+        digest,
+        changedAt: before !== undefined && sawSame(before, value) ? (before.changedAt ?? now) : now,
         firedAt: now,
     }));
     const observed = observedOf(value, undefined, outside);

@@ -63,9 +63,14 @@ const BUSY_RETRY_MS = 15_000;
 const dueOf = (deps: Pick<KeepWarmDeps, "conversations" | "logger">): Deadlines =>
     deadlines(deps.conversations, DUE, (conversationId, error) => deps.logger.warn({ err: error, conversationId }, "keep-warm: tending a hold failed"));
 
-/** What a settled turn leaves to keep its cache by, or undefined: a spawned child, a runtime or provider that cannot, a credential it cannot spend. */
+/**
+ * What a settled turn leaves to keep its cache by, or undefined: a spawned child, a runtime or provider that cannot, a
+ * credential it cannot spend, or a turn whose placement ended under it (its mount anchor gone, so its execution no
+ * longer stands). Asked in the turn's `finally`, before it is settled, so it never throws: keeping a cache is a nicety,
+ * and a refusal here must not keep the turn from being settled, nor have it reported as that refusal.
+ */
 export const keepableOf = (
-    deps: ProviderDeps & Pick<Services, "providerModules">,
+    deps: ProviderDeps & Pick<Services, "providerModules" | "logger">,
     turn: {
         readonly input: RoutedTurn;
         readonly request: AgentRequest;
@@ -79,7 +84,13 @@ export const keepableOf = (
     if (turn.spawned || account === undefined || sessionId === undefined || !capabilitiesOf(input.agent, input.harness).warm) {
         return undefined;
     }
-    const replay = deps.providerModules.find((module) => module.id === input.agent)?.warm?.keepable(deps, { request, account, sessionId, anchor: startAnchor });
+    let replay: WarmReplay | undefined;
+    try {
+        replay = deps.providerModules.find((module) => module.id === input.agent)?.warm?.keepable(deps, { request, account, sessionId, anchor: startAnchor });
+    } catch (error) {
+        deps.logger.warn({ err: error, conversationId: input.conversationId }, "keep-warm: the settled turn's cache cannot be kept");
+        return undefined;
+    }
     return replay === undefined ? undefined : { ...replay, provider: input.agent, harness: input.harness, account, sessionId, fingerprint: turn.fingerprint };
 };
 

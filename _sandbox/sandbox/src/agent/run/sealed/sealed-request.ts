@@ -138,10 +138,14 @@ const failure = async (services: Services, event: ErrorFrame, ran: SealedRun): P
 
 // Runs the planned request to its last frame and answers with its prose. A retry the provider defers past what a helper
 // can wait is the end of it; so is an error frame, once filed.
-const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadline: SealedDeadline): Promise<RunOutcome> => {
+// Leaving early stops the attempt BEFORE the loop is closed: closing a runtime's frames waits for its loop to wind down,
+// and a loop waiting out a provider's deferred retry winds down only once it is aborted, so closing first would hold the
+// caller until the deadline and then misname the refusal as the clock.
+const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadline: SealedDeadline, stop: () => void): Promise<RunOutcome> => {
     let text = "";
     let sessionId: string | undefined;
     let answered = false;
+    let early: { readonly outcome: RunOutcome } | { readonly error: Error } | undefined;
     const frames: AsyncIterable<AgentEvent> = plan.run(plan.request.spec);
     for await (const event of frames) {
         if (event.kind === "session") {
@@ -154,10 +158,20 @@ const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadli
             }
             text += event.text;
         } else if (event.kind === "provider_retry" && (event.nextAttemptAt ?? 0) - Date.now() > MAX_RETRY_WAIT_MS) {
-            throw new Error(`the model did not answer (retry deferred ${Math.round(((event.nextAttemptAt ?? 0) - Date.now()) / 1000)}s)`);
+            early = { error: new Error(`the model did not answer (retry deferred ${Math.round(((event.nextAttemptAt ?? 0) - Date.now()) / 1000)}s)`) };
         } else if (event.kind === "error") {
-            return failure(services, event, { ask, plan, sessionId, answered });
+            early = { outcome: await failure(services, event, { ask, plan, sessionId, answered }) };
         }
+        if (early !== undefined) {
+            stop();
+            break;
+        }
+    }
+    if (early !== undefined) {
+        if ("error" in early) {
+            throw early.error;
+        }
+        return early.outcome;
     }
     const answer = text.trim();
     if (answer === "") {
@@ -171,12 +185,20 @@ const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadli
 // what sends the arm's account choice to a sibling with room, the move a turn's limit makes through its conversation's
 // booking (models/limit-way.ts), which a sealed request has none of. Past that, or back on an account already refused,
 // there is nothing left to try here, and a helper's chain has other models.
-const answerOf = async (services: Services, ask: SealedAsk, plan: () => Promise<TurnArmPlan>, deadline: SealedDeadline): Promise<string> => {
+// Each attempt runs on a signal of its own under the request's, so one can be stopped without ending the request.
+const answerOf = async (
+    services: Services,
+    ask: SealedAsk,
+    plan: (signal: AbortSignal) => Promise<TurnArmPlan>,
+    request: AbortSignal,
+    deadline: SealedDeadline,
+): Promise<string> => {
     const refused = new Set<string>();
     let last: Error | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
+        const own = new AbortController();
         // oxlint-disable-next-line eslint/no-await-in-loop -- the second plan reads what the first run's refusal filed
-        const planned = await plan();
+        const planned = await plan(AbortSignal.any([request, own.signal]));
         if (!planned.ok) {
             throw last ?? new Error(planned.message);
         }
@@ -184,7 +206,7 @@ const answerOf = async (services: Services, ask: SealedAsk, plan: () => Promise<
             break;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- one run at a time, on the account the plan just chose
-        const outcome = await runOnce(services, ask, planned, deadline);
+        const outcome = await runOnce(services, ask, planned, deadline, () => own.abort());
         if ("answer" in outcome) {
             return outcome.answer;
         }
@@ -212,6 +234,8 @@ export const runSealedRequest = async (services: Services, ask: SealedAsk): Prom
     });
     // The shield's read does not hold the authority for the request: checked again right before a runtime is planned.
     assertAgentExecutionContext(ask.execution);
+    // Cancelled while the shield read: there is nobody left to answer, so nothing is planned.
+    ask.signal.throwIfAborted();
     // The caller's cancel is forwarded rather than passed through, since an answer must tear the loop down too. Covers
     // every attempt: a rung the chain is waiting on must not double its budget by being planned again.
     const abort = new AbortController();
@@ -229,8 +253,8 @@ export const runSealedRequest = async (services: Services, ask: SealedAsk): Prom
         ...opt("conversationId", ask.conversationId),
     };
     try {
-        const plan = (): Promise<TurnArmPlan> => adapter.preflight(services, input, sealedContext(services, ask, sealed.prompt, abort.signal), []);
-        return sealed.restore(await answerOf(services, ask, plan, deadline));
+        const plan = (signal: AbortSignal): Promise<TurnArmPlan> => adapter.preflight(services, input, sealedContext(services, ask, sealed.prompt, signal), []);
+        return sealed.restore(await answerOf(services, ask, plan, abort.signal, deadline));
     } catch (error) {
         // A failure once the clock ran out is the clock's, whatever the torn-down loop threw instead.
         throw ask.signal.aborted && !deadline.expired() ? error : deadline.claim(error);

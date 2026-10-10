@@ -255,15 +255,23 @@ const cronEvery = (every, id) => {
     const count = Number(match[1]);
     const unit = match[2];
     const minute = minuteOf(id);
+    // A cron step restarts at every hour (or day), so only a step that divides it evenly keeps an even beat: `*/45`
+    // fires at :00 and :45, fifteen minutes apart, and `*/7` hours leaves a three-hour gap before midnight.
     if (unit === "m") {
         if (count < 5 || count > 59) {
             return die(COMMAND, "--every in minutes runs from 5m to 59m; use hours past that");
+        }
+        if (60 % count !== 0) {
+            return die(COMMAND, `--every ${count}m does not divide the hour evenly, so its runs would not be ${count} minutes apart: use 5m, 6m, 10m, 12m, 15m, 20m or 30m, or give --cron`);
         }
         return `*/${count} * * * *`;
     }
     if (unit === "h") {
         if (count < 1 || count > 23) {
             return die(COMMAND, "--every in hours runs from 1h to 23h; use 1d past that");
+        }
+        if (24 % count !== 0) {
+            return die(COMMAND, `--every ${count}h does not divide the day evenly, so its runs would not be ${count} hours apart: use 1h, 2h, 3h, 4h, 6h, 8h or 12h, or give --cron`);
         }
         return count === 1 ? `${minute} * * * *` : `${minute} */${count} * * *`;
     }

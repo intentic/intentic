@@ -1,6 +1,7 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import { liveTurnConversations } from "./actor/conversation-holdings.js";
+import { unkeptHoldReason } from "./actor/limit-hold.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import { isIsolated } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
@@ -62,6 +63,25 @@ export const checks = ({
             if (stranded.length > 0) {
                 fail(
                     `${stranded.length} checkout(s) stand off their conversation's own branch with commits the turn's carry could not copy onto agent/<id>, which review and land read: ${stranded.join(", ")}`,
+                );
+            }
+        },
+    },
+    // A spent allowance's held turn is written onto its entry so a restart keeps the turn and its booking (limit-hold.ts).
+    // One the schema refuses lives only as long as the daemon: a restart loses it with no card and no line, as a batch of
+    // a person's messages joining more files than a turn may carry once did (2026-10-10). Every turn the daemon builds is
+    // meant to parse, so a finding here names the field that does not.
+    {
+        name: "held-limit-turns-are-kept-for-a-restart",
+        on: ["turn-settled", "sweep"],
+        run: ({ fail }) => {
+            const unkept = agents.ids().flatMap((id) => {
+                const reason = unkeptHoldReason(conversations.state(id)?.resume.held);
+                return reason === undefined ? [] : [`${id} (${reason})`];
+            });
+            if (unkept.length > 0) {
+                fail(
+                    `${unkept.length} turn(s) held on a spent allowance cannot be written for a restart, so a restart before the reset loses the turn and its booking: ${unkept.join(", ")}`,
                 );
             }
         },

@@ -78,9 +78,23 @@ export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
     .refine(oneTarget, ONE_TARGET);
 // Index-only moves; nothing on disk changes, so neither needs a checkpoint. An empty target means the whole repository
 // (`git add -A`, or the entire index).
+// `chip` is the reversible form of an origin's move (the Changes panel's origin chips): staging records what the index
+// held at every path it moves, and unstaging the same chip writes exactly that back, so a partial `git add -p` or a
+// merge's clean result survives one on/off. It names its own target, so it goes alone.
+const oneIndexMove = (move: GitTarget & { readonly chip?: string | undefined }): boolean =>
+    oneTarget(move) && (move.chip === undefined || (move.paths === undefined && move.scope === undefined));
 export const GitIndexMoveSchema = RepoParamSchema.extend(GitTargetSchema.shape)
+    .extend({
+        chip: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+                `Stage one origin's unstaged files (a conversation id, or "${UNATTRIBUTED_ORIGIN}" for the files none landed) so the move can be taken back exactly: unstaging with the same value later restores what the index held at each of those paths before, partial staging included, and leaves alone any path staged differently since or a commit that already took them. Goes without paths or a scope.`,
+            ),
+    })
     .describe("What to move across the index. Nothing on disk changes either way.")
-    .refine(oneTarget, ONE_TARGET);
+    .refine(oneIndexMove, { message: "name paths, a scope or a chip, not more than one" });
 // No separate "set upstream" flag: the daemon runs `push -u` exactly when the branch has none yet, which is never
 // destructive.
 export const PushSchema = RepoParamSchema.extend({

@@ -546,9 +546,14 @@ The app (`src-tauri/src/drop_copy.rs`):
    - **Streamed:** one archive into the sandbox's own `tar -x` (`docker exec -i -u 0 <container>`), for what the
      helpers cannot take: a big file on a place that will not mount (a network share), an archive that did not
      unpack, a file a helper had trouble reading, and everything when no helper will run.
-4. Removes from the workspace any file written but not whole: a failed read of a streamed file (tar pads it out to its
-   size), an archive that failed partway through unpacking, or a cancel partway. A failed file is missing rather than
-   there and wrong. A file that was never written is left alone, so an older copy of it stays.
+4. Counts a file done only on the word of the tar writing it into the workspace: each route's writing tar runs with
+   `-v` and its complaints on the same stream, so a file is whole once tar names the next with no complaint between,
+   or exits 0 after it. The mounted route's reading tar must also have read the file without complaint. Anything put
+   into a pipe that tar then failed to write (a full disk) is not done.
+5. Removes from the workspace any file a tar started and did not finish: a failed read (tar pads it out to its size),
+   a failed write, or the file a cancel stopped it on. A failed file is missing rather than there and wrong. A file
+   no tar started on is left alone, so an older copy of it stays: after a cancel, the archives the staging helper
+   never opened, and the rest of the one it was on, are untouched, and what it finished stays.
 
 Measured on omen (Docker Desktop for Windows) on 2026-10-09. Each class is about 512 MB, except the stills (164 MB).
 These ran with five of the CI runner's jobs on the same Docker engine; a row from an idle engine says so.

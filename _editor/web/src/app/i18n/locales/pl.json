@@ -7354,6 +7354,9 @@
             },
             "qualifiers": {
                 "alsoExecRm": "także -exec rm i -execdir rm",
+                "alsoRemoveItemAliases": "także jego aliasy ri, rd, rmdir, del, erase oraz rm -Recurse",
+                "alsoRmdirS": "także rmdir /s i del /s",
+                "alsoClearDisk": "także Clear-Disk oraz format C:",
                 "alsoFindDelete": "także find / -delete; tylko gdy celem jest katalog główny, wymieniony niżej",
                 "alsoForceWithLease": "także -f i --force-with-lease",
                 "alsoNetcat": "także ncat, netcat, telnet, ftp i ssh",

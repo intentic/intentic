@@ -182,7 +182,7 @@ const execute = async (interpreter: Interpreter, timeout: number): Promise<Comma
 const GATED_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["files.destructive", "system.destructive", "container.state"]);
 
 // The refusal a destructive command earns, naming what the classifier saw so the user can judge the ask.
-const destructiveRefusal = (classes: readonly CommandClass[]): string =>
+export const destructiveRefusal = (classes: readonly CommandClass[]): string =>
     `Refused: this command would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on this device, ` +
     `and "Run destructive commands" is switched off for it. Turn it on in its capability card to allow this, ` +
     `or run a command that does not delete.`;

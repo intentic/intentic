@@ -13,7 +13,7 @@ import type { CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { memoryFleet } from "../../testing.js";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pesel } from "../../privacy/detect/tests/ids.testing.js";
@@ -206,6 +206,49 @@ describe("a turn the privacy shield reads", () => {
         expect(hook.systemAppend?.startsWith(`Be brief.\n\nPersonal data in this conversation`)).toBe(true);
     });
 
+    // Cursor starts the servers in the project's .cursor/mcp.json with its project settings, unapproved and past the
+    // masking proxy; one given in the agent's own options wins its name, so each is given again through the proxy.
+    describe("the project's own MCP servers", () => {
+        const opened = async (mcp: unknown): Promise<AgentOptions> => {
+            create.mockResolvedValue({ agentId: `agent-project-mcp`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
+            const turn = await shielded({ prompt: `list the tickets` });
+            mkdirSync(join(turn.spec.cwd, `.cursor`));
+            writeFileSync(join(turn.spec.cwd, `.cursor`, `mcp.json`), typeof mcp === `string` ? mcp : JSON.stringify(mcp));
+            await collect(createCursorAgent(hooked(true))(turn));
+            return create.mock.calls.at(-1)?.[0] as AgentOptions;
+        };
+
+        test("are reached through the masking proxy under their own names, with their headers filled in", async () => {
+            process.env[`INTENTIC_TEST_TICKETS_KEY`] = `k-1`;
+            const options = await opened({
+                mcpServers: { tickets: { url: `https://tickets.example/mcp`, headers: { Authorization: `Bearer \${env:INTENTIC_TEST_TICKETS_KEY}` } } },
+            });
+            delete process.env[`INTENTIC_TEST_TICKETS_KEY`];
+            const tickets = options.mcpServers?.[`tickets`] as { url: string; headers?: Record<string, string> };
+            expect(tickets.url).toContain(`/privacy/mcp/`);
+            expect(tickets.headers).toEqual({ Authorization: `Bearer k-1` });
+            expect(options.local?.settingSources).toEqual([`mdm`, `project`]);
+        });
+
+        test("one that runs as a local process can't be proxied, so the project's settings are not loaded on the turn", async () => {
+            const options = await opened({
+                mcpServers: { tickets: { url: `https://tickets.example/mcp` }, files: { command: `npx`, args: [`files-mcp`] } },
+            });
+            expect(options.local?.settingSources).toEqual([`mdm`]);
+            expect(options.mcpServers?.[`files`]).toBeUndefined();
+        });
+
+        test("a config that can't be read is not loaded either", async () => {
+            expect((await opened(`{ not json`)).local?.settingSources).toEqual([`mdm`]);
+        });
+
+        test("a project without one loads its settings as always", async () => {
+            create.mockResolvedValue({ agentId: `agent-no-mcp`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
+            await collect(createCursorAgent(hooked(true))(await shielded({ prompt: `hi` })));
+            expect((create.mock.calls.at(-1)?.[0] as AgentOptions).local?.settingSources).toEqual([`mdm`, `project`]);
+        });
+    });
+
     test("watching, withholds none of Cursor's tools and adds no note, while still reading what passes", async () => {
         create.mockResolvedValue({
             agentId: `agent-watched`,
@@ -234,6 +277,96 @@ describe("a turn the privacy shield reads", () => {
         const refusal = events[0];
         expect(refusal).toMatchObject({ kind: `error`, code: `privacy-instructions` });
         expect(refusal?.kind === `error` ? refusal.message : ``).toContain(`AGENTS.md holds personal data`);
+    });
+
+    // Every message reaches Cursor through the turn's session, which masks it: the feedback typed when rejecting a plan
+    // becomes the next planning prompt, a path the first prompt's masking never saw.
+    test("masks the feedback that rejects a plan before it is sent as the next planning prompt", async () => {
+        const prompts: string[] = [];
+        const settle: ((result: { status: string }) => void)[] = [];
+        create.mockResolvedValue({
+            agentId: `agent-plan-shielded`,
+            send: async (prompt: string, options: SendOptions) => {
+                prompts.push(prompt);
+                options.onDelta?.({ update: { type: `text-delta`, text: `plan ${prompts.length}` } as InteractionUpdate });
+                return { wait: () => new Promise((resolve: (result: { status: string }) => void) => settle.push(resolve)), cancel };
+            },
+            close: () => {},
+        });
+        const controller = new AbortController();
+        const base = await shielded({ prompt: `plan the export` });
+        const seen: AgentEvent[] = [];
+        const turn = (async () => {
+            for await (const event of createCursorAgent(hooked(true))({ ...base, policy: { permissionMode: `plan` }, signal: controller.signal })) {
+                seen.push(event);
+            }
+        })();
+
+        await waitFor(() => expect(settle).toHaveLength(1));
+        settle[0]?.({ status: `success` });
+        await waitFor(() => expect(seen.some((event) => event.kind === `plan`)).toBe(true));
+        const plan = seen.find((event): event is Extract<AgentEvent, { kind: `plan` }> => event.kind === `plan`);
+        expect(cards.resolve({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: false, feedback: `use the customer with PESEL ${NUMBER}` })).toBe(`settled`);
+        await waitFor(() => expect(prompts).toHaveLength(2));
+        controller.abort();
+        settle[1]?.({ status: `success` });
+        await turn;
+
+        expect(prompts[1]).toContain(`rejected the plan`);
+        expect(prompts[1]).toContain(TOKEN);
+        expect(prompts[1]).not.toContain(NUMBER);
+    });
+
+    // The SDK's Run keeps its methods on its prototype, so the masking session must call them, not copy them.
+    test("masks what a live run is steered with, on a run whose methods live on its prototype", async () => {
+        const steered: string[] = [];
+        let settle: (result: { status: string }) => void = () => {};
+        class Run {
+            wait(): Promise<{ status: string }> {
+                return new Promise((resolve) => {
+                    settle = resolve;
+                });
+            }
+            cancel(): Promise<void> {
+                return cancel();
+            }
+            async steer(text: string): Promise<string> {
+                steered.push(text);
+                return `complete_delivered`;
+            }
+        }
+        create.mockResolvedValue({ agentId: `agent-steered-shielded`, send: async () => new Run(), close: () => {} });
+        const steering = new SteeringQueue();
+        const turn = collect(createCursorAgent(hooked(true))(await shielded({ prompt: `export the customers`, steering })));
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        steering.push(`only the one with PESEL ${NUMBER}`);
+        await waitFor(() => expect(steered).toHaveLength(1));
+        settle({ status: `success` });
+        const events = await turn;
+
+        expect(steered).toEqual([`only the one with PESEL ${TOKEN}`]);
+        expect(events.filter((event) => event.kind === `error`)).toEqual([]);
+    });
+
+    test("sends nothing, and says the turn was unshielded, when a message cannot be masked", async () => {
+        const send = jest.fn(async () => ({ wait: async () => ({ status: `success` }), cancel }));
+        create.mockResolvedValue({ agentId: `agent-unmasked`, send, close: () => {} });
+        const base = await shielded({ prompt: `PESEL ${NUMBER}` });
+        const privacy = base.hooks.privacy;
+        if (privacy === undefined) {
+            throw new Error(`no shield`);
+        }
+        const failing = {
+            ...privacy,
+            mask: async () => {
+                throw new Error(`reader down`);
+            },
+        };
+        const events = await collect(createCursorAgent(hooked(true))({ ...base, hooks: { ...base.hooks, privacy: failing } }));
+
+        expect(send).not.toHaveBeenCalled();
+        expect(events).toContainEqual(expect.objectContaining({ kind: `error`, code: `privacy-unshielded` }));
+        expect(events.at(-1)).toEqual({ kind: `done` });
     });
 });
 

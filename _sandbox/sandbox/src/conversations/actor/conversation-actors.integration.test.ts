@@ -639,7 +639,17 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             run: async (id) => {
                 const ladder = random() < 0.5;
                 const tries = fleet.conversations.state(id)?.resume.stopTries ?? 0;
-                const fired = await send(id, { kind: "held-fired", ladder });
+                // The dispatcher names the record it judged; a quarter of the time a copy of it, as a pass that read the
+                // hold before it changed would, which must never fire.
+                const current = fleet.conversations.state(id)?.resume.held;
+                if (current === undefined) {
+                    return;
+                }
+                const stale = random() < 0.25;
+                const fired = await send(id, { kind: "held-fired", ladder, judged: stale ? { ...current } : current });
+                if (stale) {
+                    expect(fired).toBe(false);
+                }
                 if (fired === true) {
                     modelOf(id).firedThisHold += 1;
                     // A ladder rung fires only while the ladder has rungs left.

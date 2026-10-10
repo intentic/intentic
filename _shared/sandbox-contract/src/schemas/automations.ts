@@ -180,11 +180,15 @@ export type AutomationTarget = z.infer<typeof AutomationTargetSchema>;
 export const FireOnSchema = z.enum(["pass", "change"]);
 export type FireOn = z.infer<typeof FireOnSchema>;
 // What the daemon remembers of a watch between checks (.intentic/records/automation-watch.json), and what the list
-// shows under it. Values are kept whole up to a bound, so the next check can say what changed.
+// shows under it. Values are kept whole up to a bound, so the next check can say what changed; whether anything changed
+// is decided on the digest of the whole value, so a page longer than the bound is not "changed" on every check.
 export const WatchStateSchema = z.object({
     armedAt: z.number().describe("When it was first checked, in milliseconds."),
     checkedAt: z.number().describe("When it was last checked, in milliseconds."),
-    value: z.string().optional().describe("What the last passing check saw. Absent until one has passed."),
+    value: z.string().optional().describe("What the last passing check saw, cut to a bound. Absent until one has passed."),
+    digest: z.string().optional().describe("sha256 of the whole of what the last passing check saw, before any cut."),
+    // A watch edited to check something else starts over: what the old check saw says nothing about the new one.
+    condition: z.string().optional().describe("Which check this state belongs to: a digest of the guard or source it was recorded for."),
     changedAt: z.number().optional().describe("When what it saw last changed, in milliseconds."),
     firedAt: z.number().optional().describe("When it last set something off, in milliseconds."),
     // Why the last check did not pass, when it did not.

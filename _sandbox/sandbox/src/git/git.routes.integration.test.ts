@@ -179,6 +179,41 @@ test("a repo's build outputs leave the review while the daemon's check builds it
     expect(await review()).toEqual([["dist/bin/tool", "src/tool.ts"]]);
 });
 
+test("a scope stages only the rows the review shows, so a build output hidden mid-check is not staged under it", async () => {
+    const workspace = tempWorkspace([{ name: "ext" }]);
+    const staged: string[][] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    changedFiles: async () => ({
+                        branch: "main",
+                        conflicted: [],
+                        staged: [],
+                        unstaged: [
+                            { path: "dist/bin/tool", status: "deleted" as const },
+                            { path: "src/tool.ts", status: "modified" as const },
+                        ],
+                        blobs: new Map(),
+                    }),
+                    stagePaths: async (_dir, paths) => {
+                        staged.push([...paths]);
+                    },
+                },
+            }),
+        ),
+    );
+    const checkDone = markCheckRunning("ext");
+    try {
+        await client.git.stage({ repo: "ext", scope: { side: "unstaged", origin: "yours" } });
+    } finally {
+        checkDone();
+    }
+    expect(staged).toEqual([["src/tool.ts"]]);
+});
+
 test("the git-history graph resolves the 'root' scope to /work: reads, and a HEAD-mover that checkpoints first", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
     const calls: string[] = [];

@@ -1,7 +1,7 @@
 import { routingFor } from "../../providers/accounts/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { ATTACHMENT_LIMIT, MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { type Booking, holdOf, type QueuedItem, waitingOf } from "../../../conversations/actor/conversation-queue.js";
@@ -215,12 +215,20 @@ const steerItem = async (services: Services, item: Omit<QueuedItem, "revision">)
 
 // Messages that go out as one turn: one person's in a row, joined as the composer always joined them; anything else
 // alone, since the sandbox's own words stand as a card of their own. Never two senders: a turn has one owner and fence.
+// Never more files than one turn may carry (ATTACHMENT_LIMIT) either: the run stops before the message that would take
+// it past, which goes next, said into this turn or as its own. A joined turn past the limit once ran, and its hold on a
+// spent allowance then failed the schema it is kept under, so a restart lost the turn and its booking without a word
+// (limit-hold.ts, 2026-10-10). The first message always goes: the schema already held it to the limit when it was sent.
 export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] => {
     const first = items[0];
     if (first === undefined || first.voice !== "person") {
         return items.slice(0, 1);
     }
-    const end = items.findIndex((item) => item.voice !== "person" || item.actor !== first.actor);
+    let files = 0;
+    const end = items.findIndex((item, index) => {
+        files += item.turn.attachments?.length ?? 0;
+        return item.voice !== "person" || item.actor !== first.actor || (index > 0 && files > ATTACHMENT_LIMIT);
+    });
     return items.slice(0, end === -1 ? items.length : end);
 };
 

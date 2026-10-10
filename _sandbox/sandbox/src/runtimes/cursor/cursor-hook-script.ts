@@ -6,20 +6,26 @@ export const GATE_SCRIPT_NAME = "intentic-command-guard.mjs";
 
 // The mode a wrapped shell command runs the script in, and the form the command takes. A command the shield wraps runs
 // through the script, which runs the real command and hands what it prints to the daemon to mask before Cursor (and so
-// its model) reads it; the command itself travels as base64 so no shell can read anything into it on the way.
+// its model) reads it. Cursor writes the wrapper into the call's own arguments and sends it back to its servers in the
+// shell's result, so the wrapper carries no real value: only an opaque id, by which the script fetches the command with
+// its values once from the daemon (cursor-hooks.ts), and, as base64 so no shell reads anything into it, the command as
+// the model wrote it, tokens and all, for whatever shows the call.
 const SHIELD_MODE = "shield";
 const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
-const WRAPPED = new RegExp(String.raw`^node '(?:[^']|'\\'')+' ${SHIELD_MODE} '(?:[^']|'\\'')+' ([A-Za-z0-9+/=]+)$`, "u");
+const WRAPPED = new RegExp(String.raw`^node '(?:[^']|'\\'')+' ${SHIELD_MODE} '(?:[^']|'\\'')+' ([A-Za-z0-9-]+) ([A-Za-z0-9+/=]*)$`, "u");
 
-export const shieldedCommand = (script: string, turn: string, command: string): string =>
-    `node ${quoted(script)} ${SHIELD_MODE} ${quoted(turn)} ${Buffer.from(command, "utf8").toString("base64")}`;
+export const shieldedCommand = (script: string, turn: string, id: string, shown: string): string =>
+    `node ${quoted(script)} ${SHIELD_MODE} ${quoted(turn)} ${id} ${Buffer.from(shown, "utf8").toString("base64")}`;
 
-// The command a wrapped one runs, so the command gate and the transcript read what the model asked for rather than the
-// wrapper; any other command as it is.
-export const unshieldedCommand = (command: string): string => {
+// A wrapped command's id and the command as the model wrote it; undefined for any other command.
+export const wrappedCommand = (command: string): { readonly id: string; readonly shown: string } | undefined => {
     const wrapped = WRAPPED.exec(command);
-    return wrapped?.[1] === undefined ? command : Buffer.from(wrapped[1], "base64").toString("utf8");
+    return wrapped?.[1] === undefined || wrapped[2] === undefined ? undefined : { id: wrapped[1], shown: Buffer.from(wrapped[2], "base64").toString("utf8") };
 };
+
+// The command a wrapped one stands for as the model wrote it, so the transcript reads what the model asked for rather
+// than the wrapper; any other command as it is.
+export const unshieldedCommand = (command: string): string => wrappedCommand(command)?.shown ?? command;
 
 // Every failure path answers the harmless verdict silently, since an unregistered call is usually the owner's own manual
 // run: no environment, no added context, an allowed command, an untouched tool call. A shielded command is the
@@ -33,7 +39,7 @@ export const gateScript = (socketPath: string): string =>
         `// prints reaches the model only as the shield lets it.`,
         `import { request } from "node:http";`,
         `import { spawn } from "node:child_process";`,
-        `import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";`,
+        `import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";`,
         `import { constants } from "node:os";`,
         `import { extname, isAbsolute, resolve } from "node:path";`,
         `import { StringDecoder } from "node:string_decoder";`,
@@ -50,6 +56,12 @@ export const gateScript = (socketPath: string): string =>
         `const IMAGE = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"]);`,
         `const MAX_TEXT = 4 * 1024 * 1024;`,
         `const MAX_IMAGE = 16 * 1024 * 1024;`,
+        `const MAX_DOCUMENT = 16 * 1024 * 1024;`,
+        `// A line too long to wait for is cut where no value the shield finds can straddle the cut, and never closer to its end`,
+        `// than this, so what is held back still holds the whole of a value that started before the read ended.`,
+        `const LONG_LINE = 65536;`,
+        `const TAIL = 1024;`,
+        `const NOT_FETCHED = "[Not run: the privacy shield could not be reached to hand over this command.]\\n";`,
         `const WITHHELD = "\\n[The rest of this command's output was withheld: the privacy shield could not be reached to mask it.]\\n";`,
         ``,
         `const ask = (path, body) =>`,
@@ -96,6 +108,43 @@ export const gateScript = (socketPath: string): string =>
         `        return undefined;`,
         `    }`,
         `};`,
+        `// What Cursor's read tool sends its model as raw bytes, telling the read hook only content "": a PDF (by its extension,`,
+        `// as Cursor decides, or its signature) and a picture (by its signature, as Cursor decides, or a listed extension).`,
+        `const headOf = (path) => {`,
+        `    const fd = openSync(path, "r");`,
+        `    try {`,
+        `        const head = Buffer.alloc(16);`,
+        `        return head.subarray(0, readSync(fd, head, 0, 16, 0));`,
+        `    } finally {`,
+        `        closeSync(fd);`,
+        `    }`,
+        `};`,
+        `const PICTURE_SIGNATURES = [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], [0xff, 0xd8, 0xff], [0x47, 0x49, 0x46, 0x38]];`,
+        `const kindOf = (path, head) => {`,
+        `    const starts = (bytes, at = 0) => bytes.every((byte, index) => head[at + index] === byte);`,
+        `    const webp = head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP";`,
+        `    if (extname(path).toLowerCase() === ".pdf" || head.subarray(0, 5).toString("latin1") === "%PDF-") {`,
+        `        return "document";`,
+        `    }`,
+        `    return webp || PICTURE_SIGNATURES.some((signature) => starts(signature)) || IMAGE.has(extname(path).toLowerCase()) ? "image" : "opaque";`,
+        `};`,
+        `// A read whose content Cursor did not hand the hook: the file's bytes, for the daemon to check or refuse. Cursor says`,
+        `// nothing of what it sent, so a file that is not empty and is neither a picture nor a PDF (a video, which Cursor also`,
+        `// sends as bytes) is marked opaque, and one that could not be looked at here is too.`,
+        `const attachUnread = (payload, path) => {`,
+        `    const size = path === undefined ? undefined : sizeOf(path);`,
+        `    if (size === 0) {`,
+        `        return;`,
+        `    }`,
+        `    const kind = size === undefined ? "opaque" : kindOf(path, headOf(path));`,
+        `    if (kind === "image") {`,
+        `        payload.image_base64 = size > MAX_IMAGE ? "" : readFileSync(path).toString("base64");`,
+        `    } else if (kind === "document") {`,
+        `        payload.document_base64 = size > MAX_DOCUMENT ? "" : readFileSync(path).toString("base64");`,
+        `    } else {`,
+        `        payload.opaque = true;`,
+        `    }`,
+        `};`,
         `const textOf = (path) => {`,
         `    const size = sizeOf(path);`,
         `    return size === undefined || size > MAX_TEXT ? undefined : readFileSync(path, "utf8");`,
@@ -110,10 +159,13 @@ export const gateScript = (socketPath: string): string =>
         `        return;`,
         `    }`,
         `    try {`,
-        `        // A picture is read here, where its path means what Cursor meant by it; empty when too large to check.`,
+        `        // What Cursor read as bytes is read here, where its path means what Cursor meant by it; empty when too large to`,
+        `        // check. A picture by its extension is read whatever content says, as before.`,
         `        if (mode === "read") {`,
         `            const path = pathOf(payload.file_path, payload.cwd);`,
-        `            if (path !== undefined && IMAGE.has(extname(path).toLowerCase())) {`,
+        `            if (typeof payload.content !== "string" || payload.content === "") {`,
+        `                attachUnread(payload, path);`,
+        `            } else if (path !== undefined && IMAGE.has(extname(path).toLowerCase())) {`,
         `                const size = sizeOf(path);`,
         `                payload.image_base64 = size === undefined || size > MAX_IMAGE ? "" : readFileSync(path).toString("base64");`,
         `            }`,
@@ -127,7 +179,11 @@ export const gateScript = (socketPath: string): string =>
         `            }`,
         `        }`,
         `    } catch {`,
-        `        // allow(silent-catch): what could not be read here is left for the daemon to decide on without it.`,
+        `        // allow(silent-catch): what could not be read here is left for the daemon to decide on without it; a read`,
+        `        // whose content Cursor did not hand over is marked opaque, which a shielded turn refuses.`,
+        `        if (mode === "read" && (typeof payload.content !== "string" || payload.content === "")) {`,
+        `            payload.opaque = true;`,
+        `        }`,
         `    }`,
         `    try {`,
         `        process.stdout.write(JSON.stringify(await ask(spec.path, payload)));`,
@@ -159,14 +215,58 @@ export const gateScript = (socketPath: string): string =>
         `    }`,
         `};`,
         ``,
+        `// Where a line too long to hold whole is cut, at least TAIL from its end (so the value the last read may have split`,
+        `// is held back whole, with the context before it): the best gap in the stretch before that. Best is a space with no`,
+        `// digit, capital or @ within QUIET of it either side, where no value nor the label that announces one can be; then a`,
+        `// space between two lowercase words, which no name, number or address spans; then any space; then a cell separator;`,
+        `// then any punctuation; and only in a run with no gap at all at TAIL from the end.`,
+        `const QUIET = 64;`,
+        `const LOUD = /[\\p{Lu}\\d@]/u;`,
+        `const longCut = (text) => {`,
+        `    const limit = text.length - TAIL;`,
+        `    const found = [-1, -1, -1, -1, -1];`,
+        `    for (let at = limit - 1; at > 0 && at >= limit - 16384; at -= 1) {`,
+        `        const char = text[at];`,
+        `        if (char === " " || char === "\\t") {`,
+        `            if (found[0] < 0 && !LOUD.test(text.slice(Math.max(0, at - QUIET), at + QUIET))) {`,
+        `                found[0] = at + 1;`,
+        `                break;`,
+        `            }`,
+        `            if (found[1] < 0 && /\\p{Ll}/u.test(text[at + 1] ?? "") && /(?:^|\\s)\\p{Ll}\\S*$/u.test(text.slice(Math.max(0, at - 48), at))) {`,
+        `                found[1] = at + 1;`,
+        `            }`,
+        `            if (found[2] < 0) {`,
+        `                found[2] = at + 1;`,
+        `            }`,
+        `        } else if (found[3] < 0 && (char === "," || char === ";" || char === "|")) {`,
+        `            found[3] = at + 1;`,
+        `        } else if (found[4] < 0 && /[&="'<>(){}\\[\\]]/u.test(char)) {`,
+        `            found[4] = at + 1;`,
+        `        }`,
+        `    }`,
+        `    return found.find((at) => at > 0) ?? limit;`,
+        `};`,
+        ``,
         `// A shielded shell command: run here, its output handed to the daemon a stretch at a time and printed as masked.`,
-        `const shielded = () => {`,
+        `const shielded = async () => {`,
         `    const turn = process.argv[3] ?? "";`,
-        `    const command = Buffer.from(process.argv[4] ?? "", "base64").toString("utf8");`,
+        `    // The command with its values, fetched once by the id the wrapper carries: it never stands in Cursor's arguments.`,
+        `    let fetched;`,
+        `    try {`,
+        `        fetched = await ask("/shell-command", { conversation_id: turn, id: process.argv[4] ?? "" });`,
+        `    } catch {`,
+        `        fetched = undefined;`,
+        `    }`,
+        `    if (typeof fetched?.command !== "string") {`,
+        `        process.stdout.write(typeof fetched?.refused === "string" ? fetched.refused : NOT_FETCHED);`,
+        `        process.exit(1);`,
+        `    }`,
+        `    const command = fetched.command;`,
         `    // bash first, as every agent writes its commands for it; the owner's own shell only where there is no bash.`,
         `    const shell = ["/bin/bash", "/usr/bin/bash", process.env.SHELL, "/bin/sh"].find((path) => typeof path === "string" && path !== "" && existsSync(path)) ?? "/bin/sh";`,
+        `    const options = { stdio: ["inherit", "pipe", "inherit"], ...(typeof fetched.cwd === "string" ? { cwd: fetched.cwd } : {}) };`,
         // allow(process-tiers): the script runs outside the daemon, as Cursor's own child, where no runCheck or spawnAs exists.
-        `    const child = spawn(shell, ["-c", "exec 2>&1\\n" + command], { stdio: ["inherit", "pipe", "inherit"] });`,
+        `    const child = spawn(shell, ["-c", "exec 2>&1\\n" + command], options);`,
         `    const decoder = new StringDecoder("utf8");`,
         `    let held = "";`,
         `    let withheld = false;`,
@@ -189,11 +289,13 @@ export const gateScript = (socketPath: string): string =>
         `            }`,
         `        });`,
         `    };`,
-        `    // Whole lines while the command runs, so a value is never split between two maskings; everything at the end.`,
+        `    // Whole lines while the command runs, so a value is never split between two maskings; everything at the end. A`,
+        `    // line too long to hold whole is cut at a gap between words (longCut).`,
         `    const flush = (all) => {`,
         `        clearTimeout(timer);`,
         `        timer = undefined;`,
-        `        const cut = all ? held.length : held.lastIndexOf("\\n") + 1;`,
+        `        const line = held.lastIndexOf("\\n") + 1;`,
+        `        const cut = all ? held.length : line > 0 || held.length < LONG_LINE ? line : longCut(held);`,
         `        if (cut > 0) {`,
         `            send(held.slice(0, cut));`,
         `            held = held.slice(cut);`,
@@ -201,8 +303,8 @@ export const gateScript = (socketPath: string): string =>
         `    };`,
         `    child.stdout.on("data", (chunk) => {`,
         `        held += decoder.write(chunk);`,
-        `        if (held.length >= 65536) {`,
-        `            flush(held.lastIndexOf("\\n") < 0);`,
+        `        if (held.length >= LONG_LINE) {`,
+        `            flush(false);`,
         `        } else if (timer === undefined) {`,
         `            timer = setTimeout(() => flush(false), 200);`,
         `        }`,
@@ -245,7 +347,7 @@ export const gateScript = (socketPath: string): string =>
         ``,
         `const mode = process.argv[2];`,
         `if (mode === ${JSON.stringify(SHIELD_MODE)}) {`,
-        `    shielded();`,
+        `    void shielded();`,
         `} else if (mode === "edited") {`,
         `    void edited();`,
         `} else {`,

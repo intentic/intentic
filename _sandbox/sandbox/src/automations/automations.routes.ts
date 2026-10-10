@@ -70,7 +70,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 refusePastMoment(existing.trigger, Date.now());
                 refusePastEnd(existing, Date.now());
             }
-            if (!(await services.automations.setEnabled(input.id, input.enabled))) {
+            if ((await services.automations.setEnabled(input.id, input.enabled)) === "missing") {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
             void reconcileListenerProcesses(services);

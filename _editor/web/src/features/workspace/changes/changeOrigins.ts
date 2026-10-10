@@ -1,5 +1,8 @@
 import {
+    changeIsFrom,
+    type GitChange,
     landedCommitMessage,
+    originsOfChange,
     type GitDiffSide,
     type LandedMessage,
     type LandedMessageDraft,
@@ -18,13 +21,15 @@ import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 // the files this row counts.
 export const YOURS = UNATTRIBUTED_ORIGIN;
 
-export const originsOf = (repo: RepoChanges, path: string): readonly string[] => repo.origins?.[path] ?? [];
+// Who landed a row, newest first: either leg of a rename counts, so a file renamed out of an agent's landing still
+// reads as that agent's (the contract's `originsOfChange`, the same reading the daemon's scopes use). A bare path is
+// a row that never moved.
+export const originsOf = (repo: RepoChanges, row: string | Pick<GitChange, "path" | "from">): readonly string[] =>
+    originsOfChange(typeof row === `string` ? { path: row } : row, repo.origins ?? {});
 
-// Whether a path is that origin's: a session it landed, or for YOURS a path no session did.
-export const isFrom = (repo: RepoChanges, path: string, id: string): boolean => {
-    const ids = originsOf(repo, path);
-    return id === YOURS ? ids.length === 0 : ids.includes(id);
-};
+// Whether a row is that origin's work: the one predicate the daemon resolves a scope with (`changeIsFrom`), so a count,
+// a discard question and the action they describe can never disagree about a file.
+export const isFrom = (repo: RepoChanges, row: Pick<GitChange, "path" | "from">, id: string): boolean => changeIsFrom(row, id, repo.origins ?? {});
 
 // One legend entry: an agent with files currently in the tree, and how many.
 export interface OriginSummary {
@@ -44,14 +49,20 @@ export const summarizeOrigins = (
     const files = new Map<string, number>();
     let yours = 0;
     for (const repo of repos) {
-        for (const path of new Set(sides.flatMap((side) => repo[side]).map((change) => change.path))) {
-            const ids = originsOf(repo, path);
-            if (ids.length === 0) {
-                yours += 1;
-                continue;
-            }
+        // A path counts for every origin one of its rows is from (a path staged and edited again is two rows), read
+        // row by row as the chip's own filter and scope read them, YOURS being the rows no conversation landed.
+        const byPath = new Map<string, Set<string>>();
+        for (const change of sides.flatMap((side) => repo[side])) {
+            const ids = originsOf(repo, change);
+            byPath.set(change.path, new Set([...(byPath.get(change.path) ?? []), ...(ids.length === 0 ? [YOURS] : ids)]));
+        }
+        for (const ids of byPath.values()) {
             for (const id of ids) {
-                files.set(id, (files.get(id) ?? 0) + 1);
+                if (id === YOURS) {
+                    yours += 1;
+                } else {
+                    files.set(id, (files.get(id) ?? 0) + 1);
+                }
             }
         }
     }

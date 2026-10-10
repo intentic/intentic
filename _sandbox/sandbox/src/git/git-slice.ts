@@ -44,6 +44,7 @@ import {
 } from "./changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes/changes-diff.js";
 import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
+import { type IndexEntries, indexEntries, writeIndexEntries } from "./changes/chip-staging.js";
 import { type ScratchScope, scratchOf } from "./changes/scratch.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
 import { type CommitScope, collectRepoDiff, type RepoDiff } from "./ops/commit-message.js";
@@ -83,6 +84,9 @@ export interface GitSlice {
         // What a stage-everything leaves out of the checkout at `dir` because it looks like scratch.
         readonly scratchOf: (dir: string, scope: ScratchScope) => Promise<ScratchPath[]>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
+        // Index entries read and written exactly, so an origin chip can put back the staging it replaced (chip-staging.ts).
+        readonly indexEntries: (dir: string, paths: readonly string[]) => Promise<IndexEntries>;
+        readonly writeIndexEntries: (dir: string, entries: ReadonlyMap<string, string | undefined>) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
         // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/settings-versions.ts).
         readonly commitOnly: (
@@ -176,6 +180,8 @@ export const createGitSlice = (): GitSlice => ({
         stageAll,
         scratchOf,
         unstagePaths,
+        indexEntries,
+        writeIndexEntries,
         commitIndex,
         commitOnly,
         discardPaths,

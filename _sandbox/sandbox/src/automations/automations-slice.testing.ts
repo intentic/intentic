@@ -17,10 +17,13 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
         setEnabled: async (id, enabled) => {
             const existing = automations.find((automation) => automation.id === id);
             if (existing === undefined) {
-                return false;
+                return "missing";
+            }
+            if (existing.enabled === enabled) {
+                return "unchanged";
             }
             existing.enabled = enabled;
-            return true;
+            return "changed";
         },
         remove: async (id) => {
             const next = automations.filter((automation) => automation.id !== id);

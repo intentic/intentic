@@ -656,3 +656,38 @@ describe("git.branch-switch", () => {
         expect(marked("cd repo && git switch main && pnpm build", "git.branch-switch")).toEqual(["git switch"]);
     });
 });
+
+describe("Windows' own shells", () => {
+    test("PowerShell's and cmd's recursive deletes are files.destructive, the way a device's run_command meets them", () => {
+        for (const command of [
+            "Remove-Item -Recurse -Force C:\\Users\\me\\thesis",
+            "Remove-Item C:\\x -Recurse",
+            "Remove-Item -Recurse:$true x",
+            "ri -r C:\\x",
+            "rm -Recurse x",
+            "rd /s /q C:\\x",
+            "rmdir /S C:\\x",
+            "del /s /q *.tmp",
+            "[System.IO.Directory]::Delete('C:\\x', $true)",
+            "powershell -Command 'Remove-Item -Recurse -Force C:\\x'",
+            "cmd /c 'rmdir /s /q C:\\x'",
+        ]) {
+            expect(classify(command), command).toContain("files.destructive");
+        }
+    });
+
+    test("what only looks like one is not: a single file, a read that recurses, POSIX rm's asking -r", () => {
+        for (const command of ["Remove-Item C:\\x\\file.txt", "del file.txt", "Get-ChildItem -Recurse C:\\x", "Copy-Item -Recurse a b", "rmdir empty", "rm -r build", "git rm -r --cached x"]) {
+            expect(classify(command), command).not.toContain("files.destructive");
+        }
+    });
+
+    test("a volume formatted or a disk cleared is system.destructive", () => {
+        for (const command of ["Format-Volume -DriveLetter D", "Clear-Disk -Number 1 -RemoveData", "format D: /q"]) {
+            expect(classify(command), command).toContain("system.destructive");
+        }
+        for (const command of ["npm run format", "prettier --write . && echo format done", "dotnet format"]) {
+            expect(classify(command), command).not.toContain("system.destructive");
+        }
+    });
+});

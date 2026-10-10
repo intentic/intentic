@@ -12,8 +12,10 @@ export interface Line {
     readonly code: boolean;
     // A row of upper-case data ("1|JAN|KOWALSKI|…"), the only place an all-caps word may be a name.
     readonly upperData: boolean;
-    // A row of cells (CSV, TSV, a table's row) rather than prose: as many separators as lowercase words, and at least
-    // two. Only there do neighbouring cells make one name; in a sentence a comma separates the people of a list.
+    // A row of cells (CSV, TSV, a table's row) rather than prose: at least two separators and no more lowercase words
+    // than separators, or a short pair of cells with no lowercase word at all ("Jan,Kowalski", "Kowalski, Jan", a TSV
+    // pair under a first_name,last_name header). Only there do neighbouring cells make one name; in a sentence a comma
+    // separates the people of a list, and a sentence has lowercase words.
     readonly data: boolean;
 }
 
@@ -35,6 +37,8 @@ const CELL_SEPARATOR = /[|;,\t]/;
 const CELL_SEPARATORS = /[|;,\t]/gu;
 const LOWERCASE_WORD = /(?<!\p{L})\p{Ll}{2,}/gu;
 const MAX_UPPER_WORDS = 6;
+// The most words a two-cell row may hold and still read as one: a surname and up to three first names, or the reverse.
+const MAX_PAIR_WORDS = 4;
 
 const describeLine = (text: string, start: number, end: number): Line => {
     const line = text.slice(start, end);
@@ -45,12 +49,14 @@ const describeLine = (text: string, start: number, end: number): Line => {
     // line from every "=".
     const statement = STATEMENT_END.test(line) && line.includes("=");
     const separators = line.match(CELL_SEPARATORS)?.length ?? 0;
+    const lowercaseWords = line.match(LOWERCASE_WORD)?.length ?? 0;
+    const pair = separators === 1 && lowercaseWords === 0 && line.trim().split(/[\s|;,]+/u).length <= MAX_PAIR_WORDS;
     return {
         start,
         end,
         code: statement || CODE_LINE.test(line),
         upperData: upper > 0 && lower * 10 <= upper && shortOrCells,
-        data: separators >= 2 && (line.match(LOWERCASE_WORD)?.length ?? 0) <= separators,
+        data: (separators >= 2 && lowercaseWords <= separators) || pair,
     };
 };
 

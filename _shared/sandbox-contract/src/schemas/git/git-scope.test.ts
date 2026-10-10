@@ -1,6 +1,5 @@
-import { UNATTRIBUTED_ORIGIN, type GitChange } from "@intentic/sandbox-contract";
-import { chunkPaths } from "./changes-index.js";
-import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes-target.js";
+import { type GitChange, UNATTRIBUTED_ORIGIN } from "./git.js";
+import { changeIsFrom, DISCARDABLE_SIDES, discardOutcome, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./git-scope.js";
 
 const change = (path: string, extra: Partial<GitChange> = {}): GitChange => ({ path, status: "modified", ...extra });
 
@@ -62,21 +61,31 @@ test("a scope that narrows nothing is the whole repository", () => {
     expect(isWholeRepo({ origin: "agent-a" })).toBe(false);
 });
 
-test("paths are split into runs that each fit one command line, in order and losing nothing", () => {
-    // 40 KiB per path; three of five exceed the ~96 KiB budget this splits on.
-    const long = Array.from({ length: 5 }, (_, index) => `${index}/${"p".repeat(40 * 1024)}`);
-    const chunks = chunkPaths(long);
-    expect(chunks.length).toBeGreaterThan(1);
-    expect(chunks.flat()).toEqual(long);
-    for (const chunk of chunks) {
-        expect(chunk.reduce((total, path) => total + Buffer.byteLength(path, "utf8") + 1, 0)).toBeLessThanOrEqual(96 * 1024);
-    }
-    // An ordinary short list must stay one call, not one process per path.
-    expect(chunkPaths(["a.ts", "b.ts"])).toEqual([["a.ts", "b.ts"]]);
-    expect(chunkPaths([])).toEqual([]);
+// The panel's count, its discard question and the daemon's scope all read this one predicate, so a rename out of an
+// agent's file cannot be "yours" in the question and the agent's in the action.
+test("a row is an origin's when either leg was landed by it, and the owner's only when neither was", () => {
+    const origins = { "util.ts": ["agent-a"] };
+    const renamed = change("helpers.ts", { status: "renamed", from: "util.ts" });
+    expect(changeIsFrom(renamed, "agent-a", origins)).toBe(true);
+    expect(changeIsFrom(renamed, UNATTRIBUTED_ORIGIN, origins)).toBe(false);
+    expect(changeIsFrom(change("mine.ts"), UNATTRIBUTED_ORIGIN, origins)).toBe(true);
+    expect(changeIsFrom(change("mine.ts"), "agent-a", origins)).toBe(false);
 });
 
-test("a single path past the budget still gets a call of its own rather than being dropped", () => {
-    const huge = "x".repeat(200 * 1024);
-    expect(chunkPaths([huge, "a.ts"])).toEqual([[huge], ["a.ts"]]);
+test("a discard names what leaves the disk apart from what returns to its last commit", () => {
+    const changed = {
+        conflicted: [],
+        staged: [
+            change("helpers.ts", { status: "renamed", from: "util.ts" }),
+            change("fresh.ts", { status: "added" }),
+            change("gone.ts", { status: "deleted" }),
+        ],
+        // `gone.ts` deleted in the index and recreated on disk reads untracked, yet the last commit still holds it.
+        unstaged: [change("edited.ts"), change("scratch.ts", { status: "added" }), change("gone.ts", { status: "added" })],
+    };
+    const paths = scopedPaths(changed, DISCARDABLE_SIDES, {});
+    expect(discardOutcome(changed, paths)).toEqual({
+        deletes: ["helpers.ts", "fresh.ts", "scratch.ts"],
+        restores: ["util.ts", "gone.ts", "edited.ts"],
+    });
 });

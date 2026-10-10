@@ -34,8 +34,21 @@ interface Pending {
 interface Held {
     readonly tunnel: DeviceTunnel;
     readonly server: Server;
+    // Every connection it accepted and has not yet seen close: a server's close() only stops new ones and waits for
+    // these, so a close that should end the tunnel ends them itself.
+    readonly sockets: Set<Socket>;
     streams: number;
 }
+
+// Ends a tunnel now: no new connections, and every one already through it cut, which tears down its pump.
+const shut = (entry: Held): Promise<void> => {
+    const closed = new Promise<void>((done) => entry.server.close(() => done()));
+    for (const socket of entry.sockets) {
+        socket.destroy();
+    }
+    entry.sockets.clear();
+    return closed;
+};
 
 export interface DeviceTunnels {
     // Opens one; a port already listening (another tunnel, or anything in the sandbox) is refused with what holds it.
@@ -61,6 +74,8 @@ export const createDeviceTunnels = (deps: { readonly hub: () => HostHub; readonl
             socket.destroy();
             return;
         }
+        entry.sockets.add(socket);
+        socket.once("close", () => entry.sockets.delete(socket));
         socket.pause();
         const client = deps.hub().client(device);
         if (client === undefined) {
@@ -153,7 +168,7 @@ export const createDeviceTunnels = (deps: { readonly hub: () => HostHub; readonl
                 throw new Error(`the agent on "${device}" is too old to be reached this way: update it there and try again`);
             }
             const tunnel: DeviceTunnel = { device, devicePort, localPort, url: `http://127.0.0.1:${localPort}`, openedAt: new Date().toISOString() };
-            const entry: Held = { tunnel, server: createServer(), streams: 0 };
+            const entry: Held = { tunnel, server: createServer(), sockets: new Set(), streams: 0 };
             entry.server.on("connection", (socket) => accept(entry, socket));
             await new Promise<void>((done, fail) => {
                 entry.server.once("error", (error: NodeJS.ErrnoException) =>
@@ -177,7 +192,7 @@ export const createDeviceTunnels = (deps: { readonly hub: () => HostHub; readonl
                 return false;
             }
             held.delete(keyOf(device, devicePort));
-            await new Promise<void>((done) => entry.server.close(() => done()));
+            await shut(entry);
             return true;
         },
         list: () => [...held.values()].map((entry) => entry.tunnel),
@@ -185,7 +200,7 @@ export const createDeviceTunnels = (deps: { readonly hub: () => HostHub; readonl
         route,
         closeAll: () => {
             for (const entry of held.values()) {
-                entry.server.close();
+                void shut(entry);
             }
             held.clear();
             for (const waiting of pending.values()) {

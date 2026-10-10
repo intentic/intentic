@@ -1,4 +1,4 @@
-import type { AgentDomainPolicy, AgentEvent, TranscriptRow } from "@intentic/sandbox-contract";
+import { ATTACHMENT_LIMIT, AgentTurnSchema, type AgentDomainPolicy, type AgentEvent, type TranscriptRow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../../composition.js";
@@ -31,6 +31,26 @@ test("one person's messages in a row leave together, and a second person's wait 
     const queue = [item("a1", "person", "alice"), item("a2", "person", "alice"), item("b1", "person", "bob"), item("a3", "person", "alice")];
     expect(together(queue).map((waiting) => waiting.id)).toEqual(["a1", "a2"]);
     expect(together(queue.slice(2)).map((waiting) => waiting.id)).toEqual(["b1"]);
+});
+
+// A turn the admission builds is one the sandbox can keep: a spent allowance's hold is written under AgentTurnSchema
+// (limit-hold.ts), which caps the files a turn carries, so a batch never joins more than that. The message that would go
+// past it waits for the next turn, its files with it, rather than any file being dropped.
+test("a person's messages leave together only while their files fit one turn, and the rest go next with every file", () => {
+    const withFiles = (id: string, count: number): QueuedItem => {
+        const base = item(id, "person", "alice");
+        return { ...base, turn: { ...base.turn, attachments: Array.from({ length: count }, (_, index) => `${id}/f${String(index)}.png`) } };
+    };
+    const queue = [withFiles("a1", 11), withFiles("a2", 11), withFiles("a3", 9)];
+    expect(together(queue).map((waiting) => waiting.id)).toEqual(["a1"]);
+    expect(together(queue.slice(1)).map((waiting) => waiting.id)).toEqual(["a2", "a3"]);
+    expect(together([withFiles("a1", 10), withFiles("a2", 10)]).map((waiting) => waiting.id)).toEqual(["a1", "a2"]);
+    // Words with no files still join a full turn; one more file does not.
+    expect(together([withFiles("a1", ATTACHMENT_LIMIT), item("a2", "person", "alice"), withFiles("a3", 1)]).map((waiting) => waiting.id)).toEqual(["a1", "a2"]);
+    for (const batch of [queue.slice(0, 1), queue.slice(1)]) {
+        const files = batch.flatMap((waiting) => waiting.turn.attachments ?? []);
+        expect(AgentTurnSchema.safeParse({ prompt: "joined", attachments: files }).success).toBe(true);
+    }
 });
 
 test("the sandbox's own words leave alone, and a person's stop short of them", () => {

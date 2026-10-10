@@ -27,13 +27,13 @@ import { latestVersion } from "../system/updates/version-check.js";
 // build, or a container no machine knows by name.
 
 // The soonest moment the sandbox promised somebody: an automation's next run (a cron's too, unlike idle-stop: a restart
-// landing on its minute would fire it late for nothing) and a scheduled message.
+// landing on its minute would fire it late for nothing), a scheduled message and a held turn booked for its reset.
 const soonestDue = async (services: Services): Promise<number> => {
     const zone = await sandboxZone(services);
     const crons = (await services.automations.list()).flatMap((automation) =>
         automation.trigger.kind === "schedule" ? [nextRunOf(automation, zone) ?? 0].filter((at) => at > 0) : [],
     );
-    const moments = [await nextOneTimeWakeAt(services), nextBookedSendAt(services), ...crons].filter((at) => at > 0);
+    const moments = [await nextOneTimeWakeAt(services), await nextBookedSendAt(services), ...crons].filter((at) => at > 0);
     return moments.length === 0 ? 0 : Math.min(...moments);
 };
 

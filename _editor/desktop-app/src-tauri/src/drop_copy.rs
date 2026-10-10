@@ -27,8 +27,11 @@
 //   take: a big file on a place that will not mount (a network share), a file a helper had trouble with, and
 //   everything when no helper will run.
 //
-// A file written but not whole (a failed read of a streamed file, which tar pads out; an unpack that failed or was
-// cancelled partway) is removed from the workspace at the end, so a failed file is missing rather than there and wrong.
+// A file counts done only once the tar writing it into the workspace has shown it got past it: named the next file
+// with no complaint between, or exited 0 at the archive's end. What went into a pipe is not yet in the workspace, and a
+// full disk fails the write after the app has long moved on. A file written but not whole (a failed read, which tar
+// pads out; a write that failed; an unpack cancelled partway) is removed from the workspace at the end, so a failed
+// file is missing rather than there and wrong. A file no tar started on is left alone, older copy and all.
 //
 // The page hears how far it has got through `intentic:drop-copy` events and draws the same card it draws for an
 // upload. Anything the app will not take (no Docker, no container on that port, a drop too small to bother, a file
@@ -409,12 +412,10 @@ struct Meter<'a> {
     copied: Copied,
     last: Instant,
     tick: &'a mut dyn FnMut(&Copied),
-    /// Files below /work that a route wrote but not whole: padded after a failed read, or cut off by a cancel. Taken
-    /// out again by a later route landing the file, and removed from the workspace at the end (`remove_spoiled`), so a
-    /// failed file is missing rather than there and wrong.
+    /// Files below /work that a route's tar started writing and did not show it finished: padded after a failed read,
+    /// a write that failed, cut off by a cancel. Taken out again by a later route landing the file, and removed from
+    /// the workspace at the end (`remove_spoiled`), so a failed file is missing rather than there and wrong.
     spoiled: HashSet<String>,
-    /// The file the streamed route is writing now.
-    in_flight: Option<String>,
 }
 
 impl<'a> Meter<'a> {
@@ -427,7 +428,6 @@ impl<'a> Meter<'a> {
             last: Instant::now(),
             tick,
             spoiled: HashSet::new(),
-            in_flight: None,
         }
     }
 
@@ -559,8 +559,9 @@ struct Appended {
 }
 
 /// Appends one ready item to `builder`. A file that will not read is recorded failed and left out; a big file read
-/// from disk that fails partway is padded out (see [`Exact`]), recorded failed, and marked spoiled. `Err` only for the
-/// archive itself: `out` refusing a write, or the cancel, which leaves the file going marked in `meter.in_flight`.
+/// from disk that fails partway is padded out (see [`Exact`]) and recorded failed, and is the caller's to mark spoiled
+/// once a tar has written it. `Err` only for the archive itself: `out` refusing a write, or the cancel, both possibly
+/// partway through the item.
 fn append<W: Write>(
     builder: &mut tar::Builder<W>,
     item: &Item,
@@ -611,8 +612,6 @@ fn append<W: Write>(
         }
     };
     meter.copied.current.clone_from(&item.name);
-    // Until the file's last byte is out: an archive ended here (a cancel, the other end gone) leaves it partial.
-    meter.in_flight = Some(item.name.clone());
     // The file's bytes count while it goes, and are the caller's to count once it has gone.
     let before = meter.copied.live_bytes;
     let mut head = header(Kind::File, size, item.mtime);
@@ -625,10 +624,8 @@ fn append<W: Write>(
     };
     builder.append_data(&mut head, &item.name, &mut exact)?;
     let error = exact.error.take();
-    meter.in_flight = None;
     meter.copied.live_bytes = before;
     if let Some(error) = error {
-        meter.spoiled.insert(item.name.clone());
         meter.copied.fail(item, error);
         return Ok(Appended {
             whole: false,
@@ -710,20 +707,296 @@ fn header(kind: Kind, size: u64, mtime: u64) -> tar::Header {
     header
 }
 
-/// Writes `items` as one tar archive into `out`, named by their paths below /work, each file counted done as it goes
-/// in whole (see [`append`] for the ones that do not). `Err` only for the archive itself.
-fn write_archive<W: Write>(
+/* LANDING: a file counts done once the tar writing it into the workspace has shown it got past it. */
+
+/// What a `tar -x -v` writing into the workspace has said, read against the members it was given, in their order.
+/// tar names each member as it starts writing it, and complains about one it could not write before it names the
+/// next; with its stderr joined to its stdout the two come in the order tar wrote them. So a member is whole once tar
+/// names a later one with no complaint between, or once tar exits 0 after it. Counting a file done as it went into the
+/// pipe, as this module first did, counted a file the sandbox then failed to write (a full disk) as landed, and left
+/// it there cut short (2026-10-10).
+struct Writes<'i> {
+    members: Vec<Member<'i>>,
+    /// Members are named by their path within the drop (the mounting helper's) rather than below /work.
+    by_relative: bool,
+    /// The bytes of a member count as going (`live_bytes`) from when it went in until it lands (the streamed route's).
+    holds_live: bool,
+    /// The first member tar has not named.
+    next: usize,
+    /// The member tar named last, being written until it names another.
+    writing: Option<usize>,
+    /// Members from here on have not been vouched for by whatever produced the archive: tar got past them, but a
+    /// complaint about reading one may still be on its way (the mounting helper's reading tar, on another stream).
+    gate: usize,
+    /// The bytes of the files landed.
+    landed_bytes: u64,
+    /// tar's complaints, in its words, for the card when the copy fails.
+    complaints: String,
+    /// tar's lines as they arrive, while the archive is still being written (the streamed route's).
+    heard: Option<mpsc::Receiver<String>>,
+    /// The archive is partway through a member: ended now, it leaves tar with some of that member.
+    cut: bool,
+}
+
+struct Member<'i> {
+    item: &'i Item,
+    /// Not whole whatever tar says: it would not read whole and was padded.
+    troubled: bool,
+    /// Already counted failed, by the route that padded it.
+    counted: bool,
+    /// tar complained about it: not whole, unless tar exits 0, which makes every complaint a warning.
+    complained: bool,
+    /// tar named it, so it has written some of it at least.
+    named: bool,
+    /// tar got past it without a complaint, waiting for the gate.
+    passed: bool,
+    landed: bool,
+}
+
+/// How much of tar's complaining the card is told.
+const COMPLAINTS: usize = 4 * 1024;
+/// How far past the member it expects next a name is looked for. tar names members in order and passes over only the
+/// ones that never went in, so a name further on is not one; the bound keeps a tar whose lines never match a name from
+/// costing a search of the whole archive per line.
+const NAMES_AHEAD: usize = 256;
+
+impl<'i> Writes<'i> {
+    fn new(by_relative: bool, holds_live: bool, heard: Option<mpsc::Receiver<String>>) -> Self {
+        Self {
+            members: Vec::new(),
+            by_relative,
+            holds_live,
+            next: 0,
+            writing: None,
+            gate: usize::MAX,
+            landed_bytes: 0,
+            complaints: String::new(),
+            heard,
+            cut: false,
+        }
+    }
+
+    fn push(&mut self, item: &'i Item, troubled: bool) {
+        self.members.push(Member {
+            item,
+            troubled,
+            counted: troubled,
+            complained: false,
+            named: false,
+            passed: false,
+            landed: false,
+        });
+    }
+
+    fn key(&self, index: usize) -> &str {
+        let item = self.members[index].item;
+        if self.by_relative {
+            &item.relative
+        } else {
+            &item.name
+        }
+    }
+
+    /// The member `name` is, looked for from the first tar has not named; a folder tar names with a `/` after.
+    fn find(&self, name: &str) -> Option<usize> {
+        let bare = name.strip_suffix('/').unwrap_or(name);
+        let upto = self.members.len().min(self.next + NAMES_AHEAD);
+        (self.next..upto).find(|&index| {
+            let key = self.key(index);
+            key == name || key == bare
+        })
+    }
+
+    /// tar has named the member at `index`, so it got past the one before. Members passed over were never in the
+    /// archive (the reading tar could not open them, and said so), or have a name tar did not print as one line; none
+    /// of them counts as named.
+    fn named(&mut self, index: usize, meter: &mut Meter) {
+        if let Some(before) = self.writing.take() {
+            self.pass(before, meter);
+        }
+        self.members[index].named = true;
+        self.writing = Some(index);
+        self.next = index + 1;
+    }
+
+    fn pass(&mut self, index: usize, meter: &mut Meter) {
+        self.members[index].passed = true;
+        if index < self.gate {
+            self.land(index, meter);
+        }
+    }
+
+    fn land(&mut self, index: usize, meter: &mut Meter) {
+        let member = &mut self.members[index];
+        if member.troubled || member.complained || member.landed {
+            return;
+        }
+        member.landed = true;
+        let item = member.item;
+        if item.kind == Kind::File {
+            self.landed_bytes += item.size;
+            if self.holds_live {
+                meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(item.size);
+            }
+            meter.landed(item);
+        }
+    }
+
+    /// Whatever produced the archive has got past every member before `upto` without a complaint of its own: those tar
+    /// got past land now.
+    fn vouch(&mut self, upto: usize, meter: &mut Meter) {
+        let from = self.gate.min(self.members.len());
+        self.gate = upto;
+        for index in from..upto.min(self.members.len()) {
+            if self.members[index].passed {
+                self.land(index, meter);
+            }
+        }
+    }
+
+    /// The member a complaint (what follows its `tar: `) is about: the one whose path it starts with (the longest that
+    /// fits, a name may hold `: `).
+    fn about(&self, said: &str) -> Option<usize> {
+        let from = self.next.saturating_sub(NAMES_AHEAD);
+        let upto = self.members.len().min(self.next + NAMES_AHEAD);
+        (from..upto)
+            .filter(|&index| {
+                said.strip_prefix(self.key(index))
+                    .is_some_and(|rest| rest.starts_with(": "))
+            })
+            .max_by_key(|&index| self.key(index).len())
+    }
+
+    /// One of tar's complaints: about the member it names, else about the member being written. tar's closing
+    /// "Exiting with failure status due to previous errors" is said once it got to the archive's end, every complaint
+    /// already made: the member it was on is as whole as nothing said otherwise.
+    fn complaint(&mut self, said: &str, meter: &mut Meter) {
+        match self.about(said) {
+            Some(index) => self.members[index].complained = true,
+            None if said.starts_with("Exiting with failure status") => {
+                if let Some(last) = self.writing.take() {
+                    self.pass(last, meter);
+                }
+            }
+            None => {
+                if let Some(index) = self.writing {
+                    self.members[index].complained = true;
+                }
+            }
+        }
+        if self.complaints.len() < COMPLAINTS {
+            self.complaints.push_str("tar: ");
+            self.complaints.push_str(said);
+            self.complaints.push('\n');
+        }
+    }
+
+    /// One line from a tar writing these members and nothing else: a name, a complaint, or nothing to go on.
+    fn hear(&mut self, line: &str, meter: &mut Meter) {
+        if let Some(index) = self.find(line) {
+            self.named(index, meter);
+        } else if let Some(said) = line.strip_prefix("tar: ") {
+            self.complaint(said, meter);
+        }
+    }
+
+    /// Takes in what tar has said so far, without waiting.
+    fn catch_up(&mut self, meter: &mut Meter) {
+        let Some(heard) = self.heard.take() else {
+            return;
+        };
+        for line in heard.try_iter() {
+            self.hear(&line, meter);
+        }
+        self.heard = Some(heard);
+    }
+
+    /// Takes in the rest of what tar said, once it has exited.
+    fn hear_out(&mut self, meter: &mut Meter) {
+        if let Some(heard) = self.heard.take() {
+            for line in heard.iter() {
+                self.hear(&line, meter);
+            }
+        }
+    }
+
+    /// tar has exited. `exited_ok`: with 0, so what it complained about were warnings, and the member it was on is
+    /// whole too. `complete`: the archive it was given held every member whole, so after a 0 every member landed, named
+    /// or not (a name tar printed that was not read as one).
+    fn end(&mut self, exited_ok: bool, complete: bool, meter: &mut Meter) {
+        let last = self.writing.take();
+        if !exited_ok {
+            return;
+        }
+        for index in 0..self.members.len() {
+            self.members[index].complained = false;
+            if self.members[index].passed {
+                self.pass(index, meter);
+            }
+        }
+        if let Some(last) = last {
+            self.pass(last, meter);
+        }
+        if complete {
+            for index in 0..self.members.len() {
+                self.pass(index, meter);
+            }
+        }
+    }
+
+    /// Files tar started and did not finish, for `remove_spoiled`: a later route landing one takes it off again.
+    fn spoil(&self, meter: &mut Meter) {
+        for member in &self.members {
+            if member.named && !member.landed && member.item.kind == Kind::File {
+                meter.spoiled.insert(member.item.name.clone());
+            }
+        }
+    }
+
+    /// The members that did not land, in order.
+    fn unlanded(&self) -> impl Iterator<Item = &'i Item> + '_ {
+        self.members
+            .iter()
+            .filter(|member| !member.landed)
+            .map(|member| member.item)
+    }
+}
+
+/// Writes `items` as one tar archive into `out`, named by their paths below /work, each put in `writes` as it goes in:
+/// counted done only once the tar unpacking it says it landed, and a file that would not read whole marked as it goes
+/// (see [`append`]). `Err` only for the archive itself; the builder still ends the archive, so a tar reading it gets
+/// to the end of what it was sent.
+fn write_archive<'i, W: Write>(
     out: W,
-    items: &[&Item],
+    items: &[&'i Item],
     cancel: &AtomicBool,
     meter: &mut Meter,
+    writes: &mut Writes<'i>,
 ) -> io::Result<()> {
     let mut builder = tar::Builder::new(out);
     each_ready(items, cancel, &mut |item, ready| {
-        let appended = append(&mut builder, item, ready, cancel, meter)?;
-        if appended.whole && item.kind == Kind::File {
-            meter.landed(item);
+        // A member from its header on: an archive cut partway through it leaves tar with some of it.
+        let goes_in = !matches!(ready, Ready::Failed(_));
+        if goes_in {
+            writes.push(item, false);
+            writes.cut = true;
         }
+        let appended = append(&mut builder, item, ready, cancel, meter)?;
+        writes.cut = false;
+        if goes_in && !appended.whole {
+            if appended.bytes == 0 {
+                // Would not open: nothing of it went in.
+                writes.members.pop();
+            } else if let Some(member) = writes.members.last_mut() {
+                // Padded, and counted failed by `append`: spoiled once tar has written it.
+                member.troubled = true;
+                member.counted = true;
+            }
+        } else if goes_in && writes.holds_live {
+            // Sent, and going until tar says it landed.
+            meter.copied.live_bytes += appended.bytes;
+        }
+        writes.catch_up(meter);
         meter.report();
         Ok(())
     })?;
@@ -741,7 +1014,56 @@ fn copy_error(written: Option<&io::Error>, exited_ok: Option<bool>, said: &str) 
     }
 }
 
-/// `items` through `docker exec -i -u 0 <container> tar -x -C /work`: the archive on tar's stdin, unpacked by the
+/// Waits for `child` at most `limit`, then kills it.
+fn wait_for(child: &mut Child, limit: Duration) -> io::Result<ExitStatus> {
+    let until = Instant::now() + limit;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if Instant::now() >= until {
+            let _ = child.kill();
+            return child.wait();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// `read`'s lines, as they come, on a thread of its own, each passed to `send` until it refuses one. Bytes that are
+/// not UTF-8 are replaced rather than ending the reading, which would lose every line after.
+fn each_line(read: impl Read + Send + 'static, send: impl Fn(String) -> bool + Send + 'static) {
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+        let mut read = io::BufReader::new(read);
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            match read.read_until(b'\n', &mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let text = String::from_utf8_lossy(&line);
+            if !send(text.trim_end_matches(['\n', '\r']).to_string()) {
+                break;
+            }
+        }
+    });
+}
+
+/// `read`'s lines, as they come.
+fn lines_of(read: impl Read + Send + 'static) -> mpsc::Receiver<String> {
+    let (lines, heard) = mpsc::channel::<String>();
+    each_line(read, move |line| lines.send(line).is_ok());
+    heard
+}
+
+/// What the sandbox's tar runs for the streamed route: the archive on its stdin unpacked into /work, naming each member
+/// as it starts it (`-v`, which GNU tar flushes line by line) with its complaints on the same stream. Names as they are
+/// (`literal`), not escaped as tar escapes them in a C locale. A time stamp in the future is no reason to doubt a file.
+const STREAM_SCRIPT: &str =
+    "tar -x -v --quoting-style=literal --warning=no-timestamp -f - -C /work 2>&1";
+
+/// `items` through `docker exec -i -u 0 <container> sh -c 'tar -x …'`: the archive on tar's stdin, unpacked by the
 /// sandbox's own tar into its workspace, parent folders and all. Not `docker cp -`, which unpacks through Docker
 /// Desktop's backend at about 20 ms a file: 20,000 stills took 170 s that way on omen (2026-10-09).
 fn stream(
@@ -753,10 +1075,17 @@ fn stream(
     let mut command = crate::scripts::docker_command();
     command
         .args([
-            "exec", "-i", "-u", "0", container, "tar", "-x", "-f", "-", "-C", WORK,
+            "exec",
+            "-i",
+            "-u",
+            "0",
+            container,
+            "sh",
+            "-c",
+            STREAM_SCRIPT,
         ])
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command
         .spawn()
@@ -768,35 +1097,73 @@ fn stream(
             said
         })
     });
+    let mut writes = Writes::new(false, true, child.stdout.take().map(lines_of));
+    let live_before = meter.copied.live_bytes;
     let written = match child.stdin.take() {
         Some(stdin) => write_archive(
             BufWriter::with_capacity(1 << 20, stdin),
             items,
             cancel,
             meter,
+            &mut writes,
         ),
         None => Err(io::Error::other("docker took no input")),
     };
-    if written.is_err() {
-        let _ = child.kill();
-        if let Some(name) = meter.in_flight.take() {
-            meter.spoiled.insert(name);
+    // Cut partway through a member: tar has some of it, and may read the archive's end the builder wrote after it as
+    // the rest of it, and say nothing.
+    let cut = writes.cut;
+    if cut {
+        if let Some(member) = writes.members.last_mut() {
+            member.troubled = true;
         }
     }
-    let status = child.wait();
+    // The archive has ended either way, so tar ends by itself, having said what it wrote. Docker is given a while to
+    // pass that on after a failure or a cancel; after a whole archive, tar takes as long as the disk takes.
+    let status = if written.is_ok() {
+        child.wait()
+    } else {
+        wait_for(&mut child, LOOKUP_LIMIT)
+    };
+    writes.hear_out(meter);
     let said = stderr
         .and_then(|reader| reader.join().ok())
         .unwrap_or_default();
-    if cancel.load(Ordering::SeqCst) {
-        return Err(Stop::Cancelled);
-    }
-    match copy_error(
+    let cancelled = cancel.load(Ordering::SeqCst);
+    let exited_ok = status.as_ref().is_ok_and(ExitStatus::success);
+    // tar's 0 vouches for every member only if the archive ended at a member's end: whole, or cut between two by a
+    // cancel (an archive cut short at a header reads to tar as one that ended).
+    writes.end(exited_ok, !cut && (written.is_ok() || cancelled), meter);
+    // What did not land is no longer going.
+    meter.copied.live_bytes = live_before;
+    let error = copy_error(
         written.as_ref().err(),
         status.ok().map(|status| status.success()),
-        &said,
-    ) {
+        &format!("{said}{}", writes.complaints),
+    );
+    settle_stream(&writes, error.as_deref(), cancelled, meter);
+    match error {
+        _ if cancelled => Err(Stop::Cancelled),
         Some(error) => Err(Stop::Failed(error)),
         None => Ok(()),
+    }
+}
+
+/// What the streamed route's tar did not land: a file it started on is spoiled, and each is counted failed (not for a
+/// cancel, which counts nothing failed), with the copy's error or else tar's complaining. A file tar never named was
+/// never written, and is left alone.
+fn settle_stream(writes: &Writes, error: Option<&str>, cancelled: bool, meter: &mut Meter) {
+    writes.spoil(meter);
+    for member in &writes.members {
+        if member.landed || member.item.kind != Kind::File {
+            continue;
+        }
+        if !cancelled && !member.counted {
+            let why = error.map_or_else(
+                || format!("tar did not write it whole: {}", writes.complaints.trim()),
+                str::to_string,
+            );
+            meter.copied.fail(member.item, why);
+        }
     }
 }
 
@@ -821,10 +1188,17 @@ const STAGE: Limits = Limits {
     ahead: 2,
 };
 
-/// What the staging helper runs: each archive named on its stdin unpacked into /work, and said back on stdout.
-const STAGE_SCRIPT: &str = "while IFS= read -r part; do \
-    if tar -x -b 2048 -f \"/stage/$part\" -C /work --no-same-owner; then echo \"ok $part\"; \
-    else echo \"failed $part\"; fi; done";
+/// How long a helper stopped by a cancel is listened to for what it said before it went.
+const HEARD_OUT: Duration = Duration::from_secs(2);
+
+/// What the staging helper runs: each archive named on its stdin unpacked into /work, and said back on stdout: that it
+/// opened it, then tar's own lines (each member as it starts writing it, names as they are, and its complaints in
+/// order between them, see [`Writes`]), then whether it unpacked whole. The helper's own lines start with `/`, which
+/// none of tar's do. An archive that stops partway (a full disk, a cancel) is known member by member: what tar got past
+/// landed, the member it was on is partial, and the rest of it, like every archive it never opened, was never written.
+const STAGE_SCRIPT: &str = "while IFS= read -r part; do echo \"/opened $part\"; \
+    if tar -x -v --quoting-style=literal --warning=no-timestamp -b 2048 -f \"/stage/$part\" -C /work \
+    --no-same-owner 2>&1; then echo \"/ok $part\"; else echo \"/failed $part\"; fi; done";
 
 /// The helper that unpacks staged archives, as the staged route talks to it. A trait so the tests can stand in for
 /// Docker.
@@ -833,10 +1207,17 @@ trait Unpacker {
     fn unpack(&mut self, part: &str) -> io::Result<()>;
     /// The next answer, waiting at most `wait` for it.
     fn answer(&mut self, wait: Duration) -> Answer;
+    /// Stops the helper now, partway through whatever it is unpacking. What it said before it went is still answered,
+    /// and then that it has gone.
+    fn halt(&mut self) {}
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum Answer {
+    /// The helper has started on an archive.
+    Opened(String),
+    /// A line of the tar unpacking the archive the helper is on.
+    Said(String),
     /// An archive, and whether it unpacked whole.
     Unpacked(String, bool),
     Waiting,
@@ -873,17 +1254,11 @@ impl StageHelper {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let mut child = command.spawn()?;
-        let (lines, answers) = mpsc::channel::<String>();
-        if let Some(stdout) = child.stdout.take() {
-            std::thread::spawn(move || {
-                use std::io::BufRead;
-                for line in io::BufReader::new(stdout).lines().map_while(Result::ok) {
-                    if lines.send(line).is_err() {
-                        break;
-                    }
-                }
-            });
-        }
+        // No stdout is a helper that says nothing and has gone.
+        let answers = match child.stdout.take() {
+            Some(stdout) => lines_of(stdout),
+            None => mpsc::channel().1,
+        };
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || {
                 use std::io::BufRead;
@@ -900,16 +1275,10 @@ impl StageHelper {
         })
     }
 
-    /// Ends the helper: closing its stdin ends its loop once the archive going is unpacked; a cancel removes it at
-    /// once (killing the CLI alone leaves the container running).
-    fn stop(mut self, cancelled: bool) {
+    /// Ends the helper: closing its stdin ends its loop once the archive going is unpacked (after a cancel it has
+    /// already gone, see [`Unpacker::halt`]).
+    fn stop(mut self) {
         self.stdin = None;
-        if cancelled {
-            let mut remove = crate::scripts::docker_command();
-            remove.args(["rm", "-f", &self.name]);
-            let _ = crate::scripts::capture("docker rm", remove, LOOKUP_LIMIT);
-            let _ = self.child.kill();
-        }
         let _ = self.child.wait();
     }
 }
@@ -931,11 +1300,26 @@ impl Unpacker for StageHelper {
             Err(mpsc::RecvTimeoutError::Disconnected) => Answer::Gone,
         }
     }
+
+    /// Removes the container at once (killing the CLI alone leaves it running), then lets the CLI end by itself, which
+    /// it does once the container has gone and it has passed on what the helper said: killing it first could lose the
+    /// name of a file the helper had started, and leave that file partial and unmarked.
+    fn halt(&mut self) {
+        self.stdin = None;
+        let mut remove = crate::scripts::docker_command();
+        remove.args(["rm", "-f", &self.name]);
+        let _ = crate::scripts::capture("docker rm", remove, LOOKUP_LIMIT);
+        let _ = wait_for(&mut self.child, LOOKUP_LIMIT);
+    }
 }
 
-/// A line the staging helper wrote on stdout.
+/// A line the staging helper wrote on stdout: its own start with `/`, anything else is tar's.
 fn parse_answer(line: &str) -> Answer {
-    match line.split_once(' ') {
+    let Some(said) = line.strip_prefix('/') else {
+        return Answer::Said(line.to_string());
+    };
+    match said.split_once(' ') {
+        Some(("opened", part)) => Answer::Opened(part.to_string()),
         Some(("ok", part)) => Answer::Unpacked(part.to_string(), true),
         Some(("failed", part)) => Answer::Unpacked(part.to_string(), false),
         _ => Answer::Waiting,
@@ -996,6 +1380,8 @@ struct Stager<'i, 'u> {
     /// Items done with: unpacked whole, or failed in a way another route would fail at too (a file that will not read).
     settled: HashSet<*const Item>,
     halt: Option<Halt>,
+    /// The archive the helper said it opened and has not answered for yet, followed member by member.
+    unpacking: Option<(String, Writes<'i>)>,
 }
 
 impl<'i> Stager<'i, '_> {
@@ -1034,7 +1420,8 @@ impl<'i> Stager<'i, '_> {
             // Would not read: the streamed route would fail at it just the same.
             self.settled.insert(item);
         } else {
-            // Padded, and so spoiled: it goes in as it is, is removed at the end, and is not tried again.
+            // Padded: it goes in as it is, is spoiled once the helper has written it (removed at the end), and is not
+            // tried again.
             open.part.whole.push(item);
             self.settled.insert(item);
         }
@@ -1088,31 +1475,44 @@ impl<'i> Stager<'i, '_> {
         Ok(())
     }
 
-    /// Takes in the helper's answers: an archive unpacked whole lands its files; one that did not leaves them for the
-    /// streamed route, spoiled, since an unpack that failed partway may have left any of them partial. Waits for the
-    /// first answer at most `wait`. False once the helper has gone.
+    /// Takes in the helper's answers: an archive unpacked whole lands its files; one that did not lands what tar got
+    /// past and leaves the rest for the streamed route (see [`Stager::settle`]). Waits for the first answer at most
+    /// `wait`. False once the helper has gone.
     fn hear(&mut self, wait: Duration, meter: &mut Meter) -> bool {
         let mut wait = wait;
         loop {
             match self.unpacker.answer(wait) {
                 Answer::Waiting => return true,
                 Answer::Gone => return false,
+                Answer::Opened(name) => {
+                    let Some(part) = self.handed.iter().find(|part| part.name == name) else {
+                        continue;
+                    };
+                    let mut writes = Writes::new(false, false, None);
+                    for item in &part.whole {
+                        // Padded on the way in, and so never whole.
+                        writes.push(item, self.settled.contains(&(*item as *const Item)));
+                    }
+                    self.unpacking = Some((name, writes));
+                }
+                Answer::Said(line) => {
+                    if let Some((_, writes)) = &mut self.unpacking {
+                        writes.hear(&line, meter);
+                    }
+                }
                 Answer::Unpacked(name, whole) => {
                     let Some(at) = self.handed.iter().position(|part| part.name == name) else {
                         continue;
                     };
                     let part = self.handed.remove(at).expect("found above");
-                    let _ = std::fs::remove_file(self.dir.join(&part.name));
-                    meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
-                    for item in &part.whole {
-                        if !whole {
-                            if item.kind == Kind::File {
-                                meter.spoiled.insert(item.name.clone());
-                            }
-                        } else if self.settled.insert(*item) && item.kind == Kind::File {
-                            meter.landed(item);
+                    let followed = match self.unpacking.take() {
+                        Some((opened, writes)) if opened == name => Some(writes),
+                        other => {
+                            self.unpacking = other;
+                            None
                         }
-                    }
+                    };
+                    self.settle(&part, followed, whole, meter);
                     if !whole {
                         eprintln!(
                             "drop copy: {} did not unpack; streaming its files",
@@ -1126,6 +1526,47 @@ impl<'i> Stager<'i, '_> {
         }
     }
 
+    /// What became of an archive the helper is done with, `whole` or not: what tar got past lands, what it started on
+    /// and did not finish is spoiled, and the rest, never written, is left alone. Its files that did not land are left
+    /// for the streamed route. Without tar's own lines (`followed`), an archive that did not unpack whole may have left
+    /// any of its files partial.
+    fn settle(
+        &mut self,
+        part: &Part<'i>,
+        followed: Option<Writes<'i>>,
+        whole: bool,
+        meter: &mut Meter,
+    ) {
+        let _ = std::fs::remove_file(self.dir.join(&part.name));
+        meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
+        let Some(mut writes) = followed else {
+            for item in &part.whole {
+                // Padded ones are settled already, and written all the same.
+                if whole && self.settled.insert(*item) {
+                    if item.kind == Kind::File {
+                        meter.landed(item);
+                    }
+                } else if item.kind == Kind::File {
+                    meter.spoiled.insert(item.name.clone());
+                }
+            }
+            return;
+        };
+        writes.end(whole, whole, meter);
+        writes.spoil(meter);
+        if whole {
+            // Padded, and written: tar named it or not.
+            for member in writes.members.iter().filter(|member| member.troubled) {
+                if member.item.kind == Kind::File {
+                    meter.spoiled.insert(member.item.name.clone());
+                }
+            }
+        }
+        for member in writes.members.iter().filter(|member| member.landed) {
+            self.settled.insert(member.item);
+        }
+    }
+
     fn broken(&mut self, reason: &str) -> io::Error {
         self.halt = Some(Halt::Broken(reason.to_string()));
         io::Error::other(reason.to_string())
@@ -1134,7 +1575,8 @@ impl<'i> Stager<'i, '_> {
 
 /// The staged route: `items` read by the app many at once into archives in `dir`, each unpacked by `unpacker` as soon
 /// as it is complete. Returns what is left for the streamed route: nothing when every archive unpacked; otherwise the
-/// items of the archives that did not (spoiled, see [`Stager::hear`]) and every item not staged yet.
+/// items of the archives that did not (see [`Stager::hear`]) and every item not staged yet. A cancel stops the helper
+/// where it is: what it unpacked whole stays, and of the archive it was on only the files tar had started are spoiled.
 fn stage<'i>(
     dir: &Path,
     items: &[&'i Item],
@@ -1152,6 +1594,7 @@ fn stage<'i>(
         count: 0,
         settled: HashSet::new(),
         halt: None,
+        unpacking: None,
     };
     let written = each_ready(items, cancel, &mut |item, ready| {
         stager.put(item, ready, cancel, meter)
@@ -1169,19 +1612,39 @@ fn stage<'i>(
         drop(open.builder);
         let _ = std::fs::remove_file(dir.join(&open.part.name));
     }
-    while stager.halt.is_none() && !stager.handed.is_empty() {
+    // The helper unpacks what it was handed whatever went wrong on this side, so its answers say what became of each;
+    // only a cancel, or the helper going, stops the wait for them.
+    while !matches!(stager.halt, Some(Halt::Cancelled)) && !stager.handed.is_empty() {
         if cancel.load(Ordering::SeqCst) {
             stager.halt = Some(Halt::Cancelled);
         } else if !stager.hear(Duration::from_millis(200), meter) {
-            stager.halt = Some(Halt::Broken("the staging helper stopped".to_string()));
+            if stager.halt.is_none() {
+                stager.halt = Some(Halt::Broken("the staging helper stopped".to_string()));
+            }
+            break;
         }
     }
-    // Handed over and never answered: possibly half unpacked.
+    if matches!(stager.halt, Some(Halt::Cancelled)) {
+        // Stopped at once, then heard out: an archive it finished meanwhile lands, and the one it was on says which of
+        // its files tar had started. Never reading these, as this route first did, spoiled every file of every archive
+        // handed over, and the copy's end deleted older copies of files it had never written (2026-10-10).
+        stager.unpacker.halt();
+        let until = Instant::now() + HEARD_OUT;
+        while !stager.handed.is_empty()
+            && Instant::now() < until
+            && stager.hear(Duration::from_millis(200), meter)
+        {}
+    }
+    // Handed over and never answered for. The one the helper had opened stopped partway: what tar got past landed,
+    // and the member it was on is partial. The rest it never opened, and nothing of them is in the workspace.
+    let mut opened = stager.unpacking.take();
     for part in std::mem::take(&mut stager.handed) {
-        let _ = std::fs::remove_file(dir.join(&part.name));
-        meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
-        for item in part.whole.iter().filter(|item| item.kind == Kind::File) {
-            meter.spoiled.insert(item.name.clone());
+        if opened.as_ref().is_some_and(|(name, _)| *name == part.name) {
+            let followed = opened.take().map(|(_, writes)| writes);
+            stager.settle(&part, followed, false, meter);
+        } else {
+            let _ = std::fs::remove_file(dir.join(&part.name));
+            meter.copied.live_bytes = meter.copied.live_bytes.saturating_sub(part.bytes);
         }
     }
     match stager.halt {
@@ -1222,7 +1685,7 @@ fn stage_into<'i>(
         }
     };
     let left = stage(&dir, items, &mut helper, STAGE, cancel, meter);
-    helper.stop(matches!(left, Err(Stop::Cancelled)));
+    helper.stop();
     let _ = std::fs::remove_dir_all(&dir);
     left
 }
@@ -1237,12 +1700,17 @@ const MOUNTED_FROM: u64 = 2 * 1024 * 1024;
 /// The helper's tar record, 1 MiB (`-b 2048`). At tar's default 10 KiB every read crosses the file sharing on its
 /// own: 1 GiB took 16 s rather than 6.
 const RECORD: u64 = 1024 * 1024;
-/// What the helper runs: the listed files out of /src, as root-owned 644 files, into the target below /work. `-v`
-/// names each file as it starts and `--checkpoint` says every 16 MiB how far it has got, both on stderr.
+/// What the helper runs: the listed files out of /src, as root-owned 644 files, into the target below /work. The
+/// reading tar's `-v` names each file as it starts reading it and `--checkpoint` says every 16 MiB how far it has got,
+/// with its complaints, on stderr. The writing tar's `-v` names each file as it starts writing it, with its complaints,
+/// on stdout: it runs a record or more behind the reading one, and only its word says a file is in the workspace
+/// whole. Read for the reading tar's side alone, a write that failed (a full disk) came after the reading tar had
+/// moved on, was taken for nobody's, and left a file cut short counted done (2026-10-10). Names as they are.
 const HELPER_SCRIPT: &str =
     "mkdir -p \"/work/$1\" && tar -C /src --null --no-recursion -T - -b 2048 -cvf - \
-    --checkpoint=16 --checkpoint-action=echo=%u --owner=0 --group=0 --mode=go-w,a-x,a+X \
-    | tar -C \"/work/$1\" -b 2048 -xf - --no-same-owner";
+    --quoting-style=literal --checkpoint=16 --checkpoint-action=echo=%u --owner=0 --group=0 \
+    --mode=go-w,a-x,a+X | tar -C \"/work/$1\" -b 2048 -xvf - --no-same-owner --quoting-style=literal \
+    --warning=no-timestamp 2>&1";
 
 /// Whether a dropped item's place can be bind-mounted: a path on one of this computer's drives. A network share is
 /// not something Docker Desktop mounts, nor something our engine's distro sees.
@@ -1341,13 +1809,13 @@ fn helper_list(items: &[&Item]) -> Vec<u8> {
         .collect()
 }
 
-/// A line the helper wrote on stderr.
+/// A line the helper's reading tar wrote on stderr.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Said<'a> {
     /// `--checkpoint`: this many records written.
     Records(u64),
-    /// `-v`: the next listed file has started.
-    Started,
+    /// `-v`: a listed file has started, if it is one (Docker's own warnings come on the same stream).
+    Name(&'a str),
     /// tar on one file: its path within the drop, and what went wrong.
     Trouble(&'a str, &'a str),
     /// Anything else: Docker's own words, tar giving up.
@@ -1367,12 +1835,18 @@ pub fn said(line: &str) -> Said<'_> {
     if line.is_empty() || line.starts_with("docker: ") {
         return Said::Other(line);
     }
-    Said::Started
+    Said::Name(line)
 }
 
-/// The big files, through the helper. Returns what is left for the streamed route: the files the helper had trouble
-/// with, and, when it could not do its job (it would not mount, Docker refused it), the file it was on and the rest. A
-/// failure of this route costs speed and never a file.
+/// A line of the mounting helper's: its reading tar's on stderr, its writing tar's on stdout.
+enum Heard {
+    Reading(String),
+    Writing(String),
+}
+
+/// The big files, through the helper. Returns what is left for the streamed route: every file the helper's writing
+/// tar did not show it wrote whole (see [`Writes`]), whether the reading tar had trouble with it, the writing tar
+/// could not write it, or the helper stopped before it. A failure of this route costs speed and never a file.
 #[allow(clippy::too_many_arguments)]
 fn mount<'i>(
     id: &str,
@@ -1406,7 +1880,7 @@ fn mount<'i>(
             binds,
         ))
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -1423,143 +1897,144 @@ fn mount<'i>(
             let _ = stdin.write_all(&list);
         });
     }
-    let (lines, heard) = mpsc::channel::<String>();
+    let (lines, heard) = mpsc::channel::<Heard>();
     if let Some(stderr) = child.stderr.take() {
-        std::thread::spawn(move || {
-            use std::io::BufRead;
-            for line in io::BufReader::new(stderr).lines().map_while(Result::ok) {
-                if lines.send(line).is_err() {
-                    break;
-                }
-            }
-        });
+        let lines = lines.clone();
+        each_line(stderr, move |line| lines.send(Heard::Reading(line)).is_ok());
     }
-    let total: u64 = items.iter().map(|item| item.size).sum();
-    let mut follow = Follow::default();
+    match child.stdout.take() {
+        Some(stdout) => each_line(stdout, move |line| lines.send(Heard::Writing(line)).is_ok()),
+        None => drop(lines),
+    }
+    let mut follow = Follow::new(items);
     let status = loop {
         if cancel.load(Ordering::SeqCst) {
             let mut remove = crate::scripts::docker_command();
             remove.args(["rm", "-f", &name]);
             let _ = crate::scripts::capture("docker rm", remove, LOOKUP_LIMIT);
-            let _ = child.kill();
-            let _ = child.wait();
-            if let Some((index, _)) = follow.going {
-                meter.spoiled.insert(items[index].name.clone());
+            let _ = wait_for(&mut child, LOOKUP_LIMIT);
+            // Heard out, so a file the writing tar got past counts as landed and stays; the one it was on is partial.
+            // The reading tar was stopped too, and what it got past is all it vouches for.
+            let until = Instant::now() + HEARD_OUT;
+            while let Ok(line) = heard.recv_timeout(until.saturating_duration_since(Instant::now()))
+            {
+                follow.hear(line, meter);
             }
+            follow.end(None, meter);
             return Err(Stop::Cancelled);
         }
         match heard.recv_timeout(Duration::from_millis(200)) {
-            Ok(line) => follow.hear(&line, items, total, meter),
+            Ok(line) => follow.hear(line, meter),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break child.wait(),
         }
     };
-    Ok(follow.end(status.ok(), items, meter))
+    Ok(follow.end(status.ok(), meter))
 }
 
-/// What the helper has said so far, read against its list: the files run in list order, each named as it starts.
-#[derive(Default)]
-struct Follow {
-    /// The next file in the list not yet started or refused.
+/// What the helper has said so far, read against its list: its reading tar names each file as it starts reading it, in
+/// list order, and complains about one it could not read before it names the next; its writing tar does the same for
+/// writing them (`writes`). A file lands once the writing tar got past it and the reading tar vouched for it.
+struct Follow<'s, 'i> {
+    items: &'s [&'i Item],
+    total: u64,
+    writes: Writes<'i>,
+    /// The first listed file the reading tar has not named or passed over.
     next: usize,
-    /// The file going now, and whether tar has had trouble with it.
-    going: Option<(usize, bool)>,
-    /// Bytes of the files settled so far, the yardstick for the records count.
-    settled_bytes: u64,
-    /// The files tar had trouble with, by their place in the list: for the streamed route to try again. On Docker
-    /// Desktop a read through the file sharing can fail where the app's own read of the same file does not (2026-10-09:
-    /// "Cannot allocate memory" partway through a film).
-    retry: Vec<usize>,
+    /// Bytes the reading tar has sent, from its records count.
+    read_bytes: u64,
     /// Docker's or tar's last words that were about no one file.
     last_words: String,
 }
 
-impl Follow {
-    fn settle(&mut self, items: &[&Item], meter: &mut Meter) {
-        if let Some((index, troubled)) = self.going.take() {
-            let item = items[index];
-            self.settled_bytes += item.size;
-            if !troubled {
-                meter.copied.land(item);
-            }
+impl<'s, 'i> Follow<'s, 'i> {
+    fn new(items: &'s [&'i Item]) -> Self {
+        let mut writes = Writes::new(true, false, None);
+        for item in items {
+            writes.push(item, false);
+        }
+        // Nothing vouched for until the reading tar has moved past it.
+        writes.gate = 0;
+        Self {
+            items,
+            total: items.iter().map(|item| item.size).sum(),
+            writes,
+            next: 0,
+            read_bytes: 0,
+            last_words: String::new(),
         }
     }
 
-    fn hear(&mut self, line: &str, items: &[&Item], total: u64, meter: &mut Meter) {
+    fn hear(&mut self, line: Heard, meter: &mut Meter) {
+        match line {
+            Heard::Reading(line) => self.reading(&line, meter),
+            Heard::Writing(line) => self.writes.hear(&line, meter),
+        }
+        meter.copied.live_bytes = self.read_bytes.saturating_sub(self.writes.landed_bytes);
+        meter.report();
+    }
+
+    /// One line of the reading tar's.
+    fn reading(&mut self, line: &str, meter: &mut Meter) {
+        let items = self.items;
+        let upto = items.len().min(self.next + NAMES_AHEAD);
         match said(line) {
-            Said::Records(records) => {
-                meter.copied.live_bytes = (records * RECORD)
-                    .min(total)
-                    .saturating_sub(self.settled_bytes);
-            }
-            Said::Started if self.next < items.len() => {
-                self.settle(items, meter);
-                meter.copied.live_bytes = 0;
-                meter.copied.current.clone_from(&items[self.next].name);
-                self.going = Some((self.next, false));
-                self.next += 1;
-            }
-            Said::Trouble(path, _) => {
-                match self.going {
-                    // The file going now, coming up short: tar pads it out, so what landed is spoiled until the
-                    // retry lands it whole.
-                    Some((index, false)) if items[index].relative == path => {
-                        self.going = Some((index, true));
-                        meter.spoiled.insert(items[index].name.clone());
-                        self.retry.push(index);
+            Said::Records(records) => self.read_bytes = (records * RECORD).min(self.total),
+            Said::Name(name) => {
+                match (self.next..upto).find(|&index| items[index].relative == name) {
+                    Some(index) => {
+                        meter.copied.current.clone_from(&items[index].name);
+                        self.next = index + 1;
+                        // Done reading every file before this one.
+                        self.writes.vouch(index, meter);
                     }
-                    // A file tar could not open: it is never named as started, and the list moves past it.
-                    _ if self.next < items.len() && items[self.next].relative == path => {
-                        self.retry.push(self.next);
-                        self.settled_bytes += items[self.next].size;
-                        self.next += 1;
-                    }
-                    _ => self.last_words = line.to_string(),
+                    None => self.last_words = line.to_string(),
                 }
             }
-            Said::Started => {}
+            Said::Trouble(path, _) => {
+                // The file it is reading, coming up short (tar pads it out), or one it could not open, never named,
+                // which it moves past.
+                let from = self.next.saturating_sub(1);
+                match (from..upto).find(|&index| items[index].relative == path) {
+                    Some(index) => {
+                        self.writes.members[index].troubled = true;
+                        if index >= self.next {
+                            self.next = index + 1;
+                            self.writes.vouch(self.next, meter);
+                        }
+                    }
+                    None => self.last_words = line.to_string(),
+                }
+            }
             Said::Other(words) => {
                 if !words.is_empty() {
                     self.last_words = words.to_string();
                 }
             }
         }
-        meter.report();
     }
 
-    /// The helper has exited. Every file it reached is settled, and the files it had trouble with are handed back;
-    /// if it stopped before the end of its list, so are the file it was on and the rest.
-    fn end<'i>(
-        mut self,
-        status: Option<ExitStatus>,
-        items: &[&'i Item],
-        meter: &mut Meter,
-    ) -> Vec<&'i Item> {
-        let reached_end = self.next == items.len();
-        // tar exits 2 when some files had trouble, each already handed back; any other failure stopped the copy.
-        let finished = status
-            .is_some_and(|status| status.success() || (status.code() == Some(2) && reached_end));
-        meter.copied.live_bytes = 0;
-        let mut left: Vec<&Item> = self.retry.iter().map(|&index| items[index]).collect();
-        if finished {
-            self.settle(items, meter);
-            return left;
+    /// The helper has gone, with the writing tar's `status` (the pipeline's), or none for a cancel. Returns the files
+    /// that did not land, for the streamed route; the ones the writing tar started on are spoiled until then. After an
+    /// exit the reading tar has said all it will, and vouches for every file it did not complain about; after a cancel
+    /// only for those it got past.
+    fn end(mut self, status: Option<ExitStatus>, meter: &mut Meter) -> Vec<&'i Item> {
+        let exited_ok = status.is_some_and(|status| status.success());
+        if status.is_some() {
+            self.writes.vouch(self.items.len(), meter);
         }
-        eprintln!(
-            "drop copy: the helper stopped ({:?}): {}; streaming the rest",
-            status, self.last_words
-        );
-        let from = match self.going {
-            // Already handed back with its trouble.
-            Some((index, true)) => index + 1,
-            // Started and not finished: what landed of it is partial until the streamed route sends it whole.
-            Some((index, false)) => {
-                meter.spoiled.insert(items[index].name.clone());
-                index
-            }
-            None => self.next,
-        };
-        left.extend_from_slice(&items[from.min(items.len())..]);
+        self.writes.end(exited_ok, false, meter);
+        self.writes.spoil(meter);
+        meter.copied.live_bytes = 0;
+        let left: Vec<&'i Item> = self.writes.unlanded().collect();
+        if status.is_some() && (!exited_ok || !left.is_empty()) {
+            eprintln!(
+                "drop copy: the helper ({status:?}) left {} files for the streamed route: {}{}",
+                left.len(),
+                self.writes.complaints.trim(),
+                self.last_words
+            );
+        }
         left
     }
 }
@@ -2037,13 +2512,22 @@ mod tests {
         )
     }
 
-    /// The whole scan as the streamed route's archive, and what the copy counted.
+    /// The whole scan as the streamed route's archive, and what the copy counted once a tar unpacking it exited 0.
     fn archived(scan: &Scan) -> (Vec<u8>, Copied) {
         let mut archive = Vec::new();
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(scan.roots.len(), &mut tick);
         let items: Vec<&Item> = scan.items.iter().collect();
-        write_archive(&mut archive, &items, &AtomicBool::new(false), &mut meter).unwrap();
+        let mut writes = Writes::new(false, true, None);
+        write_archive(
+            &mut archive,
+            &items,
+            &AtomicBool::new(false),
+            &mut meter,
+            &mut writes,
+        )
+        .unwrap();
+        writes.end(true, true, &mut meter);
         (archive, meter.copied)
     }
 
@@ -2200,7 +2684,14 @@ mod tests {
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(scan.roots.len(), &mut tick);
         let items: Vec<&Item> = scan.items.iter().collect();
-        let result = write_archive(Vec::new(), &items, &AtomicBool::new(true), &mut meter);
+        let mut writes = Writes::new(false, true, None);
+        let result = write_archive(
+            Vec::new(),
+            &items,
+            &AtomicBool::new(true),
+            &mut meter,
+            &mut writes,
+        );
         assert_eq!(result.unwrap_err().to_string(), "cancelled");
     }
 
@@ -2225,10 +2716,12 @@ mod tests {
         let mut meter = Meter::new(1, &mut tick);
         meter.last = Instant::now() - TICK;
         let started = Instant::now();
-        let result = write_archive(io::sink(), &[&item], &cancel, &mut meter);
+        let mut writes = Writes::new(false, true, None);
+        let result = write_archive(io::sink(), &[&item], &cancel, &mut meter, &mut writes);
         assert_eq!(result.unwrap_err().to_string(), "cancelled");
         assert!(started.elapsed() < Duration::from_secs(5));
-        assert_eq!(meter.in_flight.as_deref(), Some("media/m/film.mov"));
+        assert!(writes.cut);
+        assert_eq!(writes.members.len(), 1);
     }
 
     /// Big files on a drive go mounted; folders, small files, and anything on a place that will not mount, streamed.
@@ -2474,9 +2967,19 @@ mod tests {
             (meter.copied.done, left_files, meter.spoiled.len()),
             (70, 50, 50)
         );
-        // Streamed whole, each comes off the spoiled list.
+        // Streamed whole, each comes off the spoiled list once the sandbox's tar says so.
         let mut streamed = Vec::new();
-        write_archive(&mut streamed, &left, &AtomicBool::new(false), &mut meter).unwrap();
+        let mut writes = Writes::new(false, true, None);
+        write_archive(
+            &mut streamed,
+            &left,
+            &AtomicBool::new(false),
+            &mut meter,
+            &mut writes,
+        )
+        .unwrap();
+        assert_eq!((meter.copied.done, meter.spoiled.len()), (70, 50));
+        writes.end(true, true, &mut meter);
         assert_eq!((meter.copied.done, meter.spoiled.len()), (120, 0));
 
         let (stage_dir, work) = (Scratch::new(), Scratch::new());
@@ -2522,14 +3025,25 @@ mod tests {
     #[test]
     fn the_staging_helper_is_heard_and_run_as_it_should_be() {
         assert_eq!(
-            parse_answer("ok part-00001.tar"),
+            parse_answer("/opened part-00001.tar"),
+            Answer::Opened("part-00001.tar".into())
+        );
+        assert_eq!(
+            parse_answer("/ok part-00001.tar"),
             Answer::Unpacked("part-00001.tar".into(), true)
         );
         assert_eq!(
-            parse_answer("failed part-00002.tar"),
+            parse_answer("/failed part-00002.tar"),
             Answer::Unpacked("part-00002.tar".into(), false)
         );
-        assert_eq!(parse_answer("tar: something"), Answer::Waiting);
+        assert_eq!(
+            parse_answer("media/ok part.jpg"),
+            Answer::Said("media/ok part.jpg".into())
+        );
+        assert_eq!(
+            parse_answer("tar: something"),
+            Answer::Said("tar: something".into())
+        );
         let args = stage_args(
             "intentic-drop-copy-a1-stage",
             "sha256:abc",
@@ -2641,7 +3155,10 @@ mod tests {
     #[test]
     fn the_helpers_words_are_read_for_what_they_say() {
         assert_eq!(said("tar: 64"), Said::Records(64));
-        assert_eq!(said("marketing/films/a.mp4"), Said::Started);
+        assert_eq!(
+            said("marketing/films/a.mp4"),
+            Said::Name("marketing/films/a.mp4")
+        );
         assert_eq!(
             said("tar: marketing/b.mov: Cannot open: Permission denied"),
             Said::Trouble("marketing/b.mov", "Cannot open: Permission denied")
@@ -2680,8 +3197,9 @@ mod tests {
         ExitStatus::from_raw(code as u32)
     }
 
-    /// The helper's run as the card hears it: a file done as the next starts, and the files tar had trouble with
-    /// handed back to the streamed route rather than counted failed, the one it padded marked as spoiled.
+    /// The helper's run as the card hears it: a file lands once its writing tar has moved past it and its reading tar
+    /// vouched for it; the files the reading tar had trouble with go back to the streamed route rather than counted
+    /// failed, the one it padded spoiled. Docker's own warning on stderr is nobody's file.
     #[test]
     fn the_helper_is_followed_file_by_file() {
         let owned = [
@@ -2697,28 +3215,36 @@ mod tests {
         );
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(1, &mut tick);
-        let mut follow = Follow::default();
-        let total = 7 * RECORD;
+        let mut follow = Follow::new(&items);
+        let reading = |line: &str| Heard::Reading(line.to_string());
+        let writing = |line: &str| Heard::Writing(line.to_string());
         for line in [
-            "m/a.mp4",
-            "tar: 2",
-            "tar: m/b.mov: Cannot open: Permission denied",
-            "m/c.mp4",
-            "tar: 4",
-            "tar: m/c.mp4: Read error at byte 1048576, while reading 1048576 bytes: Cannot allocate memory",
-            "m/d.mov",
+            reading("WARNING: The requested image's platform (linux/amd64) does not match"),
+            reading("m/a.mp4"),
+            reading("tar: 2"),
+            writing("m/a.mp4"),
+            reading("tar: m/b.mov: Cannot open: Permission denied"),
+            reading("m/c.mp4"),
+            reading("tar: 4"),
+            // The writing tar is past a.mp4 and on c.mp4 before the reading tar says it padded c.mp4.
+            writing("m/c.mp4"),
+            reading("tar: m/c.mp4: Read error at byte 1048576, while reading 1048576 bytes: Cannot allocate memory"),
+            reading("m/d.mov"),
+            writing("m/d.mov"),
+            reading("tar: Exiting with failure status due to previous errors"),
         ] {
-            follow.hear(line, &items, total, &mut meter);
+            follow.hear(line, &mut meter);
         }
         assert_eq!(
             (
                 meter.copied.done,
                 meter.copied.done_bytes,
-                meter.copied.failed
+                meter.copied.failed,
+                meter.copied.current.as_str()
             ),
-            (1, 3 * RECORD, 0)
+            (1, 3 * RECORD, 0, "media/m/d.mov")
         );
-        let left = follow.end(Some(exited(2)), &items, &mut meter);
+        let left = follow.end(Some(exited(0)), &mut meter);
         assert_eq!(
             left.iter()
                 .map(|item| item.relative.as_str())
@@ -2737,8 +3263,71 @@ mod tests {
         assert_eq!(meter.spoiled, HashSet::from(["media/m/c.mp4".to_string()]));
     }
 
-    /// A helper that could not do its job (here, Docker refusing the mount) hands back the file it was on and the
-    /// rest, for the streamed route; what it wrote of the file it was on is spoiled until then.
+    /// A write that fails on the writing tar's side (a full disk) is said after the reading tar has moved on to the
+    /// next file: it is still that file's, which is spoiled and handed back rather than counted done. A file the
+    /// writing tar never named was never written, and is handed back without being spoiled.
+    #[test]
+    fn a_file_the_writing_tar_could_not_write_is_handed_back() {
+        let owned = [
+            big("m/a.bin", 3 * RECORD),
+            big("m/b.bin", 2 * RECORD),
+            big("m/c.bin", 2 * RECORD),
+        ];
+        let items: Vec<&Item> = owned.iter().collect();
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(1, &mut tick);
+        let mut follow = Follow::new(&items);
+        for line in [
+            Heard::Reading("m/a.bin".into()),
+            Heard::Reading("m/b.bin".into()),
+            Heard::Writing("m/a.bin".into()),
+            Heard::Writing("tar: m/a.bin: Wrote only 2969600 of 3145728 bytes".into()),
+            Heard::Reading("m/c.bin".into()),
+            Heard::Writing("m/b.bin".into()),
+            Heard::Writing("m/c.bin".into()),
+            Heard::Writing("tar: Exiting with failure status due to previous errors".into()),
+        ] {
+            follow.hear(line, &mut meter);
+        }
+        let left = follow.end(Some(exited(2)), &mut meter);
+        assert_eq!(
+            left.iter()
+                .map(|item| item.relative.as_str())
+                .collect::<Vec<_>>(),
+            vec!["m/a.bin"]
+        );
+        assert_eq!(
+            (meter.copied.done, meter.spoiled.clone()),
+            (2, HashSet::from(["media/m/a.bin".to_string()]))
+        );
+
+        // A writing tar that stops (killed, out of memory) vouches for nothing it was on.
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(1, &mut tick);
+        let mut follow = Follow::new(&items);
+        for line in [
+            Heard::Reading("m/a.bin".into()),
+            Heard::Reading("m/b.bin".into()),
+            Heard::Writing("m/a.bin".into()),
+            Heard::Writing("m/b.bin".into()),
+        ] {
+            follow.hear(line, &mut meter);
+        }
+        let left = follow.end(Some(exited(137)), &mut meter);
+        assert_eq!(
+            left.iter()
+                .map(|item| item.relative.as_str())
+                .collect::<Vec<_>>(),
+            vec!["m/b.bin", "m/c.bin"]
+        );
+        assert_eq!(
+            (meter.copied.done, meter.spoiled.clone()),
+            (1, HashSet::from(["media/m/b.bin".to_string()]))
+        );
+    }
+
+    /// A helper that could not do its job (here, Docker refusing the mount) hands back everything, and spoils nothing:
+    /// it wrote nothing.
     #[test]
     fn a_helper_that_stops_hands_back_what_it_did_not_finish() {
         let owned = [
@@ -2749,20 +3338,190 @@ mod tests {
         let items: Vec<&Item> = owned.iter().collect();
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(1, &mut tick);
-        let mut follow = Follow::default();
-        follow.hear("m/a.mp4", &items, 3 * RECORD, &mut meter);
-        follow.hear("m/b.mov", &items, 3 * RECORD, &mut meter);
-        let left = follow.end(Some(exited(125)), &items, &mut meter);
+        let mut follow = Follow::new(&items);
+        follow.hear(
+            Heard::Reading("docker: Error response from daemon: invalid mount config".into()),
+            &mut meter,
+        );
+        let left = follow.end(Some(exited(125)), &mut meter);
+        assert_eq!(left.len(), 3);
+        assert_eq!((meter.copied.done, meter.spoiled.len()), (0, 0));
+    }
+
+    /// The streamed route counts a file done only once the sandbox's tar has written it: a write that fails partway (a
+    /// full disk) leaves it spoiled and failed, though every byte of it went into the pipe; one tar never reached is
+    /// failed and left alone, older copy and all.
+    #[test]
+    fn a_streamed_file_tar_could_not_write_is_spoiled_and_failed() {
+        let base = Scratch::new();
+        let mut owned = Vec::new();
+        for name in ["a.jpg", "b.jpg", "c.jpg"] {
+            let path = base.path().join(name);
+            fs::write(&path, vec![1u8; 10_240]).unwrap();
+            let mut item = big(&format!("m/{name}"), 10_240);
+            item.source = path;
+            owned.push(item);
+        }
+        let items: Vec<&Item> = owned.iter().collect();
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(1, &mut tick);
+        // Left by an earlier route that failed partway through it.
+        meter.spoiled.insert("media/m/a.jpg".to_string());
+        let mut writes = Writes::new(false, true, None);
+        write_archive(
+            Vec::new(),
+            &items,
+            &AtomicBool::new(false),
+            &mut meter,
+            &mut writes,
+        )
+        .unwrap();
         assert_eq!(
-            left.iter()
-                .map(|item| item.relative.as_str())
-                .collect::<Vec<_>>(),
-            vec!["m/b.mov", "m/c.mp4"]
+            (meter.copied.done, meter.copied.live_bytes),
+            (0, 3 * 10_240)
+        );
+        for line in [
+            "media/m/a.jpg",
+            "media/m/b.jpg",
+            "tar: media/m/b.jpg: Wrote only 512 of 10240 bytes",
+            "tar: Error is not recoverable: exiting now",
+        ] {
+            writes.hear(line, &mut meter);
+        }
+        writes.end(false, false, &mut meter);
+        settle_stream(
+            &writes,
+            Some("Docker stopped the copy: tar: …"),
+            false,
+            &mut meter,
         );
         assert_eq!(
-            (meter.copied.done, meter.spoiled.clone()),
-            (1, HashSet::from(["media/m/b.mov".to_string()]))
+            (
+                meter.copied.done,
+                meter.copied.failed,
+                meter.spoiled.clone()
+            ),
+            (1, 2, HashSet::from(["media/m/b.jpg".to_string()]))
         );
+
+        // tar's 0 makes a complaint a warning.
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(1, &mut tick);
+        let mut writes = Writes::new(false, true, None);
+        write_archive(
+            Vec::new(),
+            &items,
+            &AtomicBool::new(false),
+            &mut meter,
+            &mut writes,
+        )
+        .unwrap();
+        writes.hear("media/m/a.jpg", &mut meter);
+        writes.hear("tar: media/m/a.jpg: implausibly old time stamp", &mut meter);
+        writes.end(true, true, &mut meter);
+        assert_eq!(
+            (
+                meter.copied.done,
+                meter.copied.live_bytes,
+                meter.spoiled.len()
+            ),
+            (3, 0, 0)
+        );
+    }
+
+    /// A staging helper that answers as the real one does: that it opened an archive, tar's names as it goes, and
+    /// (unless `stop_after` names it stops partway) that it unpacked. Raises `cancel` when handed archive `cancel_at`.
+    struct ScriptedUnpacker<'c> {
+        stage: PathBuf,
+        stop_after: usize,
+        cancel: &'c AtomicBool,
+        cancel_at: usize,
+        handed: usize,
+        answers: VecDeque<Answer>,
+        halted: bool,
+    }
+
+    impl Unpacker for ScriptedUnpacker<'_> {
+        fn unpack(&mut self, part: &str) -> io::Result<()> {
+            self.handed += 1;
+            if self.handed == 1 {
+                let bytes = fs::read(self.stage.join(part)).unwrap();
+                let mut archive = tar::Archive::new(bytes.as_slice());
+                let names: Vec<String> = archive
+                    .entries()
+                    .unwrap()
+                    .map(|entry| {
+                        entry
+                            .unwrap()
+                            .path()
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned()
+                    })
+                    .collect();
+                self.answers.push_back(Answer::Opened(part.to_string()));
+                for name in names.into_iter().take(self.stop_after) {
+                    self.answers.push_back(Answer::Said(name));
+                }
+            }
+            if self.handed == self.cancel_at {
+                self.cancel.store(true, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+
+        fn answer(&mut self, _wait: Duration) -> Answer {
+            match self.answers.pop_front() {
+                Some(answer) => answer,
+                None if self.halted => Answer::Gone,
+                None => Answer::Waiting,
+            }
+        }
+
+        fn halt(&mut self) {
+            self.halted = true;
+        }
+    }
+
+    /// A cancel while the helper is partway through an archive: what tar got past stays and counts done, the file it
+    /// was on is spoiled, and nothing of the archives it never opened is touched, so older copies of their files stay.
+    /// Spoiling every file handed over, as the staged route first did, deleted those older copies (2026-10-10).
+    #[test]
+    fn a_cancel_while_unpacking_spoils_only_the_file_tar_was_on() {
+        let (_base, scan) = stills(1, 120);
+        let items: Vec<&Item> = scan.items.iter().collect();
+        let stage_dir = Scratch::new();
+        let cancel = AtomicBool::new(false);
+        let mut unpacker = ScriptedUnpacker {
+            stage: stage_dir.path().to_path_buf(),
+            // The two folders, then two stills, and on the third.
+            stop_after: 5,
+            cancel: &cancel,
+            cancel_at: 2,
+            handed: 0,
+            answers: VecDeque::new(),
+            halted: false,
+        };
+        let mut tick = |_: &Copied| {};
+        let mut meter = Meter::new(scan.roots.len(), &mut tick);
+        let result = stage(
+            stage_dir.path(),
+            &items,
+            &mut unpacker,
+            SMALL_PARTS,
+            &cancel,
+            &mut meter,
+        );
+        assert!(matches!(result, Err(Stop::Cancelled)));
+        assert_eq!(unpacker.handed, 2);
+        assert_eq!(meter.copied.done, 2);
+        assert_eq!(meter.spoiled.len(), 1);
+        let spoiled = meter.spoiled.iter().next().unwrap();
+        assert!(
+            spoiled.starts_with("media/marketing/batch-0/still-"),
+            "{spoiled}"
+        );
+        assert_eq!(fs::read_dir(stage_dir.path()).unwrap().count(), 0);
     }
 
     /// The streamed route marks a file it padded, and clears the mark when it lands the file whole, as a retry of a
@@ -2779,13 +3538,19 @@ mod tests {
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(1, &mut tick);
         meter.spoiled.insert("media/m/whole.mov".to_string());
+        let mut writes = Writes::new(false, true, None);
         write_archive(
             Vec::new(),
             &[&gone, &retried],
             &AtomicBool::new(false),
             &mut meter,
+            &mut writes,
         )
         .unwrap();
+        // Not landed until the sandbox's tar says so.
+        assert_eq!((meter.copied.done, meter.spoiled.len()), (0, 1));
+        writes.hear("media/m/whole.mov", &mut meter);
+        writes.end(true, true, &mut meter);
         // gone.mov never opened, so nothing of it was written and nothing is taken away.
         assert_eq!(
             (meter.copied.done, meter.copied.failed, meter.spoiled.len()),

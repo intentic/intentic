@@ -415,7 +415,7 @@ describe("an uncoded death", () => {
     test("on a carried re-run the other account refused before it answered is booked there fresh, and the frame says so", async () => {
         const carried = { ...input, account: "sibling", resume: "carried" } as const;
         const queries = answering({ policy: "retry", rung: 1_800_000_060_500 });
-        const plan = await classifyFailure(died, context({ answered: false, turn: carried }), queries);
+        const plan = await classifyFailure(died, context({ answered: false, turn: carried, carriedOff: true }), queries);
         expect(plan.frame).toStrictEqual({ ...died, held: { ran: true, contextTokens: 9_000, moving: "sibling" }, autoResume: "scheduled" });
         expect(plan.held).toStrictEqual({
             input: carried,
@@ -428,6 +428,26 @@ describe("an uncoded death", () => {
             contextTokens: 9_000,
         });
         expect(queries.asked).toStrictEqual([]);
+    });
+
+    // A trimmed hand-off is a way to continue, not a move: re-sent on the account it was refused on and dying unanswered,
+    // no other account refused a carry, so nothing is booked onto the account it is already on; it is an ordinary death.
+    test("a trimmed re-run on the same account that dies unanswered is held as stopped, never moved onto itself", async () => {
+        const trimmed = { ...input, account: "acct", resume: "trimmed" } as const;
+        const plan = await classifyFailure(died, context({ answered: false, turn: trimmed }), answering());
+        expect(plan.frame.held).toStrictEqual({ ran: false, contextTokens: 9_000 });
+        expect(plan.frame.held?.moving).toBeUndefined();
+        expect(plan.held).toMatchObject({ reason: "stopped", input: trimmed });
+        expect(plan.held?.move).toBeUndefined();
+        expect(plan.held?.carryRefused).toBeUndefined();
+    });
+
+    // Trimmed onto another account, the account refused the carry exactly as a whole-session carry: booked there fresh.
+    test("a trimmed re-run carried onto another account that refused before it answered is booked there fresh", async () => {
+        const trimmed = { ...input, account: "sibling", resume: "trimmed" } as const;
+        const plan = await classifyFailure(died, context({ answered: false, turn: trimmed, carriedOff: true }), answering());
+        expect(plan.held).toMatchObject({ reason: "limit", carryRefused: true, move: { account: "sibling", carry: false } });
+        expect(plan.frame.held?.moving).toBe("sibling");
     });
 
     test("never answered on an ordinary message is still held, as not having run", async () => {
@@ -541,7 +561,7 @@ test.each([
     ["one before any answer", "stopped", died, { answered: false }],
     ["a stopped resume never answered", undefined, died, { answered: false, turn: { ...input, resume: "stopped" } }],
     ["a stopped resume that answered", "stopped", died, { turn: { ...input, resume: "stopped" } }],
-    ["a carried re-run refused unanswered", "limit", died, { answered: false, turn: { ...input, account: "sibling", resume: "carried" } }],
+    ["a carried re-run refused unanswered", "limit", died, { answered: false, carriedOff: true, turn: { ...input, account: "sibling", resume: "carried" } }],
     ["a carried re-run that answered first", "stopped", died, { turn: { ...input, account: "sibling", resume: "carried" } }],
     ["a coded failure with a remedy of its own", undefined, { kind: "error", code: "context-window-too-small", message: "too small" }, {}],
     ["an uncoded death with no conversation", undefined, died, { turn: { agent: "claude", harness: "native", prompt: "ship it" } }],

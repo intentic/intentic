@@ -2725,7 +2725,11 @@ it("stops reading a spent allowance as booked once its hold is dropped or fired"
     // Every window hears it, since nothing else moves when a hold is dropped.
     expect(told.length).toBeGreaterThan(0);
 
-    await conversations.send("fired", { kind: "held-fired", ladder: false }).settled;
+    const judged = conversations.state("fired")?.resume.held;
+    if (judged === undefined) {
+        throw new Error("expected a hold");
+    }
+    await conversations.send("fired", { kind: "held-fired", ladder: false, judged }).settled;
     expect(registry.get("fired")).toMatchObject({ limitHeld: true });
     expect([registry.get("fired")?.limitScheduled, registry.get("fired")?.limitMoving]).toEqual([undefined, undefined]);
 });
@@ -2806,7 +2810,11 @@ it("takes a spent allowance's kept hold off its entry once fired or dropped, and
     }
     // Held before either way out, so the cleared ones below were cleared by it rather than never written.
     expect(registry.entry("fired")?.limitHold).toMatchObject({ reopensAt: 9_000, ran: true });
-    await conversations.send("fired", { kind: "held-fired", ladder: false }).settled;
+    const judged = conversations.state("fired")?.resume.held;
+    if (judged === undefined) {
+        throw new Error("expected a hold");
+    }
+    await conversations.send("fired", { kind: "held-fired", ladder: false, judged }).settled;
     await conversations.send("dropped", { kind: "resume-dropped" }).settled;
     expect([registry.entry("fired")?.limitHold, registry.entry("dropped")?.limitHold, registry.entry("unheld")?.limitHold]).toEqual([
         undefined,
@@ -2822,6 +2830,40 @@ it("takes a spent allowance's kept hold off its entry once fired or dropped, and
         expect([restarted.get(id)?.limitHeld, restarted.get(id)?.limitScheduled]).toEqual([undefined, undefined]);
     }
     expect(after.stranded()).toEqual([]);
+});
+
+// A booked resend fires, and its re-run is turned away at the door for low memory: the sandbox holds the turn whole
+// again (a door hold), and a restart, which low memory often brings, must not lose what the fired booking handed on.
+// The entry keeps the door hold as it kept the limit one; the boot puts it back, for the memory release to send.
+it("keeps a fired resend that low memory turned away at the door across a restart", async () => {
+    const store = memoryStore();
+    const { agents: registry, conversations } = createFleet(store, standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", {
+        kind: "frame",
+        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true } },
+    });
+    holdLimit(conversations, "c1");
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    const judged = conversations.state("c1")?.resume.held;
+    if (judged === undefined) {
+        throw new Error("expected a hold");
+    }
+    expect(conversations.send("c1", { kind: "held-fired", ladder: false, judged }).reply).toBe(true);
+    // The re-run, refused before the model saw a word.
+    await beginTurn(conversations, turn({ prompt: "p" }), 9_001_000);
+    const input = { conversationId: "c1", prompt: "p", resume: "limit" as const };
+    conversations.send("c1", { kind: "turn-held", held: { input, reason: "door", ran: false, run: "run-2" } }, 9_001_000);
+    conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "sandbox-memory-low", message: "short of memory" } });
+    await conversations.send("c1", { kind: "settle" }, 9_002_000).settled;
+    expect(registry.entry("c1")?.ending).toMatchObject({ kind: "failed", code: "sandbox-memory-low" });
+
+    const { agents: restarted, conversations: after } = createFleet(store, standings(), presences());
+    await restarted.init();
+    expect(restoreLimitHolds({ agents: restarted, conversations: after, logger: silent })).toBe(1);
+    const [stranded] = after.stranded();
+    expect(stranded?.record).toMatchObject({ reason: "door", fired: false, ran: false, run: "run-2", input: { conversationId: "c1", prompt: "p", resume: "limit" } });
 });
 
 // A kept hold an older build left standing under a later turn is not this ending's: it is taken off, never fired.

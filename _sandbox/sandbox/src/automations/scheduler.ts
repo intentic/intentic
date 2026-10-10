@@ -190,6 +190,9 @@ export interface FireOptions {
     // What the automation's check saw, already worded for the wake: carried by a held wake's replay, whose check ran
     // when it was held and must not run again (it would compare against the value it just recorded).
     readonly observed?: string;
+    // The held wake this fire replays, by id: what a delivery into a conversation is keyed on, so two holds approved
+    // together are two deliveries rather than one answered twice.
+    readonly held?: string;
     // What happens when this automation is already running:
     // - `drop` (default): a cron or workspace-event re-fire is not wanted twice; the next tick comes anyway.
     // - `queue`: for an inbound message with no next tick; waits for the run in progress, keeping its reply sink open.
@@ -371,13 +374,23 @@ const runFire = async (
         title,
         late,
         observed: replayedObservation,
+        held,
     }: FireOptions,
 ): Promise<FireOutcome> => {
+    // This fire's own name, for a delivery that must not be mistaken for another fire's.
+    const fireKey = held === undefined ? `at-${Date.now()}` : `held-${held}`;
     try {
         // Past its end date it does nothing but end: switched off, and whoever it was for told. A held wake already
         // released by a person is theirs to have, so a replay goes ahead.
         if (automation.expiresAt !== undefined && automation.expiresAt <= Date.now() && cleared !== "both") {
-            await expireAutomation(services, automation);
+            // Ended before (a press of "Run now" on it): nobody is told again, but the press is answered in its history.
+            if (!(await expireAutomation(services, automation)) && cleared === "approval") {
+                await services.automations.recordRun(automation.id, {
+                    at: Date.now(),
+                    outcome: "skipped",
+                    detail: `It reached its end date (${new Date(automation.expiresAt).toISOString()}): move the end date to run it again.`,
+                });
+            }
             stream?.failed("this automation reached its end date");
             return {};
         }
@@ -479,10 +492,17 @@ const runFire = async (
             return {};
         }
         if (target.kind === "conversation") {
-            const continued = await continueConversation(services, automation, target.conversationId, "met", {
-                ...(observed === undefined ? {} : { text: observed }),
-                ...(observedOutside === undefined ? {} : { outside: observedOutside }),
-            });
+            const continued = await continueConversation(
+                services,
+                automation,
+                target.conversationId,
+                "met",
+                {
+                    ...(observed === undefined ? {} : { text: observed }),
+                    ...(observedOutside === undefined ? {} : { outside: observedOutside }),
+                },
+                fireKey,
+            );
             await recordTargetRun(services, automation, continued);
             return {};
         }
@@ -618,6 +638,7 @@ export interface AutomationsScheduler {
 // automation says now; the hold itself was answered, so the lane asks for none.
 const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): FireOptions => ({
     cleared: "both",
+    held: held.id,
     lane: { actsAs: held.actsAs, requireApproval: false },
     ...(held.payload !== undefined ? { payload: held.payload } : {}),
     ...(held.observed !== undefined ? { observed: held.observed } : {}),

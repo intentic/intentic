@@ -58,6 +58,8 @@ export interface FailureContext {
     readonly sessionId: string | undefined;
     // Whether the provider answered before this frame: `ran` on every hold this frame promises.
     readonly answered: boolean;
+    // Whether this turn re-ran a held one, its session carried onto another account than the one it was held on.
+    readonly carriedOff?: boolean | undefined;
     // The stored Claude credential a refusal of it would re-mint and re-run the turn on; undefined when none would be.
     readonly remint: HeldTurn["remint"];
     // The reset instant the stream last named, which outranks the frame's own and the account snapshot's.
@@ -354,9 +356,12 @@ const dressFlagged = (event: ErrorFrame, context: FailureContext, conversationId
 };
 
 // Held whole for a press; a carry refused unanswered moves fresh at once; an unanswered `stopped` resume is not held again.
+// A carry is a session moved onto another account (`carriedOff`), whatever way it continued: a trimmed hand-off re-sent
+// on the account it was held on is no carry, and read as one it was booked as a move onto that same account, the card
+// saying `moving` to where it already was and a move policy re-running it fresh at once (2026-10-10).
 const dressDeath = async (event: ErrorFrame, context: FailureContext, conversationId: string, queries: FailureQueries): Promise<Dressed> => {
     const { turn, answered } = context;
-    if ((turn.resume === "carried" || turn.resume === "trimmed") && !answered && turn.account !== undefined) {
+    if (context.carriedOff === true && !answered && turn.account !== undefined) {
         const left = leftBy(context);
         const held = holding(context, conversationId, "limit", {
             ran: true,

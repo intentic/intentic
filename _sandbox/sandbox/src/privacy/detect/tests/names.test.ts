@@ -216,6 +216,22 @@ describe("data-shaped text", () => {
         expect(names("4\tTomasz\tWójcik")).toEqual(["Tomasz", "Wójcik"]);
     });
 
+    // A two-column export has one separator per row, and that row is still data: a short pair of cells with no lowercase
+    // word in it, whatever header it sits under.
+    test("a two-column row pairs a first name with its surname, in either order", () => {
+        expect(names("first_name,last_name,city\nJan,Kowalski,Gdynia\n")).toHaveLength(2);
+        expect(names("first_name,last_name\nJan,Kowalski\nAnna,Nowak\n")).toHaveLength(4);
+        expect(names("imię;nazwisko\nPiotr;Wiśniewski\n")).toHaveLength(2);
+        expect(names("Jan\tKowalski\n")).toHaveLength(2);
+        expect(names("Kowalski, Jan\nNowak, Anna\n")).toHaveLength(4);
+    });
+
+    // One separator in a sentence is a list, not a row.
+    test("a sentence with one comma pairs nothing across it", () => {
+        expect(names("Anna, Marek")).toEqual([]);
+        expect(names("Zaprosiłem Annę, Kowalski też przyjdzie.")).toEqual([]);
+    });
+
     test("a city in the next cell is not taken for a surname, and a first name alone in a row is no find", () => {
         expect(names("Anna,Warszawa,2024")).toEqual([]);
     });

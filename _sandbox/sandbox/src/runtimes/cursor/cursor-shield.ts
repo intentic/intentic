@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { SDKCustomTool, SDKCustomToolResult, SDKJsonValue, ToolName } from "@cursor/sdk";
+import type { McpServerConfig, SDKCustomTool, SDKCustomToolResult, SDKJsonValue, ToolName } from "@cursor/sdk";
 import type { AgentEvent, PersonalDataClass } from "@intentic/sandbox-contract";
 import { createHoldback, type Holdback } from "../../privacy/gateway/protocols/holdback.js";
 import { type Json, restoreStrings } from "../../privacy/gateway/protocols/walk.js";
@@ -8,11 +8,14 @@ import { SHIELD_NOTE } from "../../privacy/gateway/request-shield.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import { tokenPattern } from "../../privacy/tokens.js";
 import type { CursorHookShield } from "./cursor-hooks.js";
+import type { CursorRunHandle, CursorSession } from "./cursor-host.js";
 
 // THE PRIVACY SHIELD ON CURSOR'S RUNTIME. Cursor's agent sends what it reads to its own servers on its own wire, so the
 // gateway can't stand in front of it; but every channel its model reads through passes this daemon first, and each is
 // read by content here (agent-runtimes.ts `privacy: "hooks"`):
-// - the prompt, steering and the instructions the daemon hands over: masked before they are sent (cursor-agent.ts);
+// - every message sent to the agent (the prompt, a plan's revision, steering, a follow-up): masked on the session itself
+//   (shieldedSession), so no path that sends can forget to; the instructions the daemon hands over: masked before they
+//   are handed over (cursor-agent.ts);
 // - the rules Cursor loads itself (AGENTS.md, .cursor/rules): read before the turn, and a finding refuses it, the one
 //   thing that can't be masked (instructionRefusal);
 // - a file its read tool opens: refused when it holds personal data, since a read can be refused but not changed; the
@@ -20,7 +23,9 @@ import type { CursorHookShield } from "./cursor-hooks.js";
 // - a shell command: rewritten by the preToolUse hook to run through the hook script, which hands its output here to be
 //   masked before Cursor reads it (cursor-hooks.ts, cursor-hook-script.ts);
 // - the built-in tools that read past both (grep, glob, ls, semantic search, fetch, lints): withheld (SHIELD_WITHHELD);
-// - MCP: every server behind the masking proxy (privacy/gateway/mcp-route.ts); the daemon's own tools: masked here;
+// - MCP: every server behind the masking proxy (privacy/gateway/mcp-route.ts), the project's own (.cursor/mcp.json,
+//   which Cursor would otherwise start unproxied and unapproved) included, or the project's settings not loaded at all
+//   when one of its servers can't be proxied (projectMcp); the daemon's own tools: masked here;
 // - tokens the model writes: read back to their values in tool inputs, in the new lines of an edited file, and in
 //   everything the transcript shows.
 
@@ -70,6 +75,12 @@ export const refusals = {
         `${path} shows personal data (${kindsSaid(kinds)}) this model provider is not trusted with, so the privacy shield did not let it be opened.`,
     unreadablePicture: (path: string): string =>
         `${path} is a picture the privacy shield could not read on this machine to check it for personal data, so it was not opened.`,
+    document: (path: string, kinds: readonly PersonalDataClass[]): string =>
+        `${path} is a document holding personal data (${kindsSaid(kinds)}) this model provider is not trusted with, so the privacy shield did not let the read tool open it. Read its text with the shell instead (pdftotext "${path}" -), where it arrives with tokens in place of the personal data.`,
+    unreadableDocument: (path: string): string =>
+        `${path} is a document the privacy shield could not read on this machine to check it for personal data, so it was not opened.`,
+    opaque: (path: string): string =>
+        `${path} is a file the read tool would send as raw bytes, which the privacy shield cannot check for personal data, so it was not opened. Inspect it with the shell instead, where the output is masked.`,
     offTool: (tool: string): string =>
         `The ${tool} tool reads past the privacy shield, so it is off while the shield masks this conversation. Use the shell instead (rg, ls, find, curl): its output reaches you with personal data as tokens.`,
     write: (path: string): string =>
@@ -104,9 +115,136 @@ export const restoreEdits = (
     return out === content ? undefined : out;
 };
 
+// Thrown in place of sending a message the shield could not mask; the turn reports it as unshielded.
+export class UnmaskedMessage extends Error {
+    constructor(cause: unknown) {
+        super(`The privacy shield could not mask this message, so it was not sent to Cursor. ${cause instanceof Error ? cause.message : ""}`.trim(), { cause });
+        this.name = "UnmaskedMessage";
+    }
+}
+
+const masked = async (shield: TurnShield, text: string): Promise<string> => {
+    try {
+        return await shield.mask(text, "prompt");
+    } catch (error) {
+        throw new UnmaskedMessage(error);
+    }
+};
+
+// The one way a shielded turn talks to its agent: every message, sent or steered into a live run, is masked on its way
+// in, and one that cannot be masked is not sent. The run is wrapped member by member: the SDK's Run keeps its methods on
+// its prototype, which a spread would drop.
+export const shieldedSession = (session: CursorSession, shield: TurnShield): CursorSession => ({
+    agentId: session.agentId,
+    close: () => session.close(),
+    send: async (prompt, options) => {
+        const run = await session.send(await masked(shield, prompt), options);
+        const steer = run.steer === undefined ? undefined : run.steer.bind(run);
+        const handle: CursorRunHandle = {
+            wait: () => run.wait(),
+            cancel: () => run.cancel(),
+            ...(steer === undefined ? {} : { steer: async (text: string) => steer(await masked(shield, text)) }),
+        };
+        return handle;
+    },
+});
+
+// The project's own MCP servers on a turn the shield reads. Cursor loads <root>/.cursor/mcp.json with its project
+// settings and starts every server in it unapproved and unproxied (@cursor/sdk: includeProjectMcp with
+// ignoreApprovals), while a server given in the agent's own options wins its name over the project's. So each server
+// that speaks HTTP is given again under its name, through the masking proxy; a server that runs as a local process
+// (or one whose address or headers name what can't be filled in here) can't be proxied, and then the project's settings
+// are not loaded at all (`withhold`), which drops its rules with its servers rather than let one go to Cursor unmasked.
+// `root` is the turn's folder as this process reaches it.
+export const projectMcp = async (
+    shield: TurnShield,
+    root: string,
+): Promise<{ readonly servers: Readonly<Record<string, McpServerConfig>> } | { readonly withhold: readonly string[] }> => {
+    const text = await readFile(join(root, ".cursor", "mcp.json"), "utf8").catch(() => undefined);
+    if (text === undefined) {
+        return { servers: {} };
+    }
+    let declared: unknown;
+    try {
+        declared = (JSON.parse(text) as { mcpServers?: unknown } | null)?.mcpServers;
+    } catch {
+        return { withhold: [".cursor/mcp.json"] };
+    }
+    if (declared === undefined || declared === null) {
+        return { servers: {} };
+    }
+    if (typeof declared !== "object" || Array.isArray(declared)) {
+        return { withhold: [".cursor/mcp.json"] };
+    }
+    const servers: Record<string, McpServerConfig> = {};
+    const withhold: string[] = [];
+    for (const [name, server] of Object.entries(declared as Record<string, unknown>)) {
+        const proxied = await proxiedProjectServer(shield, server);
+        if (proxied === undefined) {
+            withhold.push(name);
+        } else {
+            servers[name] = proxied;
+        }
+    }
+    return withhold.length > 0 ? { withhold } : { servers };
+};
+
+// Cursor fills ${env:NAME}, ${NAME} and ${NAME:-default} from its environment; anything else left in is not proxied.
+const VARIABLE = /\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/gu;
+const filled = (text: string): string | undefined => {
+    const value = text.replaceAll(VARIABLE, (_match, name: string, fallback: string | undefined) => process.env[name] ?? fallback ?? "");
+    return value.includes("${") ? undefined : value;
+};
+
+const proxiedProjectServer = async (shield: TurnShield, server: unknown): Promise<McpServerConfig | undefined> => {
+    if (typeof server !== "object" || server === null || Array.isArray(server)) {
+        return undefined;
+    }
+    // The masking proxy speaks streamable HTTP, and passes no OAuth flow through.
+    const { url, headers, type, auth } = server as { url?: unknown; headers?: unknown; type?: unknown; auth?: unknown };
+    if (typeof url !== "string" || (type !== undefined && type !== "http") || auth !== undefined) {
+        return undefined;
+    }
+    const address = filled(url);
+    const filledHeaders: Record<string, string> = {};
+    if (headers !== undefined) {
+        if (typeof headers !== "object" || headers === null || Array.isArray(headers)) {
+            return undefined;
+        }
+        for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+            const header = typeof value === "string" ? filled(value) : undefined;
+            if (header === undefined) {
+                return undefined;
+            }
+            filledHeaders[key] = header;
+        }
+    }
+    if (address === undefined) {
+        return undefined;
+    }
+    return {
+        type: "http",
+        url: await shield.mcpUrl(address),
+        ...(Object.keys(filledHeaders).length > 0 ? { headers: filledHeaders } : {}),
+    };
+};
+
 // The shield's answers to Cursor's hooks for one turn (cursor-hooks.ts CursorHookShield).
 export const cursorHookShield = (shield: TurnShield): CursorHookShield => ({
-    read: async ({ path, content, image }) => {
+    read: async ({ path, content, image, document, opaque }) => {
+        if (document !== undefined) {
+            if (document.length === 0) {
+                return (await shield.masking()) ? refusals.unreadableDocument(path) : undefined;
+            }
+            const verdict = await shield.refusesDocument(document, "read");
+            if (verdict === "unreadable") {
+                return refusals.unreadableDocument(path);
+            }
+            return verdict.length === 0 ? undefined : refusals.document(path, verdict);
+        }
+        if (opaque === true) {
+            return (await shield.masking()) ? refusals.opaque(path) : undefined;
+        }
         if (image !== undefined) {
             if (image.length === 0) {
                 return (await shield.masking()) ? refusals.unreadablePicture(path) : undefined;

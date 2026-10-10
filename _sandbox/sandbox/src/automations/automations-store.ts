@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
     type Automation,
@@ -144,7 +145,7 @@ const withRuns = (automations: readonly Automation[], runs: RunLedger, watches: 
     automations.map((automation) => joined(automation, runs, watches));
 
 const joined = (automation: Automation, runs: RunLedger, watches: WatchLedger): AutomationRecord => {
-    const watch = watches[automation.id];
+    const watch = ownWatch(automation, watches[automation.id]);
     return { ...automation, runs: runs[automation.id] ?? [], ...(watch === undefined ? {} : { watch }) };
 };
 
@@ -161,16 +162,40 @@ export interface AutomationsStore {
     readonly get: (id: string) => Promise<AutomationRecord | undefined>;
     // Upsert by id (re-adding the same id edits its config); an edit keeps the existing run history.
     readonly upsert: (automation: Automation) => Promise<void>;
-    // Atomically change one switch on the current record. True when the id existed.
-    readonly setEnabled: (id: string, enabled: boolean) => Promise<boolean>;
+    // Atomically change one switch on the current record. `missing` when there is no such id, `unchanged` when it already
+    // stood that way: a caller that tells somebody about the switch tells them only when this call moved it.
+    readonly setEnabled: (id: string, enabled: boolean) => Promise<SwitchOutcome>;
     // True when an automation of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
     // Prepend a run (newest first), capped at RUNS_KEPT. A run for a just-removed automation is dropped.
     readonly recordRun: (id: string, run: AutomationRun) => Promise<void>;
-    // Replace what a watch's check saw last, given what it saw before; dropped for an automation no longer there. The
-    // value is cut to WATCH_VALUE_MAX here, so no caller can grow the file.
+    // Replace what a watch's check saw last, given what it saw before (nothing, when that was recorded for a check the
+    // automation no longer runs); dropped for an automation no longer there. The value is cut to WATCH_VALUE_MAX here,
+    // so no caller can grow the file, and the state is stamped with the check it belongs to.
     readonly recordWatch: (id: string, next: (previous: WatchState | undefined) => WatchState) => Promise<void>;
 }
+
+export type SwitchOutcome = "missing" | "unchanged" | "changed";
+
+const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+// Which check a watch state was recorded for. Edit a watch to read another page or another repository and what the old
+// check saw says nothing about the new one: compared against it, the first check of the new one would read as a change.
+export const watchConditionOf = (automation: Pick<Automation, "guard" | "source">): string =>
+    sha256(JSON.stringify({ guard: automation.guard ?? null, source: automation.source ?? null })).slice(0, 16);
+
+// The digest a watch compares by: of the whole value, since the value itself is kept only up to WATCH_VALUE_MAX.
+export const watchDigest = (value: string): string => sha256(value);
+
+// Whether a check saw what the watch saw last time. By digest, so a value longer than the bound compares whole; a state
+// written before digests were kept compares its value, as it always did.
+export const sawSame = (previous: WatchState | undefined, value: string): boolean =>
+    previous?.digest !== undefined ? previous.digest === watchDigest(value) : previous?.value === value;
+
+// The state as this automation reads it: one recorded for a check it no longer runs is no state at all. A state from
+// before conditions were recorded is taken as its own.
+const ownWatch = (automation: Pick<Automation, "guard" | "source">, state: WatchState | undefined): WatchState | undefined =>
+    state === undefined || state.condition === undefined || state.condition === watchConditionOf(automation) ? state : undefined;
 
 const bounded = (state: WatchState): WatchState =>
     state.value === undefined || state.value.length <= WATCH_VALUE_MAX ? state : { ...state, value: state.value.slice(0, WATCH_VALUE_MAX) };
@@ -227,18 +252,20 @@ export const fileAutomationsStore = (
             }
         },
         setEnabled: async (id, enabled) => {
-            let found = false;
+            let outcome: SwitchOutcome = "missing";
             await file.update((automations) => {
                 const existing = automations.find((automation) => automation.id === id);
                 if (existing === undefined) {
                     return automations;
                 }
-                found = true;
-                return existing.enabled === enabled
-                    ? automations
-                    : automations.map((automation) => (automation.id === id ? { ...automation, enabled } : automation));
+                if (existing.enabled === enabled) {
+                    outcome = "unchanged";
+                    return automations;
+                }
+                outcome = "changed";
+                return automations.map((automation) => (automation.id === id ? { ...automation, enabled } : automation));
             });
-            return found;
+            return outcome;
         },
         remove: async (id) => {
             let removed = false;
@@ -271,10 +298,15 @@ export const fileAutomationsStore = (
             await ledger.update((runs) => ({ ...runs, [id]: [run, ...(runs[id] ?? [])].slice(0, RUNS_KEPT) }));
         },
         recordWatch: async (id, next) => {
-            if (!(await file.read()).some((automation) => automation.id === id)) {
+            const automation = (await file.read()).find((record) => record.id === id);
+            if (automation === undefined) {
                 return;
             }
-            await watches.update((current) => ({ ...current, [id]: bounded(next(current[id])) }));
+            // Stamped with the check it was recorded for, so an edit to another check starts the watch over.
+            await watches.update((current) => ({
+                ...current,
+                [id]: bounded({ ...next(ownWatch(automation, current[id])), condition: watchConditionOf(automation) }),
+            }));
         },
     };
 };
