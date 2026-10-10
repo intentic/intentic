@@ -199,6 +199,9 @@ flowchart LR
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
   "Open a folder…" and "Open a file…" (each in a window of its own), the machine agent's row (This device), the update
   row and Quit. Updates download in the background and install on quit or from the editor's banner or This device;
+  setup and project operations hold an install, while the resumable onboarding downloads pause before it and resume
+  on the next launch (or when the install fails). The update smoke checks both the installed bytes and the restarted
+  app's native version, so an old window still on screen cannot count as a successful update.
   deb and rpm installs cannot replace themselves and link to the download page instead. A local window never draws the
   editor's update banner: This device says it instead. A deb or rpm upgraded under the running app (the file at the path
   it started from is no longer the one it runs, `update.rs` `replaced_on_disk`) is offered as a restart onto it ("Restart

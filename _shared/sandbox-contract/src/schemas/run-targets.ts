@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { ArtifactNameSchema } from "./device-artifacts.js";
 
@@ -21,14 +22,16 @@ import { ArtifactNameSchema } from "./device-artifacts.js";
 //     }]
 //   }
 
-export const RUN_TARGETS_FILE = ".intentic/run.json";
+export const RUN_TARGETS_FILE = `${STATE_DIR}/run.json`;
 
 const RepoPathSchema = z
     .string()
     .min(1)
     .max(500)
     .refine((path) => !path.startsWith("/") && !path.split(/[\\/]/).includes(".."), "a path inside the repository, relative to its root");
-const BundleNameSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,199}(\/[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,199})*$/, "a relative name, folders by /");
+const BundleNameSchema = z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,199}(\/[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,199})*$/, "a relative name, folders by /");
 
 export const RunTargetSchema = z
     .object({

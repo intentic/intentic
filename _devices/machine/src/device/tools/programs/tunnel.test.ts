@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { type AddressInfo, createServer } from "node:net";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../../policy.js";
-import { dialLoopback, tunnelSocketUrl } from "./tunnel.js";
+import { dialLoopback, tunnelSocketUrl } from "./device-tunnel.js";
 
 // This machine's end of a `devices reach` tunnel: allowed by either switch that already reaches its loopback, said
 // plainly when nothing listens on the port, and aimed at the daemon the link dialled.

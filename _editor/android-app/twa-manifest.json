@@ -16,7 +16,7 @@
     "maskableIconUrl": "https://raw.githubusercontent.com/intentic/intentic/HEAD/_editor/android-app/store-icon-512.png",
     "appVersionName": "1.0.0",
     "appVersionCode": 1,
-    "minSdkVersion": 21,
+    "minSdkVersion": 24,
     "orientation": "default",
     "splashScreenFadeOutDuration": 300,
     "enableNotifications": true,

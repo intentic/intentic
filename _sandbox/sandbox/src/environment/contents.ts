@@ -19,18 +19,19 @@ interface Staple {
     readonly bin: string;
     readonly name: string;
     readonly purpose: string;
-    readonly locate?: () => Promise<string | undefined>;
+    readonly locate?: (logger: Services["logger"]) => Promise<string | undefined>;
 }
 
 // Playwright installs its browser under its own cache, never on PATH, so `chromium` answered nothing and the browser
 // every agent drives was missing from the list. Asked at the path the daemon's own playwright launches, which the
 // browser pack installs to match.
-const playwrightChromium = async (): Promise<string | undefined> => {
-    const { chromium } = await import("playwright").catch(() => ({ chromium: undefined }));
+const playwrightChromium = async (logger: Services["logger"]): Promise<string | undefined> => {
     try {
-        const path = chromium?.executablePath();
-        return path !== undefined && existsSync(path) ? path : undefined;
-    } catch {
+        const { chromium } = await import("playwright");
+        const path = chromium.executablePath();
+        return existsSync(path) ? path : undefined;
+    } catch (error) {
+        logger.warn({ err: error }, "environment: Playwright's Chromium path could not be read");
         return undefined;
     }
 };
@@ -107,7 +108,9 @@ const customCandidates = async (services: Services): Promise<Candidate[]> => {
     const incoming = proposed.filter((block) => !settled.has(`${block.name}\u0000${block.body}`));
     const replaced = new Set(incoming.map((block) => block.name));
     return [
-        ...approved.filter((block) => !replaced.has(block.name)).map((block): Candidate => ({ block, origin: "custom", removable: { block: block.name } })),
+        ...approved
+            .filter((block) => !replaced.has(block.name))
+            .map((block): Candidate => ({ block, origin: "custom", removable: { block: block.name } })),
         ...incoming.map((block): Candidate => ({ block, origin: "custom", state: "awaiting-approval", removable: { block: block.name } })),
     ];
 };
@@ -136,7 +139,9 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
     const candidates = [...(await customCandidates(services)), ...(await capabilityCandidates(services))];
     const tooling = candidates.map((candidate) => blockTools(candidate.block));
     // What each staple is asked as: its own name on PATH, or the binary its `locate` found.
-    const asked = new Map(await Promise.all(STAPLES.map(async (staple) => [staple.bin, (await staple.locate?.()) ?? staple.bin] as const)));
+    const asked = new Map(
+        await Promise.all(STAPLES.map(async (staple) => [staple.bin, (await staple.locate?.(services.logger)) ?? staple.bin] as const)),
+    );
     // One probe per distinct command across the whole view, staples included; prefix modules read their manifest.
     const [probes, moduleProbes, packageProbes] = await Promise.all([
         probeAll([...tooling.flatMap((tools) => tools.candidates), ...asked.values()]),
@@ -155,7 +160,8 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
             ...modules.map((module) => toolOf(module.name, moduleProbes.get(module.name))),
         ].filter((tool) => tool !== undefined);
         // A package named for no command it ships (imagemagick, sysstat) answers through dpkg only when no command did.
-        const tools = answered.length > 0 ? answered : packages.map((name) => toolOf(name, packageProbes.get(name))).filter((tool) => tool !== undefined);
+        const tools =
+            answered.length > 0 ? answered : packages.map((name) => toolOf(name, packageProbes.get(name))).filter((tool) => tool !== undefined);
         const plumbing = packages.filter((name) => !tools.some((tool) => tool.name === name)).length;
         const prose = blockProse(candidate.block.body, candidate.originLabel);
         const purpose = purposeOf(prose);

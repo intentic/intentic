@@ -76,7 +76,7 @@ flowchart LR
   redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
 - **Loading placeholders.** A view's loading placeholder is drawn exactly as that view last looked in this sandbox.
-  `v-skeleton-source="name"` on the content takes its imprint once it has settled (`src/lib/skeletonImprint.ts`):
+  `v-skeleton-source="name"` on the content takes its imprint once it has settled (`src/lib/skeleton/skeletonImprint.ts`):
   the same elements and classes, each line of text a bar as wide as that line was, and each icon, picture, field and
   button a block of its measured size. No words are kept. `<SkeletonSnapshot of="name">` draws that imprint, and
   draws its slot (the hand-drawn skeleton, usually `SkeletonRows`) until one exists. Badges and painted marks with
@@ -85,7 +85,7 @@ flowchart LR
   since they are where a graph's nodes and a virtual list's rows sit. The imprint is taken again whenever the source
   resizes or its content changes, once it has been quiet for half a second. A source may be a `display: contents`
   wrapper, so a run of grid items is imprinted while a live item beside them stays live. The store
-  (`src/lib/skeletonStore.ts`) is memory, read synchronously so the first frame already has the imprint, and is
+  (`src/lib/skeleton/skeletonStore.ts`) is memory, read synchronously so the first frame already has the imprint, and is
   keyed by a scope the app supplies. The editor's scope is the active sandbox, and its persistence is IndexedDB
   (`_editor/web/src/lib/skeletonPersistence.ts`). _2026-10-04: fixed placeholder counts ("three rows") were
   replaced by imprints, because a list of twelve drawn as three jumps the page when it lands. A per-view count kept

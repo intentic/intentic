@@ -180,12 +180,12 @@
             "default": "./src/lib/workerCall.ts"
         },
         "./skeleton-imprint": {
-            "types": "./src/lib/skeletonImprint.ts",
-            "default": "./src/lib/skeletonImprint.ts"
+            "types": "./src/lib/skeleton/skeletonImprint.ts",
+            "default": "./src/lib/skeleton/skeletonImprint.ts"
         },
         "./skeleton-store": {
-            "types": "./src/lib/skeletonStore.ts",
-            "default": "./src/lib/skeletonStore.ts"
+            "types": "./src/lib/skeleton/skeletonStore.ts",
+            "default": "./src/lib/skeleton/skeletonStore.ts"
         }
     },
     "scripts": {
