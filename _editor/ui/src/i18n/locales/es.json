@@ -255,5 +255,8 @@
     },
     "dagEditor": {
         "fitGraph": "Encajar grafo"
+    },
+    "coachMark": {
+        "notNow": "Ahora no"
     }
 }

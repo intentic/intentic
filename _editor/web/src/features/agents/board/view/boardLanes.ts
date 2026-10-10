@@ -9,7 +9,7 @@ import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
 import { useBoardTrays } from "./boardTrays";
 import { trayRows } from "./childFold";
-import { boardScreen } from "./firstScreen";
+import { firstRun } from "./firstScreen";
 
 // What each lane draws and what the board says about it: runs above their lane's cards, Finished capped at its window
 // or standing aside for the archive a page at a time, a filter narrowing all of it; every count the header, the tail
@@ -19,12 +19,30 @@ export interface LaneHead {
     readonly key: FleetLane;
     readonly label: string;
     readonly empty: string;
+    // What the lane says on a first run, when nothing has ever been in it: what will arrive there, not that nothing has.
+    readonly first: string;
 }
 
 export const laneHeads = (): readonly LaneHead[] => [
-    { key: `attention`, label: t(`shared.attention`), empty: t(`agents.agentsView.nothingNeedsRightNow`) },
-    { key: `active`, label: t(`shared.active`), empty: t(`agents.agentsView.noAgentsWorkingStart`) },
-    { key: `finished`, label: t(`shared.finished`), empty: t(`agents.agentsView.finishedAgentsLandWork`) },
+    {
+        key: `attention`,
+        label: t(`shared.attention`),
+        empty: t(`agents.agentsView.nothingNeedsRightNow`),
+        first: t(`agents.agentsView.attentionFirst`),
+    },
+    // Active never says its first-run line: that lane holds the first agent's slot instead (FirstAgentSlot).
+    {
+        key: `active`,
+        label: t(`shared.active`),
+        empty: t(`agents.agentsView.noAgentsWorkingStart`),
+        first: t(`agents.agentsView.noAgentsWorkingStart`),
+    },
+    {
+        key: `finished`,
+        label: t(`shared.finished`),
+        empty: t(`agents.agentsView.finishedAgentsLandWork`),
+        first: t(`agents.agentsView.finishedFirst`),
+    },
 ];
 
 // The lanes left to right, which is also the order a Shift+click range walks.
@@ -195,7 +213,7 @@ export const useBoardLanes = (host: LanesHost) => {
     );
     // Counted off the very ids Clear sends, so the button never offers a sweep that would move nothing.
     const clearable = computed(() => clearableOf(agents.lanes.value).length);
-    const screen = computed(() => boardScreen(started.value, total.value, view.value.archive));
+    const first = computed(() => firstRun(started.value, view.value.archive));
     // In drawing order, each card followed by the rows its tray draws, so a range can start or end on a child.
     const paneOrder = computed(() => LANE_ORDER.flatMap((lane) => cardsFor(lane).flatMap((card) => [card, ...trayRows(trays.trayFor(card))])));
     const laneDropClass = (lane: FleetLane): string =>
@@ -226,7 +244,7 @@ export const useBoardLanes = (host: LanesHost) => {
         matchTally,
         noMatches,
         clearable,
-        screen,
+        first,
         laneDropClass,
     };
 };

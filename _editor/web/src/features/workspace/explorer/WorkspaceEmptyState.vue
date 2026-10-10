@@ -1,5 +1,6 @@
 <!-- Shown in the viewer pane when the workspace holds no files at all; with files, that pane is the home. -->
 <script setup lang="ts">
+import TourMark from "../../tour/TourMark.vue";
 import { computed, nextTick, ref } from "vue";
 import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
@@ -56,7 +57,16 @@ const askAgent = (): void => {
 
         <!-- Every way in, most common first. -->
         <div class="flex max-w-md flex-col gap-1">
-            <p class="text-base font-semibold text-content">{{ t(`workspace.workspaceEmptyState.getCodeIn`) }}</p>
+            <p class="inline-flex items-center justify-center gap-1.5 text-base font-semibold text-content">
+                {{
+                    t(`workspace.workspaceEmptyState.getCodeIn`)
+                }}<!-- The getting-started mark for bringing work in: this page is where that step is done. --><TourMark
+                    step="work"
+                    place="workspace"
+                    :priority="3"
+                    side="bottom"
+                />
+            </p>
             <p class="text-xs text-muted">
                 {{ t(`workspace.workspaceEmptyState.workspaceAgentsReadEdit`) }}
             </p>

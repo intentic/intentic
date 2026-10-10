@@ -48,6 +48,7 @@ export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.v
 export { type AgentRunAttempt, type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
 export { type FixStanceLook, fixStanceLook } from "./composables/fixStanceLook.js";
 export { default as AnchoredOverlay } from "./components/overlays/AnchoredOverlay.vue";
+export { default as CoachMark } from "./components/overlays/CoachMark.vue";
 // The product's own mark: the lotus alone, or the lotus with the wordmark.
 export { default as AppBrand } from "./components/brand/AppBrand.vue";
 export { default as Avatar } from "./components/brand/Avatar.vue";
@@ -123,6 +124,7 @@ export { type ImageViewState } from "./components/primitives/imageView.js";
 // card that must not open while it is being renamed) and must consult the edit.
 export { default as InlineRename } from "./components/forms/InlineRename.vue";
 export { default as InfoDialog } from "./components/overlays/InfoDialog.vue";
+export { default as Beacon } from "./components/feedback/Beacon.vue";
 export { default as InfoHint } from "./components/feedback/InfoHint.vue";
 export { default as InfoTable } from "./components/feedback/InfoTable.vue";
 // Body of one device's sync detail (folders, localhost ports, watcher liveness); the desktop app and web Devices

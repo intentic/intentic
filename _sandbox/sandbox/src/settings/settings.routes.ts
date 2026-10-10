@@ -12,6 +12,7 @@ import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
 import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
+import { fileMemberGettingStarted, memberGettingStartedDocument, type MemberGettingStarted } from "./member-getting-started.js";
 import { settingsDocument } from "./settings-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
@@ -28,6 +29,9 @@ export const createSettingsRoutes = (services: Services) => {
     let audiences: MemberAudiences | undefined;
     const memberAudiences = (): MemberAudiences =>
         (audiences ??= fileMemberAudiences(join(services.config.historyRoot, memberAudienceDocument.path)));
+    let gettingStarted: MemberGettingStarted | undefined;
+    const memberGettingStarted = (): MemberGettingStarted =>
+        (gettingStarted ??= fileMemberGettingStarted(join(services.config.historyRoot, memberGettingStartedDocument.path)));
     // Every settings.json write here is a page's own (the Agent tab, the checks list) or the app's (a browser's clock), so
     // each is committed as it lands (settings-versions.ts): left uncommitted, a land touching the file was refused as the
     // owner's edits. Not when the file already held uncommitted edits: those may be the owner's own, by hand.
@@ -85,6 +89,9 @@ export const createSettingsRoutes = (services: Services) => {
             return audience === undefined ? {} : { audience };
         }),
         setAudience: i.setAudience.handler(({ input, context }) => memberAudiences().answer(memberOf(context), input.audience, input.offer === true)),
+        // The caller's own choices about the getting-started checklist, by the address they signed in with.
+        gettingStarted: i.gettingStarted.handler(({ context }) => memberGettingStarted().get(memberOf(context))),
+        setGettingStarted: i.setGettingStarted.handler(({ input, context }) => memberGettingStarted().set(memberOf(context), input)),
         savings: i.savings.handler(async ({ input }) => {
             const [inputSavings, experiments] = await Promise.all([
                 readInputSavings(services.config.historyRoot, input),

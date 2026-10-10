@@ -3,6 +3,12 @@ import {
     DEFAULT_PRIVACY_SHIELD,
     type Info,
     PROVIDER_SPECS,
+    type GettingStarted,
+    TRANSLATOR_PROVIDERS,
+    type TranslatorAccounts,
+    TRIAL_LABEL,
+    TRIAL_PROVIDER,
+    type TrialStatusResponse,
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
@@ -55,7 +61,7 @@ import {
     workspaceChildren,
     workspaceTree,
 } from "../fixture/workspace";
-import { demoMode, demoQuiet, deskEdition } from "../mode";
+import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
 import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
@@ -82,6 +88,17 @@ const runsOnBoard = (now: number): WorkflowRun[] =>
     demoRuns(now).filter((run) =>
         run.steps.every((step) => step.state !== `running` || roster.agents.some((agent) => agent.id === step.conversationId)),
     );
+
+// A fresh sandbox has signed nothing in: the daemon-provisioned free trial is the one thing a chat can run on, with
+// its whole day ahead of it. Every other recording runs on its connected Claude and has no trial to offer.
+const DEMO_TRIAL: TrialStatusResponse = freshEdition
+    ? { available: true, allowance: 30, used: 0, remaining: 30, health: `healthy` }
+    : { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
+// What the visitor said about the getting-started checklist, for this page load: put away, steps passed over. Every
+// recording but the fresh one is an established sandbox whose owner put the list away long ago, so screenshots of it
+// carry no beginner's ring; `?mode=fresh` is where the list is seen.
+let gettingStarted: GettingStarted = freshEdition ? {} : { hidden: true };
+const NO_TRANSLATOR_ACCOUNTS = Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])) as unknown as TranslatorAccounts;
 
 const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
@@ -251,7 +268,9 @@ export const procedures = {
     // when the app moved, every read 404'd: `accountsLoaded` never flipped, so the Agent tab drew skeleton rows for as
     // long as you left it open — including in the marketing shots.
     accounts: {
-        accounts: ({ provider }) => ({ accounts: provider === `claude` ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [] }),
+        accounts: ({ provider }) => ({
+            accounts: provider === `claude` && !freshEdition ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [],
+        }),
         // Starts a provider-account sign-in (Cursor's, Grok's) in its device shape, so the connect view's card can be seen
         // holding one: a page to open, a code to copy, the wait for approval. Like the routed one below it never lands.
         start: ({ provider, variant }) => ({
@@ -268,7 +287,7 @@ export const procedures = {
     },
     translator: {
         // Codex authenticates only through the translator, not an oauth account.
-        accounts: () => DEMO_TRANSLATOR_ACCOUNTS,
+        accounts: () => (freshEdition ? NO_TRANSLATOR_ACCOUNTS : DEMO_TRANSLATOR_ACCOUNTS),
         // Starts a routed sign-in so ConnectFlow is reachable here: without it the panel a new user meets first
         // could only be seen against a real daemon. `redirect` is the shape Google uses (a loopback dead-end).
         connect: ({ provider }) => ({
@@ -288,9 +307,13 @@ export const procedures = {
         // as much as on the accounts above it.
         // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
         // reader who cannot open /accounts learns that.
-        list: () => ({ native: [`claude`], agents: [], endpoints: [] }),
+        list: () =>
+            freshEdition
+                ? { native: [], agents: [], endpoints: [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
+                : { native: [`claude`], agents: [], endpoints: [] },
     },
     endpoints: {
+        trial: () => DEMO_TRIAL,
         // What the connect view's local lane draws: a 32 GB laptop with nothing downloaded yet.
         localModelFit: () => demoLocalModelFit(),
         // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say
@@ -303,6 +326,11 @@ export const procedures = {
     },
     settings: {
         get: () => DEMO_SETTINGS,
+        gettingStarted: () => gettingStarted,
+        setGettingStarted: (choices) => {
+            gettingStarted = choices;
+            return gettingStarted;
+        },
         savings: () => DEMO_SAVINGS,
         // A brief that exists, is maintained, and does not entirely fit the budget: the state the row has the most to say
         // about, and the only one where "ranks 1-5 of 12" means anything.

@@ -1,4 +1,5 @@
 import type { ApprovalSummary } from "@intentic/sandbox-contract";
+import { freshEdition } from "../mode";
 
 // What the demo's agents prepared and may not do unasked (the Approvals queue, .intentic/config/approvals/): a launch
 // post and an action, so Needs you shows an extension's asks beside the agents' own needs and the Approvals page has a
@@ -33,7 +34,8 @@ const seed = (now: number): ApprovalSummary[] => [
 let approvals: ApprovalSummary[] | undefined;
 
 export const demoApprovals = (): readonly ApprovalSummary[] => {
-    approvals ??= seed(Date.now());
+    // A fresh sandbox's agents have prepared nothing yet.
+    approvals ??= freshEdition ? [] : seed(Date.now());
     return approvals;
 };
 

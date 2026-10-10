@@ -4,7 +4,7 @@ import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, LATENCY_AGENT_ID, RELEASE_NOTES_A
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `desk`;
+export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `desk` | `fresh`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -85,7 +85,20 @@ const DESK: DemoMode = {
     quiet: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, DESK];
+// A sandbox on its first day, which no other mode can show: nothing started, nothing connected but the free trial,
+// and an empty workspace. What the getting-started checklist and the first-run board are designed and checked against.
+const FRESH: DemoMode = {
+    id: `fresh`,
+    label: `Fresh`,
+    note: `A sandbox on its first day: nothing started, only the free trial.`,
+    agents: [],
+    extensions: [],
+    teammate: false,
+    openChats: false,
+    quiet: true,
+};
+
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, DESK, FRESH];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;
@@ -135,6 +148,9 @@ export const demoTier = resolveTier();
 
 /** Whether this page load is the desk recording: the one switch every fixture seam reads. */
 export const deskEdition = demoMode.id === `desk`;
+
+/** Whether this page load is a first-day sandbox: every seam that carries the recording's history serves it empty. */
+export const freshEdition = demoMode.id === `fresh`;
 
 // The look and the audience the desk recording is read in, the same three keys the desk PROFILE seeds (@intentic/constants
 // profile.ts): light, unskinned, a maker. index.html's pre-paint script writes them for the first frame; this writes

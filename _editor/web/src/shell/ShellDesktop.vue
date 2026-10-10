@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
+import TourMark from "../features/tour/TourMark.vue";
+import type { MarkStep } from "../features/tour/tourMarks";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
@@ -54,6 +57,7 @@ import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
 import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
+import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
@@ -518,6 +522,9 @@ watch(openPanel, (panel) => {
         terminal.setOpen(false);
     }
 });
+// Which getting-started marks a rail tile carries: the page each step is done on. Only the current one draws (TourMark).
+const RAIL_MARKS: Readonly<Record<string, readonly MarkStep[]>> = { workspace: [`work`], agents: [`agent`, `board`, `land`] };
+const railMarks = (id: string): readonly MarkStep[] => RAIL_MARKS[id] ?? [];
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
 // One destination per place the shell has: every rail section on the rail or not, every sandbox and settings section.
@@ -526,6 +533,9 @@ useNavigationCommands();
 useKeybindings();
 // The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
 const wallpapered = useWallpaperedRoute();
+// The getting-started checklist, started with the shell so every mark in every feature has an answer to read
+// (features/tour/tourState.ts), whichever screen a first run opens on.
+useGettingStarted();
 </script>
 
 <template>
@@ -592,6 +602,11 @@ const wallpapered = useWallpaperedRoute();
                             />
                             <!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
                             <TileMark v-if="tile.note" :name="tile.note.icon" class="icon-rail-mark absolute bottom-0.5 left-0.5 text-subtle" />
+                            <!-- The way to a getting-started step from anywhere: the rail's tile for the page it is done on. The
+                                 lowest of a step's places, so the page's own mark takes over once the reader is there. -->
+                            <template v-for="mark in railMarks(tile.id)" :key="mark">
+                                <TourMark :step="mark" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
+                            </template>
                         </RouterLink>
                     </template>
                 </template>
@@ -602,6 +617,8 @@ const wallpapered = useWallpaperedRoute();
                  one control on this rail that really does add something. -->
             <!-- Empty for an owner means "everything is on the rail", which is worth a tile and a sentence. Empty for a guest
                  means there is nothing to put there and never will be, so the door itself goes. -->
+            <!-- A first run's checklist, until it is done or put away (gettingStarted/). -->
+            <GettingStartedRing v-if="!isGuest" />
             <button
                 v-if="!isGuest"
                 ref="moreTrigger"

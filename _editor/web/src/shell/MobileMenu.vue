@@ -40,6 +40,8 @@ import { environment } from "../app/environments/environment";
 import { usePushNotifications } from "../workbench/push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
 import MenuRow from "./MenuRow.vue";
+import GettingStartedList from "../features/gettingStarted/GettingStartedList.vue";
+import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import RailIcon from "./rail/RailIcon.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -48,6 +50,7 @@ import { useT } from "@intentic/ui/i18n";
 // presentation.
 
 const t = useT();
+const tour = useGettingStarted();
 
 interface SectionRow {
     // Groups by railBands, so this page's sections match the desktop rail's runs.
@@ -157,6 +160,11 @@ const logout = async (): Promise<void> => {
     <!-- Every band is a group of the kit's own rows (MenuRow), the shape a phone's Sandbox and Settings indexes take too, so
          the Menu reads as one list of places in labelled cards rather than a flat run of lines in three type sizes. -->
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
+        <!-- A first run's checklist, the phone's door to it as the rail's ring is the desktop's: on top while it lasts,
+             since on a first run there is nothing else here yet to put first. -->
+        <div v-if="tour.visible.value" class="rounded-xl border border-line bg-card" data-tour="ring">
+            <GettingStartedList fill />
+        </div>
         <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
         <RowGroup v-if="inboxBadge !== undefined || sandboxAttention.length > 0" :label="t(`shared.needs`)">
             <MenuRow
@@ -285,6 +293,7 @@ const logout = async (): Promise<void> => {
 
         <!-- Account: identity and the actions the desktop avatar popover holds. -->
         <RowGroup :label="t(`shell.words.account`)" class="pb-4">
+            <MenuRow v-if="tour.reopenable.value" icon="circle" :title="t(`gettingStarted.panel.show`)" plain @press="tour.show()" />
             <Row lead="face" :title="user?.email" :description="user?.name ?? undefined">
                 <template #lead="{ mark }"><Avatar :size="mark" :src="user?.image" /></template>
             </Row>

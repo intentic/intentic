@@ -275,12 +275,15 @@ const samplesOf = (
             list: undefined,
         },
         endpoints: {
+            trial: undefined,
             localModelFit: undefined,
             localModelPrefetch: { action: `start` },
             hostServers: undefined,
         },
         settings: {
             get: undefined,
+            gettingStarted: undefined,
+            setGettingStarted: { hidden: false },
             savings: {},
             fieldNotes: undefined,
             firings: undefined,

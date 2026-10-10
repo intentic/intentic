@@ -8,6 +8,7 @@ import {
     MemberAudienceSchema,
     BuiltinPromptTextSchema,
     FieldNotesStatusSchema,
+    GettingStartedSchema,
     REPO_CHECKS_FILE,
     RepoChecksAdoptSchema,
     RepoChecksListSchema,
@@ -142,6 +143,28 @@ export const settingsContract = {
         .meta({ guest: true, floor: "viewer" })
         .input(AudienceAnswerSchema)
         .output(AudienceStateSchema),
+    // Like the audience, a person's own and not a sandbox setting: nobody's choice to put the checklist away or pass a
+    // step over changes another member's screen.
+    gettingStarted: procedure
+        .route({
+            method: "GET",
+            path: "/settings/getting-started",
+            summary: "What you said about the getting-started checklist here",
+            description:
+                "Whether you put the editor's getting-started checklist away on this sandbox, and which of its steps you passed over. Whether a step is done is not kept here: the editor reads that from the sandbox itself.",
+        })
+        .output(GettingStartedSchema),
+    setGettingStarted: procedure
+        .route({
+            method: "POST",
+            path: "/settings/getting-started",
+            summary: "Put away or bring back the getting-started checklist",
+            description:
+                "Replaces what you said about the editor's getting-started checklist on this sandbox: whether it is put away, and which steps you passed over. Other members keep their own.",
+        })
+        .meta({ floor: "viewer" })
+        .input(GettingStartedSchema)
+        .output(GettingStartedSchema),
     adoptRepoChecks: procedure
         .route({
             method: "POST",

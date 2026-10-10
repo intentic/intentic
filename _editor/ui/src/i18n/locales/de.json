@@ -250,5 +250,8 @@
     },
     "dagEditor": {
         "fitGraph": "Graph einpassen"
+    },
+    "coachMark": {
+        "notNow": "Nicht jetzt"
     }
 }

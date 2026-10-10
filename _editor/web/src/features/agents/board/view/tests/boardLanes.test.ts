@@ -200,18 +200,18 @@ describe(`the archive in Finished's place`, () => {
 });
 
 describe(`what the board says it holds`, () => {
-    it(`asks for a first task while only an untouched draft is on the board`, () => {
-        expect(boardOf([]).lanes.screen.value).toBe(`first`);
-        expect(boardOf([card(`d`, { status: `draft` })]).lanes.screen.value).toBe(`first`);
+    it(`is a first run while only an untouched draft is on the board`, () => {
+        expect(boardOf([]).lanes.first.value).toBe(true);
+        expect(boardOf([card(`d`, { status: `draft` })]).lanes.first.value).toBe(true);
     });
 
-    it(`counts a held wake as something to show, and an archive as a history rather than a first run`, () => {
+    it(`counts a held wake as something started, and an archive as a history rather than a first run`, () => {
         const held = boardOf([], { held: [{ id: `w1`, automationId: `nightly`, createdAt: 1 }] });
-        expect(held.lanes.screen.value).toBe(`lanes`);
+        expect(held.lanes.first.value).toBe(false);
         const cleared = boardOf([], { archived: [card(`old`, { archivedAt: 5 })] });
-        expect(cleared.lanes.screen.value).toBe(`cleared`);
+        expect(cleared.lanes.first.value).toBe(false);
         cleared.view.value = { ...VIEW_START, archive: true };
-        expect(cleared.lanes.screen.value).toBe(`lanes`);
+        expect(cleared.lanes.first.value).toBe(false);
     });
 
     it(`says the tally is incomplete while the daemon's half is out, and claims no empty result until it is in`, () => {
@@ -353,11 +353,26 @@ describe(`a lane under a dragged card`, () => {
 });
 
 describe(`the lanes' heads`, () => {
-    it(`runs Attention, Active, Finished, each with what it says empty`, () => {
+    it(`runs Attention, Active, Finished, each with what it says empty and what it says on a first run`, () => {
         expect(laneHeads()).toEqual([
-            { key: `attention`, label: t(`shared.attention`), empty: t(`agents.agentsView.nothingNeedsRightNow`) },
-            { key: `active`, label: t(`shared.active`), empty: t(`agents.agentsView.noAgentsWorkingStart`) },
-            { key: `finished`, label: t(`shared.finished`), empty: t(`agents.agentsView.finishedAgentsLandWork`) },
+            {
+                key: `attention`,
+                label: t(`shared.attention`),
+                empty: t(`agents.agentsView.nothingNeedsRightNow`),
+                first: t(`agents.agentsView.attentionFirst`),
+            },
+            {
+                key: `active`,
+                label: t(`shared.active`),
+                empty: t(`agents.agentsView.noAgentsWorkingStart`),
+                first: t(`agents.agentsView.noAgentsWorkingStart`),
+            },
+            {
+                key: `finished`,
+                label: t(`shared.finished`),
+                empty: t(`agents.agentsView.finishedAgentsLandWork`),
+                first: t(`agents.agentsView.finishedFirst`),
+            },
         ]);
     });
 });

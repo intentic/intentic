@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TourMark from "../../../tour/TourMark.vue";
 import {
     type ActionItem,
     Button,
@@ -848,15 +849,19 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
                 </p>
                 <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
-                <Button
-                    size="small"
-                    tone="success" thumb
-                    :disabled="landing || busy"
-                    class="self-start whitespace-nowrap"
-                    @click.stop="emit('land')"
-                >
-                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
-                </Button>
+                <div class="flex items-center gap-1.5">
+                    <Button
+                        size="small"
+                        tone="success" thumb
+                        :disabled="landing || busy"
+                        class="self-start whitespace-nowrap"
+                        @click.stop="emit('land')"
+                    >
+                        <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
+                    </Button>
+                    <!-- Getting started's mark for the first land, beside the press that does it (only while that is the step). -->
+                    <TourMark v-if="!landing" step="land" place="card" :priority="3" side="bottom" @click.stop />
+                </div>
             </div>
 
             <!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->

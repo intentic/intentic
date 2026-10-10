@@ -212,7 +212,6 @@ export const UNSERVED = {
     "agents.toolChildren": UNFILLED_VIEW,
     "automations.senders": UNFILLED_VIEW,
     "endpoints.models": UNFILLED_VIEW,
-    "endpoints.trial": UNFILLED_VIEW,
     "extensions.processStatus": UNFILLED_VIEW,
     "extensions.readiness": UNFILLED_VIEW,
     "extensions.removalPlan": UNFILLED_VIEW,

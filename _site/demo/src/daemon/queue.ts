@@ -129,7 +129,15 @@ const book = (input: SandboxHandlerInput<`agent`, `run`>, id: string, hold: Hold
 export const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>): { delivered: `started`; run: string } | { delivered: `queued` } => {
     const id = input.conversationId ?? FEATURED_ID;
     const hold = holdOf(input);
-    return hold === undefined ? startTurn(input) : book(input, id, hold);
+    if (hold !== undefined) {
+        return book(input, id, hold);
+    }
+    // A conversation's first message opens its card, as the daemon's registry does: without this a fresh board (mode.ts
+    // `freshEdition`) could never show its first agent arriving.
+    if (!roster.agents.some((agent) => agent.id === id)) {
+        roster.agents = [bookedCard(input, id, Date.now()), ...roster.agents];
+    }
+    return startTurn({ ...input, conversationId: id });
 };
 
 // The queue's four doors, each refused as the daemon refuses it: nothing waiting, a message named that has gone, or one

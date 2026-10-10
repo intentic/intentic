@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -61,6 +62,12 @@ const logout = async (): Promise<void> => {
     }
     // Full navigation, not a router push: afterSignOut may point outside this SPA.
     globalThis.location.href = environment.afterSignOut;
+};
+
+const tour = useGettingStarted();
+const reopenTour = (): void => {
+    open.value = false;
+    void tour.show();
 };
 
 // The other half of this popover is a place (Settings, a destination like any other); this half is the one thing the
@@ -146,6 +153,16 @@ onUnmounted(() => {
 
             <div class="my-1 border-t border-line-subtle"></div>
 
+            <!-- Only while it is put away and still a first run: the way back to a checklist the rail no longer shows. -->
+            <button
+                v-if="tour.reopenable.value"
+                type="button"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
+                @click="reopenTour"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="circle" class="text-base text-muted" /></span>
+                {{ t(`gettingStarted.panel.show`) }}
+            </button>
             <RouterLink
                 to="/settings"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"

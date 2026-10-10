@@ -310,7 +310,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
-            "agentsWorkOnOwn": "Agenty pracują na własnej gałęzi, podczas gdy Ty robisz swoje: przeglądasz, co zrobiły, zanim cokolwiek trafi do Twojej przestrzeni roboczej.",
             "allSandboxes": "Wszystkie sandboxy",
             "archive": "Archiwum",
             "archiveAll": "Zarchiwizuj wszystkie",
@@ -346,14 +345,12 @@
             "noMatchesInLane": "Brak trafień na tym torze.",
             "nothingArchivedYetFinished": "Nic jeszcze nie zarchiwizowano. Skończone agenty lądują tu same po kilku spokojnych dniach.",
             "nothingNeedsRightNow": "W tej chwili nic Cię nie potrzebuje.",
-            "nothingOnBoardStart": "Nic na tablicy. Zacznij rozmowę tutaj albo w przestrzeni roboczej; obie pojawią się na tej tablicy, a odizolowana praca zostaje do przejrzenia na własnej gałęzi.",
             "nothingWrittenToWorkspace": "Nic nie zostaje zapisane do Twojej przestrzeni roboczej, jeśli się nie uda. Turę możesz zatrzymać w dowolnym momencie.",
             "onlyOwnedBy": "Tylko sesje, których właścicielem jest {name}, w każdej kolumnie",
             "openArchive": "Otwórz archiwum ({archiveSize})",
             "reviewMyChanges": "Przejrzyj moje zmiany",
             "reviewMyUncommittedChanges": "Przejrzyj moje niezacommitowane zmiany i oznacz wszystko ryzykowne, zanim zrobię commit.",
             "show": "Pokaż",
-            "startFirstAgent": "Uruchom swojego pierwszego agenta",
             "suggestThreeSmallSafe": "Zaproponuj trzy małe, bezpieczne ulepszenia tej bazy kodu. Poczekaj, aż wybiorę jedno, zanim cokolwiek zmienisz.",
             "synthesize": "Podsumuj",
             "thisAgent": "Ten agent",
@@ -368,7 +365,8 @@
             "archiveFamily": "Zarchiwizować {title} i jego {count} podagenta? | Zarchiwizować {title} i jego {count} podagenty? | Zarchiwizować {title} i jego {count} podagentów?",
             "archiveFamilyKept": "Znikną z tablicy razem. Nic nie przepada: gałęzie, rozmowy i zmiany zostają, a Cofnij albo archiwum przywróci je z powrotem.",
             "archiveWithSubagents": "Zarchiwizuj {count} agenta | Zarchiwizuj {count} agenty | Zarchiwizuj {count} agentów",
-            "archivedAgents": "{count} zarchiwizowany agent | {count} zarchiwizowani agenci | {count} zarchiwizowanych agentów"
+            "attentionFirst": "Gdy agent o coś pyta albo potrzebuje zgody, czeka tutaj.",
+            "finishedFirst": "Skończone agenty czekają tu na Twój przegląd. Nic nie trafia do Twojej przestrzeni roboczej bez Twojej zgody."
         },
         "buildIdeas": {
             "pageMyBusiness": "Strona dla mojej firmy",
@@ -763,6 +761,29 @@
             "fixing": "Naprawia…",
             "fixQueued": "Naprawa w kolejce",
             "fixTitle": "Agent aktualizuje swoją gałąź"
+        },
+        "firstAgentSlot": {
+            "title": "Twój pierwszy agent",
+            "line": "Daj mu zadanie. Pracuje na własnej kopii, a Ty robisz swoje; jego karta pojawi się właśnie tutaj.",
+            "writeYourOwn": "Napiszę własne"
+        },
+        "exampleCard": {
+            "title": "Dodaj przełącznik trybu ciemnego",
+            "tag": "Przykład",
+            "openLabel": "Otwórz przykład: jak wygląda skończony agent",
+            "files": "{count} plik | {count} pliki | {count} plików",
+            "line": "Otwórz, żeby zobaczyć, jak przeglądasz pracę agenta i ją scalasz.",
+            "reviewTitle": "Przykład: przegląd pracy agenta",
+            "reviewIntro": "To nagrany przykład, a nie praca wykonana tutaj. Gdy Twój agent skończy, jego karta otworzy taki sam przegląd.",
+            "asked": "O co poprosiłeś",
+            "prompt": "Dodaj w nagłówku przełącznik trybu ciemnego i zapamiętuj wybór.",
+            "did": "Co według niego zrobił",
+            "reply": "Dodałem magazyn motywu, który czyta ustawienie systemu i zapisuje Twój wybór, przełącznik w nagłówku oraz ciemne kolory strony. Uruchomiłem testy; przechodzą.",
+            "changed": "Co się zmieniło",
+            "landTitle": "Potem to scalasz",
+            "landLine": "Agent pracował na własnej kopii, więc Twoja przestrzeń robocza jeszcze się nie zmieniła. Scalenie wprowadza te zmiany. Jeśli coś jest nie tak, napisz agentowi w jego czacie, co poprawić.",
+            "close": "Zamknij",
+            "startOwn": "Uruchom mojego agenta"
         }
     },
     "app": {
@@ -10252,6 +10273,93 @@
             "showDetails": "Szczegóły",
             "hideDetails": "Ukryj szczegóły",
             "allowanceUsed": "Dzienny limit Naprawy się wyczerpał. Odnowi się o {time}. Sprawdzenia i poprawki nadal działają."
+        }
+    },
+    "gettingStarted": {
+        "eyebrow": "Pierwsze kroki · krok {n} z {total}",
+        "markLabel": "Pierwsze kroki: {title}",
+        "steps": {
+            "work": {
+                "title": "Dodaj swoją pracę",
+                "line": "Sklonuj repozytorium, wgraj folder albo zacznij od zera."
+            },
+            "agent": {
+                "title": "Uruchom pierwszego agenta",
+                "line": "Daj mu zadanie. Pracuje na własnej kopii, a Ty robisz swoje."
+            },
+            "models": {
+                "title": "Podłącz własne modele",
+                "line": "Zaloguj się planem lub kluczem, który już masz. Od tej pory nowe agenty działają na nim."
+            },
+            "land": {
+                "title": "Przejrzyj i scal jego pracę",
+                "line": "Zobacz, co zmienił, a potem przenieś pracę do swojej przestrzeni roboczej."
+            }
+        },
+        "skip": {
+            "work": "Zacznij od zera",
+            "later": "Później"
+        },
+        "hints": {
+            "openWorkspace": "Otwórz przestrzeń roboczą",
+            "openBoard": "Otwórz tablicę",
+            "openModels": "Otwórz modele",
+            "writeTask": "Napisz zadanie",
+            "workRail": {
+                "title": "Dodaj swoją pracę",
+                "line": "Sklonuj repozytorium albo upuść folder w przestrzeni roboczej. Agenty pracują na tym, co tam jest."
+            },
+            "workHere": {
+                "title": "Wrzuć tu swój kod",
+                "line": "Sklonuj, wgraj albo przeciągnij pliki w dowolne miejsce tej strony. Nie masz jeszcze czego dodać? Zacznij od zera i pozwól agentowi to zbudować."
+            },
+            "agentBoard": {
+                "title": "Uruchom pierwszego agenta",
+                "lineTrial": "Wybierz podpowiedź albo napisz własne zadanie. Działa na darmowym okresie próbnym, więc nic nie trzeba jeszcze podłączać.",
+                "line": "Wybierz podpowiedź albo napisz własne zadanie i je wyślij."
+            },
+            "agentComposer": {
+                "title": "Poproś agenta o coś",
+                "lineTrial": "Wpisz zadanie i je wyślij. Działa na darmowym okresie próbnym, a Ty przeglądasz jego pracę, zanim cokolwiek zostanie scalone.",
+                "line": "Wpisz zadanie i je wyślij. Przeglądasz jego pracę, zanim cokolwiek zostanie scalone."
+            },
+            "agentRail": {
+                "title": "Uruchom pierwszego agenta",
+                "line": "Agenty pracują obok siebie na tablicy. Uruchom jednego tam albo z czatu."
+            },
+            "boardRail": {
+                "title": "Twój agent jest na tablicy",
+                "line": "Każdy agent ma tam kartę: co robi, czego od Ciebie potrzebuje i jego pracę, gdy skończy. Uruchamiaj kolejne obok siebie."
+            },
+            "modelsRail": {
+                "title": "Podłącz własne modele",
+                "line": "Zaloguj się planem Claude, ChatGPT lub Gemini, za który już płacisz, albo dodaj klucz. Modele, środowisko i sekrety tej piaskownicy są tutaj."
+            },
+            "modelsHere": {
+                "title": "Użyj tego, za co już płacisz",
+                "line": "Zaloguj się u dostawcy albo dodaj klucz. Nowe agenty działają na nim, a darmowy okres próbny zostaje na wypadek, gdy nic innego nie działa."
+            },
+            "landCard": {
+                "title": "Przejrzyj i scal",
+                "line": "Otwórz kartę, żeby zobaczyć zmiany. Scalenie przenosi pracę do Twojej przestrzeni roboczej; do tego czasu nic się tam nie zmieniło."
+            },
+            "landRail": {
+                "title": "Twój agent skończył",
+                "line": "Jego praca czeka na tablicy na Twój przegląd."
+            }
+        },
+        "panel": {
+            "title": "Pierwsze kroki",
+            "progress": "{settled} z {total} gotowe",
+            "skipped": "Pominięte",
+            "hide": "Ukryj pierwsze kroki",
+            "show": "Pokaż pierwsze kroki",
+            "finishedTitle": "Wszystko gotowe",
+            "finishedLine": "To cała pętla: dodaj pracę, przekaż ją agentom, przejrzyj, scal. Uruchamiaj ich obok siebie, ilu chcesz.",
+            "done": "Gotowe"
+        },
+        "ring": {
+            "label": "Pierwsze kroki, {settled} z {total} gotowe"
         }
     }
 }

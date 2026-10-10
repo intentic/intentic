@@ -4,7 +4,7 @@ import { automationApprovals } from "../fixture/automations";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../fixture/desk";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../fixture/fleet";
 import { demoNeeds } from "../fixture/needs";
-import { demoMode, demoQuiet, deskEdition } from "../mode";
+import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
 // write goes through (snapshot-not-diff, newest rev wins).
@@ -36,7 +36,7 @@ const withNeeds = (agent: AgentSummary): AgentSummary => {
 export const boardAgents = (): AgentSummary[] => roster.agents.map(withNeeds);
 
 // Held automation approvals project onto the board's attention lane; a desk runs no automations.
-export const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
+export const heldApprovals = () => (deskEdition || freshEdition ? [] : automationApprovals(Date.now()));
 export const listeners = new Set<(event: SystemEvent) => void>();
 
 export const broadcastRoster = (): void => {

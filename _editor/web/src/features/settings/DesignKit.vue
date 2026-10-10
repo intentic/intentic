@@ -4,6 +4,7 @@ import {
     type ButtonLook,
     AnchoredOverlay,
     Avatar,
+    Beacon,
     BarChart,
     BrandMark,
     Button,
@@ -11,6 +12,7 @@ import {
     ChangeStatusMark,
     ui,
     Code,
+    CoachMark,
     CodeField,
     ConfirmDialog,
     CopyButton,
@@ -195,6 +197,8 @@ const anchoredOpen = ref(false);
 const responsiveOpen = ref(false);
 const resourcesOpen = ref(false);
 const anchoredTrigger = ref<HTMLButtonElement | null>(null);
+const coachOpen = ref(false);
+const coachTrigger = ref<HTMLButtonElement | null>(null);
 const responsiveTrigger = ref<HTMLButtonElement | null>(null);
 const segment = ref(`all`);
 const picked = ref<string | undefined>(`sonnet`);
@@ -668,6 +672,8 @@ const pickedTier = ref(`collaborator`);
                         ><ChangeStatusMark status="deleted" /><span class="text-xs text-content">deleted</span></span
                     >
                     <DiffStat :additions="128" :deletions="42" />
+                    <Beacon />
+                    <Beacon size="sm" />
                     <ProgressRing :value="0.41" :size="24" />
                     <ProgressRing :value="0.86" :size="24" />
                     <Avatar :size="28" name="Ada Lovelace" />
@@ -968,6 +974,9 @@ const pickedTier = ref(`collaborator`);
                     <button ref="anchoredTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="anchoredOpen = !anchoredOpen">
                         Anchored overlay
                     </button>
+                    <button ref="coachTrigger" type="button" :class="ui.addTile(`relative px-3 py-1.5`)" @click="coachOpen = !coachOpen">
+                        Coach mark<Beacon size="sm" class="absolute -right-1 -top-1" />
+                    </button>
                     <button ref="responsiveTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="responsiveOpen = !responsiveOpen">
                         Responsive overlay
                     </button>
@@ -1018,6 +1027,10 @@ const pickedTier = ref(`collaborator`);
                 <p class="text-xs text-content">Hangs off its trigger, flips when there is no room, clamps into the viewport.</p>
             </div>
         </AnchoredOverlay>
+
+        <CoachMark v-model="coachOpen" :anchor="coachTrigger ?? undefined" eyebrow="Step 2 of 4" title="Start your first agent" action="Write a task">
+            Points at the one press that finishes the step. Nothing dims behind it, and a press anywhere else closes it.
+        </CoachMark>
 
         <ResponsiveOverlay
             v-model="responsiveOpen"

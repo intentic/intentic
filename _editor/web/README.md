@@ -27,6 +27,16 @@ flowchart LR
   directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this
   device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
   address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
+- **A first run.** The agents board is always its three lanes, even empty: a first run draws the first agent's
+  dashed slot in Active, where its card will arrive, and says in each empty lane what will land there
+  (`features/agents/board/view/firstScreen.ts`). A maintainer's first run also carries a getting-started checklist,
+  opened from a ring at the foot of the rail or from the top of the phone's Menu tab: bring work in, start an agent,
+  connect your own models, land its work. A step is done when the sandbox's own data says so, never by pressing Next
+  (`features/gettingStarted/useGettingStarted.ts`). The sandbox keeps only what each member chose (put away, steps
+  passed over), per member, under `settings.gettingStarted`. One beacon at a time points at the next press, from the
+  rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
+  offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
+  in `_site/demo` shows it.
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below. Settings and
   the popped-out chat share `components/PersonaTile.vue` for the face, label and selected appearance; each view owns
   its selection and actions. Settings wraps the shared tile in `PersonaSelector.vue` for renaming and removal directly

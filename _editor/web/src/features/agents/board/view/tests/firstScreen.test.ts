@@ -1,21 +1,18 @@
 import { t } from "@intentic/ui/i18n";
 import { buildIdeas, buildPrompt } from "../../buildIdeas";
-import { boardScreen, boardStarters } from "../firstScreen";
+import { boardStarters, firstRun } from "../firstScreen";
 
-// Pins what an empty board shows: the first run until anything was ever started, the cleared board once it was and the
-// lanes are bare, the lanes whenever the archive is open; and which starters a workspace earns, in which order.
+// Pins what an empty board shows: always the lanes, with a first run's slot and lane lines until anything was ever
+// started, and never on the archive; and which starters a workspace earns, in which order.
 
-describe(`which screen the board draws`, () => {
-    it(`asks for a first task until anything was started, and says the board was cleared once it was`, () => {
-        expect(boardScreen(false, 0, false)).toBe(`first`);
-        // An untouched draft is on the board without anything having started.
-        expect(boardScreen(false, 1, false)).toBe(`first`);
-        expect(boardScreen(true, 0, false)).toBe(`cleared`);
-        expect(boardScreen(true, 3, false)).toBe(`lanes`);
+describe(`when the board is on its first run`, () => {
+    it(`is a first run until anything was started, and a cleared board after`, () => {
+        expect(firstRun(false, false)).toBe(true);
+        expect(firstRun(true, false)).toBe(false);
     });
 
-    it(`always draws the lanes while the archive stands in Finished`, () => {
-        expect([boardScreen(false, 0, true), boardScreen(true, 0, true)]).toEqual([`lanes`, `lanes`]);
+    it(`is never a first run while the archive stands in Finished`, () => {
+        expect([firstRun(false, true), firstRun(true, true)]).toEqual([false, false]);
     });
 });
 

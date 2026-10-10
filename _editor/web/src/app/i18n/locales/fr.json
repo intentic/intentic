@@ -230,7 +230,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
-            "agentsWorkOnOwn": "Les agents travaillent sur leur propre branche pendant que vous continuez : vous relisez ce qu'ils ont fait avant que quoi que ce soit n'arrive dans votre espace de travail.",
             "allSandboxes": "Tous les sandboxes",
             "archiveAll": "Tout archiver",
             "archiveEmptiedFinishedAgents": "Archive vidée. Les agents terminés s'y accumuleront de nouveau tout seuls après quelques jours calmes.",
@@ -264,20 +263,20 @@
             "noMatchesInLane": "Aucune correspondance dans ce couloir.",
             "nothingArchivedYetFinished": "Rien d'archivé pour l'instant. Les agents terminés atterrissent ici tout seuls après quelques jours calmes.",
             "nothingNeedsRightNow": "Rien n'a besoin de vous en ce moment.",
-            "nothingOnBoardStart": "Rien sur le tableau. Lancez une conversation ici ou dans l'espace de travail ; les deux apparaissent sur ce tableau, et le travail isolé reste relisable sur sa propre branche.",
             "nothingWrittenToWorkspace": "Rien n'est écrit dans votre espace de travail sauf si cela réussit. Vous pouvez arrêter le tour à tout moment.",
             "openArchive": "Ouvrir l'archive ({archiveSize})",
             "reviewMyChanges": "Relis mes changements",
             "reviewMyUncommittedChanges": "Relis mes changements non committés et signale tout ce qui est risqué avant que je les committe.",
             "show": "Afficher",
-            "startFirstAgent": "Lancez votre premier agent",
             "suggestThreeSmallSafe": "Propose trois améliorations petites et sûres à cette base de code. Attends que j'en choisisse une avant de changer quoi que ce soit.",
             "synthesize": "Synthétiser",
             "thisAgent": "Cet agent",
             "thoseExactCapitals": " » avec exactement ces majuscules.",
             "undoArchive": "Annuler l'archivage",
             "willStartTurn": "{agent} lancera un tour : il rebase sa branche sur votre espace de travail actuel, résout le conflit dans son propre worktree et intègre le résultat quand il a fini.",
-            "workTheyAlreadyLanded": "Le travail qu'ils ont déjà intégré reste dans votre espace de travail. Seul ce qui n'a jamais quitté leurs branches est perdu. Les agents encore sur le tableau ne sont pas touchés."
+            "workTheyAlreadyLanded": "Le travail qu'ils ont déjà intégré reste dans votre espace de travail. Seul ce qui n'a jamais quitté leurs branches est perdu. Les agents encore sur le tableau ne sont pas touchés.",
+            "attentionFirst": "Quand un agent vous pose une question ou a besoin d'une autorisation, il attend ici.",
+            "finishedFirst": "Les agents terminés attendent ici votre relecture. Rien n'arrive dans votre espace de travail sans votre accord."
         },
         "buildIdeas": {
             "pageMyBusiness": "Une page pour mon activité",
@@ -570,6 +569,29 @@
             "fixing": "Résolution…",
             "fixQueued": "Résolution prévue",
             "fixTitle": "L'agent met sa branche à jour"
+        },
+        "firstAgentSlot": {
+            "title": "Votre premier agent",
+            "line": "Donnez-lui une tâche. Il travaille sur sa propre copie pendant que vous continuez, et sa carte apparaît ici même.",
+            "writeYourOwn": "Écrire la mienne"
+        },
+        "exampleCard": {
+            "title": "Ajouter un interrupteur de mode sombre",
+            "tag": "Exemple",
+            "openLabel": "Ouvrir l'exemple : à quoi ressemble un agent terminé",
+            "files": "{count} fichier | {count} fichiers",
+            "line": "Ouvrez-le pour voir comment relire le travail d'un agent et l'intégrer.",
+            "reviewTitle": "Exemple : relire le travail d'un agent",
+            "reviewIntro": "Ceci est un exemple enregistré, pas du travail fait ici. Quand votre propre agent aura terminé, sa carte ouvrira une relecture comme celle-ci.",
+            "asked": "Ce que vous avez demandé",
+            "prompt": "Ajoute un interrupteur de mode sombre dans l'en-tête et mémorise le choix.",
+            "did": "Ce qu'il dit avoir fait",
+            "reply": "J'ai ajouté un stockage de thème qui lit le réglage du système et enregistre votre choix, un interrupteur dans l'en-tête et des couleurs sombres pour la page. J'ai lancé les tests ; ils passent.",
+            "changed": "Ce qui a changé",
+            "landTitle": "Ensuite, vous l'intégrez",
+            "landLine": "L'agent a travaillé sur sa propre copie, donc votre espace de travail n'a pas encore changé. Intégrer y fait entrer ces changements. S'ils ne conviennent pas, dites plutôt à l'agent quoi corriger dans son chat.",
+            "close": "Fermer",
+            "startOwn": "Lancer mon propre agent"
         }
     },
     "app": {
@@ -5706,6 +5728,93 @@
             "startsIfStopped": "La démarre si arrêtée",
             "syncedSandbox": "Sandbox synchronisé",
             "toggleFolder": "Basculer le dossier"
+        }
+    },
+    "gettingStarted": {
+        "eyebrow": "Premiers pas · étape {n} sur {total}",
+        "markLabel": "Premiers pas : {title}",
+        "steps": {
+            "work": {
+                "title": "Apportez votre travail",
+                "line": "Clonez un dépôt, importez un dossier ou partez de rien."
+            },
+            "agent": {
+                "title": "Lancez votre premier agent",
+                "line": "Donnez-lui une tâche. Il travaille sur sa propre copie pendant que vous continuez."
+            },
+            "models": {
+                "title": "Connectez vos propres modèles",
+                "line": "Connectez-vous avec un abonnement ou une clé que vous avez déjà. Les nouveaux agents l'utiliseront dès lors."
+            },
+            "land": {
+                "title": "Relisez et intégrez son travail",
+                "line": "Lisez ce qu'il a changé, puis faites entrer le travail dans votre espace de travail."
+            }
+        },
+        "skip": {
+            "work": "Partir de zéro",
+            "later": "Plus tard"
+        },
+        "hints": {
+            "openWorkspace": "Ouvrir l'espace de travail",
+            "openBoard": "Ouvrir le tableau",
+            "openModels": "Ouvrir les modèles",
+            "writeTask": "Écrire une tâche",
+            "workRail": {
+                "title": "Apportez votre travail",
+                "line": "Clonez un dépôt ou déposez un dossier dans l'espace de travail. Les agents travaillent sur ce qui s'y trouve."
+            },
+            "workHere": {
+                "title": "Apportez votre code ici",
+                "line": "Clonez, importez ou glissez des fichiers n'importe où sur cette page. Rien à apporter encore ? Partez de zéro et laissez un agent le construire."
+            },
+            "agentBoard": {
+                "title": "Lancez votre premier agent",
+                "lineTrial": "Choisissez une suggestion ou écrivez votre propre tâche. Il tourne sur l'essai gratuit, donc rien à connecter pour l'instant.",
+                "line": "Choisissez une suggestion ou écrivez votre propre tâche, puis envoyez-la."
+            },
+            "agentComposer": {
+                "title": "Demandez quelque chose à un agent",
+                "lineTrial": "Tapez une tâche et envoyez-la. Elle tourne sur l'essai gratuit, et vous relisez ce qu'il a fait avant que quoi que ce soit n'arrive.",
+                "line": "Tapez une tâche et envoyez-la. Vous relisez ce qu'il a fait avant que quoi que ce soit n'arrive."
+            },
+            "agentRail": {
+                "title": "Lancez votre premier agent",
+                "line": "Les agents travaillent côte à côte sur le tableau. Lancez-en un là-bas ou depuis le chat."
+            },
+            "boardRail": {
+                "title": "Votre agent est sur le tableau",
+                "line": "Chaque agent y a sa carte : ce qu'il fait, ce dont il a besoin de vous, et son travail une fois fini. Lancez-en d'autres côte à côte."
+            },
+            "modelsRail": {
+                "title": "Connectez vos propres modèles",
+                "line": "Connectez-vous avec l'abonnement Claude, ChatGPT ou Gemini que vous payez déjà, ou ajoutez une clé. Les modèles, l'environnement et les secrets de ce sandbox sont tous ici."
+            },
+            "modelsHere": {
+                "title": "Utilisez ce que vous payez déjà",
+                "line": "Connectez-vous à un fournisseur ou ajoutez une clé. Les nouveaux agents l'utiliseront, et l'essai gratuit reste pour quand rien d'autre ne peut tourner."
+            },
+            "landCard": {
+                "title": "Relisez et intégrez",
+                "line": "Ouvrez la carte pour lire ce qui a changé. Intégrer fait entrer le travail dans votre espace de travail ; jusque-là, rien n'y a changé."
+            },
+            "landRail": {
+                "title": "Votre agent a terminé",
+                "line": "Son travail est sur le tableau et attend votre relecture."
+            }
+        },
+        "panel": {
+            "title": "Premiers pas",
+            "progress": "{settled} sur {total} faits",
+            "skipped": "Ignorée",
+            "hide": "Masquer les premiers pas",
+            "show": "Afficher les premiers pas",
+            "finishedTitle": "Tout est prêt",
+            "finishedLine": "Voilà toute la boucle : apporter du travail, le confier aux agents, relire, intégrer. Lancez-en autant que vous voulez côte à côte.",
+            "done": "Terminé"
+        },
+        "ring": {
+            "label": "Premiers pas, {settled} sur {total} faits"
         }
     }
 }

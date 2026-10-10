@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -42,6 +43,9 @@ const back = computed<PageBack | undefined>(() => {
 providePageBack(back);
 // The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
 const wallpapered = useWallpaperedRoute();
+// The getting-started checklist, started with the shell so every mark in every feature has an answer to read
+// (features/tour/tourState.ts), whichever screen a first run opens on.
+useGettingStarted();
 </script>
 
 <template>

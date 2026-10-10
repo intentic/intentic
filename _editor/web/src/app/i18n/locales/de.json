@@ -230,7 +230,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
-            "agentsWorkOnOwn": "Agenten arbeiten auf ihrem eigenen Branch, während Sie weitermachen: Sie sehen durch, was sie getan haben, bevor irgendetwas in Ihrem Workspace landet.",
             "allSandboxes": "Alle Sandboxes",
             "archive": "Archiv",
             "archiveAll": "Alle archivieren",
@@ -265,20 +264,20 @@
             "noMatchesInLane": "Keine Treffer in dieser Spur.",
             "nothingArchivedYetFinished": "Noch nichts archiviert. Fertige Agenten landen nach ein paar ruhigen Tagen von selbst hier.",
             "nothingNeedsRightNow": "Gerade braucht Sie nichts.",
-            "nothingOnBoardStart": "Nichts auf dem Board. Starten Sie hier oder im Workspace eine Unterhaltung; beide erscheinen auf diesem Board, und isolierte Arbeit bleibt auf ihrem eigenen Branch durchsehbar.",
             "nothingWrittenToWorkspace": "Nichts wird in Ihren Workspace geschrieben, wenn es nicht gelingt. Sie können den Zug jederzeit stoppen.",
             "openArchive": "Archiv öffnen ({archiveSize})",
             "reviewMyChanges": "Meine Änderungen durchsehen",
             "reviewMyUncommittedChanges": "Sieh meine nicht committeten Änderungen durch und markiere alles Riskante, bevor ich sie committe.",
             "show": "Zeigen",
-            "startFirstAgent": "Ihren ersten Agenten starten",
             "suggestThreeSmallSafe": "Schlage drei kleine, sichere Verbesserungen an dieser Codebasis vor. Warte, bis ich eine gewählt habe, bevor du etwas änderst.",
             "synthesize": "Zusammenführen",
             "thisAgent": "Dieser Agent",
             "thoseExactCapitals": "“ mit genau dieser Groß-/Kleinschreibung.",
             "undoArchive": "Archivieren rückgängig",
             "willStartTurn": "{agent} startet einen Zug: er rebaset seinen Branch auf Ihren aktuellen Workspace, löst den Konflikt in seinem eigenen Worktree und landet das Ergebnis, wenn er fertig ist.",
-            "workTheyAlreadyLanded": "Arbeit, die sie bereits gelandet haben, bleibt in Ihrem Workspace. Nur was ihre Branches nie verlassen hat, geht verloren. Agenten, die noch auf dem Board sind, bleiben unangetastet."
+            "workTheyAlreadyLanded": "Arbeit, die sie bereits gelandet haben, bleibt in Ihrem Workspace. Nur was ihre Branches nie verlassen hat, geht verloren. Agenten, die noch auf dem Board sind, bleiben unangetastet.",
+            "attentionFirst": "Wenn ein Agent Sie etwas fragt oder eine Erlaubnis braucht, wartet er hier.",
+            "finishedFirst": "Fertige Agenten warten hier auf Ihre Prüfung. Nichts landet in Ihrem Workspace, bevor Sie es sagen."
         },
         "buildIdeas": {
             "pageMyBusiness": "Eine Seite für mein Geschäft",
@@ -568,6 +567,29 @@
             "fixing": "Wird behoben…",
             "fixQueued": "Behebung geplant",
             "fixTitle": "Agent aktualisiert seinen Branch"
+        },
+        "firstAgentSlot": {
+            "title": "Ihr erster Agent",
+            "line": "Geben Sie ihm eine Aufgabe. Er arbeitet auf seiner eigenen Kopie, während Sie weitermachen, und seine Karte erscheint genau hier.",
+            "writeYourOwn": "Eigene schreiben"
+        },
+        "exampleCard": {
+            "title": "Dunkelmodus-Schalter hinzufügen",
+            "tag": "Beispiel",
+            "openLabel": "Beispiel öffnen: so sieht ein fertiger Agent aus",
+            "files": "{count} Datei | {count} Dateien",
+            "line": "Öffnen Sie es, um zu sehen, wie Sie die Arbeit eines Agenten prüfen und landen.",
+            "reviewTitle": "Beispiel: die Arbeit eines Agenten prüfen",
+            "reviewIntro": "Dies ist ein aufgezeichnetes Beispiel, keine hier erledigte Arbeit. Wenn Ihr eigener Agent fertig ist, öffnet seine Karte eine Prüfung wie diese.",
+            "asked": "Was Sie gefragt haben",
+            "prompt": "Füge im Header einen Dunkelmodus-Schalter hinzu und merke dir die Wahl.",
+            "did": "Was er getan hat, laut ihm",
+            "reply": "Ich habe einen Theme-Speicher ergänzt, der die Systemeinstellung liest und Ihre Wahl speichert, einen Schalter im Header und dunkle Farben für die Seite. Die Tests laufen durch.",
+            "changed": "Was sich geändert hat",
+            "landTitle": "Dann landen Sie es",
+            "landLine": "Der Agent hat auf seiner eigenen Kopie gearbeitet, also hat sich Ihr Workspace noch nicht geändert. Landen holt diese Änderungen herein. Wenn sie nicht stimmen, sagen Sie dem Agenten stattdessen in seinem Chat, was er korrigieren soll.",
+            "close": "Schließen",
+            "startOwn": "Meinen eigenen Agenten starten"
         }
     },
     "app": {
@@ -5753,6 +5775,93 @@
             "startsIfStopped": "Startet sie bei Bedarf",
             "syncedSandbox": "Synchrone Sandbox",
             "toggleFolder": "Ordner umschalten"
+        }
+    },
+    "gettingStarted": {
+        "eyebrow": "Erste Schritte · Schritt {n} von {total}",
+        "markLabel": "Erste Schritte: {title}",
+        "steps": {
+            "work": {
+                "title": "Ihre Arbeit hereinholen",
+                "line": "Klonen Sie ein Repository, laden Sie einen Ordner hoch oder fangen Sie bei null an."
+            },
+            "agent": {
+                "title": "Ihren ersten Agenten starten",
+                "line": "Geben Sie ihm eine Aufgabe. Er arbeitet auf seiner eigenen Kopie, während Sie weitermachen."
+            },
+            "models": {
+                "title": "Eigene Modelle verbinden",
+                "line": "Melden Sie sich mit einem Abo oder Schlüssel an, den Sie schon haben. Neue Agenten laufen ab dann darauf."
+            },
+            "land": {
+                "title": "Seine Arbeit prüfen und landen",
+                "line": "Lesen Sie, was er geändert hat, und holen Sie die Arbeit dann in Ihren Workspace."
+            }
+        },
+        "skip": {
+            "work": "Bei null anfangen",
+            "later": "Später"
+        },
+        "hints": {
+            "openWorkspace": "Workspace öffnen",
+            "openBoard": "Board öffnen",
+            "openModels": "Modelle öffnen",
+            "writeTask": "Aufgabe schreiben",
+            "workRail": {
+                "title": "Ihre Arbeit hereinholen",
+                "line": "Klonen Sie ein Repository oder legen Sie einen Ordner im Workspace ab. Agenten arbeiten mit dem, was dort liegt."
+            },
+            "workHere": {
+                "title": "Holen Sie Ihren Code hierher",
+                "line": "Klonen, hochladen oder Dateien irgendwo auf diese Seite ziehen. Noch nichts mitzubringen? Fangen Sie bei null an und lassen Sie einen Agenten bauen."
+            },
+            "agentBoard": {
+                "title": "Ihren ersten Agenten starten",
+                "lineTrial": "Wählen Sie einen Vorschlag oder schreiben Sie Ihre eigene Aufgabe. Er läuft auf der kostenlosen Testphase, also muss noch nichts verbunden werden.",
+                "line": "Wählen Sie einen Vorschlag oder schreiben Sie Ihre eigene Aufgabe und senden Sie sie."
+            },
+            "agentComposer": {
+                "title": "Bitten Sie einen Agenten um etwas",
+                "lineTrial": "Tippen Sie eine Aufgabe und senden Sie sie. Sie läuft auf der kostenlosen Testphase, und Sie prüfen das Ergebnis, bevor etwas landet.",
+                "line": "Tippen Sie eine Aufgabe und senden Sie sie. Sie prüfen das Ergebnis, bevor etwas landet."
+            },
+            "agentRail": {
+                "title": "Ihren ersten Agenten starten",
+                "line": "Agenten arbeiten nebeneinander auf dem Board. Starten Sie einen dort oder aus dem Chat."
+            },
+            "boardRail": {
+                "title": "Ihr Agent ist auf dem Board",
+                "line": "Jeder Agent bekommt dort eine Karte: was er tut, was er von Ihnen braucht, und seine Arbeit, wenn er fertig ist. Starten Sie weitere nebeneinander."
+            },
+            "modelsRail": {
+                "title": "Eigene Modelle verbinden",
+                "line": "Melden Sie sich mit dem Claude-, ChatGPT- oder Gemini-Abo an, das Sie schon bezahlen, oder fügen Sie einen Schlüssel hinzu. Modelle, Umgebung und Secrets dieser Sandbox finden Sie alle hier."
+            },
+            "modelsHere": {
+                "title": "Nutzen Sie, was Sie schon bezahlen",
+                "line": "Melden Sie sich bei einem Anbieter an oder fügen Sie einen Schlüssel hinzu. Neue Agenten laufen darauf, und die kostenlose Testphase bleibt für den Fall, dass nichts anderes läuft."
+            },
+            "landCard": {
+                "title": "Prüfen und landen",
+                "line": "Öffnen Sie die Karte, um zu sehen, was sich geändert hat. Landen holt die Arbeit in Ihren Workspace; bis dahin hat sich dort nichts geändert."
+            },
+            "landRail": {
+                "title": "Ihr Agent ist fertig",
+                "line": "Seine Arbeit liegt auf dem Board und wartet auf Ihre Prüfung."
+            }
+        },
+        "panel": {
+            "title": "Erste Schritte",
+            "progress": "{settled} von {total} erledigt",
+            "skipped": "Übersprungen",
+            "hide": "Erste Schritte ausblenden",
+            "show": "Erste Schritte anzeigen",
+            "finishedTitle": "Alles eingerichtet",
+            "finishedLine": "Das ist der ganze Ablauf: Arbeit hereinholen, an Agenten geben, prüfen, landen. Lassen Sie so viele nebeneinander laufen, wie Sie möchten.",
+            "done": "Fertig"
+        },
+        "ring": {
+            "label": "Erste Schritte, {settled} von {total} erledigt"
         }
     }
 }

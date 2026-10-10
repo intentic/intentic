@@ -416,5 +416,8 @@
         "noPublicHostname": "Ten sandbox nie ma publicznej nazwy hosta podglądu, więc portów nie da się podejrzeć w przeglądarce.",
         "unreachable": "{url} nie prowadzi do tego sandboxa: adres może się jeszcze propagować albo ten sandbox nie publikuje nazw hostów podglądu. Zamknij tę kartę i spróbuj ponownie.",
         "waitingFor": "Czekamy, aż {url} zacznie odpowiadać…"
+    },
+    "coachMark": {
+        "notNow": "Nie teraz"
     }
 }

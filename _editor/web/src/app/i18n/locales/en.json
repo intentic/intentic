@@ -310,7 +310,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Have the agent resolve the conflict?",
-            "agentsWorkOnOwn": "Agents work on their own branch while you carry on: you review what they did before anything lands in your workspace.",
             "allSandboxes": "All sandboxes",
             "archive": "Archive",
             "archiveAll": "Archive all",
@@ -346,14 +345,12 @@
             "noMatchesInLane": "No matches in this lane.",
             "nothingArchivedYetFinished": "Nothing archived yet. Finished agents land here on their own after a few quiet days.",
             "nothingNeedsRightNow": "Nothing needs you right now.",
-            "nothingOnBoardStart": "Nothing on the board. Start a conversation here or in the workspace; both appear on this board, and isolated work remains reviewable on its own branch.",
             "nothingWrittenToWorkspace": "Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.",
             "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Open the archive ({archiveSize})",
             "reviewMyChanges": "Review my changes",
             "reviewMyUncommittedChanges": "Review my uncommitted changes and flag anything risky before I commit them.",
             "show": "Show",
-            "startFirstAgent": "Start your first agent",
             "suggestThreeSmallSafe": "Suggest three small, safe improvements to this codebase. Wait for me to choose one before you change anything.",
             "synthesize": "Synthesize",
             "thisAgent": "This agent",
@@ -368,7 +365,8 @@
             "archiveFamily": "Archive {title} and its {count} subagent? | Archive {title} and its {count} subagents?",
             "archiveFamilyKept": "They leave the board together. Nothing is lost: branches, conversations and changes are kept, and Undo or the archive brings them back.",
             "archiveWithSubagents": "Archive {count} agent | Archive {count} agents",
-            "archivedAgents": "{count} archived agent | {count} archived agents"
+            "attentionFirst": "When an agent asks you something or needs a permission, it waits here.",
+            "finishedFirst": "Finished agents wait here for your review. Nothing lands in your workspace until you say so."
         },
         "liveMetrics": {
             "cpuNote": "All available sandbox cores; 100% means all are busy (last few seconds).",
@@ -763,6 +761,29 @@
             "fixing": "Fixing…",
             "fixQueued": "Fix queued",
             "fixTitle": "Agent updates branch"
+        },
+        "firstAgentSlot": {
+            "title": "Your first agent",
+            "line": "Give it a task. It works on its own copy while you carry on, and its card appears right here.",
+            "writeYourOwn": "Write my own"
+        },
+        "exampleCard": {
+            "title": "Add a dark-mode toggle",
+            "tag": "Example",
+            "openLabel": "Open the example: what a finished agent looks like",
+            "files": "{count} file | {count} files",
+            "line": "Open it to see how you review an agent's work and land it.",
+            "reviewTitle": "Example: reviewing an agent's work",
+            "reviewIntro": "This is a recorded example, not work done here. When your own agent finishes, its card opens a review like this one.",
+            "asked": "What you asked",
+            "prompt": "Add a dark-mode toggle to the header and remember the choice.",
+            "did": "What it says it did",
+            "reply": "Added a theme store that reads the system setting and saves your choice, a toggle in the header, and dark colours for the page. I ran the tests; they pass.",
+            "changed": "What changed",
+            "landTitle": "Then you land it",
+            "landLine": "The agent worked on its own copy, so your workspace hasn't changed yet. Land brings these changes in. If they aren't right, tell the agent what to fix in its chat instead.",
+            "close": "Close",
+            "startOwn": "Start my own agent"
         }
     },
     "app": {
@@ -10253,6 +10274,93 @@
             "noPreview": "Preview isn't available for this file type.",
             "tooLarge": "This file is too large to preview here.",
             "tooLargeSized": "This file is {size}, too large to preview here."
+        }
+    },
+    "gettingStarted": {
+        "eyebrow": "Getting started · step {n} of {total}",
+        "markLabel": "Getting started: {title}",
+        "steps": {
+            "work": {
+                "title": "Bring your work in",
+                "line": "Clone a repository, upload a folder, or start from nothing."
+            },
+            "agent": {
+                "title": "Start your first agent",
+                "line": "Give it a task. It works on its own copy while you carry on."
+            },
+            "models": {
+                "title": "Connect your own models",
+                "line": "Sign in with a plan or key you already have. New agents run on it from then on."
+            },
+            "land": {
+                "title": "Review and land its work",
+                "line": "Read what it changed, then bring the work into your workspace."
+            }
+        },
+        "skip": {
+            "work": "Start from scratch",
+            "later": "Later"
+        },
+        "hints": {
+            "openWorkspace": "Open workspace",
+            "openBoard": "Open the board",
+            "openModels": "Open models",
+            "writeTask": "Write a task",
+            "workRail": {
+                "title": "Bring your work in",
+                "line": "Clone a repository or drop a folder into the workspace. Agents work on what's there."
+            },
+            "workHere": {
+                "title": "Get your code in here",
+                "line": "Clone, upload, or drag files anywhere on this page. Nothing to bring yet? Start from scratch and let an agent build it."
+            },
+            "agentBoard": {
+                "title": "Start your first agent",
+                "lineTrial": "Pick a starter or write your own task. It runs on the free trial, so nothing needs connecting yet.",
+                "line": "Pick a starter or write your own task, and send it."
+            },
+            "agentComposer": {
+                "title": "Ask an agent for something",
+                "lineTrial": "Type a task and send it. It runs on the free trial, and you review what it did before anything lands.",
+                "line": "Type a task and send it. You review what it did before anything lands."
+            },
+            "agentRail": {
+                "title": "Start your first agent",
+                "line": "Agents work side by side on the board. Start one there, or from the chat."
+            },
+            "boardRail": {
+                "title": "Your agent is on the board",
+                "line": "Every agent gets a card there: what it's doing, what it needs from you, and its work once it's done. Start more side by side."
+            },
+            "modelsRail": {
+                "title": "Connect your own models",
+                "line": "Sign in with the Claude, ChatGPT or Gemini plan you already pay for, or add a key. This sandbox's models, environment and secrets all live here."
+            },
+            "modelsHere": {
+                "title": "Use what you already pay for",
+                "line": "Sign in to a provider or add a key. New agents run on it, and the free trial stays for when nothing else can run."
+            },
+            "landCard": {
+                "title": "Review and land",
+                "line": "Open the card to read what changed. Land brings the work into your workspace; until then nothing there has changed."
+            },
+            "landRail": {
+                "title": "Your agent finished",
+                "line": "Its work is on the board, waiting for your review."
+            }
+        },
+        "panel": {
+            "title": "Getting started",
+            "progress": "{settled} of {total} done",
+            "skipped": "Skipped",
+            "hide": "Hide getting started",
+            "show": "Show getting started",
+            "finishedTitle": "You're set up",
+            "finishedLine": "That's the whole loop: bring work in, hand it to agents, review, land. Run as many side by side as you like.",
+            "done": "Done"
+        },
+        "ring": {
+            "label": "Getting started, {settled} of {total} done"
         }
     }
 }

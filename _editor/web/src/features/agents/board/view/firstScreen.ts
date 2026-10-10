@@ -1,22 +1,14 @@
 import { t } from "@intentic/ui/i18n";
 import { buildIdeas, buildPrompt } from "../buildIdeas";
 
-// What an empty board shows: the first run asks for a task, with starters read off the workspace that fill the one
-// composer (the chat's) and never send; a board that was cleared needs only its way back to the archive.
+// What an empty board shows: ALWAYS THE LANES. A first board used to be a centred hero that turned into three columns the
+// moment anything was sent, so a new reader met the board twice and learned the first one was a placeholder. Now a
+// first run draws the lanes it will keep, with the first agent's slot in Active where its card will arrive, each empty
+// lane saying what will land in it, and starters read off the workspace that fill the one composer (the chat's) and
+// never send. A board that was cleared is the same lanes, empty, with the archive's door in Finished's header.
 
-export type BoardScreen = `first` | `cleared` | `lanes`;
-
-// The archive always opens onto the lanes, or an archive behind an empty board would be a dead end with no door; the
-// first run is nothing ever started, the cleared board nothing on it now.
-export const boardScreen = (started: boolean, total: number, archive: boolean): BoardScreen => {
-    if (archive) {
-        return `lanes`;
-    }
-    if (!started) {
-        return `first`;
-    }
-    return total === 0 ? `cleared` : `lanes`;
-};
+// The first run is nothing ever started here; the archive always opens onto the lanes it fills, never onto a slot.
+export const firstRun = (started: boolean, archive: boolean): boolean => !started && !archive;
 
 export interface Starter {
     readonly label: string;

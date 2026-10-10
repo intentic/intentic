@@ -29,6 +29,11 @@ afterEach(() => {
     }
     // Workspace facts are seeded per test into the query cache; dropped here so the next mount doesn't inherit them.
     queryClient.clear();
+    // A starter's filled composer is an unsent card in Active, which takes the first agent's slot; emptied here so the
+    // next mount opens on the slot rather than on this test's draft.
+    for (const conversation of useChat().conversations.value) {
+        conversation.draft.value = ``;
+    }
 });
 
 // Every test states the connection picture outright: the daemon has answered, and answered with nothing connected and
@@ -140,8 +145,10 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
     expect(useChat().active.value.transcript.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
-    // Still the empty board: filling the composer is not starting anything.
-    expect(board.textContent).toContain(`first agent`);
+    // Still a first run: filling the composer is not starting anything. The filled draft is an unsent card standing in
+    // the first agent's slot, which is where the slot said its card would appear.
+    expect(board.textContent).toContain(`When an agent asks you something`);
+    expect(board.textContent).toContain(`Unsent`);
 });
 
 // The hosted product can answer a question before anything is connected: the chat lands on the free trial so there's

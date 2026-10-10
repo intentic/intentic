@@ -2,7 +2,6 @@
 import {
     Button,
     ContextMenu,
-    EmptyState,
     FloatingAction,
     Modal,
     Notice,
@@ -15,9 +14,9 @@ import {
     useDevice,
     useNarrow,
 } from "@intentic/ui";
-import { computed, inject, nextTick, provide, ref } from "vue";
+import { computed, inject, nextTick, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { composeAgent, startAgent } from "../fleet/agentActions";
+import { startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
 import { useChanges } from "../../workspace/changes/useChanges";
 import { synthesizing } from "../fleet/synthesizeSessions";
@@ -44,6 +43,10 @@ import { chatStrip } from "../../chat/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
+import ExampleAgentCard from "./cards/ExampleAgentCard.vue";
+import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
+import { tourVisible } from "../../tour/tourState";
+import { markHinted } from "../../tour/tourMarks";
 import ChildRows from "./cards/ChildRows.vue";
 import { CHILD_ROWS } from "./cards/childRows";
 import StatusBar from "../status-bar/StatusBar.vue";
@@ -119,7 +122,7 @@ const roster = useSubagentRoster();
 const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
 const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
-const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
+const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, first } = lanes;
 // What opens and shuts the trays under the cards (ChildRows' `shown`): the ring, the panes beside it, a subagent's
 // transcript on screen. A render that moves any of it is one the lanes' motion measures across.
 const folds = (): string => `${highlightId.value}|${chatStrip.value.panes.join(`,`)}|${subagentShown.value?.id}`;
@@ -243,6 +246,14 @@ const toggleFinished = async (): Promise<void> => {
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
+// The example card stands in Finished while getting started is on and nothing of the reader's own has finished:
+// a picture of the review before there is anything of theirs to review. Never in the archive or a filtered board.
+const exampleShown = computed(
+    () => tourVisible.value && !view.value.archive && !filtering.value && cardsFor(`finished`).length === 0 && runsFor(`finished`).length === 0,
+);
+
+// Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
+onMounted(() => markHinted(`board`, `visited`));
 
 // THE BOARD OPENS ROW BY ROW (@intentic/ui/motion, reveal.ts): the lanes and their headings are there at once, and the
 // cards in them arrive in reading order, row one of every lane together, then row two, so the board is seen filling
@@ -267,12 +278,22 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="scopeOptions" class="shrink-0" />
-                <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing. -->
-                <SegmentedControl v-if="user !== null && sharedAccess" v-model="ownerScope" :options="ownerOptions" size="xs" wrap class="shrink-0" />
+                <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
+                <SegmentedControl
+                    v-if="user !== null && sharedAccess && !first"
+                    v-model="ownerScope"
+                    :options="ownerOptions"
+                    size="xs"
+                    wrap
+                    class="shrink-0"
+                />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
+            <!-- Not on a first run: there is nothing yet to filter, and a field over an empty board reads as the board's
+                 point. It arrives with the first card, in the place it keeps. -->
             <SearchBar
+                v-if="!first || filtering"
                 ref="filterField"
                 v-model="query"
                 v-model:match-case="matchCase"
@@ -313,37 +334,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <span class="sr-only" aria-live="polite">{{ foundAnnouncement }}</span>
-        <!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
-        <!-- First run: one heading, one sentence, nothing waiting on a daemon read (it used to swap its lower half once
-             accounts loaded). Cleared: this user knows what agents are and just needs the way back to the archive. -->
-        <EmptyState
-            v-if="screen !== 'lanes'"
-            :icon="screen === 'first' ? undefined : 'sparkles'"
-            :line="screen === 'first' ? t(`agents.agentsView.agentsWorkOnOwn`) : t(`agents.agentsView.nothingOnBoardStart`)"
-            class="min-h-0 flex-1 gap-4 p-4"
-        >
-            <template v-if="screen === 'first'" #title>
-                <h2 class="font-semibold text-content">{{ t(`agents.agentsView.startFirstAgent`) }}</h2>
-            </template>
-            <!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
-            <div v-if="screen === 'first' && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
-                <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
-                    {{ starter.label }}
-                </button>
-            </div>
-            <!-- Carries the pulse too, since it's the only archive affordance left once the board itself is bare. -->
-            <button
-                v-if="archiveSize > 0"
-                type="button"
-                class="inline-flex items-center gap-1 rounded px-1 py-px text-2xs text-link transition-colors hover:underline"
-                :class="pulsing ? 'bg-primary-600/25 ring-1 ring-primary-500/50' : ''"
-                @click="toggleArchive"
-            >
-                <Icon name="history" class="text-2xs" />{{ t(`agents.agentsView.archivedAgents`, { count: archiveSize }, archiveSize) }}
-            </button>
-        </EmptyState>
+        <!-- ALWAYS THE LANES, a first run and a cleared board included (firstScreen.ts): the board a reader meets first is the
+             one they keep, and the first agent's card arrives in the slot drawn where it will sit. -->
         <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
-        <div v-else class="scrollbar-stable min-h-0 flex-1 overflow-auto">
+        <div class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
             <!-- A phone's board ends with room for the floating New agent, so its last card never sits under the press. -->
             <div
@@ -467,14 +461,28 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             (view.purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`))
                         }}
                     </p>
+                    <!-- Until the reader's own first agent finishes, Finished holds the example of one (ExampleAgentCard). -->
+                    <div v-else-if="lane.key === 'finished' && exampleShown" class="flex flex-col gap-2 pb-2.5">
+                        <ExampleAgentCard />
+                        <p class="px-1 text-2xs leading-snug text-subtle">{{ first ? lane.first : lane.empty }}</p>
+                    </div>
+                    <!-- A first run's Active lane holds the first agent's slot, where its card will arrive. -->
+                    <div
+                        v-else-if="first && lane.key === 'active' && cardsFor('active').length === 0 && runsFor('active').length === 0"
+                        class="flex flex-col pb-2.5"
+                    >
+                        <FirstAgentSlot :starters="starters" />
+                    </div>
                     <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
+                    <!-- On a first run each lane says what will arrive in it, since "nothing here" teaches nothing to someone who has never seen it full. -->
                     <p
                         v-else-if="
                             cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && scopedHeld.length > 0)
                         "
                         class="px-1 pb-3 text-2xs text-subtle"
+                        :class="first ? 'rounded-xl border border-dashed border-line px-3 py-3 leading-snug' : ''"
                     >
-                        {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : lane.empty }}
+                        {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
                     </p>
                     <div v-else class="relative flex flex-col gap-4.5 pb-2.5">
                         <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->

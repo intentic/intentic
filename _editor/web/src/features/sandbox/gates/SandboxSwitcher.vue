@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TourMark from "../../tour/TourMark.vue";
 import type { Disposable } from "@intentic/extension-api";
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@intentic/api-contract";
 import {
@@ -411,6 +412,8 @@ const confirmRemove = async (): Promise<void> => {
         <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
              the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
         <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
+        <!-- Getting started's way to connecting a model: the sandbox's own settings start here. Its hint leads to them. -->
+        <TourMark step="models" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
         <!-- The rail's running mark, on a corner of its own: it is an errand in flight, where the two beside it are
      standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
      since a tooltip on a mark inside a tooltipped button nests inside it. -->

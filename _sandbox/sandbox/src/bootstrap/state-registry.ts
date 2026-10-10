@@ -67,6 +67,7 @@ import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
 import { memberAudienceDocument } from "../settings/member-audience.js";
+import { memberGettingStartedDocument } from "../settings/member-getting-started.js";
 import { settingsDocument } from "../settings/settings-store.js";
 import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
@@ -176,6 +177,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     secretUsesDocument,
     threadSessionsDocument,
     memberAudienceDocument,
+    memberGettingStartedDocument,
     settingsDocument,
     sharesDocument,
     conversionsDocument,

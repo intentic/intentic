@@ -233,7 +233,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
-            "agentsWorkOnOwn": "Los agentes trabajan en su propia rama mientras tú sigues: revisas lo que hicieron antes de que nada llegue a tu espacio de trabajo.",
             "allSandboxes": "Todos los sandboxes",
             "archive": "Archivo",
             "archiveAll": "Archivar todos",
@@ -268,20 +267,20 @@
             "noMatchesInLane": "Sin coincidencias en este carril.",
             "nothingArchivedYetFinished": "Todavía no hay nada archivado. Los agentes terminados llegan aquí solos tras unos días tranquilos.",
             "nothingNeedsRightNow": "Ahora mismo no te necesita nada.",
-            "nothingOnBoardStart": "Nada en el tablero. Empieza una conversación aquí o en el espacio de trabajo; ambas aparecen en este tablero, y el trabajo aislado sigue siendo revisable en su propia rama.",
             "nothingWrittenToWorkspace": "No se escribe nada en tu espacio de trabajo si no sale bien. Puedes detener el turno en cualquier momento.",
             "openArchive": "Abrir el archivo ({archiveSize})",
             "reviewMyChanges": "Revisa mis cambios",
             "reviewMyUncommittedChanges": "Revisa mis cambios sin commit y señala cualquier cosa arriesgada antes de que haga commit.",
             "show": "Mostrar",
-            "startFirstAgent": "Inicia tu primer agente",
             "suggestThreeSmallSafe": "Sugiere tres mejoras pequeñas y seguras para esta base de código. Espera a que yo elija una antes de cambiar nada.",
             "synthesize": "Sintetizar",
             "thisAgent": "Este agente",
             "thoseExactCapitals": "» con esas mayúsculas exactas.",
             "undoArchive": "Deshacer archivar",
             "willStartTurn": "{agent} empezará un turno: rebasa su rama sobre tu espacio de trabajo actual, resuelve el conflicto en su propio worktree e integra el resultado cuando termine.",
-            "workTheyAlreadyLanded": "El trabajo que ya integraron se queda en tu espacio de trabajo. Solo se pierde lo que nunca salió de sus ramas. Los agentes que siguen en el tablero no se tocan."
+            "workTheyAlreadyLanded": "El trabajo que ya integraron se queda en tu espacio de trabajo. Solo se pierde lo que nunca salió de sus ramas. Los agentes que siguen en el tablero no se tocan.",
+            "attentionFirst": "Cuando un agente te pregunta algo o necesita un permiso, espera aquí.",
+            "finishedFirst": "Los agentes terminados esperan aquí tu revisión. Nada entra en tu espacio de trabajo hasta que lo digas."
         },
         "buildIdeas": {
             "pageMyBusiness": "Una página para mi negocio",
@@ -574,6 +573,29 @@
             "fixing": "Resolviendo…",
             "fixQueued": "Resolución en cola",
             "fixTitle": "El agente actualiza su rama"
+        },
+        "firstAgentSlot": {
+            "title": "Tu primer agente",
+            "line": "Dale una tarea. Trabaja en su propia copia mientras sigues con lo tuyo, y su tarjeta aparece justo aquí.",
+            "writeYourOwn": "Escribir la mía"
+        },
+        "exampleCard": {
+            "title": "Añadir un interruptor de modo oscuro",
+            "tag": "Ejemplo",
+            "openLabel": "Abrir el ejemplo: así se ve un agente terminado",
+            "files": "{count} archivo | {count} archivos",
+            "line": "Ábrelo para ver cómo revisas el trabajo de un agente y lo integras.",
+            "reviewTitle": "Ejemplo: revisar el trabajo de un agente",
+            "reviewIntro": "Es un ejemplo grabado, no trabajo hecho aquí. Cuando tu propio agente termine, su tarjeta abrirá una revisión como esta.",
+            "asked": "Lo que pediste",
+            "prompt": "Añade un interruptor de modo oscuro en la cabecera y recuerda la elección.",
+            "did": "Lo que dice que hizo",
+            "reply": "Añadí un almacén de tema que lee el ajuste del sistema y guarda tu elección, un interruptor en la cabecera y colores oscuros para la página. Ejecuté las pruebas; pasan.",
+            "changed": "Qué cambió",
+            "landTitle": "Después lo integras",
+            "landLine": "El agente trabajó en su propia copia, así que tu espacio de trabajo aún no ha cambiado. Integrar trae estos cambios. Si no están bien, dile al agente en su chat qué corregir.",
+            "close": "Cerrar",
+            "startOwn": "Iniciar mi propio agente"
         }
     },
     "app": {
@@ -5788,6 +5810,93 @@
             "startsIfStopped": "La inicia si está parada",
             "syncedSandbox": "Sandbox sincronizado",
             "toggleFolder": "Mostrar carpeta"
+        }
+    },
+    "gettingStarted": {
+        "eyebrow": "Primeros pasos · paso {n} de {total}",
+        "markLabel": "Primeros pasos: {title}",
+        "steps": {
+            "work": {
+                "title": "Trae tu trabajo",
+                "line": "Clona un repositorio, sube una carpeta o empieza desde cero."
+            },
+            "agent": {
+                "title": "Inicia tu primer agente",
+                "line": "Dale una tarea. Trabaja en su propia copia mientras sigues con lo tuyo."
+            },
+            "models": {
+                "title": "Conecta tus propios modelos",
+                "line": "Inicia sesión con un plan o una clave que ya tengas. Los agentes nuevos funcionarán con él desde entonces."
+            },
+            "land": {
+                "title": "Revisa e integra su trabajo",
+                "line": "Lee lo que cambió y luego trae el trabajo a tu espacio de trabajo."
+            }
+        },
+        "skip": {
+            "work": "Empezar desde cero",
+            "later": "Más tarde"
+        },
+        "hints": {
+            "openWorkspace": "Abrir espacio de trabajo",
+            "openBoard": "Abrir el tablero",
+            "openModels": "Abrir modelos",
+            "writeTask": "Escribir una tarea",
+            "workRail": {
+                "title": "Trae tu trabajo",
+                "line": "Clona un repositorio o suelta una carpeta en el espacio de trabajo. Los agentes trabajan con lo que hay ahí."
+            },
+            "workHere": {
+                "title": "Trae aquí tu código",
+                "line": "Clona, sube o arrastra archivos a cualquier parte de esta página. ¿Aún no tienes nada? Empieza desde cero y deja que un agente lo construya."
+            },
+            "agentBoard": {
+                "title": "Inicia tu primer agente",
+                "lineTrial": "Elige una sugerencia o escribe tu propia tarea. Funciona con la prueba gratuita, así que aún no hace falta conectar nada.",
+                "line": "Elige una sugerencia o escribe tu propia tarea y envíala."
+            },
+            "agentComposer": {
+                "title": "Pídele algo a un agente",
+                "lineTrial": "Escribe una tarea y envíala. Funciona con la prueba gratuita, y revisas lo que hizo antes de que se integre nada.",
+                "line": "Escribe una tarea y envíala. Revisas lo que hizo antes de que se integre nada."
+            },
+            "agentRail": {
+                "title": "Inicia tu primer agente",
+                "line": "Los agentes trabajan uno al lado del otro en el tablero. Inicia uno ahí o desde el chat."
+            },
+            "boardRail": {
+                "title": "Tu agente está en el tablero",
+                "line": "Cada agente tiene ahí una tarjeta: qué hace, qué necesita de ti y su trabajo cuando termina. Inicia más en paralelo."
+            },
+            "modelsRail": {
+                "title": "Conecta tus propios modelos",
+                "line": "Inicia sesión con el plan de Claude, ChatGPT o Gemini que ya pagas, o añade una clave. Los modelos, el entorno y los secretos de este sandbox están aquí."
+            },
+            "modelsHere": {
+                "title": "Usa lo que ya pagas",
+                "line": "Inicia sesión en un proveedor o añade una clave. Los agentes nuevos funcionarán con él, y la prueba gratuita queda para cuando nada más pueda funcionar."
+            },
+            "landCard": {
+                "title": "Revisa e integra",
+                "line": "Abre la tarjeta para leer qué cambió. Integrar trae el trabajo a tu espacio de trabajo; hasta entonces ahí no ha cambiado nada."
+            },
+            "landRail": {
+                "title": "Tu agente terminó",
+                "line": "Su trabajo está en el tablero, esperando tu revisión."
+            }
+        },
+        "panel": {
+            "title": "Primeros pasos",
+            "progress": "{settled} de {total} hechos",
+            "skipped": "Omitido",
+            "hide": "Ocultar primeros pasos",
+            "show": "Mostrar primeros pasos",
+            "finishedTitle": "Ya está todo listo",
+            "finishedLine": "Ese es todo el ciclo: trae trabajo, pásalo a los agentes, revisa, integra. Ejecuta tantos en paralelo como quieras.",
+            "done": "Listo"
+        },
+        "ring": {
+            "label": "Primeros pasos, {settled} de {total} hechos"
         }
     }
 }

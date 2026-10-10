@@ -75,9 +75,20 @@ test(`the free agent answers`, async ({ page }) => {
     // Composer renders only once connected; its visibility is the assertion that a trial was offered.
     await expect(composer).toBeVisible({ timeout: 120_000 });
 
+    // A first run carries the getting-started checklist, its ring on the rail saying how far along it is. Read before
+    // the send so the step it ticks is measured, not assumed: whether the workspace starts empty is the lane's to say.
+    const ring = page.getByRole(`button`, { name: /^Getting started, \d of \d done$/ });
+    await expect(ring).toBeVisible({ timeout: 60_000 });
+    const settledBefore = settledOf(await ring.getAttribute(`aria-label`));
+
     await composer.fill(`Say hello.`);
     await composer.press(`Enter`);
 
     // TRIAL_REPLY collides with no UI copy; matching it proves the pipe carried a message, not a specific answer.
     await expect(page.getByText(TRIAL_REPLY, { exact: false }).first()).toBeVisible({ timeout: 180_000 });
+
+    // The first agent is a step the sandbox itself reports done: the ring moves on by one, with nothing pressed on it.
+    await expect.poll(async () => settledOf(await ring.getAttribute(`aria-label`)), { timeout: 60_000 }).toBe(settledBefore + 1);
 });
+
+const settledOf = (label: string | null): number => Number(/(\d) of/.exec(label ?? ``)?.[1] ?? Number.NaN);

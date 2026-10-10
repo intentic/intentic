@@ -15,7 +15,7 @@ import type {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeGlobs } from "@intentic/sandbox-contract";
-import { demoQuiet, deskEdition } from "../mode";
+import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
@@ -28,19 +28,22 @@ import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 // to three agents. Small on purpose: forty nodes prove what four thousand wouldn't. The desk recording (fixture/desk.ts)
 // stands in for it at every seam below when the demo's mode says so.
 
-export const REPOS: readonly string[] = deskEdition ? DESK_REPOS : [`web`, `api`];
+// A fresh sandbox has nothing in it yet: no repository, no file, no change (mode.ts `freshEdition`).
+export const REPOS: readonly string[] = freshEdition ? [] : deskEdition ? DESK_REPOS : [`web`, `api`];
 
 // `web` matches the registry fixture's project; `api` deliberately doesn't, showing both claim outcomes. A desk has no
 // remote: nothing there was ever pushed anywhere, which the sandbox's switcher carries as a standing warning. A quiet
 // desk (mode.ts `demoQuiet`) has its shop's website kept somewhere else, as the one folder a maker's web person set up.
-export const REMOTE_REPOS: readonly { repo: string; host: string; project: string }[] = deskEdition
-    ? demoQuiet()
-        ? [{ repo: `shop-site`, host: `github.com`, project: `ada-studio/shop-site` }]
-        : []
-    : [
-          { repo: `web`, host: `github.com`, project: `acme/shop-web` },
-          { repo: `api`, host: `github.com`, project: `acme-internal/shop-api` },
-      ];
+export const REMOTE_REPOS: readonly { repo: string; host: string; project: string }[] = freshEdition
+    ? []
+    : deskEdition
+      ? demoQuiet()
+          ? [{ repo: `shop-site`, host: `github.com`, project: `ada-studio/shop-site` }]
+          : []
+      : [
+            { repo: `web`, host: `github.com`, project: `acme/shop-web` },
+            { repo: `api`, host: `github.com`, project: `acme-internal/shop-api` },
+        ];
 
 // A push the demo can't make; reported in the daemon's shape (`wrote`/`committed`/`pushed`), all false here.
 export const PUBLISH_REFUSAL = {
@@ -82,7 +85,7 @@ const CODE_CHANGES: RepoChanges[] = [
     },
 ];
 
-const BASE_CHANGES: RepoChanges[] = deskEdition ? DESK_CHANGES : CODE_CHANGES;
+const BASE_CHANGES: RepoChanges[] = freshEdition ? [] : deskEdition ? DESK_CHANGES : CODE_CHANGES;
 
 // Both recordings' rows live in one table: their ids never meet, and a lookup by id needs no second switch.
 const ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
@@ -575,7 +578,11 @@ const ARCHIVES = new Map<string, [string, string | number][]>([
 
 // The desk carries its own documents and none of the extension-owned files: those belong to the code repositories.
 const FILES = new Map<string, string | number>(
-    deskEdition ? DESK_SOURCES : [...SOURCES, ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
+    freshEdition
+        ? []
+        : deskEdition
+          ? DESK_SOURCES
+          : [...SOURCES, ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
 );
 
 // Daemon's ignore scope; node_modules stays listed since a tree without it looks uninstalled.
@@ -773,6 +780,9 @@ export const restoreEntry = (id: string): { path: string } | undefined => {
 
 // Sessions window: the sandbox's whole history, more than the fleet board's today-only view.
 export const sessions = (now: number): SessionSummary[] => {
+    if (freshEdition) {
+        return [];
+    }
     if (deskEdition) {
         return deskSessions(now);
     }

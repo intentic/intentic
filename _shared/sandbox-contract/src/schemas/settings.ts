@@ -624,6 +624,20 @@ export const AudienceStateSchema = z.object({
 });
 export type AudienceState = z.infer<typeof AudienceStateSchema>;
 
+// What a person has said about the editor's getting-started checklist on this sandbox, kept per member like the
+// audience so it reads the same on every device. Only what the sandbox's own data cannot answer: whether a step is DONE
+// is read from that data each time (a workspace with files, an agent started, a model connected, work landed), so this
+// holds nothing but the reader's own choices. Step names are the editor's, opaque here.
+export const GettingStartedSchema = z.object({
+    hidden: z.boolean().optional().describe("Whether this person put the checklist away. Absent until they have."),
+    skipped: z
+        .array(z.string().min(1).max(40))
+        .max(20)
+        .optional()
+        .describe("The checklist steps this person passed over, by the editor's own step names."),
+});
+export type GettingStarted = z.infer<typeof GettingStartedSchema>;
+
 // A browser telling the sandbox which clock IT is on. An offer, not an instruction: see `adoptTimezone`.
 export const TimezoneOfferSchema = z.object({
     timezone: ZoneSchema.describe("The zone the offering machine is in, as an IANA name like Europe/Warsaw."),

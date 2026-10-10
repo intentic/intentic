@@ -416,5 +416,8 @@
         "noPublicHostname": "This sandbox has no public preview hostname, so ports can't be previewed from the browser.",
         "unreachable": "{url} doesn't reach this sandbox: the address may still be propagating, or this sandbox publishes no preview hostnames. Close this tab and try again.",
         "waitingFor": "Waiting for {url} to come up…"
+    },
+    "coachMark": {
+        "notNow": "Not now"
     }
 }

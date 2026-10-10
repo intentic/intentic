@@ -9,7 +9,7 @@ import type {
     CapabilitySummary,
 } from "@intentic/sandbox-contract";
 import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
-import { deskEdition, enabledExtensions } from "../mode";
+import { deskEdition, enabledExtensions, freshEdition } from "../mode";
 import pins from "../../vendor/extensions.json";
 import { DESK_REPOS } from "./desk";
 
@@ -21,7 +21,7 @@ const day = (now: number, back: number): string => new Date(now - back * 86_400_
 
 // Facts every extension's `detect()` runs over, deciding which rail tiles show. `running` is false for both: nothing
 // runs in a recording.
-export const demoPanels = (): PanelSummary[] => (deskEdition ? DESK_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS);
+export const demoPanels = (): PanelSummary[] => (freshEdition ? [] : deskEdition ? DESK_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS);
 
 // A folder of documents: nothing to run, nothing to publish, no stories and no docs set. Every tile that keys on these
 // stays off the desk's rail.

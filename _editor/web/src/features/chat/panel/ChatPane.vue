@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TourMark from "../../tour/TourMark.vue";
 import { Button, FACE_SIZES, Icon, Meter, Notice, PersonaFace, ResponsiveOverlay, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
@@ -499,6 +500,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 :class="{ 'composer-voice': voiceAgent }"
                                 @submit.prevent="submit()"
                             >
+                                <!-- The getting-started mark for the first agent, on the composer that sends it; the board's slot outranks it when both are on screen. -->
+                                <TourMark v-if="!strip" step="agent" place="composer" :priority="2" side="top" class="absolute -top-2 right-3 z-10" />
                                 <ChatMentionPopover
                                     v-if="mentionOpen"
                                     ref="mentionPopover"

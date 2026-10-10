@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TourMark from "../../tour/TourMark.vue";
 import {
     type AgentProvider,
     endpointProvider,
@@ -417,7 +418,11 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
     <!-- `@container`: the docked chat can leave this pane a third of the window, and the grid reflows against it. -->
     <div class="@container flex flex-col gap-6">
         <div class="flex flex-col gap-1">
-            <p class="text-xs text-muted">{{ t(`connect.providerGrid.intro`) }}</p>
+            <p class="flex items-center gap-1.5 text-xs text-muted">
+                <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
+                <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
+                <TourMark step="models" place="models" :priority="3" side="bottom" />
+            </p>
             <p v-if="trialLine" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="gift" class="text-2xs" />{{ trialLine }}</p>
         </div>
 

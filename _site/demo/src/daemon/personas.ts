@@ -1,5 +1,5 @@
 import type { Area, Persona } from "@intentic/sandbox-contract";
-import { deskEdition } from "../mode";
+import { deskEdition, freshEdition } from "../mode";
 
 // The persona picker's cards and the named areas a grant can be fenced to, each upserted by id as the daemon's store
 // upserts them, so a save is in the next read.
@@ -13,7 +13,8 @@ const codePersonas: Persona[] = [
 ];
 // The desk is one person with one assistant, so it has no team cards to pick between (fixture/openChats.ts says the
 // same of its tabs): the chat's rail would otherwise open on the code workspace's support, growth and ops leads.
-export const demoPersonas: Persona[] = deskEdition ? [] : codePersonas;
+// A fresh sandbox has set up no team yet.
+export const demoPersonas: Persona[] = deskEdition || freshEdition ? [] : codePersonas;
 
 // Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.
 export const savePersona = (card: Persona): void => {

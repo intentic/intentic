@@ -35,6 +35,7 @@ declare module "vue-i18n" {
         readonly desktop: AppMessages["desktop"];
         readonly "extension-host": AppMessages["extension-host"];
         readonly extensions: AppMessages["extensions"];
+        readonly gettingStarted: AppMessages["gettingStarted"];
         readonly local: AppMessages["local"];
         readonly needs: AppMessages["needs"];
         readonly preview: AppMessages["preview"];
