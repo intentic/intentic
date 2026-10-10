@@ -4639,7 +4639,7 @@
         "agentClock": {
             "clock": "Clock",
             "scheduleTimesAreIn": "Schedules are set by",
-            "whatAnAutomations": "What an automation's \"09:00\" means. Times on screen are always drawn in your own clock; this is the one that decides when things fire.",
+            "whatAnAutomations": "Which clock an automation's \"09:00\" uses; on-screen times show yours, but schedules fire by this zone.",
             "yourOwnClockIs": "What an automation's \"09:00\" means. Your own machine is on {zone}, so times here will not match what you read on it."
         },
         "agentCodeSearch": {
@@ -4802,7 +4802,7 @@
             "turnBreaks": "When a turn breaks",
             "keepWarmGroup": "Idle chats",
             "keepWarm": "Keep caches warm after a turn",
-            "keepWarmNote": "Re-reads a Claude conversation's cached context shortly before it would expire, so coming back hours later costs a cache read instead of sending everything again. Each refresh spends a little of the account's allowance.",
+            "keepWarmNote": "Before cache expires, re-reads context so hours later costs a cache read, not a full resend; each refresh uses allowance.",
             "keepWarmHours": "For how long",
             "keepWarmHoursNote": "Hours after the last turn; shortened at midnight and where refreshing would cost more than it saves.",
             "keepWarmHoursLabel": "Hours to keep an idle chat warm",
@@ -4812,9 +4812,9 @@
             "keepWarmReserve": "Leave this much allowance free",
             "keepWarmReserveNote": "Refreshing stops once any limit the account's model spends is fuller than 100% minus this.",
             "keepWarmReserveLabel": "Allowance kept free, in percent",
-            "memoryPolicyNote": "What happens to a message the sandbox held because its memory was low. Nothing ran, so sending it once memory frees up spends nothing twice.",
+            "memoryPolicyNote": "A message held for low memory never ran; sending once memory frees spends nothing twice.",
             "handoff": "Hand-off after a usage limit",
-            "handoffNote": "How a turn a spent usage limit held continues once its cache has gone cold, on this account at the reset or on another. The chat's card preselects this and lets you pick another for that turn.",
+            "handoffNote": "How a usage-limit hold continues once cache is cold; the chat card preselects this (reset here or another account).",
             "handoffSuggested": "Suggested",
             "handoffSuggestedBrief": "Picks by the conversation's size",
             "carryUnder": "Suggest carrying under",

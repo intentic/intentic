@@ -4090,7 +4090,7 @@
         "agentClock": {
             "clock": "Zegar",
             "scheduleTimesAreIn": "Harmonogramy działają według",
-            "whatAnAutomations": "Co znaczy „09:00” w automatyzacji. Godziny na ekranie zawsze pokazujemy według twojego zegara; ta strefa decyduje o tym, kiedy coś się uruchomi.",
+            "whatAnAutomations": "Który zegar liczy „09:00” automatyzacji; na ekranie widzisz swój, uruchomienia idą według tej strefy.",
             "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
         },
         "agentCodeSearch": {
@@ -4253,7 +4253,7 @@
             "turnBreaks": "Gdy tura się załamie",
             "keepWarmGroup": "Bezczynne czaty",
             "keepWarm": "Utrzymuj pamięć podręczną ciepłą po turze",
-            "keepWarmNote": "Odczytuje zawartość pamięci podręcznej rozmowy z Claude tuż przed jej wygaśnięciem, więc powrót po kilku godzinach kosztuje odczyt z pamięci zamiast ponownego wysłania wszystkiego. Każde odświeżenie zużywa odrobinę limitu konta.",
+            "keepWarmNote": "Przed wygaśnięciem cache odczytuje kontekst, więc powrót po godzinach to odczyt, nie pełne wysłanie; każde odświeżenie zużywa limit.",
             "keepWarmHours": "Jak długo",
             "keepWarmHoursNote": "Godziny od ostatniej tury; skracane o północy i tam, gdzie odświeżanie kosztowałoby więcej, niż oszczędza.",
             "keepWarmHoursLabel": "Ile godzin utrzymywać bezczynny czat ciepłym",
@@ -4263,9 +4263,9 @@
             "keepWarmReserve": "Zostaw tyle limitu wolnego",
             "keepWarmReserveNote": "Odświeżanie ustaje, gdy którykolwiek limit zużywany przez model konta jest pełniejszy niż 100% minus ta wartość.",
             "keepWarmReserveLabel": "Wolny limit, w procentach",
-            "memoryPolicyNote": "Co się dzieje z wiadomością, którą sandbox wstrzymał, bo kończyła się pamięć. Nic się nie uruchomiło, więc wysłanie jej po zwolnieniu pamięci niczego nie wydaje dwa razy.",
+            "memoryPolicyNote": "Wstrzymana z braku pamięci wiadomość nic nie uruchomiła; jedno wysłanie po zwolnieniu pamięci nie kosztuje dwa razy.",
             "handoff": "Przekazanie po wyczerpaniu limitu",
-            "handoffNote": "Jak tura wstrzymana przez wyczerpany limit toczy się dalej, gdy pamięć podręczna wystygła, na tym koncie po odnowieniu albo na innym. Karta w czacie zaznacza ten wybór i pozwala wybrać inny dla tej tury.",
+            "handoffNote": "Jak wstrzymana tura po limicie idzie dalej po wystygnięciu cache; karta w czacie to ustawia (tu po resecie albo na innym koncie).",
             "handoffSuggested": "Sugerowane",
             "handoffSuggestedBrief": "Wybiera według wielkości rozmowy",
             "carryUnder": "Sugeruj przeniesienie poniżej",
