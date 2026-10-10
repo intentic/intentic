@@ -706,6 +706,17 @@ describe(`accountState`, () => {
         expect(accountState(`claude`, row({ state: { kind: `unknown` } }))).toEqual({ kind: `unknown` });
     });
 
+    it(`holds the daemon's spent verdict over a rounded reading at the line, until a reading shows room or it reopens`, () => {
+        const atLine = usage({ windows: [window({ utilization: 100, rounded: true, resetsAt: 9_000 })], measuredAt: 900 });
+        const spent = row({ usage: atLine, state: { kind: `spent`, reopensAt: 9_000 } });
+        // No refusal in this window's copy: the re-read alone would say ready at 0 room.
+        expect(accountState(`claude`, spent, undefined, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        expect(accountState(`claude`, spent, { id: `claude-opus-4-6` }, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        expect(accountState(`claude`, spent, undefined, 9_000_000)).toEqual({ kind: `ready`, room: 0 });
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 40, rounded: true })], measuredAt: 950 }) };
+        expect(accountState(`claude`, spent, undefined, 1_000_000)).toEqual({ kind: `ready`, room: 60 });
+    });
+
     it(`lets a bench lift at its own instant, whatever the list that reported it said`, () => {
         const benched = row({ state: { kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 }, usage: usage({ measuredAt: 500 }) });
         expect(accountState(`claude`, benched, undefined, 999_000)).toEqual({ kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 });

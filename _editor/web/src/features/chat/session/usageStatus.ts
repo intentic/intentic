@@ -497,8 +497,20 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
         return verdict;
     }
     const live = liveUsage(provider, facts.account, facts.usage, model);
-    return live === undefined && verdict.kind !== `blocked` ? verdict : headroomState(live, model);
+    if (live === undefined && verdict.kind !== `blocked`) {
+        return verdict;
+    }
+    const local = headroomState(live, model);
+    // The daemon judged `spent` with the refusal it holds; this window's copy of that refusal can be missing, and a
+    // rounded pool read at the line is then no proof either way. Only a reading showing room below the line, or the
+    // reopening instant passing, answers the daemon's verdict, never a re-read at 0 room.
+    return heldSpent(verdict, local, now) ? verdict : local;
 };
+
+const heldSpent = (verdict: AccountState, local: AccountState, now: number): boolean =>
+    verdict.kind === `spent` &&
+    (verdict.reopensAt === undefined || verdict.reopensAt * 1000 > now) &&
+    (local.kind === `unknown` || (local.kind === `ready` && local.room === 0));
 
 // Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
 // identity are both strings and easy to swap by accident.
