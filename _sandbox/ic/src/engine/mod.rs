@@ -84,6 +84,9 @@ pub struct Status {
     /// Stopped on purpose: nothing restarts it until `ic engine start`.
     pub held: bool,
     pub distro: String,
+    /// The network the running engine's dockerd is in, as its keeper wrote it: `isolated` (a namespace of its own, the
+    /// way it runs since 2026-10-10) or `shared` (WSL's, the fallback). None when it is not running.
+    pub network: Option<String>,
 }
 
 /// The engine a fresh setup on this PC would put sandboxes on (choice.rs has the rules and the migration's switch).

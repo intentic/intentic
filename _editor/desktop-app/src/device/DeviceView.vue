@@ -49,6 +49,8 @@ const {
     startDocker,
     openDocker,
     engineState,
+    onOurEngine,
+    ourEngineHeld,
     engineMoving,
     engineMoveEnd,
     engineMoveError,
@@ -158,6 +160,16 @@ const engineShown = computed(
         engineState.value !== undefined &&
         (!dockerCardShown.value || engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined),
 );
+// The engine is down on a computer that has hosted a sandbox: an empty list says nothing about what is here.
+const engineDownWithSandboxes = computed(() => engineListening.value === false && facts.value?.hostsSandboxes === true);
+// The engine that is down, by its own name: Intentic's engine on a PC that runs on it, and why it is down when that was
+// on purpose (a start here ends the hold; the app's keeper never does).
+const engineDownSentence = computed(() => {
+    if (ourEngineHeld.value) {
+        return t(`desktop.device.oursHeld`);
+    }
+    return onOurEngine.value ? t(`desktop.device.oursIsntRunning`) : t(`desktop.device.dockerIsntRunning`);
+});
 // A sandbox by the name this app knows it by, else its slug: what a move says it is moving.
 const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
 // The transcript of a move that stopped part way, in the machine's own file manager.
@@ -434,6 +446,7 @@ onUnmounted(() => {
                     :limit-seconds="info?.engineLimitSeconds"
                     :report="dockerReport"
                     :os="info?.os"
+                    :ours="onOurEngine"
                     @start="startDocker(`card`)"
                     @open="openDocker"
                     @install="openUrl(DOCKER_DOCS)"
@@ -447,8 +460,14 @@ onUnmounted(() => {
                 <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. This
                      computer's own sandbox offers the same start in its section, which is not said twice. -->
                 <Notice v-else-if="engineListening === false && !machineNeedsDocker" tone="warning" icon="box" class="items-center">
-                    <span class="min-w-0 flex-1">{{ t(`desktop.device.dockerIsntRunning`) }}</span>
-                    <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.startDocker`)" @click="startDocker(`notice`)" />
+                    <span class="min-w-0 flex-1">{{ engineDownSentence }}</span>
+                    <Button
+                        class="ml-2 shrink-0"
+                        size="small"
+                        tier="boring"
+                        :label="onOurEngine ? t(`desktop.app.startEngine`) : t(`desktop.app.startDocker`)"
+                        @click="startDocker(`notice`)"
+                    />
                 </Notice>
                 <!-- WHICH ENGINE THE SANDBOXES RUN ON: Docker Desktop or Intentic's own, and the move to the other, ahead of
                      the sandboxes it would move. Quiet unless the move is worth making, runs, or has just ended. -->
@@ -513,9 +532,11 @@ onUnmounted(() => {
             </RowGroup>
 
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a
-                 sync is on the page, which is the sandbox arriving, nor before the machine has been read. -->
+                 sync is on the page, which is the sandbox arriving, nor before the machine has been read, nor while the
+                 engine of a computer that hosts sandboxes is down: the list is empty then because nothing can be asked,
+                 and the notice above says its sandboxes are not running (seen on omen, 2026-10-10). -->
             <section
-                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown"
+                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown && !engineDownWithSandboxes"
                 class="flex flex-col items-start gap-3 rounded-xl border border-dashed border-line p-5"
             >
                 <div class="flex items-start gap-3">

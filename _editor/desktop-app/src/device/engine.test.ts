@@ -93,6 +93,22 @@ it(`reads which engine the sandboxes run on, and follows a move only the status 
     expect(asked(`engine_status`)).toHaveLength(reads);
 });
 
+it(`names the engine that is down as Intentic's own, and as held only when it was stopped on purpose`, async () => {
+    const engine = await load();
+    status = { ...ON_DOCKER_DESKTOP, held: true };
+    await engine.loadEngine();
+    expect(engine.onOurEngine.value).toBe(false);
+    // A hold on an engine the sandboxes do not run on says nothing about them.
+    expect(engine.ourEngineHeld.value).toBe(false);
+    status = { ...ON_OURS, running: false };
+    await engine.loadEngine();
+    expect(engine.onOurEngine.value).toBe(true);
+    expect(engine.ourEngineHeld.value).toBe(false);
+    status = { ...ON_OURS, running: false, held: true };
+    await engine.loadEngine();
+    expect(engine.ourEngineHeld.value).toBe(true);
+});
+
 it(`has nothing to say on a computer whose app has no status for it, and keeps what it knew when ic is silent once`, async () => {
     const engine = await load();
     status = null;

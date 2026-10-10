@@ -197,5 +197,7 @@ export const keptCopiesOf = (status: EngineStatus | undefined): KeptCopies[] => 
     return [...kept.values()];
 };
 
-/** Bytes as ic says them in its own lines: decimal gigabytes, to one place. */
-export const gigabytes = (bytes: number): string => `${formatFixed(bytes / 1e9, 1)} GB`;
+/** Bytes as ic says them in its own lines: decimal gigabytes, to one place. Under a tenth of one, whole megabytes: a
+ *  sandbox's history and Docker volumes are a few megabytes, and "0.0 GB of 0.0 GB" said nothing (omen, 2026-10-10). */
+export const gigabytes = (bytes: number): string =>
+    bytes < 1e8 ? `${formatFixed(Math.round(bytes / 1e6), 0)} MB` : `${formatFixed(bytes / 1e9, 1)} GB`;

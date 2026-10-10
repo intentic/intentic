@@ -43,7 +43,8 @@
         "updateRestart": "Aktualisieren und neu starten",
         "yourSandbox": "Ihrer Sandbox",
         "newerIntenticInstalled": "Eine neuere Version von Intentic ist installiert. Starten Sie Intentic neu, um sie zu verwenden.",
-        "restartIntentic": "Intentic neu starten"
+        "restartIntentic": "Intentic neu starten",
+        "startEngine": "Engine starten"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Immer so machen: nicht mehr fragen",
@@ -75,6 +76,15 @@
         "mayBeWaitingForYou": "Vielleicht wartet es darauf, dass Sie seine Bedingungen annehmen oder sich anmelden. Öffnen Sie es, beantworten Sie, was es fragt, und prüfen Sie dann erneut.",
         "nothingToStartUntilInstalled": "Ihre Sandbox läuft in Docker, es gibt also nichts zu starten, bis es wieder installiert ist.",
         "openDockerDesktop": "Docker Desktop öffnen",
+        "oursBroken": "Die Intentic-Engine läuft, funktioniert aber nicht",
+        "oursCheckAgain": "Erneut prüfen, um sie noch einmal zu starten.",
+        "oursIsntRunning": "Die Intentic-Engine läuft nicht",
+        "oursRestartComputer": "Sie beantwortet jede Anfrage mit einem Fehler. Starten Sie diesen Computer neu und prüfen Sie dann erneut.",
+        "oursSlowStart": "Der erste Start nach einem Neustart des Computers startet auch WSL, was ein bis zwei Minuten dauern kann.",
+        "oursStarting": "Intentic-Engine wird gestartet",
+        "oursStartingBody": "Ihre Sandboxes laufen in der Intentic-Engine, und sie läuft noch nicht. Das dauert meist nur ein paar Sekunden.",
+        "oursTakingLong": "Die Intentic-Engine braucht länger als üblich",
+        "oursWouldntStart": "Die Intentic-Engine ließ sich nicht starten",
         "quitAndOpenAgain": "Die Engine beantwortet jede Anfrage mit einem Fehler, und Warten ändert daran nichts. Beenden Sie Docker Desktop vollständig, öffnen Sie es erneut und prüfen Sie dann erneut.",
         "sandboxRunsInDockerStarting": "Ihre Sandbox läuft in Docker, und Docker läuft noch nicht. Das dauert meist etwa eine Minute.",
         "signOutAndBackIn": "Windows vergibt Dockers Berechtigung erst bei einer neuen Anmeldung. Melden Sie sich von Windows ab und wieder an, und prüfen Sie dann erneut.",

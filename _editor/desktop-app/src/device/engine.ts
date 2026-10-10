@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { setEngine, track } from "../analytics";
 import {
     engineCleanup,
@@ -26,6 +26,10 @@ const MOVE_RUN = `engine-move`;
 
 /** What ic last said of the engine; undefined before it has, and on a computer that is not a Windows PC. */
 export const engineState = ref<EngineStatus | undefined>(undefined);
+/** This PC's sandboxes run on Intentic's engine: the engine a start starts, and the one the page names when it is down. */
+export const onOurEngine = computed(() => pcEngineOf(engineState.value?.engine) === `intentic`);
+/** Intentic's engine was stopped on purpose (`ic engine stop`): nothing in the background starts it, only a person. */
+export const ourEngineHeld = computed(() => onOurEngine.value && engineState.value?.held === true);
 /** A move under way: this window's own, one another window started, or one only the status shows (Repair's). */
 export const engineMoving = ref<MoveProgress | undefined>(undefined);
 /** How the last move this window followed ended, until the reader puts it away or another begins. */

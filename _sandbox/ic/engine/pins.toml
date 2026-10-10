@@ -1,7 +1,7 @@
 # Single source for the intentic-engine rootfs build and ic's fetch pins. Bump engine_version when the rootfs changes;
 # ic release attaches intentic-engine-<engine_version>-x86_64.tar.gz beside the ic binaries.
 
-engine_version = "1.0.0"
+engine_version = "1.1.0"
 
 # Alpine minirootfs (x86_64)
 alpine_version = "3.21.3"

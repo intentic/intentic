@@ -25,7 +25,7 @@ import { DOCKER_DOCS, useDevice } from "./useDevice";
 // the reader here for anything with more than a button to it.
 
 const t = useT();
-const { dockerStarting, startDocker } = useDevice();
+const { dockerStarting, startDocker, onOurEngine } = useDevice();
 
 const record = computed(() => machineSandbox.value);
 const state = computed(() => record.value?.state);
@@ -136,7 +136,7 @@ const useCloud = (): void => {
                 <Button
                     v-if="record.reason !== `notInstalled`"
                     size="small"
-                    :label="t(`desktop.app.startDocker`)"
+                    :label="onOurEngine ? t(`desktop.app.startEngine`) : t(`desktop.app.startDocker`)"
                     :loading="dockerStarting"
                     @click="startDocker(`card`)"
                 />

@@ -26,6 +26,9 @@ const props = defineProps<{
     report?: DockerStart;
     /** `windows` changes what a refused engine means: a sign-out, rather than a group on this machine. */
     os?: string;
+    /** The engine is Intentic's own (engine.ts `onOurEngine`): ic starts it in seconds, and there is no Docker Desktop
+     *  window to open, sign in to or quit. */
+    ours?: boolean;
 }>();
 const emit = defineEmits<{ start: []; open: []; install: [] }>();
 
@@ -50,6 +53,9 @@ const outcome = computed(() => props.report?.outcome);
 const windows = computed(() => props.os === `windows`);
 
 const heading = computed(() => {
+    if (props.ours) {
+        return oursHeading();
+    }
     if (props.starting) {
         return t(`desktop.docker.startingDockerDesktop`);
     }
@@ -71,7 +77,36 @@ const heading = computed(() => {
     }
 });
 
+// Intentic's engine, in its own name: what a start of it waits on is WSL, never a window of Docker Desktop's.
+const oursHeading = (): string => {
+    if (props.starting) {
+        return t(`desktop.docker.oursStarting`);
+    }
+    switch (outcome.value) {
+        case `wouldNotStart`:
+            return t(`desktop.docker.oursWouldntStart`);
+        case `tookTooLong`:
+            return t(`desktop.docker.oursTakingLong`);
+        case `broken`:
+            return t(`desktop.docker.oursBroken`);
+        default:
+            return t(`desktop.docker.oursIsntRunning`);
+    }
+};
+const oursBody = (): string => {
+    if (hinted.value) {
+        return t(`desktop.docker.oursSlowStart`);
+    }
+    if (props.starting) {
+        return t(`desktop.docker.oursStartingBody`);
+    }
+    return outcome.value === `broken` ? t(`desktop.docker.oursRestartComputer`) : t(`desktop.docker.oursCheckAgain`);
+};
+
 const body = computed(() => {
+    if (props.ours) {
+        return oursBody();
+    }
     if (hinted.value) {
         return t(`desktop.docker.mayBeAskingYou`);
     }
@@ -98,7 +133,7 @@ const detail = computed(() => (props.starting ? undefined : props.report?.detail
 // already up and refusing this account. Linux has no Docker Desktop to promise either: there the engine is a
 // system service, and the sentence hands over the one command that starts it.
 const canOpen = computed(
-    () => (props.os === `windows` || props.os === `macos`) && outcome.value !== `notInstalled` && outcome.value !== `notAllowed`,
+    () => !props.ours && (props.os === `windows` || props.os === `macos`) && outcome.value !== `notInstalled` && outcome.value !== `notAllowed`,
 );
 </script>
 

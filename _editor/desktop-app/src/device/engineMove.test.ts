@@ -179,8 +179,10 @@ describe(`the copies a move left`, () => {
     });
 });
 
-it(`says bytes as ic does, in decimal gigabytes to one place`, () => {
+it(`says bytes as ic does, in decimal gigabytes to one place, and small volumes in megabytes`, () => {
     expect(gigabytes(1_234_567_890)).toBe(`1.2 GB`);
-    expect(gigabytes(0)).toBe(`0.0 GB`);
+    expect(gigabytes(0)).toBe(`0 MB`);
+    expect(gigabytes(29_458_217)).toBe(`29 MB`);
+    expect(gigabytes(100_000_000)).toBe(`0.1 GB`);
     expect(gigabytes(15_960_000_000)).toBe(`16.0 GB`);
 });

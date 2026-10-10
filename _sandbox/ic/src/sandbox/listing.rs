@@ -7,7 +7,9 @@ use crate::docker;
 use crate::record::Phase;
 use crate::record::{self, ChannelRecord};
 use crate::sandbox::side::{self, Adoption, Side};
-use crate::sandbox::{desired, versions, CONTAINER_PREFIX, PARKED_SUFFIX, TUNNEL_PREFIX};
+use crate::sandbox::{
+    desired, versions, CONTAINER_PREFIX, MOVED_SUFFIX, PARKED_SUFFIX, TUNNEL_PREFIX,
+};
 use crate::shape::Shape;
 use crate::util::{bail, Result};
 
@@ -138,8 +140,13 @@ fn resources_from(inspected: &Value, desired: Option<&Shape>) -> Value {
 
 /// The sandbox a container row stands for, and whether the row is a parked container. A parked row beside its live one
 /// is the previous version on probation and is not listed; a parked row alone is the sandbox, down, which an interrupted
-/// swap left set aside. Pure.
+/// swap left set aside. A copy a move between engines left behind (`<name>.moved`, engine/moves.rs) is no sandbox at all:
+/// `ic engine status` and the desktop app's engine card say it, with the day it goes, and nothing may start it (seen on
+/// omen, 2026-10-10: listed as a sandbox `<slug>.moved` with a Start button, during the move and for the week after). Pure.
 fn row_slug<'a>(row: &'a Row, rows: &[Row]) -> Option<(&'a str, bool)> {
+    if row.name.ends_with(MOVED_SUFFIX) {
+        return None;
+    }
     let name = row.name.strip_prefix(CONTAINER_PREFIX)?;
     match name.strip_suffix(PARKED_SUFFIX) {
         None => Some((name, false)),
@@ -365,6 +372,33 @@ mod tests {
              intentic-sandbox-tunnel-work\texited\tcloudflare/cloudflared\n\
              intentic-sandbox-tunnel-lab\tcreated\tintentic-sandbox-env-lab:abc\n",
         )
+    }
+
+    #[test]
+    fn a_copy_a_move_between_engines_left_behind_is_never_listed() {
+        // During a move (the sandbox's container renamed, nothing yet on the other engine) and after it.
+        for listing_text in [
+            "intentic-sandbox-work.moved\texited\timg:1\n",
+            "intentic-sandbox-work\trunning\timg:1\nintentic-sandbox-work.moved\texited\timg:1\n",
+        ] {
+            let listed = listing(
+                &rows_from(listing_text),
+                &HashMap::new(),
+                &HashMap::new(),
+                &HashMap::new(),
+                &|_| true,
+            );
+            let slugs: Vec<&str> = listed
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|sandbox| sandbox["slug"].as_str())
+                .collect();
+            assert!(
+                slugs.iter().all(|slug| !slug.ends_with(".moved")),
+                "{slugs:?}"
+            );
+        }
     }
 
     #[test]

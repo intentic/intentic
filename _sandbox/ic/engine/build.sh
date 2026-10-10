@@ -70,7 +70,9 @@ run_chroot() {
     return 1
   fi
 }
-run_chroot /sbin/apk add --no-cache iptables ip6tables openssl ca-certificates
+# passt (pasta) and socat give dockerd a network namespace of its own: the way out, and the loopback forwards in
+# (rootfs/intentic-engine). A distro imported from 1.0.0 fetches them on its first start of a newer keeper.
+run_chroot /sbin/apk add --no-cache iptables ip6tables openssl ca-certificates passt socat
 rm -f "$WORK/rootfs/etc/resolv.conf"
 
 NAME="intentic-engine-${ENGINE_VERSION}-x86_64.tar.gz"

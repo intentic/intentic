@@ -43,7 +43,8 @@
         "updateRestart": "Mettre à jour et redémarrer",
         "yourSandbox": "votre sandbox",
         "newerIntenticInstalled": "Une version plus récente d'Intentic est installée. Redémarrez Intentic pour l'utiliser.",
-        "restartIntentic": "Redémarrer Intentic"
+        "restartIntentic": "Redémarrer Intentic",
+        "startEngine": "Démarrer le moteur"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Toujours faire ainsi : ne plus demander",
@@ -75,6 +76,15 @@
         "mayBeWaitingForYou": "Il attend peut-être que vous acceptiez ses conditions ou que vous vous connectiez. Ouvrez-le, répondez à ce qu'il demande, puis vérifiez à nouveau.",
         "nothingToStartUntilInstalled": "Votre sandbox tourne dans Docker : il n'y a donc rien à démarrer tant qu'il n'est pas réinstallé.",
         "openDockerDesktop": "Ouvrir Docker Desktop",
+        "oursBroken": "Le moteur d'Intentic tourne, mais ne fonctionne pas",
+        "oursCheckAgain": "Vérifiez à nouveau pour le relancer.",
+        "oursIsntRunning": "Le moteur d'Intentic ne tourne pas",
+        "oursRestartComputer": "Il répond à chaque requête par une erreur. Redémarrez cet ordinateur, puis vérifiez à nouveau.",
+        "oursSlowStart": "Le premier démarrage après un redémarrage de l'ordinateur lance aussi WSL, ce qui peut prendre une à deux minutes.",
+        "oursStarting": "Démarrage du moteur d'Intentic",
+        "oursStartingBody": "Vos sandboxes tournent dans le moteur d'Intentic, qui ne tourne pas encore. Cela prend en général quelques secondes.",
+        "oursTakingLong": "Le moteur d'Intentic met plus de temps que d'habitude",
+        "oursWouldntStart": "Le moteur d'Intentic n'a pas démarré",
         "quitAndOpenAgain": "Son moteur répond à chaque requête par une erreur, et attendre n'y changera rien. Quittez complètement Docker Desktop, rouvrez-le, puis vérifiez à nouveau.",
         "sandboxRunsInDockerStarting": "Votre sandbox tourne dans Docker, et Docker n'est pas encore lancé. Cela prend en général une minute environ.",
         "signOutAndBackIn": "Windows n'accorde la permission de Docker qu'à une nouvelle connexion. Déconnectez-vous de Windows, reconnectez-vous, puis vérifiez à nouveau.",

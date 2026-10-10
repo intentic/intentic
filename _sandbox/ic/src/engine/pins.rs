@@ -1,7 +1,7 @@
 //! Pinned upstream versions for the intentic-engine rootfs and prefetch sizes. Keep in sync with `engine/pins.toml`.
 #![cfg_attr(not(windows), allow(dead_code))]
 
-pub const ENGINE_VERSION: &str = "1.0.0";
+pub const ENGINE_VERSION: &str = "1.1.0";
 
 pub const DOCKER_CLI_VERSION: &str = "27.5.1";
 
@@ -15,10 +15,11 @@ pub const DOCKER_CLI_URL: &str =
 pub const DOCKER_CLI_SHA256: &str =
     "a573be076030c8babe34ffcd89c7ad6e720cfb4f876a0f8412dba7ecdd368926";
 
-pub const TARBALL_NAME: &str = "intentic-engine-1.0.0-x86_64.tar.gz";
+pub const TARBALL_NAME: &str = "intentic-engine-1.1.0-x86_64.tar.gz";
 
-/// `intentic-engine-1.0.0-x86_64.tar.gz` from `engine/build.sh` on 2026-10-09 (53M, with apk packages).
-pub const DISTRO_TARBALL_BYTES: u64 = 54_744_564;
+/// `intentic-engine-1.1.0-x86_64.tar.gz` from `engine/build.sh` on 2026-10-10 (53M, with apk packages, passt and socat
+/// included).
+pub const DISTRO_TARBALL_BYTES: u64 = 55_463_571;
 /// `docker-27.5.1.zip` from download.docker.com, measured in the build sandbox.
 pub const DOCKER_CLI_ZIP_BYTES: u64 = 40_083_749;
 

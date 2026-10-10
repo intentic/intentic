@@ -236,7 +236,9 @@ flowchart LR
     volume by a tar stream checked against a list of every file and its size, then made again by the ordinary reshape
     (run contract, health waits). The PC switches only once all are across; any failure puts every sandbox back as it
     was. The old copies stay for 7 days in `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
-    removes them. Sandboxes kept by a WSL-side `ic` stay on Docker Desktop. Measured on omen: 1.47 GB of volumes
+    removes them; no listing names one as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
+    prune` on that engine can take one sooner, since it is a stopped container. Sandboxes kept by a WSL-side `ic` stay
+    on Docker Desktop. Measured on omen: 1.47 GB of volumes
     with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
     8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
   - **Which engine, and the switch.** [src/engine/choice.rs](src/engine/choice.rs): `IC_ENGINE`, then
@@ -247,12 +249,14 @@ flowchart LR
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
-  - **One network with every distro.** WSL's distros share one network namespace and Docker Desktop keeps its engine
-    in its own, so the keeper (written into the distro by every start, from [engine/rootfs/](engine/rootfs/)) leaves
-    Windows' connections to 127.0.0.1 to `docker-proxy` (mirrored networking otherwise loses them), puts its bridge
-    and networks on 192.168.239.0/24 and 192.168.240.0/20 rather than Docker's 172.17.0.0/16, and refuses to start
-    beside another Docker engine in WSL (one owning `docker0`). `ic engine remove` takes those out of WSL's network
-    before it unregisters the distro.
+  - **A network of its own.** WSL's distros share one network namespace, and Docker Desktop keeps its engine in its
+    own; since rootfs 1.1.0 ours does too. The keeper (written into the distro by every start, from
+    [engine/rootfs/](engine/rootfs/)) runs dockerd in the namespace `intentic`, with pasta for the way out, a
+    loopback-only forward from the distro's 127.0.0.1 for each port listening inside (the API and every port a sandbox
+    publishes), and `host.docker.internal` reaching the host. Nothing of the engine's shows in another distro's network,
+    and a person's own Docker Engine in WSL no longer clashes with it. Where the namespace cannot be made, the keeper
+    falls back to the shared network as before (and there refuses to start beside another engine owning `docker0`);
+    `ic engine status` names the mode (`network`). One keeper per distro, by a lock.
   - **Tests and CI.** `IC_ENGINE_DISTRO` names another distro (its own disk folder and Run key value),
     `IC_ENGINE_AUTOSTART=0` registers no sign-in start, and `INTENTIC_ENGINE_TARBALL` hands in a rootfs built from the
     checkout. The Windows smoke's tier 4 (`_tools/desktop-smoke-windows`) runs it on the CI machine.

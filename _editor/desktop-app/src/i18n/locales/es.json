@@ -43,7 +43,8 @@
         "updateRestart": "Actualizar y reiniciar",
         "yourSandbox": "tu sandbox",
         "newerIntenticInstalled": "Hay una versión más reciente de Intentic instalada. Reinicia Intentic para usarla.",
-        "restartIntentic": "Reiniciar Intentic"
+        "restartIntentic": "Reiniciar Intentic",
+        "startEngine": "Iniciar el motor"
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Hacer siempre esto: no volver a preguntar",
@@ -75,6 +76,15 @@
         "mayBeWaitingForYou": "Puede que esté esperando a que aceptes sus términos o inicies sesión. Ábrelo, responde a lo que pida y vuelve a comprobarlo.",
         "nothingToStartUntilInstalled": "Tu sandbox se ejecuta en Docker, así que no hay nada que iniciar hasta que vuelva a estar instalado.",
         "openDockerDesktop": "Abrir Docker Desktop",
+        "oursBroken": "El motor de Intentic está en marcha, pero no funciona",
+        "oursCheckAgain": "Vuelve a comprobar para iniciarlo otra vez.",
+        "oursIsntRunning": "El motor de Intentic no está en marcha",
+        "oursRestartComputer": "Responde a cada solicitud con un error. Reinicia este equipo y vuelve a comprobar.",
+        "oursSlowStart": "El primer inicio tras reiniciar el equipo también inicia WSL, lo que puede tardar uno o dos minutos.",
+        "oursStarting": "Iniciando el motor de Intentic",
+        "oursStartingBody": "Tus sandboxes se ejecutan en el motor de Intentic, que aún no está en marcha. Suele tardar unos segundos.",
+        "oursTakingLong": "El motor de Intentic está tardando más de lo habitual",
+        "oursWouldntStart": "El motor de Intentic no se inició",
         "quitAndOpenAgain": "Su motor responde a cada petición con un error, y esperar no lo arreglará. Cierra Docker Desktop por completo, ábrelo de nuevo y vuelve a comprobarlo.",
         "sandboxRunsInDockerStarting": "Tu sandbox se ejecuta en Docker, y Docker todavía no está en marcha. Esto suele tardar alrededor de un minuto.",
         "signOutAndBackIn": "Windows solo concede el permiso de Docker en un inicio de sesión nuevo. Cierra sesión en Windows, vuelve a entrar y comprueba de nuevo.",

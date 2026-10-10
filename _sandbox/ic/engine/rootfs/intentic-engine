@@ -6,14 +6,39 @@ set -eu
 PORT="${1:-${INTENTIC_ENGINE_PORT:-2378}}"
 TLS_DIR="/etc/intentic-engine/tls"
 LOG="/var/log/intentic-engine.log"
+STATE="/run/intentic-engine"
+NS_NAME="intentic"
+NS="/run/netns/$NS_NAME"
+FORWARDS="$STATE/forwards"
+# What `host.docker.internal` means inside the engine's namespace: one address pasta hands to this distro's loopback,
+# as Docker Desktop's name reaches the host (`ic` rewrites a platform on localhost to that name, sandbox-run adds it).
+HOST_ALIAS="169.254.231.1"
 
-mkdir -p /var/run "$TLS_DIR" /var/lib/docker /var/log
+mkdir -p /var/run "$TLS_DIR" /var/lib/docker /var/log "$STATE"
 chmod 700 "$TLS_DIR"
 
-# A log that only grows: the last one is kept, the one before it goes.
-if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 10485760 ]; then
-  mv -f "$LOG" "$LOG.1"
+# One keeper per distro. A second one (two starts at once, as the sign-in start and the desktop app's can be, or a start
+# asked for while the first keeper is still bringing dockerd up) would take the namespace's helpers from under the
+# first: on omen, 2026-10-10, it cleared the first one's state and hung on a second pasta. The lock is fd 9, held by the
+# keeper for as long as it runs and closed for everything it starts (a containerd shim outlives dockerd, and would hold
+# it for days); a second keeper ends at once with 4, which `ic engine start` reads as the engine being on its way.
+# Without flock (an image that lost busybox's applet) the keeper starts unlocked rather than never.
+exec 9>"$STATE/keeper.lock"
+if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
+  echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') intentic-engine: a keeper is already running; this one ends" >>"$LOG"
+  exit 4
 fi
+
+# A log that only grows: the last one is kept, the one before it goes.
+for log in "$LOG" /var/log/intentic-pasta.log /var/log/intentic-forwards.log; do
+  if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 10485760 ]; then
+    mv -f "$log" "$log.1"
+  fi
+done
+
+say() {
+  echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') intentic-engine: $*" >>"$LOG"
+}
 
 # cgroup v2 on Alpine without OpenRC: mount if the kernel did not already.
 if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
@@ -23,43 +48,294 @@ if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
 fi
 
 if [ ! -f "$TLS_DIR/server-cert.pem" ]; then
-  echo "TLS material missing in $TLS_DIR — run ic engine install on Windows first." >>"$LOG"
+  say "TLS material missing in $TLS_DIR — run ic engine install on Windows first."
   exit 1
 fi
 
-# THIS DISTRO SHARES WSL'S NETWORK WITH EVERY OTHER ONE (one VM, one network namespace; Docker Desktop keeps its engine
-# in a namespace of its own, this one does not), so what dockerd adds there is seen by all of them:
+# Docker's own 172.17.0.0/16 is the range VPNs and office networks most often route, and the routes of this PC's network
+# are copied into the namespace too (pasta): the bridge and the networks dockerd makes come from a rarely used range.
+DOCKERD_ARGS="--host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:${PORT} --tlsverify \
+  --tlscacert=$TLS_DIR/ca.pem --tlscert=$TLS_DIR/server-cert.pem --tlskey=$TLS_DIR/server-key.pem \
+  --data-root=/var/lib/docker --bip=192.168.239.1/24 --default-address-pool=base=192.168.240.0/20,size=26 \
+  --log-opt=max-size=20m --log-opt=max-file=3"
+
+# ---------------------------------------------------------------------------------------------------------------------
+# ITS OWN NETWORK (2026-10-10), as Docker Desktop's engine has. Every WSL distro on a PC shares one VM and, without
+# this, one network namespace: what dockerd adds there (its bridge, its routes, iptables chains named DOCKER) would be
+# every distro's, a person's own dockerd in another distro would flush them on each of its starts, and they would stay
+# behind after the engine stops. So dockerd runs in a namespace of its own, `intentic`:
+# - out: pasta (passt) gives the namespace this PC's network from user space, through ordinary sockets of this distro,
+#   so nothing is routed or NATed in the shared namespace and no firewall rule there is touched;
+# - in: every TCP port listening inside the namespace (the engine's API, each port a sandbox publishes) is forwarded
+#   from the same port on this distro's 127.0.0.1, which WSL hands to Windows' own 127.0.0.1. Loopback only: pasta's
+#   own automatic forwarding binds every address, and under mirrored networking that is the LAN;
+# - `host.docker.internal` reaches this distro's loopback through pasta, as on Docker Desktop.
+# A PC where any of it cannot be set up (no TUN device, no packages and no network to fetch them) runs the engine in
+# the shared namespace as before 2026-10-10 rather than not at all: see shared() below. The mode in use is written to
+# $STATE/network for `ic engine status`.
+# ---------------------------------------------------------------------------------------------------------------------
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# An engine imported from an older rootfs (1.0.0) lacks pasta and socat: Alpine's own repositories have both.
+ensure_tools() {
+  have pasta && have socat && return 0
+  say "fetching pasta and socat for the engine's own network"
+  apk add --no-cache passt socat >>"$LOG" 2>&1 && have pasta && have socat
+}
+
+# The namespace outlives a keeper that ends while the distro keeps running, and is used again; a file at its path that
+# is not one (a start cut off between the two steps below) is made again.
+make_namespace() {
+  mkdir -p /run/netns
+  if [ -e "$NS" ] && ! nsenter -n"$NS" true 2>/dev/null; then
+    umount "$NS" 2>/dev/null || true
+    rm -f "$NS"
+  fi
+  if [ ! -e "$NS" ]; then
+    : >"$NS"
+    unshare --net="$NS" true || { rm -f "$NS"; return 1; }
+  fi
+  nsenter -n"$NS" ip link set lo up
+}
+
+# A process that runs under the name given (a shell pattern): not a zombie left to be reaped, and not another process
+# the kernel has since handed a recorded pid to.
+running() {
+  [ -r "/proc/$1/stat" ] || return 1
+  [ "$(sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | cut -c1)" != "Z" ] || return 1
+  # shellcheck disable=SC2254
+  case "$(cat "/proc/$1/comm" 2>/dev/null || true)" in
+    $2) return 0 ;;
+  esac
+  return 1
+}
+
+# The process a pid file names, when it still runs under the name given.
+pid_alive() {
+  pid="$(cat "$1" 2>/dev/null || true)"
+  [ -n "$pid" ] && running "$pid" "$2"
+}
+
+pasta_alive() {
+  pid_alive "$STATE/pasta.pid" 'pas*'
+}
+
+start_pasta() {
+  rm -f "$STATE/pasta.pid"
+  # --runas 0:0: the namespace is root's, and pasta's default drop to `nobody` could not enter it. No port forwarding
+  # of pasta's own in either direction (-t/-u/-T/-U none): the forwards below are loopback-only. pasta returns once
+  # its daemon runs; one that fails to set up can hang instead (omen, 2026-10-10), so it gets 30 seconds.
+  timeout -s KILL 30 pasta --config-net --netns "$NS" --runas 0:0 \
+    -t none -u none -T none -U none \
+    --map-host-loopback "$HOST_ALIAS" \
+    -q -P "$STATE/pasta.pid" -l /var/log/intentic-pasta.log </dev/null >/dev/null 2>&1 9>&-
+}
+
+# The TCP ports listening inside the namespace on its loopback or on every address, IPv4 and IPv6, as decimal numbers.
+listening_ports() {
+  nsenter -n"$NS" cat /proc/net/tcp /proc/net/tcp6 2>/dev/null \
+    | awk '$4 == "0A" {
+        n = split($2, at, ":"); addr = at[1];
+        if (addr == "0100007F" || addr == "00000000" || addr == "00000000000000000000000001000000" \
+            || addr == "00000000000000000000000000000000") print at[n]
+      }' \
+    | sort -u \
+    | while read -r hex; do printf '%d\n' "0x$hex"; done
+}
+
+start_forward() {
+  port="$1"
+  socat -d0 TCP-LISTEN:"$port",bind=127.0.0.1,reuseaddr,fork TCP:127.0.0.1:"$port",netns="$NS_NAME" \
+    </dev/null >/dev/null 2>>/var/log/intentic-forwards.log 9>&- &
+  pid=$!
+  echo "$pid" >"$FORWARDS/$port"
+  # A port this distro's loopback already has (another distro's server, an older forward) does not bind: tried again in
+  # ten seconds rather than every second.
+  sleep 0.3
+  if ! running "$pid" socat; then
+    rm -f "$FORWARDS/$port"
+    date +%s >"$FORWARDS/$port.failed"
+    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') port $port: could not listen on 127.0.0.1:$port" >>/var/log/intentic-forwards.log
+  fi
+}
+
+recently_failed() {
+  [ -f "$FORWARDS/$1.failed" ] && [ $(($(date +%s) - $(cat "$FORWARDS/$1.failed"))) -lt 10 ]
+}
+
+# Rescanned every second: how a port a sandbox publishes appears on Windows, and how one it stops publishing goes.
+# pasta is watched here too, and started again if it ends, since without it the namespace has no way out.
+keep_forwards() {
+  # A loop that must outlast every command in it that fails (a forward already gone when it is stopped, a scan that
+  # finds nothing): not one of them ends it.
+  set +e
+  mkdir -p "$FORWARDS"
+  rm -f "$FORWARDS"/*
+  while :; do
+    ports="$(listening_ports || true)"
+    for port in $ports; do
+      if pid_alive "$FORWARDS/$port" socat; then
+        continue
+      fi
+      recently_failed "$port" || start_forward "$port"
+    done
+    for held in "$FORWARDS"/*; do
+      [ -f "$held" ] || continue
+      port="${held##*/}"
+      case "$port" in *.failed) continue ;; esac
+      case " $(echo $ports) " in
+        *" $port "*) ;;
+        *) kill "$(cat "$held")" 2>/dev/null; rm -f "$held" ;;
+      esac
+    done
+    if ! pasta_alive; then
+      say "pasta ended; starting it again"
+      start_pasta || say "pasta would not start again"
+    fi
+    # Forwards stopped above, or ended by themselves, are reaped here rather than left as zombies for days.
+    jobs >/dev/null 2>&1
+    sleep 1
+  done
+}
+
+stop_helpers() {
+  if pid_alive "$STATE/forwarding.pid" intentic-engine; then
+    kill "$(cat "$STATE/forwarding.pid")" 2>/dev/null || true
+  fi
+  for held in "$FORWARDS"/*; do
+    [ -f "$held" ] || continue
+    case "$held" in *.failed) ;; *) pid_alive "$held" socat && kill "$(cat "$held")" 2>/dev/null ;; esac
+    rm -f "$held"
+  done
+  if pasta_alive; then
+    kill "$(cat "$STATE/pasta.pid")" 2>/dev/null || true
+  fi
+  rm -f "$STATE/forwarding.pid" "$STATE/pasta.pid"
+  return 0
+}
+
+# What a keeper that was killed left running: its helpers, and its dockerd, which outlive it and which nothing outside
+# the namespace can reach without it. The lock says no keeper runs now, so they are stopped before this one starts its
+# own (a second dockerd would not start beside the first).
+stop_leftovers() {
+  stop_helpers
+  if pid_alive /var/run/docker.pid dockerd; then
+    say "stopping the dockerd an earlier keeper left running"
+    kill "$(cat /var/run/docker.pid)" 2>/dev/null || true
+    waited=0
+    while pid_alive /var/run/docker.pid dockerd && [ "$waited" -lt 30 ]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    if pid_alive /var/run/docker.pid dockerd; then
+      kill -KILL "$(cat /var/run/docker.pid)" 2>/dev/null || true
+    fi
+  fi
+  return 0
+}
+
+# What an engine that ran in WSL's shared network before (1.0.0, or a fallback run) left there: its loopback rule, its
+# bridges and Docker's chains. Only ours: a bridge holding one of our addresses, and Docker's chains only when docker0
+# is ours, since a person's own dockerd in another distro would be using the same ones (rootfs/teardown does the same
+# on a removal).
+clear_shared() {
+  ours_bridge() {
+    ip addr show dev "$1" 2>/dev/null | grep -qE 'inet 192\.168\.(239\.1|24[0-9]\.|25[0-5]\.)'
+  }
+  iptables -t nat -D PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null || true
+  iptables -t nat -S POSTROUTING 2>/dev/null | grep -E ' -s 192\.168\.(239|24[0-9]|25[0-5])\.' | sed 's/^-A //' \
+    | while read -r rule; do
+      # shellcheck disable=SC2086
+      iptables -t nat -D $rule 2>/dev/null || true
+    done
+  if ours_bridge docker0; then
+    say "clearing what the engine left in WSL's shared network before it had its own"
+    iptables -t nat -D PREROUTING -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null || true
+    iptables -t nat -D OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null || true
+    iptables -t nat -F DOCKER 2>/dev/null || true
+    iptables -t nat -X DOCKER 2>/dev/null || true
+    iptables -S FORWARD 2>/dev/null | grep -E 'DOCKER|docker0|br-' | sed 's/^-A //' | while read -r rule; do
+      # shellcheck disable=SC2086
+      iptables -D $rule 2>/dev/null || true
+    done
+    for chain in DOCKER DOCKER-ISOLATION-STAGE-1 DOCKER-ISOLATION-STAGE-2 DOCKER-USER DOCKER-FORWARD DOCKER-BRIDGE DOCKER-CT DOCKER-INTERNAL; do
+      iptables -F "$chain" 2>/dev/null || true
+      iptables -X "$chain" 2>/dev/null || true
+    done
+  fi
+  for link in $(ls /sys/class/net 2>/dev/null); do
+    case "$link" in
+      docker0 | br-*) ours_bridge "$link" && ip link delete "$link" 2>/dev/null ;;
+    esac
+  done
+  return 0
+}
+
+isolated() {
+  ensure_tools || { say "no pasta or socat: running in WSL's shared network"; return 1; }
+  [ -c /dev/net/tun ] || { say "no /dev/net/tun: running in WSL's shared network"; return 1; }
+  stop_leftovers
+  make_namespace || { say "could not make the network namespace: running in WSL's shared network"; return 1; }
+  clear_shared
+  start_pasta || { say "pasta would not start: running in WSL's shared network"; stop_helpers; return 1; }
+  echo isolated >"$STATE/network"
+  keep_forwards </dev/null >/dev/null 2>&1 9>&- &
+  echo "$!" >"$STATE/forwarding.pid"
+  say "dockerd in its own network namespace ($NS_NAME), API on 127.0.0.1:$PORT"
+  # shellcheck disable=SC2086
+  nsenter -n"$NS" dockerd $DOCKERD_ARGS --host-gateway-ip="$HOST_ALIAS" </dev/null >>"$LOG" 2>&1 9>&- &
+  DOCKERD=$!
+  # Waited on rather than run in the foreground, so a stop asked of the keeper reaches dockerd at once (a trap waits for
+  # a foreground child), and pasta and the forwards end with it.
+  trap 'stop_helpers' EXIT
+  trap 'kill -TERM "$DOCKERD" 2>/dev/null; wait "$DOCKERD" || true; stop_helpers; exit 143' INT TERM
+  status=0
+  wait "$DOCKERD" || status=$?
+  return "$status"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# THE SHARED NETWORK, the fallback (and the engine as it ran before 2026-10-10):
 # - Windows' connections to 127.0.0.1 arrive on an interface (mirrored networking's loopback0, NAT's localhost relay),
 #   where Docker's DNAT for a port published on 127.0.0.1 sends them to the container and the reply never makes it
 #   back (omen, 2026-10-09). Loopback traffic is left to docker-proxy, which listens there for every published port.
-# - Docker's own 172.17.0.0/16 is the range most often routed by VPNs and office networks, and a bridge on it would
-#   shadow those routes in every distro: the bridge and the networks dockerd makes come from a rarely used range.
-# - Another Docker engine already running in WSL (Docker Engine in a person's own Ubuntu, Rancher Desktop) owns docker0
-#   and the iptables chains named DOCKER, and two daemons there flush each other's rules on every start. Its bridge is
-#   the sign: docker0 holding an address that is not ours. This engine then does not start, and says why (exit 3,
-#   which `ic engine start` turns into the sentence a person reads).
-rm -f /var/run/intentic-engine.refused
-if ip addr show dev docker0 2>/dev/null | grep -q 'inet ' \
-  && ! ip addr show dev docker0 2>/dev/null | grep -q 'inet 192\.168\.239\.1/'; then
-  owner="$(ip addr show dev docker0 | sed -n 's/.*inet \([0-9.\/]*\).*/\1/p' | head -n 1)"
-  echo "another Docker engine in WSL owns docker0 ($owner): not starting beside it." >>"$LOG"
-  echo "$owner" >/var/run/intentic-engine.refused
-  exit 3
+# - Another Docker engine already running in WSL owns docker0 and the iptables chains named DOCKER, and two daemons
+#   there flush each other's rules on every start. Its bridge is the sign: docker0 holding an address that is not ours.
+#   This engine then does not start, and says why (exit 3, which `ic engine start` turns into a sentence).
+# ---------------------------------------------------------------------------------------------------------------------
+shared() {
+  rm -f /var/run/intentic-engine.refused
+  if ip addr show dev docker0 2>/dev/null | grep -q 'inet ' \
+    && ! ip addr show dev docker0 2>/dev/null | grep -q 'inet 192\.168\.239\.1/'; then
+    owner="$(ip addr show dev docker0 | sed -n 's/.*inet \([0-9.\/]*\).*/\1/p' | head -n 1)"
+    say "another Docker engine in WSL owns docker0 ($owner): not starting beside it."
+    echo "$owner" >/var/run/intentic-engine.refused
+    exit 3
+  fi
+  iptables -t nat -C PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null \
+    || iptables -t nat -I PREROUTING 1 -d 127.0.0.0/8 -j RETURN 2>>"$LOG" || true
+  echo shared >"$STATE/network"
+  # A child waited on, not exec'd: the keeper keeps the lock while dockerd runs, and dockerd's own children (containerd's
+  # shims outlive it) do not inherit it.
+  # shellcheck disable=SC2086
+  dockerd $DOCKERD_ARGS </dev/null >>"$LOG" 2>&1 9>&- &
+  DOCKERD=$!
+  trap 'kill -TERM "$DOCKERD" 2>/dev/null; wait "$DOCKERD" || true; exit 143' INT TERM
+  status=0
+  wait "$DOCKERD" || status=$?
+  exit "$status"
+}
+
+# Which network this run uses is decided afresh: a file from an earlier keeper in the same distro session says nothing.
+rm -f "$STATE/network"
+if [ "${INTENTIC_ENGINE_NETWORK:-}" = "shared" ]; then
+  shared
 fi
-
-iptables -t nat -C PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null \
-  || iptables -t nat -I PREROUTING 1 -d 127.0.0.0/8 -j RETURN 2>>"$LOG" || true
-
-exec dockerd \
-  --host="unix:///var/run/docker.sock" \
-  --host="tcp://127.0.0.1:${PORT}" \
-  --tlsverify \
-  --tlscacert="$TLS_DIR/ca.pem" \
-  --tlscert="$TLS_DIR/server-cert.pem" \
-  --tlskey="$TLS_DIR/server-key.pem" \
-  --data-root=/var/lib/docker \
-  --bip=192.168.239.1/24 \
-  --default-address-pool=base=192.168.240.0/20,size=26 \
-  --log-opt=max-size=20m \
-  --log-opt=max-file=3 \
-  >>"$LOG" 2>&1
+isolated_status=0
+isolated || isolated_status=$?
+if [ "$(cat "$STATE/network" 2>/dev/null)" = "isolated" ]; then
+  # dockerd ran in its own namespace and has ended: the keeper ends with it, as it always has.
+  exit "$isolated_status"
+fi
+shared

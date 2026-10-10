@@ -41,6 +41,7 @@ pub fn status() -> Status {
         .as_ref()
         .filter(|record| record.is_ours())
         .is_some_and(engine_answers);
+    let network = running.then(|| network_of(&distro)).flatten();
     Status {
         installed,
         running,
@@ -48,7 +49,27 @@ pub fn status() -> Status {
         active: record.as_ref().is_some_and(EngineRecord::is_active),
         held: record::held(),
         distro,
+        network,
     }
+}
+
+/// What the keeper wrote about the network its dockerd runs in (engine/rootfs/intentic-engine): `isolated` or `shared`.
+fn network_of(distro: &str) -> Option<String> {
+    let (code, said, _) = wsl::run_wsl(
+        &[
+            "-d",
+            distro,
+            "-u",
+            "root",
+            "--exec",
+            "cat",
+            "/run/intentic-engine/network",
+        ],
+        Duration::from_secs(15),
+    )
+    .ok()?;
+    let mode = said.trim();
+    (code == 0 && matches!(mode, "isolated" | "shared")).then(|| mode.to_string())
 }
 
 pub fn download_bytes() -> u64 {
@@ -622,6 +643,9 @@ fn spawn_keeper(distro: &str, port: u16) -> Result<std::process::Child, String> 
 
 /// The keeper exited on purpose: another Docker engine in WSL owns docker0 (engine/rootfs/intentic-engine).
 const KEEPER_REFUSED: i32 = 3;
+/// The keeper exited on purpose: one already runs in the distro (two starts at once, or a start while the first keeper
+/// still brings dockerd up), and the engine is on its way rather than broken.
+const KEEPER_ALREADY_RUNNING: i32 = 4;
 
 fn wait_for_engine(
     record: &EngineRecord,
@@ -629,25 +653,46 @@ fn wait_for_engine(
     keeper: &mut std::process::Child,
 ) -> Result<(), String> {
     let deadline = Instant::now() + limit;
+    let mut another_keeper = false;
     while Instant::now() < deadline {
         if engine_answers(record) {
             return Ok(());
         }
-        // A keeper that has ended will not bring the engine up however long this waits: say why now.
-        if let Ok(Some(status)) = keeper.try_wait() {
-            if engine_answers(record) {
-                return Ok(());
+        // A keeper that has ended will not bring the engine up however long this waits: say why now. One that ended
+        // because another keeper runs leaves the wait to that one.
+        if !another_keeper {
+            if let Ok(Some(status)) = keeper.try_wait() {
+                if engine_answers(record) {
+                    return Ok(());
+                }
+                if status.code() != Some(KEEPER_ALREADY_RUNNING) {
+                    return Err(keeper_ended(record, status.code()));
+                }
+                another_keeper = true;
             }
-            return Err(keeper_ended(record, status.code()));
         }
         std::thread::sleep(Duration::from_secs(2));
     }
-    Err(format!(
+    Err(not_answering(record, limit, another_keeper))
+}
+
+/// Pure: the sentence for an engine that did not answer within `limit`, `another_keeper` when the keeper this start ran
+/// found one already running.
+fn not_answering(record: &EngineRecord, limit: Duration, another_keeper: bool) -> String {
+    if another_keeper {
+        return format!(
+            "the engine's keeper is already running in the {} distro, but the engine did not answer on {} within {} seconds — `ic engine restart` starts it over.",
+            record.distro,
+            record.host,
+            limit.as_secs(),
+        );
+    }
+    format!(
         "the engine did not answer on {} within {} seconds — see the log inside the {} distro (/var/log/intentic-engine.log).",
         record.host,
         limit.as_secs(),
         record.distro,
-    ))
+    )
 }
 
 /// Why the keeper ended before the engine answered, in a person's words: the clash it refused, or the end of its log.
@@ -827,6 +872,24 @@ done
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_engine_another_keeper_brings_up_is_named_as_such_when_it_never_answers() {
+        let record = EngineRecord {
+            engine: "intentic".into(),
+            host: "tcp://127.0.0.1:2378".into(),
+            cert_path: String::new(),
+            bin: String::new(),
+            version: "1.1.0".into(),
+            active: true,
+            distro: "intentic-engine".into(),
+        };
+        let waiting = not_answering(&record, Duration::from_secs(120), true);
+        assert!(waiting.contains("keeper is already running in the intentic-engine distro"));
+        assert!(waiting.contains("ic engine restart"));
+        let silent = not_answering(&record, Duration::from_secs(120), false);
+        assert!(silent.contains("/var/log/intentic-engine.log"));
+    }
 
     #[test]
     fn a_keeper_that_refused_names_the_engine_it_found_and_what_to_do() {

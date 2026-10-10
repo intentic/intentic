@@ -45,6 +45,7 @@ pub fn status_json(
         "active": status.active,
         "held": status.held,
         "distro": status.distro,
+        "network": status.network,
         "dockerDesktop": facts.docker_desktop,
         "ownEngine": facts.own_engine,
         "preferred": facts.preferred.map(Kind::id),
@@ -209,6 +210,16 @@ fn print_human_status(kind: Kind, status: &Status) {
             println!("Version: {version}");
         }
         println!("Distro: {}", status.distro);
+        if let Some(network) = &status.network {
+            println!(
+                "Network: {}",
+                if network == "isolated" {
+                    "its own (a network namespace of the engine's, as Docker Desktop's engine has)"
+                } else {
+                    "WSL's shared one (the fallback: see /var/log/intentic-engine.log in its distro)"
+                }
+            );
+        }
         if let Some(record) = record::EngineRecord::load() {
             println!("Endpoint: {}", record.host);
         }
@@ -237,6 +248,7 @@ mod tests {
             active: false,
             held: false,
             distro: "intentic-engine".into(),
+            network: Some("isolated".into()),
         };
         let facts = super::super::choice::Facts {
             docker_desktop: true,
@@ -250,6 +262,7 @@ mod tests {
         assert_eq!(json["active"], false);
         assert_eq!(json["dockerDesktop"], true);
         assert_eq!(json["distro"], "intentic-engine");
+        assert_eq!(json["network"], "isolated");
         assert_eq!(json["canMove"], true);
         assert_eq!(json["offerMove"], false);
         assert_eq!(json["bringYourOwn"], false);
