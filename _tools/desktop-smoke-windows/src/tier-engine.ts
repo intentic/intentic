@@ -64,11 +64,16 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     rmSync(ENGINE_ROOT, { recursive: true, force: true });
     mkdirSync(ENGINE_ROOT, { recursive: true });
     const env = isolatedEnv(ENGINE_ROOT, options.tarball);
-    const ic = async (args: readonly string[], timeoutMs: number): Promise<RunResult> => await run(options.icBin, args, { env, timeoutMs });
+    // The PC this tier stands in for: one whose sandboxes run on Docker Desktop, which keeps them there until they are
+    // moved (choice.rs). Its isolated home holds no record of them, so the steps that set up that PC say so (a new
+    // setup elsewhere goes onto Intentic's engine); the moves themselves run without it.
+    const asDockerDesktopPc = { ...env, IC_ENGINE: `docker-desktop` };
+    const ic = async (args: readonly string[], timeoutMs: number, runEnv: Record<string, string> = env): Promise<RunResult> =>
+        await run(options.icBin, args, { env: runEnv, timeoutMs });
     const status = async () => engineStatusOf((await ic([`engine`, `status`, `--json`], 60_000)).stdout);
 
     harness.section(`installed beside Docker Desktop`);
-    const installed = await ic([`engine`, `install`], INSTALL_MS);
+    const installed = await ic([`engine`, `install`], INSTALL_MS, asDockerDesktopPc);
     if (installed.code !== 0) {
         harness.fail(`ic engine install exited ${installed.code}`, said(installed));
         return;
@@ -121,14 +126,18 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     const web = await docker([`run`, `-d`, `--name`, WEB, `-p`, `127.0.0.1:${WEB_PORT}:80`, WEB_IMAGE]);
     if (web.code === 0) {
         harness.pass(`a container publishing 127.0.0.1:${WEB_PORT} runs on the engine`);
-        await harness.untilTrue(30, `Windows reaches it at 127.0.0.1:${WEB_PORT}`, async () => (await httpStatus(`http://127.0.0.1:${WEB_PORT}/`)) === 200);
+        await harness.untilTrue(
+            30,
+            `Windows reaches it at 127.0.0.1:${WEB_PORT}`,
+            async () => (await httpStatus(`http://127.0.0.1:${WEB_PORT}/`)) === 200,
+        );
     } else {
         harness.fail(`the engine would not run ${WEB_IMAGE}`, said(web));
     }
     await docker([`rm`, `-f`, WEB]);
 
     if (options.move) {
-        await moveBothWays(harness, { ic, status, docker, options, env });
+        await moveBothWays(harness, { ic, status, docker, options, env: asDockerDesktopPc });
     }
 
     harness.section(`removed`);
@@ -206,7 +215,11 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     if (port === undefined) {
         harness.fail(`the moved sandbox publishes no loopback port`);
     } else {
-        await harness.untilTrue(120, `Windows reaches the moved sandbox's daemon at 127.0.0.1:${port}`, async () => (await httpStatus(`http://127.0.0.1:${port}/health`)) === 200);
+        await harness.untilTrue(
+            120,
+            `Windows reaches the moved sandbox's daemon at 127.0.0.1:${port}`,
+            async () => (await httpStatus(`http://127.0.0.1:${port}/health`)) === 200,
+        );
     }
 
     harness.section(`moved back to Docker Desktop`);

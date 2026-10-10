@@ -1,8 +1,9 @@
-//! OUR OWN CONTAINER ENGINE (2026-10-09): on a Windows PC without Docker Desktop, sandboxes run on the open-source
+//! OUR OWN CONTAINER ENGINE (2026-10-09): on a Windows PC, sandboxes run on the open-source Docker engine in a small
 #![cfg_attr(not(windows), allow(dead_code))]
-//! Docker engine in a small WSL distro of ours (`intentic-engine`), which ic imports, starts and points every `docker`
-//! it runs at. A PC that already has Docker Desktop keeps it until its owner moves its sandboxes over
-//! (`ic engine move`): the engine is installed there inactive, and only the move switches the PC onto it.
+//! WSL distro of ours (`intentic-engine`), which ic imports, starts and points every `docker` it runs at. Every new
+//! setup goes onto it, Docker Desktop installed or not (choice.rs, since 2026-10-10). Sandboxes already on Docker
+//! Desktop stay there until their owner moves them over (`ic engine move`): until then the engine is installed beside
+//! it inactive, and only the move switches the PC onto it.
 
 pub mod choice;
 mod commands;

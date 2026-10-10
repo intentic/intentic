@@ -243,9 +243,10 @@ flowchart LR
     8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
   - **Which engine, and the switch.** [src/engine/choice.rs](src/engine/choice.rs): `IC_ENGINE`, then
     `ic engine prefer`, then what the PC already holds (sandboxes on Docker Desktop stay until moved; a GPU sandbox
-    keeps the PC on Docker Desktop), then `DOCKER_DESKTOP_PCS`, the one constant that flips new Docker Desktop PCs onto
+    keeps the PC on Docker Desktop), then `DOCKER_DESKTOP_PCS`, the one constant that puts new Docker Desktop PCs onto
     our engine, offers the move after updates, and makes a Docker Desktop that stays the person's own: checked, never
-    installed or repaired (bring your own Docker). Rancher Desktop is that from the start.
+    installed or repaired (bring your own Docker). Rancher Desktop is that from the start. Flipped to our engine on
+    2026-10-10, so every new setup runs on it.
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.

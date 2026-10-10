@@ -5,8 +5,10 @@
 saves (`ic engine prefer`). What the PC already holds: sandboxes that run on Docker Desktop stay there until they are
 moved (`ic engine move`), because a setup that switched engines under them would leave them where no `docker` looks;
 and a sandbox handed this PC's GPU stays on Docker Desktop, since Intentic's engine cannot pass a GPU through yet. Then
-the default for a PC with Docker Desktop, which is the one switch of the migration plan: Docker Desktop until our
-engine has shown it is at least as good on new PCs (setup success, outages, over weeks and real installs), then ours.
+the default for a PC with Docker Desktop, which is the one switch of the migration plan. Flipped to ours on 2026-10-10:
+every new setup goes onto Intentic's engine, Docker Desktop installed or not, so a new install has one engine to run and
+repair whatever else the PC holds. What it cannot flip is above it: sandboxes already on Docker Desktop (until moved), a
+GPU sandbox, and the person's own word.
 
 The same switch decides what Intentic promises a Docker Desktop that stays. Before it flips, Docker Desktop is an engine
 Intentic sets up and repairs. After, it is the person's own engine (bring your own Docker): Intentic checks that it
@@ -15,10 +17,10 @@ owner. Another engine of a person's own (Rancher Desktop) is that from the start
 
 use super::Kind;
 
-/// What a PC with Docker Desktop gets by default. Flipping this to `Kind::Intentic` is the migration's switch:
-/// new setups there go onto our engine, the desktop app offers the move to sandboxes already on Docker Desktop, and
-/// a Docker Desktop that stays becomes the person's own engine.
-pub const DOCKER_DESKTOP_PCS: Kind = Kind::DockerDesktop;
+/// What a PC with Docker Desktop gets by default: our engine, the migration's switch flipped (2026-10-10). New setups
+/// there go onto it, the desktop app offers the move to sandboxes already on Docker Desktop, and a Docker Desktop that
+/// stays becomes the person's own engine. `Kind::DockerDesktop` here puts it back.
+pub const DOCKER_DESKTOP_PCS: Kind = Kind::Intentic;
 
 /// What the choice is made from.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

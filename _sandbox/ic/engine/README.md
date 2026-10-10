@@ -1,8 +1,8 @@
 # intentic-engine rootfs
 
-Small WSL2 distro (`intentic-engine`) that runs the open-source Docker engine for Intentic sandboxes on Windows PCs. A
-fresh PC gets it as its engine; a PC with Docker Desktop gets it when its owner moves the sandboxes over
-(`ic engine move --to intentic`).
+Small WSL2 distro (`intentic-engine`) that runs the open-source Docker engine for Intentic sandboxes on Windows PCs.
+Every new setup gets it as its engine, Docker Desktop installed or not (since 2026-10-10); sandboxes already on Docker
+Desktop come over when their owner moves them (`ic engine move --to intentic`).
 
 ## What it contains
 
