@@ -4271,10 +4271,7 @@
             "carryUnder": "Sugeruj przeniesienie poniżej",
             "carryUnderNote": "Tokeny. Poniżej tej wartości przenoszona jest cała sesja (przycinanie niewiele daje); od niej sugerowana jest przycięta kopia. 0 nigdy nie sugeruje przeniesienia.",
             "summaryOver": "Sugeruj streszczenie od",
-            "summaryOverNote": "Tokeny. Od tej wartości sugerowane jest streszczenie, jeśli w Modelach ustawiono model do streszczeń przekazania; przycięta kopia wciąż zawiera każdą wiadomość i każde wywołanie narzędzia, co bywa duże."
-        },
-        "agentRepoChecks": {
-            "couldntReadWhatRepositories": "Nie udało się odczytać, co deklarują repozytoria.",
+            "summaryOverNote": "Powyżej tej liczby — streszczenie (model w Modelach); przycięta kopia trzyma całą rozmowę, ale rośnie.",
             "noRepositoryDeclaresOwn": "Żadne repozytorium nie deklaruje własnych sprawdzeń",
             "oneRepositoryWaitingOn": "Jedno repozytorium czeka na Ciebie. Dopóki go nie włączysz, jego własne sprawdzenia nie działają.",
             "readingWhatWorkspacesRepositories": "Odczytywanie, co deklarują repozytoria tej przestrzeni roboczej…",

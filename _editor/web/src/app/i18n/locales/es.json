@@ -2297,7 +2297,9 @@
             "keepWarmMinTokensLabel": "Contexto mínimo, en tokens",
             "keepWarmReserve": "Dejar libre esta cuota",
             "keepWarmReserveNote": "La actualización se detiene en cuanto cualquier límite que gaste el modelo de la cuenta está más lleno que el 100 % menos este valor.",
-            "keepWarmReserveLabel": "Cuota dejada libre, en porcentaje"
+            "keepWarmReserveLabel": "Cuota dejada libre, en porcentaje",
+            "summaryOver": "Sugerir resumen desde",
+            "summaryOverNote": "A partir de aquí, sugerir resumen (modelo de traspaso en Modelos); copias recortadas conservan todo y crecen."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "No se pudo leer qué declaran los repositorios.",

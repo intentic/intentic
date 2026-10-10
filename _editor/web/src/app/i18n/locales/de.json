@@ -2288,7 +2288,9 @@
             "keepWarmMinTokensLabel": "Mindestkontext, in Tokens",
             "keepWarmReserve": "So viel Kontingent frei lassen",
             "keepWarmReserveNote": "Das Auffrischen endet, sobald ein Limit, das das Modell des Kontos verbraucht, voller ist als 100 % minus diesen Wert.",
-            "keepWarmReserveLabel": "Frei gelassenes Kontingent, in Prozent"
+            "keepWarmReserveLabel": "Frei gelassenes Kontingent, in Prozent",
+            "summaryOver": "Summary vorschlagen ab",
+            "summaryOverNote": "Ab hier Summary vorschlagen (Übergabe-Modell unter „Modelle“); gekürzte Kopien behalten alles und wachsen."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Es ließ sich nicht lesen, was die Repositorys deklarieren.",

@@ -2286,7 +2286,9 @@
             "keepWarmMinTokensLabel": "Contexte minimal, en jetons",
             "keepWarmReserve": "Laisser ce quota libre",
             "keepWarmReserveNote": "Le rafraîchissement s'arrête dès qu'une limite consommée par le modèle du compte est plus remplie que 100 % moins cette valeur.",
-            "keepWarmReserveLabel": "Quota laissé libre, en pourcentage"
+            "keepWarmReserveLabel": "Quota laissé libre, en pourcentage",
+            "summaryOver": "Suggérer un résumé à partir de",
+            "summaryOverNote": "Au-delà, suggérer un résumé (modèle de relais dans Modèles) ; copie rognée garde tout et grossit."
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Impossible de lire ce que déclarent les dépôts.",

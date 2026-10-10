@@ -4820,10 +4820,7 @@
             "carryUnder": "Suggest carrying under",
             "carryUnderNote": "Tokens. Under this the whole session is carried (trimming saves little); at or above it a trimmed copy is suggested. 0 never suggests carrying.",
             "summaryOver": "Suggest a summary from",
-            "summaryOverNote": "Tokens. At or above this a summary is suggested, where a model is set for hand-off summaries in Models; a trimmed copy still holds every message and tool call, which gets large."
-        },
-        "agentRepoChecks": {
-            "couldntReadWhatRepositories": "Couldn't read what the repositories declare.",
+            "summaryOverNote": "Above this, suggest a summary (hand-off model in Models); trimmed copies keep all messages and grow.",
             "noRepositoryDeclaresOwn": "No repository declares its own checks",
             "oneRepositoryWaitingOn": "One repository is waiting on you. Until you switch it on, its own checks do not run.",
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
