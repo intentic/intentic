@@ -386,31 +386,44 @@ pub fn onboarding_pause(app: AppHandle, paused: bool) -> Result<(), String> {
 pub fn pause_for_update(app: &AppHandle) -> Result<bool, String> {
     let resume = !PREFETCH_PAUSED.load(Ordering::SeqCst);
     onboarding_pause(app.clone(), true)?;
-    let until = std::time::Instant::now() + Duration::from_secs(5);
-    while PREFETCH_ACTIVE.load(Ordering::SeqCst) {
+    let stopped = wait_for_prefetch_stop(&PREFETCH_ACTIVE, Duration::from_secs(5), || {
         for id in PREFETCH_RUNS {
             if scripts::is_running(id) {
-                if let Err(error) = scripts::stop(id) {
-                    if scripts::is_running(id) {
-                        if resume {
-                            let _ = onboarding_pause(app.clone(), false);
-                        }
-                        return Err(error);
-                    }
-                }
+                scripts::stop(id)?;
             }
         }
-        if std::time::Instant::now() >= until {
-            if resume {
-                let _ = onboarding_pause(app.clone(), false);
-            }
-            return Err(
-                "The background download has not stopped yet. Try the update again.".into(),
-            );
+        Ok(())
+    });
+    if stopped.is_err() && resume {
+        let _ = onboarding_pause(app.clone(), false);
+    }
+    stopped.map(|()| resume)
+}
+
+fn wait_for_prefetch_stop(
+    active: &AtomicBool,
+    timeout: Duration,
+    mut stop: impl FnMut() -> Result<(), String>,
+) -> Result<(), String> {
+    let until = std::time::Instant::now() + timeout;
+    let mut stop_error = None;
+    while active.load(Ordering::SeqCst) {
+        // follow() forgets a PID after joining its readers. TERM may fail against an already exited child
+        // during that interval; only a worker that remains active at the deadline should refuse an update.
+        if let Err(error) = stop() {
+            stop_error = Some(error);
+        }
+        if std::time::Instant::now() >= until && active.load(Ordering::SeqCst) {
+            return Err(match stop_error {
+                Some(error) => format!(
+                    "The background download has not stopped yet: {error}. Try the update again."
+                ),
+                None => "The background download has not stopped yet. Try the update again.".into(),
+            });
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    Ok(resume)
+    Ok(())
 }
 
 fn cancel_scheduled_restart(app: &AppHandle) {
@@ -1153,6 +1166,45 @@ pub fn prefetch_display(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefetch_stop_waits_for_an_exited_child_to_leave_the_registry() {
+        let active = AtomicBool::new(true);
+        let mut attempts = 0;
+        let result = wait_for_prefetch_stop(&active, Duration::from_secs(5), || {
+            attempts += 1;
+            if attempts == 2 {
+                active.store(false, Ordering::SeqCst);
+            }
+            Err("the child has already exited".into())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(attempts, 2);
+        assert!(!active.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn prefetch_stop_refuses_an_active_worker_even_when_stop_succeeds() {
+        let active = AtomicBool::new(true);
+        assert_eq!(
+            wait_for_prefetch_stop(&active, Duration::ZERO, || Ok(())),
+            Err("The background download has not stopped yet. Try the update again.".into())
+        );
+        assert!(active.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn prefetch_stop_reports_why_an_active_worker_could_not_stop() {
+        let active = AtomicBool::new(true);
+        assert_eq!(
+            wait_for_prefetch_stop(&active, Duration::ZERO, || Err("access denied".into())),
+            Err(
+                "The background download has not stopped yet: access denied. Try the update again."
+                    .into()
+            )
+        );
+        assert!(active.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn prepare_summary_and_requirements_become_a_check() {
