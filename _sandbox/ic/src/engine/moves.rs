@@ -1030,10 +1030,6 @@ pub fn copy(args: CopyArgs) -> Result<()> {
     if args.volumes.is_empty() && args.images.is_empty() && args.containers.is_empty() {
         bail!("name what to copy: --container, --volume and --image, each as often as needed.");
     }
-    let helper = args.helper.clone().or_else(|| args.images.first().cloned());
-    if helper.is_none() && !args.volumes.is_empty() {
-        bail!("name the image that copies the volumes (--helper, or an --image): one with GNU tar and find, as the sandbox image has.");
-    }
     let log = Log::create_named("engine", "copy")?;
     let (source, target) = match &explicit {
         Some((from_host, to_host)) => {
@@ -1083,7 +1079,12 @@ pub fn copy(args: CopyArgs) -> Result<()> {
         }
         placeholders.push((name.clone(), inspect));
     }
-    let helper = helper.or_else(|| args.images.first().cloned());
+    // The image that copies the volumes: the one named, else the first image, a container's own included (checked
+    // after the containers added theirs: `--container` alone names one).
+    let helper = args.helper.clone().or_else(|| args.images.first().cloned());
+    if helper.is_none() && !args.volumes.is_empty() {
+        bail!("name the image that copies the volumes (--helper, or an --image): one with GNU tar and find, as the sandbox image has.");
+    }
     for volume in &args.volumes {
         if docker::capture_on(&source, &["volume", "inspect", volume], docker::READ_LIMIT)
             .map(|ran| ran.code != Some(0))
