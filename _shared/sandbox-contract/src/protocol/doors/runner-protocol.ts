@@ -20,6 +20,10 @@ export const RunnerHelloSchema = z.object({
     // Compared against what the parent runs to report parity (outdated → rebuild action); an outdated runner still runs
     // turns rather than being refused.
     image: z.string(),
+    // The image `image` was composed from (SANDBOX_BASE_IMAGE). Parity compares this, not `image`: an overlay build's
+    // tag names its own container (`intentic-sandbox-env-<slug>:<hash>`), so two sides on one base and one overlay
+    // never share it. Absent on an old image, which is then compared by `image` alone.
+    baseImage: z.string().optional(),
     channel: z.string().optional(),
     overlayHash: z.string().optional(),
     // Runner's declared settings-only sandbox.toml (definition.ts), diffed against the parent's to itemize drift;

@@ -24,6 +24,7 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): P
                 token: identity.token,
                 version,
                 image: services.config.sandbox.image === "" ? "dev" : services.config.sandbox.image,
+                ...(services.config.sandbox.baseImage !== "" ? { baseImage: services.config.sandbox.baseImage } : {}),
                 ...(services.config.sandbox.channel !== "" ? { channel: services.config.sandbox.channel } : {}),
                 ...(services.config.sandbox.environmentHash !== "" ? { overlayHash: services.config.sandbox.environmentHash } : {}),
                 ...(definitionToml !== undefined ? { definitionToml } : {}),

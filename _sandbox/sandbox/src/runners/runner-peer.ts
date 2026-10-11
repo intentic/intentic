@@ -17,7 +17,7 @@ import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/
 export type RunnerClient = ContractRouterClient<typeof runnerContract>;
 // What a runner's hello asserts about its build and declared shape, kept beside the live socket for the parity card.
 // `definitionToml` is replaced in place after a successful settings push (runner.routes.ts).
-export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "channel" | "overlayHash" | "definitionToml">;
+export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "channel" | "overlayHash" | "definitionToml">;
 export type RunnerHub = PeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>;
 export type RunnerStore = PeerStore<{ readonly host?: string | undefined }>;
 
@@ -43,9 +43,10 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
     },
     hello: {
         schema: RunnerHelloSchema,
-        announced: ({ version, image, channel, overlayHash, definitionToml }) => ({
+        announced: ({ version, image, baseImage, channel, overlayHash, definitionToml }) => ({
             version,
             image,
+            ...(baseImage !== undefined ? { baseImage } : {}),
             ...(channel !== undefined ? { channel } : {}),
             ...(overlayHash !== undefined ? { overlayHash } : {}),
             ...(definitionToml !== undefined ? { definitionToml } : {}),
@@ -94,6 +95,7 @@ export const runnerSummaries = async (services: Services): Promise<RunnerSummary
     // Read once for the whole list, so every row's badge and drift lines are measured against the same build.
     const parentBuild = {
         image: services.config.sandbox.image,
+        baseImage: services.config.sandbox.baseImage,
         channel: services.config.sandbox.channel,
         overlayHash: services.config.sandbox.environmentHash,
     };

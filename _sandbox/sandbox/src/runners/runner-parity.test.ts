@@ -35,6 +35,33 @@ test("nothing to compare, or nothing to compare against, reads as unknown rather
     expect(runnerParity({ image: "dev" }, { image: "dev" })).toBe("unknown");
 });
 
+// An overlay build's own tag carries its container's slug, so it differs on every pair of sandboxes by construction.
+test("a runner built from the parent's overlay on the parent's base is current, whatever its own tag", () => {
+    const base = "ghcr.io/intentic/sandbox:stable";
+    const parentBuild = { image: "intentic-sandbox-env-sandbox-82789f4106b4:0e888b675bc7", baseImage: base, channel: "stable", overlayHash: "0e888b675bc7" };
+    const runner = { image: "intentic-sandbox-env-runner-omen:0e888b675bc7", baseImage: base, channel: "stable", overlayHash: "0e888b675bc7" };
+    expect(runnerParity(parentBuild, runner)).toBe("current");
+    expect(runnerParity(parentBuild, { ...runner, baseImage: "ghcr.io/intentic/sandbox:edge" })).toBe("outdated");
+    expect(runnerParity(parentBuild, { ...runner, overlayHash: "ffffffffffff" })).toBe("outdated");
+});
+
+// Each machine's `intentic-sandbox:dev` is whatever its checkout held, so the tag agreeing proves nothing, and an
+// update can't bring it level: `ic` refuses to move a checkout build onto the published image (recreate.rs).
+test("a build from a checkout on either side reads as unknown, never as outdated with an update that is refused", () => {
+    const dev = "intentic-sandbox:dev";
+    const parentDev = { image: "intentic-sandbox-dev-env-sandbox-82789f4106b4:0e888b675bc7", baseImage: dev, channel: "stable", overlayHash: "0e888b675bc7" };
+    const runnerDev = { image: "intentic-sandbox-env-runner-omen:0e888b675bc7", baseImage: dev, overlayHash: "0e888b675bc7" };
+    expect(runnerParity(parentDev, runnerDev)).toBe("unknown");
+    expect(runnerParity(parent, runnerDev)).toBe("unknown");
+    expect(runnerParity({ image: dev }, parent)).toBe("unknown");
+});
+
+// An image from before the hello carried `baseImage` is measured by `image`, as it always was.
+test("a runner that announces no base is compared by its image", () => {
+    expect(runnerParity(parent, { image: parent.image, channel: parent.channel, overlayHash: parent.overlayHash })).toBe("current");
+    expect(runnerParity({ ...parent, baseImage: parent.image, image: "intentic-sandbox-env-sandbox-x:abc" }, parent)).toBe("current");
+});
+
 // Must match ic's own spelling (runner.rs SLUG_PREFIX), or the update/rebuild flow addresses a container that doesn't
 // exist.
 test("a runner's container is its name under ic's prefix", () => {
