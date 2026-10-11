@@ -116,6 +116,12 @@ const freePort = async (): Promise<number> => {
     return bindEphemeral();
 };
 
+// Gives pages document.modelContext, so the agent can call the WebMCP tools of a site it builds or reads
+// (browser-router.ts, browser_webmcp_call). The blink switch, not --enable-features: Playwright passes its own
+// --enable-features and Chromium keeps only the last copy of a switch. The credential-free browser only: on a signed-in
+// profile, a modelContext on every site is a trait real Chrome users don't share, one more thing to fingerprint.
+export const WEBMCP_LAUNCH_ARG = "--enable-blink-features=WebMCP";
+
 // A nonce, not owner+port: a port can recur before its old config file expires, and wx would collide on the name.
 // Owner and port stay in the name for reading a directory by eye.
 export const writeBrowserConfig = async (
@@ -125,6 +131,7 @@ export const writeBrowserConfig = async (
     // Display this browser is headed on, if headed at all; its size becomes the window's, absent means headless.
     display?: Display | undefined,
     exit?: ProfileExit | undefined,
+    extraArgs: readonly string[] = [],
 ): Promise<string> => {
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const path = join(configDir, `${server}-${port}-${randomBytes(4).toString("hex")}.json`);
@@ -133,7 +140,7 @@ export const writeBrowserConfig = async (
     const config = {
         browser: {
             launchOptions: {
-                args: [`--remote-debugging-port=${port}`, ...(display === undefined ? [] : chromiumWindowArgs(display))],
+                args: [`--remote-debugging-port=${port}`, ...(display === undefined ? [] : chromiumWindowArgs(display)), ...extraArgs],
                 ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
             },
             contextOptions: {
@@ -303,7 +310,7 @@ export const prepareBrowserOwner = async (
                 browserOutputDir(root),
                 await ensureStealthScript(root, ANONYMOUS_BROWSER_SERVER, fingerprint),
                 webDisplay,
-                await writeBrowserConfig(ANONYMOUS_BROWSER_SERVER, port, fingerprint, webDisplay),
+                await writeBrowserConfig(ANONYMOUS_BROWSER_SERVER, port, fingerprint, webDisplay, undefined, [WEBMCP_LAUNCH_ARG]),
             ),
         );
     }

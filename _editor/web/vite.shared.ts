@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import type { Plugin, ResolvedConfig } from "vite";
@@ -103,10 +105,31 @@ const stableDevStyles = (): Plugin => {
     };
 };
 
+// SERVE ONLY: which checkout this dev server serves, and which Intentic conversation started it. The editor mirrors the
+// owner's own dev servers onto 47145 and 47146 inside the sandbox, so a page on those ports can be the owner's code
+// rather than the worktree an agent just edited; the editor's `editor_build` agent tool (src/shell/agentDevTools.ts)
+// reports this so the agent can tell. Every conversation sees its own worktree at the same path, so the path alone
+// can't say whose it is: the branch and the starting conversation can. A production build never carries it.
+const devSource = (): Plugin => ({
+    name: `intentic-dev-source`,
+    apply: `serve`,
+    config: () => {
+        const root = repoRoot(import.meta.url);
+        let branch: string | null = null;
+        try {
+            branch = execFileSync(`git`, [`-C`, root, `branch`, `--show-current`], { encoding: `utf8`, stdio: [`ignore`, `pipe`, `ignore`] }).trim() || null;
+        } catch {
+            // allow(silent-catch): not a git checkout, or no git; the branch stays null, which the tool reports as unknown.
+        }
+        const source = { root, branch, startedBy: process.env[`INTENTIC_TURN_OWNER`] ?? null, startedAt: new Date().toISOString() };
+        return { define: { "import.meta.env.DEV_SOURCE": JSON.stringify(source) } };
+    },
+});
+
 export const MONACO_WORKER = `monaco-editor-core/esm/vs/editor/editor.worker.start.js`;
 
 export const shared = {
-    plugins: [vue(), tailwindcss(), stableDevStyles()],
+    plugins: [vue(), tailwindcss(), stableDevStyles(), devSource()],
     // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
     // own chunk on first use, which an IIFE worker cannot split.
     worker: { format: `es` as const },

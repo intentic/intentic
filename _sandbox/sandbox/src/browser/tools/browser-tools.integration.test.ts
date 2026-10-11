@@ -6,7 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import { createTurnMounts, type TurnLease } from "../../agent/tools/turn-mounts.js";
 import type { BrowserRouterFactory, RouterManifest } from "./browser-router.js";
-import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, writeBrowserConfig } from "./browser-tools.js";
+import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, WEBMCP_LAUNCH_ARG, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessions/session-store.js";
@@ -328,6 +328,24 @@ test("preparing an owner writes its config and binds its own profile directory",
         browser: { launchOptions: { args: string[] } };
     };
     expect(config.browser.launchOptions.args).toContain("--remote-debugging-port=41999");
+    // A signed-in profile keeps Chrome's stock surface: a modelContext on every site would set it apart.
+    expect(config.browser.launchOptions.args).not.toContain(WEBMCP_LAUNCH_ARG);
+});
+
+// The credential-free browser is where an agent exercises the WebMCP tools of a site it is building.
+test("preparing the credential-free browser turns WebMCP on", async () => {
+    if (!(await chromiumInstalled())) {
+        return;
+    }
+    const prepared = await prepareBrowserOwner([], tempRoot(), "web", 41_997);
+    if ("refusal" in prepared) {
+        throw new Error(`expected a spawn spec, got a refusal: ${prepared.refusal}`);
+    }
+    const args = [...prepared.args];
+    const config = JSON.parse(readFileSync(args[args.indexOf("--config") + 1] as string, "utf8")) as {
+        browser: { launchOptions: { args: string[] } };
+    };
+    expect(config.browser.launchOptions.args).toContain(WEBMCP_LAUNCH_ARG);
 });
 
 test("preparing an owner whose profile a login window holds refuses instead of racing it", async () => {

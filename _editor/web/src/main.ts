@@ -107,9 +107,11 @@ app.config.errorHandler = (err, _instance, info) => {
     reportStartupError(err);
 };
 // Dev-only and idle until armed from the console; `import.meta.env.DEV` is compile-time, so the hook and the module
-// behind it leave a production build entirely.
+// behind it leave a production build entirely. So do the WebMCP tools an agent's browser calls (shell/agentDevTools.ts),
+// imported rather than bundled so nothing of them reaches a production chunk.
 if (import.meta.env.DEV) {
-    installRenderTrace(app);
+    const render = installRenderTrace(app);
+    void import("./shell/agentDevTools").then(({ installAgentDevTools }) => installAgentDevTools(render));
 }
 app.use(router);
 // Our own client so requireAuth can hydrate it from IndexedDB (per-user) before any route mounts.

@@ -14,6 +14,8 @@ import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepar
 // 5. a sole-owner manifest serves tools with no `account` at all and routes everything to that owner.
 // 6. closing the router (the turn ending) kills the backends.
 // 7. a network tool's answer comes back with the credentials a site issued redacted, and its debugging facts intact.
+// 8. the fixed browser_webmcp_call is listed beside the probed tools and reaches the page tool the backend names
+//    webmcp_<name>, which no cached tool list could have carried.
 // The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
 // back.
 
@@ -83,6 +85,8 @@ process.stdin.on("data", (chunk) => {
         else if (msg.method === "tools/list") reply({ tools: [{ name: "browser_probe", description: "canary tool", inputSchema: { type: "object", properties: {} } }] });
         else if (msg.method === "tools/call" && msg.params?.name === "browser_network_requests") reply({ content: [{ type: "text", text: NETWORK.list }] });
         else if (msg.method === "tools/call" && msg.params?.name === "browser_network_request") reply({ content: [{ type: "text", text: NETWORK[msg.params.arguments?.part ?? "details"] ?? "### Result\\n" + JSON.stringify(msg.params.arguments) }] });
+        else if (msg.method === "tools/call" && msg.params?.name === "webmcp_unregistered") reply({ content: [{ type: "text", text: '### Error\\nTool "webmcp_unregistered" not found' }], isError: true });
+        else if (msg.method === "tools/call" && msg.params?.name.startsWith("webmcp_")) reply({ content: [{ type: "text", text: "page:" + msg.params.name + ":" + JSON.stringify(msg.params.arguments ?? {}) }] });
         else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: "echo:" + marker + ":" + JSON.stringify(msg.params?.arguments ?? {}) }] });
         else if (msg.id !== undefined) reply({});
     }
@@ -174,9 +178,11 @@ test("handshake and tools/list cost no backend, and every tool gains the require
     await handshake(harness);
     const list = await rpc(harness.router, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     const tools = (list["result"] as { tools: { name: string; inputSchema: { properties: Record<string, unknown>; required: string[] } }[] }).tools;
-    expect(tools.map((tool) => tool.name)).toEqual(["browser_probe"]);
-    expect(tools[0]?.inputSchema.properties["account"]).toMatchObject({ type: "string" });
-    expect(tools[0]?.inputSchema.required).toContain("account");
+    expect(tools.map((tool) => tool.name)).toEqual(["browser_probe", "browser_webmcp_call"]);
+    for (const tool of tools) {
+        expect(tool.inputSchema.properties["account"]).toMatchObject({ type: "string" });
+        expect(tool.inputSchema.required).toContain("account");
+    }
     expect(await exists(harness.markers["identity-1"] as string)).toBe(false);
     expect(await exists(harness.markers["standalone"] as string)).toBe(false);
     // The point of the whole arrangement: a client can learn every browser tool without this sandbox starting a
@@ -276,7 +282,7 @@ test("a second turn's router answers tools/list straight from the cache: no prob
     await writeFile(second.schemaCachePath, await readFile(first.schemaCachePath, "utf8"));
     await handshake(second);
     const list = await rpc(second.router, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-    expect((list["result"] as { tools: unknown[] }).tools).toHaveLength(1);
+    expect((list["result"] as { tools: unknown[] }).tools).toHaveLength(2);
     expect(await exists(join(second.dir, "probe.pid"))).toBe(false);
 });
 
@@ -389,4 +395,36 @@ test("a network call that asks for a file instead of an answer is refused before
     expect(refused.isError).toBe(true);
     expect(refused.content[0]?.text).toContain("filename");
     expect(harness.prepares).toEqual([]);
+});
+
+// A page's WebMCP tools appear and vanish with the page, so no probed list can hold them; the one fixed tool reaches
+// whichever the current page registered, under the name @playwright/mcp gives it.
+test.each([
+    ["a signed-in account", undefined, { account: "born-acct" }],
+    ["the anonymous browser", "web", {}],
+] as const)("%s's browser_webmcp_call reaches the page tool by its backend name, with only its params", async (_label, soleOwner, routing) => {
+    const harness = await startRouter(soleOwner);
+    await handshake(harness);
+    const list = await rpc(harness.router, { jsonrpc: "2.0", id: 30, method: "tools/list", params: {} });
+    expect((list["result"] as { tools: { name: string }[] }).tools.map((tool) => tool.name)).toContain("browser_webmcp_call");
+    const called = await networkCall(harness, 31, "browser_webmcp_call", { ...routing, name: "add to-cart", params: { sku: "A1", quantity: 2 } });
+    expect(called.isError).toBeUndefined();
+    expect(called.content[0]?.text).toBe('page:webmcp_add_to-cart:{"sku":"A1","quantity":2}');
+    const bare = await networkCall(harness, 32, "browser_webmcp_call", { ...routing, name: "get_state" });
+    expect(bare.content[0]?.text).toBe("page:webmcp_get_state:{}");
+});
+
+test("a WebMCP tool the page never registered says to snapshot, and a malformed call costs no backend", async () => {
+    const harness = await startRouter();
+    await handshake(harness);
+    const malformed = await networkCall(harness, 33, "browser_webmcp_call", { account: "identity-1", name: "x", params: ["not", "an", "object"] });
+    expect(malformed.isError).toBe(true);
+    expect(malformed.content[0]?.text).toContain("params");
+    const nameless = await networkCall(harness, 34, "browser_webmcp_call", { account: "identity-1" });
+    expect(nameless.isError).toBe(true);
+    expect(harness.prepares).toEqual([]);
+    const missing = await networkCall(harness, 35, "browser_webmcp_call", { account: "identity-1", name: "unregistered" });
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0]?.text).toContain('no WebMCP tool "unregistered"');
+    expect(missing.content[0]?.text).toContain("snapshot");
 });

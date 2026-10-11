@@ -16,7 +16,7 @@
 
 import { getCurrentInstance, type App, type DebuggerEvent } from "vue";
 
-interface Cause {
+export interface Cause {
     readonly comp: string;
     // `key` as the reactive system names it: `value` for a ref, the property for a reactive object. A computed
     // notifying downstream carries no key at all, which is what `computed` stands for here.
@@ -114,7 +114,31 @@ const observeRedraws = (): PerformanceObserver => {
 };
 
 /** Installs the hook. Recording stays off until `__intenticRender.on()`, so an unarmed app pays one boolean per trigger. */
-export const installRenderTrace = (app: App): void => {
+// One component's line in the report: what it cost the screen, how often it was woken, and the write behind most of it.
+export interface RenderRow {
+    readonly comp: string;
+    readonly redraws: number;
+    readonly instances: number;
+    readonly worstInstance: number;
+    readonly ms: number;
+    readonly triggers: number;
+    readonly dep: string;
+    readonly writer: string;
+}
+
+// The console handle, also handed to the editor's agent tools (shell/agentDevTools.ts) so `editor_render` reads the same
+// recording a person would.
+export interface RenderTrace {
+    readonly on: () => void;
+    readonly off: () => void;
+    readonly reset: () => void;
+    readonly table: () => void;
+    readonly rows: () => readonly RenderRow[];
+    readonly why: (comp: string) => readonly Cause[];
+    readonly dump: () => readonly Cause[];
+}
+
+export const installRenderTrace = (app: App): RenderTrace => {
     app.mixin({
         renderTriggered(event: DebuggerEvent): void {
             if (!armed) {
@@ -137,16 +161,7 @@ export const installRenderTrace = (app: App): void => {
     let observer: PerformanceObserver | undefined;
 
     // One row per component: what it cost the screen, how often it was woken, and the single write behind most wakings.
-    const rows = (): readonly {
-        comp: string;
-        redraws: number;
-        instances: number;
-        worstInstance: number;
-        ms: number;
-        triggers: number;
-        dep: string;
-        writer: string;
-    }[] => {
+    const rows = (): readonly RenderRow[] => {
         const totals = new Map<string, { comp: string; redraws: number; instances: number; worstInstance: number; ms: number }>();
         for (const row of redraws.values()) {
             const updates = row.renders - row.mounts;
@@ -185,7 +200,7 @@ export const installRenderTrace = (app: App): void => {
             .toSorted((left, right) => right.redraws - left.redraws || right.triggers - left.triggers);
     };
 
-    (globalThis as unknown as Record<string, unknown>)[`__intenticRender`] = {
+    const handle: RenderTrace = {
         on: (): void => {
             armed = true;
             causes.clear();
@@ -216,4 +231,6 @@ export const installRenderTrace = (app: App): void => {
             [...causes.values()].filter((cause) => cause.comp === comp).toSorted((left, right) => right.count - left.count),
         dump: (): readonly Cause[] => [...causes.values()].toSorted((left, right) => right.count - left.count),
     };
+    (globalThis as unknown as Record<string, unknown>)[`__intenticRender`] = handle;
+    return handle;
 };

@@ -155,6 +155,26 @@ export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Pr
 // Ranked by total time, not worst case: what consumed the most time overall is the bottleneck.
 const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
 
+// The ranked table as rows, the one `__intenticPerf.table()` prints and the editor's `editor_perf` agent tool returns.
+export const perfTable = (): readonly { op: string; count: number; totalMs: number; meanMs: number; maxMs: number; slow: number }[] =>
+    ranked().map((stat) => ({
+        op: stat.op,
+        count: stat.count,
+        totalMs: Math.round(stat.totalMs),
+        meanMs: round(stat.totalMs / stat.count),
+        maxMs: Math.round(stat.maxMs),
+        slow: stat.slowCount,
+    }));
+
+// The last spans recorded, newest last, optionally only ops starting with `prefix`.
+export const perfSpans = (prefix?: string): readonly PerfSpan[] => (prefix === undefined ? [...ring] : ring.filter((span) => span.op.startsWith(prefix)));
+
+// Zeroes the table and the ring, before reproducing something deliberately.
+export const resetPerf = (): void => {
+    stats.clear();
+    ring.length = 0;
+};
+
 // Console handle, attached to the window rather than exported, since the moment it's needed the only tool in reach
 // is devtools:
 //
@@ -166,18 +186,9 @@ const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, ri
 export const installPerfConsole = (): void => {
     (globalThis as unknown as Record<string, unknown>)[`__intenticPerf`] = {
         table: (): void => {
-            console.table(
-                ranked().map((stat) => ({
-                    op: stat.op,
-                    count: stat.count,
-                    totalMs: Math.round(stat.totalMs),
-                    meanMs: round(stat.totalMs / stat.count),
-                    maxMs: Math.round(stat.maxMs),
-                    slow: stat.slowCount,
-                })),
-            );
+            console.table(perfTable());
         },
-        dump: (prefix?: string): readonly PerfSpan[] => (prefix === undefined ? [...ring] : ring.filter((span) => span.op.startsWith(prefix))),
+        dump: perfSpans,
         verbose: (on: boolean): void => {
             verbose = on;
             try {
@@ -187,10 +198,7 @@ export const installPerfConsole = (): void => {
             }
             console.info(`[perf] verbose ${on ? `on` : `off`}`);
         },
-        reset: (): void => {
-            stats.clear();
-            ring.length = 0;
-        },
+        reset: resetPerf,
     };
 };
 
