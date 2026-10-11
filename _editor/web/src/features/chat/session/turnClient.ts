@@ -15,14 +15,15 @@ import {
 } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
+import { basename } from "@intentic/ui/path";
 import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
-import type { TurnBooking } from "../composer/later/sendLater";
-import { holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../composer/later/bookings";
+import type { SendLater, TurnBooking } from "../composer/later/sendLater";
+import { bookingOfMessage, holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../composer/later/bookings";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../run/endings/pickUp";
@@ -120,6 +121,7 @@ type TurnHost = Pick<
     | "draft"
     | "attachments"
     | "queue"
+    | "sendLater"
     | "autoLandDraft"
 >;
 
@@ -821,16 +823,60 @@ export class TurnClient {
     }
 
     // Takes a waiting message back before it goes out, as this window read it: refused when another window changed it
-    // since, which the error line says. False when nothing changed.
+    // since, which the error line says. A person's words come back into this composer (takenBack), and when they were
+    // all the conversation ever held, the conversation went with them and this chat is a new one again (unopened).
+    // False when nothing changed.
     async unqueue(message: QueuedMessage): Promise<boolean> {
         const { host } = this;
+        // The booking as this window read it, before the answer replaces the queue it is read off.
+        const booking = bookingOfMessage(host.queue.value, message);
         const left = await orRefusal(
             sandboxRpc.agent.queueRemove(
                 { conversationId: host.conversationId, id: message.id, revision: message.revision },
                 { context: { at: host.box.value } },
             ),
         );
-        return this.heard(left);
+        if (!this.heard(left) || left instanceof SandboxHttpError) {
+            return false;
+        }
+        if (message.voice === `person`) {
+            this.takenBack(message, booking);
+        }
+        if (left.unopened === true) {
+            this.unopened();
+        }
+        return true;
+    }
+
+    // A person's message taken back goes back where it was written, the inverse of the press that sent it: its words
+    // ahead of anything typed since, a blank line between (as words the daemon never took come back, giveBack), its files
+    // staged again as finished chips, and, into a box that held nothing of its own, the booking it waited by, so pressing
+    // again books it as it was rather than sending it now. Nothing typed is lost to a take-back: clearing the box is
+    // how words are thrown away. Never the sandbox's or an agent's words, which were nobody's here to write.
+    private takenBack(message: QueuedMessage, booking: SendLater | undefined): void {
+        const { draft, attachments, sendLater } = this.host;
+        const own = draft.value.trim() !== `` || attachments.value.length > 0;
+        if (message.text.trim() !== ``) {
+            draft.value = draft.value.trim() === `` ? message.text : `${message.text}\n\n${draft.value}`;
+        }
+        attachments.value = [...(message.attachments ?? []).map((path) => chipOf({ name: basename(path), path })), ...attachments.value];
+        if (!own && booking !== undefined && sendLater.value === undefined) {
+            sendLater.value = booking;
+        }
+    }
+
+    // The conversation went with the message that opened it (agent.queueRemove's `unopened`): no card, no record, nothing
+    // of it anywhere but this tab, which is a new chat again, named afresh by whatever it next sends. Unlatched here, since
+    // a roster frame never re-registers a chat it no longer lists; left latched, the tab read as one that had left the
+    // board and stood in Finished, empty, under the old message's name.
+    private unopened(): void {
+        const { host } = this;
+        host.registered.value = false;
+        host.standing.value = undefined;
+        host.title.value = null;
+        // The conversation it opens next counts its queue from the start, so a revision kept from this one would read
+        // every change to that queue as older than what this window holds (newerQueue).
+        host.queue.value = undefined;
     }
 
     // Rewords a waiting message where it stands in the queue, as this window read it; refused like a removal.

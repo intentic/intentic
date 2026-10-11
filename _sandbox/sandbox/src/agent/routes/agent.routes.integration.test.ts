@@ -331,6 +331,52 @@ describe("the conversation's queue", () => {
         gates[1]?.();
     });
 
+    // Taking back the message that opened its conversation takes the conversation too: left, it stood on the board as an
+    // idle card named after words nobody could find in it. The words are the pressing window's to put back in its
+    // composer, and the same id opens afresh when they are sent again.
+    it("takes a conversation off the board with the scheduled message that opened it, and only once nothing else is in it", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        const listed = async (id: string): Promise<boolean> => (await client.agents.list()).agents.some((agent) => agent.id === id);
+        const at = Date.now() + 60 * 60 * 1000;
+        await client.agent.run({ prompt: "write the migration guide", conversationId: "conv-unopen", agent: "grok", isolated: true, messageId: "m-a", sendAt: at });
+        await client.agent.run({ prompt: "then tag it", conversationId: "conv-unopen", agent: "grok", messageId: "m-b", sendAt: at + 1_000 });
+
+        // Another message still waits in it, so it stays for that one.
+        const first = await client.agent.queueRemove({ conversationId: "conv-unopen", id: "m-b", revision: 2 });
+        expect(first).toMatchObject({ items: [{ id: "m-a" }] });
+        expect(first.unopened).toBeUndefined();
+        expect(await listed("conv-unopen")).toBe(true);
+
+        expect(await client.agent.queueRemove({ conversationId: "conv-unopen", id: "m-a", revision: 1 })).toEqual({ items: [], revision: 4, unopened: true });
+        expect(await listed("conv-unopen")).toBe(false);
+        expect(await errorCode(client.agent.queueRemove({ conversationId: "conv-unopen", id: "m-a", revision: 1 }))).toBe("NOT_FOUND");
+
+        // Sent again, the words open it afresh, under the same id.
+        expect(await client.agent.run({ prompt: "write the migration guide", conversationId: "conv-unopen", agent: "grok", messageId: "m-c", sendAt: at })).toEqual({
+            delivered: "queued",
+        });
+        expect(await queueOf(client, "conv-unopen")).toMatchObject({ items: [{ id: "m-c", text: "write the migration guide" }] });
+        expect(gates).toHaveLength(0);
+    });
+
+    // A conversation that has run is more than its waiting message: taking that back leaves the card and everything in it.
+    it("keeps a conversation that has run when its scheduled message is taken back", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-ran-at", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        gates[0]?.();
+        await collect(await client.agent.attach({ conversationId: "conv-ran-at" }));
+        await client.agent.run({ prompt: "and the changelog", conversationId: "conv-ran-at", agent: "grok", messageId: "m-r", sendAt: Date.now() + 60 * 60 * 1000 });
+        const item = (await queueOf(client, "conv-ran-at"))?.items[0];
+
+        const taken = await client.agent.queueRemove({ conversationId: "conv-ran-at", id: "m-r", revision: item?.revision ?? -1 });
+        expect(taken).toMatchObject({ items: [] });
+        expect(taken.unopened).toBeUndefined();
+        expect((await client.agents.list()).agents.some((agent) => agent.id === "conv-ran-at")).toBe(true);
+    });
+
     // Scheduling is the person choosing when the words go: a turn running when they press is not that moment.
     it("holds a send booked while a turn runs, and lets it go at its time rather than when that turn ends", async () => {
         const { gates, prompts, services: turns } = unsteerableTurns();

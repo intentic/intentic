@@ -253,7 +253,10 @@ export const createAgentRoutes = (services: Services) => {
         }),
         queueRemove: i.queueRemove.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            return queueAnswer(input.conversationId, await services.turns.unqueue(input));
+            const change = await services.turns.unqueue(input);
+            // The message took the conversation it opened with it: answered with the queue the removal left, since nothing
+            // reads one back from a conversation that is gone, and said so, for the window to make it a draft again.
+            return typeof change === "object" ? { ...queueView(change.unopened), unopened: true } : queueAnswer(input.conversationId, change);
         }),
         queueResume: i.queueResume.handler(async ({ input, context }) => {
             own(context, input.conversationId);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { QueuedMessage } from "@intentic/sandbox-contract";
-import { Button, Icon, type SwipeAction, SwipeRow, ui, useDevice } from "@intentic/ui";
+import { Button, Icon, type SwipeAction, SwipeRow, type TooltipValue, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
@@ -55,13 +55,16 @@ const picturesOf = (message: QueuedMessage) =>
 const filesOf = (message: QueuedMessage): string[] =>
     (message.attachments ?? []).filter((path) => attachmentPreview(path) === undefined).map((path) => basename(path));
 
+// A person's words go back into the composer below, which the hover says, since a ✕ alone read as throwing them away.
+const takeBackTip = (message: QueuedMessage): TooltipValue =>
+    message.voice === `person` ? { title: t(`chat.chatQueue.takeBack`), note: t(`chat.chatQueue.takeBackNote`) } : t(`chat.chatQueue.takeBack`);
+
 // On a touch screen a waiting message is swiped aside to take it back: its ✕ was the one way, a 20px target a thumb kept
-// missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four seconds). The ✕
-// stays, now with a thumb's target, for whoever reaches for it. Not while it is being reworded: that row holds a field.
+// missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four seconds). The
+// button stays, now with a thumb's target, for whoever reaches for it. Not while it is being reworded: that row holds a field.
 const { coarse } = useDevice();
-const takeBack = computed<SwipeAction | undefined>(() =>
-    coarse.value ? { label: t(`chat.chatQueue.takeBack`), icon: `times`, tone: `danger` } : undefined,
-);
+const takeBack = (message: QueuedMessage): SwipeAction | undefined =>
+    coarse.value ? { label: t(`chat.chatQueue.takeBack`), icon: message.voice === `person` ? `undo` : `times`, tone: `danger` } : undefined;
 
 const save = async (message: QueuedMessage): Promise<void> => {
     const text = rewording.value?.text.trim() ?? ``;
@@ -77,7 +80,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
         <SwipeRow
             v-for="message in waiting"
             :key="message.id"
-            :action="rewording?.id === message.id ? undefined : takeBack"
+            :action="rewording?.id === message.id ? undefined : takeBack(message)"
             class="rounded-xl"
             @commit="unqueue(message)"
         >
@@ -127,11 +130,11 @@ const save = async (message: QueuedMessage): Promise<void> => {
                 <button
                     type="button"
                     class="composer-ghost touch-target h-5 w-5 shrink-0 pointer-coarse:ml-3"
-                    v-tooltip.top="t(`chat.chatQueue.takeBack`)"
+                    v-tooltip.top="takeBackTip(message)"
                     :aria-label="t(`chat.chatQueue.removeLabel`)"
                     @click="unqueue(message)"
                 >
-                    <Icon name="times" class="text-2xs" />
+                    <Icon :name="message.voice === `person` ? `undo` : `times`" class="text-2xs" />
                 </button>
             </div>
         </SwipeRow>

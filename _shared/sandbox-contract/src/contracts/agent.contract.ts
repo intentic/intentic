@@ -2,7 +2,15 @@ import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/requests.js";
 import { AttachFrameSchema } from "../events/agent-events.js";
-import { AgentRunSchema, AttachTurnSchema, ConversationQueueSchema, MessageReceiptSchema, QueueResumedSchema, StartedTurnSchema } from "../schemas/agent.js";
+import {
+    AgentRunSchema,
+    AttachTurnSchema,
+    ConversationQueueSchema,
+    MessageReceiptSchema,
+    QueueResumedSchema,
+    QueueTakenBackSchema,
+    StartedTurnSchema,
+} from "../schemas/agent.js";
 import { ChatRouteAskSchema, ChatRouteSchema } from "../schemas/chat-route.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
 import {
@@ -102,11 +110,11 @@ export const agentContract = {
             path: "/agent/queue/remove",
             summary: "Take back a waiting message",
             description:
-                "Removes a message from the conversation's queue before the agent gets it. Name the revision you read it at: a message somebody reworded since is left alone, so you never take back words you have not seen.",
+                "Removes a message from the conversation's queue before the agent gets it. Name the revision you read it at: a message somebody reworded since is left alone, so you never take back words you have not seen. A message that opened its conversation by being scheduled, with nothing else in that conversation since, takes the conversation with it: the answer says so, and the words are the caller's to put back where they were written.",
         })
         .meta({ floor: "collaborator", guest: true })
         .input(QueuedMessageRefSchema)
-        .output(ConversationQueueSchema),
+        .output(QueueTakenBackSchema),
     queueResume: procedure
         .route({
             method: "POST",

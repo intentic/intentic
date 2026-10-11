@@ -13,13 +13,14 @@ import { unstubbed } from "@intentic/testing";
 import { AsyncIteratorClass } from "@orpc/client";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { computed, ref, shallowRef, watch } from "vue";
-import type { AgentStanding } from "../../agents/fleet/agentStatus";
+import { type AgentStanding, NO_ATTENTION } from "../../agents/fleet/agentStatus";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { runningTurn } from "../../../testing/runningTurn";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { PickUp } from "../run/endings/pickUp";
+import type { SendLater } from "../composer/later/sendLater";
 import type { TurnFailures } from "../run/endings/turnFailures";
 import type { ForkLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
@@ -138,6 +139,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         draft,
         attachments,
         queue: shallowRef<ConversationQueue | undefined>(),
+        sendLater: shallowRef<SendLater | undefined>(),
         autoLandDraft: ref<boolean | undefined>(),
     };
     const client = new TurnClient(host);
@@ -896,6 +898,79 @@ describe(`the queue's doors`, () => {
         expect(await client.unqueue({ ...waiting!, revision: 2 })).toBe(true);
         expect(queueRemove.mock.calls[0]?.[0]).toEqual({ conversationId: `c1`, id: `m-wait`, revision: 2 });
         expect(host.queue.value).toEqual({ items: [], revision: 3 });
+    });
+
+    // Take back is the inverse of the press that sent it: the words were the person's, so they come back to the box
+    // they were written in rather than vanishing, ahead of whatever was typed since, with their files.
+    it(`puts a person's words and files back into the composer, ahead of what was typed since`, async () => {
+        const { client, host } = clientOf();
+        const message = { id: `m-wait`, text: `and the docs`, attachments: [FILE.path], voice: `person` as const, queuedAt: 1_000, revision: 1 };
+        host.queue.value = { items: [message], revision: 1 };
+        host.draft.value = `also the readme`;
+        host.attachments.value = [{ id: `own`, name: `own.png`, path: `own.png`, status: `done`, progress: 100 }];
+        queueRemove.mockImplementation(async () => ({ items: [], revision: 2 }));
+
+        expect(await client.unqueue(message)).toBe(true);
+        expect(host.draft.value).toBe(`and the docs\n\nalso the readme`);
+        expect(host.attachments.value.map((chip) => [chip.name, chip.path, chip.status])).toEqual([
+            [`shot.png`, FILE.path, `done`],
+            [`own.png`, `own.png`, `done`],
+        ]);
+        // Nothing waited by a booking, so nothing is booked for the box.
+        expect(host.sendLater.value).toBeUndefined();
+    });
+
+    it(`leaves the box alone for words nobody here wrote`, async () => {
+        const { client, host } = clientOf();
+        const message = { id: `m-agent`, text: `the build is green`, voice: `agent` as const, queuedAt: 1_000, revision: 1 };
+        host.queue.value = { items: [message], revision: 1 };
+        queueRemove.mockImplementation(async () => ({ items: [], revision: 2 }));
+
+        expect(await client.unqueue(message)).toBe(true);
+        expect(host.draft.value).toBe(``);
+    });
+
+    // A scheduled message taken back to fix a word must not go out NOW at the next Enter: the box gets its booking back,
+    // so pressing again books it as it was. A box already holding something of its own keeps its own say.
+    it(`gives an empty box the booking the message waited by, and a box with words of its own none`, async () => {
+        const at = Date.now() + 60 * 60 * 1000;
+        const booked = { id: `m-at`, text: `write the guide`, voice: `person` as const, queuedAt: 1_000, revision: 1, until: at };
+        queueRemove.mockImplementation(async () => ({ items: [], revision: 2 }));
+
+        const empty = clientOf();
+        empty.host.queue.value = { items: [booked], revision: 1, paused: `scheduled`, until: at };
+        expect(await empty.client.unqueue(booked)).toBe(true);
+        expect(empty.host.draft.value).toBe(`write the guide`);
+        expect(empty.host.sendLater.value).toEqual({ kind: `at`, at });
+
+        const typing = clientOf();
+        typing.host.queue.value = { items: [booked], revision: 1, paused: `scheduled`, until: at };
+        typing.host.draft.value = `now, please`;
+        expect(await typing.client.unqueue(booked)).toBe(true);
+        expect(typing.host.draft.value).toBe(`write the guide\n\nnow, please`);
+        expect(typing.host.sendLater.value).toBeUndefined();
+    });
+
+    // The message was all the conversation ever held, so the sandbox let the conversation go with it: this chat is a
+    // new one again, with the words in its box, rather than a card named after a message that is nowhere in it.
+    it(`makes the chat a new one again when the conversation went with the message that opened it`, async () => {
+        const { client, host } = clientOf();
+        const at = Date.now() + 60 * 60 * 1000;
+        const opening = { id: `m-open`, text: `analyse the transcripts`, voice: `person` as const, queuedAt: 1_000, revision: 1, until: at };
+        host.queue.value = { items: [opening], revision: 1, paused: `scheduled`, until: at };
+        host.registered.value = true;
+        host.title.value = `Analyse the transcripts`;
+        host.standing.value = { status: `idle`, attention: NO_ATTENTION };
+        queueRemove.mockImplementation(async () => ({ items: [], revision: 2, unopened: true }));
+
+        expect(await client.unqueue(opening)).toBe(true);
+        expect(host.draft.value).toBe(`analyse the transcripts`);
+        expect(host.sendLater.value).toEqual({ kind: `at`, at });
+        expect(host.registered.value).toBe(false);
+        expect(host.title.value).toBeNull();
+        expect(host.standing.value).toBeUndefined();
+        // The conversation it opens next counts its queue afresh, which a kept revision would read as older.
+        expect(host.queue.value).toBeUndefined();
     });
 
     it(`says a change against an older copy was refused, and one to a message already gone`, async () => {

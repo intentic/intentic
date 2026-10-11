@@ -8,10 +8,11 @@ import { type Booking, holdOf, type QueuedItem, waitingOf } from "../../../conve
 import { windowShut } from "../../../conversations/actor/conversation-state.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
-import { conversationProfile, worktreeOf } from "../../../conversations/registry/agents-store.js";
+import { forgetConversations } from "../../../conversations/registry/archive.js";
+import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
+import type { Said, Steer, TurnInput, TurnStarter, Unqueued, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
 import { conversationIdentity, unpairedRunner } from "../placement/turn-placement.js";
 import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
@@ -193,6 +194,31 @@ const openingOf = async (services: Services, turn: Turn): Promise<BeginTurn | Un
         return { invalid: unpairedRunner(runner) };
     }
     return conversationIdentity(routed, turn.conversationId, { isolated: runner !== undefined || routed.isolated === true, runner });
+};
+
+/**
+ * The entry of a conversation its scheduled message opened (openingOf) in which nothing has happened since: no turn has
+ * run or been tried, no session, no record (a placed message, a fork's rows), no fork to copy, nothing waiting, nothing
+ * running, and no booking elsewhere waiting on its work. It exists only for that message, so taking the message back takes
+ * the conversation too; left, it stood on the board as an idle card named after words nobody could find in it
+ * (2026-10-11). Undefined for every other conversation, which stands whatever is taken back from it.
+ */
+const unopened = async (services: Services, conversationId: string): Promise<PersistedAgent | undefined> => {
+    const entry = services.agents.entry(conversationId);
+    if (
+        entry === undefined ||
+        entry.totals.turns > 0 ||
+        entry.sessionId !== undefined ||
+        entry.ending.kind !== "idle" ||
+        entry.identity.forkedFrom !== undefined ||
+        (entry.placement.kind === "worktree" && (entry.placement.repos.length > 0 || entry.placement.parent !== undefined)) ||
+        services.conversations.queued(conversationId).items.length > 0 ||
+        services.conversations.running(conversationId) ||
+        services.conversations.booked().some(({ booking }) => booking.after?.conversationId === conversationId)
+    ) {
+        return undefined;
+    }
+    return (await services.transcripts.count({ id: conversationId })) === 0 ? entry : undefined;
 };
 
 // Whether the live turn takes words now: not being stopped, and not parked on a card, whose answer comes first.
@@ -539,8 +565,27 @@ export const createAdmission = (
                 handBack(conversationId);
                 kept(conversationId, await deliver(conversationId));
             }),
+        // The message taken back, and with it the conversation it opened when nothing else is in it: the card goes in every
+        // window, and its words are the taker's to put back in the composer they came from. Under the conversation's own
+        // lock, so no message sent meanwhile can land in a conversation on its way out.
         unqueue: ({ conversationId, id, revision }) =>
-            inTurn(conversationId, async () => services().conversations.send(conversationId, { kind: "queue-removed", id, revision }).reply),
+            inTurn(conversationId, async (): Promise<Unqueued> => {
+                const daemon = services();
+                const removed = daemon.conversations.send(conversationId, { kind: "queue-removed", id, revision });
+                if (removed.reply !== "done") {
+                    return removed.reply;
+                }
+                // Its write first, so the entry the forget removes is not written back behind it.
+                await removed.settled;
+                const entry = await unopened(daemon, conversationId);
+                if (entry === undefined) {
+                    return "done";
+                }
+                const left = daemon.conversations.queued(conversationId);
+                await forgetConversations(daemon, [entry]);
+                daemon.logger.info({ conversationId }, "admission: the message that opened the conversation was taken back, and the conversation with it");
+                return { unopened: left };
+            }),
         reword: ({ conversationId, id, revision, text }) =>
             inTurn(conversationId, async () => services().conversations.send(conversationId, { kind: "queue-edited", id, revision, text }).reply),
         // The hold let go, with the bookings of the messages named (every one's when none are), and what can go goes.

@@ -22,7 +22,7 @@ import type {
     TurnSpeaker,
 } from "@intentic/sandbox-contract";
 import type { BeginRefusal } from "../conversations/actor/conversation-decide.js";
-import type { QueueChange } from "../conversations/actor/conversation-queue.js";
+import type { QueueChange, TurnQueue } from "../conversations/actor/conversation-queue.js";
 
 // How a subsystem starts or drives a conversation's turn without importing the turn engine: it names this port in its
 // deps, and composition hands it the engine's own implementation (agent/run/turn/turn-doors.ts).
@@ -84,6 +84,11 @@ export type Unsteered = { readonly why: string } | { readonly invalid: string };
 // is archived and they are not a person's (`why` says so).
 export type Unsaid = { readonly invalid: string } | { readonly why: string };
 
+// What taking a waiting message back did: the queue's change, or, for the message that opened its conversation by being
+// scheduled with nothing in that conversation since, the conversation gone with it (`unopened`, the queue the removal
+// left, which nothing can read back once the conversation is gone).
+export type Unqueued = QueueChange | { readonly unopened: TurnQueue };
+
 // What a reschedule did: booked what waits (`booked`), let it go because what it would wait for has already come
 // (`released`), found nothing waiting or a message it named gone (`missing`), or was asked to wait for a conversation that cannot land (`invalid`).
 export type Rescheduled = "booked" | "released" | "missing" | { readonly invalid: string };
@@ -141,8 +146,9 @@ export interface TurnStarter {
     readonly steerIn: (conversationId: string, steer: Omit<Steer, "voice" | "outside">) => Promise<MessageReceipt | Unsteered>;
     // Lets out what waits in the conversation's queue, as far as anything can take it now.
     readonly drain: (conversationId: string) => Promise<void>;
-    // Changes to what waits, each refused as stale when the message changed since it was read.
-    readonly unqueue: (ref: QueuedMessageRef) => Promise<QueueChange>;
+    // Changes to what waits, each refused as stale when the message changed since it was read. Taking back the message
+    // that opened its conversation, with nothing else in it, takes the conversation too (Unqueued).
+    readonly unqueue: (ref: QueuedMessageRef) => Promise<Unqueued>;
     readonly reword: (edit: QueueEdit) => Promise<QueueChange>;
     // Lets a held queue go, with the bookings of the messages it names (every one's when it names none), re-routed where
     // the press names who serves it.

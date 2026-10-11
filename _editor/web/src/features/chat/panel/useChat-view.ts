@@ -22,7 +22,7 @@ import { providerReadyOn } from "../session/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
 import { newestOf } from "../transcript/transcriptScan";
 import { endingOfTab } from "../tabs/tabFacts";
-import { conversations, setConversations } from "../tabs/useChat-tabs";
+import { conversations, focusComposer, setConversations } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
@@ -208,7 +208,14 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
         return conversation.value.turn.say(prompt, staged, editorContext);
     },
     // The queue's doors, each acting on the message as this window read it, and letting a held queue go.
-    unqueue: (message: QueuedMessage): Promise<boolean> => conversation.value.turn.unqueue(message),
+    // A person's message taken back is in the composer again (TurnClient.takenBack), so the caret goes where its words are.
+    unqueue: async (message: QueuedMessage): Promise<boolean> => {
+        const taken = await conversation.value.turn.unqueue(message);
+        if (taken && message.voice === `person`) {
+            focusComposer();
+        }
+        return taken;
+    },
     reword: (message: QueuedMessage, text: string): Promise<boolean> => conversation.value.turn.reword(message, text),
     resumeQueue: (ids?: readonly string[]): Promise<void> => conversation.value.turn.resume(ids),
     // Forks the conversation at `cut` (the index of the first message below the line) into a fresh tab, leaving the

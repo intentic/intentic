@@ -542,6 +542,17 @@ export const ConversationQueueSchema = z.object({
     ),
 });
 export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;
+// What taking a waiting message back left: the queue, and whether the conversation went with the message. A conversation
+// its scheduled message opened, in which nothing has happened since, exists only for that message.
+export const QueueTakenBackSchema = ConversationQueueSchema.extend({
+    unopened: z
+        .boolean()
+        .optional()
+        .describe(
+            "True when the message was the only thing in a conversation it had opened by being scheduled: no turn ran and nothing else waits. The conversation went with it, so its card is off the board and its id is free to open again. Absent otherwise, and from sandboxes older than the field.",
+        ),
+});
+export type QueueTakenBack = z.infer<typeof QueueTakenBackSchema>;
 // What resuming a queue did: started a turn with what waited, when nothing else ran.
 export const QueueResumedSchema = z.object({
     run: z.string().optional().describe("The turn the waiting messages started. Absent when a turn was already running, and they go after it."),

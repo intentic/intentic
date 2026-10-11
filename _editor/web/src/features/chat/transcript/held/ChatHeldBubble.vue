@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { QueuedMessage } from "@intentic/sandbox-contract";
-import { Button, Icon, ui, useDevice } from "@intentic/ui";
+import { Button, Icon, type TooltipValue, ui, useDevice } from "@intentic/ui";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
@@ -70,6 +70,11 @@ const save = async (): Promise<void> => {
         rewording.value = undefined;
     }
 };
+
+// A person's words go back into the composer, which the hover says, since the glyph alone read as throwing them away.
+const takeBackTip = computed((): TooltipValue =>
+    props.message.voice === `person` ? { title: t(`chat.chatQueue.takeBack`), note: t(`chat.chatQueue.takeBackNote`) } : t(`chat.chatQueue.takeBack`),
+);
 
 const queuedClock = computed(() => formatClock(props.message.queuedAt));
 const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
@@ -175,11 +180,11 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                 type="button"
                 class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content max-md:h-9"
                 :class="compact ? `w-6 max-md:w-9` : `w-full`"
-                v-tooltip.right="t(`chat.chatQueue.takeBack`)"
+                v-tooltip.right="takeBackTip"
                 :aria-label="t(`chat.chatQueue.removeLabel`)"
                 @click="unqueue(message)"
             >
-                <Icon name="times" class="text-2xs" />
+                <Icon :name="message.voice === `person` ? `undo` : `times`" class="text-2xs" />
             </button>
         </div>
     </div>

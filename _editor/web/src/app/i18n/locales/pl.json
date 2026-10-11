@@ -2829,7 +2829,8 @@
             "rewordLabel": "Przeredaguj oczekującą wiadomość",
             "save": "Zapisz",
             "sendNow": "Wyślij teraz",
-            "takeBack": "Wycofaj"
+            "takeBack": "Wycofaj",
+            "takeBackNote": "Słowa wracają do pola wpisywania"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Twój agent na Ciebie czeka",
