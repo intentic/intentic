@@ -196,6 +196,42 @@ it(`says so when a filter matches nothing, rather than showing an empty tab`, as
     expect(text(el)).toContain(`Nothing matches that filter`);
 });
 
+// DOM assertions pin the shrink/wrap contract; actual pane geometry is checked in the source-backed demo.
+it(`keeps the add-secret fields and actions separate, labelled and usable when the form opens`, async () => {
+    const el = mount();
+    const add = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Add a secret`))!;
+    add.click();
+    await nextTick();
+
+    const key = el.querySelector<HTMLInputElement>(`input[spellcheck="false"]:not([type="password"])`)!;
+    const value = el.querySelector<HTMLInputElement>(`input[type="password"]`)!;
+    expect(key.getAttribute(`aria-label`)).toBe(key.getAttribute(`placeholder`));
+    expect(value.getAttribute(`aria-label`)).toBe(value.getAttribute(`placeholder`));
+    expect(key.classList.contains(`min-w-0`)).toBe(true);
+    expect(key.parentElement?.classList.contains(`flex-col`)).toBe(true);
+    expect(value.classList.contains(`min-w-0`)).toBe(true);
+    expect(value.parentElement?.classList.contains(`flex-wrap`)).toBe(true);
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Save`)!;
+    expect(save.disabled).toBe(true);
+    await type(key, `RESPONSIVE_DEMO_KEY`);
+    await type(value, `test-value`);
+    expect(save.disabled).toBe(false);
+
+    el.querySelector<HTMLButtonElement>(`button[aria-label="Show value"]`)!.click();
+    await nextTick();
+    expect(value.type).toBe(`text`);
+    expect(value.value).toBe(`test-value`);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="Hide value"]`)!.click();
+    await nextTick();
+    expect(value.type).toBe(`password`);
+
+    const cancel = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Cancel`)!;
+    cancel.click();
+    await nextTick();
+    expect(el.querySelector(`input[type="password"]`)).toBeNull();
+});
+
 it(`keeps one row open at a time, so a list being scanned cannot grow under the pointer`, async () => {
     const el = mount();
     const rows = disclosures(el);

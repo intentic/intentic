@@ -19,10 +19,14 @@ afterEach(() => {
 });
 
 /** Renders `children` inside a <RowGroup>. Pass no density for the standard case: a group is compact. */
-const mount = async (density: `comfortable` | `compact` | `dense` | undefined, children: () => unknown): Promise<HTMLElement> => {
+const mount = async (
+    density: `comfortable` | `compact` | `dense` | undefined,
+    children: () => unknown,
+    actions?: () => unknown,
+): Promise<HTMLElement> => {
     const host = document.createElement(`div`);
     document.body.append(host);
-    const app = createApp({ render: () => h(RowGroup, density === undefined ? {} : { density }, { default: children }) });
+    const app = createApp({ render: () => h(RowGroup, density === undefined ? {} : { density }, { default: children, actions }) });
     app.mount(host);
     mounted.push({ app, host });
     await nextTick();
@@ -123,6 +127,55 @@ it(`pads a note and an action from the group's tier, so they share the rows' edg
     // The row, the note and the action: three elements, one padding.
     expect(padded(host, `compact`).length).toBeGreaterThanOrEqual(3);
     expect(host.querySelector(`button`)?.className, `the "add one" line is pressable and on the tier`).toContain(ROW_TIERS.compact.pad);
+});
+
+// Facts may occupy a line of their own in a narrow pane, but the inner cluster must also wrap rather than defeat
+// the outer row's width bound. Controls still stop their click before it can open the row.
+it(`bounds and wraps a row's metadata without changing control click handling`, async () => {
+    const open = jest.fn();
+    const remove = jest.fn();
+    const host = await mount(undefined, () =>
+        h(
+            Row,
+            { title: `Workspace area`, interactive: true, onClick: open },
+            {
+                meta: () => [h(`span`, { class: `folder-fact` }, `workspace/site`), h(`span`, null, `Support assistant`)],
+                control: () => h(`button`, { onClick: remove }, `Remove`),
+            },
+        ),
+    );
+    const meta = host.querySelector(`.folder-fact`)!.parentElement!;
+    expect(meta.classList.contains(`max-w-full`)).toBe(true);
+    expect(meta.classList.contains(`min-w-0`)).toBe(true);
+    expect(meta.classList.contains(`flex-wrap`)).toBe(true);
+    expect(meta.textContent).toBe(`workspace/siteSupport assistant`);
+    host.querySelector<HTMLButtonElement>(`button`)!.click();
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+});
+
+it(`lets below-row content shrink so a local table scroller cannot widen the row`, async () => {
+    const host = await mount(undefined, () =>
+        h(Row, { title: `Comparison` }, { below: () => h(`div`, { class: `comparison-scroller overflow-x-auto` }, `3.2 / 6.4`) }),
+    );
+    const content = host.querySelector(`.comparison-scroller`)!;
+    const below = content.parentElement!;
+    expect(below.classList.contains(`basis-full`)).toBe(true);
+    expect(below.classList.contains(`min-w-0`)).toBe(true);
+    expect(content.textContent).toBe(`3.2 / 6.4`);
+});
+
+it(`lets a group's action cluster wrap within the header's available width`, async () => {
+    const host = await mount(
+        undefined,
+        () => h(Row, { title: `Environment` }),
+        () => [h(`button`, null, `Export`), h(`button`, null, `Import`)],
+    );
+    const actions = host.querySelector(`button`)!.parentElement!;
+    expect(actions.classList.contains(`max-w-full`)).toBe(true);
+    expect(actions.classList.contains(`min-w-0`)).toBe(true);
+    expect(actions.classList.contains(`flex-wrap`)).toBe(true);
+    expect([...actions.querySelectorAll(`button`)].map((button) => button.textContent)).toEqual([`Export`, `Import`]);
 });
 
 // The empty state keeps the room an empty surface is owed rather than a row's, so its vertical padding is deliberately

@@ -248,7 +248,7 @@ const removeLogo = async (): Promise<void> => {
                     </AnchoredOverlay>
 
                     <div class="-ml-1 min-w-0 flex-1 @2xl:max-w-md">
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <!-- The card's heading IS the rename: text at rest, a field in the same box, nothing added beside it.
                                  It stays an <h2> around that, so renaming the sandbox doesn't cost the card its heading. -->
                             <h2 class="flex min-w-0 text-lg font-semibold">
@@ -296,9 +296,9 @@ const removeLogo = async (): Promise<void> => {
             >
                 <div role="status" aria-busy="true" class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5">
                     <span class="sr-only">{{ t(`sandbox.sandboxOverview.readingWhatSandboxReports`) }}</span>
-                    <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
-                        <span class="skeleton block h-2 w-16" />
-                        <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
+                    <div v-for="row in 2" :key="row" class="grid gap-x-3 gap-y-1 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]" aria-hidden="true">
+                        <span class="skeleton block h-2 w-16 max-w-full" />
+                        <span class="skeleton block h-2 max-w-full @md:justify-self-end" :class="row === 1 ? `w-48` : `w-32`" />
                     </div>
                 </div>
             </SkeletonSnapshot>
@@ -307,45 +307,47 @@ const removeLogo = async (): Promise<void> => {
             <dl
                 v-else-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
                 v-skeleton-source="`sandbox.overview.facts`"
-                class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
+                class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:gap-1.5"
             >
-                <div v-if="info?.image" class="flex items-start justify-between gap-3">
+                <!-- Stack facts against the pane, not the window; technical values stay readable in full. -->
+                <div v-if="info?.image" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.words.image`) }}</dt>
-                    <dd class="min-w-0 text-right">
-                        <div class="truncate font-mono text-content">{{ info.image }}</div>
+                    <dd class="min-w-0 [overflow-wrap:anywhere] @md:text-right">
+                        <div class="font-mono text-content">{{ info.image }}</div>
                         <div v-if="installed" class="mt-0.5 font-mono text-subtle">
                             {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
                             <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
                         </div>
                     </dd>
                 </div>
-                <div v-else-if="installed" class="flex items-center justify-between gap-3">
+                <div v-else-if="installed" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.installedVersion2`) }}</dt>
-                    <dd class="font-mono text-content">
+                    <dd class="min-w-0 font-mono text-content [overflow-wrap:anywhere] @md:text-right">
                         {{ installed }}
                         <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
                     </dd>
                 </div>
-                <div v-if="agentUrl" class="flex items-center justify-between gap-3">
+                <div v-if="agentUrl" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.sandboxUrl`) }}</dt>
-                    <dd class="min-w-0">
+                    <dd class="min-w-0 @md:text-right">
                         <!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
                         <a
                             :href="agentUrl"
                             target="_blank"
                             rel="noopener"
-                            class="touch-target inline-flex items-center gap-1 truncate font-mono text-link hover:underline"
+                            class="touch-target inline-flex max-w-full items-start gap-1 font-mono text-link hover:underline"
                         >
-                            {{ agentUrl }}<Icon name="external-link" class="text-2xs" />
+                            <span class="min-w-0 [overflow-wrap:anywhere]">{{ agentUrl }}</span>
+                            <Icon name="external-link" class="shrink-0 text-2xs" />
                         </a>
                     </dd>
                 </div>
                 <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
                      maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
-                <div v-if="shareLine" class="flex items-center justify-between gap-3">
+                <div v-if="shareLine" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
-                    <dd class="flex min-w-0 items-center gap-2">
-                        <span class="truncate text-content">{{ shareLine }}</span>
+                    <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
+                        <span class="min-w-0 break-words text-content">{{ shareLine }}</span>
                         <button
                             v-if="canShip"
                             type="button"

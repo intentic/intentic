@@ -283,11 +283,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                 <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</span>
             </div>
 
-            <RowGroup
-                v-else
-                v-skeleton-source="`sandbox.areas`"
-                :label="t(`sandbox.sandboxAreas.areas`)"
-            >
+            <RowGroup v-else v-skeleton-source="`sandbox.areas`" :label="t(`sandbox.sandboxAreas.areas`)">
                 <template #actions>
                     <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
@@ -325,12 +321,16 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     <!-- What the name means: the folders it stands for, and who holding it hands over. -->
                     <template #meta>
                         <!-- Never while open, where the picker below holds the draft of it. -->
-                        <StatusBadge v-if="!isOpen(area)" variant="neutral" size="xs">{{ folderLine(area) }}</StatusBadge>
+                        <StatusBadge v-if="!isOpen(area)" variant="neutral" size="xs" class="min-w-0 max-w-full">
+                            <span class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">{{ folderLine(area) }}</span>
+                        </StatusBadge>
                         <!-- Derived from the folders and editable nowhere, so it stands while the row is open. No badge
                              at all means holding this area grants no assistant: fine for a viewer or a writer, and the
                              whole of what a guest would get. -->
 
-                        <StatusBadge v-for="name in assistantsIn(area)" :key="name" variant="info" :label="name" size="xs" />
+                        <StatusBadge v-for="name in assistantsIn(area)" :key="name" variant="info" size="xs" class="min-w-0 max-w-full">
+                            <span class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">{{ name }}</span>
+                        </StatusBadge>
                     </template>
 
                     <template v-if="isOwner" #control>

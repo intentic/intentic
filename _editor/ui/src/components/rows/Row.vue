@@ -176,7 +176,7 @@ const picked = as === `button`;
             :class="wideControl ? `grow basis-auto` : `ml-auto shrink-0`"
         >
             <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
-            <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
+            <div v-if="$slots[`meta`]" class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-2xs tabular-nums text-subtle">
                 <slot name="meta" />
             </div>
             <!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
@@ -184,7 +184,7 @@ const picked = as === `button`;
             <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
         </div>
         <!-- A line of its own under the headline: the wrap spaces it by `gap-y-2`, and its margin makes up the rest of the 0.75rem. -->
-        <div v-if="$slots[`below`]" class="mt-1 basis-full">
+        <div v-if="$slots[`below`]" class="mt-1 min-w-0 basis-full">
             <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
             <div v-if="indent" class="flex" :class="TIERS[tier].gap">
                 <span class="invisible flex shrink-0 items-center" :class="TIERS[tier].gap" inert aria-hidden="true">

@@ -76,8 +76,8 @@ const onEnter = (event: KeyboardEvent): void => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-1.5">
-        <div class="flex items-start gap-2">
+    <div class="flex min-w-0 flex-col gap-1.5">
+        <div class="flex min-w-0 flex-wrap items-start gap-2">
             <textarea
                 v-if="multiline"
                 v-model="value"
@@ -86,7 +86,8 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
-                :class="[ui.input({ size: `sm` }, 'flex-1 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
+                :aria-label="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
+                :class="[ui.input({ size: `sm` }, 'min-w-0 flex-1 basis-40 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
             ></textarea>
             <input
                 v-else
@@ -96,22 +97,25 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
-                :class="ui.input('flex-1')"
+                :aria-label="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
+                :class="ui.input('min-w-0 flex-1 basis-40')"
                 @keydown.enter="onEnter"
             />
-            <Button
-                tier="quiet"
-                :aria-label="show ? t(`capabilities.words.hideValue`) : t(`capabilities.secretField.showValue`)"
-                @click="show = !show"
-            >
-                <template #icon><Icon :name="show ? 'eye-slash' : 'eye'" /></template>
-            </Button>
-            <Button v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
-                <template #icon><Icon name="check" /></template>
-            </Button>
-            <Button v-if="cancellable" tier="quiet" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">
-                <template #icon><Icon name="times" /></template>
-            </Button>
+            <div class="flex max-w-full flex-wrap items-center gap-2">
+                <Button
+                    tier="quiet"
+                    :aria-label="show ? t(`capabilities.words.hideValue`) : t(`capabilities.secretField.showValue`)"
+                    @click="show = !show"
+                >
+                    <template #icon><Icon :name="show ? 'eye-slash' : 'eye'" /></template>
+                </Button>
+                <Button v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
+                    <template #icon><Icon name="check" /></template>
+                </Button>
+                <Button v-if="cancellable" tier="quiet" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">
+                    <template #icon><Icon name="times" /></template>
+                </Button>
+            </div>
         </div>
         <Notice v-if="notice" :of="notice" />
         <p v-else-if="!noHint" class="text-xs text-muted">

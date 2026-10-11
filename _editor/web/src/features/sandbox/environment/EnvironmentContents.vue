@@ -142,7 +142,8 @@ const expandable = (item: EnvironmentItem): boolean =>
                 >
                     <!-- Idle marks an entry the recipe has but the container doesn't yet, readable even without color. -->
                     <template #lead="{ mark }">
-                        <BrandMark plain
+                        <BrandMark
+                            plain
                             :size="mark"
                             :name="item.name"
                             :logo="environmentVisual(item).logo"
@@ -152,9 +153,9 @@ const expandable = (item: EnvironmentItem): boolean =>
                     </template>
                     <!-- Names, versions, and purpose share one title line. -->
                     <template #title>
-                        <!-- The title line clips overflow while keeping the name visible. -->
-                        <span class="flex min-w-0 items-center gap-3 overflow-hidden">
-                            <span class="shrink-0">{{ item.name }}</span>
+                        <!-- Names stay readable; version and purpose can take another line in a narrow pane. -->
+                        <span class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <span class="min-w-0 break-words">{{ item.name }}</span>
                             <!-- Versions use monospace and occupy at most half the row. -->
                             <span
                                 v-if="item.tools.length > 0"
@@ -252,7 +253,13 @@ const expandable = (item: EnvironmentItem): boolean =>
                                 :class="ui.chip({ on: picked === item.id }, `py-1 pl-1 pr-2.5`)"
                                 @click="pick(item.id)"
                             >
-                                <BrandMark plain :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
+                                <BrandMark
+                                    plain
+                                    :size="18"
+                                    :name="item.name"
+                                    :logo="environmentVisual(item).logo"
+                                    :icon="environmentVisual(item).icon"
+                                />
                                 <span class="font-medium">{{ item.name }}</span>
                                 <span
                                     v-if="item.tools[0]?.version !== undefined"

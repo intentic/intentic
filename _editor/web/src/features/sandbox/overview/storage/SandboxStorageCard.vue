@@ -127,7 +127,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 </script>
 
 <template>
-    <Card v-if="storage.available.value" class="flex flex-col gap-3">
+    <Card v-if="storage.available.value" class="@container/storage flex min-w-0 flex-col gap-3">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div class="flex min-w-0 items-center gap-2">
                 <Icon name="database" class="shrink-0 text-link" />
@@ -140,7 +140,11 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         v-else-if="scan"
                         class="truncate text-2xs"
                         :class="stale ? `text-warning` : `text-subtle`"
-                        v-tooltip.top="stale ? { title: formatDateTime(scan.finishedAt), note: t(`sandbox.sandboxStorageCard.staleNote`) } : formatDateTime(scan.finishedAt)"
+                        v-tooltip.top="
+                            stale
+                                ? { title: formatDateTime(scan.finishedAt), note: t(`sandbox.sandboxStorageCard.staleNote`) }
+                                : formatDateTime(scan.finishedAt)
+                        "
                     >
                         <Icon v-if="stale" name="history" class="mr-1 inline-block align-[-0.125em]" />{{
                             t(`sandbox.sandboxStorageCard.measured`, { when: timeAgo(scan.finishedAt, { now, days: true }) })
@@ -183,7 +187,10 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             </div>
         </div>
 
-        <Notice v-if="storage.readError.value" :of="{ tone: `danger`, title: t(`sandbox.sandboxStorageCard.couldntRead`), detail: storage.readError.value }" />
+        <Notice
+            v-if="storage.readError.value"
+            :of="{ tone: `danger`, title: t(`sandbox.sandboxStorageCard.couldntRead`), detail: storage.readError.value }"
+        />
         <Notice v-if="storage.scanNotice.value" :of="storage.scanNotice.value" />
         <Notice v-if="storage.cleanNotice.value" :of="storage.cleanNotice.value" />
         <Notice v-if="cleanedNotice" :of="cleanedNotice" />
@@ -215,42 +222,58 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 
             <p v-if="scan.outcome === `partial`" class="text-2xs text-warning">{{ t(`sandbox.sandboxStorageCard.partial`) }}</p>
 
-            <!-- One grid for every row, so names, bars, sizes and actions each line up in a column of their own. -->
-            <ul class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-3">
+            <!-- Shared columns stay aligned. A narrow card gives names and sizes their own line, with bars and actions below. -->
+            <ul class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 @sm/storage:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
                 <li
                     v-for="(row, index) in shown"
                     :key="row.category.id"
-                    class="col-span-4 grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1 first:border-t-0"
+                    class="col-span-full grid min-h-9 grid-cols-subgrid items-center gap-y-1 border-t border-line-subtle py-2 first:border-t-0 @sm/storage:gap-y-0 @sm/storage:py-1"
                 >
                     <button
                         type="button"
-                        class="flex min-w-0 cursor-pointer items-center gap-1.5 text-left"
+                        class="col-start-1 row-start-1 flex min-w-0 cursor-pointer items-center gap-1.5 text-left"
                         :aria-expanded="open.has(row.category.id)"
                         @click="toggle(row.category.id)"
                     >
                         <Icon :name="open.has(row.category.id) ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
-                        <span class="truncate text-xs font-medium text-content">{{ row.text.label }}</span>
+                        <span class="min-w-0 break-words text-xs font-medium text-content">{{ row.text.label }}</span>
                     </button>
-                    <Meter :value="row.share / 100" grow :grow-step="index + 1" class="w-12 sm:w-24" />
-                    <span class="text-right text-xs tabular-nums text-content">{{ formatBytes(row.category.bytes) }}</span>
-                    <div class="flex justify-end">
+                    <Meter
+                        :value="row.share / 100"
+                        grow
+                        :grow-step="index + 1"
+                        class="col-start-1 row-start-2 w-full @sm/storage:col-start-2 @sm/storage:row-start-1 @sm/storage:w-24"
+                    />
+                    <span class="col-start-2 row-start-1 text-right text-xs tabular-nums text-content @sm/storage:col-start-3">{{
+                        formatBytes(row.category.bytes)
+                    }}</span>
+                    <div class="col-start-2 row-start-2 flex justify-end @sm/storage:col-start-4 @sm/storage:row-start-1">
                         <Button
                             v-if="row.offer.kind === `clean`"
                             :label="cleanLabel(row.category)"
                             size="small"
                             tier="boring"
                             :loading="storage.cleaningCategory.value === row.category.id"
-                            :disabled="scanning || (storage.cleaningCategory.value !== undefined && storage.cleaningCategory.value !== row.category.id)"
+                            :disabled="
+                                scanning || (storage.cleaningCategory.value !== undefined && storage.cleaningCategory.value !== row.category.id)
+                            "
                             @click="press(row.category)"
                         >
                             <template #icon><Icon name="eraser" /></template>
                         </Button>
-                        <span v-else-if="row.offer.kind === `waiting`" class="text-2xs text-subtle" v-tooltip.top="{ title: t(`sandbox.sandboxStorageCard.tooRecent`), note: t(`sandbox.sandboxStorageCard.changedTodayOrInUse`) }">
+                        <span
+                            v-else-if="row.offer.kind === `waiting`"
+                            class="text-2xs text-subtle"
+                            v-tooltip.top="{
+                                title: t(`sandbox.sandboxStorageCard.tooRecent`),
+                                note: t(`sandbox.sandboxStorageCard.changedTodayOrInUse`),
+                            }"
+                        >
                             {{ t(`sandbox.sandboxStorageCard.waiting`) }}
                         </span>
                     </div>
                     <!-- Opened, a row says why the space is held and shows its largest parts: the evidence for its size. -->
-                    <div v-if="open.has(row.category.id)" class="col-span-4 flex flex-col gap-1.5 pt-1 pb-2 pl-4">
+                    <div v-if="open.has(row.category.id)" class="col-span-full flex flex-col gap-1.5 pt-1 pb-2 pl-4">
                         <p class="text-2xs leading-relaxed text-muted">{{ row.text.reason }}</p>
                         <ul v-if="row.category.items.length > 0" class="flex flex-col gap-0.5">
                             <li v-for="item in row.category.items" :key="item.path" class="flex min-w-0 items-center gap-3 text-2xs">
@@ -261,16 +284,20 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                     </div>
                 </li>
 
-                <li v-if="split.rest.length > 0" class="col-span-4 grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1">
+                <li v-if="split.rest.length > 0" class="col-span-full grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1">
                     <button
                         type="button"
-                        class="col-span-2 flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-xs text-muted hover:text-content"
+                        class="flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-xs text-muted hover:text-content @sm/storage:col-span-2"
                         :aria-expanded="showRest"
                         @click="showRest = !showRest"
                     >
                         <Icon :name="showRest ? `chevron-up` : `chevron-down`" class="shrink-0 text-2xs text-subtle" />
                         <span class="truncate">
-                            {{ showRest ? t(`sandbox.sandboxStorageCard.fewer`) : t(`sandbox.sandboxStorageCard.more`, { count: split.rest.length }, split.rest.length) }}
+                            {{
+                                showRest
+                                    ? t(`sandbox.sandboxStorageCard.fewer`)
+                                    : t(`sandbox.sandboxStorageCard.more`, { count: split.rest.length }, split.rest.length)
+                            }}
                         </span>
                     </button>
                     <span v-if="!showRest" class="text-right text-xs tabular-nums text-muted">{{ formatBytes(restBytes) }}</span>
@@ -278,10 +305,13 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 
                 <li
                     v-if="uncounted"
-                    class="col-span-4 grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1 text-2xs text-subtle"
-                    v-tooltip.top="{ title: t(`sandbox.sandboxStorageCard.otherUsage`), note: t(`sandbox.sandboxStorageCard.systemProgramsFilesystem`) }"
+                    class="col-span-full grid min-h-9 grid-cols-subgrid items-center border-t border-line-subtle py-1 text-2xs text-subtle"
+                    v-tooltip.top="{
+                        title: t(`sandbox.sandboxStorageCard.otherUsage`),
+                        note: t(`sandbox.sandboxStorageCard.systemProgramsFilesystem`),
+                    }"
                 >
-                    <span class="col-span-2 truncate pl-4">{{ t(`sandbox.sandboxStorageCard.uncounted`) }}</span>
+                    <span class="min-w-0 break-words pl-4 @sm/storage:col-span-2">{{ t(`sandbox.sandboxStorageCard.uncounted`) }}</span>
                     <span class="text-right tabular-nums">{{ formatBytes(uncounted) }}</span>
                 </li>
             </ul>
@@ -295,7 +325,11 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             :open="asking !== undefined"
             :header="t(`sandbox.sandboxStorageCard.confirmHeader`, { category: asked?.label ?? `` })"
             header-icon="eraser"
-            :confirm-label="asking?.cleanableBytes === undefined ? t(`sandbox.sandboxStorageCard.clean`) : t(`sandbox.sandboxStorageCard.free`, { bytes: formatBytes(asking.cleanableBytes) })"
+            :confirm-label="
+                asking?.cleanableBytes === undefined
+                    ? t(`sandbox.sandboxStorageCard.clean`)
+                    : t(`sandbox.sandboxStorageCard.free`, { bytes: formatBytes(asking.cleanableBytes) })
+            "
             size="md"
             @cancel="asking = undefined"
             @confirm="confirm"

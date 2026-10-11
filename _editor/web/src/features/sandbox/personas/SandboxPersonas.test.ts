@@ -71,6 +71,7 @@ jest.mock(`./usePersonaKit`, () => {
 // A real small tree, not empty, since "the picker lists your folders" is the actual claim under test; the file is here
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
+const nestedRepos = ref<string[]>([]);
 // <FolderPicker>'s lazy listing, the one daemon call the page itself makes.
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
     sandboxRpc: fakeSandboxRpc({ workspace: { children: jest.fn(async () => ({ entries: [], hidden: 0 })) } }),
@@ -89,7 +90,7 @@ jest.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
 jest.mock(`../../../client/sandbox/useSandboxQuery`, () => {
     return {
         useSandboxQuery: () => ({
-            query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0 })), isPending: shallow(false) },
+            query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0, repos: nestedRepos.value })), isPending: shallow(false) },
             error: shallow(undefined),
         }),
     };
@@ -202,6 +203,7 @@ beforeEach(() => {
     remove.mockClear();
     personas.value = [];
     connected.value = [];
+    nestedRepos.value = [];
     accounts.value = [account(`reddit-work`, `reddit`), account(`x-company`, `x`), account(`reddit-personal`, `reddit`)];
     tree.value = [
         { name: `app`, path: `app`, type: `dir`, children: [{ name: `src`, path: `app/src`, type: `dir`, children: [] }] },
@@ -553,6 +555,32 @@ it(`keeps every permission on one screen rather than splitting them across tabs`
     expect(rendered).toContain(`In your workspace`);
     expect(rendered).toContain(`Reaching out`);
     expect(rendered).toContain(`Where it works`);
+});
+
+it(`keeps repository switches full-size beside long names without changing which repositories are carried`, async () => {
+    const repo = `workspace-with-a-long-name/packages/customer-support-service`;
+    nestedRepos.value = [repo];
+    personas.value = [{ id: `work`, capabilities: [], context: { repos: [] } }];
+    const el = mount();
+    await openPersona(el, `work`);
+    await openTab(el, `Runs on`);
+
+    const switches = [...el.querySelectorAll<HTMLInputElement>(`label input[type="checkbox"]`)];
+    expect(switches).toHaveLength(2);
+    expect(switches.map((input) => input.checked)).toEqual([false, false]);
+    for (const input of switches) {
+        expect(input.closest(`[data-pc-name="toggleswitch"]`)!.classList.contains(`shrink-0`)).toBe(true);
+    }
+    expect(text(el)).toContain(repo);
+    expect(save).not.toHaveBeenCalled();
+
+    toggleSwitch(el, repo);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].context).toEqual({ repos: [repo] });
+    toggleSwitch(el, `Every repository`);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(save.mock.calls[1]![0].context).toBeUndefined();
+    expect(el.querySelectorAll(`label input[type="checkbox"]`)).toHaveLength(1);
 });
 
 it(`shows the name as text and turns it into a field only when clicked`, async () => {

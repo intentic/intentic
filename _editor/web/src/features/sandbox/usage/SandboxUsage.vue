@@ -208,7 +208,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <SegmentedControl v-model="preset" :options="rangePresets()" />
+            <SegmentedControl v-model="preset" :options="rangePresets()" wrap />
             <!-- These days are UTC days, at both ends: the daemon stamps every row in UTC so that last month's totals
                  cannot change when somebody moves a setting. Said out loud only to a reader whose own midnight is a
                  different moment, for whom "today" here is not the today they mean. -->
@@ -223,9 +223,11 @@ const hasSpend = computed(() => current.value.length > 0);
                 {{ t(`sandbox.sandboxUsage.utcDays`) }}
             </span>
             <span class="h-4 w-px bg-line" />
-            <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
-            <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1" @click="clearAgentFilter">
-                <Icon name="sliders-h" />{{ agentTitle(agentFilter) }}<Icon name="times" />
+            <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" wrap />
+            <button v-if="agentFilter !== undefined" type="button" class="ui-chip max-w-full gap-1" @click="clearAgentFilter">
+                <Icon name="sliders-h" class="shrink-0" />
+                <span class="min-w-0 break-words whitespace-normal text-left">{{ agentTitle(agentFilter) }}</span>
+                <Icon name="times" class="shrink-0" />
             </button>
             <button
                 type="button"
@@ -342,7 +344,7 @@ const hasSpend = computed(() => current.value.length > 0);
                 <PlanLimitsPanel />
 
                 <Card>
-                    <div class="mb-3 flex items-baseline justify-between gap-3">
+                    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <h3 class="text-sm font-semibold text-content">
                             {{ preset === `all` ? t(`sandbox.sandboxUsage.spendPerPeriod`) : t(`sandbox.sandboxUsage.spendPerDay`) }}
                         </h3>
@@ -398,7 +400,8 @@ const hasSpend = computed(() => current.value.length > 0);
 
                             <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
                             <template #footnote>
-                                {{ t(`sandbox.sandboxUsage.commandCount`, { count: formatCompact(savings?.input.commands ?? 0) }) }} {{ savingsPeriod }}
+                                {{ t(`sandbox.sandboxUsage.commandCount`, { count: formatCompact(savings?.input.commands ?? 0) }) }}
+                                {{ savingsPeriod }}
                                 <template v-if="savings?.input.updatedAt !== undefined">{{
                                     t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: timeAgo(savings.input.updatedAt, { days: true }) })
                                 }}</template>
@@ -409,8 +412,12 @@ const hasSpend = computed(() => current.value.length > 0);
 
                 <!-- How a distrusted number gets reconciled, and what discharges the palette's low-contrast fills. -->
                 <Card>
-                    <div class="flex items-center justify-between gap-3">
-                        <button type="button" class="flex cursor-pointer items-center gap-1.5 text-sm text-content" @click="tableOpen = !tableOpen">
+                    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                        <button
+                            type="button"
+                            class="flex min-w-0 flex-wrap cursor-pointer items-center gap-1.5 text-sm text-content"
+                            @click="tableOpen = !tableOpen"
+                        >
                             <Icon :name="tableOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
                             {{ t(`sandbox.sandboxUsage.showTable`) }}
                             <span class="text-2xs text-subtle">{{
@@ -458,7 +465,9 @@ const hasSpend = computed(() => current.value.length > 0);
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.outputTokens) }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.cacheReadTokens) }}</td>
-                                    <td class="py-1.5 text-right text-content">{{ row.costKnown === false ? `≥ ` : `` }}{{ formatMoney(row.costUsd) }}</td>
+                                    <td class="py-1.5 text-right text-content">
+                                        {{ row.costKnown === false ? `≥ ` : `` }}{{ formatMoney(row.costUsd) }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>

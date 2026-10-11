@@ -57,6 +57,24 @@ test(`a repository's row prints the command it declares, not a count of them`, (
     expect(host.textContent).toContain(`intentic/.intentic/checks.json`);
 });
 
+test(`gives the complete command and path filters a full-width line until the row can support aligned columns`, () => {
+    repos.value = [declaring({ checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] }] })];
+    const host = mount();
+    const row = host.querySelector(`[class*="@container/repo-check"]`)!;
+    const line = row.querySelector(`li`)!;
+    const command = line.children[1]!;
+    expect(command.classList.contains(`min-w-0`)).toBe(true);
+    expect(command.classList.contains(`col-span-full`)).toBe(true);
+    expect(command.classList.contains(`row-start-2`)).toBe(true);
+    expect(command.classList.contains(`@xl/repo-check:row-start-1`)).toBe(true);
+    expect(command.textContent).toContain(`pnpm exec eslint {file}`);
+    expect(command.textContent).toContain(`only when touching`);
+    expect(command.textContent).toContain(`src/**`);
+    expect(line.textContent).toContain(`After each edit`);
+    expect(line.textContent).toContain(`never flagged`);
+    expect(adopt).not.toHaveBeenCalled();
+});
+
 test(`each check is named by the moment it runs at`, () => {
     repos.value = [
         declaring({

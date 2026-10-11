@@ -483,7 +483,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         <Notice v-if="keyNotice" :of="keyNotice" />
 
         <!-- The grid: every way in, always the same tiles in the same places. -->
-        <div role="group" :aria-label="t(`shared.models`)" class="-mx-1.5 flex flex-wrap gap-1">
+        <div role="group" :aria-label="t(`shared.models`)" class="flex flex-wrap gap-1">
             <ProviderTile
                 v-for="tile in MODEL_TILES"
                 :key="tile"

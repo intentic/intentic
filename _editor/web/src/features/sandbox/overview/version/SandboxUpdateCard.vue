@@ -191,7 +191,9 @@ const withdrawnNotice = computed<NoticeModel | undefined>(() => {
         return undefined;
     }
     const notice: NoticeModel = { tone: `warning`, title: said };
-    return plan.value.rollbackWhy === `withdrawn` ? { ...notice, action: { label: t(`capabilities.hostRecreate.rollBackVerb`), run: openRollback } } : notice;
+    return plan.value.rollbackWhy === `withdrawn`
+        ? { ...notice, action: { label: t(`capabilities.hostRecreate.rollBackVerb`), run: openRollback } }
+        : notice;
 });
 
 // What the machine last did. Its one action: skipping a version it gave up on (Try again is the update button
@@ -205,7 +207,8 @@ const newsNotice = computed<NoticeModel | undefined>(() => {
     if (news === undefined) {
         return undefined;
     }
-    const said: NoticeModel = news.reason === undefined ? { tone: news.tone, title: news.text } : { tone: news.tone, title: news.text, detail: news.reason };
+    const said: NoticeModel =
+        news.reason === undefined ? { tone: news.tone, title: news.text } : { tone: news.tone, title: news.text, detail: news.reason };
     const action = newsAction.value;
     return action === undefined ? said : { ...said, action };
 });
@@ -255,7 +258,9 @@ const facts = computed((): Fact[] => {
         // A deploy decides its own restart, so what it costs is not this card's to say.
         ...(serverManaged.value ? [] : [{ icon: `clock` as const, label: t(`sandbox.sandboxUpdateCard.factDowntime`), tip: downtimeTip }]),
         { icon: `shield`, label: t(`sandbox.sandboxUpdateCard.factFilesStay`), tip: t(`sandbox.sandboxUpdateCard.filesStay`) },
-        ...(throughIc.value ? [{ icon: `undo` as const, label: t(`sandbox.sandboxUpdateCard.factUndo`), tip: t(`sandbox.sandboxUpdateCard.previousStaysReady`) }] : []),
+        ...(throughIc.value
+            ? [{ icon: `undo` as const, label: t(`sandbox.sandboxUpdateCard.factUndo`), tip: t(`sandbox.sandboxUpdateCard.previousStaysReady`) }]
+            : []),
     ];
 });
 
@@ -269,9 +274,12 @@ const { starting } = useBackgroundDownload(() =>
         ? { slug: slug.value, version: latest.value }
         : undefined,
 );
-const download = computed(
-    (): DownloadState => ({ offered: downloadsHere.value, staged: updateStaged.value, preparing: preparing.value, starting: starting.value }),
-);
+const download = computed((): DownloadState => ({
+    offered: downloadsHere.value,
+    staged: updateStaged.value,
+    preparing: preparing.value,
+    starting: starting.value,
+}));
 const isDownloading = computed(() => downloading(download.value));
 watchEffect(() => {
     poll.value = downloadPollMs(download.value);
@@ -312,7 +320,12 @@ const quietBody = computed(
 );
 // The developer notes, the stored-file conversions and the way back: the offer's fine print, below what is new.
 const finePrint = computed(
-    () => breakingNotes.value.length > 0 || convertedFiles.value.length > 0 || stagedPlan.value?.downgrade === true || troubleAtFoot.value || rollbackShown.value,
+    () =>
+        breakingNotes.value.length > 0 ||
+        convertedFiles.value.length > 0 ||
+        stagedPlan.value?.downgrade === true ||
+        troubleAtFoot.value ||
+        rollbackShown.value,
 );
 </script>
 
@@ -320,11 +333,18 @@ const finePrint = computed(
     <div v-if="plan.visible">
         <!-- THE OFFER. Its own card, lit from one corner with a gold hairline along its top: the one piece of good news
              on this page, and the reading order is the order of the decision. -->
-        <section v-if="offering" class="ui-card relative isolate flex flex-col overflow-hidden p-0" :aria-label="t(`sandbox.sandboxUpdateCard.updateAvailable`)">
+        <section
+            v-if="offering"
+            class="@container/update ui-card relative isolate flex min-w-0 flex-col overflow-hidden p-0"
+            :aria-label="t(`sandbox.sandboxUpdateCard.updateAvailable`)"
+        >
             <div aria-hidden="true" class="pointer-events-none absolute -right-24 -top-36 -z-10 h-80 w-80 rounded-full bg-primary-500/15 blur-3xl" />
-            <div aria-hidden="true" class="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent" />
+            <div
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent"
+            />
 
-            <div class="flex flex-col gap-5 p-5 sm:p-6">
+            <div class="flex flex-col gap-5 p-4 @md/update:p-6">
                 <!-- What there is to know about the version that runs, before what there is to take. -->
                 <Notice v-if="withdrawnNotice" :of="withdrawnNotice" />
                 <div v-if="newsNotice" class="flex flex-col gap-1.5">
@@ -360,14 +380,22 @@ const finePrint = computed(
                                       : t(`sandbox.sandboxUpdateCard.updateAvailable`)
                             }}
                         </p>
-                        <h2 class="text-xl font-semibold leading-tight tracking-tight text-content">{{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}</h2>
+                        <h2 class="text-xl font-semibold leading-tight tracking-tight text-content [overflow-wrap:anywhere]">
+                            {{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}
+                        </h2>
                         <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
-                            <span class="inline-flex items-center gap-1.5 font-mono text-2xs">
-                                <span class="rounded bg-content/5 px-1.5 py-0.5 text-subtle">{{ installed ?? `?` }}</span>
-                                <Icon name="arrow-right" class="text-subtle" aria-hidden="true" />
-                                <span class="rounded bg-primary-500/10 px-1.5 py-0.5 font-medium text-link">{{ latest }}</span>
+                            <span class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 font-mono text-2xs">
+                                <span class="min-w-0 max-w-full break-all rounded bg-content/5 px-1.5 py-0.5 text-subtle">{{
+                                    installed ?? `?`
+                                }}</span>
+                                <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                                    <Icon name="arrow-right" class="shrink-0 text-subtle" aria-hidden="true" />
+                                    <span class="min-w-0 break-all rounded bg-primary-500/10 px-1.5 py-0.5 font-medium text-link">{{ latest }}</span>
+                                </span>
                             </span>
-                            <span v-if="improvements > 0">{{ t(`sandbox.sandboxUpdateCard.improvementCount`, { count: improvements }, improvements) }}</span>
+                            <span v-if="improvements > 0">{{
+                                t(`sandbox.sandboxUpdateCard.improvementCount`, { count: improvements }, improvements)
+                            }}</span>
                         </p>
                     </div>
                 </header>
@@ -382,7 +410,13 @@ const finePrint = computed(
                     <template v-else-if="hosted">
                         <!-- Own block so the column's stretch doesn't draw the button at full width. -->
                         <div v-if="isOwner">
-                            <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" tier="loud" gilded :loading="restarting" @click="restartHosted">
+                            <Button
+                                :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)"
+                                tier="loud"
+                                gilded
+                                :loading="restarting"
+                                @click="restartHosted"
+                            >
                                 <template #icon><Icon name="arrow-circle-up" /></template>
                             </Button>
                         </div>
@@ -434,22 +468,25 @@ const finePrint = computed(
                 v-if="updateNotes.length > 0"
                 :notes="updateNotes"
                 :more="moreUpdateNotes"
-                class="border-t border-line-subtle px-5 py-5 sm:px-6"
+                class="border-t border-line-subtle px-4 py-5 @md/update:px-6"
             />
 
             <!-- THE FINE PRINT: each a line that opens. The developer notes gate nothing and are for whoever builds on
                  the sandbox's API or config, so they are named, counted and folded, not painted as a danger. -->
-            <div v-if="finePrint" class="flex flex-col gap-3 border-t border-line-subtle px-5 py-4 sm:px-6">
+            <div v-if="finePrint" class="flex flex-col gap-3 border-t border-line-subtle px-4 py-4 @md/update:px-6">
                 <details v-if="convertedFiles.length > 0" class="group">
                     <summary :class="ui.textButton({ tone: `quiet` }, `w-full list-none [&::-webkit-details-marker]:hidden`)">
                         <Icon name="file-edit" class="shrink-0 text-subtle" aria-hidden="true" />
-                        <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length) }}</span>
+                        <span class="flex-1">{{
+                            t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length)
+                        }}</span>
                         <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
                     </summary>
                     <div class="flex flex-col gap-1.5 pb-1 pl-6 pt-1">
                         <ul class="flex flex-col gap-1">
                             <li v-for="step in convertedFiles" :key="`${step.document}:${step.change}`" class="text-2xs text-muted">
-                                <span class="font-mono text-content">{{ step.document }}</span>: {{ step.change }}
+                                <span class="font-mono text-content">{{ step.document }}</span
+                                >: {{ step.change }}
                             </li>
                         </ul>
                         <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.convertedFilesKeptAside`) }}</p>
@@ -461,7 +498,9 @@ const finePrint = computed(
                 <details v-if="breakingNotes.length > 0" class="group">
                     <summary :class="ui.textButton({ tone: `quiet` }, `w-full list-none [&::-webkit-details-marker]:hidden`)">
                         <Icon name="code" class="shrink-0 text-warning" aria-hidden="true" />
-                        <span class="flex-1">{{ t(`sandbox.sandboxUpdateCard.developerChanges`, { count: breakingNotes.length }, breakingNotes.length) }}</span>
+                        <span class="flex-1">{{
+                            t(`sandbox.sandboxUpdateCard.developerChanges`, { count: breakingNotes.length }, breakingNotes.length)
+                        }}</span>
                         <Icon name="chevron-right" class="shrink-0 text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
                     </summary>
                     <div class="flex flex-col gap-2.5 pb-1 pl-6 pt-1">
@@ -481,7 +520,13 @@ const finePrint = computed(
                     </div>
                 </details>
                 <!-- The way back, tucked away: there for whoever comes looking and never pitched to whoever doesn't. -->
-                <button v-if="troubleAtFoot" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)" :aria-expanded="rollbackOpen" @click="toggleRollback">
+                <button
+                    v-if="troubleAtFoot"
+                    type="button"
+                    :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)"
+                    :aria-expanded="rollbackOpen"
+                    @click="toggleRollback"
+                >
                     {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
                 </button>
                 <UpdateRollbackPanel
@@ -503,7 +548,12 @@ const finePrint = computed(
                     <StatusBadge v-if="plan.withdrawn" variant="warning" :label="t(`sandbox.sandboxUpdateCard.withdrawnBadge`)" dot />
                     <!-- Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an
                          amber "take this" on a card telling you not to would be the card arguing with itself. -->
-                    <StatusBadge v-if="updateAvailable" :variant="localImage ? `neutral` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
+                    <StatusBadge
+                        v-if="updateAvailable"
+                        :variant="localImage ? `neutral` : `warning`"
+                        :label="`${installed ?? '?'} → ${latest}`"
+                        dot
+                    />
                     <StatusBadge v-else-if="plan.skipped" variant="neutral" :label="t(`sandbox.sandboxUpdateCard.skippedBadge`)" />
                     <StatusBadge v-else-if="channel === `stable` && !plan.withdrawn" variant="success" :label="t(`shared.upToDate`)" dot />
                     <StatusBadge v-else-if="channel && !plan.withdrawn" variant="neutral" :label="channel" />
@@ -526,7 +576,9 @@ const finePrint = computed(
                     </div>
                     <p v-if="plan.skipped" class="flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <span>{{ t(`sandbox.sandboxUpdateCard.skippedLine`, { version: plan.skipped }) }}</span>
-                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="skip(null)">
+                            {{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}
+                        </button>
                     </p>
                     <Notice v-if="skipNotice" :of="skipNotice" />
 
@@ -578,7 +630,8 @@ const finePrint = computed(
                         <p class="font-medium">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
                         <ul class="mt-1.5 flex flex-col gap-1">
                             <li v-for="failure in stagedPlan?.failures ?? []" :key="failure.document" class="text-2xs text-content">
-                                <span class="font-mono">{{ failure.document }}</span>: {{ failure.detail }}
+                                <span class="font-mono">{{ failure.document }}</span
+                                >: {{ failure.detail }}
                             </li>
                         </ul>
                     </Notice>

@@ -157,7 +157,9 @@ const editingPin = computed<ModelPin | undefined>(() =>
     editing.value?.index === undefined ? undefined : models.entries.value[editing.value.index]?.pin,
 );
 // While adding, the list ticks the persona's own first model, never the chat's.
-const editingCurrent = computed<ModelPin | undefined>(() => (editing.value !== undefined && editing.value.index === undefined ? models.entries.value[0]?.pin : undefined));
+const editingCurrent = computed<ModelPin | undefined>(() =>
+    editing.value !== undefined && editing.value.index === undefined ? models.entries.value[0]?.pin : undefined,
+);
 const pick = (pin: ModelPin): void => models.apply(editing.value?.index, pin);
 const configure = (pin: ModelPin): void => {
     if (editing.value?.index !== undefined) {
@@ -170,7 +172,7 @@ const configure = (pin: ModelPin): void => {
     <!-- The form spans the persona row; text fields keep their own reading width. -->
     <div class="flex max-w-4xl flex-col gap-6">
         <!-- Section pills rely on the surrounding field frame. -->
-        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" />
+        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" wrap />
 
         <template v-if="section === `identity`">
             <!-- The persona's own line, shown first since it's the persona saying who it is; also the sentence a new chat is matched on. -->
@@ -212,12 +214,7 @@ const configure = (pin: ModelPin): void => {
                             <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
                         </button>
                         <!-- A persona that speaks nowhere is a fine persona; the button is the whole state, nothing picked yet. -->
-                        <button
-                            type="button"
-                            :class="ui.textButton({ tone: `quiet` })"
-                            :aria-expanded="open"
-                            @click="open = !open"
-                        >
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" :aria-expanded="open" @click="open = !open">
                             <!-- "Add another", not "Change": removing is the chip's own job, this control only adds. -->
                             <Icon :name="open ? `check` : `plus`" class="text-2xs" />
                             {{
@@ -370,6 +367,7 @@ const configure = (pin: ModelPin): void => {
                             <span class="text-xs text-subtle">{{ t(`sandbox.personaForm.wholeWorkspaceChatNo`) }}</span>
                         </span>
                         <ToggleSwitch
+                            class="shrink-0"
                             :model-value="draft.carries === undefined"
                             @update:model-value="(on: boolean) => (draft.carries = on ? undefined : [])"
                         />
@@ -380,7 +378,11 @@ const configure = (pin: ModelPin): void => {
                         </p>
                         <label v-for="repo in nested" :key="repo" class="flex items-center justify-between gap-3 pl-4">
                             <span class="truncate text-sm text-content">{{ repo }}</span>
-                            <ToggleSwitch :model-value="draft.carries.includes(repo)" @update:model-value="(on: boolean) => setCarried(repo, on)" />
+                            <ToggleSwitch
+                                class="shrink-0"
+                                :model-value="draft.carries.includes(repo)"
+                                @update:model-value="(on: boolean) => setCarried(repo, on)"
+                            />
                         </label>
                         <!-- An off repository is absent from the session tree. -->
                         <span class="text-xs text-subtle">

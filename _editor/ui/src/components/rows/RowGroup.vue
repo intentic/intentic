@@ -45,7 +45,9 @@ provideRowDensity(computed(() => density));
             <slot name="info" />
             <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
-            <div v-if="$slots[`actions`]" class="ml-auto flex items-center gap-2"><slot name="actions" /></div>
+            <div v-if="$slots[`actions`]" class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+                <slot name="actions" />
+            </div>
         </div>
         <!-- Equal rows: each child stretches to the tallest and centres what it holds by `align-content`, which a <Row> (a
              wrapping flex line) and a plain block child (a note, a skeleton) both answer, without being made a column. -->

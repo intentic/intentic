@@ -120,56 +120,64 @@ const shortfall = computed<number>(() => (table === undefined ? 0 : shortfallOf(
 <template>
     <!-- No background or border of its own: the row's `#below` spine and the group's `divide-y` already provide the boundaries.
          Capped: on a wide pane an uncapped table strands its figures a hand's width from the names they belong to. -->
-    <div class="flex max-w-xl flex-col gap-3">
-        <!-- Fixed columns, not sized to content: the section stacks several of these tables, and columns that moved from
-             one to the next would make the same "With" figure sit in a different place under each setting. -->
-        <table v-if="table !== undefined" class="w-full table-fixed border-collapse text-xs tabular-nums">
-            <colgroup>
-                <col />
-                <col class="w-20" />
-                <col class="w-20" />
-                <col class="w-40" />
-            </colgroup>
-            <thead>
-                <tr class="text-2xs text-subtle">
-                    <th scope="col" class="pb-1.5 text-left font-medium">{{ t(`sandbox.measurementPanel.effect`) }}</th>
-                    <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ onLabel }}</th>
-                    <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ offLabel }}</th>
-                    <th scope="col" class="pb-1.5 pl-6 text-left font-medium">{{ t(`sandbox.measurementPanel.change`) }}</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- How much each column stands on, as a row of the table rather than an "n=" beside every figure. -->
-                <tr class="border-t border-line-subtle text-subtle">
-                    <th scope="row" class="py-1.5 text-left font-normal">{{ t(`sandbox.measurementPanel.sample.${table.unit}`) }}</th>
-                    <td class="py-1.5 pl-4 text-right">{{ formatCount(table.on) }}</td>
-                    <td class="py-1.5 pl-4 text-right">{{ formatCount(table.off) }}</td>
-                    <td class="py-1.5 pl-6" />
-                </tr>
-                <tr v-for="line in lines" :key="line.key" class="border-t border-line-subtle">
-                    <th scope="row" class="py-1.5 pr-2 text-left font-normal text-muted">{{ line.label }}</th>
-                    <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.on }}</td>
-                    <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.off }}</td>
-                    <td class="whitespace-nowrap py-1.5 pl-6 text-left">
-                        <!-- The statistics behind the words (the likely range, the sample still owed) are a hover away for
+    <div class="flex min-w-0 max-w-xl flex-col gap-3">
+        <!-- Fixed columns, not sized to content: preserve comparisons in a local scroller rather than crushing the
+             effect column when the pane is narrow. Keyboard readers can reach and scroll the same region. -->
+        <div
+            v-if="table !== undefined"
+            role="region"
+            :aria-label="`${onLabel} / ${offLabel}`"
+            tabindex="0"
+            class="min-w-0 max-w-full overflow-x-auto"
+        >
+            <table class="w-full min-w-[32rem] table-fixed border-collapse text-xs tabular-nums">
+                <colgroup>
+                    <col />
+                    <col class="w-20" />
+                    <col class="w-20" />
+                    <col class="w-40" />
+                </colgroup>
+                <thead>
+                    <tr class="text-2xs text-subtle">
+                        <th scope="col" class="pb-1.5 text-left font-medium">{{ t(`sandbox.measurementPanel.effect`) }}</th>
+                        <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ onLabel }}</th>
+                        <th scope="col" class="pb-1.5 pl-4 text-right font-medium">{{ offLabel }}</th>
+                        <th scope="col" class="pb-1.5 pl-6 text-left font-medium">{{ t(`sandbox.measurementPanel.change`) }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- How much each column stands on, as a row of the table rather than an "n=" beside every figure. -->
+                    <tr class="border-t border-line-subtle text-subtle">
+                        <th scope="row" class="py-1.5 text-left font-normal">{{ t(`sandbox.measurementPanel.sample.${table.unit}`) }}</th>
+                        <td class="py-1.5 pl-4 text-right">{{ formatCount(table.on) }}</td>
+                        <td class="py-1.5 pl-4 text-right">{{ formatCount(table.off) }}</td>
+                        <td class="py-1.5 pl-6" />
+                    </tr>
+                    <tr v-for="line in lines" :key="line.key" class="border-t border-line-subtle">
+                        <th scope="row" class="py-1.5 pr-2 text-left font-normal text-muted">{{ line.label }}</th>
+                        <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.on }}</td>
+                        <td class="py-1.5 pl-4 text-right" :class="line.settled ? `text-content` : `text-muted`">{{ line.off }}</td>
+                        <td class="whitespace-nowrap py-1.5 pl-6 text-left">
+                            <!-- The statistics behind the words (the likely range, the sample still owed) are a hover away for
                              whoever asks, not printed for everyone; a dotted underline on an open row says so. -->
-                        <span
-                            v-tooltip.top="line.tip"
-                            :tabindex="line.tip === undefined ? undefined : 0"
-                            class="inline-block"
-                            :class="[
-                                line.mark,
-                                line.tip === undefined ? `` : `cursor-help`,
-                                line.tip !== undefined && !line.settled
-                                    ? `underline decoration-line-strong decoration-dotted underline-offset-3`
-                                    : ``,
-                            ]"
-                            >{{ line.result }}</span
-                        >
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                            <span
+                                v-tooltip.top="line.tip"
+                                :tabindex="line.tip === undefined ? undefined : 0"
+                                class="inline-block"
+                                :class="[
+                                    line.mark,
+                                    line.tip === undefined ? `` : `cursor-help`,
+                                    line.tip !== undefined && !line.settled
+                                        ? `underline decoration-line-strong decoration-dotted underline-offset-3`
+                                        : ``,
+                                ]"
+                                >{{ line.result }}</span
+                            >
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         <p v-else class="text-xs text-subtle">{{ t(`sandbox.measurementPanel.noResultsYet`) }}</p>
 
         <!-- Said once for the whole table, not as "Too early" plus a reason on every row. -->

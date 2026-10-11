@@ -273,22 +273,23 @@ const pushToCi = async (): Promise<void> => {
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
                     <RowNote v-if="!filtering && adding" variant="block">
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-start gap-2">
+                        <div class="@container/secret-form flex min-w-0 flex-col gap-2">
+                            <div class="flex min-w-0 flex-col gap-2 @lg/secret-form:flex-row">
                                 <input
                                     ref="newKeyInput"
                                     v-model="newKey"
                                     :placeholder="t(`sandbox.sandboxSecrets.keyName`)"
+                                    :aria-label="t(`sandbox.sandboxSecrets.keyName`)"
                                     autocapitalize="off"
                                     spellcheck="false"
-                                    :class="ui.input('w-44 shrink-0 font-mono')"
+                                    :class="ui.input('min-w-0 w-full shrink-0 font-mono @lg/secret-form:w-44')"
                                 />
-                                <SecretField class="flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
+                                <SecretField class="min-w-0 flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
                             </div>
                             <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
                                 {{ newKeyProblem }}
                             </span>
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <button
                                     v-if="newKeyValid && !newKeyTaken"
                                     type="button"

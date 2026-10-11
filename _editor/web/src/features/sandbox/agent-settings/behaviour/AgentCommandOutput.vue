@@ -139,22 +139,23 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
             </template>
             <!-- Per-cleaner checklist; shown only while cleaning is on. -->
             <template v-if="settings !== undefined && cleaningOn" #below>
-                <div class="flex flex-col gap-2">
-                    <div class="flex items-baseline justify-between gap-2">
+                <div class="@container/cleaners flex min-w-0 flex-col gap-2">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
                         <p class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</p>
                         <!-- Per-switch savings turn sixteen identical toggles into a list you can prune by impact. -->
                         <p class="text-2xs text-subtle">{{ t(`sandbox.agentCommandOutput.tokensSavedAllTime`) }}</p>
                     </div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                        <label v-for="cleaner in cleanerOptions()" :key="cleaner.id" class="flex items-center justify-between gap-2">
-                            <span class="flex min-w-0 items-baseline gap-1.5">
-                                <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
+                    <div class="grid grid-cols-1 gap-x-4 gap-y-1.5 @md/cleaners:grid-cols-2">
+                        <label v-for="cleaner in cleanerOptions()" :key="cleaner.id" class="flex min-w-0 items-center justify-between gap-2">
+                            <span class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                                <span class="min-w-0 break-words text-xs text-content">{{ cleaner.label }}</span>
                                 <!-- Absent means not yet measured, a different claim from zero. -->
                                 <span v-if="savedTokens.get(cleaner.id) !== undefined" class="shrink-0 text-2xs tabular-nums text-success">
                                     ~{{ formatTokens(savedTokens.get(cleaner.id) ?? 0) }}
                                 </span>
                             </span>
                             <ToggleSwitch
+                                class="shrink-0"
                                 :model-value="enabledCleaners.has(cleaner.id)"
                                 @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
                             />

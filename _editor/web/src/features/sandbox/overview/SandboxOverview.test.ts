@@ -33,8 +33,12 @@ jest.mock(`../devices/useSelfResources`, () => ({
         save: () => Promise.resolve(``),
     }),
 }));
+const versionInfo = ref<{ image: string } | undefined>(undefined);
+const installedVersion = ref<string | undefined>(undefined);
+const latestVersion = ref<string | undefined>(undefined);
+const updateAvailable = ref(false);
 jest.mock(`./version/useSandboxVersion`, () => ({
-    useSandboxVersion: () => ({ info: ref(undefined), installed: ref(undefined), latest: ref(undefined), updateAvailable: ref(false) }),
+    useSandboxVersion: () => ({ info: versionInfo, installed: installedVersion, latest: latestVersion, updateAvailable }),
 }));
 jest.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
 const availability = ref<`live` | `warming` | `busy`>(`live`);
@@ -113,6 +117,10 @@ const pickFile = async (el: HTMLElement): Promise<void> => {
 
 beforeEach(() => {
     availability.value = `live`;
+    versionInfo.value = undefined;
+    installedVersion.value = undefined;
+    latestVersion.value = undefined;
+    updateAvailable.value = false;
     update.mockClear();
     fileToSquareDataUrl.mockClear();
 });
@@ -261,6 +269,41 @@ it(`states this sandbox's own hours on the hosted card, with Billing where a pla
     await nextTick();
     expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
     expect(root.textContent).not.toContain(`Billing`);
+});
+
+// Structural wrap/shrink assertions complement the real-browser pane audit; jsdom cannot measure CSS layout.
+it(`keeps long image, installed and available versions in full within stackable facts`, () => {
+    const image = `ghcr.io/intentic/sandbox:stable-2026.10.10-4f5dd184296f1351fa2f795d36b4d3c7081a4f9c`;
+    const installed = `2026.10.03-stable-4f5dd184296f1351fa2f795d36b4d3c7081a4f9c`;
+    const latest = `2026.10.10-stable-729f184f364d3c7081a4f9c2f795d36b4d3c7081a4f9c`;
+    versionInfo.value = { image };
+    installedVersion.value = installed;
+    latestVersion.value = latest;
+    updateAvailable.value = true;
+    const el = mount(sandboxRow());
+    const facts = el.querySelector(`dl`)!;
+    expect(facts.textContent).toContain(image);
+    expect(facts.textContent).toContain(installed);
+    expect(facts.textContent).toContain(latest);
+    expect(facts.querySelector(`.truncate`)).toBeNull();
+    expect(facts.querySelector(`dd`)?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
+    expect(facts.firstElementChild?.classList.contains(`grid`)).toBe(true);
+});
+
+it(`bounds a long Sandbox URL's text independently of its external-link icon without changing the address`, () => {
+    const url = `https://sandbox-82789f4106b4-long-descriptive-address.demo.invalid`;
+    daemonUrl.value = url;
+    const el = mount(sandboxRow());
+    const link = el.querySelector<HTMLAnchorElement>(`dl a`)!;
+    expect(link.getAttribute(`href`)).toBe(url);
+    expect(link.getAttribute(`target`)).toBe(`_blank`);
+    expect(link.classList.contains(`max-w-full`)).toBe(true);
+    expect(link.classList.contains(`truncate`)).toBe(false);
+    const text = link.firstElementChild!;
+    expect(text.textContent).toBe(url);
+    expect(text.classList.contains(`min-w-0`)).toBe(true);
+    expect(text.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
+    expect(link.lastElementChild?.classList.contains(`shrink-0`)).toBe(true);
 });
 
 /* THIS SANDBOX'S SHARE OF ITS MACHINE: changing it is a device op, maintainer and up at the daemon, so the form is a

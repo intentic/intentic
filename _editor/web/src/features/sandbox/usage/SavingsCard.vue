@@ -24,7 +24,7 @@ defineProps<{
     <!-- `@container`: the body lays out against the card, not the viewport, which sit many nested widths apart (rail, chat panel, tab padding). -->
     <Card class="@container flex min-w-0 flex-col gap-3">
         <div class="flex items-start justify-between gap-2">
-            <h3 class="text-sm font-semibold text-content">{{ title }}</h3>
+            <h3 class="min-w-0 flex-1 break-words text-sm font-semibold text-content">{{ title }}</h3>
             <InfoHint :label="t(`sandbox.savingsCard.howMeasured`, { title })" class="shrink-0">
                 <span class="block text-xs text-content"><slot name="hint" /></span>
             </InfoHint>

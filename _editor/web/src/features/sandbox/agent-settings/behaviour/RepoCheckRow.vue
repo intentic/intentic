@@ -43,7 +43,9 @@ const momentWords = (when: RepoCheckMoment): string =>
 
 // When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
 const firedWords = (at: number | null | undefined): string =>
-    at === null || at === undefined ? t(`sandbox.repoCheckRow.neverFlagged`) : t(`sandbox.repoCheckRow.lastFlagged`, { ago: timeAgo(at, { days: true }) });
+    at === null || at === undefined
+        ? t(`sandbox.repoCheckRow.neverFlagged`)
+        : t(`sandbox.repoCheckRow.lastFlagged`, { ago: timeAgo(at, { days: true }) });
 
 // Declared checks that are not running; only their own lines dim, never the switch that would start them.
 const idle = computed(() => !entry.adopted && !entry.changed);
@@ -53,19 +55,17 @@ type Line = { key: string; when: RepoCheckMoment; run: string; paths: readonly s
 // In the order of their moments, so one moment's checks sit together under a single label.
 const lines = computed((): Line[] =>
     entry.checks
-        .map(
-            (check, index): Line => ({
-                key: `${index}`,
-                when: check.when,
-                run: check.run,
-                paths: check.paths ?? [],
-                // An edit or turn check stamps a firing when it reports something; a retired one has nothing left to have
-                // flagged.
-                note: check.when !== `land` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
-                // A retired check reads as inert as one nobody switched on: neither runs.
-                dim: idle.value || check.when === `land`,
-            }),
-        )
+        .map((check, index): Line => ({
+            key: `${index}`,
+            when: check.when,
+            run: check.run,
+            paths: check.paths ?? [],
+            // An edit or turn check stamps a firing when it reports something; a retired one has nothing left to have
+            // flagged.
+            note: check.when !== `land` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
+            // A retired check reads as inert as one nobody switched on: neither runs.
+            dim: idle.value || check.when === `land`,
+        }))
         .toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when)),
 );
 
@@ -88,7 +88,7 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
 </script>
 
 <template>
-    <Row icon="shield" :tone="status?.tone ?? `default`">
+    <Row icon="shield" :tone="status?.tone ?? `default`" class="@container/repo-check">
         <template #title>
             <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span>{{ title ?? name }}</span>
@@ -96,7 +96,9 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
             </span>
         </template>
         <template v-if="entry.error !== undefined || status !== undefined" #description>
-            <span v-if="entry.error !== undefined" class="text-danger">{{ t(`sandbox.repoCheckRow.checksFileCouldNot`, { error: entry.error }) }}</span>
+            <span v-if="entry.error !== undefined" class="text-danger">{{
+                t(`sandbox.repoCheckRow.checksFileCouldNot`, { error: entry.error })
+            }}</span>
             <span v-else-if="status !== undefined" class="inline-flex items-baseline gap-1.5" :class="STATUS_TEXT[status.tone]">
                 <span v-if="status.tone === `success`" class="size-1.5 shrink-0 translate-y-[-0.1em] rounded-full bg-success" aria-hidden="true" />
                 {{ status.words }}
@@ -112,16 +114,22 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
             />
         </template>
         <template v-if="entry.error === undefined && lines.length > 0" #below>
-            <!-- Three columns shared by every line, so moments, commands and verdicts each read down one edge. -->
-            <ul class="grid grid-cols-[max-content_minmax(0,1fr)_max-content] overflow-hidden rounded-lg border border-line-subtle bg-canvas/60 text-xs">
+            <!-- Commands get their own full-width line in a narrow row. Wider rows align moments, commands and verdicts in three columns. -->
+            <ul
+                class="grid grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-line-subtle bg-canvas/60 text-xs @xl/repo-check:grid-cols-[max-content_minmax(0,1fr)_max-content]"
+            >
                 <li
                     v-for="(line, index) in lines"
                     :key="line.key"
-                    class="col-span-3 grid grid-cols-subgrid items-baseline gap-x-4 px-3 py-2"
+                    class="col-span-full grid grid-cols-subgrid items-baseline gap-x-3 gap-y-1 px-3 py-2 @xl/repo-check:gap-x-4"
                     :class="[index > 0 && line.when !== lines[index - 1]!.when ? `border-t border-line-subtle` : ``, line.dim ? `opacity-60` : ``]"
                 >
-                    <span class="text-2xs text-subtle">{{ index > 0 && line.when === lines[index - 1]!.when ? `` : momentWords(line.when) }}</span>
-                    <span class="flex min-w-0 flex-col gap-1">
+                    <span class="col-start-1 row-start-1 min-w-0 break-words text-2xs text-subtle">{{
+                        index > 0 && line.when === lines[index - 1]!.when ? `` : momentWords(line.when)
+                    }}</span>
+                    <span
+                        class="col-span-full row-start-2 flex min-w-0 flex-col gap-1 @xl/repo-check:col-span-1 @xl/repo-check:col-start-2 @xl/repo-check:row-start-1"
+                    >
                         <!-- The command wraps so the approval target remains fully readable. -->
                         <RuleCommand :command="line.run" wrap />
                         <!-- Repo-relative, as the file spells them; the daemon is the one that prefixes the repository. -->
@@ -136,7 +144,10 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                             >
                         </span>
                     </span>
-                    <span class="text-right text-2xs tabular-nums text-subtle">{{ line.note ?? `` }}</span>
+                    <span
+                        class="col-start-2 row-start-1 min-w-0 break-words text-right text-2xs tabular-nums text-subtle @xl/repo-check:col-start-3"
+                        >{{ line.note ?? `` }}</span
+                    >
                 </li>
             </ul>
         </template>
