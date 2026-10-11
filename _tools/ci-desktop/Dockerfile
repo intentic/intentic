@@ -29,18 +29,27 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #   xz-utils                  tar shells out to it, and the zig tarball below is the only .tar.xz here
 #   osslsigncode              Authenticode signing FROM LINUX (_tools/scripts/build/sign-windows.sh). The Windows
 #                             installer is cross-built here, so `signtool.exe` does not exist and never will;
-#                             this is the tool that signs from a .pfx. The other supported signer is `jsign`,
-#                             for a key that lives in a cloud service (Azure Trusted Signing and friends) —
-#                             it is Java and is deliberately NOT baked in until that provider is chosen, since
-#                             a JRE is ~90 MB in an image every desktop job pulls. Adding it is two lines:
-#                             `default-jre-headless` here, and the jsign .deb from its GitHub release.
-#                             docs/ops/windows-code-signing.md has the whole decision.
+#                             this is the tool that signs from a .pfx. The release signs with `jsign` instead
+#                             (the layer below); this one stays for a test certificate held as a file.
+#   jq                        sign-windows.sh reads the Azure token responses with it
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
         build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils file p7zip-full rpm xz-utils \
-        osslsigncode \
+        osslsigncode jq \
     && rm -rf /var/lib/apt/lists/*
+
+# JSIGN, the signer the release uses (WINDOWS_SIGN_TOOL=jsign): Authenticode against Azure Artifact Signing,
+# where the private key lives in Microsoft's HSM and never in this image or a secret. It is Java, hence the
+# headless JRE (~90 MB, the cost docs/ops/windows-code-signing.md weighs). `apt-get install ./x.deb` rather
+# than dpkg -i so the .deb's own Java dependency resolves to the JRE named beside it.
+# ponytail: version and sha256 from https://github.com/ebourg/jsign/releases — bump them together.
+RUN jsign_version=7.5 jsign_sha=7b4a01ba81e9ee866f09a5e45d40c928707eb5286f4e20d4042c67a141ae5e62 \
+    && curl -fsSL "https://github.com/ebourg/jsign/releases/download/${jsign_version}/jsign_${jsign_version}_all.deb" -o /tmp/jsign.deb \
+    && echo "$jsign_sha  /tmp/jsign.deb" | sha256sum -c - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends default-jre-headless /tmp/jsign.deb \
+    && rm -rf /var/lib/apt/lists/* /tmp/jsign.deb
 
 # THE DOCKER ENGINE, not just the CLI ci-base bakes — the one thing the onboarding tier cannot borrow from the
 # host. That tier serves its whole world on LOOPBACK ports (_tools/onboarding/src/docker.ts says why: the SPA's
@@ -108,6 +117,7 @@ RUN cargo --version && rustc --version && cargo fmt --version && cargo clippy --
         rustup target list --installed | grep -qx "$t" || { echo "missing rust target $t" >&2; exit 1; }; \
     done \
     && pkg-config --exists webkit2gtk-4.1 && command -v makensis && command -v xdg-mime \
-    && command -v file && command -v 7z && command -v rpm2archive \
+    && command -v file && command -v 7z && command -v rpm2archive && command -v osslsigncode && command -v jq \
+    && jsign --version \
     && node --version && pnpm --version && docker --version \
     && dockerd --version && docker compose version && command -v iptables

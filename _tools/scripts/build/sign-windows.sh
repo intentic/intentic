@@ -93,6 +93,42 @@ DIGEST="${WINDOWS_SIGN_DIGEST:-SHA-256}"
 NAME="${WINDOWS_SIGN_NAME:-Intentic}"
 SITE="${WINDOWS_SIGN_URL:-https://intentic.dev}"
 
+# AN ACCESS TOKEN FOR AZURE ARTIFACT SIGNING, on stdout.
+#
+# Two ways in, tried in this order:
+#   1. AZURE_CLIENT_SECRET set: the app registration's client secret, exchanged directly.
+#   2. Inside a GitHub Actions job that holds `id-token: write`: the job's own OIDC token, which the app
+#      registration trusts through a federated credential (docs/ops/windows-code-signing.md). Nothing to store
+#      and nothing to rotate, which is why it is the one the release uses.
+# Both need AZURE_TENANT_ID and AZURE_CLIENT_ID, which identify and are not secret.
+azure_token() {
+    : "${AZURE_TENANT_ID:?Artifact Signing needs AZURE_TENANT_ID (or a token in WINDOWS_SIGN_STOREPASS)}"
+    : "${AZURE_CLIENT_ID:?Artifact Signing needs AZURE_CLIENT_ID (or a token in WINDOWS_SIGN_STOREPASS)}"
+    local endpoint="https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token"
+    local scope="https://codesigning.azure.net/.default"
+    local response assertion
+    if [ -n "${AZURE_CLIENT_SECRET:-}" ]; then
+        response="$(curl -fsS "$endpoint" \
+            --data-urlencode grant_type=client_credentials \
+            --data-urlencode "client_id=${AZURE_CLIENT_ID}" \
+            --data-urlencode "client_secret=${AZURE_CLIENT_SECRET}" \
+            --data-urlencode "scope=${scope}")"
+    elif [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+        assertion="$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" | jq -r .value)"
+        response="$(curl -fsS "$endpoint" \
+            --data-urlencode grant_type=client_credentials \
+            --data-urlencode "client_id=${AZURE_CLIENT_ID}" \
+            --data-urlencode client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer \
+            --data-urlencode "client_assertion=${assertion}" \
+            --data-urlencode "scope=${scope}")"
+    else
+        echo "error: no Azure credential to sign with — set AZURE_CLIENT_SECRET, or run in a GitHub job with 'id-token: write'" >&2
+        return 2
+    fi
+    printf '%s' "$response" | jq -er .access_token
+}
+
 case "${WINDOWS_SIGN_TOOL:-}" in
     "")
         # The unsigned path, and it is a normal one: every local build, every CI build that is not a release.
@@ -105,20 +141,33 @@ case "${WINDOWS_SIGN_TOOL:-}" in
     jsign)
         # The key lives in a service; `WINDOWS_SIGN_STORETYPE` picks which one and the rest is that service's
         # own addressing. Examples, in the shape jsign documents them:
-        #   AZURETRUSTEDSIGNING  STORE=https://weu.codesigning.azure.net/  ALIAS=<account>/<profile>
-        #   AZUREKEYVAULT        STORE=<vault name>                        ALIAS=<certificate name>
-        #   DIGICERTONE          STORE=<api-key>|<cert.p12>|<password>     ALIAS=<certificate alias>
+        #   TRUSTEDSIGNING  STORE=https://plc.codesigning.azure.net/  ALIAS=<account>/<certificate profile>
+        #   AZUREKEYVAULT   STORE=<vault name>                        ALIAS=<certificate name>
+        #   DIGICERTONE     STORE=<api-key>|<cert.p12>|<password>     ALIAS=<certificate alias>
         # STOREPASS is the credential for whichever of those it is, and is the only secret value here.
         : "${WINDOWS_SIGN_STORETYPE:?jsign needs WINDOWS_SIGN_STORETYPE}"
         : "${WINDOWS_SIGN_STORE:?jsign needs WINDOWS_SIGN_STORE}"
         : "${WINDOWS_SIGN_ALIAS:?jsign needs WINDOWS_SIGN_ALIAS}"
+        if [ "$WINDOWS_SIGN_STORETYPE" = "TRUSTEDSIGNING" ]; then
+            # AZURE ARTIFACT SIGNING (formerly Trusted Signing). Its STOREPASS is an Entra access token, which
+            # lives about an hour — shorter than a release, so no secret can hold one. With STOREPASS unset, a
+            # fresh token is minted here for every file signed (azure_token, below). Microsoft's own timestamp
+            # authority by default, the one the service documents: its certificates live three days, so the
+            # timestamp is the only thing keeping a signature valid past Thursday.
+            TIMESTAMP_URL="${WINDOWS_SIGN_TIMESTAMP_URL:-http://timestamp.acs.microsoft.com}"
+            if [ -z "${WINDOWS_SIGN_STOREPASS:-}" ]; then
+                WINDOWS_SIGN_STOREPASS="$(azure_token)"
+            fi
+        fi
         : "${WINDOWS_SIGN_STOREPASS:?jsign needs WINDOWS_SIGN_STOREPASS}"
+        # Read by jsign from the environment rather than argv, so the credential never shows in a process list.
+        export WINDOWS_SIGN_STOREPASS
         echo "==> signing $(basename "$TARGET") with jsign (${WINDOWS_SIGN_STORETYPE})"
         jsign \
             --storetype "$WINDOWS_SIGN_STORETYPE" \
             --keystore "$WINDOWS_SIGN_STORE" \
             --alias "$WINDOWS_SIGN_ALIAS" \
-            --storepass "$WINDOWS_SIGN_STOREPASS" \
+            --storepass env:WINDOWS_SIGN_STOREPASS \
             --alg "$DIGEST" \
             --tsaurl "$TIMESTAMP_URL" \
             --tsmode RFC3161 \

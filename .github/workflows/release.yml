@@ -116,6 +116,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+      # The OIDC token sign-windows.sh trades for an Azure Artifact Signing token.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       CARGO_HOME: /ci-cache/cargo
@@ -131,6 +133,10 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # Azure Artifact Signing: the app registration the job signs in as, through its own OIDC token (the job's
+      # `id-token: write`). Identifiers, not credentials; sign-windows.sh mints a token per file.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -170,6 +176,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+      # The OIDC token sign-windows.sh trades for an Azure Artifact Signing token.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       CARGO_HOME: /ci-cache/cargo
@@ -185,6 +193,10 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # Azure Artifact Signing: the app registration the job signs in as, through its own OIDC token (the job's
+      # `id-token: write`). Identifiers, not credentials; sign-windows.sh mints a token per file.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
       # (stage-local-files.sh), which Windows registers only when it names who signed it.
       WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
@@ -343,6 +355,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+      # The OIDC token sign-windows.sh trades for an Azure Artifact Signing token.
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       CARGO_HOME: /ci-cache/cargo
@@ -362,6 +376,10 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # Azure Artifact Signing: the app registration the job signs in as, through its own OIDC token (the job's
+      # `id-token: write`). Identifiers, not credentials; sign-windows.sh mints a token per file.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
       # (stage-local-files.sh), which Windows registers only when it names who signed it.
       WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
@@ -484,6 +502,10 @@ jobs:
       WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
       WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
       WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      # Azure Artifact Signing: the app registration the job signs in as, through its own OIDC token (the job's
+      # `id-token: write`). Identifiers, not credentials; sign-windows.sh mints a token per file.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       # The certificate's subject, exactly as Windows shows it: the publisher of the Explorer menu's package
       # (stage-local-files.sh), which Windows registers only when it names who signed it.
       WINDOWS_SIGN_PUBLISHER: ${{ secrets.WINDOWS_SIGN_PUBLISHER }}
