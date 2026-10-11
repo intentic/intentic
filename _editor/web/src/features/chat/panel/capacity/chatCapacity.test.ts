@@ -518,6 +518,47 @@ describe(`the allowances behind one account`, () => {
         ]);
     });
 
+    it(`leaves out a model's own pool with nothing spent, beside a pool that gates every model`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({
+                    id: `a`,
+                    usage: pools(
+                        { kind: `seven_day`, utilization: 12 },
+                        { kind: `seven_day_opus`, utilization: 0.4, gates: { models: [`opus`] } },
+                        { kind: `model:Fable`, label: `Fable`, utilization: 0, gates: { models: [`Fable`] } },
+                        { kind: `model:Sonnet`, label: `Sonnet`, utilization: 1, gates: { models: [`Sonnet`] } },
+                    ),
+                }),
+            ],
+        };
+
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
+        expect(row?.lanes.map((lane) => [lane.short, lane.scope])).toEqual([
+            [`wk`, undefined],
+            [`wk`, `Sonnet`],
+        ]);
+    });
+
+    it(`keeps every untouched model pool when no pool gates every model`, () => {
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [
+                {
+                    name: `gemini-1`,
+                    label: `google`,
+                    usage: pools(
+                        { kind: `model:gemini`, label: `Weekly · Gemini models`, utilization: 0, gates: { models: [`gemini`] } },
+                        { kind: `model:claude`, label: `Weekly · Claude models`, utilization: 0, gates: { models: [`claude`] } },
+                    ),
+                },
+            ],
+        };
+
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
+        expect(row?.lanes).toHaveLength(2);
+    });
+
     it(`draws no lane for a pool that cannot gate a turn`, () => {
         providerAccounts.value = {
             claude: [

@@ -14,6 +14,7 @@ import {
     nestPools,
     poolPeriod,
     poolScope,
+    remainingPercent,
     unreadGroups,
 } from "../../session/usageStatus";
 
@@ -175,9 +176,15 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
 // gate a turn. The week leads because the top lane is
 // read as the account's room: a roomy 5-hour lane above a spent week read as capacity that isn't there, while the week
 // is never overruled by the session nested inside it.
+// A model's own pool with nothing spent says nothing the all-models pool above it doesn't, so it is left out. Only when
+// such a pool exists: a plan metered per model alone (Google's families) has nothing else to draw.
+const untouchedSlice = (pool: PlanLimitPool, metersAll: boolean): boolean =>
+    metersAll && pool.gates !== `all` && Math.round(remainingPercent(pool.percent)) >= 100;
+
 const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
+    const metersAll = row.pools.some((pool) => pool.gates === `all`);
     const sorted = row.pools
-        .filter((pool) => pool.gates !== `none`)
+        .filter((pool) => pool.gates !== `none` && !untouchedSlice(pool, metersAll))
         .map((pool) => ({ pool, period: poolPeriod(pool) }))
         .toSorted(
             (left, right) =>
