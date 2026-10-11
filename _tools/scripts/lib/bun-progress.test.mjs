@@ -114,7 +114,10 @@ test("a real process that reported everything and hangs is killed, and the run k
 
 test("a process that exits on its own is left alone and decides nothing", async () => {
     const child = spawn(process.execPath, ["-e", `console.log("a.test.ts:"); console.log("(fail) x");`], { stdio: ["ignore", "pipe", "pipe"] });
-    const stop = watchProgress(child, { expected: ["a.test.ts"], timeoutMs: 100, padMs: 100, checkMs: 50, out: sink(), err: sink() });
+    // Looked at every 50ms, but allowed far more silence than a process takes to go: on a loaded runner the exited child
+    // still sat in /proc, idle, past a 200ms window before its exit reached this process (run 38088630519), and was
+    // ruled stuck on its way out. The case is a process ending itself, not how short a silence may be.
+    const stop = watchProgress(child, { expected: ["a.test.ts"], timeoutMs: 10_000, padMs: 10_000, checkMs: 50, out: sink(), err: sink() });
     await new Promise((resolve) => child.once("exit", resolve));
     assert.equal(stop(), undefined);
 });

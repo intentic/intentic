@@ -1,8 +1,9 @@
 import { STATE_DIR } from "@intentic/constants";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { Capability, TurnReach } from "@intentic/sandbox-contract";
 import { changedInstalls, reachWatch, snapshotInstalls, strandedClones } from "./turn-reach.js";
 
@@ -12,8 +13,31 @@ import { changedInstalls, reachWatch, snapshotInstalls, strandedClones } from ".
 
 const MANIFEST = JSON.stringify({ publisher: "acme", name: "widgets", version: "1.0.0", engines: { intentic: ">=0.0.0" } });
 
-const git = (cwd: string, ...args: string[]): string =>
-    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" }).trim();
+// A git of the test's own: this file shares its bun worker, and so its environment and its HOME, with every other suite
+// in the run (all 517 of the daemon's, when the test pool leaves room for one worker), so it reads no config, ignore or
+// attributes file but its own, and no GIT_* another suite left behind. Asynchronous and bounded: run 38088630519's
+// synchronous `git add -A` hung there, holding the whole worker for 120s a test, where this fails in 30s and stalls
+// nothing.
+const gitHome = mkdtempSync(join(tmpdir(), "turn-reach-home-"));
+const gitEnv = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+    HOME: gitHome,
+    XDG_CONFIG_HOME: join(gitHome, ".config"),
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+};
+const run = promisify(execFile);
+const git = async (cwd: string, ...args: string[]): Promise<string> => {
+    const child = run("git", ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args], {
+        cwd,
+        env: gitEnv,
+        encoding: "utf8",
+        timeout: 30_000,
+    });
+    child.child?.stdin?.end();
+    return (await child).stdout.trim();
+};
 
 const put = (dir: string, path: string, content: string): void => {
     mkdirSync(join(dir, path, ".."), { recursive: true });
@@ -21,14 +45,14 @@ const put = (dir: string, path: string, content: string): void => {
 };
 
 // A committed repository at `dir`, answering with its HEAD.
-const repoAt = (dir: string, files: Record<string, string>): string => {
+const repoAt = async (dir: string, files: Record<string, string>): Promise<string> => {
     mkdirSync(dir, { recursive: true });
     for (const [path, content] of Object.entries(files)) {
         put(dir, path, content);
     }
-    git(dir, "init", "-q", "--initial-branch=main");
-    git(dir, "add", "-A");
-    git(dir, "commit", "-q", "-m", "start");
+    await git(dir, "init", "-q", "--initial-branch=main");
+    await git(dir, "add", "-A");
+    await git(dir, "commit", "-q", "-m", "start");
     return git(dir, "rev-parse", "HEAD");
 };
 
@@ -39,34 +63,34 @@ const temp = (): string => {
     return dir;
 };
 afterAll(() => {
-    for (const dir of temps) {
+    for (const dir of [...temps, gitHome]) {
         rmSync(dir, { recursive: true, force: true });
     }
 });
 
 // A workspace with one install, pinned where it was cloned.
-const workspace = (): { readonly root: string; readonly install: string; readonly pin: string } => {
+const workspace = async (): Promise<{ readonly root: string; readonly install: string; readonly pin: string }> => {
     const root = temp();
     const install = join(root, `${STATE_DIR}`, "local", "extensions", "acme-widgets");
-    const pin = repoAt(install, { "intentic-extension.json": MANIFEST, "src/index.ts": "export default 1;\n" });
+    const pin = await repoAt(install, { "intentic-extension.json": MANIFEST, "src/index.ts": "export default 1;\n" });
     return { root, install, pin };
 };
 
 describe("which installs a turn changed", () => {
     test("an edit, its shell's or its tools', is a change; one put back is none", async () => {
-        const { root, install, pin } = workspace();
+        const { root, install, pin } = await workspace();
         const pins = new Map([["acme-widgets", pin]]);
         const before = await snapshotInstalls(root);
         put(install, "src/index.ts", "export default 2;\n");
         const edited = await snapshotInstalls(root);
         expect(changedInstalls(before, edited, pins)).toStrictEqual(["acme-widgets"]);
 
-        git(install, "checkout", "--", "src/index.ts");
+        await git(install, "checkout", "--", "src/index.ts");
         expect(changedInstalls(before, await snapshotInstalls(root), pins)).toStrictEqual([]);
     });
 
     test("a file already dirty when the turn opened, edited again, is a change; left alone, it is none", async () => {
-        const { root, install, pin } = workspace();
+        const { root, install, pin } = await workspace();
         const pins = new Map([["acme-widgets", pin]]);
         put(install, "src/index.ts", "export default 2;\n");
         const before = await snapshotInstalls(root);
@@ -77,32 +101,32 @@ describe("which installs a turn changed", () => {
     });
 
     test("a checkout that moved it off its pinned commit is a change; an update that lands on its new pin is none", async () => {
-        const { root, install, pin } = workspace();
+        const { root, install, pin } = await workspace();
         const before = await snapshotInstalls(root);
-        git(install, "checkout", "-q", "-b", "fix");
+        await git(install, "checkout", "-q", "-b", "fix");
         put(install, "src/index.ts", "export default 4;\n");
-        git(install, "commit", "-q", "-am", "fix");
+        await git(install, "commit", "-q", "-am", "fix");
         const after = await snapshotInstalls(root);
         expect(changedInstalls(before, after, new Map([["acme-widgets", pin]]))).toStrictEqual(["acme-widgets"]);
         // The same move, made by an update the owner pressed: the install now sits clean on the commit it is pinned to.
-        expect(changedInstalls(before, after, new Map([["acme-widgets", git(install, "rev-parse", "HEAD")]]))).toStrictEqual([]);
+        expect(changedInstalls(before, after, new Map([["acme-widgets", await git(install, "rev-parse", "HEAD")]]))).toStrictEqual([]);
     });
 });
 
 describe("clones of its own", () => {
     test("one holding uncommitted files or commits nobody else has is stranded; a clean one is not", async () => {
         const upstream = temp();
-        repoAt(upstream, { "README.md": "# upstream\n" });
+        await repoAt(upstream, { "README.md": "# upstream\n" });
         const checkout = temp();
-        repoAt(checkout, { "src/app.ts": "export {};\n" });
-        git(checkout, "clone", "-q", upstream, "fork");
-        git(checkout, "clone", "-q", upstream, "clean");
+        await repoAt(checkout, { "src/app.ts": "export {};\n" });
+        await git(checkout, "clone", "-q", upstream, "fork");
+        await git(checkout, "clone", "-q", upstream, "clean");
         put(join(checkout, "fork"), "README.md", "# changed\n");
         put(join(checkout, "fork"), "NEW.md", "new\n");
-        git(join(checkout, "fork"), "checkout", "-q", "-b", "fix");
+        await git(join(checkout, "fork"), "checkout", "-q", "-b", "fix");
         put(join(checkout, "fork"), "FIX.md", "fix\n");
-        git(join(checkout, "fork"), "add", "FIX.md");
-        git(join(checkout, "fork"), "commit", "-q", "-m", "fix");
+        await git(join(checkout, "fork"), "add", "FIX.md");
+        await git(join(checkout, "fork"), "commit", "-q", "-m", "fix");
         put(checkout, "notes.txt", "not a clone\n");
 
         expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "fork", uncommitted: 2, unpushed: 1 }]);
@@ -112,20 +136,20 @@ describe("clones of its own", () => {
 
     test("commits ahead of the upstream it follows count, and none of the ones it already has", async () => {
         const upstream = temp();
-        repoAt(upstream, { "README.md": "# upstream\n" });
+        await repoAt(upstream, { "README.md": "# upstream\n" });
         const checkout = temp();
-        repoAt(checkout, { "src/app.ts": "export {};\n" });
-        git(checkout, "clone", "-q", upstream, "ext");
+        await repoAt(checkout, { "src/app.ts": "export {};\n" });
+        await git(checkout, "clone", "-q", upstream, "ext");
         put(join(checkout, "ext"), "A.md", "a\n");
-        git(join(checkout, "ext"), "add", "A.md");
-        git(join(checkout, "ext"), "commit", "-q", "-m", "a");
+        await git(join(checkout, "ext"), "add", "A.md");
+        await git(join(checkout, "ext"), "commit", "-q", "-m", "a");
         expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "ext", uncommitted: 0, unpushed: 1 }]);
     });
 });
 
 describe("a turn's reach, open to close", () => {
     test("notes the install it changed by its manifest id, the push its frames saw, and drops its own frames for that install", async () => {
-        const { root, install, pin } = workspace();
+        const { root, install, pin } = await workspace();
         const sent: { id: string; reach: TurnReach | undefined }[] = [];
         const capabilities = [
             { id: "acme-widgets", kind: "extension", config: { url: "https://github.com/acme/widgets.git", ref: pin } } as Capability,
@@ -161,7 +185,7 @@ describe("a turn's reach, open to close", () => {
     });
 
     test("notes nothing for a turn that left everything where it found it", async () => {
-        const { root } = workspace();
+        const { root } = await workspace();
         const sent: (TurnReach | undefined)[] = [];
         const watch = reachWatch(
             {

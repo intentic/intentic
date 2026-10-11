@@ -59,8 +59,10 @@ const onTerminal = async (command: string, given?: string): Promise<{ dir: strin
     throw new Error(`the runner for ${command} never started`);
 };
 
-// The run's reader as /proc shows it, once the program has had the moment it takes to reach its prompt.
-const readerOf = async (run: { dir: string; leader: number }, settleMs = 4_000) => {
+// The run's reader as /proc shows it, once the program has had the moment it takes to reach its prompt. Answers as soon
+// as one is seen, so the default only bounds how long a loaded runner gets to reach the prompt: 4s was not enough for
+// run 38088630519's verify-clocks. A case expecting no reader passes its own, shorter, window.
+const readerOf = async (run: { dir: string; leader: number }, settleMs = 15_000) => {
     const deadline = Date.now() + settleMs;
     let sample;
     do {
