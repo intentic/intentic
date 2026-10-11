@@ -7,7 +7,7 @@ import { computed, ref, watch } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/turnBreak";
+import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/endings/turnBreak";
 
 // One wall's one question, asked where the wall stands in the chat: "Next", the answers as one segmented control, and on
 // the same line what the chosen answer will do. Every wall a chat can stop at asks it through here (the pick-up card for

@@ -8,7 +8,7 @@ import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
 import { activityIcon, limitClosed, limitCorner, memoryCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
-import { effectivePolicy } from "../../../chat/run/turnBreak";
+import { effectivePolicy } from "../../../chat/run/endings/turnBreak";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";

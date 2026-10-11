@@ -65,7 +65,7 @@ import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
 import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
-import { agentFlow, sandboxFlow } from "./devices";
+import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
 import { demoAreas, demoPersonas, removeArea, saveArea, savePersona } from "./personas";
 import { queueDoors, sayOrBook } from "./queue";

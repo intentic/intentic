@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { TRIM_KEEPS_RESULTS } from "@intentic/sandbox-contract";
 
 /* A COPY OF A CLAUDE CODE SESSION, TO RESUME INSTEAD OF THE ORIGINAL.
@@ -291,9 +292,9 @@ export const sessionFileOf = async (store: string, sessionId: string): Promise<s
         return undefined;
     }
     const projects = join(store, "projects");
-    const dirs = await readdir(projects, { withFileTypes: true }).catch(() => []);
+    const dirs = (await readdir(projects, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
     const paths = dirs.filter((dir) => dir.isDirectory()).map((dir) => join(projects, dir.name, `${sessionId}.jsonl`));
-    const found = await Promise.all(paths.map(async (path) => ((await stat(path).catch(() => undefined))?.isFile() === true ? path : undefined)));
+    const found = await Promise.all(paths.map(async (path) => ((await stat(path).catch(undefinedIfMissing))?.isFile() === true ? path : undefined)));
     return found.find((path) => path !== undefined);
 };
 

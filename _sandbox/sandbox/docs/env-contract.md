@@ -46,7 +46,7 @@ when the daemon runs from a checkout), the process environment, then command-lin
   folders attach to it later, each as `/work/<name>`. The daemon seeds no starter site, and takes in each folder the
   machine agent's sync report names: it makes the folder a repo as above, keeps its name in `/history/projects.json`
   ([src/system/projects-registry.ts](../src/system/projects-registry.ts)), and names every attached folder in one
-  `AGENTS.md` note ([src/bootstrap/projects-host.ts](../src/bootstrap/projects-host.ts)). The `/events` hello names no
+  `AGENTS.md` note ([src/bootstrap/projects/projects-host.ts](../src/bootstrap/projects/projects-host.ts)). The `/events` hello names no
   folder; the editor opens one by its address (`?project=<name>`).
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children
   ([src/bootstrap/daemon-env.ts](../src/bootstrap/daemon-env.ts)).

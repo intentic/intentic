@@ -5,6 +5,7 @@
 // Docker Desktop, moved onto the engine with its files and back again. ic runs with a home, a disk and a distro of the
 // tier's own (engine.ts), so nothing here touches this runner's own ~/.intentic, a real engine, or the Run key.
 
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +33,7 @@ export const ENGINE_ROOT = join(tmpdir(), `intentic-engine-smoke`);
 const WEB = `intentic-engine-smoke-web`;
 const WEB_IMAGE = `nginx:alpine`;
 const WEB_PORT = 18_099;
-const MARKER = `/work/intentic-engine-smoke.txt`;
+const MARKER = `${WORKSPACE_ROOT}/intentic-engine-smoke.txt`;
 const INSTALL_MS = 15 * 60_000;
 const CONNECT_MS = 30 * 60_000;
 const MOVE_MS = 40 * 60_000;
@@ -45,6 +46,7 @@ const httpStatus = async (url: string): Promise<number | undefined> => {
         const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
         return response.status;
     } catch {
+        // allow(silent-catch): a refused or timed-out GET is what "nothing answered" means; the caller polls again.
         return undefined;
     }
 };
@@ -109,11 +111,13 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     }
 
     harness.section(`a port published on 127.0.0.1 reaches Windows`);
-    let record = ``;
+    const recordPath = join(env[`USERPROFILE`] ?? ``, STATE_DIR, `engine`, `engine.json`);
+    let record: string;
     try {
-        record = readFileSync(join(env[`USERPROFILE`] ?? ``, `.intentic`, `engine`, `engine.json`), `utf8`);
-    } catch {
-        // Read as unparsable below.
+        record = readFileSync(recordPath, `utf8`);
+    } catch (error) {
+        harness.fail(`could not read the engine record at ${recordPath}`, String(error));
+        return;
     }
     const engine = engineDockerOf(record);
     if (engine === undefined) {

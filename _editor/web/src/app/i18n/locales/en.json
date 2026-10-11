@@ -379,7 +379,7 @@
             "loadNote": "Whole machine",
             "memoryNote": "Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.",
             "accountingLabel": "Memory accounting",
-            "accountingNote": "Measured separately; values may not add up exactly.",
+            "accountingNote": "Measured separately; sum may differ.",
             "anonymousLabel": "Anonymous memory",
             "fileCacheLabel": "File cache (counted)",
             "kernelLabel": "Kernel memory",
@@ -940,7 +940,7 @@
             "open": "Open",
             "apps": "Apps",
             "webDetail": "A page in your own browser",
-            "more": "Open an app or the desktop"
+            "more": "Open app"
         },
         "phone": {
             "toggle": "Phone frame",

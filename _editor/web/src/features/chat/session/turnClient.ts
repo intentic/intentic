@@ -25,7 +25,7 @@ import type { TurnBooking } from "../composer/later/sendLater";
 import { holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../composer/later/bookings";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
-import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../run/pickUp";
+import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../run/endings/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";

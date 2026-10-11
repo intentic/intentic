@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { McpServerConfig, SDKCustomTool, SDKCustomToolResult, SDKJsonValue, ToolName } from "@cursor/sdk";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { AgentEvent, PersonalDataClass } from "@intentic/sandbox-contract";
 import { createHoldback, type Holdback } from "../../privacy/gateway/protocols/holdback.js";
 import { type Json, restoreStrings } from "../../privacy/gateway/protocols/walk.js";
@@ -160,7 +161,9 @@ export const projectMcp = async (
     shield: TurnShield,
     root: string,
 ): Promise<{ readonly servers: Readonly<Record<string, McpServerConfig>> } | { readonly withhold: readonly string[] }> => {
-    const text = await readFile(join(root, ".cursor", "mcp.json"), "utf8").catch(() => undefined);
+    // No file is no project servers. One that is there but cannot be read here rejects, which refuses the turn
+    // (cursor-agent.ts), since Cursor could still load its servers unproxied.
+    const text = await readFile(join(root, ".cursor", "mcp.json"), "utf8").catch(undefinedIfMissing);
     if (text === undefined) {
         return { servers: {} };
     }

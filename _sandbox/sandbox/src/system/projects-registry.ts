@@ -8,7 +8,7 @@ import { openEntries } from "../store/open-document.js";
 // A PROJECTS HOST (config.sandbox.projectsHost, system/project-dir.ts) is this computer's own sandbox: the desktop app
 // makes it with no folder, and the owner's folders attach to it later (`intentic-machine sync attach`), each synced into
 // `/work/<name>` of its own. The daemon learns of each from the machine agent's sync report and keeps the names here, on
-// /history, so a boot re-ensures every one's repo and note before any report arrives (bootstrap/projects-host.ts). Only
+// /history, so a boot re-ensures every one's repo and note before any report arrives (bootstrap/projects/projects-host.ts). Only
 // ever added to: a folder detached on the computer leaves its copy, its repo and its history here as they were.
 
 const AttachedProjectSchema = z.object({

@@ -3,7 +3,7 @@ import type { Footnote, Item, Ui } from "@intentic/local-agent";
 import { buildCommand, machineUi } from "../cli-ui.js";
 import { runLogPath } from "../config.js";
 import { type MachineConfig, readMachineConfig, updateMachineConfig } from "../environments/machine.js";
-import { ensureResident } from "../resident.js";
+import { ensureResident } from "../resident/resident.js";
 import { runIcAttached } from "./tools/sandboxes.js";
 import { sleepMinutesOf, withSleepMinutes } from "./sandbox-rounds/sleep.js";
 

@@ -207,7 +207,7 @@ describe("the sandbox panel", () => {
         expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`]);
         expect(el.querySelector(`p`)).toBeNull();
         expect(el.querySelector<HTMLElement>(`[data-section="memory-accounting"]`)!.dataset[`tip`]).toBe(
-            `Memory accounting · Measured separately; values may not add up exactly.`,
+            `Memory accounting · Measured separately; sum may differ.`,
         );
         expect(el.querySelectorAll<HTMLElement>(`[data-section="gauges"] [data-figure]`)[1]!.dataset[`tip`]).toContain(
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,

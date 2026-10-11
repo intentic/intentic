@@ -6,7 +6,7 @@ import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
 import { baseDir } from "../config.js";
-import { ensureResident } from "../resident.js";
+import { ensureResident } from "../resident/resident.js";
 import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, upsertPairing } from "./config.js";
 import { transportFor } from "./endpoint.js";
 import { canonicalFolder, folderRefusal, overlappingPairing, sameFolder } from "./folders.js";

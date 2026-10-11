@@ -1,7 +1,7 @@
 import type { CommandContext } from "@stricli/core";
 import { explain, type Item } from "@intentic/local-agent";
 import { answeringUi, buildCommand, markFailed } from "../cli-ui.js";
-import { readResident } from "../supervision.js";
+import { readResident } from "../resident/supervision.js";
 import { MANIFEST } from "./manifest.js";
 import { runUpkeep, summaryLine, type UpkeepItem } from "./reconcile.js";
 

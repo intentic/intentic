@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { PRIVACY_IMAGE_ID, type PrivacyImagePair, PrivacyImagePairSchema } from "@intentic/sandbox-contract";
 
 // The images the shield painted over, each as it was and as it left, so the owner can peek at what a provider saw in
@@ -54,7 +55,7 @@ export const filePrivacyImages = (dir: string, now: () => Date = () => new Date(
             if (!PRIVACY_IMAGE_ID.test(id)) {
                 return undefined;
             }
-            const raw = await readFile(fileOf(id), "utf8").catch(() => undefined);
+            const raw = await readFile(fileOf(id), "utf8").catch(undefinedIfMissing);
             if (raw === undefined) {
                 return undefined;
             }

@@ -162,6 +162,7 @@ export const keyedLock = <K>(): (<T>(key: K, task: () => Promise<T>) => Promise<
     const tails = new Map<K, Promise<unknown>>();
     return (key, task) => {
         const next = (tails.get(key) ?? Promise.resolve()).then(task, task);
+        // allow(silent-catch): the caller gets the failure through `next`; the tail only orders the next run after it
         const tail = next.catch(() => undefined);
         tails.set(key, tail);
         void tail.then(() => {
@@ -260,6 +261,7 @@ export const withDeadline = async <T>(
         unsubscribe = whenAborted(options?.signal, () => reject(options?.signal?.reason));
     });
     // Heard here too, so a stop that lands while the work is still being started leaves no rejection unhandled.
+    // allow(silent-catch): the race below hands the same rejection to the caller; this only marks it handled
     cut.catch(() => {});
     // A task that throws before returning its promise is a rejection like any other, not a throw past the race.
     const work = (async (): Promise<T> => task(signal))();

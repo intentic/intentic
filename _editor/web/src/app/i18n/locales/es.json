@@ -357,7 +357,7 @@
             "sessionsLabel": "Memoria de procesos por sesión",
             "sessionsNote": "Otra agrupación de los mismos procesos, no memoria adicional. CPU: 100 % = 1 núcleo.",
             "accountingLabel": "Desglose de memoria",
-            "accountingNote": "Medidos por separado; los valores pueden no sumar exactamente.",
+            "accountingNote": "Medidos aparte; la suma puede variar.",
             "anonymousLabel": "Memoria anónima",
             "fileCacheLabel": "Caché de archivos (contada)",
             "kernelLabel": "Memoria del kernel",
@@ -703,7 +703,7 @@
             "open": "Abierta",
             "apps": "Apps",
             "webDetail": "Una página en tu propio navegador",
-            "more": "Abrir una app o el escritorio"
+            "more": "Abrir app"
         },
         "phone": {
             "toggle": "Marco de teléfono",

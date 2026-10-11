@@ -351,7 +351,7 @@ describe("enrollment store", () => {
         expect((await enrolledFleet(history)).machines.map((row) => row.machineId)).toEqual(["m-laptop-a-0001", "m-laptop-b-0001"]);
     });
 
-    // What a projects host attaches folders from (bootstrap/projects-host.ts): only a report its enrollment's token vouched
+    // What a projects host attaches folders from (bootstrap/projects/projects-host.ts): only a report its enrollment's token vouched
     // for, and nothing once the listener is gone.
     it("tells its listeners of each report a token vouched for, and of no other", async () => {
         const holder = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));

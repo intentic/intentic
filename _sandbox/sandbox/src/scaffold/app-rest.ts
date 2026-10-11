@@ -64,8 +64,15 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
             return;
         }
         for (const key of listed) {
+            if (!deps.running(key)) {
+                continue;
+            }
             // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of apps, each a read of the socket tables
-            if (deps.running(key) && (await deps.inUse?.(key).catch(() => false)) === true) {
+            const inUse = await deps.inUse?.(key).catch((error: unknown) => {
+                deps.logger.warn({ err: error, app: key }, "app rest: could not tell whether a workspace app is in use");
+                return false;
+            });
+            if (inUse === true) {
                 visitedAt.set(key, Date.now());
             }
         }

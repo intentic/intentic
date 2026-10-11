@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { explain, type Footnote, type Item, type Log } from "@intentic/local-agent";
 import { buildRouteMap, type CommandContext } from "@stricli/core";
 import { buildCommand, machineUi } from "../cli-ui.js";
-import { ensureResident } from "../resident.js";
+import { ensureResident } from "../resident/resident.js";
 import { listDistros, WINDOWS_SIDE } from "./wsl.js";
 import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
 

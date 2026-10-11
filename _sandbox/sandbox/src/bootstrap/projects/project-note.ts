@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { MEMORY_FILE } from "@intentic/constants";
-import { mergeFenced } from "../migrations/merge.js";
+import { mergeFenced } from "../../migrations/merge.js";
 
 // A project sandbox's agents learn which folder is the owner's from the workspace's own AGENTS.md, which the daemon
 // composes into every turn whichever runtime serves it (agent/prompt/workspace-memory.ts), and a projects host's learn

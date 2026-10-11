@@ -23,7 +23,7 @@ import type { InputHistory } from "../../drafts/inputHistory";
 import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { type ContinueOptions, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/pickUp";
+import { type ContinueOptions, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { track } from "../../../../app/analytics";

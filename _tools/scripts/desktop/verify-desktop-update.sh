@@ -32,6 +32,7 @@
 # Costs two release-profile Tauri builds. Nightly, not per-push.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
+. "$(dirname "$0")/../lib/appimage-env.sh"
 
 ROOT="$(repo_root)"
 APP="$ROOT/_editor/desktop-app"
@@ -79,10 +80,8 @@ INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Carg
 INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Cargo.toml" --lib \
     windows::loopback_tests::the_workspace_reports_the_stamped_release_version -- --exact
 
-# linuxdeploy is itself an AppImage and FUSE-mounts by default; NO_STRIP because its bundled strip predates
-# RELR relocations. Both are build-desktop.sh's, and needed here for the same container-shaped reasons.
-export APPIMAGE_EXTRACT_AND_RUN=1
-export NO_STRIP=true
+# The AppImage bundler's environment, the same as build-desktop.sh's (appimage-env.sh says why for each).
+appimage_env
 
 TARGET_DIR="${CARGO_TARGET_DIR:-$APP/src-tauri/target}"
 

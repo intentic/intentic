@@ -466,7 +466,7 @@
             "memoryLabel": "Pamięć",
             "memoryNote": "Obejmuje demona, cache plików i pamięć jądra. Nieaktywny cache plików jest wyłączony; swap liczy się dopiero, gdy jest niemal pełny.",
             "accountingLabel": "Rozliczenie pamięci",
-            "accountingNote": "Mierzone osobno; wartości mogą nie sumować się dokładnie.",
+            "accountingNote": "Mierzone osobno; suma może się różnić.",
             "anonymousLabel": "Pamięć anonimowa",
             "fileCacheLabel": "Cache plików (liczony)",
             "kernelLabel": "Pamięć jądra",
@@ -940,7 +940,7 @@
             "open": "Otwarte",
             "apps": "Aplikacje",
             "webDetail": "Strona w Twojej własnej przeglądarce",
-            "more": "Otwórz aplikację lub pulpit"
+            "more": "Otwórz aplikację"
         },
         "phone": {
             "toggle": "Ramka telefonu",

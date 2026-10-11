@@ -12,7 +12,7 @@ import {
     tileRim,
     turnInFlight,
 } from "../../agents/fleet/agentStatus";
-import { cardProof, type ProofMark } from "../../agents/board/cards/proofSeal";
+import { cardProof, type ProofMark } from "../../agents/board/cards/seal/proofSeal";
 import { type ReachLine, reachLine } from "../../agents/board/cards/reachLine";
 import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/prompt-cache/promptCache";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";

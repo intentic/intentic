@@ -354,7 +354,7 @@
             "sessionsLabel": "Prozessspeicher nach Session",
             "sessionsNote": "Eine andere Gruppierung derselben Prozesse, kein zusätzlicher Speicher. CPU: 100 % = 1 Kern.",
             "accountingLabel": "Speicheraufteilung",
-            "accountingNote": "Separat gemessen; die Werte ergeben nicht immer genau die Summe.",
+            "accountingNote": "Separat gemessen; Summe kann abweichen.",
             "anonymousLabel": "Anonymer Speicher",
             "fileCacheLabel": "Dateicache (gezählt)",
             "kernelLabel": "Kernelspeicher",
@@ -696,7 +696,7 @@
             "open": "Offen",
             "apps": "Apps",
             "webDetail": "Eine Seite in deinem eigenen Browser",
-            "more": "App oder Desktop öffnen"
+            "more": "App öffnen"
         },
         "phone": {
             "toggle": "Handyrahmen",

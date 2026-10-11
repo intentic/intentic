@@ -4,6 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type HookCallback, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_GROUP_DIR } from "@intentic/sandbox-contract";
+import { statePath } from "../src/state-paths.js";
 import {
     carrySession,
     chainBefore,
@@ -33,8 +36,8 @@ import {
    Needs CLAUDE_CODE_OAUTH_TOKEN (a subscription account) for `run`. Results live under
    /work/.intentic/records/bench/handoff/, one directory per cut, and a step already on disk is never re-run. */
 
-const SESSIONS = process.env["HANDOFF_SESSIONS"] ?? "/work/.intentic/records/sessions/claude/projects";
-const OUT = process.env["HANDOFF_OUT"] ?? "/work/.intentic/records/bench/handoff";
+const SESSIONS = process.env["HANDOFF_SESSIONS"] ?? statePath(WORKSPACE_ROOT, ".intentic/records/sessions/claude/", "projects");
+const OUT = process.env["HANDOFF_OUT"] ?? join(WORKSPACE_ROOT, STATE_GROUP_DIR.records, "bench", "handoff");
 const ARM_MODEL = "claude-opus-5-5";
 const JUDGE_MODEL = "claude-opus-5-5";
 const COMPACT_MODEL = "claude-haiku-5-5";

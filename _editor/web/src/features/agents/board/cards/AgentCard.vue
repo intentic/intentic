@@ -59,9 +59,9 @@ import {
     turnWorking,
     unregistered,
 } from "../../fleet/agentStatus";
-import CardSeal from "./CardSeal.vue";
+import CardSeal from "./seal/CardSeal.vue";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
-import { cardProof, type ProofMark, sealStandsIn as standsIn } from "./proofSeal";
+import { cardProof, type ProofMark, sealStandsIn as standsIn } from "./seal/proofSeal";
 import { reachLine } from "./reachLine";
 import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the

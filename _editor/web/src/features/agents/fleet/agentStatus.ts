@@ -911,7 +911,7 @@ const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string
 export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.autoLand ?? sandboxDefault ?? false;
 
-// The same two-level fold for what happens when a turn breaks lives in chat/run/turnBreak.ts (`effectivePolicy`),
+// The same two-level fold for what happens when a turn breaks lives in chat/run/endings/turnBreak.ts (`effectivePolicy`),
 // beside the words for each answer: one question per ending, asked in one vocabulary by every surface.
 
 // Sources an agent can be opened by, keyed on `AgentOrigin.provider` (an open string; listener sources are

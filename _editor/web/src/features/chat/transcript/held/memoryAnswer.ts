@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { usePaneView } from "../../panel/useChat-view";
-import { effectivePolicy } from "../../run/turnBreak";
+import { effectivePolicy } from "../../run/endings/turnBreak";
 
 /**
  * Whether this pane's low-memory hold goes by itself once memory frees up: its conversation's answer to the memory

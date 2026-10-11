@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // WHO IS CONNECTED TO A PORT RIGHT NOW, from the kernel's own socket tables: the cheap question a full listener scan
 // (port-scan.ts walks every process's fds) is far too heavy to ask once a minute. A browser with a workspace app open
@@ -27,9 +28,10 @@ export const establishedPortsIn = (table: string): Set<number> => {
     return ports;
 };
 
-// Both tables; one that cannot be read (no IPv6) counts as no connections.
+// Both tables; one the kernel does not have (no IPv6) counts as no connections. Any other failure to read one rejects:
+// a table that is there but unreadable says nothing about who is connected, and "nobody" would rest a page in use.
 export const establishedLocalPorts = async (read: (path: string) => Promise<string> = (path) => readFile(path, "utf8")): Promise<Set<number>> => {
-    const tables = await Promise.all(TABLES.map((path) => read(path).catch(() => "")));
+    const tables = await Promise.all(TABLES.map(async (path) => (await read(path).catch(undefinedIfMissing)) ?? ""));
     return new Set(tables.flatMap((table) => [...establishedPortsIn(table)]));
 };
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import CardSeal from "../../agents/board/cards/CardSeal.vue";
-import { sealStandsIn } from "../../agents/board/cards/proofSeal";
+import CardSeal from "../../agents/board/cards/seal/CardSeal.vue";
+import { sealStandsIn } from "../../agents/board/cards/seal/proofSeal";
 import ChildCount from "../../agents/board/cards/ChildCount.vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { editsRefusal, turnInFlight } from "../../agents/fleet/agentStatus";

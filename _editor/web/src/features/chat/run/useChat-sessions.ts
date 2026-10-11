@@ -9,7 +9,7 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { whenIdle } from "../../../lib/whenIdle";
 import { agentTranscript, type AgentTranscript, freshAgentTranscript } from "../transcript/agentTranscript";
 import type { Conversation } from "../session/conversation";
-import type { PickUp } from "./pickUp";
+import type { PickUp } from "./endings/pickUp";
 import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandbox } from "../../../client/sandbox/useSandbox";

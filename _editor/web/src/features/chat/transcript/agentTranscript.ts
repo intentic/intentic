@@ -4,7 +4,7 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { AGENTS } from "../../../lib/queryKeys";
-import { type PickUp, pickUpOf } from "../run/pickUp";
+import { type PickUp, pickUpOf } from "../run/endings/pickUp";
 import type { SessionRef } from "../run/turnRequest";
 
 // A registered agent's transcript as a cached query, so concurrent callers share one fetch instead of each re-asking

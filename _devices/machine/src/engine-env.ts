@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, win32 } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { homeDir } from "@intentic/local-agent";
 
 // The agent acts on this only on Windows, and the tests run on Linux: the separator is spelled as Windows spells it.
@@ -38,6 +39,7 @@ export const activeEngine = (text: string | undefined): EngineRecord | undefined
     try {
         record = JSON.parse(text);
     } catch {
+        // allow(silent-catch): a record that is not JSON names no engine, the same answer as no record at all
         return undefined;
     }
     if (typeof record !== "object" || record === null) {
@@ -102,7 +104,7 @@ export const syncEngineEnv = (env: NodeJS.ProcessEnv = process.env, home: string
     }
     let text: string | undefined;
     try {
-        text = readFileSync(join(home, ".intentic", "engine", "engine.json"), "utf8");
+        text = readFileSync(join(home, STATE_DIR, "engine", "engine.json"), "utf8");
     } catch {
         text = undefined;
     }

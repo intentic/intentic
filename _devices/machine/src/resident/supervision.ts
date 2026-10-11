@@ -12,13 +12,13 @@ import {
     spawnDetached,
     stopProcess,
 } from "@intentic/local-agent";
-import { recordStopped } from "./agent-trial.js";
-import { MACHINE_AUTOSTART } from "./autostart/autostart.js";
-import { runLogPath, runPidPath } from "./config.js";
-import { linkStatePath } from "./device/config.js";
-import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "./device/sandbox-rounds/swap-records.js";
-import { attachToWindows, WINDOWS_SUPERVISOR } from "./environments/machine.js";
-import { mirrorHeartbeatPath } from "./sync/config.js";
+import { recordStopped } from "../agent-trial.js";
+import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
+import { runLogPath, runPidPath } from "../config.js";
+import { linkStatePath } from "../device/config.js";
+import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "../device/sandbox-rounds/swap-records.js";
+import { attachToWindows, WINDOWS_SUPERVISOR } from "../environments/machine.js";
+import { mirrorHeartbeatPath } from "../sync/config.js";
 
 // Every start goes through whoever restarts this environment's agent; a bare detached spawn only where nothing does.
 

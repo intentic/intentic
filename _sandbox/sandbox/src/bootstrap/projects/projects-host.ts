@@ -1,9 +1,9 @@
 import type { DeviceReport } from "@intentic/sandbox-contract";
 import type { GitRunner } from "@intentic/base/git";
-import { ensureProjectRepo } from "../git/remote/project-repo.js";
-import { attachedProjects, registerProject, reportedProjects } from "../system/projects-registry.js";
-import { announceRepoChange } from "../workspace/watch/repo-watch.js";
-import type { WorkspacePaths } from "../workspace/workspace.js";
+import { ensureProjectRepo } from "../../git/remote/project-repo.js";
+import { attachedProjects, registerProject, reportedProjects } from "../../system/projects-registry.js";
+import { announceRepoChange } from "../../workspace/watch/repo-watch.js";
+import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { convergeProjectNote } from "./project-note.js";
 
 // A PROJECTS HOST takes in the folders attached to it (system/projects-registry.ts): each becomes a repo of its own, as a

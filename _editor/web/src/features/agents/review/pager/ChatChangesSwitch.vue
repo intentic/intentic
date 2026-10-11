@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { countBadgePlate, countBadgeText } from "@intentic/ui";
+import { countBadgePlate, countBadgeText, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useTemplateRef } from "vue";
 
@@ -7,6 +7,12 @@ import { useTemplateRef } from "vue";
 // under it. Two segments, a glyph each, and a thumb the pager slides along with the pages (SwipePages' follower), so the
 // switch is also where the reader sees a swipe land. The Changes segment IS the count of what is still to land, on the
 // same plate every count in the app wears; with nothing to land it falls back to a quiet glyph.
+//
+// Each segment is the header's own glyph button (`md`, 28px, as the session menu beside it), round, with `mx-1` either
+// side, so the segments step 36px apart: the thumb's width, which is how far the pager moves it. The margin is also what
+// keeps the two coarse-pointer targets (44px each) from reaching over each other's glyph. What is selected is said by the
+// thumb alone, never by the button's `on` fill, which would jump while the thumb slides: the selected segment's ink, and
+// a hover that leaves the thumb showing, ride `aria-selected` instead.
 
 const t = useT();
 
@@ -34,8 +40,8 @@ defineExpose({ thumb });
             :aria-selected="page === `chat`"
             :aria-controls="`${idPrefix}-chat`"
             :aria-label="t(`shared.chat`)"
-            class="touch-target relative flex h-7 w-9 items-center justify-center rounded-full transition-colors"
-            :class="page === `chat` ? `text-content` : `text-muted`"
+            :class="ui.iconButton({ size: `md`, round: true }, `relative mx-1`)"
+            class="aria-selected:text-content aria-selected:hover:bg-transparent aria-selected:active:bg-transparent"
             @click="page = `chat`"
         >
             <Icon name="comments" class="text-xs" aria-hidden="true" />
@@ -46,8 +52,8 @@ defineExpose({ thumb });
             :aria-selected="page === `changes`"
             :aria-controls="`${idPrefix}-changes`"
             :aria-label="pending > 0 ? `${t(`shared.changes`)} · ${t(`agents.agentDetail.toLand`, { count: pending })}` : t(`shared.changes`)"
-            class="touch-target relative flex h-7 w-9 items-center justify-center rounded-full transition-colors"
-            :class="page === `changes` ? `text-content` : `text-muted`"
+            :class="ui.iconButton({ size: `md`, round: true }, `relative mx-1`)"
+            class="aria-selected:text-content aria-selected:hover:bg-transparent aria-selected:active:bg-transparent"
             @click="page = `changes`"
         >
             <span

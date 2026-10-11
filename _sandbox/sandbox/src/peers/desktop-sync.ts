@@ -272,7 +272,7 @@ const rowsOf = (enrollments: readonly SyncEnrollment[]): SyncEnrollmentRow[] =>
 const reports = new Map<string, { readonly report: DeviceReport; readonly receivedAt: number }>();
 
 // Who is told of each report taken in, so this store never imports what one sets in motion: on a projects host, the
-// folders it names are attached (bootstrap/projects-host.ts). The report is answered only once every listener settled,
+// folders it names are attached (bootstrap/projects/projects-host.ts). The report is answered only once every listener settled,
 // or REPORT_LISTENER_WAIT_MS passed: the machine agent starts copying a newly attached folder only after the sandbox
 // answered a report naming it, so a folder's repo stands before its first file arrives and the root repo never reads
 // those files as its own. A listener past the wait goes on; the machine reads the slow answer as a failed post and

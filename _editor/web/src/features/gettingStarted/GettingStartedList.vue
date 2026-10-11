@@ -77,7 +77,7 @@ const hide = (): void => {
         </RowGroup>
         <div class="flex items-center justify-end px-1 pb-1">
             <Button v-if="tour.finished.value" size="small" @click="hide">{{ t(`gettingStarted.panel.done`) }}</Button>
-            <button v-else type="button" :class="ui.textButton({ tone: 'quiet' }, 'text-2xs')" @click="hide">
+            <button v-else type="button" :class="ui.textButton({ tone: 'quiet', size: 'xs' })" @click="hide">
                 {{ t(`gettingStarted.panel.hide`) }}
             </button>
         </div>

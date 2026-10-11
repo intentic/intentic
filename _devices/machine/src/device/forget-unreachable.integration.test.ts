@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import * as residentOriginal from "../resident.js";
+import * as residentOriginal from "../resident/resident.js";
 import { recordingUi } from "../testing.js";
 
 // Dropping the links a machine can no longer reach: the one delete on this device driven from a sandbox, so what it is
@@ -27,7 +27,7 @@ beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-forget-"));
     process.env["HOME"] = home;
     process.env["USERPROFILE"] = home;
-    jest.mock("../resident.js", () => ({ ...residentOriginal, ensureResident: ensured }));
+    jest.mock("../resident/resident.js", () => ({ ...residentOriginal, ensureResident: ensured }));
     config = await import("./config.js");
     commands = await import("./commands.js");
 });

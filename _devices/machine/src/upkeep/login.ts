@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { autostart, clearWindowsRunValue, type EntryInspection } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
 import { agentPath } from "../release.js";
-import { machineLauncher } from "../supervision.js";
+import { machineLauncher } from "../resident/supervision.js";
 import { readState } from "../sync/config.js";
 import { MUTAGEN_RUN_VALUE, ownMutagenPath, registerMutagenAutostart } from "../sync/mutagen.js";
 import type { Finding, UpkeepContext, UpkeepEntry } from "./entry.js";

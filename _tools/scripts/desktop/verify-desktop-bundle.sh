@@ -32,7 +32,13 @@
 #      from there instead of downloading the same release from GitHub. An installer without it still works, and
 #      quietly needs github.com again before a first setup can start, which is the whole of what it is there to stop.
 #
-# This is deliberately the cheap tier: it is pure archive inspection, runs in seconds, needs no display, no
+#   5. THE LOCAL FILES SIDECAR DOES NOT START. The AppImage bundler REWRITES intentic-files (linuxdeploy sets its
+#      rpath), and a rewrite can leave a binary the loader cannot map: linuxdeploy's own patchelf 0.8 did that to
+#      bun 1.4.3's output, which then segfaulted on start (_tools/scripts/lib/appimage-env.sh). Every bundle built,
+#      and shipped a folder sidecar that could not run. The one thing here that executes anything: the extracted
+#      sidecar's `version`, which needs no display and touches nothing.
+#
+# This is deliberately the cheap tier: it is archive inspection, runs in seconds, needs no display, no
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
 # which is cross-built by cargo-xwin and never otherwise opened before it reaches a user.
 set -euo pipefail
@@ -172,6 +178,28 @@ check_ic() {
     fi
 }
 
+# The local files sidecar, started out of one extracted Linux payload (class 5 above). A missing one is check_ic's
+# to report, so it is not failed twice. Bundles are built for the host they are built on, so a host that cannot
+# run an x86_64 Linux binary says it did not look rather than passing a sidecar nobody started.
+check_sidecar_runs() {
+    local label="$1" root="$2" found out status
+    found="$(find "$root" -type f -name intentic-files -print -quit)"
+    if [ -z "$found" ]; then
+        return
+    fi
+    if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
+        echo "    ($label: intentic-files not started, this host cannot run an x86_64 Linux binary)"
+        return
+    fi
+    status=0
+    out="$(timeout 30 "$found" version 2>&1)" || status=$?
+    if [ "$status" -eq 0 ]; then
+        echo "  ✓ $label: intentic-files starts (version ${out})"
+    else
+        fail "$label: intentic-files does not start (exit $status${out:+: $out}), so the app could not open a local folder"
+    fi
+}
+
 # The floor, over one extracted Linux payload and, for a package, over the metadata the bundler wrote into it.
 check_glibc_floor() {
     need objdump "the Linux binaries' glibc symbol versions"
@@ -189,6 +217,7 @@ check_deb() {
     compare_scripts "deb" "$out"
     compare_desktop_entry "deb" "$out"
     check_ic "deb" "$out" intentic-ic intentic-files
+    check_sidecar_runs "deb" "$out"
     check_glibc_floor "deb" "$out" "$deb"
     checked=$((checked + 1))
 }
@@ -205,6 +234,7 @@ check_rpm() {
     compare_scripts "rpm" "$out"
     compare_desktop_entry "rpm" "$out"
     check_ic "rpm" "$out" intentic-ic intentic-files
+    check_sidecar_runs "rpm" "$out"
     check_glibc_floor "rpm" "$out" "$rpm"
     checked=$((checked + 1))
 }
@@ -221,6 +251,7 @@ check_appimage() {
     # integrator (appimaged, Gear Lever) would install, and the runtime registration is the fallback, not the plan.
     compare_desktop_entry "appimage" "$out"
     check_ic "appimage" "$out" intentic-ic intentic-files
+    check_sidecar_runs "appimage" "$out"
     check_glibc_floor "appimage" "$out"
     checked=$((checked + 1))
 }

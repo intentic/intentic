@@ -6,7 +6,7 @@ import type { CommandContext } from "@stricli/core";
 import { answeringUi, buildCommand, markFailed } from "../../cli-ui.js";
 import { z } from "zod";
 import { baseDir } from "../../config.js";
-import { readResidentPid } from "../../resident.js";
+import { readResidentPid } from "../../resident/resident.js";
 import { isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "../config.js";
 import { canonicalFolder, foldersOverlap, sameFolder } from "../folders.js";
 import { ensureMutagen, sessionName } from "../mutagen.js";

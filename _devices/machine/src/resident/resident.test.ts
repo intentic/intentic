@@ -1,5 +1,5 @@
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
-import type { HostLink } from "./device/config.js";
+import type { HostLink } from "../device/config.js";
 import { type KeptCheck, reconcileLinks, stillKeeping } from "./resident.js";
 
 const link = (url: string, token = `token-for-${url}`): HostLink => ({

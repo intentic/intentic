@@ -16,7 +16,7 @@ import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { providerCommands } from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
-import type { ContinueOptions } from "../run/pickUp";
+import type { ContinueOptions } from "../run/endings/pickUp";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../session/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";

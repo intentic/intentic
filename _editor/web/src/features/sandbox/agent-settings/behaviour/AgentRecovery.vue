@@ -13,12 +13,12 @@ import {
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { breakAnswers, breakLabel } from "../../../chat/run/turnBreak";
-import { handoffLabel } from "../../../chat/run/handoffChoice";
+import { breakAnswers, breakLabel } from "../../../chat/run/endings/turnBreak";
+import { handoffLabel } from "../../../chat/run/endings/handoffChoice";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// The standing answer to each ending's one question, in the same words the chat asks it in (chat/run/turnBreak.ts).
+// The standing answer to each ending's one question, in the same words the chat asks it in (chat/run/endings/turnBreak.ts).
 // One answer per row, never a set of switches over the same wall: two independent booleans over a spent allowance
 // spelled a fourth posture ("move, else hold") nobody would choose, and left every surface guessing which of them was
 // the one in force. Every ending that ran something starts at `wait`: a re-run spends the owner's allowance on a turn
@@ -56,7 +56,7 @@ const memoryPolicy = computed<TurnBreakPolicy>({
     set: (value) => patch({ memoryPolicy: value as RoomPolicy }),
 });
 
-// How a turn a spent allowance held continues once its cache is cold (chat/run/handoffChoice.ts): the chat's card asks
+// How a turn a spent allowance held continues once its cache is cold (chat/run/endings/handoffChoice.ts): the chat's card asks
 // each time and preselects this, and a booked send (a move, a resend at the reset) uses it unless someone picked there.
 const handoffRows = computed(() => [
     { label: t(`sandbox.agentRecovery.handoffSuggested`), value: `suggested` as LimitHandoff, title: { title: t(`sandbox.agentRecovery.handoffSuggested`), note: t(`sandbox.agentRecovery.handoffSuggestedBrief`) } },

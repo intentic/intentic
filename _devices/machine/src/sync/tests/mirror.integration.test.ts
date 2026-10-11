@@ -40,8 +40,8 @@ const {
 } = await import("../mirror.js");
 const { SandboxGoneError } = await import("../gone.js");
 const { readState, upsertPairing } = await import("../config.js");
-const { readResidentPid, runForeground, signalExitCode } = await import("../../resident.js");
-const { stopResident } = await import("../../supervision.js");
+const { readResidentPid, runForeground, signalExitCode } = await import("../../resident/resident.js");
+const { stopResident } = await import("../../resident/supervision.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("../mutagen.js");
 // setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(runPidPath), { recursive: true });

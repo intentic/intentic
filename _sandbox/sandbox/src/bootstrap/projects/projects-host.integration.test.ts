@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { MEMORY_FILE } from "@intentic/constants";
 import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
-import { createLogger } from "../logger.js";
-import { attachedProjects, registerProject } from "../system/projects-registry.js";
-import { repoGitDir } from "../workspace/layout/git-layout.js";
-import { discoverRepos } from "../workspace/layout/repo-discovery.js";
-import { workspacePaths } from "../workspace/workspace.js";
+import { createLogger } from "../../logger.js";
+import { attachedProjects, registerProject } from "../../system/projects-registry.js";
+import { repoGitDir } from "../../workspace/layout/git-layout.js";
+import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { workspacePaths } from "../../workspace/workspace.js";
 import { projectNote } from "./project-note.js";
 import { attachReportedProjects, convergeAttachedProjects, projectsHostAttacher, type ProjectsHostDeps } from "./projects-host.js";
 

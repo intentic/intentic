@@ -2,10 +2,13 @@
 // snapshot-reset runner doesn't need this, everything else does. Never fails the job: nothing here is news, since the
 // app not being installed or the container not existing are the states this is trying to reach.
 
+import { errorMessage, isMissing } from "@intentic/base/errors";
 import { LOCAL_PORT } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { uninstallSilently } from "./app.js";
 import { CONNECT_TOKEN, PRODUCT_NAME, SANDBOX_HOSTNAME } from "./constants.js";
@@ -70,13 +73,17 @@ Run key value, its isolated home, and its sandbox on Docker Desktop. Each step m
 const removeEngine = async (harness: Harness): Promise<void> => {
     const listed = await run(`wsl.exe`, [`--list`, `--quiet`], { env: { WSL_UTF8: `1` }, timeoutMs: 30_000 });
     if (listed.stdout.replace(/\0/g, ``).split(/\r?\n/).some((name) => name.trim() === ENGINE_DISTRO)) {
-        let teardown = ``;
+        // Without the script the distro still goes; its rules go when WSL next restarts. A script that is there and
+        // cannot be read is said, never failed on (teardown never fails the job).
+        let teardown: string | undefined;
         try {
-            teardown = readFileSync(new URL(`../../../_sandbox/ic/engine/rootfs/teardown`, import.meta.url), `utf8`);
-        } catch {
-            // Without the script the distro still goes; its rules go when WSL next restarts.
+            teardown = readFileSync(join(repoRoot(import.meta.url), `_sandbox`, `ic`, `engine`, `rootfs`, `teardown`), `utf8`);
+        } catch (error) {
+            if (!isMissing(error)) {
+                harness.detail(`the engine's teardown script could not be read (${errorMessage(error)}); its network rules go when WSL next restarts`);
+            }
         }
-        if (teardown !== ``) {
+        if (teardown !== undefined) {
             await run(`wsl.exe`, [`-d`, ENGINE_DISTRO, `-u`, `root`, `--exec`, `sh`, `-c`, teardown], { timeoutMs: 60_000 });
         }
         await run(`wsl.exe`, [`--unregister`, ENGINE_DISTRO], { timeoutMs: 120_000 });

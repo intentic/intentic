@@ -622,7 +622,7 @@ describe("a spent allowance", () => {
     });
 });
 
-// The same two-level fold for what happens when a turn breaks now lives in chat/run/turnBreak.ts, one question per
+// The same two-level fold for what happens when a turn breaks now lives in chat/run/endings/turnBreak.ts, one question per
 // ending rather than a boolean per switch; turnBreak.test.ts covers its precedence.
 
 // The identity tile's rim: how far round, and in what ink. One function, because the board card and the rail card

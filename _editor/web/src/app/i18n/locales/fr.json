@@ -353,7 +353,7 @@
             "sessionsLabel": "Mémoire des processus par session",
             "sessionsNote": "Un autre regroupement des mêmes processus, pas de mémoire supplémentaire. CPU : 100 % = 1 cœur.",
             "accountingLabel": "Décomposition de la mémoire",
-            "accountingNote": "Mesurées séparément ; les valeurs peuvent ne pas s’additionner exactement.",
+            "accountingNote": "Mesurées séparément ; somme approximative.",
             "anonymousLabel": "Mémoire anonyme",
             "fileCacheLabel": "Cache de fichiers (compté)",
             "kernelLabel": "Mémoire du noyau",
@@ -698,7 +698,7 @@
             "open": "Ouvert",
             "apps": "Apps",
             "webDetail": "Une page dans votre propre navigateur",
-            "more": "Ouvrir une app ou le bureau"
+            "more": "Ouvrir une app"
         },
         "phone": {
             "toggle": "Cadre de téléphone",

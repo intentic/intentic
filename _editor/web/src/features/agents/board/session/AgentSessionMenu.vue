@@ -3,7 +3,7 @@ import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { effectiveAutoLand, landedAway, limited, memoryHeld, unregistered, writingNow } from "../../fleet/agentStatus";
 import AgentReactions from "../cards/AgentReactions.vue";
-import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
+import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../chat/run/endings/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";

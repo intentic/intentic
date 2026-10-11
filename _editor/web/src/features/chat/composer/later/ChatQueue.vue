@@ -7,7 +7,7 @@ import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
 import { usePaneView } from "../../panel/useChat-view";
-import { pickUpWhen, wakesHeldUntil } from "../../run/pickUp";
+import { pickUpWhen, wakesHeldUntil } from "../../run/endings/pickUp";
 import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with

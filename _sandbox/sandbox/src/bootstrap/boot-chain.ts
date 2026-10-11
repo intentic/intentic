@@ -35,8 +35,8 @@ import { seedStarterSite } from "../scaffold/starter-site.js";
 import { linkClaudeState } from "../sessions/session-store.js";
 import { reconcileBakedSkills } from "../settings/skills.js";
 import type { BootPhase } from "./boot-phase.js";
-import { convergeProjectNote } from "./project-note.js";
-import { convergeAttachedProjects, projectsHostAttacher, type ProjectsHostDeps } from "./projects-host.js";
+import { convergeProjectNote } from "./projects/project-note.js";
+import { convergeAttachedProjects, projectsHostAttacher, type ProjectsHostDeps } from "./projects/projects-host.js";
 
 // What a step reads: the boot phase, the runner env a definition seed is filtered by, and whether rootRepo created the
 // workspace repo this boot, which the starter seed and the baseline commit wait on.
@@ -202,7 +202,7 @@ const noteProjectFolder = async ({ config, logger }: BootRun): Promise<void> => 
     }
 };
 
-// A projects host's attached folders (bootstrap/projects-host.ts), from what a boot is handed.
+// A projects host's attached folders (bootstrap/projects/projects-host.ts), from what a boot is handed.
 const projectsHostDeps = ({ config, logger, services, traits }: BootPhase): ProjectsHostDeps => ({
     workspace: services.workspace,
     historyRoot: config.historyRoot,

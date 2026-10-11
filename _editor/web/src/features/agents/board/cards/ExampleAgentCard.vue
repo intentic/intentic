@@ -5,7 +5,7 @@
      reads as work someone did here. It goes once the reader's own first agent finishes (AgentsView) or the checklist is
      put away. -->
 <script setup lang="ts">
-import { Button, Code, DiffStat, Modal, StatusBadge } from "@intentic/ui";
+import { Button, Code, DiffStat, Modal, StatusBadge, toneTint } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
@@ -74,7 +74,7 @@ const startOwn = (): void => {
             </section>
 
             <!-- 4. What landing is: the one press this whole board leads to. -->
-            <section class="flex flex-col gap-1 rounded-xl bg-success/10 p-3">
+            <section :class="toneTint(`success`, `strong`, `flex flex-col gap-1 rounded-xl p-3`)">
                 <p class="text-xs font-semibold text-content">{{ t(`agents.exampleCard.landTitle`) }}</p>
                 <p class="text-xs leading-relaxed text-muted">{{ t(`agents.exampleCard.landLine`) }}</p>
             </section>

@@ -4,7 +4,7 @@ import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
 import type { DeviceAgentOp } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
-import { machineLauncher } from "../../supervision.js";
+import { machineLauncher } from "../../resident/supervision.js";
 import { CUTOVER_HOLDS_MS } from "../sandbox-rounds/swap-records.js";
 import { icSwapsInFlight } from "./sandboxes.js";
 

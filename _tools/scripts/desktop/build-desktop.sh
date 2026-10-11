@@ -27,6 +27,7 @@ set -euo pipefail
 VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>|--assemble <windows-dir>]}"
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/desktop-artifacts.sh"
+. "$(dirname "$0")/../lib/appimage-env.sh"
 # Two verification jobs each want ONE side of this build, the release's linux-build job wants the Linux side,
 # and the publish wants the assembled whole. One build script either way, so the artifacts a CI job verifies
 # are produced by exactly the path that produces the released ones.
@@ -241,11 +242,11 @@ else
     CONFIG="{\"version\":\"${VERSION}\",${NO_BEFORE_BUILD},\"bundle\":{\"createUpdaterArtifacts\":false}}"
 fi
 
-# The AppImage bundler runs linuxdeploy (itself an AppImage), which FUSE-mounts by default — CI containers
-# have no FUSE, so make it self-extract instead. NO_STRIP because linuxdeploy's bundled strip predates RELR
-# relocations and distro libs ship pre-stripped anyway.
-export APPIMAGE_EXTRACT_AND_RUN=1
-export NO_STRIP=true
+# The AppImage bundler runs linuxdeploy, which needs a self-extract instead of FUSE, no strip, and the system
+# patchelf rather than its own (appimage-env.sh says why for each). Only the Linux pass below runs it.
+if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
+    appimage_env
+fi
 
 # The signing key carries no password, and the signer WAITS FOR ONE unless it is told that in the environment:
 # with the variable unset it prints "Signing without password." and then blocks on a prompt no CI job can

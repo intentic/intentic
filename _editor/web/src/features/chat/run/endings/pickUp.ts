@@ -1,7 +1,7 @@
 import type { AccountState, HandoffMode, HandoffOffer, HeldEnding, QueuedMessage, RetryLadder, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
-import { formatReset, formatWait } from "../session/usageStatus";
+import { formatReset, formatWait } from "../../session/usageStatus";
 
 // One state for every turn ending that leaves finished work behind a live session. `reason` is the wall, `readyAt` a
 // spent allowance's honest reopen time, `nextAt` the instant the daemon's own booking fires. Excludes endings that need

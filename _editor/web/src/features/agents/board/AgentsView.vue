@@ -536,7 +536,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 <SwipeRow
                                     :action="swipeOf(agent)"
                                     :disabled="pendingFor(agent) !== undefined"
-                                    class="rounded-[20px]"
+                                    class="rounded-2xl"
                                     @commit="swipeCard(agent)"
                                 >
                                     <AgentCard

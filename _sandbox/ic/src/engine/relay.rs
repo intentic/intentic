@@ -392,11 +392,17 @@ fn serve(pipe: Pipe, config: &Arc<ClientConfig>, port: u16) {
     }
     // Gone before the engine's thread is waited for, which may be waiting to hand over more.
     drop(plain_in);
-    // The engine is done (or the client is gone): the client hears the end (a zero-length message), reads what is
-    // left, and the pipe closes, which also ends a read pending in the client's direction.
+    // The engine is done (or the client is gone): the client hears the end (a zero-length message) and reads what is
+    // left; the client's direction is ended (a read of the pipe it may be waiting in is cancelled until it has gone);
+    // and the pipe closes when the last of `pipe` is dropped, below, which is the end a client that missed the
+    // zero-length message still reads as one (Pipe::finish).
     let _ = pipe.write_all(&down_event, &[]);
     pipe.finish();
     tls.shutdown();
+    while !up.is_finished() {
+        pipe.cancel();
+        std::thread::sleep(Duration::from_millis(20));
+    }
     let _ = up.join();
     let _ = down.join();
 }
@@ -564,7 +570,6 @@ extern "system" {
         security: *const SecurityAttributes,
     ) -> Handle;
     fn ConnectNamedPipe(pipe: Handle, overlapped: *mut Overlapped) -> i32;
-    fn DisconnectNamedPipe(pipe: Handle) -> i32;
     fn FlushFileBuffers(file: Handle) -> i32;
     fn CreateEventW(
         security: *const c_void,
@@ -921,12 +926,26 @@ impl Pipe {
         }
     }
 
-    /// Let the client read what is still in the pipe, then end the connection (which also ends a read pending on it).
+    /// Let the client read what is still in the pipe. The connection then ends when the handle closes (Drop), and
+    /// deliberately not by DisconnectNamedPipe: docker's client (go-winio) reads the pipe in BYTE mode, where a read
+    /// that spans the last data message and the zero-length end swallows the end, so the client reads once more; after
+    /// a close that read fails with ERROR_BROKEN_PIPE, which go-winio reads as EOF, but after a disconnect it fails with
+    /// ERROR_PIPE_NOT_CONNECTED, which it hands on as an error. That is how every `docker run` reading a volume over
+    /// the pipe died at its last byte with "No process is on the other end of the pipe." (nightly run 38128740282's
+    /// move back to Docker Desktop), and reproduced on omen: 5000-byte messages read 4096 at a time, 12 of 12.
     fn finish(&self) {
-        // SAFETY: plain calls on a handle this value owns; a client that is gone makes them fail, harmlessly.
+        // SAFETY: a plain call on a handle this value owns; a client that is gone makes it fail, harmlessly.
         unsafe {
             FlushFileBuffers(self.0);
-            DisconnectNamedPipe(self.0);
+        }
+    }
+
+    /// End whatever read or write is pending on this instance, from any thread (theirs ends ERROR_OPERATION_ABORTED,
+    /// which reads as Closed): how the client's direction is stopped once the connection is over.
+    fn cancel(&self) {
+        // SAFETY: a null OVERLAPPED cancels every operation pending on this handle; each waits on its own completion.
+        unsafe {
+            CancelIoEx(self.0, std::ptr::null_mut());
         }
     }
 }

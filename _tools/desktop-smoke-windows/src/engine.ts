@@ -48,6 +48,7 @@ export const engineStatusOf = (stdout: string): EngineStatus | undefined => {
             ...(typeof value[`pipe`] === `string` ? { pipe: value[`pipe`] } : {}),
         };
     } catch {
+        // allow(silent-catch): a last `{` line that is not JSON is no status line, which this answers as undefined.
         return undefined;
     }
 };
@@ -63,6 +64,7 @@ export const moveLines = (stdout: string): Record<string, unknown>[] =>
                 const value: unknown = JSON.parse(line.slice(`intentic-move:`.length).trim());
                 return typeof value === `object` && value !== null ? [value as Record<string, unknown>] : [];
             } catch {
+                // allow(silent-catch): a line that does not parse is not a move line, and anything else is left out.
                 return [];
             }
         });
@@ -99,6 +101,7 @@ export const engineDockerOf = (record: string): { readonly docker: string; reado
             env: { DOCKER_HOST: host, DOCKER_TLS_VERIFY: `1`, DOCKER_CERT_PATH: certPath },
         };
     } catch {
+        // allow(silent-catch): a record that is not JSON says nothing about the engine; the caller prints the record.
         return undefined;
     }
 };

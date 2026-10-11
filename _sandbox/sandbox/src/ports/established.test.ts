@@ -12,10 +12,17 @@ describe("established connections", () => {
         expect([...establishedPortsIn(TABLE)].toSorted((a, b) => a - b)).toEqual([4321, 54000]);
     });
 
-    test("a port is in use while a connection to it is open, and an unreadable table counts as none", async () => {
-        const read = (path: string): Promise<string> => (path.endsWith("tcp") ? Promise.resolve(TABLE) : Promise.reject(new Error("no ipv6")));
+    test("a port is in use while a connection to it is open, and a missing table counts as none", async () => {
+        const noIpv6 = Object.assign(new Error("no ipv6"), { code: "ENOENT" });
+        const read = (path: string): Promise<string> => (path.endsWith("tcp") ? Promise.resolve(TABLE) : Promise.reject(noIpv6));
         expect(await anyConnected([4321], read)).toBe(true);
         expect(await anyConnected([5173], read)).toBe(false);
         expect(await anyConnected([], read)).toBe(false);
+    });
+
+    test("a table that is there but cannot be read is no answer, not a quiet one", async () => {
+        const refused = Object.assign(new Error("permission denied"), { code: "EACCES" });
+        const read = (path: string): Promise<string> => (path.endsWith("tcp") ? Promise.resolve(TABLE) : Promise.reject(refused));
+        await expect(anyConnected([5173], read)).rejects.toBe(refused);
     });
 });

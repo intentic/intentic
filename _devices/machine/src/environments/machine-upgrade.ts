@@ -7,7 +7,7 @@ import { rollBackIfCrashLooping } from "../agent-trial.js";
 import { agentLogPath, binDir, upgradeLockPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
-import { machineLauncher, readResident, restartResident, waitOutSwaps } from "../supervision.js";
+import { machineLauncher, readResident, restartResident, waitOutSwaps } from "../resident/supervision.js";
 import { realUpgradeExec, runUpgrade, type UpgradeOutcome, upgradeLanded, upgradeMessage } from "../upgrade.js";
 import { MACHINE_VERSION } from "../version.js";
 import { agentInDistro, crossEnv, NO_AGENT_EXIT } from "./crossing.js";

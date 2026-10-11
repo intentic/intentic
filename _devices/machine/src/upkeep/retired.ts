@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { autostart, type AutostartSpec, type Log } from "@intentic/local-agent";
 import { peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
-import { machineLauncher } from "../supervision.js";
+import { machineLauncher } from "../resident/supervision.js";
 import type { Finding, UpkeepContext, UpkeepEntry } from "./entry.js";
 import { exists, isInside, linkTarget, moveToTrash, processesFrom } from "./trash.js";
 

@@ -719,7 +719,7 @@ login entries once and then stood in for every later cleanup too (2026-10-05).
 ### The hang watchdog
 
 Every supervisor of this agent restarts it when it exits, and none can tell a hung agent from a busy one
-([`watchdog.ts`](src/watchdog.ts), 2026-10-05). So the agent watches its own event loop from a Worker thread, which has
+([`watchdog.ts`](src/resident/watchdog.ts), 2026-10-05). So the agent watches its own event loop from a Worker thread, which has
 a loop of its own: the main loop pings it every five seconds, and after three minutes without a ping the Worker writes
 `event loop stalled for N s; exiting so the supervisor restarts the agent` to the log (straight to fd 2, where every
 supervisor sends it) and kills the process with SIGKILL. Checks of its own held apart by far more than their
@@ -734,7 +734,7 @@ source text, so the compiled binary needs no second file; both it and the SIGKIL
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `sandbox`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
-- [src/resident.ts](src/resident.ts) — the resident process that holds links, pairings and WSL distros.
+- [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
 - [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
@@ -743,7 +743,7 @@ source text, so the compiled binary needs no second file; both it and the SIGKIL
 - [src/sync/gone.ts](src/sync/gone.ts) — when a paired sandbox counts as gone; `gone-watch.ts` acts on it, `retire.ts` retires its pairings, `forget-command.ts` is `sync forget`.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
-- [src/watchdog.ts](src/watchdog.ts) — the agent's own hang watchdog.
+- [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
 
 ## Commands
 

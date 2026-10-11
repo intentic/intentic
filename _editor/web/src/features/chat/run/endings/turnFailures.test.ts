@@ -1,14 +1,14 @@
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { computed, ref } from "vue";
-import { providerAccounts } from "../accounts/providerAccounts";
+import { providerAccounts } from "../../accounts/providerAccounts";
 import type { PickUp } from "./pickUp";
-import type { SessionRef } from "./turnRequest";
+import type { SessionRef } from "../turnRequest";
 import { type FailureHost, TurnFailures } from "./turnFailures";
 
 // The sandbox's account list, as a give-up or a clean turn asks it again; late imported by the module under test.
 const refreshAccounts = jest.fn(async () => []);
-jest.mock("../accounts/useChat-accounts", () => ({ refreshAccounts }));
+jest.mock("../../accounts/useChat-accounts", () => ({ refreshAccounts }));
 
 // A failure host whose turn records what the failure asked of it; nothing here writes a transcript line, so that seam
 // names itself if a case reaches for it.

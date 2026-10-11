@@ -2,13 +2,13 @@ import type { AgentProvider, TurnFact } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { cooledPickUp, type PickUp, warmedPickUp } from "./pickUp";
-import { bindingWindow, usageStatusFor } from "../session/usageStatus";
-import type { ComposerSelection } from "../session/composerSelection";
-import type { Conversation } from "../session/conversation";
-import type { TranscriptView } from "../session/transcriptView";
-import type { TurnClient } from "../session/turnClient";
-import { importOrReload } from "../../../lib/staleChunk";
-import { markNeedsReauth, providerAccounts } from "../accounts/providerAccounts";
+import { bindingWindow, usageStatusFor } from "../../session/usageStatus";
+import type { ComposerSelection } from "../../session/composerSelection";
+import type { Conversation } from "../../session/conversation";
+import type { TranscriptView } from "../../session/transcriptView";
+import type { TurnClient } from "../../session/turnClient";
+import { importOrReload } from "../../../../lib/staleChunk";
+import { markNeedsReauth, providerAccounts } from "../../accounts/providerAccounts";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (the error line) or merely informed, and
 // whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
@@ -121,7 +121,7 @@ export class TurnFailures {
             case `trial-exhausted`:
                 // Message undelivered and refunded; held in the queue for explicit retry, not the outage auto-resume loop.
                 importOrReload(
-                    () => import(`../models/useChat-catalog`),
+                    () => import(`../../models/useChat-catalog`),
                     async (chat) => {
                         await chat.loadTrialStatus();
                         if (code === `trial-model-unavailable`) {
@@ -145,7 +145,7 @@ export class TurnFailures {
         }
         if (MODEL_REFUSED.has(code)) {
             importOrReload(
-                () => import(`../models/useChat-catalog`),
+                () => import(`../../models/useChat-catalog`),
                 (chat) => chat.loadProviderModels(this.host.selection.provider.value),
             );
             this.host.error.value = message;
@@ -388,7 +388,7 @@ export class TurnFailures {
 // imported, as the catalog is above: the accounts module reaches back into the conversation tabs.
 const rereadAccounts = (provider: AgentProvider): void =>
     importOrReload(
-        () => import(`../accounts/useChat-accounts`),
+        () => import(`../../accounts/useChat-accounts`),
         (accounts) =>
             accounts.refreshAccounts(provider).catch((cause: unknown) => {
                 console.warn("Could not refresh provider accounts", cause);

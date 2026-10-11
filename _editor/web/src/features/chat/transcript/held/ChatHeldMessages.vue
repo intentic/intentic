@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../panel/useChat-view";
-import { memoryNext } from "../../run/turnBreak";
+import { memoryNext } from "../../run/endings/turnBreak";
 import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";

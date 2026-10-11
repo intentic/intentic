@@ -2,7 +2,7 @@ import { bindingWindow, type OauthAccount } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, ref, watch } from "vue";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
-import { effectivePolicy, sandboxPolicy } from "../../run/turnBreak";
+import { effectivePolicy, sandboxPolicy } from "../../run/endings/turnBreak";
 import type { Conversation } from "../../session/conversation";
 import { fallbackAccount, fallbackLabel } from "../../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../../session/limitReset";

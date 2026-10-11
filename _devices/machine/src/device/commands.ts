@@ -7,7 +7,7 @@ import type { CommandContext } from "@stricli/core";
 import { buildCommand, machineUi, type Narration, sandboxUrlOf } from "../cli-ui.js";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
-import { ensureResident } from "../resident.js";
+import { ensureResident } from "../resident/resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readLinkStates, removeLinks, unreachableIn, upsertLink } from "./config.js";
 
 // device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.

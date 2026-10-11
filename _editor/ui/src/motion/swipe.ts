@@ -99,7 +99,7 @@ export const tick = (): void => {
         try {
             navigator.vibrate(8);
         } catch {
-            // Refused before the first user gesture, or by a policy: a missing tick is not an error.
+            // allow(silent-catch): refused before the first user gesture, or by a policy; a missing tick is not an error.
         }
     }
 };

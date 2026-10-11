@@ -58,7 +58,10 @@ export const startQuietWatch = (
     };
 
     const check = async (): Promise<void> => {
-        const wakeAt = await probes.nextWakeAt().catch(() => 0);
+        const wakeAt = await probes.nextWakeAt().catch((error: unknown) => {
+            options.logger.warn({ err: error }, "quiet watch: the next promised wake could not be read");
+            return 0;
+        });
         const promised = wakeAt > 0 ? { nextWakeAt: wakeAt } : {};
         if (busy()) {
             streakStart = undefined;

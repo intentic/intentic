@@ -66,14 +66,12 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     CONFIG='{"bundle":{"createUpdaterArtifacts":false}}'
 fi
 
-# AppImage bundling on a modern dev box needs three accommodations (each verified on Arch/WSL2):
-#  • linuxdeploy is itself an AppImage and FUSE-mounts by default — self-extract instead (no libfuse2).
-#  • linuxdeploy's bundled (old) strip chokes on RELR relocations (`unknown type [0x13] section
-#    '.relr.dyn'`) in modern distro libs — skip stripping; distro libs ship pre-stripped anyway.
+# AppImage bundling on a modern dev box needs the bundler environment every AppImage build sets
+# (_tools/scripts/lib/appimage-env.sh: self-extract instead of FUSE, no strip, the system patchelf), plus one
+# accommodation of its own (verified on Arch/WSL2):
 #  • gdk-pixbuf ≥2.44 builds its loaders in, so the pkg-config-advertised external module dir does
 #    not exist and the gtk plugin's unconditional copy_tree dies — guard it (patched below).
-export APPIMAGE_EXTRACT_AND_RUN=1
-export NO_STRIP=true
+. "$ROOT/_tools/scripts/lib/appimage-env.sh"
 
 patch_gtk_plugin() {
     local plugin="$HOME/.cache/tauri/linuxdeploy-plugin-gtk.sh"
@@ -114,12 +112,15 @@ if [ "$STAGE_ONLY" -eq 0 ]; then
         build_bundle deb
         build_bundle rpm
         # linuxdeploy's desktop integration shells into xdg-mime; without it the bundler dies late.
-        if command -v xdg-mime >/dev/null 2>&1; then
-            patch_gtk_plugin
-            build_bundle appimage
-        else
+        if ! command -v xdg-mime >/dev/null 2>&1; then
             echo "==> skipping AppImage: xdg-mime not found — install xdg-utils (pacman -S xdg-utils / apt-get install xdg-utils)"
             failed+=("appimage")
+        elif ! appimage_env; then
+            echo "==> skipping AppImage: its sidecar would not survive linuxdeploy's own patchelf (see above)"
+            failed+=("appimage")
+        else
+            patch_gtk_plugin
+            build_bundle appimage
         fi
     fi
     if [ "$WINDOWS" -eq 1 ]; then
