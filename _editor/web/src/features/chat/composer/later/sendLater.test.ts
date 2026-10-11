@@ -1,15 +1,5 @@
 import { formatUntil } from "@intentic/ui/time";
-import {
-    bookable,
-    bookingOf,
-    instantOfInput,
-    LATEST_SEND_MS,
-    laterLabel,
-    laterOfQueue,
-    localInputOf,
-    SOONEST_SEND_MS,
-    timeChoices,
-} from "./sendLater";
+import { bookable, bookingOf, LATEST_SEND_MS, laterLabel, laterOfQueue, SOONEST_SEND_MS, timeChoices } from "./sendLater";
 
 // When the next message goes, when not now: the quick times the panel offers against the reader's own clock, how a
 // picked time is said, the bounds the sandbox keeps a booking within, and the wire's spelling of a pick. Every instant
@@ -66,14 +56,6 @@ describe(`what can be booked`, () => {
         expect(bookable(now + LATEST_SEND_MS, now)).toBe(true);
         expect(bookable(now + LATEST_SEND_MS + 1, now)).toBe(false);
         expect(LATEST_SEND_MS).toBe(30 * 24 * HOUR);
-    });
-
-    it(`reads the browser's date field on the reader's own clock, and nothing from a half-typed one`, () => {
-        expect(localInputOf(at(3, 9, 5))).toBe(`2026-10-03T09:05`);
-        expect(instantOfInput(`2026-10-03T09:05`)).toBe(at(3, 9, 5));
-        expect(instantOfInput(localInputOf(at(20, 23, 59)))).toBe(at(20, 23, 59));
-        expect(instantOfInput(``)).toBeUndefined();
-        expect(instantOfInput(`2026-10-03`)).toBeUndefined();
     });
 });
 

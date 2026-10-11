@@ -58,6 +58,12 @@ const DATE_STYLES = {
     dayMonth: { month: `short`, day: `numeric` },
     // A month on its own, for a heading over what happened in it: "August".
     month: { month: `long` },
+    // A month's short name, where a calendar's grid crosses into it: "Nov".
+    monthShort: { month: `short` },
+    // A weekday's short name, over a calendar's column: "Tue".
+    weekday: { weekday: `short` },
+    // A day said whole, for a calendar day's accessible name: "Tuesday, October 14".
+    dayLong: { weekday: `long`, month: `long`, day: `numeric` },
     dateTime: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
     timestamp: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
     time: { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
@@ -181,6 +187,32 @@ export const formatDateLong = (at: number | string): string => dateFormat(`dateL
 
 /** A month's own name, the year left to context: "August". For a heading over the things dated in it. */
 export const formatMonth = (at: number): string => dateFormat(`month`).format(at);
+
+/** A month's short name, where a calendar's grid crosses into it: "Nov". */
+export const formatMonthShort = (at: number): string => dateFormat(`monthShort`).format(at);
+
+/** A weekday's short name, over a calendar's column: "Tue". */
+export const formatWeekday = (at: number): string => dateFormat(`weekday`).format(at);
+
+/** A day said whole, the year left to context: "Tuesday, October 14". A calendar day's accessible name. */
+export const formatDayLong = (at: number): string => dateFormat(`dayLong`).format(at);
+
+// Monday, the ISO week's, for a browser that cannot say: Firefox has no `getWeekInfo` yet.
+const ISO_FIRST_WEEKDAY = 1;
+
+/**
+ * The weekday a calendar's week starts on, as `getDay` counts (0 Sunday … 6 Saturday). A REGION'S answer rather than a
+ * language's, so it is read off the browser's own locale ("en-GB" starts on Monday, "en-US" on Sunday), not the app's
+ * language, which carries no region: an English window in Warsaw still starts its weeks on Monday.
+ */
+export const weekStart = (): number => {
+    const locale: Intl.Locale & { getWeekInfo?: () => { readonly firstDay: number }; weekInfo?: { readonly firstDay: number } } = new Intl.Locale(
+        navigator.language,
+    );
+    const firstDay = locale.getWeekInfo?.().firstDay ?? locale.weekInfo?.firstDay;
+    // `firstDay` counts 1 Monday … 7 Sunday.
+    return firstDay === undefined ? ISO_FIRST_WEEKDAY : firstDay % 7;
+};
 
 /** A day where the year is already implied by its surroundings: "Jul 28". */
 export const formatDayMonth = (at: number): string => dateFormat(`dayMonth`).format(at);

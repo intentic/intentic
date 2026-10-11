@@ -254,6 +254,13 @@ const laterText = computed(() => {
     const picked = props.conversation.sendLater.value;
     return picked === undefined ? undefined : laterLabel(picked, laterNow.value, titleOf);
 });
+// The panel opened for a time of the reader's own ("Pick a date and time…" in the quick pick) opens on its picker.
+const laterCustom = ref(false);
+watch(laterOpen, (open) => {
+    if (!open) {
+        laterCustom.value = false;
+    }
+});
 const pickLater = (later: SendLater): void => {
     props.conversation.sendLater.value = later;
     laterOpen.value = false;
@@ -384,6 +391,7 @@ const popovers = useComposerPopovers({
             })),
         ),
         open: () => {
+            laterCustom.value = true;
             laterOpen.value = true;
         },
     },
@@ -991,7 +999,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         </ResponsiveOverlay>
         <!-- When the next message goes: a time, or once another agent's work lands (sendLater.ts). -->
         <ResponsiveOverlay v-model="laterOpen" :anchor="laterAnchor" cross="end" :header="t(`chat.sendLater.title`)" panel-class="w-80 p-1">
-            <ComposerSendLater :conversation="conversation" :picked="conversation.sendLater.value" @pick="pickLater($event)" @clear="clearLater()" />
+            <ComposerSendLater
+                :conversation="conversation"
+                :picked="conversation.sendLater.value"
+                :custom="laterCustom"
+                @pick="pickLater($event)"
+                @clear="clearLater()"
+            />
         </ResponsiveOverlay>
         <!-- The overflow itself; its rows hand off to the three panels above. -->
         <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" :header="t(`chat.chatPane.message`)" panel-class="w-80 p-1">

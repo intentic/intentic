@@ -98,19 +98,3 @@ export const laterLabel = (later: SendLater, now: number, titleOf: (conversation
     later.kind === `at`
         ? formatUntil(later.at, now)
         : t(`chat.sendLater.afterLands`, { title: titleOf(later.conversationId) ?? t(`chat.sendLater.anotherAgent`) });
-
-// The value a `datetime-local` field holds for an instant, on the reader's own clock: "2026-10-02T15:40".
-export const localInputOf = (at: number): string => {
-    const date = new Date(at);
-    const pad = (value: number): string => String(value).padStart(2, `0`);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-/** The instant a `datetime-local` field's value names on the reader's own clock; undefined for an empty or partial one. */
-export const instantOfInput = (value: string): number | undefined => {
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
-        return undefined;
-    }
-    const at = new Date(value).getTime();
-    return Number.isNaN(at) ? undefined : at;
-};
