@@ -75,11 +75,10 @@ RUN git config --system --add safe.directory '*'
 
 # bun — _tools/scripts/build/build-agent-binaries.sh cross-compiles the release's intentic-machine binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
-# version is digest-pinned and this layer needs no network. -slim is Debian, and an older one than this image's
-# trixie, so the binary is linked against a glibc this one already satisfies.
-# ponytail: keep in lockstep with _platform/api/Dockerfile and the `bun` catalog entry in pnpm-workspace.yaml —
-# both images ship bun 1.4.3 from the same digest-pinned stable 1.4.3-slim (canary-slim only stood in while no
-# stable -slim tag of the catalog's bun existed).
+# version is digest-pinned and this layer needs no network. -slim is Debian trixie, so the binary is linked against
+# a glibc this image satisfies.
+# The pin is one of _tools/scripts/tools/tool-pins.mjs's, moved with the sandbox image's, the platform api's and the
+# `bun` catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
 COPY --from=oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 /usr/local/bin/bun /usr/local/bin/bun
 
 # ruff and pyright, the two binaries the daemon's python check runs on every `.py` edit

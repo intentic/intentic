@@ -1,10 +1,10 @@
 # THE SANDBOX IMAGE'S PINNED TOOLS, KEPT CURRENT BY THE CLOCK RATHER THAN BY MEMORY.
 #
 # The core Dockerfile, its packs and the CI base image download ripgrep, jq, yq, gh, cloudflared, uv, ruff, pyright,
-# pnpm and Docker Engine at fixed versions (and ripgrep, jq, gh and cloudflared's image at fixed checksums). Moving those
-# was a chore nobody was assigned, so they drifted a release or several behind. _tools/scripts/tools/tool-pins.mjs lists
-# every place each is written; this workflow is the assignee, the sibling of engines.yml for everything that is not an
-# agent engine.
+# pnpm, Bun and Docker Engine at fixed versions (and ripgrep, jq, gh, and cloudflared's and Bun's images, at fixed
+# checksums). Moving those was a chore nobody was assigned, so they drifted a release or several behind.
+# _tools/scripts/tools/tool-pins.mjs lists every place each is written; this workflow is the assignee, the sibling of
+# engines.yml for everything that is not an agent engine.
 #
 # It runs no build and no test, and that is the design. It rewrites the pins (fetching the checksums and digests a new
 # version needs), checks what it wrote clears the checkout gates its output can fail, and opens ONE pull request. ci.yml
@@ -97,10 +97,11 @@ jobs:
           if [ -n "${VERSION:-}" ]; then args+=("--to=$VERSION"); fi
           node _tools/scripts/tools/bump-tools.mjs "${args[@]}"
 
-      # Only when pnpm itself moved: `packageManager` is what the lockfile is resolved by. A real resolution with
-      # `--ignore-scripts`, for engines.yml's reasons (no `--lockfile-only`, no package build scripts under this token).
+      # Only when pnpm or bun moved: `packageManager` is what the lockfile is resolved by, and bun is a catalog entry
+      # the lockfile resolves. A real resolution with `--ignore-scripts`, for engines.yml's reasons (no
+      # `--lockfile-only`, no package build scripts under this token).
       - name: Move the lockfile
-        if: steps.plan.outputs.changed == 'true' && contains(format(',{0},', steps.plan.outputs.written), ',pnpm,')
+        if: steps.plan.outputs.changed == 'true' && (contains(format(',{0},', steps.plan.outputs.written), ',pnpm,') || contains(format(',{0},', steps.plan.outputs.written), ',bun,'))
         run: pnpm install --no-frozen-lockfile --fix-lockfile --ignore-scripts
 
       - name: Check what the bump wrote

@@ -11,8 +11,9 @@
     pinDigests: true,
     // cloudflared, binary and image, belongs to the daily tool bump (.github/workflows/tools.yml, which moves its tag and
     // digest at every site _tools/scripts/tools/tool-pins.mjs lists). Two bots writing one pin open competing pull
-    // requests, so Renovate leaves it alone. The same goes for anything else that table lists.
-    ignoreDeps: ["cloudflare/cloudflared"],
+    // requests, so Renovate leaves it alone. The same goes for anything else that table lists: Bun, the image three
+    // Dockerfiles copy it from and the catalog's npm package, is one pin there.
+    ignoreDeps: ["cloudflare/cloudflared", "oven/bun", "bun"],
     customManagers: [
         {
             // Read each pin from the frozen IMAGES map. The `renovate:` hint comment above an entry supplies the

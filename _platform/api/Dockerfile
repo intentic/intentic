@@ -9,9 +9,8 @@
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
-# ponytail: keep in lockstep with _tools/ci-base/Dockerfile and the `bun` catalog entry in pnpm-workspace.yaml —
-# both images ship bun 1.4.3 from the same digest-pinned stable 1.4.3-slim (canary-slim only stood in while no
-# stable -slim tag of the catalog's bun existed).
+# The Bun pin is one of _tools/scripts/tools/tool-pins.mjs's, moved with CI's, the sandbox image's and the `bun`
+# catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
 FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app

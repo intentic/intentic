@@ -228,6 +228,19 @@ ENV PATH=$PNPM_HOME/bin:$PATH
 RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.10.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
+# bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
+# release cross-compiles the machine agent with `bun build --compile`, so a sandbox without it could not check its
+# own work: until this was baked, the intentic workspace carried it as an environment-overlay step of its own, and
+# any other workspace had none. Scripts inside the monorepo still run the lockfile's `bun` (the root devDependency);
+# this is the one an agent types, a user's Bun project runs, and a heavy-shim (`bun` is one) falls through to.
+# Copied out of the official image, as _tools/ci-base does, rather than fetched from a release zip: the digest pins
+# both architectures at once, upstream verified the zip's signature when it built that image, and its amd64 binary
+# is the `x64-baseline` build, which runs on a CPU without AVX2 (a laptop's or an old server's) where the plain x64
+# release dies with SIGILL. -slim is trixie, this image's own release, so the glibc it links against is here.
+# The pin is one of _tools/scripts/tools/tool-pins.mjs's: the tool bump moves it with ci-base's, the platform api's
+# and the catalog's, and the `tool-pins` check refuses a hand edit that moves only some of them.
+COPY --from=oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s bun /usr/local/bin/bunx && bun --version && bunx --version
 # node-gyp on PATH, for an agent compiling a native dep by hand. Pinned like every other tool in this image so a
 # bad upstream release fails a deliberate bump, not the next pipeline.
 # ponytail: bump alongside the node base image — node-gyp tracks the headers it compiles against.

@@ -4,9 +4,9 @@
 // the same idea for the agent engines and owns the reading and writing both use).
 //
 // A pin is more than its version where the download is checked: ripgrep, jq and gh carry a sha256 per architecture,
-// cloudflared's container image a digest. Those are DERIVED from the version (`derive`), fetched by the bumper and
-// written in the same pass, because a version moved without its checksum fails the image build, and a checksum moved
-// by hand is a number nobody checked.
+// cloudflared's and Bun's container images a digest. Those are DERIVED from the version (`derive`), fetched by the
+// bumper and written in the same pass, because a version moved without its checksum fails the image build, and a
+// checksum moved by hand is a number nobody checked.
 //
 // What is deliberately NOT here, and why each stays a person's bump:
 //   - Debian packages (git, curl, python3, ffmpeg…): trixie's, floating within the release on purpose. Their security
@@ -225,6 +225,33 @@ export const TOOL_PINS = [
             site(DOCKERFILE, /PNPM_VERSION=(\S+) /g, 1),
             site(CI_BASE, /PNPM_VERSION=(\S+) /g, 1),
         ],
+    },
+    {
+        id: "bun",
+        label: "Bun",
+        // One Bun everywhere: the sandbox image's, CI's (which cross-compiles the release's machine agents with it), the
+        // platform api's runtime, and the catalog's, which is the one every package's tests and typecheck run. The npm
+        // package installs a per-platform binary through optional dependencies, each excused from pnpm's release-age
+        // hold by exact name@version, so the exclusions move with the catalog. A catalog move needs the lockfile
+        // re-resolved, which tools.yml does when this tool is among those written.
+        // `alsoPublished`: npm gets a release after GitHub does, and a version the catalog cannot install is no pin.
+        upstream: { kind: "github-release", repo: "oven-sh/bun", tagPrefix: "bun-v", alsoPublished: ["bun"] },
+        sites: [
+            site("pnpm-workspace.yaml", /^ {2}bun: (\d+\.\d+\.\d+)$/gm, 1),
+            site("pnpm-workspace.yaml", /^ {2}- "?(?:@oven\/bun-[a-z0-9-]+|bun)@(\d+\.\d+\.\d+)"?$/gm, 13),
+            ...[DOCKERFILE, CI_BASE, "_platform/api/Dockerfile"].flatMap((file) => [
+                site(file, /oven\/bun:(\d+\.\d+\.\d+)-slim@sha256:[a-f0-9]{64}/g, 1),
+                site(file, /oven\/bun:\d+\.\d+\.\d+-slim@sha256:([a-f0-9]{64})/g, 1, "digest"),
+            ]),
+        ],
+        // The -slim image the three Dockerfiles copy from is pushed after the release, and for a while not at all (the
+        // canary image once stood in for a stable tag that did not exist yet), so its absence is a wait, not a failure.
+        available: async (version) =>
+            (await dockerHubDigest("oven/bun", `${version}-slim`)) === undefined ? `Docker Hub has no oven/bun:${version}-slim yet` : undefined,
+        derive: async (version) => {
+            const digest = await dockerHubDigest("oven/bun", `${version}-slim`);
+            return digest === undefined ? undefined : { digest };
+        },
     },
     {
         id: "docker",

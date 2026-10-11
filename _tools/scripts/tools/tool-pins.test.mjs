@@ -45,9 +45,35 @@ test("a cloudflared image reference moves its tag and its digest as two values",
     assert.equal(digested.text, `    cloudflared: "cloudflare/cloudflared:2026.10.0@sha256:${B}",\n`);
 });
 
+test("a bun image reference moves its tag and its digest as two values, in a COPY --from as in a FROM", () => {
+    const file = "_sandbox/sandbox/Dockerfile";
+    const line = `COPY --from=oven/bun:1.4.3-slim@sha256:${A} /usr/local/bin/bun /usr/local/bin/bun\n`;
+    const tagged = rewrite(line, patternOf("bun", "version", file), "1.4.4");
+    const digested = rewrite(tagged.text, patternOf("bun", "digest", file), B);
+    assert.equal(tagged.count, 1);
+    assert.equal(digested.count, 1);
+    assert.equal(digested.text, `COPY --from=oven/bun:1.4.4-slim@sha256:${B} /usr/local/bin/bun /usr/local/bin/bun\n`);
+});
+
+// pnpm-workspace.yaml names bun three ways: the catalog's version, the release-age exclusions, and `bun: true` under
+// allowBuilds, which is a switch and no version.
+test("bun's catalog entry and its exclusions move together, and allowBuilds' `bun: true` stays", () => {
+    const yaml = `minimumReleaseAgeExclude:\n  - "@oven/bun-linux-x64@1.4.3"\n  - bun@1.4.3\nallowBuilds:\n  bun: true\ncatalog:\n  bun: 1.4.3\n`;
+    const [catalog, exclusions] = toolPin("bun").sites.filter((spot) => spot.file === "pnpm-workspace.yaml");
+    const excluded = rewrite(yaml, exclusions.pattern, "1.4.4");
+    const both = rewrite(excluded.text, catalog.pattern, "1.4.4");
+    assert.equal(excluded.count, 2);
+    assert.equal(both.count, 1);
+    assert.equal(both.text, yaml.replaceAll("1.4.3", "1.4.4"));
+});
+
 // The tests' own fake references (`@sha256:aaaa`) are not pins and must not read as one.
 test("a reference with a fake digest is not a pin site", () => {
-    const { count } = rewrite(`image: "cloudflare/cloudflared:2026.9.3@sha256:aaaa"`, patternOf("cloudflared", "version", "_deploy/state-resolver/src/lib/images.ts"), "2026.10.0");
+    const { count } = rewrite(
+        `image: "cloudflare/cloudflared:2026.9.3@sha256:aaaa"`,
+        patternOf("cloudflared", "version", "_deploy/state-resolver/src/lib/images.ts"),
+        "2026.10.0",
+    );
     assert.equal(count, 0);
 });
 
