@@ -3,7 +3,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { buildApplication, buildRouteMap, run } from "@stricli/core";
+import { buildApplication, buildRouteMap, run, type StricliProcess } from "@stricli/core";
 
 // `sync attach` and `sync detach` on a throwaway home: config.ts fixes its paths at import time, so HOME points at a
 // temp dir before the imports below. Docker and the resident agent are the seams' (attach-commands.ts), so nothing here
@@ -104,7 +104,7 @@ describe("sync attach", () => {
     });
 
     it("says so when this computer's sandbox is not set up for folders", async () => {
-        await expect(planAttach([], { sandboxUrl: URL_OF, dir: shop, name: "shop" }, here)).rejects.toThrow("this computer's sandbox is not set up for folders yet");
+        await expect(planAttach([], { sandboxUrl: URL_OF, dir: shop, name: "shop" }, here)).rejects.toThrow("this device's sandbox is not set up for folders yet");
         const workspace = { ...host, projectsHost: undefined, localDir: join(home, "intentic", "w") };
         await expect(planAttach([workspace], { sandboxUrl: URL_OF, dir: shop, name: "shop" }, here)).rejects.toThrow("not set up for folders yet");
     });
@@ -141,16 +141,15 @@ describe("sync attach", () => {
             name: "intentic-machine",
             scanner: { caseStyle: "allow-kebab-for-camel" },
         });
-        await run(app, ["attach", "--sandbox-url", "https://nowhere.example.dev", "--dir", shop, "--name", "shop", "--json"], {
-            process: { stdout: { write: (text: string) => void out.push(text) }, stderr: { write: () => undefined } },
-        });
+        const fake: StricliProcess = { stdout: { write: (text: string) => void out.push(text) }, stderr: { write: () => undefined } };
+        await run(app, ["attach", "--sandbox-url", "https://nowhere.example.dev", "--dir", shop, "--name", "shop", "--json"], { process: fake });
         expect(out.map((line) => JSON.parse(line) as unknown)).toEqual([
             {
                 ok: false,
-                error: "This computer's sandbox is not set up for folders yet: no sandbox at https://nowhere.example.dev was enrolled here with `intentic-machine sync setup --projects-host`.",
+                error: "This device's sandbox is not set up for folders yet: no sandbox at https://nowhere.example.dev was enrolled here as the sandbox folders attach to (sync setup --projects-host).",
             },
         ]);
-        expect(process.exitCode).toBe(1);
+        expect(fake.exitCode).toBe(1);
     });
 });
 
@@ -176,6 +175,6 @@ describe("sync detach", () => {
         const own = { sandboxUrl: "https://sandbox-0738cd6b5027.intentic.dev", sandboxId: "sandbox-0738cd6b5027-intentic-dev", mode: "sync" as const, localDir: blog, remoteDir: `${WORKSPACE_ROOT}/blog`, project: true as const };
         await upsertPairing(own);
         await expect(detachFolder(blog, machineDir, { terminate: async () => undefined })).rejects.toThrow("has a sandbox of its own");
-        await expect(detachFolder(shop, machineDir, { terminate: async () => undefined })).rejects.toThrow(`no project on this machine syncs ${shop}`);
+        await expect(detachFolder(shop, machineDir, { terminate: async () => undefined })).rejects.toThrow(`no project on this device syncs ${shop}`);
     });
 });

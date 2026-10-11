@@ -4,9 +4,9 @@
 /* Three things decide it, in this order. The person's own word: `IC_ENGINE`, then the preference the desktop app
 saves (`ic engine prefer`). What the PC already holds: sandboxes that run on Docker Desktop stay there until they are
 moved (`ic engine move`), because a setup that switched engines under them would leave them where no `docker` looks;
-and a sandbox handed this PC's GPU stays on Docker Desktop, since Intentic's engine cannot pass a GPU through yet. Then
+and a sandbox handed this device's GPU stays on Docker Desktop, since the intentic engine cannot pass a GPU through yet. Then
 the default for a PC with Docker Desktop, which is the one switch of the migration plan. Flipped to ours on 2026-10-10:
-every new setup goes onto Intentic's engine, Docker Desktop installed or not, so a new install has one engine to run and
+every new setup goes onto the intentic engine, Docker Desktop installed or not, so a new install has one engine to run and
 repair whatever else the PC holds. What it cannot flip is above it: sandboxes already on Docker Desktop (until moved), a
 GPU sandbox, and the person's own word.
 
@@ -38,7 +38,7 @@ pub struct Facts {
     pub gpu: bool,
 }
 
-/// The engine a NEW setup on this PC puts its sandboxes on, when none is active yet. `default` is
+/// The engine a NEW setup on this device puts its sandboxes on, when none is active yet. `default` is
 /// [`DOCKER_DESKTOP_PCS`], passed in so tests can hold the switch either way.
 pub fn for_new_setup(facts: &Facts, default: Kind) -> Kind {
     if let Some(forced) = facts.forced {
@@ -58,7 +58,7 @@ pub fn for_new_setup(facts: &Facts, default: Kind) -> Kind {
     }
 }
 
-/// Whether a Docker Desktop (or another engine of the person's) that this PC's sandboxes run on is theirs to keep
+/// Whether a Docker Desktop (or another engine of the person's) that this device's sandboxes run on is theirs to keep
 /// running: true once the switch has flipped, and always for an engine Intentic does not install.
 pub fn bring_your_own(facts: &Facts, default: Kind, in_use: Kind) -> bool {
     in_use == Kind::DockerDesktop
@@ -75,7 +75,7 @@ pub fn offer_move(facts: &Facts, default: Kind, in_use: Kind) -> bool {
         && facts.preferred != Some(Kind::DockerDesktop)
 }
 
-/// Whether a move is possible at all from where this PC is: onto our engine from Docker Desktop (not with a GPU
+/// Whether a move is possible at all from where this device is: onto our engine from Docker Desktop (not with a GPU
 /// sandbox), or back onto Docker Desktop while it is installed.
 pub fn can_move(facts: &Facts, in_use: Kind) -> bool {
     match in_use {

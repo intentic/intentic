@@ -112,10 +112,19 @@ pub fn up(args: Up) -> Result<()> {
     let slug = slug_of(&name)?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
     if docker::container_exists(&container) {
-        bail!("a runner named '{name}' already exists here — remove it first: ic runner remove {name}");
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("A runner named {name} already exists on this device."),
+                None,
+                Some(&format!("ic runner remove {name}")),
+            )
+        );
     }
     let image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
     let log = Log::create("runner-up")?;
+
+    ui::act(&format!("Starting runner {name}"));
 
     // Read both shape files up front, so a missing path is a sentence naming it rather than a mid-flow stop.
     let overlay = overlay_file
@@ -141,10 +150,10 @@ pub fn up(args: Up) -> Result<()> {
             let workdir = tempfile::tempdir()?;
             let overlay_path = workdir.path().join("overlay.Dockerfile");
             std::fs::write(&overlay_path, content)?;
-            println!(
-                "intentic: building {} from the parent's approved overlay…",
+            ui::note(&format!(
+                "building {} from the parent's approved overlay…",
                 verified.target
-            );
+            ));
             recreate::build_overlay(
                 &verified.target,
                 &slug,
@@ -225,9 +234,14 @@ pub fn up(args: Up) -> Result<()> {
     }
     ui::note("waiting for the runner daemon to come up…");
     health::wait_answering(&container, &log, "")?;
-    println!("Runner '{name}' is up and enrolling with {parent_url}.");
-    println!("Watch it from the parent sandbox (GET /system/runners); logs here: docker logs {container}");
-    println!("Remove it (container and volumes): ic runner remove {name}");
+    ui::done(&format!(
+        "Runner {name} is up and enrolling with {parent_url}."
+    ));
+    ui::later(&[
+        ("watch".to_string(), format!("{parent_url}/system/runners")),
+        ("logs".to_string(), format!("docker logs {container}")),
+        ("remove".to_string(), format!("ic runner remove {name}")),
+    ]);
     Ok(())
 }
 
@@ -237,16 +251,21 @@ pub fn list() -> Result<()> {
         .into_iter()
         .filter_map(|slug| slug.strip_prefix(SLUG_PREFIX).map(str::to_string))
         .collect();
+    ui::report("intentic · runners on this device", None);
     if runners.is_empty() {
-        println!("intentic: no runners on this machine.");
+        ui::quiet("No runners on this device.");
         return Ok(());
     }
-    for name in runners {
-        println!(
-            "{:<9} {name}",
-            sandbox::container_status(&format!("{SLUG_PREFIX}{name}"))
-        );
+    let mut items = Vec::new();
+    for name in &runners {
+        let status = sandbox::container_status(&format!("{SLUG_PREFIX}{name}"));
+        let tone = match status.as_str() {
+            "running" => ui::Tone::Ok,
+            _ => ui::Tone::Skip,
+        };
+        items.push(ui::Item::new(tone, name, status));
     }
+    ui::items(&items);
     Ok(())
 }
 

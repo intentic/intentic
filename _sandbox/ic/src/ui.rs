@@ -31,6 +31,7 @@ struct Glyphs {
     fail: &'static str,
     warn: &'static str,
     skip: &'static str,
+    ask: &'static str,
     spinner: &'static [&'static str],
 }
 
@@ -39,6 +40,7 @@ const UNICODE: Glyphs = Glyphs {
     fail: "✗",
     warn: "!",
     skip: "·",
+    ask: "?",
     spinner: &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 };
 
@@ -47,6 +49,7 @@ const ASCII: Glyphs = Glyphs {
     fail: "x",
     warn: "!",
     skip: "-",
+    ask: "?",
     spinner: &["|", "/", "-", "\\"],
 };
 
@@ -57,6 +60,385 @@ const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
 const RESET: &str = "\x1b[0m";
+
+// layout
+
+/* THE DESIGN SYSTEM'S SHAPES AS PURE FUNCTIONS — text in, lines out, no clock and no stream. The stateful calls below
+draw through these, and so does intentic-machine through their twin in _devices/local-agent/src/layout.ts; both are
+held to _shared/sandbox-run/src/terminal-layout.fixture.json, so a person sees one layout whichever binary is talking.
+Which shape a command draws is docs/ops/cli-output-protocol.md. */
+
+/// What every shape needs to know about the screen it is drawn on.
+pub(crate) struct Pen {
+    color: bool,
+    glyphs: &'static Glyphs,
+    width: usize,
+}
+
+impl Pen {
+    fn paint(&self, text: &str, color: &str) -> String {
+        if self.color && !text.is_empty() {
+            format!("{color}{text}{RESET}")
+        } else {
+            text.to_string()
+        }
+    }
+
+    fn glyph(&self, tone: Tone) -> String {
+        match tone {
+            Tone::Ok => self.paint(self.glyphs.ok, GREEN),
+            Tone::Fail => self.paint(self.glyphs.fail, RED),
+            Tone::Warn => self.paint(self.glyphs.warn, YELLOW),
+            Tone::Skip => self.paint(self.glyphs.skip, DIM),
+        }
+    }
+
+    /// Spaces that push something `right` wide to the line's last usable column (width - 1, so nothing wraps);
+    /// none when there is nothing on the right, so no line ends in padding.
+    fn gap(&self, left: usize, right: usize) -> String {
+        if right == 0 {
+            return String::new();
+        }
+        " ".repeat(self.width.saturating_sub(1 + left + right).max(1))
+    }
+}
+
+/// The verdict a glyph carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tone {
+    Ok,
+    Fail,
+    Warn,
+    Skip,
+}
+
+impl Tone {
+    /// The column word a plain log has always used; only the failure shouts.
+    fn plain_word(self) -> &'static str {
+        match self {
+            Tone::Ok => "ok  ",
+            Tone::Fail => "FAIL",
+            Tone::Warn => "warn",
+            Tone::Skip => "skip",
+        }
+    }
+}
+
+/// One row of a report: a verdict, the thing, and a dim half-sentence about it (empty for none).
+pub struct Item {
+    pub tone: Tone,
+    pub name: String,
+    pub meta: String,
+}
+
+impl Item {
+    pub fn new(tone: Tone, name: impl Into<String>, meta: impl Into<String>) -> Item {
+        Item {
+            tone,
+            name: name.into(),
+            meta: meta.into(),
+        }
+    }
+}
+
+/// The sentence a declined question settles on, everywhere.
+pub const CANCELLED: &str = "Cancelled. Nothing changed.";
+
+fn chars(text: &str) -> usize {
+    text.chars().count()
+}
+
+fn pad_to(text: &str, column: usize) -> String {
+    format!("{text}{}", " ".repeat(column.saturating_sub(chars(text))))
+}
+
+/// The header of a flow or a report: the title, a dim version stamp on the right, and one dim scope line.
+fn heading_lines(pen: &Pen, title: &str, stamp: &str, scope: &str) -> Vec<String> {
+    let head = if stamp.is_empty() {
+        format!("  {}", pen.paint(title, BOLD))
+    } else {
+        format!(
+            "  {}{}{}",
+            pen.paint(title, BOLD),
+            pen.gap(2 + chars(title), chars(stamp)),
+            pen.paint(stamp, DIM)
+        )
+    };
+    let mut lines = vec![String::new(), head];
+    if !scope.is_empty() {
+        for part in wrap(scope, pen.width.saturating_sub(3)) {
+            lines.push(format!("  {}", pen.paint(&part, DIM)));
+        }
+    }
+    lines.push(String::new());
+    lines
+}
+
+/// The scope line a flow promises when it has nothing more specific to say.
+pub fn plan_summary(steps: usize, seconds: u32) -> String {
+    let minutes = ((seconds as f32 / 60.0).round() as u32).max(1);
+    format!(
+        "{steps} step{}, roughly {minutes} minute{}.",
+        if steps == 1 { "" } else { "s" },
+        if minutes == 1 { "" } else { "s" }
+    )
+}
+
+/// A step or an action that has finished, with how long it took on the right. `ordinal` is set for a flow's
+/// numbered steps.
+fn settled_line(pen: &Pen, tone: Tone, ordinal: Option<usize>, label: &str, took: &str) -> String {
+    let (number, shown) = match ordinal {
+        Some(ordinal) => (
+            format!("{ordinal:>2}  "),
+            format!("{}  ", pen.paint(&format!("{ordinal:>2}"), DIM)),
+        ),
+        None => (String::new(), String::new()),
+    };
+    let left = 5 + chars(&number) + chars(label);
+    format!(
+        "  {}  {shown}{label}{}{}",
+        pen.glyph(tone),
+        pen.gap(left, chars(took)),
+        pen.paint(took, DIM)
+    )
+}
+
+/// The end of a flow: one bold verdict and the run's whole duration.
+fn verdict_lines(pen: &Pen, tone: Tone, verdict: &str, took: &str) -> Vec<String> {
+    vec![
+        String::new(),
+        format!(
+            "  {}  {}{}{}",
+            pen.glyph(tone),
+            pen.paint(verdict, BOLD),
+            pen.gap(5 + chars(verdict), chars(took)),
+            pen.paint(took, DIM)
+        ),
+    ]
+}
+
+/// The commands a reader will want later: labels dim and aligned, the command itself in body colour so it reads
+/// as copyable — and never truncated, because a clipped command is one that cannot be pasted.
+fn footnote_lines(pen: &Pen, footnotes: &[(String, String)]) -> Vec<String> {
+    let column = footnotes
+        .iter()
+        .map(|(what, _)| chars(what))
+        .max()
+        .unwrap_or(0);
+    footnotes
+        .iter()
+        .enumerate()
+        .map(|(index, (what, command))| {
+            let heading = if index == 0 { "later" } else { "" };
+            let label = format!("{heading:<6} {}", pad_to(what, column));
+            format!("     {}   {command}", pen.paint(&label, DIM))
+        })
+        .collect()
+}
+
+/// A verdict under the running step (a check, a requirement); dim, indented under the step.
+fn row_lines(pen: &Pen, tone: Tone, name: &str, note: &str) -> Vec<String> {
+    let body = if note.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} — {note}")
+    };
+    wrap(&body, pen.width.saturating_sub(10))
+        .iter()
+        .enumerate()
+        .map(|(index, part)| {
+            if index == 0 {
+                format!("        {} {}", pen.glyph(tone), pen.paint(part, DIM))
+            } else {
+                format!("          {}", pen.paint(part, DIM))
+            }
+        })
+        .collect()
+}
+
+/// The same verdict for a log: the aligned word column ic has always written, byte for byte.
+fn plain_row_line(tone: Tone, name: &str, note: &str) -> String {
+    if note.is_empty() {
+        format!("  {}  {name}", tone.plain_word())
+    } else {
+        format!("  {}  {name} — {note}", tone.plain_word())
+    }
+}
+
+/// A report's rows: glyph, name in one aligned column, and a dim note.
+fn item_lines(pen: &Pen, items: &[Item]) -> Vec<String> {
+    let column = items
+        .iter()
+        .map(|item| chars(&item.name))
+        .max()
+        .unwrap_or(0);
+    items
+        .iter()
+        .map(|item| {
+            if item.meta.is_empty() {
+                format!("  {}  {}", pen.glyph(item.tone), item.name)
+            } else {
+                format!(
+                    "  {}  {}   {}",
+                    pen.glyph(item.tone),
+                    pad_to(&item.name, column),
+                    pen.paint(&item.meta, DIM)
+                )
+            }
+        })
+        .collect()
+}
+
+fn plain_item_lines(items: &[Item]) -> Vec<String> {
+    items
+        .iter()
+        .map(|item| plain_row_line(item.tone, &item.name, &item.meta))
+        .collect()
+}
+
+/// A report's sub-heading.
+fn section_lines(pen: &Pen, title: &str) -> Vec<String> {
+    vec![String::new(), format!("     {}", pen.paint(title, DIM))]
+}
+
+fn plain_section_lines(title: &str) -> Vec<String> {
+    vec![String::new(), format!("{title}:")]
+}
+
+/// Facts as key and value, keys dim in one column.
+fn field_lines(pen: &Pen, fields: &[(String, String)]) -> Vec<String> {
+    let column = fields.iter().map(|(key, _)| chars(key)).max().unwrap_or(0);
+    fields
+        .iter()
+        .map(|(key, value)| format!("     {}   {value}", pen.paint(&pad_to(key, column), DIM)))
+        .collect()
+}
+
+fn plain_field_lines(fields: &[(String, String)]) -> Vec<String> {
+    fields
+        .iter()
+        .map(|(key, value)| format!("{key}: {value}"))
+        .collect()
+}
+
+/// A neutral one-line outcome: an empty report, a cancelled question.
+fn quiet_line(pen: &Pen, sentence: &str) -> String {
+    format!("  {}  {}", pen.glyph(Tone::Skip), pen.paint(sentence, DIM))
+}
+
+/// A question: the question in bold, then what answering yes does, before the reader is asked.
+fn question_lines(pen: &Pen, question: &str, consequence: &str) -> Vec<String> {
+    let mut lines = vec![format!(
+        "  {}  {}",
+        pen.paint(pen.glyphs.ask, CYAN),
+        pen.paint(question, BOLD)
+    )];
+    if !consequence.is_empty() {
+        for paragraph in consequence.lines() {
+            for part in wrap(paragraph, pen.width.saturating_sub(6)) {
+                lines.push(format!("     {}", pen.paint(&part, DIM)));
+            }
+        }
+    }
+    lines
+}
+
+/// A message for a stop: what did not happen, why, and the one thing to do. [`error`] lays it out, and a plain
+/// log keeps the headline on the `error:` line its readers take the reason from.
+pub fn explain(headline: &str, problem: Option<&str>, fix: Option<&str>) -> String {
+    let mut message = headline.to_string();
+    if let Some(problem) = problem {
+        message.push_str(&format!("\n   problem: {problem}"));
+    }
+    if let Some(fix) = fix {
+        message.push_str(&format!("\n   fix:     {fix}"));
+    }
+    message
+}
+
+/// The stop block: a red headline, then any `problem:`/`fix:` pairs with their labels dim and their values in one
+/// column. The words are the caller's — `checks::failure_summary` composes a numbered block that is already the
+/// right information — so this only supplies the frame.
+fn stop_lines(pen: &Pen, message: &str) -> Vec<String> {
+    let mut lines = vec![String::new()];
+    let mut rest = message.lines();
+    let first = rest.next().unwrap_or_default();
+    for (index, part) in wrap(first, pen.width.saturating_sub(6)).iter().enumerate() {
+        let painted = pen.paint(part, RED);
+        if index == 0 {
+            lines.push(format!("  {}  {painted}", pen.glyph(Tone::Fail)));
+        } else {
+            lines.push(format!("     {painted}"));
+        }
+    }
+    for raw in rest {
+        let trimmed = raw.trim_end();
+        if trimmed.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let indent = trimmed.len() - trimmed.trim_start().len();
+        let body = trimmed.trim_start();
+        match body
+            .split_once(": ")
+            .filter(|(label, _)| matches!(label.trim_end(), "problem" | "fix") && indent > 0)
+        {
+            Some((label, value)) => {
+                // "problem:" is the wider label; padding to it puts both values in one column, however long the
+                // remedy — and the remedy is the only line on this screen the reader is going to act on.
+                let padded = format!("{:<9}", format!("{}:", label.trim_end()));
+                let column = indent + 2 + padded.len();
+                for (index, part) in wrap(value, pen.width.saturating_sub(column + 1))
+                    .iter()
+                    .enumerate()
+                {
+                    if index == 0 {
+                        lines.push(format!(
+                            "  {:indent$}{}{part}",
+                            "",
+                            pen.paint(&padded, DIM),
+                            indent = indent
+                        ));
+                    } else {
+                        lines.push(format!("{:column$}{part}", "", column = column));
+                    }
+                }
+            }
+            None => {
+                for (index, part) in wrap(body, pen.width.saturating_sub(indent + 4))
+                    .iter()
+                    .enumerate()
+                {
+                    let hang = if index == 0 { indent } else { indent + 3 };
+                    lines.push(format!("  {:hang$}{part}", "", hang = hang));
+                }
+            }
+        }
+    }
+    lines.push(String::new());
+    lines
+}
+
+/// A numbered list to pick from.
+fn pick_lines(pen: &Pen, items: &[(String, String)]) -> Vec<String> {
+    let column = items.iter().map(|(name, _)| chars(name)).max().unwrap_or(0);
+    items
+        .iter()
+        .enumerate()
+        .map(|(index, (name, meta))| {
+            let number = pen.paint(&format!("{:>2}", index + 1), CYAN);
+            if meta.is_empty() {
+                format!("  {number}  {name}")
+            } else {
+                format!(
+                    "  {number}  {}   {}",
+                    pad_to(name, column),
+                    pen.paint(meta, DIM)
+                )
+            }
+        })
+        .collect()
+}
 
 // state
 
@@ -70,6 +452,8 @@ struct State {
     index: Option<usize>,
     /// Ordinal of the running step for display — counts every step, planned or not.
     ordinal: usize,
+    /// Whether the live line is a flow's numbered step or an action's single line.
+    numbered: bool,
     label: String,
     detail: String,
     started: Instant,
@@ -144,6 +528,7 @@ impl State {
             plan: Vec::new(),
             index: None,
             ordinal: 0,
+            numbered: true,
             label: String::new(),
             detail: String::new(),
             started: Instant::now(),
@@ -165,6 +550,33 @@ impl State {
             text.to_string()
         }
     }
+
+    fn pen(&self) -> Pen {
+        Pen {
+            color: self.color,
+            glyphs: self.glyphs,
+            width: self.width,
+        }
+    }
+}
+
+/// The version stamp a header carries on its right; none for a checkout build, whose version means nothing.
+fn stamp() -> String {
+    let version = crate::VERSION;
+    if version == "0.0.0" {
+        String::new()
+    } else {
+        format!("ic {version}")
+    }
+}
+
+/// Write whole lines to stdout in one lock.
+fn emit(lines: &[String]) {
+    let mut out = std::io::stdout().lock();
+    for line in lines {
+        let _ = writeln!(out, "{line}");
+    }
+    let _ = out.flush();
 }
 
 /// Terminal width, without a crate for it and without spawning anything. `COLUMNS` is exported by most
@@ -244,46 +656,24 @@ pub fn is_rich() -> bool {
     mode() == Mode::Rich
 }
 
-/// The banner, and the shape of what is about to happen. `steps` is drawn as a promise about SCOPE and TIME
-/// rather than a list — a list here would be read once and then repeated line by line as the run ticks it
-/// off, and two renderings of the same nine things is how a screen stops being read at all.
-pub fn begin(title: &str, plan: Vec<PlanStep>) {
+/// The banner, and the shape of what is about to happen. The plan is drawn as a promise about SCOPE and TIME — one
+/// dim line — rather than a list: a list here would be read once and then repeated line by line as the run ticks it
+/// off, and two renderings of the same nine things is how a screen stops being read at all. `scope` replaces the
+/// plan's own size-and-time sentence when the flow has something more specific to promise.
+pub fn begin(title: &str, plan: Vec<PlanStep>, scope: Option<&str>) {
     let mut state = ui();
     state.plan = plan;
     state.started = Instant::now();
     if state.mode == Mode::Plain {
         return;
     }
-    let count = state.plan.len();
     let seconds: u32 = state.plan.iter().map(|step| step.weight).sum();
-    let heading = state.paint(title, BOLD);
-    let version = crate::VERSION;
-    let stamp = if version == "0.0.0" {
-        String::new()
-    } else {
-        state.paint(&format!("ic {version}"), DIM)
+    let promise = match scope {
+        Some(scope) => scope.to_string(),
+        None if !state.plan.is_empty() => plan_summary(state.plan.len(), seconds),
+        None => String::new(),
     };
-    let mut out = std::io::stdout().lock();
-    let _ = writeln!(out);
-    if stamp.is_empty() {
-        let _ = writeln!(out, "  {heading}");
-    } else {
-        // Right-aligned against the padded plain text, so the escapes never count toward the column.
-        let pad = state
-            .width
-            .saturating_sub(3 + title.chars().count() + version.len() + 3);
-        let _ = writeln!(out, "  {heading}{:pad$}{stamp}", "", pad = pad);
-    }
-    if count > 0 {
-        let minutes = (seconds as f32 / 60.0).round().max(1.0) as u32;
-        let summary = format!(
-            "  {count} steps, roughly {minutes} minute{}. One long download in the middle is most of it.",
-            if minutes == 1 { "" } else { "s" }
-        );
-        let _ = writeln!(out, "{}", state.paint(&summary, DIM));
-    }
-    let _ = writeln!(out);
-    let _ = out.flush();
+    emit(&heading_lines(&state.pen(), title, &stamp(), &promise));
     drop(state);
     start_spinner();
 }
@@ -301,13 +691,14 @@ pub fn step(phase: &str, message: &str) {
         println!("intentic: [{phase}] {message}");
         return;
     }
-    settle_current(&mut state);
+    settle(&mut state, Tone::Ok, None);
     let planned = state
         .plan
         .iter()
         .position(|planned| planned.phase == phase)
         .filter(|found| state.index.is_none_or(|current| *found >= current));
     state.index = planned;
+    state.numbered = true;
     state.label = planned
         .map(|at| state.plan[at].label.to_string())
         .unwrap_or_else(|| capitalize(message));
@@ -339,45 +730,14 @@ pub fn detail(text: &str) {
 pub fn row(outcome: RowOutcome, name: &str, note: &str) {
     let mut state = ui();
     if state.mode == Mode::Plain {
-        // Byte-for-byte the historical rows, including the two-space gutter and the column padding. The
-        // separator appears only when there is something after it — the Windows checklist has rows with no
-        // note at all, and " — " with nothing behind it reads as truncation.
-        let tail = if note.is_empty() {
-            String::new()
-        } else {
-            format!(" — {note}")
-        };
-        match outcome {
-            RowOutcome::Pass => println!("  ok    {name}{tail}"),
-            RowOutcome::Warn => println!("  warn  {name}{tail}"),
-            RowOutcome::Fail => println!("  FAIL  {name}{tail}"),
-            RowOutcome::Skip => println!("  skip  {name}{tail}"),
-        }
+        // Byte-for-byte the historical rows, including the two-space gutter and the column padding. The separator
+        // appears only when there is something after it — the Windows checklist has rows with no note at all, and
+        // " — " with nothing behind it reads as truncation.
+        println!("{}", plain_row_line(outcome.tone(), name, note));
         return;
     }
-    let (glyph, color) = match outcome {
-        RowOutcome::Pass => (state.glyphs.ok, GREEN),
-        RowOutcome::Warn => (state.glyphs.warn, YELLOW),
-        RowOutcome::Fail => (state.glyphs.fail, RED),
-        RowOutcome::Skip => (state.glyphs.skip, DIM),
-    };
-    let marker = state.paint(glyph, color);
-    let body = if note.is_empty() {
-        name.to_string()
-    } else {
-        format!("{name} — {note}")
-    };
-    for (index, part) in wrap(&body, state.width.saturating_sub(10))
-        .iter()
-        .enumerate()
-    {
-        let painted = state.paint(part, DIM);
-        let rendered = if index == 0 {
-            format!("        {marker} {painted}")
-        } else {
-            format!("          {painted}")
-        };
-        above(&mut state, &rendered);
+    for line in row_lines(&state.pen(), outcome.tone(), name, note) {
+        above(&mut state, &line);
     }
 }
 
@@ -387,6 +747,17 @@ pub enum RowOutcome {
     Warn,
     Fail,
     Skip,
+}
+
+impl RowOutcome {
+    fn tone(self) -> Tone {
+        match self {
+            RowOutcome::Pass => Tone::Ok,
+            RowOutcome::Warn => Tone::Warn,
+            RowOutcome::Fail => Tone::Fail,
+            RowOutcome::Skip => Tone::Skip,
+        }
+    }
 }
 
 /// Narration under the running step — the `intentic: …` sentences the flows print as they go. The prefix is
@@ -501,13 +872,13 @@ pub fn resume() {
     repaint(&mut state);
 }
 
-/// The end of a successful run, RICH ONLY — callers keep their historical prose for `Plain`, because that
-/// ending is seven specific sentences that something downstream may be reading and no abstraction over them
-/// would be byte-identical by construction.
+/// The end of a successful flow, RICH ONLY — callers keep their historical prose for `Plain`, because that ending is
+/// seven specific sentences that something downstream may be reading and no abstraction over them would be
+/// byte-identical by construction.
 ///
-/// The shape is the argument: a verdict, the one address that matters, the one instruction the reader has to
-/// act on, and only then the commands they will want in a week — dim, aligned, and visibly a footnote. The
-/// old ending gave all seven the same weight, which put "go back to your browser" third.
+/// The shape is the argument: a verdict, the one address that matters, the one instruction the reader has to act on,
+/// and only then the commands they will want in a week — aligned, and visibly a footnote. The old ending gave all
+/// seven the same weight, which put "go back to your browser" third.
 pub fn finished(
     verdict: &str,
     address: Option<&str>,
@@ -518,132 +889,425 @@ pub fn finished(
     if state.mode == Mode::Plain {
         return;
     }
-    settle_current(&mut state);
+    settle(&mut state, Tone::Ok, None);
     state.spinning = false;
+    let pen = state.pen();
     let took = format!("took {}", human_duration(state.started.elapsed()));
-    let pad = state
-        .width
-        .saturating_sub(6 + verdict.chars().count() + took.chars().count());
-    let marker = state.paint(state.glyphs.ok, GREEN);
-    let mut out = std::io::stdout().lock();
-    let _ = writeln!(out);
-    let _ = writeln!(
-        out,
-        "  {marker}  {}{:pad$}{}",
-        state.paint(verdict, BOLD),
-        "",
-        state.paint(&took, DIM),
-        pad = pad
-    );
+    let mut lines = verdict_lines(&pen, Tone::Ok, verdict, &took);
     if let Some(address) = address {
-        let _ = writeln!(out);
-        let _ = writeln!(out, "     {}", state.paint(address, CYAN));
+        lines.push(String::new());
+        lines.push(format!("     {}", pen.paint(address, CYAN)));
     }
     if !instruction.is_empty() {
-        let _ = writeln!(out);
-        let _ = writeln!(out, "     {instruction}");
+        lines.push(String::new());
+        lines.extend(
+            wrap(instruction, pen.width.saturating_sub(6))
+                .iter()
+                .map(|part| format!("     {part}")),
+        );
     }
     if !footnotes.is_empty() {
-        let _ = writeln!(out);
-        let column = footnotes
-            .iter()
-            .map(|(what, _)| what.chars().count())
-            .max()
-            .unwrap_or(0);
-        for (index, (what, command)) in footnotes.iter().enumerate() {
-            let heading = if index == 0 { "later" } else { "" };
-            let row = format!("     {heading:<6} {what:<column$}   {command}");
-            let _ = writeln!(out, "{}", state.paint(&truncate(&row, state.width), DIM));
-        }
+        lines.push(String::new());
+        lines.extend(footnote_lines(&pen, footnotes));
     }
-    let _ = writeln!(out);
-    let _ = out.flush();
+    lines.push(String::new());
+    emit(&lines);
 }
 
-/// The frame around a stopped run. The words are the flow's own — `checks::failure_summary` composes a
-/// numbered problem/fix block and it is already the right information — so this only supplies what plain
-/// text could not: that the run STOPPED, in a colour nobody scrolls past.
+/// A stopped run. The running step settles as failed — so the reader sees WHERE it stopped, which an erased line
+/// hid — and then the stop block goes to stderr. Compose `message` with [`explain`].
 pub fn error(message: &str) {
     let mut state = ui();
     if state.mode == Mode::Plain {
         eprintln!("error: {message}");
         return;
     }
-    erase(&mut state);
+    settle(&mut state, Tone::Fail, None);
     state.spinning = false;
-    let mut lines = message.lines();
-    let first = lines.next().unwrap_or_default();
-    let marker = state.paint(state.glyphs.fail, RED);
     let mut out = std::io::stderr().lock();
-    let _ = writeln!(out);
-    for (index, part) in wrap(first, state.width.saturating_sub(6))
-        .iter()
-        .enumerate()
-    {
-        let painted = state.paint(part, RED);
-        if index == 0 {
-            let _ = writeln!(out, "  {marker}  {painted}");
-        } else {
-            let _ = writeln!(out, "     {painted}");
-        }
+    for line in stop_lines(&state.pen(), message) {
+        let _ = writeln!(out, "{line}");
     }
-    for rest in lines {
-        let trimmed = rest.trim_end();
-        if trimmed.is_empty() {
-            let _ = writeln!(out);
-            continue;
-        }
-        let indent = trimmed.len() - trimmed.trim_start().len();
-        let body = trimmed.trim_start();
-        // `checks::failure_summary` composes `problem: …` / `fix: …` under each numbered failure. Dimming the
-        // label and hanging the wrap under the value keeps that column readable however long the remedy is —
-        // and the remedy is the only line on this screen the reader is going to act on.
-        match body
-            .split_once(": ")
-            .filter(|(label, _)| matches!(label.trim_end(), "problem" | "fix") && indent > 0)
-        {
-            Some((label, value)) => {
-                // "problem:" is the wider of the two labels; padding to it puts both values in one column.
-                let padded = format!("{:<9}", format!("{label}:"));
-                let column = indent + 2 + padded.len();
-                for (index, part) in wrap(value, state.width.saturating_sub(column + 1))
-                    .iter()
-                    .enumerate()
-                {
-                    if index == 0 {
-                        let _ = writeln!(
-                            out,
-                            "  {:indent$}{}{part}",
-                            "",
-                            state.paint(&padded, DIM),
-                            indent = indent
-                        );
-                    } else {
-                        let _ = writeln!(out, "{:column$}{part}", "", column = column);
-                    }
-                }
-            }
-            None => {
-                for (index, part) in wrap(body, state.width.saturating_sub(indent + 4))
-                    .iter()
-                    .enumerate()
-                {
-                    let hang = if index == 0 { indent } else { indent + 3 };
-                    let _ = writeln!(out, "  {:hang$}{part}", "", hang = hang);
-                }
-            }
-        }
-    }
-    let _ = writeln!(out);
     let _ = out.flush();
+}
+
+// actions: one thing, one live line that settles in place
+
+/// Start an action's live line, in the present tense ("Stopping sandbox-x"). A log gets it as narration.
+pub fn act(label: &str) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        println!("intentic: {}…", as_narration(label));
+        return;
+    }
+    settle(&mut state, Tone::Ok, None);
+    state.index = None;
+    state.numbered = false;
+    state.label = label.to_string();
+    state.detail.clear();
+    state.step_started = Instant::now();
+    state.frame = 0;
+    repaint(&mut state);
+    drop(state);
+    start_spinner();
+}
+
+/// Settle the action as a past-tense sentence ("Stopped sandbox-x."), with how long it took.
+pub fn done(verdict: &str) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        println!("intentic: {verdict}");
+        return;
+    }
+    if state.label.is_empty() {
+        emit(&[settled_line(&state.pen(), Tone::Ok, None, verdict, "")]);
+        return;
+    }
+    settle(&mut state, Tone::Ok, Some(verdict));
+}
+
+/// The commands a reader will want later, after an action or a report. A screen's footnote; a log has no use for one.
+pub fn later(footnotes: &[(String, String)]) {
+    let mut state = ui();
+    if state.mode == Mode::Plain || footnotes.is_empty() {
+        return;
+    }
+    settle(&mut state, Tone::Ok, None);
+    emit(&footnote_lines(&state.pen(), footnotes));
+}
+
+// reports: read-only, the same glyph column without timings
+
+/// A report's header: the title, the version stamp, and an optional dim scope line. Nothing in a log.
+pub fn report(title: &str, scope: Option<&str>) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        return;
+    }
+    settle(&mut state, Tone::Ok, None);
+    emit(&heading_lines(
+        &state.pen(),
+        title,
+        &stamp(),
+        scope.unwrap_or_default(),
+    ));
+}
+
+pub fn items(items: &[Item]) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        for line in plain_item_lines(items) {
+            println!("{line}");
+        }
+        return;
+    }
+    for line in item_lines(&state.pen(), items) {
+        above(&mut state, &line);
+    }
+}
+
+pub fn section(title: &str) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        for line in plain_section_lines(title) {
+            println!("{line}");
+        }
+        return;
+    }
+    for line in section_lines(&state.pen(), title) {
+        above(&mut state, &line);
+    }
+}
+
+/// Facts as key and value; `Key: value` lines in a log.
+pub fn fields(fields: &[(String, String)]) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        for line in plain_field_lines(fields) {
+            println!("{line}");
+        }
+        return;
+    }
+    for line in field_lines(&state.pen(), fields) {
+        above(&mut state, &line);
+    }
+}
+
+/// A neutral one-line outcome: an empty report, nothing to do.
+pub fn quiet(sentence: &str) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        println!("intentic: {sentence}");
+        return;
+    }
+    let line = quiet_line(&state.pen(), sentence);
+    above(&mut state, &line);
+}
+
+/// The person said no. One line, everywhere the same.
+pub fn cancelled() {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        println!("intentic: {CANCELLED}");
+        return;
+    }
+    settle(&mut state, Tone::Skip, None);
+    state.spinning = false;
+    emit(&[quiet_line(&state.pen(), CANCELLED)]);
+}
+
+/// A line only a log reader gets: a plain sentence something downstream reads by name (`deviceUpdateStages.ts`, the
+/// machine agent's `removed …` parser). Nothing on a screen, where the shapes above say the same thing.
+pub fn plain(text: &str) {
+    if mode() == Mode::Plain {
+        println!("{text}");
+    }
+}
+
+// questions
+
+/// What [`confirm`] and friends return when nobody can answer — a stop, not a cancel, naming the flag that answers it.
+fn nobody_to_answer(question: &str, flag: &str) -> crate::util::Fail {
+    crate::util::Fail(explain(
+        "Nothing was changed.",
+        Some(&format!("nobody is at this terminal to answer: {question}")),
+        Some(&format!("run it again with {flag}")),
+    ))
+}
+
+/// Draw a question and read one line from the terminal. The live line steps aside while the person thinks, and comes
+/// back once they have answered. `None` when there is no terminal.
+fn ask_line(question: &str, consequence: &str, prompt: &str) -> Option<String> {
+    ask_with(question, consequence, prompt, crate::tty::ask)
+}
+
+/// [`ask_line`] with the read itself chosen by the caller: a plain line, or one typed with echo off.
+fn ask_with(
+    question: &str,
+    consequence: &str,
+    prompt: &str,
+    read: fn(&str) -> Option<String>,
+) -> Option<String> {
+    if !crate::tty::have_tty() {
+        return None;
+    }
+    let (rich, was_suspended) = {
+        let mut state = ui();
+        let was = state.suspended;
+        if state.mode == Mode::Rich {
+            erase(&mut state);
+            state.suspended = true;
+            emit(&question_lines(&state.pen(), question, consequence));
+            (true, was)
+        } else {
+            (false, was)
+        }
+    };
+    let answer = if rich {
+        read(&format!("     {prompt}"))
+    } else {
+        for line in consequence.lines() {
+            crate::tty::say(line);
+        }
+        read(&format!("{question} {prompt}"))
+    };
+    // A caller that had handed the screen over (a restart request, a consent list) keeps it handed over.
+    let mut state = ui();
+    if rich && !was_suspended {
+        state.suspended = false;
+        repaint(&mut state);
+    }
+    answer
+}
+
+/// A yes/no question whose safe answer, `N`, is the default. The consequence is shown first, so the person decides
+/// knowing what happens. `yes` is the `--yes` flag: it answers without asking. Nobody at the terminal is an error
+/// that names `--yes`, never a silent no.
+pub fn confirm(question: &str, consequence: &str, yes: bool) -> crate::util::Result<bool> {
+    if yes {
+        return Ok(true);
+    }
+    match ask_line(question, consequence, "[y/N] ") {
+        Some(answer) => Ok(answer.trim_start().starts_with(['y', 'Y'])),
+        None => Err(nobody_to_answer(question, "--yes")),
+    }
+}
+
+/// For what cannot be undone: the person types `name`. `--yes` never answers this; `--confirm <name>` does, and only
+/// with the right name.
+pub fn confirm_typed(
+    question: &str,
+    consequence: &str,
+    name: &str,
+    confirmed: Option<&str>,
+) -> crate::util::Result<bool> {
+    if let Some(given) = confirmed {
+        if given == name {
+            return Ok(true);
+        }
+        return Err(crate::util::Fail(explain(
+            "Nothing was deleted.",
+            Some(&format!("--confirm names {given}, not {name}")),
+            Some(&format!("run it again with --confirm {name}")),
+        )));
+    }
+    // A batch is confirmed by its count, which the prompt then asks for by value; a name is asked for as a name.
+    let prompt = if !name.is_empty() && name.chars().all(|c| c.is_ascii_digit()) {
+        format!("Type {name} to confirm: ")
+    } else {
+        "Type its name to confirm: ".to_string()
+    };
+    match ask_line(question, consequence, &prompt) {
+        Some(answer) => Ok(answer.trim() == name),
+        None => Err(nobody_to_answer(question, &format!("--confirm {name}"))),
+    }
+}
+
+/// A secret the person pastes (an API token): the question and what it is for, then a read with echo off. `None` when
+/// nobody is at the terminal or the terminal cannot hide what is typed; callers stop and name the variable to set.
+pub fn secret(question: &str, consequence: &str) -> Option<String> {
+    ask_with(
+        question,
+        consequence,
+        "Paste it (it stays hidden): ",
+        crate::tty::ask_secret,
+    )
+}
+
+/// Pick from a numbered list: numbers ("1 3"), `a` for all when `all` is allowed, `q` or nothing to cancel. Returns
+/// the picked indices, or `None` when the person cancelled.
+pub fn pick(
+    question: &str,
+    choices: &[(String, String)],
+    all: bool,
+) -> crate::util::Result<Option<Vec<usize>>> {
+    let listing = {
+        let state = ui();
+        if state.mode == Mode::Rich {
+            pick_lines(&state.pen(), choices)
+        } else {
+            choices
+                .iter()
+                .enumerate()
+                .map(|(index, (name, meta))| {
+                    format!("  {}) {name}  {meta}", index + 1)
+                        .trim_end()
+                        .to_string()
+                })
+                .collect()
+        }
+    };
+    let prompt = if all {
+        r#"Numbers ("1 3"), a for all, or q to cancel: "#
+    } else {
+        "A number, or q to cancel: "
+    };
+    let mut consequence = listing.join("\n");
+    for _ in 0..3 {
+        let Some(answer) = ask_line_listing(question, &consequence, prompt) else {
+            return Err(nobody_to_answer(question, "the names on the command line"));
+        };
+        match parse_picks(&answer, choices.len(), all) {
+            Ok(picked) => return Ok(picked),
+            Err(why) => consequence = format!("{}\n{why}", listing.join("\n")),
+        }
+    }
+    Ok(None)
+}
+
+/// [`ask_line`] for a list: the rows are drawn as they are, not wrapped as a consequence sentence.
+fn ask_line_listing(question: &str, listing: &str, prompt: &str) -> Option<String> {
+    if !crate::tty::have_tty() {
+        return None;
+    }
+    let (rich, was_suspended) = {
+        let mut state = ui();
+        let was = state.suspended;
+        if state.mode == Mode::Rich {
+            erase(&mut state);
+            state.suspended = true;
+            let mut lines = question_lines(&state.pen(), question, "");
+            lines.extend(listing.lines().map(str::to_string));
+            emit(&lines);
+            (true, was)
+        } else {
+            (false, was)
+        }
+    };
+    let answer = if rich {
+        crate::tty::ask(&format!("     {prompt}"))
+    } else {
+        crate::tty::say(question);
+        for line in listing.lines() {
+            crate::tty::say(line);
+        }
+        crate::tty::ask(prompt)
+    };
+    // A caller that had handed the screen over (a restart request, a consent list) keeps it handed over.
+    let mut state = ui();
+    if rich && !was_suspended {
+        state.suspended = false;
+        repaint(&mut state);
+    }
+    answer
+}
+
+/// What a pick answer means: `None` to cancel, the zero-based indices otherwise, or the sentence saying what was wrong.
+fn parse_picks(
+    answer: &str,
+    count: usize,
+    all: bool,
+) -> std::result::Result<Option<Vec<usize>>, String> {
+    let answer = answer.trim();
+    if answer.is_empty() || answer.eq_ignore_ascii_case("q") {
+        return Ok(None);
+    }
+    if all && answer.eq_ignore_ascii_case("a") {
+        return Ok(Some((0..count).collect()));
+    }
+    let mut picked = Vec::new();
+    for token in answer
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|t| !t.is_empty())
+    {
+        match token.parse::<usize>() {
+            Ok(number) if (1..=count).contains(&number) => {
+                if !picked.contains(&(number - 1)) {
+                    picked.push(number - 1);
+                }
+            }
+            _ => return Err(format!("{token} is not on the list.")),
+        }
+    }
+    if !all && picked.len() > 1 {
+        return Err("Pick one.".to_string());
+    }
+    Ok(Some(picked))
+}
+
+/// A label as plain narration: lower-cased unless its first word is a name ("ic", "Docker" stay as they are).
+fn as_narration(label: &str) -> String {
+    let first = label.split(' ').next().unwrap_or_default();
+    let mut letters = first.chars();
+    let lead = letters.next();
+    let is_word = first.chars().count() > 1
+        && letters.all(|c| !c.is_uppercase())
+        && !matches!(first, "Docker" | "Intentic" | "WSL" | "Windows");
+    match lead {
+        Some(lead) if is_word => {
+            lead.to_lowercase().collect::<String>() + &label[lead.len_utf8()..]
+        }
+        _ => label.to_string(),
+    }
 }
 
 // the live line
 
 /// Turn the running step into a settled line above the cursor. Its duration is the point: afterwards a
 /// four-minute pull and a half-second check look identical, and neither the user nor whoever reads their
-/// pasted transcript can tell which part was slow.
-fn settle_current(state: &mut State) {
+/// pasted transcript can tell which part was slow. A failed step settles as failed, so the reader sees where the
+/// run stopped; `label` replaces the running words (an action settles as its past-tense verdict).
+fn settle(state: &mut State, tone: Tone, label: Option<&str>) {
     if state.label.is_empty() {
         return;
     }
@@ -652,20 +1316,13 @@ fn settle_current(state: &mut State) {
         state.behind += state.plan[at].weight;
     }
     let took = human_duration(state.step_started.elapsed());
-    // Padding is measured on the UNPAINTED line — colour escapes are zero-width on screen and would
-    // otherwise push the duration off the right edge by however many bytes they happen to be.
-    let bare = format!("  {}  {:>2}  {}", "x", state.ordinal, state.label);
-    let pad = state
-        .width
-        .saturating_sub(1 + bare.chars().count() + took.chars().count());
+    let ordinal = state.numbered.then_some(state.ordinal);
+    let shown = label
+        .map(str::to_string)
+        .unwrap_or_else(|| state.label.clone());
     println!(
-        "  {}  {}  {}{:pad$}{}",
-        state.paint(state.glyphs.ok, GREEN),
-        state.paint(&format!("{:>2}", state.ordinal), DIM),
-        state.label,
-        "",
-        state.paint(&took, DIM),
-        pad = pad
+        "{}",
+        settled_line(&state.pen(), tone, ordinal, &shown, &took)
     );
     state.label.clear();
     state.detail.clear();
@@ -702,7 +1359,12 @@ fn repaint(state: &mut State) {
         }
         _ => elapsed,
     };
-    let head = format!("  {spinner}  {:>2}  {}", state.ordinal, state.label);
+    let number = if state.numbered {
+        format!("{:>2}  ", state.ordinal)
+    } else {
+        String::new()
+    };
+    let head = format!("  {spinner}  {number}{}", state.label);
     let middle = if state.detail.is_empty() {
         String::new()
     } else {
@@ -720,10 +1382,14 @@ fn repaint(state: &mut State) {
         } else {
             state.paint(&middle, DIM)
         };
+        let number = if state.numbered {
+            format!("{}  ", state.paint(&format!("{:>2}", state.ordinal), DIM))
+        } else {
+            String::new()
+        };
         format!(
-            "  {}  {}  {}{middle}{:pad$} {}",
+            "  {}  {number}{}{middle}{:pad$} {}",
             state.paint(spinner, CYAN),
-            state.paint(&format!("{:>2}", state.ordinal), DIM),
             state.label,
             "",
             state.paint(&right, DIM),
@@ -924,6 +1590,159 @@ mod tests {
             "../../../_shared/sandbox-run/src/setup-progress.fixture.json"
         ))
         .expect("the setup-progress fixture is JSON")
+    }
+
+    /* THE DESIGN SYSTEM'S SHAPES, held to the same file intentic-machine's layout.ts is tested against. */
+    fn layout_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../_shared/sandbox-run/src/terminal-layout.fixture.json"
+        ))
+        .expect("the terminal-layout fixture is JSON")
+    }
+
+    fn draw(shape: &str, args: &serde_json::Value, width: usize) -> Vec<String> {
+        let glyphs = if args["ascii"].as_bool() == Some(true) {
+            &ASCII
+        } else {
+            &UNICODE
+        };
+        let pen = Pen {
+            color: false,
+            glyphs,
+            width,
+        };
+        let text = |key: &str| args[key].as_str().unwrap_or_default().to_string();
+        let tone = || match args["tone"].as_str().expect("a tone") {
+            "ok" => Tone::Ok,
+            "fail" => Tone::Fail,
+            "warn" => Tone::Warn,
+            "skip" => Tone::Skip,
+            other => panic!("the fixture names a tone ui.rs does not draw: {other}"),
+        };
+        let pairs = |key: &str| -> Vec<(String, String)> {
+            args[key]
+                .as_array()
+                .expect("pairs")
+                .iter()
+                .map(|pair| {
+                    (
+                        pair[0].as_str().expect("a first").to_string(),
+                        pair[1].as_str().expect("a second").to_string(),
+                    )
+                })
+                .collect()
+        };
+        let items = || -> Vec<Item> {
+            args["items"]
+                .as_array()
+                .expect("items")
+                .iter()
+                .map(|item| {
+                    let tone = match item["tone"].as_str().expect("a tone") {
+                        "ok" => Tone::Ok,
+                        "fail" => Tone::Fail,
+                        "warn" => Tone::Warn,
+                        _ => Tone::Skip,
+                    };
+                    Item::new(
+                        tone,
+                        item["name"].as_str().expect("a name"),
+                        item["meta"].as_str().unwrap_or_default(),
+                    )
+                })
+                .collect()
+        };
+        match shape {
+            "heading" => heading_lines(&pen, &text("title"), &text("stamp"), &text("scope")),
+            "planSummary" => vec![plan_summary(
+                args["steps"].as_u64().expect("steps") as usize,
+                args["seconds"].as_u64().expect("seconds") as u32,
+            )],
+            "settled" => vec![settled_line(
+                &pen,
+                tone(),
+                args["ordinal"].as_u64().map(|ordinal| ordinal as usize),
+                &text("label"),
+                &text("took"),
+            )],
+            "verdict" => verdict_lines(&pen, tone(), &text("verdict"), &text("took")),
+            "footnotes" => footnote_lines(&pen, &pairs("footnotes")),
+            "row" => row_lines(&pen, tone(), &text("name"), &text("note")),
+            "plainRow" => vec![plain_row_line(tone(), &text("name"), &text("note"))],
+            "items" => item_lines(&pen, &items()),
+            "plainItems" => plain_item_lines(&items()),
+            "section" => section_lines(&pen, &text("title")),
+            "plainSection" => plain_section_lines(&text("title")),
+            "fields" => field_lines(&pen, &pairs("fields")),
+            "plainFields" => plain_field_lines(&pairs("fields")),
+            "quiet" => vec![quiet_line(&pen, &text("sentence"))],
+            "question" => question_lines(&pen, &text("question"), &text("consequence")),
+            "explain" => explain(
+                &text("headline"),
+                args["problem"].as_str(),
+                args["fix"].as_str(),
+            )
+            .split('\n')
+            .map(str::to_string)
+            .collect(),
+            "stop" => stop_lines(&pen, &text("message")),
+            "pick" => pick_lines(&pen, &pairs("items")),
+            other => panic!("the fixture names a shape ui.rs does not draw: {other}"),
+        }
+    }
+
+    #[test]
+    fn every_shape_is_drawn_as_the_shared_fixture_says() {
+        let fixture = layout_fixture();
+        let width = fixture["width"].as_u64().expect("a width") as usize;
+        let cases = fixture["cases"].as_array().expect("cases");
+        assert!(
+            cases.len() > 20,
+            "the fixture has to cover the shapes to prove anything"
+        );
+        for (index, case) in cases.iter().enumerate() {
+            let shape = case["shape"].as_str().expect("a shape");
+            let expected: Vec<String> = case["lines"]
+                .as_array()
+                .expect("lines")
+                .iter()
+                .map(|line| line.as_str().expect("a line").to_string())
+                .collect();
+            assert_eq!(
+                draw(shape, &case["args"], width),
+                expected,
+                "case {index}: {shape}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pick_reads_numbers_all_and_cancel() {
+        assert_eq!(parse_picks("", 3, true), Ok(None));
+        assert_eq!(parse_picks(" q ", 3, true), Ok(None));
+        assert_eq!(parse_picks("a", 3, true), Ok(Some(vec![0, 1, 2])));
+        assert_eq!(parse_picks("3 1,3", 3, true), Ok(Some(vec![2, 0])));
+        assert!(parse_picks("4", 3, true).is_err());
+        assert!(parse_picks("a", 3, false).is_err());
+        assert!(parse_picks("1 2", 3, false).is_err());
+    }
+
+    #[test]
+    fn narration_lowercases_words_and_leaves_names() {
+        assert_eq!(as_narration("Stopping sandbox-x"), "stopping sandbox-x");
+        assert_eq!(as_narration("Docker is starting"), "Docker is starting");
+        assert_eq!(as_narration("WSL is updating"), "WSL is updating");
+        assert_eq!(as_narration("ic is downloading"), "ic is downloading");
+    }
+
+    #[test]
+    fn a_typed_confirmation_takes_only_the_right_name() {
+        assert!(matches!(
+            confirm_typed("Delete it?", "", "sandbox-a", Some("sandbox-a")),
+            Ok(true)
+        ));
+        let wrong = confirm_typed("Delete it?", "", "sandbox-a", Some("sandbox-b"));
+        assert!(matches!(&wrong, Err(fail) if fail.0.contains("--confirm sandbox-a")));
     }
 
     #[test]

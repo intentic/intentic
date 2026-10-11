@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { Button, Code, type CommandOs, commandLang, osOptions, SegmentedControl, useDevice, useOsPreference } from "@intentic/ui";
+import { Button, type CommandOs, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { desktopFixLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useServingSlug } from "../environment/servingSlug";
 import { phoneBrowser } from "../../../client/endpoint/endpoint";
 import { fixCommand, useFixCode } from "./fixCommand";
+import RunCommand from "../../../components/RunCommand.vue";
 
 // THE ONE COMMAND, as the recovery panel offers it: where to run it, what it will do, and the command itself in the
 // shell of the machine it is for. In the desktop app it is a button instead, since the app can run it on this computer
@@ -26,21 +27,11 @@ const slug = useServingSlug();
 const wanted = computed(() => active.value?.role === `owner` && active.value.hosted === null);
 const code = useFixCode(activeSandboxId, wanted);
 
-// The machine's own OS when it reported one; the shared preference otherwise, and whatever the reader picks after.
-const { cmdOs } = useOsPreference();
+// The machine's own OS when it reported one, shown first; the shared preference otherwise.
 const reported = computed<CommandOs | undefined>(() => {
     const os = active.value?.hostReport?.os;
     return os === undefined ? undefined : os === `windows` ? `windows` : `unix`;
 });
-const picked = ref<CommandOs | undefined>(undefined);
-const os = computed<CommandOs>({
-    get: () => picked.value ?? reported.value ?? cmdOs.value,
-    set: (value) => {
-        picked.value = value;
-        cmdOs.value = value;
-    },
-});
-const command = computed(() => fixCommand(code.value, os.value));
 
 const desktop = desktopVersion() !== undefined;
 const { mobile } = useDevice();
@@ -61,10 +52,12 @@ const where = computed(() =>
         </div>
         <component :is="remote ? `details` : `div`" class="min-w-0">
             <summary v-if="remote" class="cursor-pointer text-xs text-link">{{ t(`sandbox.diagnosis.showCommand`) }}</summary>
-            <div class="flex min-w-0 flex-col gap-2" :class="{ 'mt-2': remote }">
-                <SegmentedControl v-model="os" size="sm" class="self-start" :options="osOptions()" />
-                <Code :code="command" :lang="commandLang(os)" :label="t(`sandbox.diagnosis.fixCommandLabel`)" :wrap="true" />
-            </div>
+            <RunCommand
+                :class="{ 'mt-2': remote }"
+                :command="(os) => fixCommand(code, os)"
+                :default-os="reported"
+                :label="t(`sandbox.diagnosis.fixCommandLabel`)"
+            />
         </component>
     </div>
 </template>

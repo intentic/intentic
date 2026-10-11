@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic/capability-catalog";
 import type { InventoryEntry } from "@intentic/sandbox-contract";
-import { Button, Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { Button, Card, ui, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import SecretField from "../../features/capabilities/connect/secrets/SecretField.vue";
 import { bashCommand } from "../../app/environments/scriptCommand";
+import RunCommand from "../../components/RunCommand.vue";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { useDeployments } from "../../features/extensions/useDeployments";
 import { useInventory } from "../../features/extensions/useInventory";
@@ -661,7 +662,7 @@ onMounted(progress.recover);
                 {{ t(`views.infraDeclare.inventoryEntryStoredSsh`) }} <b>{{ t(`views.infraDeclare.everythingAlreadyDeployedKeeps`) }}</b>
                 {{ t(`views.infraDeclare.untilCleanUp`) }}
             </p>
-            <Code :code="cleanupHostCommand" lang="bash" :label="t(`views.infraDeclare.runOnServerRoot`)" :wrap="true" />
+            <RunCommand :command="cleanupHostCommand" :label="t(`views.infraDeclare.runOnServerRoot`)" />
             <p class="text-xs text-subtle">
                 {{ t(`views.infraDeclare.scriptListsExactlyWhat`) }} <b>{{ t(`views.infraDeclare.includingOnHostBackup`) }}</b
                 >{{ t(`views.infraDeclare.tunnelConnectorServiceIntentic`) }}

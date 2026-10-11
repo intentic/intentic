@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceReport } from "@intentic/sandbox-contract";
-import { pairingLine, statusSummary } from "../../status.js";
+import { pairingItem, statusSummary } from "../../status.js";
 import { projectsHostChange, selectPairings, transportFor } from "../commands.js";
 import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingProblem, withPairing } from "../config.js";
 import { folderRefusal } from "../folders.js";
@@ -130,7 +130,7 @@ describe("projectsHostChange", () => {
 
     it("refuses turning a sandbox that syncs a folder into the projects host, and the other way round", () => {
         expect(projectsHostChange(elsewhere, { projectsHost: true, project: false })).toContain(`already syncs ${elsewhere.localDir}`);
-        expect(projectsHostChange(host, { project: false })).toContain("is this computer's sandbox for folders");
+        expect(projectsHostChange(host, { project: false })).toContain("it is this device's sandbox for folders");
         // Set up again as what it is, it is a token rotated.
         expect(projectsHostChange(host, { projectsHost: true, project: false })).toBeUndefined();
         const mirrorOnly: Pairing = { sandboxUrl: elsewhere.sandboxUrl, sandboxId: elsewhere.sandboxId, mode: "mirror" };
@@ -223,8 +223,8 @@ describe("the report of a computer whose folders attach to its sandbox", () => {
 
     it("counts sandboxes rather than pairings, and says what each line is", () => {
         expect(statusSummary(1, 0, built, 1)).toBe("syncing 3 sandboxes");
-        expect(pairingLine(built.pairings[0]!)).toBe(`  ${SANDBOX}  (this computer's sandbox: folders attach to it)`);
-        expect(pairingLine(built.pairings[1]!)).toBe(`  ${SANDBOX}  ${shop.localDir} ↔ ${WORKSPACE_ROOT}/shop  [watching, landed work delivered here]`);
+        expect(pairingItem(built.pairings[0]!)).toEqual({ tone: "ok", name: SANDBOX, meta: "this device's sandbox: folders attach to it" });
+        expect(pairingItem(built.pairings[1]!)).toEqual({ tone: "ok", name: SANDBOX, meta: `${shop.localDir} ↔ ${WORKSPACE_ROOT}/shop · watching · landed work delivered here` });
     });
 });
 

@@ -1,7 +1,6 @@
 // When the recovery panel shows, and what it prints: the ways back for a sandbox that didn't come back, which must work
 // with that sandbox's daemon down. It shows when the diagnosis found a way back, never on a timer. The commands are
 // pinned in their published spelling, since that is what a reader on another machine pastes.
-import { installScriptUrl } from "@intentic/constants";
 import type { Device } from "@intentic/sandbox-contract";
 import { scriptSource } from "../../../app/environments/scriptCommand";
 import { listedDevice } from "../../../testing/listedDevice";
@@ -68,21 +67,20 @@ describe(`what it prints besides the one command`, () => {
         scriptSource.value = `published`;
     });
 
-    it(`spells each single-purpose command in the shell of the machine it is for`, () => {
-        const update = installScriptUrl(`update`);
+    it(`spells each single-purpose command as the one-liner for the shell of the machine it is for`, () => {
         expect(recoveryCommands(`sandbox-3c469e9d6c58`, `unix`)).toEqual({
-            rollback: `curl -fsSL ${update} | sh -s -- sandbox-3c469e9d6c58 --rollback`,
-            restart: `curl -fsSL ${update} | sh -s -- sandbox-3c469e9d6c58 --restart`,
+            rollback: `curl -fsSL https://intentic.dev/rollback/sandbox-3c469e9d6c58 | sh`,
+            restart: `curl -fsSL https://intentic.dev/restart/sandbox-3c469e9d6c58 | sh`,
         });
-        const updatePs1 = installScriptUrl(`updatePs1`);
         expect(recoveryCommands(`sandbox-3c469e9d6c58`, `windows`)).toEqual({
-            rollback: `& ([scriptblock]::Create((irm ${updatePs1}))) -Slug sandbox-3c469e9d6c58 -Rollback`,
-            restart: `& ([scriptblock]::Create((irm ${updatePs1}))) -Slug sandbox-3c469e9d6c58 -Restart`,
+            rollback: `irm https://intentic.dev/rollback/sandbox-3c469e9d6c58 | iex`,
+            restart: `irm https://intentic.dev/restart/sandbox-3c469e9d6c58 | iex`,
         });
     });
 
     it(`falls back to ic's bare verbs when nothing here knows the sandbox's name`, () => {
         expect(recoveryCommands(undefined, `windows`)).toEqual({ rollback: `ic sandbox rollback`, restart: `ic sandbox restart` });
+        expect(recoveryCommands(`Not a slug`, `unix`)).toEqual({ rollback: `ic sandbox rollback`, restart: `ic sandbox restart` });
     });
 });
 

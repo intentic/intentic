@@ -1,6 +1,6 @@
-/* THE SANDBOX IMAGE, FETCHED BEFORE DOCKER EXISTS — so a fresh PC's longest download overlaps its slowest waits. */
+/* THE SANDBOX IMAGE, FETCHED BEFORE DOCKER EXISTS — so a fresh device's longest download overlaps its slowest waits. */
 
-// On a PC with no Docker yet, setup used to download nothing of the sandbox image until Docker Desktop was installed,
+// On a device with no Docker yet, setup used to download nothing of the sandbox image until Docker Desktop was installed,
 // Windows had restarted and the engine had come up: then `docker pull` started on 1.8 GB (116 layers), and the whole
 // of it was waited out in front of the person. None of that download needs Docker. A registry is plain HTTPS, so
 // `ic image prefetch` fetches the image's blobs into a cache of its own while WSL2 is turned on, while Windows waits for
@@ -147,7 +147,7 @@ fn home() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Where one image's cache lives. `INTENTIC_IMAGE_CACHE` moves the root (tests, and a PC whose home is the small disk).
+/// Where one image's cache lives. `INTENTIC_IMAGE_CACHE` moves the root (tests, and a device whose home is the small disk).
 pub fn dir_for(reference: &Reference) -> Option<PathBuf> {
     let root = std::env::var_os("INTENTIC_IMAGE_CACHE")
         .filter(|root| !root.is_empty())
@@ -573,7 +573,7 @@ fn complete(dir: &Path, plan: &Plan) -> bool {
 }
 
 /// The plan the cache already holds, from its own state and manifest blob: what a load uses when the registry cannot
-/// be reached any more (the PC is offline now, the fetch was finished before).
+/// be reached any more (the device is offline now, the fetch was finished before).
 fn cached_plan(dir: &Path) -> Option<Plan> {
     let state = read_state(dir)?;
     let bytes = std::fs::read(blob_path(dir, &state.manifest_digest)).ok()?;
@@ -624,7 +624,7 @@ fn marker(state: &str, done: u64, total: u64) -> String {
     serde_json::json!({ "state": state, "done": done, "total": total }).to_string()
 }
 
-/// Whether Docker Desktop (or a docker CLI) is installed here, engine running or not. On a PC that has it, Docker pulls
+/// Whether Docker Desktop (or a docker CLI) is installed here, engine running or not. On a device that has it, Docker pulls
 /// the image itself as soon as its engine is up, and very likely has it already: fetching 1.8 GB ahead there is waste.
 fn docker_installed() -> bool {
     #[cfg(windows)]
@@ -689,6 +689,7 @@ pub fn discard(image: &str) {
 
 pub fn prefetch(image: &str) -> crate::util::Result<()> {
     let say = |state: &str, done: u64, total: u64| {
+        // allow(terminal-output): a column-0 marker the desktop app parses (prefetch.rs).
         println!("intentic-prefetch: {}", marker(state, done, total))
     };
     let Some(reference) = Reference::parse(image) else {
@@ -702,7 +703,7 @@ pub fn prefetch(image: &str) -> crate::util::Result<()> {
         crate::util::bail!("could not find this account's home folder to keep the image in.");
     };
     sweep_stale(&dir);
-    // Worth it only where Docker is still to come: a PC with Docker installed pulls when its engine is up. A fetch an
+    // Worth it only where Docker is still to come: a device with Docker installed pulls when its engine is up. A fetch an
     // earlier run started (before the restart that installed Docker) is still carried on with.
     if read_state(&dir).is_none() && docker_installed() {
         say("skipped", 0, 0);
@@ -859,7 +860,7 @@ fn finish_and_load(
             ));
         }
     })?;
-    crate::ui::progress("loading the downloaded image into Docker...");
+    crate::ui::progress("loading the downloaded image into Docker…");
     load(dir, &plan, reference, image, log)?;
     drop(lock);
     Ok(())

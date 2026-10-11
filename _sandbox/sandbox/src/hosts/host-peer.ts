@@ -200,6 +200,7 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
         store: services.hosts,
         hub: services.hostHub,
         summaries: () => hostSummaries(services),
+        codes: "device",
         // One install connects the whole computer: whichever side the owner ran it on, the daemon puts an agent in
         // the rest from here (environment-bootstrap.ts). And the enrollment learns which computer it is on, replacing
         // the id it was derived with, the first time its agent says.

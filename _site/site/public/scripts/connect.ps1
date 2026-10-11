@@ -1,23 +1,28 @@
 <#
 .SYNOPSIS
-  intentic connect (Windows) - bootstrap shim, and now genuinely only that: fetch the `ic` CLI, let it get
-  this PC ready for Docker (`ic docker prepare` - virtualization, WSL2, Docker Desktop, its engine), then hand
-  the flow over to `ic sandbox connect`, which does everything else - the setup-code claim, tunnels, the
-  launch, the Docker-in-Docker deploy target (SELF_HOST), desktop sync. Both flows live in _sandbox/ic.
+  intentic connect (Windows): a bootstrap shim. It finds or downloads the ic CLI, lets it get this device ready for
+  Docker (ic docker prepare: virtualization, WSL2, the engine), then hands the flow over to ic sandbox connect, which
+  does everything else: the setup-code claim, tunnels, the launch, the Docker-in-Docker deploy target (SELF_HOST),
+  desktop sync. Both flows live in _sandbox/ic.
 
-  The CLI is fetched BEFORE Docker is looked at, which is the one ordering worth knowing about here: the
-  Windows prerequisite tree is far too large to live in a shell script, and putting it in ic is what lets the
-  terminal, the desktop app and the browser setup page all report the same diagnosis.
+  The CLI is fetched BEFORE Docker is looked at: the Windows prerequisite tree is far too large to live in a script,
+  and putting it in ic is what lets the terminal, the desktop app and the browser setup page report the same diagnosis.
 
-  The setup code carries the sandbox's reachability grant (a platform-signed token naming the sandbox's id);
-  the daemon dials intentic's ingress edge with it from inside, outbound-only, so nothing here opens a port.
-  CF_TOKEN is only for SELF_HOST, which publishes THIS PC's SSH for the deploy engine.
+  The setup code carries the sandbox's reachability grant; the daemon dials intentic's ingress edge with it from
+  inside, outbound only, so nothing here opens a port. CF_TOKEN is only for SELF_HOST, which publishes this device's
+  SSH for the deploy engine.
+
+  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE, and only
+  a run as a file (powershell -File, how the desktop app runs it) exits with it.
 
 .EXAMPLE
-  $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex
+  irm https://intentic.dev/setup/<code> | iex
 
 .EXAMPLE
-  $env:SELF_HOST='1'; $env:CF_TOKEN='<cf>'; $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex
+  irm https://intentic.dev/setup/<code>/<folder> | iex      # also syncs ~/intentic/<folder> with the sandbox
+
+.EXAMPLE
+  $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex      # the older shape, still served
 
 .EXAMPLE
   ./connect.ps1 -ConnectToken <token>   # headless/scripted: raw values, no setup code
@@ -26,62 +31,313 @@ param(
     [string]$PlatformUrl,
     [string]$ConnectToken,
     [string]$SetupCode,
-    # Start without prompting even if other sandboxes are already running (the old always-proceed behavior).
+    [string]$SyncDir,
     [switch]$Yes,
-    # Reinstall a sandbox this machine already has, keeping its files, logins, settings and device. Without it ic asks
-    # at the terminal, or refuses when nobody can answer. The one-liner's spelling is $env:REPLACE='1'.
     [switch]$Replace
 )
-# NOT 'Stop': this shim branches on $LASTEXITCODE itself - a child exiting non-zero is an ANSWER to act on,
-# not a failure to abort into. Windows PowerShell 5.1 (what `powershell.exe` still is, and what the desktop app
-# spawns) additionally turns a redirected native stderr into a terminating error under 'Stop'.
+
+# NOT 'Stop': this shim branches on $LASTEXITCODE itself (a child exiting non-zero is an answer to act on, not a
+# failure to abort into), and Windows PowerShell 5.1 turns a redirected native stderr into a terminating error under
+# 'Stop'.
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-# A PHASE OF THE INSTALL, ANNOUNCED ONCE - prose for a terminal, and a name for anything watching.
+# >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
+# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
 #
-# The desktop app spawns this script and turns its stdout into a progress bar, so it has to know WHICH phase
-# started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
-# connect.sh's step() and ic's util::step, and the same vocabulary - anything written WITHOUT a phase is
-# detail under the step that is running, never a step of its own.
-# Split the same way ic splits them (its ui.rs): a PIPE gets the marker, unchanged and forever, because
-# something is parsing it - the desktop app spawns this with redirected stdio. A TERMINAL gets the sentence
-# alone; there the bracketed id says the same thing twice in a shape that reads like an error code, and these
-# lines sit directly above the checklist ic is about to draw, where they would otherwise look like a different
-# program's output. IsOutputRedirected is the same question ic's IsTerminal asks, and 5.1 has it.
+# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
+# their code points instead.
 #
-# This shim keeps NARRATING either way. Going quiet in a terminal would be silence across a Docker install
-# that can run ten minutes, which is the one stretch of this script that most needs to say something.
-function Write-Step($Phase, $Message) {
-    if ([Console]::IsOutputRedirected) {
-        Write-Host "intentic: [$Phase] $Message"
-    } else {
-        Write-Host "  - $Message"
+#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
+#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
+#   Write-IntenticStep <phase> <sentence> <label>
+#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
+#   Write-IntenticSay <sentence>             narration under the running step
+#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
+#   Suspend-IntenticLine / Resume-IntenticLine
+#                                            hand the screen to a command that prints its own lines, and take it back
+#   Complete-IntenticStep                    the running step is done
+#   Write-IntenticFinished <verdict> [address]
+#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
+#   Stop-Intentic <headline> [problem] [fix] [code]
+#                                            the running step settles as failed, the stop block goes to stderr, and
+#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
+#   Read-IntenticConfirm <question> <consequence> <flag>
+#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
+#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
+#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
+#
+# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
+# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
+# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
+# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+
+$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
+if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {
+    $IntenticKit.Mode = $env:INTENTIC_UI
+} elseif ($env:INTENTIC_PLAIN -ne '1' -and -not [Console]::IsOutputRedirected) {
+    $IntenticKit.Mode = 'rich'
+}
+$IntenticKit.Color = $IntenticKit.Mode -eq 'rich' -and ($env:FORCE_COLOR -or -not $env:NO_COLOR)
+# Unicode where the console can draw it: pwsh, Windows Terminal, or a console host that took VT processing. The old
+# console with a raster font cannot, and gets ASCII.
+$IntenticUnicode = $PSVersionTable.PSVersion.Major -ge 6 -or [bool]$env:WT_SESSION
+if (-not $IntenticUnicode) { try { $IntenticUnicode = [bool]$Host.UI.SupportsVirtualTerminal } catch { $IntenticUnicode = $false } }
+if ($IntenticUnicode) {
+    $IntenticKit.Ok = [string][char]0x2713; $IntenticKit.Fail = [string][char]0x2717; $IntenticKit.Skip = [string][char]0x00B7
+    $IntenticKit.Run = [string][char]0x2839; $IntenticKit.More = [string][char]0x2026; $IntenticKit.Dot = [string][char]0x00B7
+} else {
+    $IntenticKit.Ok = '+'; $IntenticKit.Fail = 'x'; $IntenticKit.Skip = '-'; $IntenticKit.Run = '|'; $IntenticKit.More = '...'; $IntenticKit.Dot = '-'
+}
+try { if ($Host.UI.RawUI.WindowSize.Width -gt 20) { $IntenticKit.Width = [Math]::Min(100, $Host.UI.RawUI.WindowSize.Width) } } catch { $IntenticKit.Width = 80 }
+
+# One run of text, coloured when colour is on, never ending the line.
+function Write-IntenticRun {
+    param([string]$Text, [string]$Color = '')
+    if ($IntenticKit.Color -and $Color) { Write-Host $Text -NoNewline -ForegroundColor $Color } else { Write-Host $Text -NoNewline }
+}
+
+function Write-IntenticLive {
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun $IntenticKit.Run 'Cyan'
+    Write-Host "  $($IntenticKit.Label)$($IntenticKit.More)" -NoNewline
+    $IntenticKit.Open = $true
+}
+
+function Clear-IntenticLive {
+    if ($IntenticKit.Open) {
+        Write-Host ("`r" + (' ' * ($IntenticKit.Width - 1)) + "`r") -NoNewline
+        $IntenticKit.Open = $false
     }
 }
 
-# Explicit params (direct file invocation) win; else the env vars the `irm | iex` one-liner carries. The env
-# spelling is also what rides through to ic, so set it back for anything a param supplied.
-if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
-if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
-if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
-if ($env:REPLACE -eq '1') { $Replace = $true }
+# A whole line above the live one: the live line steps aside and comes back under it.
+function Write-IntenticAbove {
+    param([scriptblock]$Line)
+    $wasOpen = $IntenticKit.Open
+    Clear-IntenticLive
+    & $Line
+    Write-Host ''
+    if ($wasOpen) { Write-IntenticLive }
+}
 
-# THE FOLDER THE ic CLI LANDS IN, PUT ON THE USER'S PATH - so `ic sandbox doctor <slug>`, `ic sandbox remove
-# <slug>` and every other command ic prints when it finishes are real commands rather than a promise the
-# installer that made them cannot keep. The .sh twin gets this free with a symlink into ~/.local/bin; Windows
-# has no such folder, so the user's own PATH is the only place to say it. Every Windows installer here carries
-# an identical copy - they are standalone irm|iex files and cannot share code, so a test in the desktop crate
-# holds the copies to each other.
+function Format-IntenticDuration {
+    param([TimeSpan]$Took)
+    if ($Took.TotalSeconds -lt 10) { return ('{0:0.0}s' -f $Took.TotalSeconds) }
+    if ($Took.TotalSeconds -lt 60) { return ('{0}s' -f [int][Math]::Floor($Took.TotalSeconds)) }
+    return ('{0}m' -f [int][Math]::Floor($Took.TotalMinutes))
+}
+
+function Complete-IntenticStep {
+    param([string]$Tone = 'ok')
+    if (-not $IntenticKit.Label) { return }
+    if ($IntenticKit.Mode -eq 'rich') {
+        $took = Format-IntenticDuration $IntenticKit.Clock.Elapsed
+        Clear-IntenticLive
+        Write-Host '  ' -NoNewline
+        switch ($Tone) {
+            'fail' { Write-IntenticRun $IntenticKit.Fail 'Red' }
+            'skip' { Write-IntenticRun $IntenticKit.Skip 'DarkGray' }
+            default { Write-IntenticRun $IntenticKit.Ok 'Green' }
+        }
+        $pad = [Math]::Max(2, $IntenticKit.Width - 7 - $IntenticKit.Label.Length - $took.Length)
+        Write-Host ("  " + $IntenticKit.Label + (' ' * $pad)) -NoNewline
+        Write-IntenticRun $took 'DarkGray'
+        Write-Host ''
+    }
+    $IntenticKit.Label = ''
+}
+
+function Write-IntenticBegin {
+    param([string]$What, [string]$Scope = '')
+    if ($IntenticKit.Mode -ne 'rich') { return }
+    Write-Host ''
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun "intentic $($IntenticKit.Dot) $What" 'White'
+    Write-Host ''
+    if ($Scope) {
+        Write-Host '  ' -NoNewline
+        Write-IntenticRun $Scope 'DarkGray'
+        Write-Host ''
+    }
+    Write-Host ''
+}
+
+function Write-IntenticStep {
+    param([string]$Phase, [string]$Sentence, [string]$Label)
+    switch ($IntenticKit.Mode) {
+        'plain' { if ($Phase) { Write-Host "intentic: [$Phase] $Sentence" } else { Write-Host "intentic: $Sentence" } }
+        'nested' { Write-Host "        $Label" }
+        default {
+            Complete-IntenticStep 'ok'
+            $IntenticKit.Label = $Label
+            $IntenticKit.Clock = [Diagnostics.Stopwatch]::StartNew()
+            Write-IntenticLive
+        }
+    }
+}
+
+function Write-IntenticSay {
+    param([string]$Sentence)
+    switch ($IntenticKit.Mode) {
+        'plain' { Write-Host "intentic: $Sentence" }
+        'nested' { Write-Host "        $Sentence" }
+        default { Write-IntenticAbove { Write-Host '        ' -NoNewline; Write-IntenticRun $Sentence 'DarkGray' } }
+    }
+}
+
+function Write-IntenticWarn {
+    param([string]$Sentence)
+    switch ($IntenticKit.Mode) {
+        'plain' { [Console]::Error.WriteLine("intentic: $Sentence") }
+        'nested' { Write-Host "     !  $Sentence" }
+        default { Write-IntenticAbove { Write-Host '     ' -NoNewline; Write-IntenticRun '!' 'Yellow'; Write-Host '  ' -NoNewline; Write-IntenticRun $Sentence 'DarkGray' } }
+    }
+}
+
+function Suspend-IntenticLine { if ($IntenticKit.Mode -eq 'rich') { Clear-IntenticLive } }
+
+function Resume-IntenticLine { if ($IntenticKit.Mode -eq 'rich' -and $IntenticKit.Label -and -not $IntenticKit.Open) { Write-IntenticLive } }
+
+function Write-IntenticFinished {
+    param([string]$Verdict, [string]$Address = '')
+    switch ($IntenticKit.Mode) {
+        'plain' { Write-Host "intentic: $Verdict"; if ($Address) { Write-Host "intentic: $Address" } }
+        'nested' { Write-Host "     $($IntenticKit.Ok)  $Verdict"; if ($Address) { Write-Host "        $Address" } }
+        default {
+            Complete-IntenticStep 'ok'
+            Write-Host ''
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $IntenticKit.Ok 'Green'
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $Verdict 'White'
+            Write-Host ''
+            if ($Address) {
+                Write-Host ''
+                Write-Host '     ' -NoNewline
+                Write-IntenticRun $Address 'Cyan'
+                Write-Host ''
+            }
+            Write-Host ''
+        }
+    }
+}
+
+# The commands the reader will want later, as (what, command) pairs given flat: Write-IntenticLater 'stop it', 'ic ...'.
+# Rich only: a log has no use for them.
+function Write-IntenticLater {
+    param([string[]]$Pairs)
+    if ($IntenticKit.Mode -ne 'rich' -or $Pairs.Count -lt 2) { return }
+    $column = 0
+    for ($i = 0; $i -lt $Pairs.Count; $i += 2) { $column = [Math]::Max($column, $Pairs[$i].Length) }
+    for ($i = 0; $i + 1 -lt $Pairs.Count; $i += 2) {
+        $heading = if ($i -eq 0) { 'later' } else { '' }
+        Write-Host '     ' -NoNewline
+        Write-IntenticRun ('{0,-6} {1}' -f $heading, $Pairs[$i].PadRight($column)) 'DarkGray'
+        Write-Host "   $($Pairs[$i + 1])"
+    }
+    Write-Host ''
+}
+
+function Write-IntenticCancelled {
+    if ($IntenticKit.Mode -eq 'plain') { Write-Host 'intentic: Cancelled. Nothing changed.'; return }
+    Complete-IntenticStep 'skip'
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun "$($IntenticKit.Skip)  Cancelled. Nothing changed." 'DarkGray'
+    Write-Host ''
+}
+
+# The stop block on stderr, then the sentinel Invoke-IntenticScript catches. Never called inside a try whose catch
+# would swallow it.
+function Stop-Intentic {
+    param([string]$Headline, [string]$Problem = '', [string]$Fix = '', [int]$Code = 1)
+    $err = [Console]::Error
+    if ($IntenticKit.Mode -eq 'plain') {
+        $err.WriteLine("error: $Headline")
+        if ($Problem) { $err.WriteLine("   problem: $Problem") }
+        if ($Fix) { $err.WriteLine("   fix:     $Fix") }
+    } else {
+        Complete-IntenticStep 'fail'
+        $was = [Console]::ForegroundColor
+        $err.WriteLine('')
+        if ($IntenticKit.Color) { [Console]::ForegroundColor = 'Red' }
+        $err.WriteLine("  $($IntenticKit.Fail)  $Headline")
+        if ($IntenticKit.Color) { [Console]::ForegroundColor = $was }
+        if ($Problem) { $err.WriteLine("     problem: $Problem") }
+        if ($Fix) { $err.WriteLine("     fix:     $Fix") }
+        $err.WriteLine('')
+    }
+    $IntenticKit.Code = $Code
+    throw 'intentic:stop'
+}
+
+function Set-IntenticExit {
+    param([int]$Code)
+    $IntenticKit.Code = $Code
+}
+
+function Read-IntenticConfirm {
+    param([string]$Question, [string]$Consequence, [string]$Flag)
+    if ($env:INTENTIC_NO_PROMPT -ne '1' -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Suspend-IntenticLine
+        if ($IntenticKit.Mode -eq 'rich') {
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun '?' 'Cyan'
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $Question 'White'
+            Write-Host ''
+            foreach ($line in ($Consequence -split "`n")) { if ($line) { Write-Host '     ' -NoNewline; Write-IntenticRun $line 'DarkGray'; Write-Host '' } }
+            $answer = Read-Host '     [y/N]'
+        } else {
+            Write-Host $Question
+            if ($Consequence) { Write-Host $Consequence }
+            $answer = Read-Host '[y/N]'
+        }
+        if ($answer -match '^\s*[yY]') {
+            Resume-IntenticLine
+            return $true
+        }
+        Write-IntenticCancelled
+        return $false
+    }
+    Stop-Intentic 'Nothing was changed.' "nobody is at this terminal to answer: $Question" "run it again with $Flag"
+}
+
+function Invoke-IntenticScript {
+    param([scriptblock]$Body)
+    $IntenticKit.Code = 0
+    try {
+        & $Body
+        Complete-IntenticStep 'ok'
+    } catch {
+        if ("$($_.Exception.Message)" -ne 'intentic:stop') {
+            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one.
+            $said = "$($_.Exception.Message)"
+            try {
+                Stop-Intentic 'The script stopped unexpectedly.' $said 'run the same command again; if it stops here again, report it with this message.'
+            } catch {
+                $IntenticKit.Code = 1
+            }
+        }
+    }
+    $global:LASTEXITCODE = $IntenticKit.Code
+    if ($PSCommandPath) { exit $IntenticKit.Code }
+}
+# <<< end of generated kit.ps1
+
+# >>> generated from _site/site/scripts-kit/add-path.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# THE FOLDER THE ic CLI LANDS IN, PUT ON THE USER'S PATH - so the commands ic prints when it finishes are real
+# commands rather than a promise the installer that made them cannot keep. The .sh twin gets this free with a symlink
+# into ~/.local/bin; Windows has no such folder, so the user's own PATH is the only place to say it.
 #
-# HKCU\Environment is written DIRECTLY rather than through [Environment]::SetEnvironmentVariable, which stores
-# the value back as REG_SZ: every %USERPROFILE%- or %PNPM_HOME%-style entry already in that PATH would stop
-# expanding, and each tool behind one would vanish from the user's shell - a far worse bug than the one this
-# fixes, and the first machine tried had two such entries. Reading with DoNotExpandEnvironmentNames keeps them
-# as tokens, and the value goes back under the kind it already had.
+# HKCU\Environment is written DIRECTLY rather than through [Environment]::SetEnvironmentVariable, which stores the
+# value back as REG_SZ: every %USERPROFILE%- or %PNPM_HOME%-style entry already in that PATH would stop expanding, and
+# each tool behind one would vanish from the user's shell. Reading with DoNotExpandEnvironmentNames keeps them as
+# tokens, and the value goes back under the kind it already had.
 #
-# Best-effort: PATH is the convenience, the install is the job. A machine that refuses the edit is told where
-# the binary is and keeps everything else.
+# Best-effort: PATH is the convenience, the install is the job. A device that refuses the edit is told where the
+# binary is and keeps everything else.
 function Add-IntenticPath {
     param([string]$Folder, [string]$Command)
     try {
@@ -102,35 +358,33 @@ function Add-IntenticPath {
             $answer = [UIntPtr]::Zero
             [void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
         }
-        # This window has its own copy as well, and it is the one the user is looking at when the setup output
-        # tells them what to run next.
+        # This window has its own copy as well, and it is the one the user is looking at when the output tells them
+        # what to run next.
         if (($env:Path -split ';') -notcontains $Folder) { $env:Path = "$env:Path;$Folder" }
     } catch {
-        Write-Warning "Could not put $Folder on your PATH ($($_.Exception.Message)). Run $Command from that folder, or add it to your PATH yourself."
+        Write-IntenticWarn "$Folder could not be added to your PATH ($($_.Exception.Message)), so $Command runs from that folder until you add it."
     }
 }
+# <<< end of generated add-path.ps1
 
-# ---- fetch the ic CLI (the same block recreate.ps1 and connect-host.ps1 carry, apart from its one narration
-#      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
-# Downloaded on every run that pins no release, so re-running the one-liner upgrades an existing install; a
-# run pinned to a release (IC_VERSION) that finds it or a newer one installed skips it, and only a failed download falls back to
-# what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
-# executable fails, and a half-downloaded binary must never be what runs.
-# A pinned run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is
-# exactly the release asked for: the same binary, without the download.
-$Ic = $env:IC_BIN
-if (-not $Ic) {
+# >>> generated from _site/site/scripts-kit/ic-fetch.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# Get-IntenticIc: the ic CLI to run, found or downloaded. IC_BIN overrides (a checkout's own build). Downloaded on
+# every run that pins no release, so re-running a one-liner upgrades a device; a run pinned to a release (IC_VERSION)
+# that finds it or a newer one installed skips it, and only a failed download falls back to an installed ic. Download-
+# then-rename: overwriting a running executable fails, and a half-downloaded binary must never be what runs. A pinned
+# run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
+# release asked for.
+function Get-IntenticIc {
+    $Ic = $env:IC_BIN
+    if ($Ic) { return $Ic }
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $IcDir = "$env:USERPROFILE\.intentic\ic\bin"
     New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
-    # A caller that pins its release (IC_VERSION beside IC_URL, which the desktop app sets to its own) and finds
-    # that release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds, the download
-    # seconds. Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the
-    # tray for days put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions,
-    # major.minor.patch first, a pre-release below its own release; an installed ic whose answer is not a version
-    # is replaced. An unpinned run (the one-liner) still downloads, which is how it upgrades an existing install.
+    # Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the tray for days
+    # put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions, major.minor.patch
+    # first, a pre-release below its own release; an installed ic whose answer is not a version is replaced.
     $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
     $IcCurrent = $false
     if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)$') {
@@ -142,16 +396,14 @@ if (-not $Ic) {
         }
     }
     if ($IcCurrent) {
-        Write-Host "note: $IcHave is installed (this run asks for ic $env:IC_VERSION or newer) - not downloading it."
+        Write-IntenticSay "$IcHave is installed, and this run asks for ic $($env:IC_VERSION -replace '^v', '') or newer, so nothing is downloaded."
         $Ic = $IcDest
         Add-IntenticPath -Folder $IcDir -Command 'ic'
     } else {
-        Write-Step 'fetching-ic' 'fetching the ic CLI...'
-        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside
-        # it (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that
-        # release is the very binary the download would fetch, minus the network: a PC that cannot reach github.com
-        # still gets its ic. Anything else - no pin, no file, another version, a copy that fails - leaves the download
-        # below to run as it always has, and that download is all the irm|iex one-liner ever does.
+        Write-IntenticStep 'fetching-ic' 'fetching the ic CLI...' 'Download ic'
+        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded: a copy that answers exactly the pinned release is
+        # the very binary the download would fetch, minus the network, so a device that cannot reach github.com still
+        # gets its ic. Anything else leaves the download below to run, and that download is all the one-liner ever does.
         $IcCopied = $false
         if ($env:INTENTIC_IC_PATH -and $env:IC_VERSION -and (Test-Path -LiteralPath $env:INTENTIC_IC_PATH -PathType Leaf)) {
             $IcCarried = ''
@@ -167,67 +419,80 @@ if (-not $Ic) {
             }
         }
         if ($IcCopied) {
-            Write-Host "note: installed $IcCarried from the copy the desktop app carries - not downloading it."
+            Write-IntenticSay "installed $IcCarried from the copy the desktop app carries."
             $Ic = $IcDest
             Add-IntenticPath -Folder $IcDir -Command 'ic'
         } else {
             # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
             # five-megabyte download take several seconds instead of a fraction of one.
             $ProgressPreference = 'SilentlyContinue'
+            $IcFetched = $false
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
-                Move-Item -Force "$IcDest.tmp" $IcDest
-                $Ic = $IcDest
-                Add-IntenticPath -Folder $IcDir -Command 'ic'
+                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp" -ErrorAction Stop
+                Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
+                $IcFetched = $true
             } catch {
                 Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
-                if (Test-Path $IcDest) {
-                    Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
-                    $Ic = $IcDest
+            }
+            if ($IcFetched) {
+                $Ic = $IcDest
+                Add-IntenticPath -Folder $IcDir -Command 'ic'
+            } elseif (Test-Path $IcDest) {
+                Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $IcDest runs instead."
+                $Ic = $IcDest
+            } else {
+                $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
+                if ($IcInstalled) {
+                    Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $($IcInstalled.Source) runs instead."
+                    $Ic = $IcInstalled.Source
                 } else {
-                    $installed = Get-Command ic -ErrorAction SilentlyContinue
-                    if ($installed) {
-                        Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
-                        $Ic = $installed.Source
-                    } else {
-                        Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
-                        exit 1
-                    }
+                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' "$(([uri]$IcBase).Host) did not answer from this device." 'check the network, then run the same command again.'
                 }
             }
         }
+        Complete-IntenticStep
+    }
+    return $Ic
+}
+# <<< end of generated ic-fetch.ps1
+
+Invoke-IntenticScript {
+    # Explicit params (a run as a file, the Worker's injected arguments) win; else the env vars the older one-liner
+    # carries. The env spelling is also what rides through to ic, so set it for anything a param supplied.
+    if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
+    if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
+    $code = if ($SetupCode) { $SetupCode } else { $env:SETUP_CODE }
+    $replacing = $Replace -or $env:REPLACE -eq '1'
+
+    $Ic = Get-IntenticIc
+
+    # Docker, made ready by ic itself, and only then the connect. A prepare that stops has already said why.
+    Suspend-IntenticLine
+    & $Ic docker prepare
+    if ($LASTEXITCODE -ne 0) {
+        Set-IntenticExit $LASTEXITCODE
+        return
+    }
+    $env:INTENTIC_PREPARED = '1'
+
+    # The setup code goes last, behind --, so a code beginning with a hyphen is a value rather than an unknown flag.
+    $IcArgs = @('sandbox', 'connect')
+    if ($Yes) { $IcArgs += '-y' }
+    if ($replacing) { $IcArgs += '--replace' }
+    if ($code) { $IcArgs += '--'; $IcArgs += $code }
+
+    # The sync folder rides in SYNC_DIR for the ic run only (ic expands the ~), and the person's shell gets back what
+    # it had: under irm | iex this runs in their own session.
+    $hadSyncDir = Test-Path Env:SYNC_DIR
+    $syncDirBefore = $env:SYNC_DIR
+    if ($SyncDir) { $env:SYNC_DIR = $SyncDir }
+    try {
+        & $Ic @IcArgs
+        Set-IntenticExit $LASTEXITCODE
+    } finally {
+        if ($SyncDir) {
+            if ($hadSyncDir) { $env:SYNC_DIR = $syncDirBefore } else { Remove-Item Env:SYNC_DIR -ErrorAction SilentlyContinue }
+        }
+        Remove-Item Env:INTENTIC_PREPARED -ErrorAction SilentlyContinue
     }
 }
-
-# ---- Docker, and everything Windows needs before Docker can exist ----
-#
-# This used to be forty lines of this script: is `docker` on PATH, does `docker info` answer, and if not,
-# winget. It saw two of the dozen states a Windows PC can be in, and every other one arrived as the same
-# sentence - most often "docker is not installed and winget is unavailable", which is a dead end on a machine
-# where the only thing missing was a different download.
-#
-# It is now `ic docker prepare`: one read-only examination of this PC (Windows version, virtualization,
-# WSL2, the features behind it, a pending restart, Docker itself, its group, its engine, its container mode,
-# free space), one question covering everything that has to change, and then the changes. It is in ic rather
-# than here because the SAME reading feeds the desktop app's install screen and the platform's setup page -
-# and because a decision written in Rust is one the Linux runner that cross-builds this can actually test.
-#
-# Consent still comes from the same place it always did: INSTALL_DOCKER=1 pre-approves (the desktop app sets
-# it), and otherwise ic asks on the terminal. Nothing below this line is reached until Docker answers.
-& $Ic docker prepare
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-# Said to the connect below, whose preflight would otherwise examine this PC a second time for the facts prepare
-# passed on a moment ago (ic's checks.rs `PREPARED`).
-$env:INTENTIC_PREPARED = '1'
-
-# Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
-# carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.
-#
-# The code goes LAST, behind `--`: it is a positional, and an argument parser reads anything starting with a
-# hyphen as a flag unless the end-of-flags marker has already gone by.
-$IcArgs = @('sandbox', 'connect')
-if ($Yes) { $IcArgs += '-y' }
-if ($Replace) { $IcArgs += '--replace' }
-if ($SetupCode) { $IcArgs += '--'; $IcArgs += $SetupCode }
-& $Ic @IcArgs
-exit $LASTEXITCODE

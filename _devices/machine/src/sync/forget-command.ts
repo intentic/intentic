@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import type { CommandContext } from "@stricli/core";
+import { buildCommand } from "../cli-ui.js";
 import { z } from "zod";
 import { agentInDistro } from "../environments/crossing.js";
 import { heldDistros } from "../environments/machine.js";
@@ -154,13 +155,19 @@ export const forget = buildCommand<ForgetFlags, [string]>({
         },
     },
     async func(this: CommandContext, flags: ForgetFlags, name: string) {
-        // The retirement's own lines go to stderr under --json, so stdout stays the one object.
-        const log: Log = (message) => void (flags.json ? this.process.stderr : this.process.stdout).write(`${message}\n`);
+        // The retirement's own lines are narration, on stderr under --json, so stdout stays the one object.
         await answer(
             this,
             flags.json,
-            async () => await forgetSandbox(name, log, { here: flags.here }),
-            (result) => forgotInWords(name, result),
+            async (ui) => await forgetSandbox(name, ui.note, { here: flags.here }),
+            (result, ui) => {
+                const [verdict = "", ...more] = forgotInWords(name, result).split("\n");
+                for (const line of more) {
+                    ui.note(line);
+                }
+                ui.done(verdict);
+            },
+            { doing: `Forgetting ${name}`, failed: `${name} was not forgotten.` },
         );
     },
 });

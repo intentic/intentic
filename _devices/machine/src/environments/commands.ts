@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { Log } from "@intentic/local-agent";
-import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
+import { explain, type Footnote, type Item, type Log } from "@intentic/local-agent";
+import { buildRouteMap, type CommandContext } from "@stricli/core";
+import { buildCommand, machineUi } from "../cli-ui.js";
 import { ensureResident } from "../resident.js";
 import { listDistros, WINDOWS_SIDE } from "./wsl.js";
 import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
@@ -16,21 +17,23 @@ const attach = buildCommand<Record<never, never>, [string]>({
         positional: { kind: "tuple", parameters: [{ brief: "The distro, as `wsl -l` names it", parse: String, placeholder: "distro" }] },
     },
     async func(this: CommandContext, _flags: Record<never, never>, distro: string) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const ui = machineUi(this.process);
+        const failed = `${distro} is not kept running from here.`;
         if (!WINDOWS_SIDE) {
-            throw new Error("only the Windows side of a PC keeps its distros running.");
+            throw new Error(explain(failed, "only the Windows side of a device keeps its WSL distros running."));
         }
+        ui.act(`Keeping ${distro} running from this side`);
         const listed = await listDistros();
         if (listed === undefined) {
-            throw new Error("wsl.exe could not be asked which distros this PC has.");
+            throw new Error(explain(failed, "wsl.exe could not be asked which distros this device has."));
         }
         if (!listed.includes(distro)) {
-            throw new Error(`WSL has no distro called "${distro}"; it lists ${listed.join(", ") || "none"}.`);
+            throw new Error(explain(failed, `WSL has no distro called ${distro}; it lists ${listed.join(", ") || "none"}.`));
         }
         const before = await heldDistros();
         await updateMachineConfig((config) => withChild(config, distro));
-        await ensureResident(out);
-        out(before.includes(distro) ? `${distro} is already kept running from here.` : `${distro}'s agent is kept running from here now.`);
+        await ensureResident(ui.note);
+        ui.done(before.includes(distro) ? `${distro} is already kept running from here.` : `${distro}'s agent is kept running from here now.`);
     },
 });
 
@@ -66,7 +69,7 @@ const onOff = (value: string): "on" | "off" => {
     if (value === "on" || value === "off") {
         return value;
     }
-    throw new Error(`"${value}" is not on or off.`);
+    throw new Error(`${value} is not on or off.`);
 };
 
 export interface UpdatesFlags {
@@ -114,7 +117,7 @@ const updatesArgs = (flags: UpdatesFlags): string[] =>
 // Every switch is the PC's, kept on its root: a distro hands the command to its Windows side rather than keeping a copy.
 export const updates = buildCommand<UpdatesFlags>({
     docs: {
-        brief: "What this machine does by itself: update its agent (the whole PC at once), download each sandbox's next image, back each sandbox up daily and tidy what swaps leave behind",
+        brief: "What this device does by itself: update its agent (the whole PC at once), download each sandbox's next image, back each sandbox up daily and tidy what swaps leave behind",
     },
     parameters: {
         flags: {
@@ -129,7 +132,7 @@ export const updates = buildCommand<UpdatesFlags>({
                 kind: "parsed",
                 parse: onOff,
                 optional: true,
-                brief: "Back each sandbox up once a day, encrypted, on this machine (on by default)",
+                brief: "Back each sandbox up once a day, encrypted, on this device (on by default)",
             },
             tidy: {
                 kind: "parsed",
@@ -140,37 +143,43 @@ export const updates = buildCommand<UpdatesFlags>({
         },
     },
     async func(this: CommandContext, flags: UpdatesFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         const root = await windowsRoot();
         if (root !== undefined) {
+            // The Windows side draws its own answer, and its own stop, on this terminal.
             if (runOnWindows(root, ["updates", ...updatesArgs(flags)], { inherit: true }).status !== 0) {
-                throw new Error("the Windows side's agent did not take that; run it there: intentic-machine updates");
+                process.exitCode = 1;
             }
             return;
         }
+        const ui = machineUi(this.process);
         if (updatesArgs(flags).length > 0) {
+            ui.act("Changing what this device does by itself");
             await updateMachineConfig((config) => withSwitches(config, flags));
+            ui.done("Saved. Each switch applies from the agent's next pass.");
         }
         const config = await readMachineConfig();
-        out(
-            config.agentUpdates === false
-                ? "Agent: updated only when asked (`intentic-machine upgrade`, or Update on the sandbox's Devices tab). Turn it back on with --agent on."
-                : "Agent: updated by itself when a release is published, the whole PC at once. Turn it off with --agent off.",
-        );
-        out(
-            config.sandboxUpdates === false
-                ? "Sandboxes: each update downloads when you take it, a wait of minutes. Turn background downloads back on with --sandboxes on."
-                : "Sandboxes: each one's next update is downloaded in the background, so applying it is a restart of about half a minute, which a sandbox takes by itself at a quiet moment unless its update card says otherwise. Turn the downloads off with --sandboxes off.",
-        );
-        out(
-            config.sandboxBackups === false
-                ? "Backups: none are taken by themselves. Turn the daily backup back on with --backups on."
-                : "Backups: each running sandbox is backed up once a day, encrypted, on this machine (`intentic-machine sandbox backups <slug>` lists them). Turn it off with --backups off.",
-        );
-        out(
-            config.sandboxTidy === false
-                ? "Tidy: what swaps and removals leave behind stays until you run `ic sandbox tidy`. Turn the daily tidy back on with --tidy on."
-                : "Tidy: once a day, images no sandbox can go back to, records of removed sandboxes and the trash past its week are cleared; volumes are only listed, never deleted. Turn it off with --tidy off.",
-        );
+        ui.report("intentic · what this device does by itself");
+        const rows = switchRows(config);
+        ui.items(rows.map((row) => row.item));
+        ui.later(rows.map((row) => row.later));
     },
 });
+
+// One switch of `updates`: its row, and the command that flips it.
+interface SwitchRow {
+    readonly item: Item;
+    readonly later: Footnote;
+}
+
+const switchRow = (name: keyof UpdatesFlags, on: boolean, saidOn: string, saidOff: string): SwitchRow => ({
+    item: { tone: on ? "ok" : "skip", name, meta: on ? saidOn : saidOff },
+    later: [`turn ${name} ${on ? "off" : "on"}`, `intentic-machine updates --${name} ${on ? "off" : "on"}`],
+});
+
+// Every switch, in the words of what it does while on and what happens instead while off. Pure.
+export const switchRows = (config: MachineConfig): readonly SwitchRow[] => [
+    switchRow("agent", config.agentUpdates !== false, "updated by itself, the whole device at once", "updated only when asked"),
+    switchRow("sandboxes", config.sandboxUpdates !== false, "each next update downloads in the background", "each update downloads when it is taken"),
+    switchRow("backups", config.sandboxBackups !== false, "each running sandbox daily, encrypted, on this device", "none taken by themselves"),
+    switchRow("tidy", config.sandboxTidy !== false, "daily: old images, removed sandboxes' records, week-old trash", "left until tidied by hand"),
+];

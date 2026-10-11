@@ -87,7 +87,7 @@ describe("stillKeeping", () => {
         expect(await stillKeeping(check, (line) => lines.push(line), { ask, now: () => NOW })).toBe(true);
         expect(asked).toEqual([NOW]);
         expect(lines).toEqual([
-            "nothing is linked or paired here any more, but this machine runs 1 sandbox (work), so the agent stays to bring it back after a restart. `intentic-machine sandbox keeper off` lets it go.",
+            "nothing is linked or paired here any more, but this device runs 1 sandbox (work), so the agent stays to bring it back after a restart; turning the sandbox keeper off lets it go.",
         ]);
     });
 

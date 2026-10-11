@@ -74,7 +74,7 @@ impl Kind {
     pub fn name(self) -> &'static str {
         match self {
             Kind::DockerDesktop => "Docker Desktop",
-            Kind::Intentic => "Intentic's engine",
+            Kind::Intentic => "the intentic engine",
             Kind::Native => "this system's Docker",
         }
     }
@@ -98,7 +98,7 @@ pub struct Status {
     pub pipe: Option<String>,
 }
 
-/// The engine a fresh setup on this PC would put sandboxes on (choice.rs has the rules and the migration's switch).
+/// The engine a fresh setup on this device would put sandboxes on (choice.rs has the rules and the migration's switch).
 pub fn choose(docker_desktop_installed: bool) -> Kind {
     if !cfg!(windows) {
         return Kind::Native;
@@ -109,7 +109,7 @@ pub fn choose(docker_desktop_installed: bool) -> Kind {
     )
 }
 
-/// What the choice is made from, read off this PC: `IC_ENGINE`, the saved preference, the engines installed, and
+/// What the choice is made from, read off this device: `IC_ENGINE`, the saved preference, the engines installed, and
 /// whether this side of it already keeps sandboxes (a record of ic's per sandbox, `~/.intentic/sandbox-<slug>.channel`).
 pub fn choice_facts(docker_desktop_installed: bool) -> choice::Facts {
     choice::Facts {
@@ -142,7 +142,7 @@ pub fn stamp() -> &'static str {
     Kind::DockerDesktop.id()
 }
 
-/// Whether the engine this PC's sandboxes run on is the person's own to keep running (choice.rs `bring_your_own`):
+/// Whether the engine this device's sandboxes run on is the person's own to keep running (choice.rs `bring_your_own`):
 /// Docker Desktop once the migration's switch has flipped, or Rancher Desktop. Intentic then checks it and repairs
 /// nothing of it.
 pub fn bring_your_own() -> bool {
@@ -156,7 +156,7 @@ pub fn bring_your_own() -> bool {
     )
 }
 
-/// Whether the move onto our engine is to be put in front of the person now (choice.rs `offer_move`): read off this PC,
+/// Whether the move onto our engine is to be put in front of the person now (choice.rs `offer_move`): read off this device,
 /// GPU sandboxes included, so an update can say it.
 pub fn move_offered() -> bool {
     if !cfg!(windows) || choice::DOCKER_DESKTOP_PCS != Kind::Intentic {

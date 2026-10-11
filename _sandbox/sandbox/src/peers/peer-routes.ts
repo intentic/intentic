@@ -57,6 +57,9 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     // phone) and answers whether anything was sent, then the call waits up to `waitMs` for the socket. Absent for doors
     // whose peer cannot be woken from here, where an offline peer answers at once.
     readonly wake?: { readonly send: (id: string) => Promise<boolean>; readonly waitMs: number };
+    // Whether a pairing minted here also gets a short code its install command carries instead of the token
+    // (peers/redeem-codes.ts): the device door's, whose install script redeems one. Absent, the answer is the token alone.
+    readonly codes?: "device";
 }
 
 // Grant pushed on connect: the capability's own config, for kinds whose config is the grant. Narrowed by kind before
@@ -331,7 +334,12 @@ export const createPeerRoutes = <
             } else if (id === "") {
                 return c.json({ error: `name the ${door.noun}: /system/${door.slug}/pair?id=<name>` }, 400);
             }
-            return c.json(store.mintPairing(id));
+            const minted = store.mintPairing(id);
+            return c.json(
+                deps.codes === undefined
+                    ? minted
+                    : { ...minted, code: services.redeemCodes.mint({ kind: deps.codes, pairToken: minted.token }, minted.expiresIn) },
+            );
         },
         // POST /system/<slug>/enroll: authorized by the pairing alone, exempt from the bearer middleware. A manifest
         // this build cannot read refuses the enrollment with the pairing left unspent (peer-store.ts), answered as the

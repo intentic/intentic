@@ -298,9 +298,7 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
                 // The boot chain names its own steps; they are detail under the wait, never steps of their
                 // own — a terminal shows the newest beside the spinner, a pipe gets one line each as before.
                 crate::ui::detail(&step);
-                if !crate::ui::is_rich() {
-                    println!("intentic:   {step}…");
-                }
+                crate::ui::plain(&format!("intentic:   {step}…"));
                 last_step = step;
             }
         }

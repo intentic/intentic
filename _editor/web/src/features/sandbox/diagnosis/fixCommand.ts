@@ -1,7 +1,8 @@
 import type { FixCode } from "@intentic/api-contract";
+import { oneLinerFits } from "@intentic/constants";
 import type { CommandOs } from "@intentic/ui";
 import { onScopeDispose, shallowRef, watch, type Ref } from "vue";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scriptCommand";
 import { apiClient } from "../../../lib/useApi";
 
 // THE ONE COMMAND a sandbox that stopped answering hands out: `ic sandbox fix` on the machine it runs on, fetched fresh
@@ -10,12 +11,13 @@ import { apiClient } from "../../../lib/useApi";
 // The code in it lets the run report back to the page that handed it out (FixCodeSchema), without a credential in the
 // shell's history; a command with no code still works, it only runs unobserved.
 
-// A code is pasted into a shell, so only what the platform mints is ever let into one.
-const SAFE_CODE = /^[A-Za-z0-9-]{1,64}$/;
-
+// With a code it is the `fix/<code>` one-liner; the Worker refuses anything the platform did not mint the shape of, and
+// so does this, falling back to the plain /fix script, which runs unobserved.
 export const fixCommand = (code: string | undefined, os: CommandOs): string => {
-    const safe = code !== undefined && SAFE_CODE.test(code) ? code : undefined;
-    return os === `windows` ? psCommand(`fixPs1`, safe === undefined ? `` : `$env:FIX_CODE='${safe}'; `) : bashCommand(`fix`, ``, safe ?? ``);
+    if (code !== undefined && oneLinerFits(`fix`, [code])) {
+        return oneLiner(`fix`, [code], os);
+    }
+    return os === `windows` ? psCommand(`fixPs1`, ``) : bashCommand(`fix`, ``, ``);
 };
 
 // Minted codes by sandbox, reused until a minute before they lapse, so a panel shown twice hands out the same command.

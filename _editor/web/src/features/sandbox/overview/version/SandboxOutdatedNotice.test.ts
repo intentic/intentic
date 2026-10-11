@@ -1,6 +1,6 @@
 // The one word for a sandbox older than what reads it: what the section won't show, and how to update, which is one press
-// to the Sandbox page's Update card, or `ic sandbox update <slug>` on the machine of a sandbox installed by hand. The
-// slug rides along because a machine running several sandboxes refuses the bare verb.
+// to the Sandbox page's Update card, or the `update/<slug>` one-liner on the device of a sandbox installed by hand. The
+// slug rides along because a device running several sandboxes refuses the bare verb.
 import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, defineComponent, h, ref } from "vue";
@@ -10,6 +10,13 @@ const slug = ref<string | undefined>(`sandbox-3c469e9d6c58`);
 jest.mock(`../../environment/servingSlug`, () => ({ useServingSlug: () => slug }));
 
 const { default: SandboxOutdatedNotice } = await import("./SandboxOutdatedNotice.vue");
+const { scriptSource } = await import("../../../../app/environments/scriptCommand");
+const { useOsPreference } = await import("@intentic/ui");
+
+beforeEach(() => {
+    scriptSource.value = `published`;
+    useOsPreference().cmdOs.value = `unix`;
+});
 
 let app: App | undefined;
 
@@ -44,12 +51,12 @@ it(`says the sandbox is older and what won't show, leads to the Sandbox page's u
     expect(el.querySelector(`[data-outdated]`)).not.toBeNull();
     expect(el.textContent).toContain(`Who broke main won't show here until it updates.`);
     expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
-    expect(el.querySelector(`code`)?.textContent).toBe(`ic sandbox update sandbox-3c469e9d6c58`);
+    expect(el.querySelector(`pre`)?.textContent).toBe(`curl -fsSL https://intentic.dev/update/sandbox-3c469e9d6c58 | sh`);
 });
 
 // Only a page that cannot know the name prints the bare verb, which still works on a machine running just this one.
 it(`prints the bare verb only when the sandbox's name is unknown here`, async () => {
     slug.value = undefined;
     const el = await mount();
-    expect(el.querySelector(`code`)?.textContent).toBe(`ic sandbox update`);
+    expect(el.querySelector(`pre`)?.textContent).toBe(`ic sandbox update`);
 });

@@ -204,7 +204,8 @@ fn spawn(copy: &Path) -> Result<(), String> {
 /* ------------------------------------------------------------------------------------------------------------------ */
 
 pub fn run() -> Result<(), String> {
-    let record = EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
+    let record =
+        EngineRecord::load().ok_or("the intentic engine is not installed on this device.")?;
     let port = super::windows::port_from_host(&record.host);
     let config = tls_config(Path::new(&record.cert_path))?;
     let me = std::env::current_exe()

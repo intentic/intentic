@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Code, commandLang, ui, useOsPreference } from "@intentic/ui";
+import { Button, ui, useOsPreference } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -15,6 +15,7 @@ import DiagnosisChain from "../diagnosis/DiagnosisChain.vue";
 import FixCommand from "../diagnosis/FixCommand.vue";
 import type { DiagnosisAction } from "../diagnosis/presentation";
 import { recoveryCommands, type SiblingManager, siblingManagers } from "./recovery";
+import RunCommand from "../../../components/RunCommand.vue";
 import { useDiagnosisNotice, useVisibleOutage } from "./useVisibleOutage";
 
 // THE WAY BACK WHEN A SANDBOX DOESN'T COME BACK, drawn by the connecting gate and by the notification lane beneath the
@@ -138,8 +139,9 @@ const askRepair = (): void => {
                 </div>
                 <FixCommand v-if="others.includes(`fix`)" :machine="machine" />
                 <template v-if="!hosted">
-                    <Code :code="commands.restart" :lang="commandLang(cmdOs)" :label="t(`sandbox.sandboxRecovery.restartCommand`)" :wrap="true" />
-                    <Code :code="commands.rollback" :lang="commandLang(cmdOs)" :label="t(`sandbox.sandboxRecovery.rollBackCommand`)" :wrap="true" />
+                    <!-- One shell choice for both: the first carries the toggle, the second follows it. -->
+                    <RunCommand :command="(os) => recoveryCommands(slug, os).restart" :label="t(`sandbox.sandboxRecovery.restartCommand`)" />
+                    <RunCommand :command="commands.rollback" :os="cmdOs" :label="t(`sandbox.sandboxRecovery.rollBackCommand`)" />
                 </template>
                 <!-- The cheaper way where it exists: a sandbox of the owner's that still answers can press these on that machine. -->
                 <p v-for="sibling in siblings" :key="sibling.sandbox.id" class="flex flex-wrap items-center gap-x-1.5 text-muted">

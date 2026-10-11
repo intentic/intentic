@@ -1,7 +1,8 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { type Device, hostRunningSandbox, machinesOf } from "@intentic/sandbox-contract";
 import type { CommandOs } from "@intentic/ui";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { oneLinerFits } from "@intentic/constants";
+import { oneLiner } from "../../../app/environments/scriptCommand";
 import type { DiagnosisNotice } from "../diagnosis/presentation";
 
 // WHEN A SANDBOX DOESN'T COME BACK, what can still be done about it without it. Everything the recovery panel offers
@@ -52,22 +53,15 @@ export interface RecoveryCommands {
 
 /**
  * The two single-purpose commands, for a reader who knows which one they want; everyone else gets the fix command, which
- * offers both when they are what it finds. Both go through the update script, which fetches the current `ic` first. With
- * no name known, `ic`'s bare verbs, which answer for the one sandbox on a machine running only one.
+ * offers both when they are what it finds. Both are one-liners whose script fetches the current `ic` first. With no
+ * name known (or one no one-liner can carry), `ic`'s bare verbs, which answer for the one sandbox on a device running
+ * only one.
  */
 export const recoveryCommands = (slug: string | undefined, os: CommandOs): RecoveryCommands => {
-    if (slug === undefined) {
+    if (slug === undefined || !oneLinerFits(`restart`, [slug])) {
         return { rollback: `ic sandbox rollback`, restart: `ic sandbox restart` };
     }
-    return os === `windows`
-        ? {
-              rollback: psCommand(`updatePs1`, ``, `-Slug ${slug} -Rollback`),
-              restart: psCommand(`updatePs1`, ``, `-Slug ${slug} -Restart`),
-          }
-        : {
-              rollback: bashCommand(`update`, ``, `${slug} --rollback`),
-              restart: bashCommand(`update`, ``, `${slug} --restart`),
-          };
+    return { rollback: oneLiner(`rollback`, [slug], os), restart: oneLiner(`restart`, [slug], os) };
 };
 
 /** Another of the owner's sandboxes whose Devices page can reach the machine the quiet one runs on. */

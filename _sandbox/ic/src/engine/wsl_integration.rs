@@ -31,6 +31,7 @@ use super::pins;
 use super::record::EngineRecord;
 use super::wsl;
 use super::Kind;
+use crate::ui;
 
 const INTEGRATE: &str = include_str!("../../engine/rootfs/integrate");
 const INTEGRATE_PATH: &str = "/usr/local/lib/intentic/engine-integration";
@@ -43,7 +44,7 @@ fn record() -> Result<EngineRecord, String> {
     EngineRecord::load()
         .filter(|record| record.engine == Kind::Intentic.id())
         .ok_or_else(|| {
-            "Intentic's engine is not installed on this PC: ic engine install".to_string()
+            "the intentic engine is not installed on this device — run ic engine install to install it.".to_string()
         })
 }
 
@@ -67,7 +68,7 @@ fn as_root(distro: &str, script: &str, limit: Duration) -> Result<String, String
 fn unit(engine: &str, distro: &str) -> String {
     format!(
         "[Unit]\n\
-         Description=Docker from Intentic's engine ({engine}), as `ic engine wsl enable` set it up\n\
+         Description=Docker from the intentic engine ({engine}), as `ic engine wsl enable` set it up\n\
          DefaultDependencies=no\n\
          After=local-fs.target\n\
          \n\
@@ -128,7 +129,7 @@ pub(super) fn context_script(engine: &str) -> String {
     format!(
         r#"set -eu
 D={TOOLS_DIR}/docker
-"$D" context inspect {CONTEXT} >/dev/null 2>&1 || "$D" context create {CONTEXT} --description "Intentic's engine" --docker "host=unix:///mnt/wsl/{engine}/docker.sock" >/dev/null
+"$D" context inspect {CONTEXT} >/dev/null 2>&1 || "$D" context create {CONTEXT} --description "the intentic engine" --docker "host=unix:///mnt/wsl/{engine}/docker.sock" >/dev/null
 "$D" context use {CONTEXT} >/dev/null
 "#
     )
@@ -179,7 +180,10 @@ pub fn enable(distro: &str) -> Result<(), String> {
             "there is no WSL distro named {distro} (wsl -l lists them)."
         ));
     }
-    println!("Fetching the docker CLI, compose and buildx for {distro}…");
+    ui::act(&format!("Enabling WSL integration for {distro}"));
+    ui::detail(&format!(
+        "fetching the docker CLI, compose and buildx for {distro}"
+    ));
     let tgz = super::fetch::ensure_pinned(
         pins::DOCKER_LINUX_URL,
         &pins::linux_tgz_name(),
@@ -195,7 +199,7 @@ pub fn enable(distro: &str) -> Result<(), String> {
         &pins::cached_name(pins::DOCKER_BUILDX_URL),
         pins::DOCKER_BUILDX_SHA256,
     )?;
-    println!("Installing them in {distro}…");
+    ui::detail(&format!("installing docker tools in {distro}"));
     let version = as_root(
         distro,
         &tools_script(
@@ -238,11 +242,11 @@ pub fn enable(distro: &str) -> Result<(), String> {
             Some(user) => as_user(distro, user, &context_script(&record.distro))
                 .map(|_| ())
                 .map_err(|problem| format!("could not make the {CONTEXT} docker context: {problem}"))?,
-            None => println!(
-                "Note: another engine serves {distro}'s /run/docker.sock and its default user is root: \
-                 `docker context create {CONTEXT} --docker host=unix:///mnt/wsl/{}/docker.sock` reaches ours.",
+            None => ui::note(&format!(
+                "another engine serves {distro}'s /run/docker.sock and its default user is root: \
+                 docker context create {CONTEXT} --docker host=unix:///mnt/wsl/{}/docker.sock reaches ours.",
                 record.distro
-            ),
+            )),
         }
     }
     if !record
@@ -253,24 +257,22 @@ pub fn enable(distro: &str) -> Result<(), String> {
         record.wsl.push(distro.to_string());
         record.save()?;
     }
-    println!(
-        "{distro} uses Intentic's engine as its Docker now: {}",
+    ui::done(&format!(
+        "{distro} uses the intentic engine as its Docker now: {}",
         version.trim()
-    );
+    ));
     if !systemd {
-        println!(
-            "Note: {distro} does not run systemd, so after it restarts its Docker comes back with the next `ic engine start`."
-        );
+        ui::note(&format!("{distro} does not run systemd, so after it restarts its Docker comes back with the next ic engine start."));
     }
     if let (true, Some(user)) = (foreign, &user) {
-        println!(
-            "Another engine (Docker Desktop's WSL integration, or {distro}'s own dockerd) serves its /run/docker.sock \
-             and keeps it: {user} reaches Intentic's engine through the docker context {CONTEXT}, now current, and \
-             the other engine with `docker --context default`."
-        );
+        ui::note(&format!(
+            "another engine (Docker Desktop's WSL integration, or {distro}'s own dockerd) serves its /run/docker.sock \
+             and keeps it: {user} reaches the intentic engine through the docker context {CONTEXT}, now current, and \
+             the other engine with docker --context default."
+        ));
     }
     if let Some(user) = &user {
-        println!("{user} is in {distro}'s docker group; a shell opened before this needs reopening to have it.");
+        ui::note(&format!("{user} is in {distro}'s docker group; a shell opened before this needs reopening to have it."));
     }
     Ok(())
 }
@@ -298,7 +300,9 @@ pub fn apply_all(record: &EngineRecord, quiet: bool) {
         }
         if let Err(problem) = apply(record, distro) {
             if !quiet {
-                println!("Note: {distro}'s Docker was not set up again ({problem}).");
+                ui::note(&format!(
+                    "{distro}'s Docker was not set up again ({problem})."
+                ));
             }
         }
     }
@@ -306,6 +310,7 @@ pub fn apply_all(record: &EngineRecord, quiet: bool) {
 
 pub fn disable(distro: &str) -> Result<(), String> {
     let mut record = record()?;
+    ui::act(&format!("Disabling WSL integration for {distro}"));
     let engine = record.distro.clone();
     let script = format!(
         r#"set +e
@@ -334,25 +339,35 @@ exit 0
         .wsl
         .retain(|known| !known.eq_ignore_ascii_case(distro));
     record.save()?;
-    println!("{distro} no longer uses Intentic's engine as its Docker.");
+    ui::done(&format!(
+        "{distro} no longer uses the intentic engine as its Docker."
+    ));
     Ok(())
 }
 
 pub fn list() -> Result<(), String> {
     let record = record()?;
     if record.wsl.is_empty() {
-        println!("No WSL distro uses Intentic's engine as its Docker. `ic engine wsl enable <distro>` sets one up.");
+        ui::quiet("no WSL distro uses the intentic engine as its Docker.");
+        ui::later(&[(
+            "enable a distro".to_string(),
+            "ic engine wsl enable <distro>".to_string(),
+        )]);
         return Ok(());
     }
+    ui::report("WSL distros using the intentic engine", None);
     let running = wsl::running_distros();
+    let mut items = Vec::new();
     for distro in &record.wsl {
-        let state = if running.iter().any(|name| name.eq_ignore_ascii_case(distro)) {
-            "running"
+        let is_running = running.iter().any(|name| name.eq_ignore_ascii_case(distro));
+        let (tone, state) = if is_running {
+            (ui::Tone::Ok, "running")
         } else {
-            "stopped"
+            (ui::Tone::Skip, "stopped")
         };
-        println!("{distro} ({state}): Docker from Intentic's engine");
+        items.push(ui::Item::new(tone, distro, state));
     }
+    ui::items(&items);
     Ok(())
 }
 

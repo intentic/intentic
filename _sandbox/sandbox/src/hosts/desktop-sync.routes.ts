@@ -1,4 +1,10 @@
-import { DeviceReportSchema, type SyncEnrollmentAnswer, type SyncEnrollmentRequest, SyncEnrollmentRequestSchema } from "@intentic/sandbox-contract";
+import {
+    DeviceReportSchema,
+    type SyncEnrollmentAnswer,
+    type SyncEnrollmentRequest,
+    SyncEnrollmentRequestSchema,
+    SyncPairRequestSchema,
+} from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Context } from "hono";
 import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
@@ -59,11 +65,24 @@ const reenrollments = () => {
 // hold, and that teardown runs the capability handler.
 export const createSyncRoutes = (services: Services, redeemed = reenrollments()) => ({
     // Runs through the bearer middleware, so an unauthenticated caller is already 401'd; a caller the operating gate
-    // refuses is narrowed to mirror, not refused.
+    // refuses is narrowed to mirror, not refused. Beside the token it mints a short code the sync command carries
+    // instead (peers/redeem-codes.ts), handing out with it the local folder and takeover the editor sent, if any: the
+    // person's own choices, on their way to their own sandbox and never the platform. No body is today's request.
     pair: async (c: Context<AppEnv>): Promise<Response> => {
+        // allow(silent-catch): no body (or none that parses as JSON) is the request without options, as before.
+        const raw: unknown = await c.req.json().catch(() => undefined);
+        const body = raw === undefined ? {} : SyncPairRequestSchema.safeParse(raw).data;
+        if (body === undefined) {
+            return c.json({ error: "invalid sync pairing request" }, 400);
+        }
         const requested = c.req.query("mode") === "mirror" ? "mirror" : "sync";
         const mode: SyncMode = (await ownerDenied(services, c)) === undefined ? requested : "mirror";
-        return c.json({ ...services.syncPairings.mint(mode), mode });
+        const minted = services.syncPairings.mint(mode);
+        const code = services.redeemCodes.mint(
+            { kind: "sync", pairToken: minted.token, mode, syncDir: body.syncDir, takeover: body.takeover },
+            minted.expiresIn,
+        );
+        return c.json({ ...minted, mode, code });
     },
     // Exempt from the bearer middleware: redeemed with a one-time pairing token the handler checks itself.
     enrollKey: async (c: Context<AppEnv>): Promise<Response> => {

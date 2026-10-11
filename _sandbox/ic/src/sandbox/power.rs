@@ -8,6 +8,7 @@ use crate::sandbox::{
     CONTAINER_PREFIX, TUNNEL_PREFIX,
 };
 use crate::shape::Ask;
+use crate::ui;
 use crate::util::{bail, Result};
 
 /* `ic sandbox start|stop|restart` — a sandbox's power, and the one door every restart goes through, so the shape saved for the next restart is applied whichever button asked. */
@@ -25,6 +26,46 @@ impl Power {
             Power::Start => "start",
             Power::Stop => "stop",
             Power::Restart => "restart",
+        }
+    }
+
+    /// The action's live line, in the present tense.
+    fn acting(self) -> &'static str {
+        match self {
+            Power::Start => "Starting",
+            Power::Stop => "Stopping",
+            Power::Restart => "Restarting",
+        }
+    }
+
+    /// The past tense its verdict settles on.
+    fn done(self) -> &'static str {
+        match self {
+            Power::Start => "started",
+            Power::Stop => "stopped",
+            Power::Restart => "restarted",
+        }
+    }
+}
+
+/// The verdict a power change settles on: `intentic: <slug> stopped.` in a log, as it always was.
+fn verdict(slug: &str, power: Power, tunnel: bool) -> String {
+    format!(
+        "{slug} {}{}.",
+        power.done(),
+        if tunnel { ", with its tunnel" } else { "" }
+    )
+}
+
+/// The command a reader wants after a power change: the way back.
+fn afterwards(slug: &str, power: Power) -> Vec<(String, String)> {
+    match power {
+        Power::Stop => vec![("start it".to_string(), format!("ic sandbox start {slug}"))],
+        Power::Start | Power::Restart => {
+            vec![(
+                "check on it".to_string(),
+                format!("ic sandbox doctor {slug}"),
+            )]
         }
     }
 }
@@ -69,9 +110,11 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
         // An interrupted swap parked the sandbox with no replacement: starting it IS putting it back.
         if power != Power::Stop && docker::container_exists(&parked_of(&slug)) {
             probation::watch_one(&slug)?;
-            println!("intentic: {slug} was left set aside by an interrupted update — it is back under its own name.");
+            ui::note(&format!(
+                "{slug} was left set aside by an interrupted update. It is back under its own name."
+            ));
         } else {
-            bail!("sandbox container {container} does not exist on this machine.");
+            bail!("{}", crate::sandbox::missing(&slug));
         }
     }
     remember_key(&slug, &container);
@@ -83,10 +126,10 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     /* A START OR RESTART WITH A SHAPE WAITING IS THE RECREATE THAT APPLIES IT: the same image, the saved shape, the same pre-flight as any swap. */
     if power != Power::Stop {
         if let Some(waiting) = record::read(&slug)?.desired {
-            println!(
-                "intentic: {slug} has a shape saved for its next restart ({}) — recreating it with that shape.",
+            ui::note(&format!(
+                "{slug} has a shape saved for its next restart ({}), so it is recreated with that shape.",
                 waiting.describe()
-            );
+            ));
             recreate::reshape(slug.clone(), Ask::default(), Preflight::Run)?;
             if let Some(sidecar) = sidecar {
                 power_one("start", sidecar)?;
@@ -97,13 +140,18 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
                 ledger::START
             };
             ledger::note(&slug, kind, by == By::Keeper);
+            ui::done(&verdict(&slug, power, sidecar.is_some()));
+            ui::later(&afterwards(&slug, power));
             return Ok(());
         }
     }
 
+    ui::act(&format!("{} {slug}", power.acting()));
     // The turns a restart cuts are picked up again by the daemon's next boot (resume.rs).
     if power == Power::Restart && resume::ask(&container) {
-        println!("intentic: {slug}'s agents pick up the turns this restart cuts once it is back.");
+        ui::note(&format!(
+            "{slug}'s agents pick up the turns this restart cuts once it is back."
+        ));
     }
     /* NOTED BEFORE IT IS MADE: the ledger's moment then falls before the daemon start it causes, which is how the
     probation watch tells a start made through ic from a crash (probation.rs restarts_seen). A start or restart docker
@@ -122,19 +170,8 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
             Rest::Awake
         },
     );
-    let done = match power {
-        Power::Start => "started",
-        Power::Stop => "stopped",
-        Power::Restart => "restarted",
-    };
-    println!(
-        "intentic: {slug} {done}{}.",
-        if sidecar.is_some() {
-            ", with its tunnel"
-        } else {
-            ""
-        }
-    );
+    ui::done(&verdict(&slug, power, sidecar.is_some()));
+    ui::later(&afterwards(&slug, power));
     Ok(())
 }
 
@@ -234,8 +271,15 @@ fn power_one(verb: &str, name: &str) -> Result<()> {
     let ran = docker::capture_bounded(&[verb, name], POWER_LIMIT)?;
     if ran.timed_out {
         bail!(
-            "docker {verb} {name} did not finish within {}s — the machine may be in trouble.",
-            POWER_LIMIT.as_secs()
+            "{}",
+            ui::explain(
+                &format!(
+                    "docker {verb} {name} did not finish within {}s.",
+                    POWER_LIMIT.as_secs()
+                ),
+                Some("Docker on this device is not answering in time."),
+                Some("restart Docker, then run the same command again."),
+            )
         );
     }
     if ran.code != Some(0) {

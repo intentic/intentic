@@ -23,7 +23,7 @@ import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./app-env.js";
 import { createDiffRawRoute } from "./git/changes/diff-raw.js";
 import { createSpeechRoute, createSpeechStreamRoute } from "./speech/speech.routes.js";
-import { createEnrollRoute } from "./inventory/enroll.routes.js";
+import { createEnrollCodeRoute, createEnrollRoute } from "./inventory/enroll.routes.js";
 import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
 import { createSyncRoutes } from "./hosts/desktop-sync.routes.js";
@@ -58,6 +58,7 @@ import { judgeIndependentCommand } from "./agent/tools/command-judge.js";
 import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
+import { createRedeemRoute } from "./peers/redeem-codes.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "./webext/webext-peer.js";
 import { createPhoneWakeRoute, PHONE_PEER, phonePeerRoutes } from "./phones/phone-peer.js";
@@ -335,6 +336,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // Deploy-target enrollment (connect token) and the automation fire (own token).
     serve("POST /enroll", createEnrollRoute(services));
+    serve("POST /system/enroll/code", createEnrollCodeRoute(services));
     serve("POST /automations/{id}/fire", createAutomationFireRoute(services));
 
     // The release gate: a pipeline runner POSTs here and waits for the verdict, authenticated by the workflow's own
@@ -505,6 +507,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Desktop sync enrollment: the browser mints a pairing here, the agent redeems it at /system/authorized-key.
     const sync = createSyncRoutes(services);
     serve("POST /system/sync/pair", sync.pair);
+    // What a device, sync or server-connect command's short code is redeemed for: public, a device's first contact.
+    serve(
+        "POST /system/redeem/{code}",
+        createRedeemRoute({ codes: services.redeemCodes, sandboxUrl: () => services.config.sandbox.publicUrl }),
+    );
 
     // The peer doors: each device, browser, phone and runner gets pairing, enrollment, roster, revoke and socket.
     // A device gate's turn, cards and judge come from above hosts/, so they are handed in here.

@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { desktopSyncLink } from "../../../../app/environments/desktop";
-import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
+import type { CommandOs } from "@intentic/ui";
+import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../../../app/environments/scriptCommand";
 import { onRuntimeChanged } from "../../live/runtimeEvents";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { sandboxRequest } from "../../../../client/sandbox/sandboxClient";
@@ -12,26 +13,47 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 
 // Mints a device pairing and renders the one-liner that spends it (single-use, redeemed once to enroll an SSH
 // key). Mode reflects what the daemon granted, never what was requested. Everything else about an existing
-// pairing now lives on that device's row in the Devices list.
+// pairing now lives on that device's row in the Devices list. The folder and takeover go to the sandbox with the
+// mint, and the command carries only the short code that stands for all of it: `sync/<host>/<code>`.
 
 export type SyncMode = `sync` | `mirror`;
 
 // A pairing token, single-use and expiring (~10 min) server-side, and the mode the daemon granted, which may be less than
-// the one asked for (a member's "sync" comes back "mirror").
+// the one asked for (a member's "sync" comes back "mirror"). A newer daemon also mints the short code a command carries
+// instead of the token, with the folder and takeover it was asked for bound to it.
 export interface SyncPairing {
     readonly token: string;
     readonly mode: SyncMode;
+    readonly code?: string | undefined;
+    // When the token and its code lapse, epoch ms.
+    readonly expiresAt?: number | undefined;
+}
+
+// What rides with the code: the local folder as the person chose it, and whether to take sync over from another device.
+// To their own sandbox only, never the platform.
+export interface SyncPairAsk {
+    readonly syncDir?: string;
+    readonly takeover?: boolean;
 }
 
 // Mints a pairing on the active sandbox: this card's Enable, and the setup page's hand-off of a hosted project's folder
 // to the desktop app.
-export const mintSyncPairing = async (mode: SyncMode): Promise<SyncPairing> => {
-    const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, { method: `POST` });
+export const mintSyncPairing = async (mode: SyncMode, ask: SyncPairAsk = {}): Promise<SyncPairing> => {
+    const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify(mode === `mirror` ? {} : ask),
+    });
     if (!response.ok) {
         throw new Error(t(`sandbox.useDesktopSync.startFailed`, { status: String(response.status) }));
     }
-    const body = (await response.json()) as { token: string; mode?: SyncMode };
-    return { token: body.token, mode: body.mode ?? `sync` };
+    const body = (await response.json()) as { token: string; mode?: SyncMode; code?: string; expiresIn?: number };
+    return {
+        token: body.token,
+        mode: body.mode ?? `sync`,
+        code: body.code,
+        expiresAt: body.expiresIn === undefined ? undefined : Date.now() + body.expiresIn * 1000,
+    };
 };
 
 // SYNC_DIR is quoted, so a leading ~ must become $HOME to expand; Windows also flips separators. Anything past
@@ -52,6 +74,9 @@ export function useDesktopSync() {
     const pairToken = ref<string | undefined>(undefined);
     // The mode the daemon granted for that token; what the one-liner will actually enroll.
     const pairMode = ref<SyncMode | undefined>(undefined);
+    // The short code minted with it, and when both lapse.
+    const pairCode = ref<string | undefined>(undefined);
+    const pairExpiresAt = ref<number | undefined>(undefined);
     const minting = ref(false);
     // TAKEOVER=1 in the one-liner moves sync here, revoking the other machine's key; only offered when another
     // machine already holds sync.
@@ -64,11 +89,24 @@ export function useDesktopSync() {
         () => active.value?.id,
         () => {
             folder.value = defaultFolder.value;
-            pairToken.value = undefined;
-            pairMode.value = undefined;
+            forget();
             takeover.value = false;
         },
     );
+    // The folder and takeover were sent with the mint and are bound to its code, so changing either retires the command
+    // on screen: Enable mints one that carries the new choice.
+    watch([folder, takeover], () => {
+        if (pairCode.value !== undefined) {
+            forget();
+        }
+    });
+
+    function forget(): void {
+        pairToken.value = undefined;
+        pairMode.value = undefined;
+        pairCode.value = undefined;
+        pairExpiresAt.value = undefined;
+    }
 
     const url = computed(() => daemonUrl.value ?? ``);
     // A mirror-only one-liner carries no SYNC_DIR and never TAKEOVER, since mirror enrollments don't contend.
@@ -96,6 +134,20 @@ export function useDesktopSync() {
               ),
     );
 
+    // The command in a shell: the `sync/<host>/<code>` one-liner, or, for a sandbox no one-liner reaches (localhost, in
+    // local dev) or a daemon that mints no code, the token and folder as environment variables.
+    const command = computed(() => {
+        if (pairToken.value === undefined || url.value === ``) {
+            return undefined;
+        }
+        const host = oneLinerHost(url.value);
+        const code = pairCode.value;
+        if (host !== undefined && code !== undefined) {
+            return (os: CommandOs): string => oneLiner(`sync`, [host, code], os);
+        }
+        return (os: CommandOs): string => (os === `windows` ? windowsCommand.value : linuxCommand.value);
+    });
+
     // The same enrollment as the two shell commands, for the desktop app's own handoff. No folder: the app asks
     // for one in a system dialog instead.
     const desktopLink = computed(() =>
@@ -114,9 +166,11 @@ export function useDesktopSync() {
     const enable = async (mode: SyncMode): Promise<void> => {
         minting.value = true;
         try {
-            const pairing = await mintSyncPairing(mode);
+            const pairing = await mintSyncPairing(mode, { syncDir: folder.value, takeover: takeover.value });
             pairMode.value = pairing.mode;
             pairToken.value = pairing.token;
+            pairCode.value = pairing.code;
+            pairExpiresAt.value = pairing.expiresAt;
         } finally {
             minting.value = false;
         }
@@ -161,10 +215,10 @@ export function useDesktopSync() {
         defaultFolder,
         pairToken,
         pairMode,
+        pairExpiresAt,
         minting,
         takeover,
-        linuxCommand,
-        windowsCommand,
+        command,
         desktopLink,
         enable,
         start,

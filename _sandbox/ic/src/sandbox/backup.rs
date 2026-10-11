@@ -127,7 +127,10 @@ fn ensure_key(slug: &str) -> Result<PathBuf> {
     let mut file = options.open(&path)?;
     std::io::Write::write_all(&mut file, random_hex().as_bytes())?;
     file.sync_all()?;
-    println!("intentic: made the backup key for {slug}: {} — keep it with the backups; they cannot be read without it.", path.display());
+    crate::ui::note(&format!(
+        "Made the backup key for {slug}: {}. Keep it with the backups: they cannot be read without it.",
+        path.display()
+    ));
     Ok(path)
 }
 
@@ -509,20 +512,22 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
             if let Some(reason) = reason {
                 line["reason"] = json!(reason);
             }
+            // allow(terminal-output): the --json answer, one line the machine agent's daily backup reads.
             println!("{line}");
         } else if let Some(snapshot) = snapshot {
             if let Some(adoption) = &adopted {
-                println!("intentic: {slug}: {}", adoption.sentence());
+                crate::ui::note(&format!("{slug}: {}", adoption.sentence()));
             }
-            println!(
-                "intentic: backed up {slug} (snapshot {snapshot}) to {}.",
+            crate::ui::done(&format!(
+                "Backed up {slug} (snapshot {snapshot}) to {}.",
                 repo_dir(&slug).display()
-            );
+            ));
+            crate::ui::later(&[("see them".to_string(), format!("ic sandbox backups {slug}"))]);
         } else {
-            println!(
-                "intentic: no backup of {slug} this time — {}.",
+            crate::ui::quiet(&format!(
+                "No backup of {slug} this time: {}.",
                 reason.unwrap_or("skipped")
-            );
+            ));
         }
     };
     if let Unattended::Theirs(side) = &unattended {
@@ -567,7 +572,10 @@ pub fn before_swap(slug: &str) {
     }
     match take(slug, Scope::State, "pre-update") {
         Ok(snapshot) => {
-            println!("intentic: backed up {slug}'s state before the swap (snapshot {snapshot}).")
+            // The plain sentence is a stage mark the desktop app reads (deviceUpdateStages.ts): it opens with "backed up".
+            crate::ui::note(&format!(
+                "backed up {slug}'s state before the swap (snapshot {snapshot})."
+            ))
         }
         Err(Fail(reason)) => crate::ui::warn(&format!(
             "the backup before the swap did not finish, continuing without it: {reason}"
@@ -581,9 +589,11 @@ pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
     let slug = resolve_slug(slug, "ic sandbox backups")?;
     if !repo_dir(&slug).join("config").exists() {
         if as_json {
+            // allow(terminal-output): the --json answer, an empty list.
             println!("[]");
         } else {
-            println!("intentic: {slug} has no backups on this machine yet. Take one with: ic sandbox backup {slug}");
+            crate::ui::quiet(&format!("{slug} has no backups on this device yet."));
+            crate::ui::later(&[("take one".to_string(), format!("ic sandbox backup {slug}"))]);
         }
         return Ok(());
     }
@@ -596,8 +606,15 @@ pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
     )?;
     if ran.code != Some(0) {
         bail!(
-            "could not read {slug}'s backups. Log: {}",
-            log.path.display()
+            "{}",
+            crate::ui::explain(
+                &format!("{slug}'s backups could not be read."),
+                Some(&format!(
+                    "restic stopped. Its log is {}.",
+                    log.path.display()
+                )),
+                None,
+            )
         );
     }
     let snapshots: Vec<Value> = serde_json::from_str(ran.stdout.trim()).unwrap_or_default();
@@ -606,30 +623,41 @@ pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
             .iter()
             .map(|snapshot| json!({"id": snapshot["short_id"], "time": snapshot["time"], "tags": snapshot["tags"]}))
             .collect();
+        // allow(terminal-output): the --json answer, the snapshot list the desktop app and the machine agent read.
         println!("{}", Value::Array(rows));
         return Ok(());
     }
-    println!(
-        "intentic: {} backups of {slug} in {}:",
-        snapshots.len(),
-        repo_dir(&slug).display()
+    crate::ui::report(
+        &format!("intentic · {slug} backups"),
+        Some(&repo_dir(&slug).display().to_string()),
     );
-    for snapshot in &snapshots {
-        println!(
-            "          {}  {}  {}",
-            snapshot["short_id"].as_str().unwrap_or("?"),
-            snapshot["time"].as_str().unwrap_or("?"),
-            snapshot["tags"]
-                .as_array()
-                .map(|tags| tags
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join(","))
-                .unwrap_or_default()
-        );
+    if snapshots.is_empty() {
+        crate::ui::quiet("There are no snapshots yet.");
     }
-    println!("          Restore one with: ic sandbox backup-restore {slug} --snapshot <id> --to <folder>");
+    let rows: Vec<crate::ui::Item> = snapshots
+        .iter()
+        .map(|snapshot| {
+            let tags = snapshot["tags"]
+                .as_array()
+                .map(|tags| {
+                    tags.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            crate::ui::Item::new(
+                crate::ui::Tone::Ok,
+                snapshot["short_id"].as_str().unwrap_or("?"),
+                format!("{}  {tags}", snapshot["time"].as_str().unwrap_or("?")),
+            )
+        })
+        .collect();
+    crate::ui::items(&rows);
+    crate::ui::later(&[(
+        "restore one".to_string(),
+        format!("ic sandbox backup-restore {slug} --snapshot <id> --to <folder>"),
+    )]);
     Ok(())
 }
 
@@ -646,8 +674,15 @@ pub fn restore(
     docker::require_daemon()?;
     if !repo_dir(&from).join("config").exists() {
         bail!(
-            "{from} has no backups on this machine ({} is empty).",
-            repo_dir(&from).display()
+            "{}",
+            crate::ui::explain(
+                "Nothing was restored.",
+                Some(&format!(
+                    "{from} has no backups on this device: {} is empty.",
+                    repo_dir(&from).display()
+                )),
+                Some("ic sandbox backups"),
+            )
         );
     }
     let log = Log::create_named("backup", &format!("restore-{from}"))?;
@@ -664,13 +699,33 @@ pub fn restore(
                 &log,
             )?;
             if ran.code != Some(0) {
-                bail!("the restore did not finish. Log: {}", log.path.display());
+                bail!(
+                    "{}",
+                    crate::ui::explain(
+                        "The restore did not finish.",
+                        Some(&format!(
+                            "restic stopped. Its log is {}.",
+                            log.path.display()
+                        )),
+                        None,
+                    )
+                );
             }
-            println!("intentic: {from}'s files from snapshot {snapshot} are in {} (src/work and src/history).", folder.display());
+            crate::ui::done(&format!(
+                "{from}'s files from snapshot {snapshot} are in {} (src/work and src/history).",
+                folder.display()
+            ));
             Ok(())
         }
         (None, Some(into)) => restore_into(&from, &snapshot, &into, yes, &log),
-        _ => bail!("say where the files go: --to <folder>, or --into <sandbox>."),
+        _ => bail!(
+            "{}",
+            crate::ui::explain(
+                "Nothing was restored.",
+                Some("the command does not say where the files go."),
+                Some("add --to <folder>, or --into <sandbox>."),
+            )
+        ),
     }
 }
 
@@ -678,18 +733,34 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
     let _held = lock::hold_for_person(into)?;
     let container = container_of(into);
     if !docker::container_exists(&container) {
-        bail!("sandbox container {container} does not exist on this machine.");
+        bail!("{}", crate::sandbox::missing(into));
     }
     let (Some(work), Some(history)) = (
         docker::mount_source(&container, "/work"),
         docker::mount_source(&container, "/history"),
     ) else {
-        bail!("{container} mounts no workspace or history to restore into.");
+        bail!(
+            "{}",
+            crate::ui::explain(
+                "Nothing was restored.",
+                Some(&format!(
+                    "{into} has no workspace or history volume to restore into."
+                )),
+                None,
+            )
+        );
     };
-    if !yes && !crate::tty::confirm(&format!("Restore {from}'s snapshot {snapshot} into {into}? Files the backup holds are written over."), false) {
-        println!("intentic: nothing was changed.");
+    if !crate::ui::confirm(
+        &format!("Restore {from}'s snapshot {snapshot} into {into}?"),
+        &format!("{into} is stopped, the files the backup holds are written over its own, and it starts again."),
+        yes,
+    )? {
+        crate::ui::cancelled();
         return Ok(());
     }
+    crate::ui::act(&format!(
+        "Restoring {from}'s snapshot {snapshot} into {into}"
+    ));
     docker::quiet(&["stop", &container]);
     let mounts = vec![
         format!("{work}:/src/work"),
@@ -705,13 +776,20 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
     let ran = ran?;
     if ran.code != Some(0) {
         bail!(
-            "the restore into {into} did not finish; it was started again as it was left. Log: {}",
-            log.path.display()
+            "{}",
+            crate::ui::explain(
+                &format!("The restore into {into} did not finish."),
+                Some(&format!(
+                    "{into} was started again as it was left. restic's log is {}.",
+                    log.path.display()
+                )),
+                None,
+            )
         );
     }
-    println!(
-        "intentic: {from}'s snapshot {snapshot} is restored into {into}, which is starting again."
-    );
+    crate::ui::done(&format!(
+        "{from}'s snapshot {snapshot} is restored into {into}, which is starting again."
+    ));
     Ok(())
 }
 

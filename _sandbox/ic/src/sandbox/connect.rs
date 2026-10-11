@@ -8,6 +8,7 @@ use crate::platform;
 use crate::record::{ChannelRecord, Phase, Swap};
 use crate::sandbox::recreate::{self, Restored};
 use crate::sandbox::side::{self, Side};
+use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{
     container_status, doctor, list_slugs, lock, mirror, now_ms, project_dir, remove, resume,
     CONTAINER_PREFIX, PARKED_SUFFIX,
@@ -152,7 +153,11 @@ fn connect(
         label: "Connect this device",
         weight: 20,
     });
-    ui::begin("intentic · setting up your sandbox", plan);
+    let promise = format!(
+        "{} One long download in the middle is most of it.",
+        ui::plan_summary(plan.len(), plan.iter().map(|step| step.weight).sum())
+    );
+    ui::begin("intentic · setting up your sandbox", plan, Some(&promise));
 
     /* PREFLIGHT — every prerequisite verified read-only, every failure reported at once. */
     let mut list = vec![
@@ -220,13 +225,12 @@ fn connect(
         args.replace,
         args.yes,
         || {
-            ui::suspend();
-            println!("\nintentic: sandbox {slug} already exists on this machine.");
-            println!("Setting it up again recreates its container from this setup, and keeps its files, history, logins, settings and device.");
-            let yes = tty::confirm("Recreate it?", false);
-            println!();
-            ui::resume();
-            yes
+            ui::confirm(
+                &format!("Set up {slug} again?"),
+                &format!("{slug} already exists on this device. Setting it up again recreates its container from this setup, and keeps its files, history, logins, settings and device."),
+                false,
+            )
+            .unwrap_or(false)
         },
     ) {
         Existing::None => None,
@@ -243,44 +247,42 @@ fn connect(
             .filter(|existing| *existing != slug)
             .collect();
         if !others.is_empty() {
-            // A question owns the screen while it is asked: the live step line is erased first and redrawn
-            // after, or the spinner repaints straight over what the user is being asked to read.
-            ui::suspend();
-            println!(
-                "\nintentic: you already have {} on this machine:",
-                util::plural(others.len(), "other sandbox")
-            );
-            for other in &others {
-                println!("  {:<9} {other}", container_status(other));
-            }
+            let named: Vec<String> = others
+                .iter()
+                .map(|other| format!("{other} ({})", container_status(other)))
+                .collect();
+            ui::note(&format!(
+                "This device already has {}: {}. This sets up a new one alongside them.",
+                util::plural(others.len(), "other sandbox"),
+                named.join(", ")
+            ));
             if tty::have_tty() {
-                println!("This starts a NEW sandbox alongside them.");
-                println!("  [c] continue (start alongside)");
-                println!("  [r] remove some first…");
-                println!("  [q] quit");
-                match tty::ask("Choose [c/r/q]: ").as_deref() {
-                    Some("r") | Some("R") => {
-                        println!("intentic: opening cleanup…");
-                        let _ = remove::run(remove::Args {
+                let choices = [
+                    (
+                        "Set up the new one alongside them".to_string(),
+                        String::new(),
+                    ),
+                    ("Remove some of them first".to_string(), String::new()),
+                ];
+                match ui::pick("Go on?", &choices, false)? {
+                    Some(picked) if picked == [1] => {
+                        remove::run(remove::Args {
                             slugs: Vec::new(),
                             all: false,
                             yes: false,
                             agent_auth: false,
                             now: false,
-                        });
-                        println!("intentic: continuing with this sandbox…");
+                        })?;
                     }
-                    Some("q") | Some("Q") | Some("") | None => {
-                        println!("intentic: aborted — no sandbox started.");
+                    Some(_) => {}
+                    None => {
+                        ui::cancelled();
                         return Ok(());
                     }
-                    _ => {} // c (or anything else) → start alongside
                 }
             } else {
-                eprintln!("intentic: no terminal to prompt — starting alongside them (pass -y to silence this, or run cleanup first).");
+                ui::warn("Nobody is at this terminal to ask, so the new sandbox is set up alongside them. -y says so without this note.");
             }
-            println!();
-            ui::resume();
         }
     }
 
@@ -749,8 +751,10 @@ fn existing(exists: bool, replace: bool, yes: bool, ask: impl FnOnce() -> bool) 
 
 /// What a refused connect says: what is here, what connect would have done, and what to run instead. Pure.
 fn refusal(slug: &str) -> String {
-    format!(
-        "sandbox {slug} already exists on this machine, and connect would install it again from scratch. Nothing was changed.\n       To repair it: ic sandbox fix {slug}\n       To go back to the version before: ic sandbox rollback {slug} (or rebuild its environment from the command on its Environment card: ic sandbox rebuild {slug} <hash>)\n       To reinstall it anyway, keeping its files, history, logins, settings and device: run the setup command again with a new code (this one is used up) from a terminal and answer yes, or add --replace."
+    ui::explain(
+        &format!("{slug} already exists on this device, and setting it up would install it again from scratch. Nothing changed."),
+        Some(&format!("to repair it: ic sandbox fix {slug}. To go back to the version before: ic sandbox rollback {slug}, or rebuild its environment from the command on its Environment card: ic sandbox rebuild {slug} <hash>.")),
+        Some("to reinstall it anyway, keeping its files, history, logins, settings and device, run the setup command again with a new code (this one is used up) from a terminal and answer yes, or add --replace."),
     )
 }
 
@@ -1037,7 +1041,7 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
         ),
         ("stop it".to_string(), format!("docker stop {container}")),
         (
-            "reset it".to_string(),
+            "remove it".to_string(),
             format!("ic sandbox remove {slug} -y"),
         ),
         (
@@ -1048,19 +1052,19 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
     if !self_host {
         footnotes.push((
             "deploy here".to_string(),
-            "re-run with SELF_HOST=1 (needs sudo)".to_string(),
+            "run the setup again with SELF_HOST=1 (needs sudo)".to_string(),
         ));
     }
     if ui::is_rich() {
         let (address, instruction) = if public_url.is_empty() {
             (
                 None,
-                "Your sandbox answers on this machine only — open it from the platform on this device.",
+                "Your sandbox answers on this device only. Open it from the platform on this device.",
             )
         } else {
             (
                 Some(public_url),
-                "Go back to your browser — your sandbox announces itself and setup continues there.",
+                "Go back to your browser: your sandbox announces itself and setup continues there.",
             )
         };
         ui::finished("Your sandbox is running.", address, instruction, &footnotes);
@@ -1069,26 +1073,26 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
     // Piped: the historical prose, in the historical shape. Nothing parses it (desktop.ts reads only the
     // `intentic: [phase]` markers and treats everything else as detail), but it IS what a saved install log
     // has always looked like, and a log that reads differently for no reason is a log people re-learn.
-    println!("intentic sandbox started.");
+    ui::plain("intentic sandbox started.");
     if public_url.is_empty() {
-        println!(
-            "Your sandbox answers on this machine only — open it from the platform on this device."
+        ui::plain(
+            "Your sandbox answers on this device only. Open it from the platform on this device.",
         );
     } else {
-        println!("Your sandbox will be reachable at {public_url} (DNS may take a few seconds to propagate).");
-        println!(
-            "Return to the platform — your sandbox announces itself and setup continues automatically."
+        ui::plain(&format!("Your sandbox will be reachable at {public_url} (DNS may take a few seconds to propagate)."));
+        ui::plain(
+            "Return to the platform: your sandbox announces itself and setup continues automatically.",
         );
     }
     if !self_host {
-        println!("Reachable only — no deploy target. To deploy an app onto this machine later, re-run with SELF_HOST=1 (needs sudo).");
+        ui::plain("Reachable only, no deploy target. To deploy an app onto this device later, run the setup again with SELF_HOST=1 (needs sudo).");
     }
-    println!(
+    ui::plain(&format!(
         "Logs: docker logs -f {container} (connect logs: {})",
         crate::logfile::log_dir().display()
-    );
-    println!("Stop (keeps your /work): docker stop {container}");
-    println!("Reset this sandbox (also removes its /work volume): ic sandbox remove {slug} -y");
+    ));
+    ui::plain(&format!("Stop (keeps your /work): docker stop {container}"));
+    ui::plain(&format!("Remove this sandbox (its /work is kept for {GRACE_DAYS} days): ic sandbox remove {slug} -y"));
 }
 
 /// Does this reference carry an explicit registry host? The part before the first `/` counts as one when it
@@ -1511,9 +1515,9 @@ mod tests {
         assert_eq!(existing(true, false, false, || false), Existing::Refuse);
         let said = refusal("sandbox-abc");
         for part in [
-            "already exists on this machine",
+            "already exists on this device",
             "install it again",
-            "Nothing was changed",
+            "Nothing changed",
             "ic sandbox fix sandbox-abc",
             "ic sandbox rollback sandbox-abc",
             "ic sandbox rebuild sandbox-abc",

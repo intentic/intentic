@@ -19,7 +19,9 @@ import {
 // must keep reading every one (COMPATIBILITY.md, "Across versions").
 describe("bodies an older machine sends still parse", () => {
     it("an announce from a daemon that names nothing but its address", () => {
-        expect(AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev" })).toEqual({ daemonUrl: "https://abc123def456.intentic.dev" });
+        expect(AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev" })).toEqual({
+            daemonUrl: "https://abc123def456.intentic.dev",
+        });
     });
 
     it("an announce whose labels it cannot read keeps the announce and drops the labels", () => {
@@ -104,7 +106,7 @@ describe("the route table", () => {
 });
 
 // The callers that cannot import this module spell its values themselves: `ic` and the edge in Rust, the site's
-// cleanup script in shell. Each spelling is read here, so the contract and they cannot drift apart unnoticed.
+// Windows server script in PowerShell. Each spelling is read here, so the contract and they cannot drift apart unnoticed.
 describe("callers in other languages spell the contract's values", () => {
     const source = (path: string): string => readFileSync(join(repoRoot(import.meta.url), path), "utf8");
 
@@ -112,7 +114,7 @@ describe("callers in other languages spell the contract's values", () => {
         for (const path of ["_sandbox/ic/src/platform.rs", "_sandbox/ic/src/machine/enroll.rs"]) {
             expect([...source(path).matchAll(/\.header\("(x-intentic-[a-z-]+)"/gu)].map((match) => match[1])).toContain(CONNECT_TOKEN_HEADER);
         }
-        expect(source("_site/site/public/scripts/cleanup.sh")).toContain(`-H "${CONNECT_TOKEN_HEADER}: $tok"`);
+        expect(source("_site/site/public/scripts/connect-host.ps1")).toContain(`@{ '${CONNECT_TOKEN_HEADER}' = $ConnectToken }`);
     });
 
     it("`ic` calls the contract's paths", () => {
@@ -126,7 +128,9 @@ describe("callers in other languages spell the contract's values", () => {
     });
 
     it("the edge asks the contract's paths", () => {
-        expect(source("_platform/ingress/src/certificate.rs")).toContain(`pub const CERTIFICATE_PATH: &str = "${PLATFORM_INGRESS.edgeCertificate.path}";`);
+        expect(source("_platform/ingress/src/certificate.rs")).toContain(
+            `pub const CERTIFICATE_PATH: &str = "${PLATFORM_INGRESS.edgeCertificate.path}";`,
+        );
         expect(source("_platform/ingress/src/revocation.rs")).toContain(
             `const REACHABILITY_PATH: &str = "${PLATFORM_INGRESS.reachability.path.replace("{sandboxId}", "")}";`,
         );

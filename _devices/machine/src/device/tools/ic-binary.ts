@@ -141,8 +141,11 @@ let staleNote: string | undefined;
 /** Why the ic this agent drives is older than the agent, when fetching the current one failed; undefined otherwise. */
 export const icOutOfDate = (): string | undefined => staleNote;
 
+// Said on stderr with the protocol's warning prefix: in the resident agent that is its log, and before a pass-through
+// hands ic the terminal there is no renderer of this agent's own to draw it.
 const warn = (line: string): void => {
-    process.stderr.write(`warning: ${line}\n`);
+    // allow(terminal-output): the agent log's warning line, and the one line before ic takes a person's terminal
+    process.stderr.write(`intentic: ${line}\n`);
 };
 
 // Put this agent's own release of ic in the per-user location when what is installed is older (or missing). A fetch

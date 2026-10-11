@@ -10,6 +10,7 @@ import {
 } from "../../schemas/environment.js";
 import { MemberEmailSchema, MemberGrantSchema, MembersListSchema, MembersRosterSchema } from "../../schemas/members.js";
 import { OkSchema } from "../../schemas/shared.js";
+import { EnrollCodeAnswerSchema, EnrollCodeRequestSchema } from "../../schemas/short-codes.js";
 import { DefinitionDiffSchema, DefinitionExportSchema, WorkspacePublishResultSchema, WorkspacePublishSchema, WorkspaceRemoteSchema } from "../../state/definition.js";
 import type { RawRouteKey } from "./raw-routes.js";
 
@@ -24,6 +25,8 @@ export interface RawJsonRoute {
 }
 
 export const RAW_JSON_ROUTES = {
+    // A server-connect code for the owner's command (short-codes.ts).
+    "POST /system/enroll/code": { input: EnrollCodeRequestSchema, output: EnrollCodeAnswerSchema },
     // The roster is ownership's; every write answers the roster after it.
     "GET /members": { output: MembersRosterSchema },
     "POST /members": { input: MemberGrantSchema, output: MembersListSchema },

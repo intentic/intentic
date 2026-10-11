@@ -78,13 +78,15 @@ export interface WarmingAsk {
     readonly doing: string;
     // Thrown on a 401: an expired pairing token is definitive, and retrying it only delays the fresh one.
     readonly expired: string;
+    // Where each retry is narrated: the command's renderer, so it lands above its live line rather than across it.
+    readonly say?: Log | undefined;
     readonly attempts?: number | undefined;
     readonly delayMs?: number | undefined;
 }
 
 // A POST through a tunnel that may still be warming: a network error or a 5xx is retried, anything else is the caller's.
 export const postWhileWarming = async (sandboxUrl: string, path: string, init: RequestInit, ask: WarmingAsk): Promise<Response> => {
-    const { doing, expired, attempts = 10, delayMs = 3000 } = ask;
+    const { doing, expired, say = () => undefined, attempts = 10, delayMs = 3000 } = ask;
     for (let attempt = 1; ; attempt++) {
         // Resolved per attempt, since loopback may only appear partway through the retries.
         const { base } = await resolveDaemonBase(sandboxUrl);
@@ -101,7 +103,7 @@ export const postWhileWarming = async (sandboxUrl: string, path: string, init: R
             return response;
         }
         const why = response === undefined ? "the sandbox isn't reachable yet" : `the sandbox is warming up (HTTP ${response.status})`;
-        process.stderr.write(`${doing}: ${why}, retrying (${attempt}/${attempts})…\n`);
+        say(`${doing}: ${why}, retrying (${attempt}/${attempts})…`);
         await sleep(delayMs);
     }
 };

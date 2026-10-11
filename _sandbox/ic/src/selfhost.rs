@@ -2,6 +2,7 @@
 
 use std::process::{Command, Stdio};
 
+use crate::ui;
 use crate::util::{bail, Result};
 
 /* Wiring a Linux machine as a deploy target — the root-side system mutations connect.sh's SELF_HOST=1 and connect-host.sh share. */
@@ -113,7 +114,7 @@ pub fn ensure_sshd(root: &Root) -> Result<()> {
         .map(|status| status.success())
         .unwrap_or(false);
     if !have_sshd {
-        println!("intentic: installing OpenSSH server…");
+        ui::detail("installing OpenSSH server");
         if root.quiet("sh", &["-c", "command -v apt-get"]) {
             root.quiet("apt-get", &["update", "-qq"]);
             root.run(
@@ -154,7 +155,7 @@ pub fn ensure_sshd(root: &Root) -> Result<()> {
         root.quiet("/usr/sbin/sshd", &[]);
     }
     if !sshd_listening() {
-        eprintln!("intentic: warning — sshd does not appear to be listening on :22; the sandbox may not be able to deploy here.");
+        ui::warn("sshd does not appear to be listening on :22; the sandbox may not be able to deploy here.");
     }
     Ok(())
 }
@@ -196,13 +197,13 @@ pub fn setup_service_user(root: &Root, user: &str, key_comment: &str) -> Result<
         .map(|s| s.success())
         .unwrap_or(false);
     if !user_exists {
-        println!("intentic: creating service user '{user}'…");
+        ui::detail(&format!("creating service user {user}"));
         root.run("useradd", &["-m", "-s", "/bin/bash", user])?;
     }
     // The host provider runs `docker version` over SSH, so the user needs docker access; group membership
     // applies to the sandbox's fresh SSH sessions. A missing docker group is a soft warning, not fatal.
     if !root.quiet("usermod", &["-aG", "docker", user]) {
-        eprintln!("intentic: warning — could not add '{user}' to the docker group.");
+        ui::warn(&format!("could not add {user} to the docker group."));
     }
 
     let home = Command::new("getent")
@@ -225,7 +226,7 @@ pub fn setup_service_user(root: &Root, user: &str, key_comment: &str) -> Result<
     root.run("mkdir", &["-p", &ssh_dir])?;
     // Generate once; reuse on re-runs so HOST_SSH_KEY (and the platform-pinned host key) stay stable.
     if !root.quiet("test", &["-f", &key]) {
-        println!("intentic: generating SSH key for '{user}'…");
+        ui::detail(&format!("generating SSH key for {user}"));
         root.run(
             "ssh-keygen",
             &[
@@ -282,7 +283,7 @@ pub fn install_cloudflared(root: &Root, version: &str) -> Result<()> {
     {
         return Ok(());
     }
-    println!("intentic: installing cloudflared on this host…");
+    ui::detail("installing cloudflared");
     let arch = Command::new("dpkg")
         .arg("--print-architecture")
         .output()
@@ -342,7 +343,9 @@ pub fn run_ssh_connector(root: &Root, token: &str, flow: &str) -> Result<()> {
     } else {
         root.quiet("pkill", &["-f", "cloudflared tunnel --no-autoupdate run"]);
         root.run("sh", &["-c", &format!("nohup cloudflared tunnel --no-autoupdate run --token '{token}' >/var/log/intentic-host-ssh-tunnel.log 2>&1 &")])?;
-        eprintln!("intentic: the host SSH connector is running (detached; re-run {flow} after a reboot to restore it).");
+        ui::warn(&format!(
+            "the SSH connector is running detached; re-run {flow} after a reboot to restore it."
+        ));
     }
     Ok(())
 }

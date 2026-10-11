@@ -15,6 +15,7 @@ use crate::sandbox::{
     versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
+use crate::ui;
 use crate::util::{bail, sha256_hex, Fail, Result};
 
 /* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and every setting the container carries. */
@@ -121,7 +122,14 @@ fn recreate(
     preflight: Preflight,
 ) -> Result<()> {
     if !docker::cli_present() {
-        bail!("docker is required — run this on the machine that runs the sandbox.");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some("Docker is not installed on this device."),
+                Some("run this on the device that runs the sandbox."),
+            )
+        );
     }
     // What the user typed, for every re-run hint below: `prepare` is `update` stopped early, so the mode's own
     // name would send someone back to the command that does the whole thing.
@@ -135,10 +143,10 @@ fn recreate(
     if auto {
         match side::unattended(&slug) {
             Unattended::Theirs(side) => {
-                println!("intentic: {slug}: {}", side::sentence(&side));
+                ui::note(&format!("{slug}: {}", side::sentence(&side)));
                 return Ok(());
             }
-            Unattended::Adopted(adoption) => println!("intentic: {slug}: {}", adoption.sentence()),
+            Unattended::Adopted(adoption) => ui::note(&format!("{slug}: {}", adoption.sentence())),
             // The keeper's own round is also its heartbeat (side.rs).
             Unattended::Ours => {
                 side::beat(&slug);
@@ -147,7 +155,9 @@ fn recreate(
     }
     // One ic at a time on a sandbox; a background run comes back on its next tick rather than queueing behind a person.
     let Some(_held) = lock::hold(&slug, if auto { Wait::Skip } else { Wait::Block })? else {
-        println!("intentic: another ic run is working on {slug} — skipping this background run.");
+        ui::note(&format!(
+            "another ic run is working on {slug} — skipping this background run."
+        ));
         return Ok(());
     };
     let container = format!("{CONTAINER_PREFIX}{slug}");
@@ -156,19 +166,22 @@ fn recreate(
         // A recreate that died between parking the old container and starting its replacement leaves the
         // name empty and the sandbox parked — put it back rather than sending the owner to the wizard.
         if !docker::container_exists(&parked) {
-            bail!(
-                "sandbox container {container} does not exist on this machine — re-run connect first."
-            );
+            bail!("{}", crate::sandbox::missing(&slug));
         }
         // Un-parking a half-finished recreate restarts a container somebody's interrupted command chose to
         // stop, and a background tick has no idea why it was interrupted. A person's next prepare/update
         // restores it; auto leaves the machine exactly as it found it and says which command to reach for.
         if auto {
             bail!(
-                "sandbox {slug} was left parked by an interrupted recreate — run `ic sandbox update {slug}` yourself to put it back."
+                "{}",
+                ui::explain(
+                    &format!("{slug} was left set aside by an interrupted update, and a background run does not put it back."),
+                    None,
+                    Some(&format!("ic sandbox update {slug}")),
+                )
             );
         }
-        println!("intentic: restoring the sandbox an interrupted recreate left parked…");
+        ui::note("restoring the sandbox an interrupted recreate left parked…");
         docker::quiet(&["rename", &parked, &container]);
         docker::quiet(&["start", &container]);
     }
@@ -180,13 +193,25 @@ fn recreate(
     if reach == Reach::Staged {
         match checks::check_disk() {
             checks::Outcome::Fail { problem, remedy } => bail!(
-                "{problem}\n       {remedy}\n       Nothing was downloaded and your sandbox is untouched."
+                "{}",
+                ui::explain(
+                    "Nothing was downloaded, and your sandbox is untouched.",
+                    Some(&problem),
+                    Some(&remedy),
+                )
             ),
             checks::Outcome::Warn { problem } => {
-                println!("intentic: {problem}");
-/* A person reading this warning can weigh it; a timer cannot, and "proceed" from a timer is how a machine that was merely getting full gets filled. */
+                ui::note(&problem);
+                /* A person reading this warning can weigh it; a timer cannot, and "proceed" from a timer is how a machine that was merely getting full gets filled. */
                 if auto {
-                    println!("intentic: skipping this background download — the space above is a person's call. `ic sandbox prepare {slug}` still takes it by hand.");
+                    said(
+                        &format!("skipping this background download — the space above is a person's call. `ic sandbox prepare {slug}` still takes it by hand."),
+                        "This background download is skipped: the space above is a person's call.",
+                    );
+                    ui::later(&[(
+                        "download it anyway".to_string(),
+                        format!("ic sandbox prepare {slug}"),
+                    )]);
                     return Ok(());
                 }
             }
@@ -235,7 +260,7 @@ fn recreate(
         && image_override.is_none()
         && !follows_registry(current_base.as_deref(), sandbox_image.as_deref())
     {
-        println!("intentic: sandbox {slug} runs a pinned or locally-built image — background downloads don't apply to it.");
+        ui::note(&format!("sandbox {slug} runs a pinned or locally-built image — background downloads don't apply to it."));
         return Ok(());
     }
 
@@ -245,7 +270,12 @@ fn recreate(
         && built_from_checkout(current_base.as_deref(), sandbox_image.as_deref())
     {
         bail!(
-            "sandbox {slug} runs an image built from a checkout ({DEV_TAG}), so an update would move it onto {registry_image} rather than refresh it.\n       Rebuild it from that checkout instead: `pnpm rebuild:sandbox {slug}`.\n       To move it onto the published image anyway: `ic sandbox update {slug} --force`."
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some(&format!("{slug} runs an image built from a checkout ({DEV_TAG}), so an update would move it onto {registry_image} rather than refresh it.")),
+                Some(&format!("rebuild it from that checkout: pnpm rebuild:sandbox {slug}. To move it onto the published image anyway: ic sandbox update {slug} --force")),
+            )
         );
     }
 
@@ -277,11 +307,25 @@ fn recreate(
             // between the check and the build. The overlay lives on the workspace volume the agent can
             // write, so only content that still hashes to what the owner reviewed is ever built.
             if let Some(reason) = docker::cp_out(&container, APPROVED_FILE, &overlay_path) {
-                bail!("no approved overlay could be read from the sandbox — approve the proposal on the Environment card first, or fix what docker reported.\n       docker: {reason}");
+                bail!(
+                    "{}",
+                    ui::explain(
+                        "Nothing changed: no approved environment could be read from the sandbox.",
+                        Some(&format!("Docker said: {reason}")),
+                        Some("approve the proposal on the Environment card first, or fix what Docker reported."),
+                    )
+                );
             }
             let have = sha256_hex(&std::fs::read(&overlay_path)?);
             if have != *hash {
-                bail!("the approved overlay changed since it was reviewed (expected {hash}, found {have}).\n       Re-review and re-approve it on the Environment card, then run the fresh command it shows.");
+                bail!(
+                    "{}",
+                    ui::explain(
+                        "Nothing changed: the approved environment changed since it was reviewed.",
+                        Some(&format!("expected {hash}, found {have}.")),
+                        Some("review and approve it again on the Environment card, then run the new command it shows."),
+                    )
+                );
             }
             env_hash = Some(hash.clone());
         }
@@ -301,7 +345,7 @@ fn recreate(
             /* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in one call. */
             if !prepared && reach == Reach::Applied {
                 if saved.staged.is_some() {
-                    println!("intentic: the prepared update no longer fits this sandbox — updating the ordinary way.");
+                    ui::note("the prepared update no longer fits this sandbox — updating the ordinary way.");
                 }
                 clear_staged(&slug, &container, &saved);
             }
@@ -316,24 +360,33 @@ fn recreate(
                         .as_deref()
                         .is_some_and(|staged| staged != now)
                     {
-                        println!("intentic: {registry_image} has moved since the update was downloaded — updating the ordinary way.");
+                        ui::note(&format!("{registry_image} has moved since the update was downloaded — updating the ordinary way."));
                         clear_staged(&slug, &container, &saved);
                         prepared = false;
                     }
                 }
             }
             if prepared {
-                println!("intentic: using the update prepared earlier — nothing to download.");
+                ui::note("using the update prepared earlier — nothing to download.");
             } else {
                 // Pull the latest base up front — a moved tag is exactly what makes an update available, and
                 // `docker run` reuses a cached tag without re-pulling. A no-op is reported honestly, not
                 // recreated into the same image and claimed as success.
-                println!("intentic: pulling {registry_image}…");
+                ui::note(&format!("pulling {registry_image}…"));
                 let cached = docker::image_id(&registry_image);
                 let _ = docker::pull(&registry_image, &log);
                 let pulled = docker::image_id(&registry_image);
                 if pulled.is_none() {
-                    bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
+                    bail!(
+                        "{}",
+                        ui::explain(
+                            &format!(
+                                "{registry_image} is not available, and the sandbox is untouched."
+                            ),
+                            Some("the download failed."),
+                            Some(&format!("read the log: {}", log.path.display())),
+                        )
+                    );
                 }
                 /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
                 let already_current = match (&old_base_id, &pulled) {
@@ -347,8 +400,12 @@ fn recreate(
                 if already_current {
                     /* Nothing is waiting for this sandbox, whatever the record last said. */
                     clear_staged(&slug, &container, &saved);
-                    println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
-                    println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
+                    // The plain sentence ends the run for the desktop app (deviceUpdateStages.ts FINISHED): its opening is frozen.
+                    ui::done(&format!("no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull."));
+                    ui::plain("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
+                    if ui::is_rich() {
+                        ui::note("If the app still shows an update, the new release's image may still be publishing. Try again in a few minutes.");
+                    }
                     return Ok(());
                 }
             }
@@ -369,9 +426,15 @@ fn recreate(
                 );
             };
             if target != pin.image {
-                println!(
-                    "intentic: {} is gone from this machine — going back to the release it was, {target}.",
-                    pin.image
+                said(
+                    &format!(
+                        "{} is gone from this machine — going back to the release it was, {target}.",
+                        pin.image
+                    ),
+                    &format!(
+                        "{} is gone from this device, so the release it was, {target}, is downloaded instead.",
+                        pin.image
+                    ),
                 );
                 gone_pin = Some(pin.image.clone());
             }
@@ -381,12 +444,15 @@ fn recreate(
             // protected tag. (A registry ref here is an older record; for those the pull attempt below is
             // still the only chance.)
             if !docker::image_exists(&registry_image) {
-                println!(
-                    "intentic: {registry_image} is not on this machine any more — pulling it…"
+                said(
+                    &format!("{registry_image} is not on this machine any more — pulling it…"),
+                    &format!(
+                        "{registry_image} is not on this device any more, so it is downloaded…"
+                    ),
                 );
                 let _ = docker::pull(&registry_image, &log);
             }
-            println!("intentic: rolling back to {registry_image}…");
+            ui::note(&format!("rolling back to {registry_image}…"));
             stage_overlay(&container, &overlay_path)?;
             /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
             let approved = std::fs::read_to_string(&overlay_path)?;
@@ -403,7 +469,7 @@ fn recreate(
                 &|image| docker::image_exists(image),
             );
             if let Some((image, hash)) = &kept_env {
-                println!("intentic: using {image}, the environment build this sandbox ran on that version — nothing to rebuild.");
+                ui::note(&format!("using {image}, the environment build this sandbox ran on that version — nothing to rebuild."));
                 env_hash = Some(hash.clone());
             }
         }
@@ -431,7 +497,7 @@ fn recreate(
             // where a dev swap legitimately hands back a bare image is a sandbox that has nothing approved,
             // and it should look different on screen from one that kept its environment.
             if !staged {
-                println!("intentic: no approved environment recipe on this sandbox — recreating it from {DEV_TAG} alone.");
+                ui::note(&format!("no approved environment recipe on this sandbox — recreating it from {DEV_TAG} alone."));
             }
         }
     }
@@ -469,7 +535,9 @@ fn recreate(
         Mode::Rebuild { .. } => {
             let hash = env_hash.as_deref().expect("rebuild set the hash");
             target_image = format!("intentic-sandbox-env-{slug}:{}", &hash[..12]);
-            println!("intentic: building {target_image} from the approved overlay…");
+            ui::note(&format!(
+                "building {target_image} from the approved overlay…"
+            ));
             build_overlay(
                 &target_image,
                 &slug,
@@ -501,10 +569,10 @@ fn recreate(
             } else if let Some((image, _)) = &kept_env {
                 target_image = image.clone();
             } else if !overlay.is_empty() {
-                println!(
-                    "intentic: rebuilding your environment overlay on the {} base…",
+                ui::note(&format!(
+                    "rebuilding your environment overlay on the {} base…",
                     if fresh { "new" } else { "rollback" }
-                );
+                ));
                 if let Some(announcing) = &announcing {
                     announcing.enter(preparing::Phase::Build);
                 }
@@ -524,7 +592,9 @@ fn recreate(
             if !overlay.is_empty() {
                 let hash = env_hash.as_deref().expect("dev set the hash");
                 target_image = format!("intentic-sandbox-dev-env-{slug}:{}", &hash[..12]);
-                println!("intentic: building {target_image} — the overlay's tooling on top of {DEV_TAG}…");
+                ui::note(&format!(
+                    "building {target_image} — the overlay's tooling on top of {DEV_TAG}…"
+                ));
                 build_overlay(&target_image, &slug, &overlay_path, false, DEV_TAG, &log)?;
             }
         }
@@ -544,7 +614,14 @@ fn recreate(
         }
     }
     if !docker::image_exists(&target_image) {
-        bail!("{target_image} is not available (pull or overlay build failed) — the sandbox is untouched. Log: {}", log.path.display());
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("{target_image} is not available, and the sandbox is untouched."),
+                Some("the download or the environment build failed."),
+                Some(&format!("read the log: {}", log.path.display())),
+            )
+        );
     }
 
     /* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
@@ -564,10 +641,15 @@ fn recreate(
         /* THE VERSION THIS SANDBOX WENT BACK FROM is never downloaded behind a person's back again; `ic sandbox prepare` by hand still takes it. */
         if auto && version.is_some() && version == saved.rolled_back_from {
             clear_staged(&slug, &container, &saved);
-            println!(
-                "intentic: skipping {} — this sandbox went back from it. `ic sandbox update {slug}` still takes it by hand.",
-                version.as_deref().unwrap_or_default()
+            let skipped = version.as_deref().unwrap_or_default();
+            said(
+                &format!("skipping {skipped} — this sandbox went back from it. `ic sandbox update {slug}` still takes it by hand."),
+                &format!("{skipped} is not downloaded in the background: this sandbox went back from it."),
             );
+            ui::later(&[(
+                "take it anyway".to_string(),
+                format!("ic sandbox update {slug}"),
+            )]);
             return Ok(());
         }
         return record_staged(
@@ -607,7 +689,7 @@ fn recreate(
             &log,
         )?,
         Some(Preflight::Skip) => {
-            println!("intentic: skipping the state-conversion pre-flight (--skip-preflight).")
+            ui::note("skipping the state-conversion pre-flight (--skip-preflight).")
         }
         // A check changes nothing it would have to convert.
         None => {}
@@ -648,10 +730,10 @@ fn recreate(
         env_nul.extend_from_slice(format!("HOST_PLATFORM={platform}").as_bytes());
         env_nul.push(0);
         if reach == Reach::Applied {
-            println!(
-                "intentic: {slug} named no side of this computer; ic on {} keeps it from now on.",
+            ui::note(&format!(
+                "{slug} named no side of this computer; ic on {} keeps it from now on.",
                 stamp.side.name()
-            );
+            ));
         }
     }
     let stamped_run = stamp_args(&slug, &stamp);
@@ -680,10 +762,10 @@ fn recreate(
         _ => saved.desired.clone(),
     };
     if let (Some(waiting), Reach::Applied) = (&saved.desired, reach) {
-        println!(
-            "intentic: applying the shape saved for this restart — {}.",
+        ui::note(&format!(
+            "applying the shape saved for this restart — {}.",
             waiting.describe()
-        );
+        ));
     }
     let (host_runtime, seeds) = match &target {
         None => (carried_runtime, Vec::new()),
@@ -802,7 +884,7 @@ fn recreate(
         crate::sandbox::backup::before_swap(&slug);
     }
 
-    println!("intentic: recreating the sandbox from {target_image}…");
+    ui::note(&format!("recreating the sandbox from {target_image}…"));
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
@@ -861,7 +943,9 @@ fn recreate(
     let mut heartbeat = probation::Heartbeat::start(&slug, swap.at);
     // The turns this cutover cuts are picked up by whichever version boots next, the new one or the old one put back.
     if resume::ask(&container) {
-        println!("intentic: the agents' turns this restart cuts are picked up again once the sandbox is back.");
+        ui::note(
+            "the agents' turns this restart cuts are picked up again once the sandbox is back.",
+        );
     }
 
     /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that passes its probation earns the rm. */
@@ -930,10 +1014,10 @@ fn recreate(
                 restored_line(&restored, matches!(mode, Mode::Dev), &slug)
             );
         }
-        println!("intentic: recreated without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
+        ui::note("recreated without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
     }
 
-    println!("intentic: waiting for the sandbox daemon to come up…");
+    ui::note("waiting for the sandbox daemon to come up…");
     let answered = match health::wait_answering(&container, &log, "") {
         Ok(answered) => answered,
         Err(err) => {
@@ -1005,42 +1089,83 @@ fn recreate(
         },
     );
 
+    // The plain sentences are what the desktop app reads (deviceUpdateStages.ts): "sandbox updated to" and "sandbox
+    // rolled back to" end the run, so their openings are frozen; the indented lines under them continue them.
+    let mut footnotes: Vec<(String, String)> = Vec::new();
     match &mode {
-        Mode::Rebuild { .. } => println!("intentic: sandbox rebuilt — the Environment card will show Applied once it reconnects."),
+        Mode::Rebuild { .. } => {
+            ui::done("sandbox rebuilt — the Environment card will show Applied once it reconnects.")
+        }
         Mode::Update { .. } => {
-            println!("intentic: sandbox updated to {target_image} (channel {channel}).");
+            ui::done(&format!(
+                "sandbox updated to {target_image} (channel {channel})."
+            ));
             // Named on success, not only in the failure paths: a bad build is usually one that STARTS, and
             // the moment to learn the way back is before anyone needs it.
             if previous.is_some() {
-                println!("          Roll back with: ic sandbox rollback {slug}");
+                ui::plain(&format!(
+                    "          Roll back with: ic sandbox rollback {slug}"
+                ));
+                footnotes.push(("go back".to_string(), format!("ic sandbox rollback {slug}")));
             }
             // The migration's switch has flipped (engine/choice.rs): an update is the moment the move is offered, and
             // the desktop app reads the line to put it on its card.
             if crate::engine::move_offered() {
-                println!("          This PC can now run its sandboxes on Intentic's own engine instead of Docker Desktop: ic engine move --to intentic");
-                println!("intentic-offer: {}", serde_json::json!({ "offer": "engine-move", "to": "intentic" }));
+                ui::plain("          This PC can now run its sandboxes on Intentic's own engine instead of Docker Desktop: ic engine move --to intentic");
+                footnotes.push((
+                    "run on Intentic's own engine".to_string(),
+                    "ic engine move --to intentic".to_string(),
+                ));
+                // allow(terminal-output): the offer the desktop app reads off the stream to put it on its card.
+                println!(
+                    "intentic-offer: {}",
+                    serde_json::json!({ "offer": "engine-move", "to": "intentic" })
+                );
             }
         }
-        Mode::Rollback { .. } => println!("intentic: sandbox rolled back to {target_image} — run rollback again to return."),
-        Mode::Dev => println!("intentic: sandbox is live on {target_image} — docker logs -f {container}"),
+        Mode::Rollback { .. } => ui::done(&format!(
+            "sandbox rolled back to {target_image} — run rollback again to return."
+        )),
+        Mode::Dev => ui::done(&format!(
+            "sandbox is live on {target_image} — docker logs -f {container}"
+        )),
         // What is IN FORCE, read back off the container rather than echoed from the ask: the contract may have
         // bounded a cap to the machine, and a host without the runtime may have dropped the GPU.
-        Mode::Reshape(_) => println!(
-            "intentic: sandbox reshaped — {}. The values live on the sandbox and survive every later update.",
+        Mode::Reshape(_) => ui::done(&format!(
+            "sandbox reshaped — {}. The values live on the sandbox and survive every later update.",
             describe_shape(&container)
-        ),
+        )),
     }
-    if keep_until.is_some() {
-        println!(
-            "          The previous version stays parked and ready for {}: if this one keeps failing, `ic sandbox watch {slug}` (run every minute by the machine agent) puts it back by itself.",
-            probation::remaining(keep_until.unwrap_or_default())
-        );
+    if let Some(until) = keep_until {
+        let left = probation::remaining(until);
+        ui::plain(&format!(
+            "          The previous version stays parked and ready for {left}: if this one keeps failing, `ic sandbox watch {slug}` (run every minute by the machine agent) puts it back by itself."
+        ));
+        if ui::is_rich() {
+            ui::note(&format!(
+                "The previous version stays parked and ready for {left}, and comes back by itself if this one keeps failing."
+            ));
+        }
     }
-    println!(
+    ui::plain(&format!(
         "Logs: docker logs -f {container} (recreate log: {})",
         log.path.display()
-    );
+    ));
+    footnotes.push(("logs".to_string(), format!("docker logs -f {container}")));
+    ui::later(&footnotes);
+    if ui::is_rich() {
+        ui::note(&format!("The log of this run is {}.", log.path.display()));
+    }
     Ok(())
+}
+
+/// One narration line in two wordings: the frozen sentence a log has always carried (the desktop app reads these lines,
+/// deviceUpdateStages.ts), and the one a person reads on a screen.
+fn said(frozen: &str, rich: &str) {
+    ui::plain(&format!("intentic: {frozen}"));
+    if ui::is_rich() {
+        ui::note(rich);
+    }
 }
 
 /// A SWAP STILL ON THE RECORD IS OVER THE MOMENT A PERSON STARTS ANOTHER: one on probation is superseded (its parked
@@ -1052,7 +1177,12 @@ pub(crate) fn supersede_swap(slug: &str, saved: ChannelRecord) -> Result<Channel
     };
     if probation::cutover_in_progress(&swap, now_ms()) {
         bail!(
-            "another ic run is swapping {slug} right now (from another terminal, or the other side of this machine's WSL). Nothing was changed; try again once it has finished."
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some(&format!("another ic run is swapping {slug} right now, from another terminal or the other side of this computer.")),
+                Some("run the same command again once it has finished."),
+            )
         );
     }
     probation::settle(slug, &saved, swap.phase == Phase::Cutover)
@@ -1078,7 +1208,14 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
         desired::adopt_legacy(&slug, &container)?;
     }
     if ask.is_empty() && record::read(&slug)?.desired.is_none() {
-        bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus.");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some("the command names no change."),
+                Some("give at least one of --memory, --cpus, --privileged, --gpus."),
+            )
+        );
     }
     if let Some(shape) = ask_spelling(&ask) {
         shape.check_spelling()?;
@@ -1205,13 +1342,17 @@ fn record_staged(
         log,
     );
     match &version {
-        Some(version) => println!("intentic: {version} is downloaded and built, and your sandbox is still running on the old one."),
-        None => println!("intentic: the next update is downloaded and built, and your sandbox is still running on the old one."),
+        Some(version) => ui::note(&format!("{version} is downloaded and built, and your sandbox is still running on the old one.")),
+        None => ui::note("the next update is downloaded and built, and your sandbox is still running on the old one."),
     }
-    println!(
+    ui::plain(&format!(
         "          Applying it is now a restart of about half a minute: ic sandbox update {}",
         what.slug
-    );
+    ));
+    ui::later(&[(
+        "apply it, a restart of about half a minute".to_string(),
+        format!("ic sandbox update {}", what.slug),
+    )]);
     Ok(())
 }
 
@@ -1339,8 +1480,12 @@ pub(crate) fn build_overlay(
     let built = docker::stream(&args, Some(&content), docker::Shown::Raw, log)?;
     if !built.ok {
         bail!(
-            "building the environment overlay {tag} failed, so the sandbox is untouched. Log: {}",
-            log.path.display()
+            "{}",
+            ui::explain(
+                &format!("Building the environment {tag} failed, so the sandbox is untouched."),
+                None,
+                Some(&format!("read the log: {}", log.path.display())),
+            )
         );
     }
     Ok(())
@@ -1610,14 +1755,14 @@ pub(crate) fn restore_parked(
     );
     // Still parked, it is what the next swap's first step removes, so the way back is said rather than assumed.
     if let Err(refusal) = docker::capture(&["rename", parked, container]) {
-        println!(
-            "intentic: the previous sandbox is kept as {parked} but could not take its name back ({}).\n          Restore it by hand before anything else: docker rename {parked} {container} && docker start {container}",
+        ui::warn(&format!(
+            "the previous sandbox is kept as {parked} but could not take its name back ({}).\nRestore it by hand before anything else: docker rename {parked} {container} && docker start {container}",
             refusal.0
-        );
+        ));
         return Restored::NotPut;
     }
     docker::quiet(&["start", container]);
-    println!("intentic: the previous sandbox container was restored; waiting for it to answer…");
+    ui::note("the previous sandbox container was restored; waiting for it to answer…");
     match health::first_answer(container) {
         Ok(_) => Restored::Answering,
         Err(silent) => {

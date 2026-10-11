@@ -1,6 +1,7 @@
 use crate::docker;
 use crate::sandbox::lock;
 use crate::sandbox::{container_of, now_ms};
+use crate::ui;
 use crate::util::{bail, Result};
 
 /* `ic sandbox reset-owner <slug>` — the way back in when the sandbox's owner file cannot be read.
@@ -29,18 +30,38 @@ fn owner_file(container: &str) -> Option<String> {
     .find(|path| docker::exec_ok(container, &["test", "-e", path.as_str()]))
 }
 
+/// What answering yes does, said before the question. Pure.
+fn consequence(slug: &str, named_owner: Option<&str>) -> String {
+    let who = match named_owner {
+        Some(email) => format!("Only {email} can sign in to bind it, as when it was set up."),
+        None => "This sandbox names no owner, so the first Google account to sign in with its connect token becomes its owner.".to_string(),
+    };
+    format!("{slug}'s owner file cannot be read, so nobody can sign in. This moves it aside so the owner's next sign-in binds the sandbox again. {who}")
+}
+
 pub fn run(slug: String, yes: bool) -> Result<()> {
     docker::require_daemon()?;
     let _held = lock::hold_for_person(&slug)?;
     let container = container_of(&slug);
     if !docker::container_exists(&container) {
-        bail!("sandbox container {container} does not exist on this machine.");
+        bail!("{}", crate::sandbox::missing(&slug));
     }
     if docker::inspect(&container, "{{.State.Running}}").as_deref() != Some("true") {
-        bail!("{slug} is not running — start it first (ic sandbox start {slug}), then run this again.");
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("{slug} is not running, so its owner file cannot be reset."),
+                None,
+                Some(&format!(
+                    "ic sandbox start {slug}, then run this command again."
+                )),
+            )
+        );
     }
     let Some(owner_file) = owner_file(&container) else {
-        println!("intentic: {slug} has no owner file, so its owner's next sign-in already binds it. Nothing was changed.");
+        ui::quiet(&format!(
+            "{slug} has no owner file, so its owner's next sign-in already binds it. Nothing changed."
+        ));
         return Ok(());
     };
     // A file that reads is a working sign-in: moving it aside would only hand the sandbox to whoever signs in next.
@@ -49,40 +70,55 @@ pub fn run(slug: String, yes: bool) -> Result<()> {
         .is_some_and(|owner| owner["email"].is_string())
     {
         bail!(
-            "{slug}'s owner file reads fine, so sign-in is not blocked by it. Nothing was changed."
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some(&format!(
+                    "{slug}'s owner file reads fine, so it is not what blocks sign-in."
+                )),
+                Some(&format!("ic sandbox doctor {slug}")),
+            )
         );
     }
     // Who can bind once the file is gone: the owner the platform named (OWNER_EMAIL), signing in with the connect
     // token. Without a connect token any Google account that reaches the daemon would bind, so this refuses; without
     // an owner email the first account to sign in with the token does, which is said before anyone agrees.
     if docker::container_env_value(&container, "CONNECT_TOKEN").is_none() {
-        bail!("{slug} has no connect token, so after this anyone who reached it could claim it. Nothing was changed; set the sandbox up again with its setup code instead.");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some(&format!(
+                    "{slug} has no connect token, so after a reset anyone who reached it could claim it."
+                )),
+                Some("set the sandbox up again with its setup code."),
+            )
+        );
     }
     let named_owner = docker::container_env_value(&container, "OWNER_EMAIL");
-    if !yes {
-        if !crate::tty::have_tty() {
-            bail!(
-                "reset-owner changes who can sign in to {slug}; run it again with -y to confirm."
-            );
-        }
-        println!("intentic: {slug}'s owner file cannot be read, so nobody can sign in.");
-        println!(
-            "          This moves it aside so the owner's next sign-in binds the sandbox again."
-        );
-        match &named_owner {
-            Some(email) => println!("          Only {email} can sign in to bind it, as when it was set up."),
-            None => println!("          This sandbox names no owner, so the first Google account to sign in with its connect token becomes its owner."),
-        }
-        if !crate::tty::confirm("Go ahead?", false) {
-            println!("intentic: nothing was changed.");
-            return Ok(());
-        }
+    if !ui::confirm(
+        &format!("Reset {slug}'s owner?"),
+        &consequence(&slug, named_owner.as_deref()),
+        yes,
+    )? {
+        ui::cancelled();
+        return Ok(());
     }
+    ui::act(&format!("Moving {slug}'s unreadable owner file aside"));
     let aside = format!("{owner_file}.unreadable-{}", now_ms());
     if !docker::exec_ok(&container, &["mv", owner_file.as_str(), aside.as_str()]) {
-        bail!("could not move {owner_file} aside inside {container}.");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some(&format!(
+                    "{owner_file} could not be moved aside inside {container}."
+                )),
+                Some(&format!("ic sandbox doctor {slug}")),
+            )
+        );
     }
-    println!("intentic: the unreadable owner file is kept as {aside}.");
-    println!("          Sign in again as this sandbox's owner: the first sign-in binds it, as it did when it was set up.");
+    ui::done(&format!("The unreadable owner file is kept as {aside}."));
+    ui::note("Sign in again as this sandbox's owner: the first sign-in binds it, as it did when it was set up.");
     Ok(())
 }

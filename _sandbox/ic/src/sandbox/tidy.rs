@@ -10,6 +10,7 @@ use crate::sandbox::labels;
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::side::{self, Adoption, Keeper, Side};
 use crate::sandbox::{backup, container_of, live_slugs, mirror, now_ms, parked_of, trash};
+use crate::ui;
 use crate::util::{bail, Result};
 
 /* WHAT UPDATES LEAVE BEHIND, cleared. Every overlay rebuild tags a new image and leaves the one before it dangling,
@@ -327,7 +328,7 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     }
     let unattended = auto || !crate::tty::have_tty();
     let Some(live) = live_slugs() else {
-        bail!("docker could not list this machine's sandboxes, so nothing was removed.");
+        bail!("{}", nothing_listed("sandboxes"));
     };
     let trashed: Vec<String> = trash::list().into_iter().map(|entry| entry.slug).collect();
     // The trash's own overdue entries go first, as every other verb that touches sandboxes does.
@@ -339,14 +340,14 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     let Some(listing) =
         docker::try_capture(&["images", "--format", "{{.Repository}}:{{.Tag}} {{.ID}}"])
     else {
-        bail!("docker could not list this machine's images, so nothing was removed.");
+        bail!("{}", nothing_listed("images"));
     };
     let side_label = format!("{{{{.Name}}}}\t{{{{.Label \"{}\"}}}}", labels::SIDE);
     let Some(volumes) = docker::try_capture(&["volume", "ls", "--format", &side_label]) else {
-        bail!("docker could not list this machine's volumes, so nothing was removed.");
+        bail!("{}", nothing_listed("volumes"));
     };
     let Some(networks) = docker::try_capture(&["network", "ls", "--format", "{{.Name}}"]) else {
-        bail!("docker could not list this machine's networks, so nothing was removed.");
+        bail!("{}", nothing_listed("networks"));
     };
     let here = side::here();
     let mut tally = Tally::default();
@@ -549,6 +550,7 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     backups(dry_run, &known, &mut tally);
 
     if as_json {
+        // allow(terminal-output): the --json answer, one line the machine agent's daily tidy reads.
         println!("{}", report(&tally, dry_run, &purged));
         return Ok(());
     }
@@ -682,60 +684,123 @@ fn report(tally: &Tally, dry_run: bool, purged: &[String]) -> Value {
     })
 }
 
-/// What a person reads.
+/// The stop for a listing Docker would not give: never read as an empty device.
+fn nothing_listed(what: &str) -> String {
+    ui::explain(
+        "Nothing was removed.",
+        Some(&format!("Docker could not list the {what} on this device.")),
+        Some("ic docker prepare --dry-run"),
+    )
+}
+
+/// What a person reads: one report, a row per kind of thing tidied, the leftovers it would not touch named under it.
 fn say(tally: &Tally, dry_run: bool, purged: &[String], unattended: bool) {
+    use crate::util::plural;
     let verb = if dry_run { "would remove" } else { "removed" };
-    println!(
-        "intentic: tidy {verb} {} image(s) no sandbox here can use.",
-        tally.images.len()
+    let moved = if dry_run { "would move" } else { "moved" };
+    ui::report(
+        "intentic · tidy",
+        Some(if dry_run {
+            "a dry run: nothing is removed"
+        } else {
+            "this device's sandboxes"
+        }),
     );
-    for image in &tally.images {
-        println!("          {image}");
-    }
-    for (slug, adoption) in &tally.adopted {
-        println!("intentic: {slug}: {}", adoption.sentence());
-    }
-    if !tally.busy.is_empty() {
-        println!(
-            "intentic: left for the next tidy, another ic run holds them: {}.",
-            tally.busy.join(", ")
-        );
-    }
+    let mut rows = vec![ui::Item::new(
+        if tally.images.is_empty() {
+            ui::Tone::Skip
+        } else {
+            ui::Tone::Ok
+        },
+        "images",
+        format!(
+            "{verb} {} no sandbox here can use",
+            plural(tally.images.len(), "image")
+        ),
+    )];
     if tally.dangling > 0 {
-        println!(
-            "intentic: {verb} {} environment build(s) a rebuild left behind.",
-            tally.dangling
-        );
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            "environment builds",
+            format!("{verb} {} a rebuild left behind", tally.dangling),
+        ));
     }
     if !tally.records.is_empty() {
-        println!(
-            "intentic: {} record(s) of sandboxes that are gone or kept by another side {} to {}.",
-            tally.records.len(),
-            if dry_run { "would move" } else { "moved" },
-            archive_dir().display()
-        );
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            "records",
+            format!(
+                "{moved} {} of sandboxes that are gone or kept by another side to {}",
+                tally.records.len(),
+                archive_dir().display()
+            ),
+        ));
     }
     if tally.records_pruned > 0 {
-        println!(
-            "intentic: {verb} {} archived record(s) older than 90 days.",
-            tally.records_pruned
-        );
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            "archived records",
+            format!("{verb} {} older than 90 days", tally.records_pruned),
+        ));
     }
     if !purged.is_empty() {
-        println!(
-            "intentic: deleted {} sandbox(es) whose recovery window ran out: {}.",
-            purged.len(),
-            purged.join(", ")
-        );
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            "removed sandboxes",
+            format!(
+                "deleted {} whose recovery window ran out: {}",
+                plural(purged.len(), "sandbox"),
+                purged.join(", ")
+            ),
+        ));
     }
     if !tally.trashed_sets.is_empty() {
-        println!(
-            "intentic: {} the volumes of {} into the trash: nothing on this machine claims them. `ic sandbox restore <slug>` takes them back out within {} days.",
-            if dry_run { "would move" } else { "moved" },
-            tally.trashed_sets.join(", "),
-            trash::GRACE_DAYS
-        );
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            "unclaimed volumes",
+            format!(
+                "{moved} those of {} into the trash for {} days",
+                tally.trashed_sets.join(", "),
+                trash::GRACE_DAYS
+            ),
+        ));
     }
+    for (slug, why, bytes) in &tally.backups {
+        rows.push(ui::Item::new(
+            ui::Tone::Ok,
+            format!("backups of {slug}"),
+            format!(
+                "{verb}{}: {why}",
+                if *bytes > 0 {
+                    format!(" {:.1} GB", *bytes as f64 / 1e9)
+                } else {
+                    String::new()
+                }
+            ),
+        ));
+    }
+    if !tally.busy.is_empty() {
+        rows.push(ui::Item::new(
+            ui::Tone::Skip,
+            "busy",
+            format!(
+                "left for the next tidy, another ic run holds {}",
+                tally.busy.join(", ")
+            ),
+        ));
+    }
+    for (slug, adoption) in &tally.adopted {
+        rows.push(ui::Item::new(
+            ui::Tone::Skip,
+            slug.clone(),
+            adoption.sentence(),
+        ));
+    }
+    ui::items(&rows);
+    for image in &tally.images {
+        ui::plain(&format!("          {image}"));
+    }
+
     let named: Vec<&String> = tally
         .orphan_volumes
         .iter()
@@ -746,32 +811,28 @@ fn say(tally: &Tally, dry_run: bool, purged: &[String], unattended: bool) {
                 .is_none_or(|slug| !tally.trashed_sets.iter().any(|set| set == slug))
         })
         .collect();
-    if !named.is_empty() {
-        println!(
-            "intentic: these volumes and networks belong to no sandbox on this machine and were left alone:"
-        );
-        for name in &named {
-            println!("          {name}");
-        }
-        for (slug, side) in &tally.other_sides {
-            println!(
-                "          ({slug}'s were made by ic on {}, whose own tidy decides.)",
-                side.name()
-            );
-        }
-        if !unattended {
-            println!("          If you don't need them: docker volume rm <name>. If you might, they are safe where they are; the machine agent's daily tidy moves unclaimed ones into the trash.");
-        }
+    if named.is_empty() {
+        return;
     }
-    for (slug, why, bytes) in &tally.backups {
-        println!(
-            "intentic: {verb} this side's backups of {slug}{} — {why}.",
-            if *bytes > 0 {
-                format!(" ({:.1} GB)", *bytes as f64 / 1e9)
-            } else {
-                String::new()
-            }
-        );
+    ui::section("left alone, no sandbox here claims them");
+    let mut left: Vec<ui::Item> = named
+        .iter()
+        .map(|name| ui::Item::new(ui::Tone::Skip, name.to_string(), String::new()))
+        .collect();
+    for (slug, side) in &tally.other_sides {
+        left.push(ui::Item::new(
+            ui::Tone::Skip,
+            format!("{slug}'s"),
+            format!("made by ic on {}, whose own tidy decides", side.name()),
+        ));
+    }
+    ui::items(&left);
+    if !unattended {
+        ui::note("If you might need them they are safe where they are: the machine agent's daily tidy moves unclaimed ones into the trash.");
+        ui::later(&[(
+            "remove one now".to_string(),
+            "docker volume rm <name>".to_string(),
+        )]);
     }
 }
 

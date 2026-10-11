@@ -132,7 +132,7 @@ export const attachToWindows = async (log: (message: string) => void): Promise<b
     }
     const attached = runOnWindows(agent, attachArgs(distro));
     if (attached.status !== 0) {
-        log(`note: the Windows side's agent would not take this distro over (${attached.output.split("\n")[0] ?? "no reason given"}); this distro starts its own.`);
+        log(`The Windows side's agent would not take this distro over (${attached.output.split("\n")[0] ?? "no reason given"}); this distro starts its own.`);
         return false;
     }
     return true;

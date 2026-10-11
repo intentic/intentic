@@ -1,16 +1,18 @@
 #!/bin/sh
-# intentic recreate — bootstrap shim. The flow itself (update/rebuild/rollback/dev, env replay, overlay
-# re-base, the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only fetches the
+# intentic recreate: a bootstrap shim. The flow itself (update/rebuild/rollback/dev, env replay, overlay
+# re-base, the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only finds or downloads the
 # binary and forwards the argument shapes every one-liner the platform ever handed out:
 #
-#   curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>   # rebuild: the owner-approved overlay
-#   curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>            # update: the fresh :stable base
+#   curl -fsSL https://intentic.dev/rebuild/<SLUG>/<SHA256> | sh          # rebuild: the owner-approved overlay
+#   curl -fsSL https://intentic.dev/update/<SLUG> | sh                   # update: the fresh :stable base
+#   curl -fsSL https://intentic.dev/rollback/<SLUG> | sh                 # (and /restart/<SLUG>) the same, by verb
+#   curl -fsSL https://intentic.dev/update | sh -s -- <SLUG>             # the older shape, still served
 #   sh recreate.sh <SLUG> --prepare                                      # download the next update, apply later
 #   sh recreate.sh <SLUG> --channel <tag>                                # move onto a release channel
 #   sh recreate.sh <SLUG> --rollback                                     # back to the previous image
 #   sh recreate.sh <SLUG> --rollback-to <version|image>                  # back to an older version kept here
 #   sh recreate.sh <SLUG> --versions                                     # the versions it can go back to
-#   sh recreate.sh <SLUG> --reshape --memory 12g --cpus 4 …              # same image, a different share of the machine
+#   sh recreate.sh <SLUG> --reshape --memory 12g --cpus 4 …              # same image, a different share of the device
 #   sh recreate.sh <SLUG> --shape --memory 12g … --when next-restart      # a shape now, or for the next restart
 #   sh recreate.sh <SLUG> --start|--stop|--restart                       # power, applying a saved shape
 #   sh recreate.sh <SLUG> --watch                                        # finish a cut-off swap, judge a new version
@@ -21,30 +23,275 @@
 #   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
 #
 # The binary is downloaded on EVERY run, so re-running a card's command upgrades an existing install; only a
-# failed download falls back to what's installed. IC_BIN overrides for local dev (a checkout's own build).
+# failed download falls back to what is installed. IC_BIN overrides for local dev (a checkout's own build).
 # A run the desktop app pins to its release copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one
 # is exactly the release asked for.
-# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL — no `pipefail`).
+# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`).
 set -eu
 
-if ! command -v curl >/dev/null 2>&1; then
-    echo "error: curl is required — install it and re-run." >&2
-    exit 1
-fi
-
-# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there isn't one — which is the normal case, since the
-# piped `curl … | sh` form has no path in $0 at all.
+# >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
+# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
+# is dash on Debian, Ubuntu and WSL.
 #
-# Found by walking up to the workspace marker rather than counting a fixed number of levels. This file is
-# served from two places in the repo (_site/site/public/scripts and the built _apps/site/dist/scripts), and a
-# fixed `../../../..` is only right while both stay exactly four deep; a walk is right wherever it is served
-# from, and survives being copied, moved or symlinked. The use below still GATES on finding the specific file
-# it needs, so an unrelated checkout that happens to be a pnpm workspace falls through exactly as before.
-# CANNOT be shared with _tools/scripts/lib/repo-root.sh: this file is downloaded and run on its own.
+#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
+#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
+#   kit_say <sentence>                       narration under the running step
+#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
+#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
+#   kit_settle                               the running step is done
+#   kit_finished <verdict>                   a flow's past-tense verdict
+#   kit_stop <headline> [problem] [fix] [code]
+#                                            stop: the running step settles as failed, the stop block goes to stderr,
+#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
+#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_confirm <question> <consequence> <flag>
+#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
+#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+
+case "${INTENTIC_UI:-}" in
+    rich | plain | nested) kit_mode="$INTENTIC_UI" ;;
+    *)
+        if [ "${INTENTIC_PLAIN:-}" = 1 ]; then
+            kit_mode=plain
+        elif [ -t 1 ]; then
+            kit_mode=rich
+        else
+            kit_mode=plain
+        fi
+        ;;
+esac
+kit_color=""
+if [ "$kit_mode" = rich ] && { [ -n "${FORCE_COLOR:-}" ] || [ -z "${NO_COLOR:-}" ]; }; then
+    kit_color=1
+fi
+# Unicode unless the locale says the console cannot draw it, as ic decides.
+case "$(printf '%s' "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" | tr '[:upper:]' '[:lower:]')" in
+    "" | *utf-8* | *utf8*)
+        kit_ok="✓" kit_fail="✗" kit_skip="·" kit_run="⠹" kit_more="…"
+        ;;
+    *)
+        kit_ok="+" kit_fail="x" kit_skip="-" kit_run="|" kit_more="..."
+        ;;
+esac
+kit_label=""
+kit_open=""
+kit_started=0
+kit_width=""
+
+# kit_paint <sgr> <text>: the text in one SGR style when colour is on, as it is otherwise.
+kit_paint() {
+    if [ -n "$kit_color" ]; then
+        printf '\033[%sm%s\033[0m' "$1" "$2"
+    else
+        printf '%s' "$2"
+    fi
+}
+
+kit_columns() {
+    if [ -z "$kit_width" ]; then
+        kit_width="$( (stty size </dev/tty) 2>/dev/null | cut -d' ' -f2)"
+        case "$kit_width" in "" | *[!0-9]*) kit_width=80 ;; esac
+        [ "$kit_width" -le 100 ] || kit_width=100
+    fi
+}
+
+# The running step's line, which stays the last line on the screen until it settles.
+kit_draw() {
+    printf '  %s  %s%s' "$(kit_paint 36 "$kit_run")" "$kit_label" "$kit_more"
+    kit_open=1
+}
+
+kit_clear() {
+    if [ -n "$kit_open" ]; then
+        printf '\r\033[K'
+        kit_open=""
+    fi
+}
+
+# kit_above <line>: a whole line above the live one.
+kit_above() {
+    was_open="$kit_open"
+    kit_clear
+    printf '%s\n' "$1"
+    [ -z "$was_open" ] || kit_draw
+}
+
+# kit_settle [ok|fail|skip]: the running step, settled in place with how long it took.
+kit_settle() {
+    [ -n "$kit_label" ] || return 0
+    if [ "$kit_mode" = rich ]; then
+        case "${1:-ok}" in
+            fail) glyph="$(kit_paint 31 "$kit_fail")" ;;
+            skip) glyph="$(kit_paint 2 "$kit_skip")" ;;
+            *) glyph="$(kit_paint 32 "$kit_ok")" ;;
+        esac
+        took=$(($(date +%s) - kit_started))
+        if [ "$took" -ge 60 ]; then
+            took="$((took / 60))m"
+        elif [ "$took" -ge 1 ]; then
+            took="${took}s"
+        else
+            took=""
+        fi
+        kit_columns
+        kit_clear
+        if [ -z "$took" ]; then
+            # Under a second: sh has no finer clock, and a row of spaces leading to nothing reads as a missing value.
+            printf "  %s  %s\n" "$glyph" "$kit_label"
+        else
+            pad=$((kit_width - 7 - ${#kit_label} - ${#took}))
+            [ "$pad" -ge 2 ] || pad=2
+            printf "  %s  %s%${pad}s%s\n" "$glyph" "$kit_label" "" "$(kit_paint 2 "$took")"
+        fi
+    fi
+    kit_label=""
+}
+
+kit_begin() {
+    [ "$kit_mode" = rich ] || return 0
+    printf '\n  %s\n' "$(kit_paint 1 "intentic · $1")"
+    [ -z "${2:-}" ] || printf '  %s\n' "$(kit_paint 2 "$2")"
+    printf '\n'
+}
+
+kit_step() {
+    case "$kit_mode" in
+        plain)
+            if [ -n "$1" ]; then
+                printf 'intentic: [%s] %s\n' "$1" "$2"
+            else
+                printf 'intentic: %s\n' "$2"
+            fi
+            ;;
+        nested) printf '        %s\n' "$3" ;;
+        *)
+            kit_settle ok
+            kit_label="$3"
+            kit_started="$(date +%s)"
+            kit_draw
+            ;;
+    esac
+}
+
+kit_say() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '        %s\n' "$1" ;;
+        *) kit_above "        $(kit_paint 2 "$1")" ;;
+    esac
+}
+
+kit_warn() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" >&2 ;;
+        nested) printf '     !  %s\n' "$1" ;;
+        *) kit_above "     $(kit_paint 33 !)  $(kit_paint 2 "$1")" ;;
+    esac
+}
+
+kit_suspend() {
+    [ "$kit_mode" = rich ] || return 0
+    kit_clear
+}
+
+kit_resume() {
+    [ "$kit_mode" = rich ] && [ -n "$kit_label" ] && [ -z "$kit_open" ] && kit_draw
+    return 0
+}
+
+kit_finished() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '     %s  %s\n' "$kit_ok" "$1" ;;
+        *)
+            kit_settle ok
+            printf '\n  %s  %s\n\n' "$(kit_paint 32 "$kit_ok")" "$(kit_paint 1 "$1")"
+            ;;
+    esac
+}
+
+kit_stop() {
+    if [ "$kit_mode" = plain ]; then
+        printf 'error: %s\n' "$1" >&2
+        [ -z "${2:-}" ] || printf '   problem: %s\n' "$2" >&2
+        [ -z "${3:-}" ] || printf '   fix:     %s\n' "$3" >&2
+    else
+        kit_settle fail
+        {
+            printf '\n  %s  %s\n' "$(kit_paint 31 "$kit_fail")" "$(kit_paint 31 "$1")"
+            [ -z "${2:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'problem: ')" "$2"
+            [ -z "${3:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'fix:     ')" "$3"
+            printf '\n'
+        } >&2
+    fi
+    exit "${4:-1}"
+}
+
+kit_cancelled() {
+    case "$kit_mode" in
+        plain) printf 'intentic: Cancelled. Nothing changed.\n' ;;
+        *)
+            kit_settle skip
+            printf '  %s  %s\n' "$(kit_paint 2 "$kit_skip")" "$(kit_paint 2 'Cancelled. Nothing changed.')"
+            ;;
+    esac
+}
+
+# Questions go to the controlling terminal, never stdin, so `curl … | sh` can still ask. The open is the probe, in a
+# subshell: `[ -r /dev/tty ]` passes even where opening fails (systemd, cron, setsid).
+kit_confirm() {
+    if [ "${INTENTIC_NO_PROMPT:-}" != 1 ] && (exec </dev/tty) 2>/dev/null; then
+        kit_suspend
+        {
+            if [ "$kit_mode" = rich ]; then
+                printf '  %s  %s\n' "$(kit_paint 36 ?)" "$(kit_paint 1 "$1")"
+                [ -z "$2" ] || printf '%s\n' "$2" | while IFS= read -r line; do printf '     %s\n' "$(kit_paint 2 "$line")"; done
+                printf '     [y/N] '
+            else
+                printf '%s\n' "$1"
+                [ -z "$2" ] || printf '%s\n' "$2"
+                printf '[y/N] '
+            fi
+        } >/dev/tty
+        if read -r kit_answer </dev/tty; then
+            case "$kit_answer" in
+                y* | Y*)
+                    kit_resume
+                    return 0
+                    ;;
+            esac
+            kit_cancelled
+            exit 0
+        fi
+    fi
+    kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
+}
+
+# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
+# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
+# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
+# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
+kit_need_root() {
+    [ "$(id -u)" != 0 ] || return 0
+    if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_say "$1"
+        kit_suspend
+        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+    fi
+    kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
+}
+# <<< end of generated kit.sh
+
+# >>> generated from _site/site/scripts-kit/checkout.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there is none, which is the normal case: the piped
+# `curl … | sh` form has no path in $0 at all. Found by walking up to the workspace marker rather than counting levels,
+# so it is right wherever the file is served from; every use still GATES on finding the specific file it needs.
 checkout_root() {
     case "$0" in
         */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;
-        *) return 0 ;; # piped curl|sh — no path, no checkout
+        *) return 0 ;; # piped curl|sh: no path, no checkout
     esac
     while [ -n "$_dir" ] && [ "$_dir" != "/" ]; do
         if [ -f "$_dir/pnpm-workspace.yaml" ]; then
@@ -54,43 +301,49 @@ checkout_root() {
         _dir="$(dirname "$_dir")"
     done
 }
-CHECKOUT="$(checkout_root)"
 
-# ---- fetch the ic CLI (keep in lockstep with connect.sh / connect-host.sh — standalone curl|sh files) ----
-IC="${IC_BIN:-}"
-# Run BY PATH from a checkout (the dev platform's one-liners, a hand-run in the repo), prefer the checkout's
-# OWN ic — a flow change and its CLI change land in one commit and are tested together. The piped curl|sh
-# form has no path in $0 and skips this; so does a checkout without cargo.
-if [ -z "$IC" ] && [ -n "$CHECKOUT" ]; then
+# ic_from_checkout: run BY PATH from a checkout (the dev platform's one-liners, a hand-run in the repo), prefer the
+# checkout's OWN ic: a flow change and its CLI change land in one commit and are tested together, and a released ic may
+# predate both. Sets $IC when it built one; IC_BIN, the piped form and a checkout without cargo skip it.
+ic_from_checkout() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
+    CHECKOUT="$(checkout_root)"
+    [ -n "$CHECKOUT" ] || return 0
     ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
     if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
-        echo "intentic: building the checkout's ic CLI…"
+        kit_step fetching-ic "building the checkout's ic CLI…" "Build ic from the checkout"
+        kit_suspend
         if cargo build --quiet --manifest-path "$ic_manifest"; then
             IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
         else
-            echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
+            kit_warn "the checkout's ic did not build, so the released ic runs instead."
         fi
+        kit_resume
+        kit_settle
     fi
-fi
-if [ -z "$IC" ]; then
+}
+# <<< end of generated checkout.sh
+
+# >>> generated from _site/site/scripts-kit/ic-fetch.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# ic_fetch: find or download the ic CLI into $IC, unless $IC is already set. IC_BIN overrides (a checkout's own
+# build). An unpinned run downloads every time, which is how re-running a one-liner upgrades a device; only a failed
+# download falls back to an installed ic. Download beside the target and rename into place: overwriting a running
+# executable fails outright ("Text file busy"), and a half-downloaded binary must never be what runs.
+ic_fetch() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
     os="$(uname -s | tr '[:upper:]' '[:lower:]')"
     case "$os" in
         linux | darwin) ;;
-        *)
-            echo "error: unsupported OS '$os' — on Windows use the .ps1 one-liner from the same card." >&2
-            exit 1
-            ;;
+        *) kit_stop "ic could not be installed." "this device runs $os, and ic is built for Linux and macOS." "on Windows, use the PowerShell command from the same card." ;;
     esac
     arch="$(uname -m)"
     case "$arch" in
         x86_64 | amd64) arch="amd64" ;;
         arm64 | aarch64) arch="arm64" ;;
-        *)
-            echo "error: unsupported CPU arch '$arch'." >&2
-            exit 1
-            ;;
+        *) kit_stop "ic could not be installed." "this device's processor is $arch, and ic is built for amd64 and arm64." ;;
     esac
-    # Root installs system-wide; a user run installs per-user with an `ic` on PATH for later hand-typed use.
     if [ "$(id -u)" = 0 ]; then
         dest="/usr/local/bin/ic"
     else
@@ -100,7 +353,7 @@ if [ -z "$IC" ]; then
     # A run pinned to a release (IC_VERSION beside IC_URL, which the desktop app sets to its own) that finds that
     # release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds. Never "exactly that
     # release": the machine agent moves ic up by itself, so a desktop app left in the tray for days put an older ic
-    # back on every Start, Stop or Restart it ran (2026-10-05). An unpinned run still downloads.
+    # back on every Start, Stop or Restart it ran (2026-10-05).
     #
     # Compared as versions: major.minor.patch first, then a pre-release below its own release. An installed ic whose
     # answer is not a version this can read counts as older, and is replaced.
@@ -133,23 +386,22 @@ if [ -z "$IC" ]; then
     }
     if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && ic_not_older "$dest" "$IC_VERSION"; then
         IC="$dest"
-        echo "note: $ic_seen is installed (this run asks for ic ${IC_VERSION} or newer) — not downloading it."
+        kit_say "$ic_seen is installed, and this run asks for ic ${IC_VERSION#v} or newer, so nothing is downloaded."
     else
-        echo "intentic: fetching the ic CLI…"
+        kit_step fetching-ic "fetching the ic CLI…" "Download ic"
         # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside it
         # (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that release
-        # is the very binary the download would fetch, minus the network: a machine that cannot reach github.com still
-        # gets its ic. Anything else — no pin, no file, another version, a copy that fails — leaves the download to run
-        # as it always has, and that download is all the curl|sh one-liner ever does.
+        # is the very binary the download would fetch, minus the network: a device that cannot reach github.com still
+        # gets its ic. Anything else (no pin, no file, another version, a copy that fails) leaves the download to run.
         ic_carried() {
             [ -n "${INTENTIC_IC_PATH:-}" ] && [ -n "${IC_VERSION:-}" ] && [ -f "$INTENTIC_IC_PATH" ] &&
                 [ "$("$INTENTIC_IC_PATH" --version 2>/dev/null || true)" = "ic ${IC_VERSION#v}" ] &&
                 cp "$INTENTIC_IC_PATH" "${dest}.tmp" &&
-                echo "note: installed ic ${IC_VERSION#v} from the copy the desktop app carries — not downloading it."
+                kit_say "installed ic ${IC_VERSION#v} from the copy the desktop app carries."
         }
-        # Download beside the target and rename into place: overwriting a running executable fails outright
-        # ("Text file busy"), and a half-downloaded binary must never be what runs.
-        if ic_carried || curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
+        ic_base="${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}"
+        # curl's own sentence would land on the live line; the stop below says the same thing in this page's words.
+        if ic_carried || curl -fsL "${ic_base}/ic-${os}-${arch}" -o "${dest}.tmp" 2>/dev/null; then
             chmod +x "${dest}.tmp"
             mv -f "${dest}.tmp" "$dest"
             IC="$dest"
@@ -161,14 +413,25 @@ if [ -z "$IC" ]; then
             rm -f "${dest}.tmp"
             IC="$(command -v ic || true)"
             if [ -n "$IC" ]; then
-                echo "note: could not download the latest ic CLI — continuing with the installed $IC." >&2
+                kit_warn "the newest ic could not be downloaded, so the one installed at $IC runs instead."
             else
-                echo "error: could not download the ic CLI and none is installed — check your network and re-run." >&2
-                exit 1
+                ic_host="${ic_base#*://}"
+                kit_stop "ic could not be downloaded, and no copy is installed." "${ic_host%%/*} did not answer from this device." "check the network, then run the same command again."
             fi
         fi
+        kit_settle
     fi
+}
+# <<< end of generated ic-fetch.sh
+
+if ! command -v curl >/dev/null 2>&1; then
+    kit_stop "ic could not be installed." "curl is not installed on this device." "install curl, then run the same command again."
 fi
+
+IC="${IC_BIN:-}"
+ic_from_checkout
+ic_fetch
+kit_suspend
 
 # ---- map the historical argument shapes onto ic verbs ----
 # Mode by argument shape, so every pasted one-liner keeps working: the Environment card's rebuild command
@@ -193,7 +456,8 @@ case "${1:-}" in
             # An older version than the one before the last update, among those this machine kept (--versions).
             --rollback-to)
                 shift
-                exec "$IC" sandbox rollback "$slug" --to "${1:?--rollback-to needs a version or an image, e.g. --rollback-to 1.200.0}"
+                [ -n "${1:-}" ] || kit_stop "Nothing was rolled back." "--rollback-to needs the version or image to go back to." "sh recreate.sh $slug --rollback-to 1.200.0" 2
+                exec "$IC" sandbox rollback "$slug" --to "$1"
                 ;;
             # ic's own flags (--json) forwarded verbatim, as for --reshape: these two also answer programs.
             --versions | --watch)
@@ -223,12 +487,10 @@ case "${1:-}" in
             --start | --stop | --restart) exec "$IC" sandbox "${1#--}" "$slug" ;;
             --channel)
                 shift
-                exec "$IC" sandbox update "$slug" --channel "${1:?--channel needs a tag, e.g. --channel stable}"
+                [ -n "${1:-}" ] || kit_stop "Nothing was updated." "--channel needs the release channel to move onto." "sh recreate.sh $slug --channel stable" 2
+                exec "$IC" sandbox update "$slug" --channel "$1"
                 ;;
-            --*)
-                echo "error: unknown option ${1}" >&2
-                exit 1
-                ;;
+            --*) kit_stop "Nothing was changed." "$1 is not an option this script knows." "" 2 ;;
             *) exec "$IC" sandbox rebuild "$slug" "$1" ;;
         esac
         ;;

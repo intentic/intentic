@@ -1,6 +1,41 @@
 // Wire contract for what a local agent shows: `plain` emits only the marker stream a pipe/CI parses, `rich` redraws for
 // a terminal, `nested` folds into a parent's own checklist. The live line never wraps (width is unknown under curl|sh);
-// anything else writing to stdout must be bracketed by suspend()/resume().
+// anything else writing to stdout must be bracketed by suspend()/resume(). The shapes themselves are layout.ts, shared
+// with ic's ui.rs; which shape a command draws is docs/ops/cli-output-protocol.md.
+
+import {
+    ASCII,
+    CANCELLED,
+    CYAN,
+    DIM,
+    fieldLines,
+    footnoteLines,
+    GREEN,
+    headingLines,
+    itemLines,
+    paint,
+    planSummary,
+    plainFieldLines,
+    plainItemLines,
+    plainRowLine,
+    plainSectionLines,
+    quietLine,
+    RED,
+    rowLines,
+    sectionLines,
+    settledLine,
+    stopLines,
+    UNICODE,
+    verdictLines,
+    wrap,
+    YELLOW,
+    type Footnote,
+    type Item,
+    type Pen,
+    type Tone,
+} from "./layout.js";
+
+export { explain, wrap, type Footnote, type Item, type Tone } from "./layout.js";
 
 /** How a run renders, chosen once from the environment (see createUi). */
 export type UiMode = "rich" | "plain" | "nested";
@@ -15,13 +50,13 @@ export interface PlanStep {
 /** A settled verdict about one thing; same vocabulary as ic's rows. */
 export type RowOutcome = "pass" | "warn" | "fail" | "skip";
 
-/** A footnote on a finished run: what it does, and the command that does it. */
-export type Footnote = readonly [what: string, command: string];
-
 export interface Ui {
     readonly mode: UiMode;
-    /** Banner plus the scope/time promise; no-op outside `rich`. */
-    begin: (title: string, plan?: readonly PlanStep[]) => void;
+
+    // Flow: several steps with a promise of scope and time.
+
+    /** Banner plus one dim scope line (`scope`, or the plan's own size and time); no-op outside `rich`. */
+    begin: (title: string, plan?: readonly PlanStep[], scope?: string) => void;
     /** One phase of the flow: a marker on the wire, a checklist row on screen. */
     step: (phase: string, message: string) => void;
     /** Replaces the running step's sub-detail; rich only, ignored in plain. */
@@ -33,10 +68,38 @@ export interface Ui {
     note: (text: string) => void;
     /** A caution, not a failure; goes to stderr in `plain`. */
     warn: (text: string) => void;
-    /** End of a successful run: one address, one instruction, then footnotes. */
+    /** End of a successful flow: one address, one instruction, then footnotes. */
     finished: (verdict: string, address: string | undefined, instruction: string, footnotes?: readonly Footnote[]) => void;
-    /** Frame around a stopped run; the caller supplies the words, this only marks it as stopped. */
+
+    // Action: one thing, one live line that settles in place.
+
+    /** Starts the one live line, in the present tense ("Stopping sandbox-x"). */
+    act: (label: string) => void;
+    /** Settles it as a past-tense sentence ("Stopped sandbox-x."), with its time. */
+    done: (verdict: string) => void;
+
+    // Report: read-only, the same glyph column without timings.
+
+    /** A report's header: title, version stamp, and an optional dim scope line. Nothing in `plain`. */
+    report: (title: string, scope?: string) => void;
+    items: (items: readonly Item[]) => void;
+    section: (title: string) => void;
+    /** Facts as key and value; `Key: value` lines in `plain`. */
+    fields: (fields: readonly Footnote[]) => void;
+    /** A neutral one-line outcome: an empty report, nothing to do. */
+    quiet: (sentence: string) => void;
+    /** The person said no: one line, nothing changed. */
+    cancelled: () => void;
+    /** The commands a reader will want later, after an action or a report. */
+    later: (footnotes: readonly Footnote[]) => void;
+    /** A line only a log reader gets; nothing on a screen. For plain sentences something downstream reads by name. */
+    plain: (text: string) => void;
+
+    // Stop.
+
+    /** A stopped run: the running step settles as failed, then the stop block on stderr. Compose `message` with `explain`. */
     fail: (message: string) => void;
+
     /** Hands the terminal to a child process that writes its own output. */
     suspend: () => void;
     resume: () => void;
@@ -53,26 +116,11 @@ export interface UiProcess {
     readonly env?: Record<string, string | undefined> | undefined;
 }
 
-interface Glyphs {
-    readonly ok: string;
-    readonly fail: string;
-    readonly warn: string;
-    readonly skip: string;
-    readonly spinner: readonly string[];
+/** What the caller knows that the environment does not. */
+export interface UiOptions {
+    /** Shown dim at the right of a header, e.g. `intentic-machine 1.4.0`. */
+    readonly stamp?: string | undefined;
 }
-
-const UNICODE: Glyphs = { ok: "✓", fail: "✗", warn: "!", skip: "·", spinner: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] };
-// Windows consoles without virtual-terminal processing print the Unicode set as mojibake.
-const ASCII: Glyphs = { ok: "+", fail: "x", warn: "!", skip: "-", spinner: ["|", "/", "-", "\\"] };
-
-// \u001b escapes, never a literal control byte, or git/grep/diff treat the file as binary.
-const DIM = "\u001b[2m";
-const BOLD = "\u001b[1m";
-const GREEN = "\u001b[32m";
-const RED = "\u001b[31m";
-const YELLOW = "\u001b[33m";
-const CYAN = "\u001b[36m";
-const RESET = "\u001b[0m";
 
 /** How often the spinner repaints: fast enough to read as motion, cheap enough to ignore. */
 const TICK_MS = 110;
@@ -80,29 +128,6 @@ const TICK_MS = 110;
 const ESTIMATE_FLOOR_SECONDS = 20;
 
 // Pure helpers, exported for their own tests.
-
-/** Wraps text to at most `width`; only the live line truncates instead. */
-export const wrap = (text: string, width: number): string[] => {
-    if (width < 20) {
-        return [text];
-    }
-    const lines: string[] = [];
-    let current = "";
-    for (const word of text.split(/\s+/u).filter((part) => part !== "")) {
-        if (current === "") {
-            current = word;
-        } else if ([...current].length + 1 + [...word].length <= width) {
-            current = `${current} ${word}`;
-        } else {
-            lines.push(current);
-            current = word;
-        }
-    }
-    if (current !== "") {
-        lines.push(current);
-    }
-    return lines.length === 0 ? [""] : lines;
-};
 
 /** Clips to `limit`, marking the cut; used only on the repainted line, which must not wrap. */
 export const truncate = (text: string, limit: number): string => {
@@ -147,6 +172,15 @@ export const asLabel = (message: string): string => {
     return trimmed === "" ? "" : trimmed[0]!.toUpperCase() + trimmed.slice(1);
 };
 
+/** A label as plain narration: lower-cased unless its first word is an acronym or a name ("ic", "Docker" stay). */
+const asNarration = (label: string): string => {
+    const first = label.split(" ")[0] ?? "";
+    const isWord = first.length > 1 && first.slice(1) === first.slice(1).toLowerCase() && first !== "Docker" && first !== "Intentic";
+    return isWord ? first[0]!.toLowerCase() + label.slice(1) : label;
+};
+
+const toneOf = (outcome: RowOutcome): Tone => (outcome === "pass" ? "ok" : outcome);
+
 // The renderer.
 
 /**
@@ -165,20 +199,26 @@ const detectMode = (process: UiProcess): UiMode => {
     return process.stdout.isTTY === true ? "rich" : "plain";
 };
 
-export const createUi = (process: UiProcess): Ui => {
+export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
     const mode = detectMode(process);
     const env = process.env ?? {};
     const colour = mode !== "plain" && (env["FORCE_COLOR"] !== undefined || env["NO_COLOR"] === undefined);
     // A reported width is trusted (80 is the floor); too low shortens a line, too high corrupts the repaint.
     const width = Math.min(120, Math.max(40, process.stdout.columns ?? 80));
-    const glyphs = colour ? UNICODE : ASCII;
+    const pen: Pen = { colour, glyphs: colour ? UNICODE : ASCII, width };
 
-    const paint = (text: string, code: string): string => (colour ? `${code}${text}${RESET}` : text);
     const out = (text: string): void => void process.stdout.write(text);
+    const lines = (all: readonly string[]): void => {
+        for (const line of all) {
+            out(`${line}\n`);
+        }
+    };
 
     let plan: readonly PlanStep[] = [];
     let index: number | undefined;
     let ordinal = 0;
+    /** Whether the live line is a flow's numbered step or an action's single line. */
+    let numbered = true;
     let label = "";
     let detailText = "";
     let started = Date.now();
@@ -222,18 +262,20 @@ export const createUi = (process: UiProcess): Ui => {
         if (mode !== "rich" || suspended || label === "") {
             return;
         }
-        const spinner = glyphs.spinner[frame % glyphs.spinner.length] ?? "";
+        const spinner = pen.glyphs.spinner[frame % pen.glyphs.spinner.length] ?? "";
         const elapsed = humanDuration(Date.now() - stepStarted);
         const left = remaining();
         const right = left === undefined || Date.now() - stepStarted < 5000 ? elapsed : `${elapsed} · ~${left} left`;
-        const head = `  ${spinner}  ${String(ordinal).padStart(2)}  ${label}`;
+        const number = numbered ? `${String(ordinal).padStart(2)}  ` : "";
+        const head = `  ${spinner}  ${number}${label}`;
         // The line must never reach the last column, or the terminal wraps it and the next carriage return lands wrong.
         const budget = width - 1;
         const fixed = [...head].length + [...right].length + 1;
         const middle = detailText === "" ? "" : truncate(`  ·  ${detailText}`, Math.max(0, budget - fixed));
         const pad = " ".repeat(Math.max(0, budget - fixed - [...middle].length));
+        const shownNumber = numbered ? `${paint(pen, String(ordinal).padStart(2), DIM)}  ` : "";
         const text = colour
-            ? `  ${paint(spinner, CYAN)}  ${paint(String(ordinal).padStart(2), DIM)}  ${label}${middle === "" ? "" : paint(middle, DIM)}${pad} ${paint(right, DIM)}`
+            ? `  ${paint(pen, spinner, CYAN)}  ${shownNumber}${label}${paint(pen, middle, DIM)}${pad} ${paint(pen, right, DIM)}`
             : `${head}${middle}${pad} ${right}`;
         out(`\r${text}`);
         live = true;
@@ -258,11 +300,18 @@ export const createUi = (process: UiProcess): Ui => {
         ticker.unref();
     };
 
+    const stopTicker = (): void => {
+        if (ticker !== undefined) {
+            clearInterval(ticker);
+            ticker = undefined;
+        }
+    };
+
     /**
      * Turns the running step into a settled line with its duration, so a slow step and a fast one still read
-     * differently afterward.
+     * differently afterward. A failed step settles as failed, so the reader sees where the run stopped.
      */
-    const settle = (): void => {
+    const settle = (tone: Tone = "ok", as?: string): void => {
         if (label === "") {
             return;
         }
@@ -270,11 +319,7 @@ export const createUi = (process: UiProcess): Ui => {
         if (index !== undefined) {
             behind += plan[index]?.weight ?? 0;
         }
-        const took = humanDuration(Date.now() - stepStarted);
-        // Padding is measured unpainted: colour escapes are zero-width but would miscount toward the margin.
-        const bare = `  x  ${String(ordinal).padStart(2)}  ${label}`;
-        const pad = " ".repeat(Math.max(0, width - 1 - [...bare].length - [...took].length));
-        out(`  ${paint(glyphs.ok, GREEN)}  ${paint(String(ordinal).padStart(2), DIM)}  ${label}${pad}${paint(took, DIM)}\n`);
+        out(`${settledLine(pen, tone, numbered ? ordinal : undefined, as ?? label, humanDuration(Date.now() - stepStarted))}\n`);
         label = "";
         detailText = "";
     };
@@ -283,27 +328,23 @@ export const createUi = (process: UiProcess): Ui => {
     const nestedLine = (text: string, marker?: string): void => {
         for (const [at, part] of wrap(text, width - 10).entries()) {
             const lead = at === 0 && marker !== undefined ? `     ${marker}  ` : "        ";
-            above(`${lead}${paint(part, DIM)}`);
+            above(`${lead}${paint(pen, part, DIM)}`);
         }
     };
+
+    const nestedMarker = (tone: Tone): string => (tone === "ok" ? pen.glyphs.ok : tone === "fail" ? pen.glyphs.fail : tone === "warn" ? pen.glyphs.warn : pen.glyphs.skip);
 
     return {
         mode,
 
-        begin: (title, steps = []) => {
+        begin: (title, steps = [], scope) => {
             plan = steps;
             started = Date.now();
             if (mode !== "rich") {
                 return;
             }
-            out("\n");
-            out(`  ${paint(title, BOLD)}\n`);
-            if (steps.length > 0) {
-                const seconds = steps.reduce((sum, step) => sum + step.weight, 0);
-                const minutes = Math.max(1, Math.round(seconds / 60));
-                out(`${paint(`  ${steps.length} steps, roughly ${minutes} minute${minutes === 1 ? "" : "s"}.`, DIM)}\n`);
-            }
-            out("\n");
+            const promise = scope ?? (steps.length > 0 ? planSummary(steps.length, steps.reduce((sum, step) => sum + step.weight, 0)) : undefined);
+            lines(headingLines(pen, title, options.stamp, promise));
             startTicker();
         },
 
@@ -322,6 +363,7 @@ export const createUi = (process: UiProcess): Ui => {
             // Cursor only moves forward: a phase already passed is narration, not a step.
             const at = found >= 0 && (index === undefined || found >= index) ? found : undefined;
             index = at;
+            numbered = true;
             label = at === undefined ? asLabel(message) : (plan[at]?.label ?? asLabel(message));
             detailText = "";
             ordinal += 1;
@@ -354,17 +396,11 @@ export const createUi = (process: UiProcess): Ui => {
 
         row: (outcome, name, note = "") => {
             if (mode === "plain") {
-                // The separator appears only when there is something after it.
-                const tail = note === "" ? "" : `, ${note}`;
-                const word = outcome === "pass" ? "ok  " : outcome === "fail" ? "FAIL" : outcome === "warn" ? "warn" : "skip";
-                out(`  ${word}  ${name}${tail}\n`);
+                out(`${plainRowLine(toneOf(outcome), name, note)}\n`);
                 return;
             }
-            const glyph = outcome === "pass" ? glyphs.ok : outcome === "fail" ? glyphs.fail : outcome === "warn" ? glyphs.warn : glyphs.skip;
-            const code = outcome === "pass" ? GREEN : outcome === "fail" ? RED : outcome === "warn" ? YELLOW : DIM;
-            const body = note === "" ? name : `${name}, ${note}`;
-            for (const [at, part] of wrap(body, width - 10).entries()) {
-                above(at === 0 ? `        ${paint(glyph, code)} ${paint(part, DIM)}` : `          ${paint(part, DIM)}`);
+            for (const line of rowLines(pen, toneOf(outcome), name, note)) {
+                above(line);
             }
         },
 
@@ -374,7 +410,7 @@ export const createUi = (process: UiProcess): Ui => {
                 return;
             }
             for (const part of wrap(text, width - 8)) {
-                above(`        ${paint(part, DIM)}`);
+                above(`        ${paint(pen, part, DIM)}`);
             }
         },
 
@@ -388,7 +424,7 @@ export const createUi = (process: UiProcess): Ui => {
             let first = true;
             for (const paragraph of text.split("\n")) {
                 for (const part of wrap(paragraph, width - 9)) {
-                    above(first ? `     ${paint(glyphs.warn, YELLOW)}  ${paint(part, DIM)}` : `        ${paint(part, DIM)}`);
+                    above(first ? `     ${paint(pen, pen.glyphs.warn, YELLOW)}  ${paint(pen, part, DIM)}` : `        ${paint(pen, part, DIM)}`);
                     first = false;
                 }
             }
@@ -410,32 +446,156 @@ export const createUi = (process: UiProcess): Ui => {
             }
             if (mode === "nested") {
                 // The parent owns the ending; this only carries up the one fact worth keeping.
-                nestedLine(verdict, paint(glyphs.ok, GREEN));
+                nestedLine(verdict, paint(pen, pen.glyphs.ok, GREEN));
                 if (address !== undefined) {
                     nestedLine(address);
                 }
                 return;
             }
             settle();
-            const took = `took ${humanDuration(Date.now() - started)}`;
-            const pad = " ".repeat(Math.max(1, width - 6 - [...verdict].length - [...took].length));
-            out("\n");
-            out(`  ${paint(glyphs.ok, GREEN)}  ${paint(verdict, BOLD)}${pad}${paint(took, DIM)}\n`);
+            stopTicker();
+            lines(verdictLines(pen, "ok", verdict, `took ${humanDuration(Date.now() - started)}`));
             if (address !== undefined) {
-                out(`\n     ${paint(address, CYAN)}\n`);
+                out(`\n     ${paint(pen, address, CYAN)}\n`);
             }
             if (instruction !== "") {
-                out(`\n     ${instruction}\n`);
+                out("\n");
+                lines(wrap(instruction, width - 6).map((part) => `     ${part}`));
             }
             if (footnotes.length > 0) {
                 out("\n");
-                const column = Math.max(...footnotes.map(([what]) => [...what].length));
-                for (const [at, [what, command]] of footnotes.entries()) {
-                    const heading = (at === 0 ? "later" : "").padEnd(6);
-                    out(`${paint(truncate(`     ${heading} ${what.padEnd(column)}   ${command}`, width), DIM)}\n`);
-                }
+                lines(footnoteLines(pen, footnotes));
             }
             out("\n");
+        },
+
+        act: (text) => {
+            if (mode === "plain") {
+                out(`intentic: ${asNarration(text)}…\n`);
+                return;
+            }
+            if (mode === "nested") {
+                nestedLine(text);
+                return;
+            }
+            settle();
+            index = undefined;
+            numbered = false;
+            label = text;
+            detailText = "";
+            stepStarted = Date.now();
+            frame = 0;
+            startTicker();
+            repaint();
+        },
+
+        done: (verdict) => {
+            if (mode === "plain") {
+                out(`intentic: ${verdict}\n`);
+                return;
+            }
+            if (mode === "nested") {
+                nestedLine(verdict, paint(pen, pen.glyphs.ok, GREEN));
+                return;
+            }
+            if (label === "") {
+                out(`${settledLine(pen, "ok", undefined, verdict, "")}\n`);
+                return;
+            }
+            settle("ok", verdict);
+        },
+
+        report: (title, scope) => {
+            if (mode !== "rich") {
+                return;
+            }
+            settle();
+            lines(headingLines(pen, title, options.stamp, scope));
+        },
+
+        items: (items) => {
+            if (mode === "plain") {
+                lines(plainItemLines(items));
+                return;
+            }
+            if (mode === "nested") {
+                for (const item of items) {
+                    nestedLine(item.meta === undefined || item.meta === "" ? item.name : `${item.name} — ${item.meta}`, nestedMarker(item.tone));
+                }
+                return;
+            }
+            for (const line of itemLines(pen, items)) {
+                above(line);
+            }
+        },
+
+        section: (title) => {
+            if (mode === "plain") {
+                lines(plainSectionLines(title));
+                return;
+            }
+            if (mode === "nested") {
+                nestedLine(title);
+                return;
+            }
+            for (const line of sectionLines(pen, title)) {
+                above(line);
+            }
+        },
+
+        fields: (fields) => {
+            if (mode === "plain") {
+                lines(plainFieldLines(fields));
+                return;
+            }
+            if (mode === "nested") {
+                for (const [key, value] of fields) {
+                    nestedLine(`${key}: ${value}`);
+                }
+                return;
+            }
+            for (const line of fieldLines(pen, fields)) {
+                above(line);
+            }
+        },
+
+        quiet: (sentence) => {
+            if (mode === "plain") {
+                out(`intentic: ${sentence}\n`);
+                return;
+            }
+            if (mode === "nested") {
+                nestedLine(sentence);
+                return;
+            }
+            above(quietLine(pen, sentence));
+        },
+
+        cancelled: () => {
+            if (mode === "plain") {
+                out(`intentic: ${CANCELLED}\n`);
+                return;
+            }
+            settle("skip");
+            if (mode === "nested") {
+                nestedLine(CANCELLED);
+                return;
+            }
+            out(`${quietLine(pen, CANCELLED)}\n`);
+        },
+
+        later: (footnotes) => {
+            if (mode !== "rich" || footnotes.length === 0) {
+                return;
+            }
+            settle();
+            lines(footnoteLines(pen, footnotes));
+        },
+
+        plain: (text) => {
+            if (mode === "plain") {
+                out(`${text}\n`);
+            }
         },
 
         fail: (message) => {
@@ -443,23 +603,18 @@ export const createUi = (process: UiProcess): Ui => {
                 process.stderr.write(`error: ${message}\n`);
                 return;
             }
-            erase();
             if (mode === "nested") {
-                for (const [at, part] of wrap(message, width - 10).entries()) {
-                    process.stderr.write(`${at === 0 ? `     ${paint(glyphs.fail, RED)}  ` : "        "}${paint(part, RED)}\n`);
+                erase();
+                for (const [at, part] of wrap(message.split("\n")[0] ?? "", width - 10).entries()) {
+                    process.stderr.write(`${at === 0 ? `     ${paint(pen, pen.glyphs.fail, RED)}  ` : "        "}${paint(pen, part, RED)}\n`);
                 }
                 return;
             }
-            const [first = "", ...rest] = message.split("\n");
-            process.stderr.write("\n");
-            for (const [at, part] of wrap(first, width - 6).entries()) {
-                process.stderr.write(`${at === 0 ? `  ${paint(glyphs.fail, RED)}  ` : "     "}${paint(part, RED)}\n`);
+            settle("fail");
+            stopTicker();
+            for (const line of stopLines(pen, message)) {
+                process.stderr.write(`${line}\n`);
             }
-            for (const line of rest) {
-                const trimmed = line.trimEnd();
-                process.stderr.write(trimmed === "" ? "\n" : `  ${trimmed}\n`);
-            }
-            process.stderr.write("\n");
         },
 
         suspend: () => {
@@ -482,10 +637,7 @@ export const createUi = (process: UiProcess): Ui => {
             if (mode === "rich") {
                 settle();
             }
-            if (ticker !== undefined) {
-                clearInterval(ticker);
-                ticker = undefined;
-            }
+            stopTicker();
         },
     };
 };

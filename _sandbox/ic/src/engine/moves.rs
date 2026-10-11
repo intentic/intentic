@@ -31,6 +31,7 @@ use super::{paths, Kind};
 use crate::docker::{self, Target};
 use crate::logfile::Log;
 use crate::sandbox::{self, side, CONTAINER_PREFIX, DIND_PREFIX, MOVED_SUFFIX, TUNNEL_PREFIX};
+use crate::ui;
 use crate::util::{bail, Fail, Result};
 
 /// How long the copies a move leaves behind are kept before cleanup removes them.
@@ -178,15 +179,18 @@ pub fn run(args: Args) -> Result<()> {
     };
     let from = super::in_use();
     if from == to {
-        println!(
-            "intentic: this PC's sandboxes already run on {}.",
-            to.name()
-        );
+        ui::begin("move sandboxes between container engines", vec![], None);
         let _ = cleanup(false);
+        ui::finished(
+            "moved",
+            None,
+            &format!("this device's sandboxes already run on {}", to.name()),
+            &[],
+        );
         return Ok(());
     }
     if in_progress() {
-        bail!("another move between engines is running on this PC; wait for it to finish.");
+        bail!("another move between engines is running on this device; wait for it to finish.");
     }
     let log = Log::create_named("engine", "move")?;
     log.line(&format!("move from {} to {}", from.id(), to.id()));
@@ -198,48 +202,53 @@ pub fn run(args: Args) -> Result<()> {
         && !answers(&Target::DockerDesktop)
     {
         switch(to)?;
-        println!(
-            "intentic: no other engine here to carry sandboxes from — this PC now runs its sandboxes on {}.",
-            to.name()
-        );
+        ui::begin("move sandboxes between container engines", vec![], None);
+        ui::plain(&format!("no other engine here to carry sandboxes from — this device now runs its sandboxes on {}.", to.name()));
+        ui::finished("moved", None, &format!("no other engine here to carry sandboxes from — this device now runs its sandboxes on {}", to.name()), &[]);
         return Ok(());
     }
     let source = ready_source(from)?;
     let plan = plan(&source, &target, from, to, &log)?;
     for (slug, kept_by) in &plan.left_alone {
-        println!(
-            "intentic: {slug} is kept by ic on {kept_by}, which reaches Docker Desktop by itself: it stays there."
-        );
+        ui::note(&format!("{slug} is kept by ic on {kept_by}, which reaches Docker Desktop by itself: it stays there."));
     }
     if plan.sandboxes.is_empty() {
         switch(to)?;
-        println!(
-            "intentic: no sandbox to carry — this PC now runs its sandboxes on {}.",
+        ui::begin("move sandboxes between container engines", vec![], None);
+        ui::plain(&format!(
+            "no sandbox to carry — this device now runs its sandboxes on {}.",
             to.name()
+        ));
+        ui::finished(
+            "moved",
+            None,
+            &format!(
+                "no sandbox to carry — this device now runs its sandboxes on {}",
+                to.name()
+            ),
+            &[],
         );
         return Ok(());
     }
     check_space(&plan, to)?;
     let names: Vec<&str> = plan.sandboxes.iter().map(|s| s.slug.as_str()).collect();
     let question = format!(
-        "Move {} ({}, {}) from {} to {}? Each is stopped while its files are copied. {} keeps its copy for {KEEP_DAYS} days; `ic engine move --to {}` moves them back.",
+        "Move {} ({}, {}) from {} to {}?",
         plural(names.len(), "sandbox", "sandboxes"),
         names.join(", "),
         gigabytes(plan.bytes),
         from.name(),
         to.name(),
-        from.name(),
-        cli_id(from),
     );
-    if !args.yes {
-        if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-            bail!("{question}\n       Nothing was moved: say yes with --yes (there is no terminal to ask on).");
-        }
-        if !crate::tty::confirm(&question, false) {
-            println!("intentic: nothing was moved.");
-            return Ok(());
-        }
+    let consequence = format!(
+        "Each is stopped while its files are copied. {} keeps its copy for {KEEP_DAYS} days.",
+        from.name(),
+    );
+    if !ui::confirm(&question, &consequence, args.yes)? {
+        ui::cancelled();
+        return Ok(());
     }
+    ui::begin("move sandboxes between container engines", vec![], None);
     let started = now_ms();
     update_journal(|journal| {
         journal.moving = Some(Moving {
@@ -273,9 +282,12 @@ pub fn run(args: Args) -> Result<()> {
     }
     docker::adopt_target(&source);
     if let Some(reason) = failure {
-        println!(
-            "intentic: the move stopped ({reason}) — putting every sandbox back on {}…",
-            from.name()
+        ui::step(
+            "undo",
+            &format!(
+                "the move stopped ({reason}) — putting every sandbox back on {}…",
+                from.name()
+            ),
         );
         for carry in carried.iter().rev() {
             undo(carry, &source, &target, &log);
@@ -284,10 +296,11 @@ pub fn run(args: Args) -> Result<()> {
         drop(locks);
         say("", "failed", json!({ "reason": reason }));
         bail!(
-            "the move to {} did not finish: {reason}\n       Every sandbox is back on {} as it was, and this PC still runs on it. Log: {}",
-            to.name(),
-            from.name(),
-            log.path.display()
+            "{}", ui::explain(
+                &format!("the move to {} did not finish", to.name()),
+                Some(&reason),
+                Some(&format!("every sandbox is back on {} as it was, and this device still runs on it. Log: {}", from.name(), log.path.display()))
+            )
         );
     }
     switch(to)?;
@@ -323,26 +336,29 @@ pub fn run(args: Args) -> Result<()> {
     drop(locks);
     if to == Kind::DockerDesktop {
         // Nothing runs on our engine now but the copies kept for the days: it rests until cleanup needs it.
-        let _ = super::rest("not in use since this PC's sandboxes moved to Docker Desktop");
+        let _ = super::rest("not in use since this device's sandboxes moved to Docker Desktop");
     }
     say(
         "",
         "done",
         json!({ "engine": to.id(), "count": carried.len() }),
     );
-    println!(
-        "intentic: moved {} to {}. This PC now runs its sandboxes on {}.",
-        plural(carried.len(), "sandbox", "sandboxes"),
-        to.name(),
-        to.name()
+    let instruction = if to == Kind::Intentic {
+        "Docker Desktop no longer runs any of Intentic's sandboxes: quit it, or uninstall it if you do not use it yourself, to give its memory back. Rollback targets kept on Docker Desktop did not come along: a rollback downloads that version instead."
+    } else {
+        ""
+    };
+    ui::finished(
+        "moved",
+        None,
+        &format!("This device now runs its sandboxes on {}. {}'s copies stay, stopped, for {KEEP_DAYS} days.", to.name(), from.name()),
+        &[
+            ("remove copies sooner".to_string(), "ic engine cleanup --now".to_string()),
+            ("move them back".to_string(), format!("ic engine move --to {}", cli_id(from))),
+        ],
     );
-    println!(
-        "          {}'s copies stay, stopped, for {KEEP_DAYS} days; `ic engine cleanup --now` removes them sooner.",
-        from.name()
-    );
-    if to == Kind::Intentic {
-        println!("          Docker Desktop no longer runs any of Intentic's sandboxes: quit it, or uninstall it if you do not use it yourself, to give its memory back.");
-        println!("          Rollback targets kept on Docker Desktop did not come along: a rollback downloads that version instead.");
+    if !instruction.is_empty() {
+        ui::note(instruction);
     }
     Ok(())
 }
@@ -352,6 +368,7 @@ pub fn cleanup(now: bool) -> Result<()> {
     if !cfg!(windows) {
         return Ok(());
     }
+    let mut acted = false;
     let journal = load_journal();
     let due: Vec<Moved> = if now {
         journal
@@ -398,14 +415,18 @@ pub fn cleanup(now: bool) -> Result<()> {
         for image in &moved.images {
             let _ = docker::capture_on(&engine, &["image", "rm", image], docker::READ_LIMIT);
         }
-        println!(
-            "intentic: removed the copy of {} that {} kept after it moved.",
+        if !acted {
+            ui::act("clean up moved copies");
+            acted = true;
+        }
+        ui::quiet(&format!(
+            "removed the copy of {} that {} kept after it moved.",
             moved.slug,
             kind.name()
-        );
+        ));
         removed.push((moved.slug.clone(), moved.at));
         if kind == Kind::Intentic && super::in_use() != Kind::Intentic {
-            let _ = super::rest("not in use since this PC's sandboxes moved to Docker Desktop");
+            let _ = super::rest("not in use since this device's sandboxes moved to Docker Desktop");
         }
     }
     update_journal(|journal| {
@@ -417,7 +438,11 @@ pub fn cleanup(now: bool) -> Result<()> {
                 moved.removed = true;
             }
         }
-    })
+    })?;
+    if acted {
+        ui::done("cleaned up");
+    }
+    Ok(())
 }
 
 /* ——— Getting both engines ready. ——— */
@@ -427,7 +452,7 @@ fn ready_target(to: Kind, log: &Log) -> Result<Target> {
         Kind::Intentic => {
             let status = super::status();
             if !status.installed || super::reach().is_none() {
-                println!("intentic: installing Intentic's engine first (about 95 MB)…");
+                ui::note("installing the intentic engine first (about 95 MB)…");
                 let mut last: Option<(String, Option<u64>)> = None;
                 super::install(
                     &mut |sentence, percent| {
@@ -450,16 +475,16 @@ fn ready_target(to: Kind, log: &Log) -> Result<Target> {
                 super::start().map_err(Fail)?;
             }
             let env = super::reach()
-                .ok_or_else(|| Fail("Intentic's engine did not install.".to_string()))?;
+                .ok_or_else(|| Fail("the intentic engine did not install.".to_string()))?;
             let target = Target::Intentic(env);
             if !answers(&target) {
-                bail!("Intentic's engine is installed but does not answer — `ic engine start`, then try again.");
+                bail!("the intentic engine is installed but does not answer — `ic engine start`, then try again.");
             }
             Ok(target)
         }
         _ => {
             if !super::docker_desktop_installed() {
-                bail!("Docker Desktop is not installed on this PC, so there is nothing to move back to.");
+                bail!("Docker Desktop is not installed on this device, so there is nothing to move back to.");
             }
             let target = Target::DockerDesktop;
             if !answers(&target) {
@@ -477,7 +502,7 @@ fn ready_source(from: Kind) -> Result<Target> {
     let source = match from {
         Kind::Intentic => {
             let env = super::reach().ok_or_else(|| {
-                Fail("Intentic's engine is not installed on this PC.".to_string())
+                Fail("the intentic engine is not installed on this device.".to_string())
             })?;
             if !answers(&Target::Intentic(env.clone())) {
                 super::start().map_err(Fail)?;
@@ -618,7 +643,7 @@ fn plan(source: &Target, target: &Target, from: Kind, to: Kind, log: &Log) -> Re
             }
         }
         if to == Kind::Intentic && uses_gpu(&inspect, &env) {
-            bail!("{slug} uses this PC's GPU, which Intentic's engine cannot pass through yet. It stays on Docker Desktop, and so does this PC: nothing was moved.");
+            bail!("{slug} uses this device's GPU, which the intentic engine cannot pass through yet. It stays on Docker Desktop, and so does this device: nothing was moved.");
         }
         let Some(image) = env_value(&env, "SANDBOX_IMAGE") else {
             bail!("{slug} predates the run contract, so it cannot be made again on another engine — run `ic sandbox update {slug}` once, then move.");
@@ -911,7 +936,7 @@ fn undo(carry: &Carried, source: &Target, target: &Target, log: &Log) {
     if let Some(record) = &carry.record {
         let _ = crate::record::write(&carry.slug, record);
     }
-    println!("intentic: {} is back as it was.", carry.slug);
+    ui::note(&format!("{} is back as it was.", carry.slug));
 }
 
 /// A volume of the same name on the target is one an earlier move left there, which this move supersedes (removed with
@@ -1051,6 +1076,7 @@ pub fn copy(args: CopyArgs) -> Result<()> {
         .as_ref()
         .map(|(_, host)| host.clone())
         .unwrap_or_else(|| to.name().to_string());
+    ui::begin("copy sandboxes between engines", vec![], None);
     // A container brings its image and its named volumes along.
     let mut args = args;
     let mut placeholders: Vec<(String, Value)> = Vec::new();
@@ -1133,11 +1159,14 @@ pub fn copy(args: CopyArgs) -> Result<()> {
             .iter()
             .filter_map(|image| image_bytes(&source, image))
             .sum();
-        println!(
-            "Copying {} ({}) to {}…",
-            missing.join(", "),
-            gigabytes(total),
-            to_name
+        ui::step(
+            "copy-images",
+            &format!(
+                "copying {} ({}) to {}…",
+                missing.join(", "),
+                gigabytes(total),
+                to_name
+            ),
         );
         let mut save: Vec<&str> = vec!["save"];
         save.extend(missing.iter().map(String::as_str));
@@ -1156,17 +1185,20 @@ pub fn copy(args: CopyArgs) -> Result<()> {
         }
     }
     let Some(helper) = helper else {
-        println!("Copied to {}.", to_name);
+        ui::finished("copied", None, &format!("copied to {}", to_name), &[]);
         return Ok(());
     };
     let helper_image = helper.clone();
     for volume in &args.volumes {
         let docker_data = volume.starts_with("intentic-docker-");
         let total = volume_bytes(&source, volume, &helper).unwrap_or(0);
-        println!(
-            "Copying volume {volume} ({}) to {}…",
-            gigabytes(total),
-            to_name
+        ui::step(
+            "copy-volume",
+            &format!(
+                "copying volume {volume} ({}) to {}…",
+                gigabytes(total),
+                to_name
+            ),
         );
         create_like(&source, &target, volume)?;
         let copied = copy_volume(
@@ -1192,7 +1224,7 @@ pub fn copy(args: CopyArgs) -> Result<()> {
             Ok(theirs.0)
         });
         match copied {
-            Ok(files) => println!("  {volume}: {files} files, the same on both."),
+            Ok(files) => ui::detail(&format!("{volume}: {files} files, the same on both.")),
             Err(error) => {
                 let _ = docker::capture_on(&target, &["volume", "rm", volume], docker::READ_LIMIT);
                 return Err(error);
@@ -1204,14 +1236,19 @@ pub fn copy(args: CopyArgs) -> Result<()> {
         let create = placeholder_args(inspect, name, image);
         let refs: Vec<&str> = create.iter().map(String::as_str).collect();
         run_on(&target, &refs, docker::READ_LIMIT)?;
-        println!(
-            "  {name}: a stopped placeholder on {}, for its recreate to make it from.",
+        ui::detail(&format!(
+            "{name}: a stopped placeholder on {}, for its recreate to make it from.",
             to_name
-        );
+        ));
     }
-    println!(
-        "Copied to {}. {} keeps its own copies until you remove them.",
-        to_name, from_name
+    ui::finished(
+        "copied",
+        None,
+        &format!(
+            "Copied to {}. {} keeps its own copies until you remove them.",
+            to_name, from_name
+        ),
+        &[],
     );
     Ok(())
 }
@@ -1873,6 +1910,7 @@ fn say(slug: &str, step: &str, detail: Value) {
             line.insert(key.clone(), value.clone());
         }
     }
+    // allow(terminal-output): a column-0 marker the desktop app parses (engine.rs).
     println!("intentic-move: {line}");
 }
 

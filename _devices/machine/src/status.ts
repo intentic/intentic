@@ -1,8 +1,10 @@
 import { plural } from "@intentic/base/format";
+import type { Footnote, Item, Tone, Ui } from "@intentic/local-agent";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceScopes, DeviceConflict, DeviceConflictChange, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import type { CommandContext } from "@stricli/core";
+import { buildCommand, machineUi } from "./cli-ui.js";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { PAUSE_HOTKEY, readPausedAt } from "./device/indicator.js";
@@ -116,13 +118,13 @@ export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceS
 
 // One port row, in the form the two skip reasons are actually asked about: not "why is 6480 missing" but "who
 // has it".
-const portLine = (port: DevicePort): string => {
+export const portItem = (port: DevicePort): Item => {
     const what = port.command ?? "unknown process";
     if (port.state === "mirrored") {
-        return `  localhost:${port.port} ← ${port.sandboxId} (${what})`;
+        return { tone: "ok", name: `localhost:${port.port} ← ${port.sandboxId}`, meta: what };
     }
-    const reason = port.heldBy === undefined ? "something else on this machine has the port" : `${port.heldBy} has it`;
-    return `  localhost:${port.port}, NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
+    const reason = port.heldBy === undefined ? "something else on this device has the port" : `${port.heldBy} has it`;
+    return { tone: "warn", name: `localhost:${port.port}`, meta: `not mirrored from ${port.sandboxId}: ${reason} (${what})` };
 };
 
 // The report carries a pairing's remote dir rather than its kind; the two only ever come together (config.ts
@@ -130,28 +132,31 @@ const portLine = (port: DevicePort): string => {
 const reportedKind = (pairing: DevicePairing): { readonly sandboxId: string; readonly project?: true } =>
     pairing.remoteDir === undefined || pairing.remoteDir === WORKSPACE_ROOT ? { sandboxId: pairing.sandboxId } : { sandboxId: pairing.sandboxId, project: true };
 
-// One pairing's line, pure and exported since every word of it has been wrong at least once. A count is
-// printed only when it IS a count: `conflicts` is absent whenever Mutagen has none (protobuf JSON omits an
-// empty list), never a number to interpolate. A missing session is shouted, not blanked.
-// The two sessions a sync pairing runs, split out so the sentence below stays a list of things that can be
-// wrong rather than a nest of conditionals.
-const fileSyncState = (pairing: DeviceReport["pairings"][number]): (string | undefined)[] => [
+// What a sync pairing's two sessions say, as a list of things that can be wrong, each with how bad it is. A count is
+// printed only when it IS a count: `conflicts` is absent whenever Mutagen has none (protobuf JSON omits an empty
+// list), never a number to interpolate. A missing session is said and marked as a failure, never blanked.
+const fileSyncState = (pairing: DeviceReport["pairings"][number]): readonly (readonly [Tone, string] | undefined)[] => [
     // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts rather than
     // clobbering.
-    pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION, this folder is not syncing"),
-    pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : plural(pairing.conflicts, "conflict"),
-    // The backup's own word, shouted when missing for the same reason as the line above: the value of this session
+    pairing.paused === true ? ["warn", "paused"] : pairing.mutagenStatus === undefined ? ["fail", "no file-sync session, this folder is not syncing"] : ["ok", pairing.mutagenStatus],
+    pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : ["fail", plural(pairing.conflicts, "conflict")],
+    // The backup's own word, a failure when missing for the same reason as the line above: the value of this session
     // is being there on the day the sandbox is not, and silent absence reads identically to healthy. A project folder
     // has none to miss.
     pairing.paused === true || reportedKind(pairing).project === true
         ? undefined
-        : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
+        : pairing.backupStatus === undefined
+          ? ["fail", "backup not running, this sandbox's own state is not being copied here"]
+          : ["ok", `backup ${pairing.backupStatus}`],
 ];
 
-// The stuck paths themselves, printed under the line that counts them: the count is a symptom, the paths are
+// The stuck paths themselves, listed under the pairing that counts them: the count is a symptom, the paths are
 // the only part anybody can act on. What happened on each side rides in the words the rest of this output
-// uses ("here" is the machine you are typing on); an unknown side says nothing rather than guessing.
+// uses ("here" is the device you are typing on); an unknown side says nothing rather than guessing.
 const CONFLICT_LINES_MAX = 8;
+
+export const CONFLICTS_SAID = "Both ends changed these since they last agreed, so neither copy was overwritten and they have stopped syncing.";
+export const CONFLICTS_SETTLED = "Resolve one by making both copies the same, or both gone; the session picks it up on its next pass.";
 
 // `untracked` is not somebody's edit and is never described as one: it is build output under an ignore pattern, sitting
 // where sync never looks, and the only reason the deletion on the other side cannot land.
@@ -168,17 +173,16 @@ const IN_SANDBOX: Record<DeviceConflictChange, string> = {
     untracked: "build output left in the sandbox",
 };
 
-const conflictLine = (conflict: DeviceConflict): string => {
-    // An empty path is the synced folder itself, which Mutagen reports for a root-level conflict.
-    const what = conflict.path === "" ? "(the folder itself)" : conflict.path;
+const conflictItem = (conflict: DeviceConflict): Item => {
     const sides = [
         conflict.local === undefined ? undefined : HERE[conflict.local],
         conflict.sandbox === undefined ? undefined : IN_SANDBOX[conflict.sandbox],
     ].filter((side) => side !== undefined);
-    return `    ${what}${sides.length === 0 ? "" : `  (${sides.join(", ")})`}`;
+    // An empty path is the synced folder itself, which Mutagen reports for a root-level conflict.
+    return { tone: "fail", name: conflict.path === "" ? "the folder itself" : conflict.path, meta: sides.join(", ") };
 };
 
-export const conflictLines = (pairing: DeviceReport["pairings"][number]): string[] => {
+export const conflictItems = (pairing: DeviceReport["pairings"][number]): Item[] => {
     const conflicts = pairing.conflictedPaths ?? [];
     if (conflicts.length === 0) {
         return [];
@@ -187,55 +191,76 @@ export const conflictLines = (pairing: DeviceReport["pairings"][number]): string
     // Counted against the pairing's OWN total, not against the list: the report caps what it carries and Mutagen
     // caps what it reports, so "and 30 more" is a fact the shown rows cannot state for themselves.
     const rest = (pairing.conflicts ?? conflicts.length) - shown.length;
-    return [
-        "    Both ends changed these since they last agreed, so neither copy was overwritten and they have stopped syncing:",
-        ...shown.map(conflictLine),
-        ...(rest > 0 ? [`    … and ${rest} more`] : []),
-        "    Resolve one by making both copies the same (or both gone); the session picks it up on its next pass.",
-    ];
+    return [...shown.map(conflictItem), ...(rest > 0 ? [{ tone: "skip", name: `… and ${rest} more` } satisfies Item] : [])];
 };
 
-export const pairingLine = (pairing: DeviceReport["pairings"][number]): string => {
-    // This computer's own sandbox holds no folder: the folders attached to it have lines of their own.
+const WORST: readonly Tone[] = ["fail", "warn", "ok"];
+
+// One pairing's row, pure and exported since every word of it has been wrong at least once. The glyph is the worst
+// thing the row says.
+export const pairingItem = (pairing: DeviceReport["pairings"][number]): Item => {
+    // This device's own sandbox holds no folder: the folders attached to it have rows of their own.
     if (pairing.projectsHost === true) {
-        return `  ${pairing.sandboxId}  (this computer's sandbox: folders attach to it)${pairing.mirroring === "off" ? "  [port mirroring OFF]" : ""}`;
+        return {
+            tone: pairing.mirroring === "off" ? "warn" : "ok",
+            name: pairing.sandboxId,
+            meta: `this device's sandbox: folders attach to it${pairing.mirroring === "off" ? " · port mirroring off" : ""}`,
+        };
     }
-    const folder = pairing.localDir ?? "(no folder)";
-    const where = pairing.mode === "sync" ? (reportedKind(pairing).project === true ? `${folder} ↔ ${pairing.remoteDir}` : folder) : "(ports only)";
+    const folder = pairing.localDir ?? "no folder";
+    const where = pairing.mode === "sync" ? (reportedKind(pairing).project === true ? `${folder} ↔ ${pairing.remoteDir}` : folder) : "ports only";
     const state = [
-        // Mirroring being off is stated on both modes and loudly, since it is a switch somebody threw and its only
-        // other evidence (an empty port list) is identical to a sandbox serving nothing. Absent means on.
-        pairing.mirroring === "off" ? "port mirroring OFF" : undefined,
+        // Mirroring being off is stated on both modes, since it is a switch somebody threw and its only other evidence
+        // (an empty port list) is identical to a sandbox serving nothing. Absent means on.
+        pairing.mirroring === "off" ? (["warn", "port mirroring off"] as const) : undefined,
         ...(pairing.mode === "sync" ? fileSyncState(pairing) : []),
-        // A folder that takes landed work by itself says so, since nothing else on the line would.
-        pairing.deliver === "auto" ? "landed work delivered here" : undefined,
+        // A folder that takes landed work by itself says so, since nothing else on the row would.
+        pairing.deliver === "auto" ? (["ok", "landed work delivered here"] as const) : undefined,
     ].filter((part) => part !== undefined);
-    return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
+    const tone = WORST.find((worst) => state.some(([said]) => said === worst)) ?? "ok";
+    return { tone, name: pairing.sandboxId, meta: [where, ...state.map(([, text]) => text)].join(" · ") };
 };
 
-// The agent's line: running, stopped, or the third state that had no words, a live process whose sync agent is
-// gone. The agent holds its tunnel listeners on the event agent, so anything that escapes it leaves a process
+// The agent's row: running, stopped, or the third state that had no words, a live process whose sync agent is
+// gone. The agent holds its tunnel listeners on the event loop, so anything that escapes it leaves a process
 // that is alive with mirroring and the git bridge stopped underneath; a pid is not a pulse, the stamp the agent
 // writes at the end of each pass is (sync/config.ts).
-export const agentLine = (agent: DeviceReport["agent"], now: number): string => {
+export const agentItem = (agent: DeviceReport["agent"], now: number): Item => {
     if (!agent.running) {
-        return "Agent: NOT running, file syncing and port mirroring are both stopped. Run `intentic-machine run` to restart it.";
+        return { tone: "fail", name: "agent", meta: "not running: file sync and port mirroring are stopped" };
     }
     const since = agent.lastTickAt === undefined ? undefined : now - agent.lastTickAt;
     if (agentStalled(agent, now) && since !== undefined) {
-        return `Agent: sync STALLED (pid ${agent.pid}), the process is alive but its last full pass finished ${plural(Math.round(since / 60_000), "minute")} ago, so port mirroring, the git bridge and any file sync it has not created are stopped. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`, and check ${runLogPath}.`;
+        return {
+            tone: "fail",
+            name: "agent",
+            meta: `sync stalled (pid ${agent.pid}): its last full pass was ${plural(Math.round(since / 60_000), "minute")} ago`,
+        };
     }
     // An agent too old to stamp reports no lastTickAt at all, and so does one whose first pass hasn't finished.
-    // Neither is a stall and neither is a clean bill of health, so the line says which it is rather than picking one.
+    // Neither is a stall and neither is a clean bill of health, so the row says which it is rather than picking one.
     return since === undefined
-        ? `Agent: running (pid ${agent.pid}), no completed sync pass reported yet (a pass finishes within seconds of startup; an agent older than this one never reports them).`
-        : `Agent: running (pid ${agent.pid}), last sync pass ${Math.round(since / 1000)}s ago`;
+        ? { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), no sync pass reported yet` }
+        : { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), last sync pass ${Math.round(since / 1000)}s ago` };
+};
+
+// What a row too short to say it leaves out about the agent: why a stall matters, and why no pass is not a fault.
+export const agentNote = (agent: DeviceReport["agent"], now: number): string | undefined => {
+    if (!agent.running) {
+        return undefined;
+    }
+    if (agent.lastTickAt === undefined) {
+        return "A pass finishes within seconds of startup; an agent older than this one never reports them.";
+    }
+    return agentStalled(agent, now)
+        ? "The process is alive, but port mirroring, the git bridge and any file sync it has not created yet are stopped."
+        : undefined;
 };
 
 // The agent is fine and it is the wrong build, a sentence this output had no way to write before: the version
-// on the first line is the file's, and a machine updated but never restarted printed a clean bill of health
+// in the header is the file's, and a device updated but never restarted printed a clean bill of health
 // with the old agent's behaviour underneath.
-export const buildSkewLine = (report: DeviceReport): string | undefined => {
+export const buildSkewItem = (report: DeviceReport): Item | undefined => {
     const skew = agentBuildSkew(report.agent);
     if (skew === undefined) {
         return undefined;
@@ -244,174 +269,181 @@ export const buildSkewLine = (report: DeviceReport): string | undefined => {
     // unknown one.
     const which =
         skew.running === undefined
-            ? `Agent: running a build older than the ${skew.installed} installed on this machine (too old to report its own version)`
-            : `Agent: running ${skew.running}, but ${skew.installed} is installed on this machine`;
-    return `${which} — the agent keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
+            ? `running a build older than the ${skew.installed} installed on this device, too old to report its own version`
+            : `running ${skew.running}, but ${skew.installed} is installed on this device`;
+    return { tone: "warn", name: "agent build", meta: which };
 };
 
 // Where this environment sits in its PC, said beside the agent it describes: who restarts it, and what it keeps running.
-export const machineLine = (distro: string | undefined, supervisor: string | undefined, children: readonly string[]): string | undefined => {
+export const placeLine = (distro: string | undefined, supervisor: string | undefined, children: readonly string[]): string | undefined => {
     if (distro !== undefined) {
         return supervisor === "windows"
-            ? `Machine: the WSL distro ${distro}, kept running and upgraded together with this PC's Windows side.`
-            : `Machine: the WSL distro ${distro}, running on its own: no agent on this PC's Windows side keeps it up.`;
+            ? `the WSL distro ${distro}, kept running and updated together with this device's Windows side`
+            : `the WSL distro ${distro}, running on its own: no agent on this device's Windows side keeps it up`;
     }
-    return children.length === 0 ? undefined : `Machine: this PC's Windows side, keeping ${children.join(", ")} running and upgraded to the same release.`;
+    return children.length === 0 ? undefined : `this device's Windows side, keeping ${children.join(", ")} running and updated to the same release`;
 };
 
-/* ONE LINK'S LINE, and the word in it that was not earned. */
-export const linkLine = (link: StatusLink): string => {
+/* ONE LINK'S ROW, and the word in it that was not earned. The grant beside it is the cached one, said as such: the
+   sandbox's card is the source of truth, and saying so stops a stale row here from being read as current. */
+export const linkItem = (link: StatusLink): Item => {
     switch (link.state) {
         case "open":
-            return `  ${link.sandboxUrl}  connected as ${link.id}`;
+            return { tone: "ok", name: link.sandboxUrl, meta: `connected as ${link.id}` };
         case "connecting":
-            return `  ${link.sandboxUrl}  NOT connected (retrying) as ${link.id}`;
+            return { tone: "warn", name: link.sandboxUrl, meta: `not connected (retrying) as ${link.id}` };
         case "closed":
-            return `  ${link.sandboxUrl}  NOT connected as ${link.id}`;
+            return { tone: "fail", name: link.sandboxUrl, meta: `not connected as ${link.id}` };
         default:
-            return `  ${link.sandboxUrl}  linked as ${link.id} (this machine's agent doesn't report whether the link is up)`;
+            return { tone: "skip", name: link.sandboxUrl, meta: `linked as ${link.id}, not known whether the link is up` };
     }
 };
 
-// A section header over nothing is a question the output raises and does not answer: on a machine with one half in use
-// the other's `(0):` read as a fault rather than as a half nobody asked for. An empty section is simply absent now, and
-// the summary on the first line is what says the machine has nothing.
-const printReport = (report: DeviceReport, out: (message: string) => void): void => {
+export const grantLine = (link: StatusLink): string =>
+    `Last granted by the sandbox: commands ${link.scopes.shell}, writes ${link.scopes.write}, screen ${link.scopes.screen}; folders ${link.scopes.roots ?? "your home folder"}.`;
+
+interface StatusFlags {
+    readonly json: boolean;
+    readonly verbose: boolean;
+}
+
+const RESTART: Footnote = ["restart the agent", "intentic-machine run"];
+
+// The sync half, as rows: each pairing with the paths it is stuck on under it, then the ports. A section over nothing
+// is a question the output raises and does not answer, so an empty one is simply absent.
+const drawSync = (ui: Ui, report: DeviceReport): Footnote[] => {
+    const later: Footnote[] = [];
     if (report.pairings.length > 0) {
-        out("");
-        out(`Paired sandboxes (${report.pairings.length}):`);
+        ui.section(`paired sandboxes (${report.pairings.length})`);
+        ui.items(report.pairings.map(pairingItem));
         for (const pairing of report.pairings) {
-            out(pairingLine(pairing));
-            // Only a pairing holding conflicts prints anything more than its own line, so a healthy machine's output is
-            // exactly what it always was.
-            for (const line of conflictLines(pairing)) {
-                out(line);
+            const stuck = conflictItems(pairing);
+            if (stuck.length > 0) {
+                ui.section(`${plural(pairing.conflicts ?? stuck.length, "conflict")} in ${pairing.localDir ?? pairing.sandboxId}`);
+                ui.note(CONFLICTS_SAID);
+                ui.items(stuck);
+                ui.note(CONFLICTS_SETTLED);
             }
         }
     }
     if (report.ports.length > 0) {
-        out("");
-        out(`Ports (${report.ports.length}):`);
-        for (const port of report.ports) {
-            out(portLine(port));
-        }
+        ui.section(`ports (${report.ports.length})`);
+        ui.items(report.ports.map(portItem));
     }
-    // A pairing whose mirroring is off has no rows above, which is exactly what a sandbox serving nothing looks
-    // like; say which it is, and say the command that undoes it.
+    // A pairing whose mirroring is off has no port rows, which is exactly what a sandbox serving nothing looks like; the
+    // row says which it is, and this is the command that undoes it.
     for (const sandboxId of new Set(report.pairings.filter((held) => held.mirroring === "off").map((held) => held.sandboxId))) {
-        out(`  ${sandboxId}: port mirroring is OFF here. Put its ports back with \`intentic-machine sync mirror on --sandbox ${sandboxId}\`.`);
+        later.push([`mirror ${sandboxId} again`, `intentic-machine sync mirror on --sandbox ${sandboxId}`]);
     }
+    return later;
 };
 
-interface StatusFlags {
-    readonly json: boolean;
-}
-
-// The one grant block per link: the grants are per sandbox, so a device allowed to run commands for one and only
-// watched by another is the ordinary case and neither answers for the other.
-const printLinks = (links: readonly StatusLink[], out: (message: string) => void): void => {
-    if (links.length === 0) {
+// Mutagen's sessions, judged from the state rather than the report, which carries no key to name an attached folder's
+// session by: a pairing whose session does not exist is named as a failure. `mutagen sync list a b` is
+// all-or-nothing, so the raw listing (--verbose) asks only for the sessions that exist.
+const drawSessions = async (ui: Ui, mutagen: string, verbose: boolean): Promise<void> => {
+    const syncing = (await readState()).pairings.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
+    // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the first
+    // would report a healthy sync while the backup was not running at all.
+    const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing));
+    const live = new Set(syncing.length === 0 ? [] : existingSyncSessions(mutagen, wanted));
+    const missing = syncing.filter((held) => !syncSessionNames(held).every((name) => live.has(name)));
+    if (missing.length > 0) {
+        ui.section("file sync");
+        ui.items(
+            missing.map((pairing) => ({
+                tone: "fail",
+                name: pairingKey(pairing),
+                meta: `${pairing.localDir ?? "its folder"} is not syncing: no file-sync session exists on this device`,
+            })),
+        );
+        ui.note("The agent retries every few minutes. If it stays this way the sandbox is unreachable, and the agent's log says why.");
+    }
+    if (!verbose) {
         return;
     }
-    out("");
-    out(`Linked sandboxes (${links.length}):`);
-    for (const link of links) {
-        out(linkLine(link));
-        // The cached grant, flagged as such: the sandbox's card is the source of truth, and saying so stops a stale
-        // line here from being read as current.
-        out(
-            `    permissions (last pushed by the sandbox): commands ${link.scopes.shell}, writes ${link.scopes.write}, screen ${link.scopes.screen}; folders ${link.scopes.roots ?? "(your home folder)"}`,
-        );
-    }
-};
-
-// Mutagen's own listings, for pairings whose session EXISTS and only those: `mutagen sync list a b` is all-or-nothing,
-// so one pairing with a lost session used to take the whole command down. The missing ones are named here instead.
-// The pairings are read off the state rather than the report, which carries no key to name an attached folder's
-// session by.
-const printMutagen = async (mutagen: string, out: (message: string) => void): Promise<void> => {
-    const syncing = (await readState()).pairings.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
-    if (syncing.length > 0) {
-        out("");
-        out("File sync:");
-        // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the
-        // first would report a healthy sync while the backup was not running at all.
-        const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing));
-        const live = new Set(existingSyncSessions(mutagen, wanted));
+    // Mutagen's own listings, word for word, for whoever asked to see them.
+    ui.section("mutagen");
+    ui.suspend();
+    try {
         if (live.size > 0) {
             runMutagen(mutagen, ["sync", "list", ...wanted.filter((name) => live.has(name))]);
         }
-        for (const pairing of syncing.filter((held) => !syncSessionNames(held).every((name) => live.has(name)))) {
-            out(
-                `  ${pairingKey(pairing)}: no file-sync session exists on this machine, ${pairing.localDir ?? "its folder"} is NOT syncing. The agent retries every few minutes; if it stays this way the sandbox is unreachable (check ${runLogPath}).`,
-            );
-        }
+        runMutagen(mutagen, ["forward", "list"]);
+    } finally {
+        ui.resume();
     }
-    out("");
-    out("Port mirroring:");
-    runMutagen(mutagen, ["forward", "list"]);
 };
 
-// What a machine with nothing on it says, instead of five section headers counting to zero and four lines of Mutagen
-// reporting no sessions. Both halves arrive from a card in a sandbox's chat, which is the only thing to do next.
-const NOTHING_CONNECTED = [
-    "Nothing is connected: this machine is not linked to a sandbox and syncs no folder.",
-    "Connect it from a sandbox's chat — the Connect-this-device card, or the Desktop sync card.",
-];
-
 // Status leads with the one-line summary, the same sentence the desktop app's tray shows, so the question a person
-// arrives with ("is my machine connected, is my folder syncing") is answered before anything is enumerated. The
-// agent's liveness sits with its version, since a healthy-looking list under a dead agent means every promise below
+// arrives with ("is my device connected, is my folder syncing") is answered before anything is enumerated. The
+// agent's liveness comes first among the rows, since a healthy-looking list under a dead agent means every promise below
 // it is quietly broken.
 export const status = buildCommand<StatusFlags>({
-    docs: { brief: "Show what this machine's agent is connected to, syncing, and mirroring, and whether it is alive" },
+    docs: { brief: "Show what this device's agent is connected to, syncing, and mirroring, and whether it is alive" },
     parameters: {
         flags: {
-            json: { kind: "boolean", brief: "Emit the machine status as JSON (what the desktop app's tray and screen read)" },
+            json: { kind: "boolean", brief: "Emit the device status as JSON (what the desktop app's tray and screen read)" },
+            verbose: { kind: "boolean", brief: "Also print Mutagen's own session and forward listings", default: false },
         },
     },
     async func(this: CommandContext, flags: StatusFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         const mutagen = await pairedMutagen();
         const report = await deviceStatus(mutagen);
         if (flags.json) {
-            out(JSON.stringify(report));
+            // allow(terminal-output): the --json document the desktop app's tray and screen read
+            this.process.stdout.write(`${JSON.stringify(report)}\n`);
             return;
         }
+        const ui = machineUi(this.process);
+        ui.report("intentic · this device", report.summary === "nothing connected" ? undefined : report.summary.toLowerCase());
         if (report.device.links.length === 0 && report.sync.pairings.length === 0) {
-            // NOTHING_CONNECTED says what `summary` says and then what to do about it, so the summary would only
-            // repeat itself here.
-            for (const line of NOTHING_CONNECTED) {
-                out(line);
-            }
+            // Both halves arrive from a card in a sandbox's chat, which is the only thing to do next.
+            ui.quiet("Nothing is connected. Connect this device from a card in a sandbox's chat.");
             return;
         }
-        out(report.summary);
-        out("");
-        out(`intentic-machine v${report.version}`);
+        // A log has no header, so the summary and the version lead it there.
+        ui.plain(report.summary);
+        ui.plain(`intentic-machine ${report.version}`);
+        const later: Footnote[] = [];
         // The agent's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
-        // session rides (sync/tunnel.ts). Said once, here, where the version it is running is also stated.
-        out(agentLine(report.sync.agent, Date.now()));
-        const [distro, held, children] = await Promise.all([registeredDistro(), readResident(), heldDistros().catch(() => [])]);
-        const where = machineLine(distro, held?.supervisor, children);
-        if (where !== undefined) {
-            out(where);
+        // session rides (sync/tunnel.ts).
+        const agent = agentItem(report.sync.agent, Date.now());
+        const skew = buildSkewItem(report.sync);
+        ui.items(skew === undefined ? [agent] : [agent, skew]);
+        const why = agentNote(report.sync.agent, Date.now());
+        if (why !== undefined) {
+            ui.note(why);
         }
-        const skew = buildSkewLine(report.sync);
         if (skew !== undefined) {
-            out(skew);
+            ui.note("The agent keeps the build it started with until it restarts.");
         }
-        out(`Logs:  ${runLogPath}`);
-        out(`Audit: ${auditPath}`);
-        if (report.device.pausedAt !== undefined) {
-            out(
-                `Mouse and keyboard: PAUSED by the person at this computer since ${report.device.pausedAt}. Agents are refused until ${PAUSE_HOTKEY} is pressed while their notice is on screen.`,
-            );
+        if (agent.tone === "fail" || skew !== undefined) {
+            later.push(RESTART);
         }
-        printLinks(report.device.links, out);
-        printReport(report.sync, out);
+        const [distro, held, children] = await Promise.all([registeredDistro(), readResident(), heldDistros().catch(() => [])]);
+        const place = placeLine(distro, held?.supervisor, children);
+        ui.fields([
+            ...(place === undefined ? [] : [["device", place] as const]),
+            ["logs", runLogPath],
+            ["audit", auditPath],
+            ...(report.device.pausedAt === undefined
+                ? []
+                : [["mouse and keyboard", `paused since ${report.device.pausedAt}, until ${PAUSE_HOTKEY} is pressed while an agent's notice is on screen`] as const]),
+        ]);
+        // The grants are per sandbox, so a device allowed to run commands for one and only watched by another is the
+        // ordinary case and neither answers for the other.
+        if (report.device.links.length > 0) {
+            ui.section(`linked sandboxes (${report.device.links.length})`);
+            for (const link of report.device.links) {
+                ui.items([linkItem(link)]);
+                ui.note(grantLine(link));
+            }
+        }
+        later.push(...drawSync(ui, report.sync));
         if (mutagen !== undefined) {
-            await printMutagen(mutagen, out);
+            await drawSessions(ui, mutagen, flags.verbose);
         }
+        ui.later(later);
     },
 });

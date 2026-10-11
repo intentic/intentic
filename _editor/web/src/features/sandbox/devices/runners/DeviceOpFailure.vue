@@ -1,7 +1,8 @@
 <!-- One press that didn't work on a machine, and the line that does the same thing where nothing can refuse it. -->
 <script setup lang="ts">
-import { Code, Notice, type NoticeModel } from "@intentic/ui";
+import { Notice, type NoticeModel } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import RunCommand from "../../../../components/RunCommand.vue";
 
 // Under the notice, not instead of it: what the machine said is the reason, and this is the way past it. Offered
 // for every failure that has a line, since the usual reason a device press fails is a route to that machine this
@@ -21,6 +22,6 @@ const { of, command, machine } = defineProps<{
     <div class="flex flex-col gap-1.5">
         <Notice :of="of" />
         <!-- Wrapped: these are single long lines, and a horizontal scrollbar would hide the end of the one being offered. -->
-        <Code v-if="command !== undefined" :code="command" lang="bash" :label="t(`sandbox.deviceOpFailure.runOnYourself`, { machine })" wrap />
+        <RunCommand v-if="command !== undefined" :command="command" :label="t(`sandbox.deviceOpFailure.runOnYourself`, { machine })" />
     </div>
 </template>

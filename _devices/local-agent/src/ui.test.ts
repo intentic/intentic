@@ -1,4 +1,4 @@
-import { asLabel, createUi, estimate, humanDuration, truncate, wrap, type UiProcess } from "./ui.js";
+import { asLabel, createUi, estimate, explain, humanDuration, truncate, wrap, type UiProcess } from "./ui.js";
 
 // plain is a wire contract: the desktop app parses its markers into a progress bar and CI reads them from a log, so the
 // redrawing path must be unreachable from it.
@@ -57,9 +57,9 @@ describe("the plain contract", () => {
         const warnRest = "Re-open the setup screen.";
         ui.warn(`${warnFirst}\n${warnRest}`);
         expect(out()).toContain("  ok    Docker");
-        expect(out()).toContain("  warn  Disk space, 12 GiB free");
+        expect(out()).toContain("  warn  Disk space — 12 GiB free");
         expect(out()).toContain("  FAIL  Platform reachable");
-        expect(out()).toContain("  skip  Public URL, no public URL to probe");
+        expect(out()).toContain("  skip  Public URL — no public URL to probe");
         expect(out()).toContain(note);
         expect(err()).toContain(warnFirst);
         expect(err()).toContain(warnRest);
@@ -148,6 +148,85 @@ describe("rich mode", () => {
         // The footnote block is labelled once and its columns align.
         expect(lines[footnote]).toContain("later");
         expect(lines[footnote + 1]).toContain("its logs");
+    });
+});
+
+/** What a terminal shows once every repaint has landed: each line is whatever followed its last carriage return. */
+const screen = (written: string): string[] => written.split("\n").map((line) => line.split("\r").at(-1) ?? "");
+
+describe("actions and reports", () => {
+    const rich = () => fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1" } });
+
+    it("settles an action's live line into its past-tense verdict", () => {
+        const { ui, out } = rich();
+        ui.act("Stopping sandbox-x");
+        ui.done("Stopped sandbox-x.");
+        ui.later([["start it", "ic sandbox start sandbox-x"]]);
+        ui.close();
+        const settled = screen(out()).filter((line) => line.includes("Stopped sandbox-x."));
+        expect(settled).toHaveLength(1);
+        expect(settled[0]).toMatch(/^ {2}\+ {2}Stopped sandbox-x\.\s+\d+\.\ds$/u);
+        expect(out()).toContain("later  start it   ic sandbox start sandbox-x");
+    });
+
+    it("narrates an action in a log without repainting", () => {
+        const { ui, out } = fake();
+        ui.act("Stopping sandbox-x");
+        ui.done("Stopped sandbox-x.");
+        ui.later([["start it", "ic sandbox start sandbox-x"]]);
+        expect(out()).toBe("intentic: stopping sandbox-x…\nintentic: Stopped sandbox-x.\n");
+    });
+
+    it("draws a report as one glyph column under its header", () => {
+        const { ui, out } = rich();
+        ui.report("intentic · sandboxes on this device");
+        ui.items([
+            { tone: "ok", name: "sandbox-a", meta: "running" },
+            { tone: "skip", name: "sandbox-bb", meta: "stopped" },
+        ]);
+        ui.section("removed, recoverable");
+        ui.quiet("Nothing removed.");
+        const lines = out().split("\n");
+        expect(lines).toContain("  intentic · sandboxes on this device");
+        expect(lines).toContain("  +  sandbox-a    running");
+        expect(lines).toContain("  -  sandbox-bb   stopped");
+        expect(lines).toContain("     removed, recoverable");
+        expect(lines).toContain("  -  Nothing removed.");
+    });
+
+    it("keeps report rows in the log's word column", () => {
+        const { ui, out } = fake();
+        ui.report("intentic · sandboxes on this device");
+        ui.items([{ tone: "warn", name: "sandbox-a", meta: "not answering" }]);
+        ui.fields([["Installed", "yes"]]);
+        ui.plain("removed   sandbox-b (6 day(s) left)");
+        expect(out()).toBe("  warn  sandbox-a — not answering\nInstalled: yes\nremoved   sandbox-b (6 day(s) left)\n");
+    });
+
+    it("prints a plain-only line nowhere on a screen", () => {
+        const { ui, out } = rich();
+        ui.plain("removed   sandbox-b (6 day(s) left)");
+        expect(out()).toBe("");
+    });
+});
+
+describe("a stopped run", () => {
+    it("settles the running step as failed before the stop block", () => {
+        const { ui, out, err } = fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1" } });
+        ui.begin("intentic · connect this device", [{ phase: "fetch", label: "Download the agent", weight: 5 }]);
+        ui.step("fetch", "downloading…");
+        ui.fail(explain("The agent could not be downloaded.", "github.com did not answer.", "run the same command again."));
+        const settled = screen(out()).find((line) => line.includes("Download the agent"));
+        expect(settled).toMatch(/^ {2}x {3}1 {2}Download the agent\s+\d+\.\ds$/u);
+        expect(err()).toContain("  x  The agent could not be downloaded.");
+        expect(err()).toContain("     problem: github.com did not answer.");
+        expect(err()).toContain("     fix:     run the same command again.");
+    });
+
+    it("keeps the one-line error a log reader takes the reason from", () => {
+        const { ui, err } = fake();
+        ui.fail(explain("The agent could not be downloaded.", "github.com did not answer."));
+        expect(err().split("\n")[0]).toBe("error: The agent could not be downloaded.");
     });
 });
 

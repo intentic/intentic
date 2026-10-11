@@ -11,6 +11,7 @@ use super::record::{self, EngineRecord};
 use super::wsl;
 use super::{Kind, Status};
 use crate::docker::{self, EngineEnv};
+use crate::ui;
 
 const START_WAIT: Duration = Duration::from_secs(120);
 
@@ -188,7 +189,7 @@ pub fn start_quiet() -> Result<(), String> {
 
 fn start_internal(quiet: bool) -> Result<(), String> {
     let mut record =
-        EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
+        EngineRecord::load().ok_or("the intentic engine is not installed on this device.")?;
     if !record.is_ours() {
         return Err("this account's engine record is not intentic's.".to_string());
     }
@@ -200,29 +201,31 @@ fn start_internal(quiet: bool) -> Result<(), String> {
         return Ok(());
     }
     if !quiet {
-        println!("Starting the intentic engine…");
+        ui::detail("starting the intentic engine");
     }
     // An engine from an older ic is brought up to this one's docker as it starts: it is down already, so nothing that
     // runs on it is interrupted for it. One that cannot be (offline) starts as it is, and is tried again next time.
     if record.version != pins::ENGINE_VERSION {
         if !quiet {
-            println!(
-                "Updating the engine from {} to {} (docker {})…",
+            ui::detail(&format!(
+                "updating the engine from {} to {} (docker {})",
                 record.version,
                 pins::ENGINE_VERSION,
                 pins::DOCKER_CLI_VERSION
-            );
+            ));
         }
         let _ = terminate();
         if let Err(problem) = upgrade_in_place(&mut record) {
-            println!("Note: the engine was not updated ({problem}); starting the docker it has.");
+            ui::note(&format!(
+                "the engine was not updated ({problem}); starting the docker it has."
+            ));
         }
     }
     if let Err(problem) = write_into_distro(&record.distro, KEEPER_PATH, KEEPER) {
         // The rootfs carries a keeper of its own: an older one, but one that runs.
-        println!(
-            "Note: could not refresh the engine's keeper ({problem}); starting the one it has."
-        );
+        ui::note(&format!(
+            "could not refresh the engine's keeper ({problem}); starting the one it has."
+        ));
     }
     let mut keeper = spawn_keeper(&record.distro, port_from_host(&record.host))?;
     wait_for_engine(&record, START_WAIT, &mut keeper)?;
@@ -237,7 +240,7 @@ fn start_internal(quiet: bool) -> Result<(), String> {
 fn keep_relay(record: &mut EngineRecord, quiet: bool) {
     if let Err(problem) = super::relay::ensure(record) {
         if !quiet {
-            println!("Note: the engine's named pipe is not up ({problem}); docker reaches it over TCP meanwhile.");
+            ui::note(&format!("the engine's named pipe is not up ({problem}); docker reaches it over TCP meanwhile."));
         }
     }
     if record.is_active() {
@@ -283,7 +286,7 @@ pub fn restart() -> Result<(), String> {
 
 pub fn update() -> Result<(), String> {
     let mut record =
-        EngineRecord::load().ok_or("the intentic engine is not installed on this PC.")?;
+        EngineRecord::load().ok_or("the intentic engine is not installed on this device.")?;
     let was_held = record::held();
     terminate()?;
     upgrade_in_place(&mut record)?;
@@ -313,7 +316,7 @@ fn upgrade_in_place(record: &mut EngineRecord) -> Result<(), String> {
 pub fn set_active(on: bool) -> Result<(), String> {
     let mut record = EngineRecord::load()
         .filter(EngineRecord::is_ours)
-        .ok_or("the intentic engine is not installed on this PC.")?;
+        .ok_or("the intentic engine is not installed on this device.")?;
     record.active = on;
     record.save()?;
     if on {
@@ -812,7 +815,7 @@ pub(super) fn keeper_sentence(code: Option<i32>, said: &str) -> String {
             format!(" (its bridge, docker0, is {owner})")
         };
         return format!(
-            "another Docker engine is running inside WSL{at}. Every WSL distro shares one network, and two engines there undo each other's rules, so Intentic's engine did not start beside it. Stop that engine (in its distro: sudo systemctl disable --now docker), or keep your sandboxes on it, then try again."
+            "another Docker engine is running inside WSL{at}. Every WSL distro shares one network, and two engines there undo each other's rules, so the intentic engine did not start beside it. Stop that engine (in its distro: sudo systemctl disable --now docker), or keep your sandboxes on it, then try again."
         );
     }
     let tail: Vec<&str> = lines
@@ -861,12 +864,12 @@ fn register_autostart(distro: &str) -> Result<(), String> {
             .filter(|path| path.file_name().is_some_and(|name| name == "ic.exe"))
     });
     let Some(ic) = ic else {
-        println!(
-            "Note: could not register intentic engine autostart — neither {} nor the running ic.exe exists.",
+        ui::note(&format!(
+            "could not register intentic engine autostart — neither {} nor the running ic.exe exists.",
             paths::ic_exe()
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "~/.intentic/ic/bin/ic.exe".to_string())
-        );
+        ));
         return Ok(());
     };
     let command = format!("\"{}\" engine start --quiet", ic.display());
@@ -891,10 +894,10 @@ fn register_autostart(distro: &str) -> Result<(), String> {
     if code != 0 {
         return Err(stderr);
     }
-    println!(
-        "Registered intentic engine autostart at sign-in: {}",
+    ui::detail(&format!(
+        "registered intentic engine autostart at sign-in: {}",
         ic.display()
-    );
+    ));
     Ok(())
 }
 

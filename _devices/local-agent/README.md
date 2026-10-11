@@ -38,8 +38,11 @@ flowchart LR
 - A pidfile stores a boot token beside the pid, so a pid reused after a reboot never reads as a running agent, and
   `claimPidFile` settles two starters racing for one file.
 - `cliLauncher` rebuilds the argv that re-invokes the current CLI, both as `node dist/cli.js` and as a bun-compiled binary.
-- `createUi` renders a setup command's checklist: `rich` in a terminal, `plain` markers for a pipe, `nested` inside a
-  parent's checklist.
+- `createUi` is how `intentic-machine` speaks to a person: `rich` in a terminal, `plain` markers for a pipe, `nested`
+  inside a parent's checklist. It draws the five shapes of [the CLI output protocol](../../docs/ops/cli-output-protocol.md)
+  (a flow, an action, a report, a question, a stop). The shapes themselves are pure functions in `layout.ts`, and `ic`'s
+  `ui.rs` draws the same ones; both are tested against `_shared/sandbox-run/src/terminal-layout.fixture.json`, so the two
+  binaries cannot drift apart on a screen.
 
 ## Key files
 
@@ -48,4 +51,5 @@ flowchart LR
 - [src/detached.ts](src/detached.ts) — pidfiles, `spawnDetached`, the launcher-stub spawn and log rotation.
 - [src/home.ts](src/home.ts) — the state directory and owner-only secret files, written atomically through `@intentic/base/fs`.
 - [src/launcher.ts](src/launcher.ts) — the argv to re-launch this CLI and the stub command line.
-- [src/ui.ts](src/ui.ts) — the checklist renderer and its output modes.
+- [src/ui.ts](src/ui.ts) — the terminal renderer: modes, the live line, and the five shapes over time.
+- [src/layout.ts](src/layout.ts) — the shapes as text in, lines out; held to the layout fixture `ic` shares.

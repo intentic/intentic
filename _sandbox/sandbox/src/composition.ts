@@ -50,6 +50,7 @@ import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
 import { enrolledFleet, syncPairBurns, type SyncMode } from "./peers/desktop-sync.js";
 import { pairings } from "./peers/enrollment.js";
+import { redeemCodes } from "./peers/redeem-codes.js";
 import type { Config } from "./env.config.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
@@ -403,6 +404,9 @@ const createHostsSlice = ({ historyRoot, logger, peerTools, whole }: PeerDoorDep
     syncFleet: () => enrolledFleet(historyRoot),
     hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
     syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
+    redeemCodes: redeemCodes(),
+    // Never replayable, so no burn file: minted and spent in-process.
+    enrollTokens: pairings(),
     deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
     runGrants: createRunGrants(),
 });

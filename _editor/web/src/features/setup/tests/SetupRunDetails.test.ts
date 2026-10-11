@@ -44,5 +44,5 @@ it(`offers no installers inside the desktop app, and explains the same command`,
     expect(text).not.toContain(`Or use the desktop app`);
     expect(text).not.toContain(`Windows`);
     expect(text).toContain(`Starts your sandbox in`);
-    expect(text).toContain(`Removes all of it`);
+    expect(text).toContain(`Removes it again`);
 });

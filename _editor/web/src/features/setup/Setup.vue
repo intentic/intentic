@@ -20,12 +20,10 @@ import {
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
-import { environment } from "../../app/environments/environment";
 import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
 import { revealConversation } from "../agents/fleet/agentActions";
@@ -153,7 +151,6 @@ const {
     runTab,
     runTabOptions,
     showCommand,
-    hasDocker,
     syncEnabled,
     throughApp,
     appFirst,
@@ -1114,22 +1111,6 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                         </p>
                                     </details>
                                 </template>
-                            </div>
-
-                            <!-- Sudo checkbox stays beside the command it rewrites, unix-only, and only while the command is on screen. -->
-                            <!-- Not on a phone: whether Docker is already there is a fact about a computer this page cannot see. -->
-                            <div
-                                v-if="environment.production && commandVisible && runTab === `unix` && !mobile"
-                                class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"
-                            >
-                                <label class="flex cursor-pointer items-center gap-2">
-                                    <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                    <span class="shrink-0 text-content">{{ t(`setup.setup.iAlreadyDocker`) }}</span>
-                                </label>
-                                <span class="min-w-0">
-                                    <template v-if="hasDocker">{{ t(`setup.setup.runsNo`) }} <code>sudo</code>.</template>
-                                    <template v-else><code>sudo</code> {{ t(`setup.setup.oneJobInstallingDocker`) }}</template>
-                                </span>
                             </div>
 
                             <!-- Sync for widths with no reference column; survives folding in the app, but not on the compose tab.

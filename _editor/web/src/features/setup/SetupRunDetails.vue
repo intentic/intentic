@@ -1,10 +1,11 @@
 <!-- Reference for what the install command creates, and the line that removes it again. -->
 <script setup lang="ts">
-import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intentic/ui";
+import { Button, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";
 import { desktopVersion } from "../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../app/environments/desktopDownloads";
 import { useT } from "@intentic/ui/i18n";
+import RunCommand from "../../components/RunCommand.vue";
 
 const t = useT();
 
@@ -63,14 +64,12 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
 
         <!-- The undo. -->
         <div class="flex flex-col gap-1 border-t border-line pt-3 text-xs text-muted">
-            <!-- The copy button rides the label, not the command. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
                 {{ t(`setup.setupRunDetails.removesAll`) }}
-                <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
-            <!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs PowerShell. -->
-            <Code :code="cleanup" :lang="commandLang(cmdOs)" :wrap="true" :copyable="false" />
+            <!-- The shell is the run step's: its tab picks bash vs PowerShell for both commands. -->
+            <RunCommand :command="cleanup" :os="cmdOs" />
         </div>
     </div>
 </template>

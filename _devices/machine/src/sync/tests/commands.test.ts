@@ -10,7 +10,14 @@ import {
     SyncEnrollmentAnswerSchema,
 } from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
-import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../../status.js";
+import type { Item } from "@intentic/local-agent";
+import { agentItem, agentNote, buildSkewItem, CONFLICTS_SETTLED, conflictItems, linkItem, pairingItem, statusSummary } from "../../status.js";
+
+// A status row as one string, glyph word first, the way a log carries it.
+const said = (item: Item | undefined): string | undefined =>
+    item === undefined ? undefined : `${item.tone} ${item.name}  ${item.meta ?? ""}`.trimEnd();
+const pairingLine = (pairing: DevicePairing): string => said(pairingItem(pairing))!;
+const linkLine = (link: Parameters<typeof linkItem>[0]): string => said(linkItem(link))!;
 import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan, transportFor } from "../commands.js";
 import type { Pairing, SyncState } from "../config.js";
 import { syncSessionNames } from "../mutagen.js";
@@ -92,7 +99,7 @@ describe("enrollKey", () => {
         stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "watch" })));
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(
-            'the sandbox enrolled this machine but its answer could not be read: ✖ Invalid option: expected one of "sync"|"mirror"\n  → at mode',
+            'the sandbox enrolled this device but its answer could not be read: ✖ Invalid option: expected one of "sync"|"mirror"\n  → at mode',
         );
     });
 
@@ -100,7 +107,7 @@ describe("enrollKey", () => {
         const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(new Response("nope", { status: 401 }));
         stubGlobal("fetch", fetchMock);
 
-        await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/pairing expired/);
+        await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/pairing has expired/);
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -139,12 +146,17 @@ describe("selectPairings", () => {
         expect(selectPairings(state, "0738")).toEqual([first]);
     });
 
+    // --sandbox is spelled one way on every command, and the setup commands take an address there.
+    it("selects by the sandbox's address, as setup named it", () => {
+        expect(selectPairings(state, "https://sandbox-0738cd6b5027-intentic-dev/")).toEqual([first]);
+    });
+
     it("refuses an ambiguous fragment instead of picking one", () => {
         expect(() => selectPairings(state, "intentic-dev")).toThrow(/matches more than one/);
     });
 
     it("refuses an unknown fragment, listing what this machine does pair", () => {
-        expect(() => selectPairings(state, "nope")).toThrow(/no paired sandbox matches "nope".*0738cd6b5027/s);
+        expect(() => selectPairings(state, "nope")).toThrow(/No paired sandbox matches nope\..*0738cd6b5027/s);
     });
 });
 
@@ -230,7 +242,7 @@ describe("placementChange", () => {
 
     it("refuses to turn a project folder into a copy of the whole workspace", () => {
         expect(placementChange(project, {})).toBe(
-            "x already syncs /home/ada/code/my-app with its /work/my-app as a project; setting it up again for /work would rewrite what that folder holds. Unpair it first (`intentic-machine sync uninstall --sandbox x`), then set it up again.",
+            "x was not set up again.\n   problem: it already syncs /home/ada/code/my-app with its /work/my-app as a project; setting it up again for /work would rewrite what that folder holds. Unpair it first, then set it up again.\n   fix:     intentic-machine sync uninstall --sandbox x",
         );
     });
 
@@ -327,13 +339,14 @@ describe("pairingLine", () => {
         expect(line).toContain("watching");
         expect(line).toContain("backup");
         expect(line).not.toContain("backup watching");
+        expect(pairingItem(synced({ backupStatus: undefined })).tone).toBe("fail");
     });
 
     // A project folder is the owner's own and carries no state backup by design, so its absence is not a gap to shout
     // about, and the line says which sandbox folder the local one holds.
     it("names a project pairing's sandbox folder and does not miss a backup it never has", () => {
         const line = pairingLine(synced({ localDir: "/home/me/code/my-app", remoteDir: `${WORKSPACE_ROOT}/my-app`, backupStatus: undefined }));
-        expect(line).toBe("  sandbox-0738cd6b5027-intentic-dev  /home/me/code/my-app ↔ /work/my-app  [watching]");
+        expect(line).toBe("ok sandbox-0738cd6b5027-intentic-dev  /home/me/code/my-app ↔ /work/my-app · watching");
     });
 
     it("names the backup's own status when it has one of its own", () => {
@@ -346,29 +359,31 @@ describe("pairingLine", () => {
         const withoutSession = pairingLine(synced({ mutagenStatus: undefined }));
         const withSession = pairingLine(synced());
         expect(withoutSession).not.toBe(withSession);
-        expect(withoutSession).toContain("NO FILE-SYNC SESSION");
+        expect(withoutSession).toContain("no file-sync session");
+        expect(pairingItem(synced({ mutagenStatus: undefined })).tone).toBe("fail");
     });
 
     it("says paused when it is paused, over whatever Mutagen last reported", () => {
-        expect(pairingLine(synced({ paused: true }))).toContain("[paused]");
+        expect(pairingLine(synced({ paused: true }))).toContain("· paused");
+        expect(pairingItem(synced({ paused: true })).tone).toBe("warn");
     });
 
     // A mirror-only enrollment has no file sync to have an opinion about, so the absent status is a fact about the
     // mode, not a missing session.
     it("leaves a ports-only enrollment alone", () => {
-        expect(pairingLine({ sandboxId: "friend", mode: "mirror" })).toBe("  friend  (ports only)");
+        expect(pairingLine({ sandboxId: "friend", mode: "mirror" })).toBe("ok friend  ports only");
     });
 
     // Mirroring off is said on the line, since the only other evidence is an empty port list, which is also what a
     // sandbox serving nothing looks like.
     it("says so when this device's port mirroring is switched off", () => {
         const line = pairingLine(synced({ mirroring: "off" }));
-        expect(line).toContain("port mirroring OFF");
+        expect(line).toContain("port mirroring off");
         expect(line).toContain("watching");
     });
 
     it("says it on a ports-only enrollment too, where it is the whole of what that pairing does", () => {
-        expect(pairingLine({ sandboxId: "friend", mode: "mirror", mirroring: "off" })).toBe("  friend  (ports only)  [port mirroring OFF]");
+        expect(pairingLine({ sandboxId: "friend", mode: "mirror", mirroring: "off" })).toBe("warn friend  ports only · port mirroring off");
     });
 
     // Absent means on: an agent reports the field only once it has the switch, and mirroring has always been on.
@@ -379,17 +394,19 @@ describe("pairingLine", () => {
 
 // A pid is not a pulse. The agent keeps its own tunnel listeners on the event agent, so a rejection that escapes
 // it leaves the process alive with mirroring, the git bridge and file sync all stopped.
-describe("agentLine", () => {
+describe("agentItem", () => {
     const NOW = 1_700_000_000_000;
+    const agentLine = (agent: DeviceReport["agent"], now: number): string => said(agentItem(agent, now))!;
 
     it("reports a stalled agent as stalled, even though the process is alive", () => {
         const pid = 4242;
         const stalledMs = AGENT_STALL_AFTER_MS + 60_000;
         const line = agentLine({ running: true, pid, lastTickAt: NOW - stalledMs }, NOW);
         expect(line).toContain(`pid ${pid}`);
-        expect(line).toContain("STALLED");
+        expect(line).toMatch(/^fail /);
+        expect(line).toContain("stalled");
         expect(line).toContain(String(Math.round(stalledMs / 60_000)));
-        expect(line).toContain("intentic-machine run");
+        expect(agentNote({ running: true, pid, lastTickAt: NOW - stalledMs }, NOW)).toContain("port mirroring");
     });
 
     it("reports a ticking agent as running, with how fresh the last pass is", () => {
@@ -408,20 +425,22 @@ describe("agentLine", () => {
         const withTick = agentLine({ running: true, pid, lastTickAt: NOW - 7000 }, NOW);
         expect(withoutTick).toContain(`pid ${pid}`);
         expect(withoutTick).not.toBe(withTick);
-        expect(withoutTick).toContain("no completed sync pass");
+        expect(withoutTick).toContain("no sync pass reported yet");
+        expect(agentNote({ running: true, pid }, NOW)).toContain("never reports them");
     });
 
     it("tells a stopped agent's reader that file sync stopped with it", () => {
         const stopped = agentLine({ running: false }, NOW);
         const running = agentLine({ running: true, pid: 4242, lastTickAt: NOW - 7000 }, NOW);
         expect(stopped).not.toBe(running);
-        expect(stopped).toContain("NOT running");
+        expect(stopped).toMatch(/^fail agent {2}not running/);
     });
 });
 
 // The machine is updated and still serving the old agent, which this output had no way to say: the version on
 // its first line is the FILE's, and the agent keeps whatever build it started with.
-describe("buildSkewLine and the status summary", () => {
+describe("buildSkewItem and the status summary", () => {
+    const buildSkewLine = (report: DeviceReport): string | undefined => said(buildSkewItem(report));
     const NOW = 1_700_000_000_000;
     const report = (agent: Omit<DeviceReport["agent"], "installed">, installed: string | undefined): DeviceReport => ({
         hostname: "radarsu-rog",
@@ -437,7 +456,7 @@ describe("buildSkewLine and the status summary", () => {
         const line = buildSkewLine(report(serving, "1.240.0"));
         expect(line).toContain("1.233.0");
         expect(line).toContain("1.240.0");
-        expect(line).toContain("intentic-machine run --stop");
+        expect(line).toMatch(/^warn /);
     });
 
     it("says nothing when the agent is already on the installed build", () => {
@@ -450,7 +469,7 @@ describe("buildSkewLine and the status summary", () => {
         const unstamped = report({ running: true, pid: 4242 }, "1.240.0");
         const line = buildSkewLine(unstamped);
         expect(line).toContain("1.240.0");
-        expect(line).toContain("intentic-machine run --stop");
+        expect(line).toMatch(/^warn /);
         expect(statusSummary(4242, 0, unstamped, NOW)).toContain("OLD BUILD RUNNING");
     });
 
@@ -485,12 +504,13 @@ describe("linkLine", () => {
 
     it("says connected only for a socket that is open", () => {
         expect(linkLine({ ...link, state: "open" })).toContain("connected as radarsu-omen");
-        expect(linkLine({ ...link, state: "open" })).not.toContain("NOT connected");
+        expect(linkLine({ ...link, state: "open" })).not.toContain("not connected");
     });
 
-    it("says NOT connected for a link that is down, and whether anything is still trying", () => {
-        expect(linkLine({ ...link, state: "connecting" })).toContain("NOT connected (retrying)");
-        expect(linkLine({ ...link, state: "closed" })).toContain("NOT connected as radarsu-omen");
+    it("says not connected for a link that is down, and whether anything is still trying", () => {
+        expect(linkLine({ ...link, state: "connecting" })).toContain("not connected (retrying)");
+        expect(linkLine({ ...link, state: "closed" })).toContain("not connected as radarsu-omen");
+        expect(linkItem({ ...link, state: "closed" }).tone).toBe("fail");
         expect(linkLine({ ...link, state: "closed" })).not.toContain("retrying");
     });
 
@@ -500,7 +520,7 @@ describe("linkLine", () => {
         const unknown = linkLine(link);
         expect(unknown).toContain("radarsu-omen");
         expect(unknown).not.toContain("connected as");
-        expect(unknown).toContain("doesn't report");
+        expect(unknown).toContain("not known whether the link is up");
     });
 });
 
@@ -530,7 +550,8 @@ describe("the summary's link count", () => {
 
 // The paths under the count, on the one output that has ever printed the word "conflict": the count was the
 // whole message, but the paths are the only part anybody can act on.
-describe("conflictLines", () => {
+describe("conflictItems", () => {
+    const conflictLines = (pairing: DevicePairing): string[] => conflictItems(pairing).map((item) => said(item)!);
     const stuck = (overrides: Partial<DevicePairing> = {}): DevicePairing => ({
         sandboxId: "sandbox-0738cd6b5027-intentic-dev",
         mode: "sync",
@@ -558,8 +579,8 @@ describe("conflictLines", () => {
         expect(lines).toContain("src/app.ts");
         expect(lines).toContain("changed here, changed in the sandbox");
         expect(lines).toContain("deleted here, changed in the sandbox");
-        // And what ends it, which is the sentence the count could never carry.
-        expect(lines).toContain("making both copies the same");
+        // And what ends it, which is the sentence the count could never carry, said under the paths.
+        expect(CONFLICTS_SETTLED).toContain("making both copies the same");
     });
 
     // The remainder is counted against the pairing's OWN total, since two caps sit between Mutagen and this line:
@@ -568,11 +589,11 @@ describe("conflictLines", () => {
         const conflictedPaths = Array.from({ length: 12 }, (_, at) => ({ path: `f-${at}.ts` }));
         const lines = conflictLines(stuck({ conflicts: 40, conflictedPaths }));
         expect(lines.join("\n")).toContain("… and 32 more");
-        // Eight paths, plus the sentence over them, the tail, and the remedy under them.
-        expect(lines).toHaveLength(11);
+        // Eight paths and the tail; the sentences over and under them are the report's, said once.
+        expect(lines).toHaveLength(9);
     });
 
     it("says in words the one conflict that has no path: the folder itself", () => {
-        expect(conflictLines(stuck({ conflicts: 1, conflictedPaths: [{ path: "" }] })).join("\n")).toContain("(the folder itself)");
+        expect(conflictLines(stuck({ conflicts: 1, conflictedPaths: [{ path: "" }] })).join("\n")).toContain("the folder itself");
     });
 });

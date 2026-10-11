@@ -15,10 +15,21 @@ flowchart LR
 - Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
 - Every build also writes a Markdown mirror of each page, `llms.txt`, `search.json`, a sitemap dated from git (all via `@intentic/astro-integrations`) and OpenGraph cards. The cards are skipped when the Inter fonts under `scripts/fonts/` are missing.
 - Comparison detail routes share `src/pages/compare/[slug].astro`; their copy comes from `site-content/compare`. `ComparisonFaq.astro` renders the same FAQ entries passed to the layout's structured data. Source-review dates are page-specific, while git modification dates account for the shared copy and route template.
-- `worker.ts` runs before static assets (`run_worker_first`). It redirects http and moved paths, serves the install scripts at vanity paths (`INSTALL_SCRIPTS` in `@intentic/constants`) from `public/scripts/`, resolves `/desktop/*` to the latest GitHub release asset, falls back to the demo's shell under `/demo/`, and applies [content/live.json](content/live.json) to every HTML page outside `/demo/`.
+- `worker.ts` runs before static assets (`run_worker_first`). It redirects http and moved paths, serves the install scripts at vanity paths (`INSTALL_SCRIPTS` in `@intentic/constants`) from `public/scripts/`, serves the same scripts with their arguments injected at the one-liner routes (`/<verb>/<arg>`, below), resolves `/desktop/*` to the latest GitHub release asset, falls back to the demo's shell under `/demo/`, and applies [content/live.json](content/live.json) to every HTML page outside `/demo/`.
 - The `/extensions/` gallery reads the registry repository at build and falls back to `src/lib/registry.fallback.json` when GitHub is unreachable.
 - `scripts/readme/` draws the repository README's pictures into `docs/marketing/readme/`: it photographs the demo build, frames each shot in the site's window, and renders the diagrams, once for GitHub's dark scheme and once for its light one.
 - The Worker name `intentic` in `wrangler.jsonc` is the Worker bound to intentic.dev, so a deploy under any other name never reaches the live site.
+
+## One-liner routes
+
+Every command the product hands out is `curl -fsSL https://intentic.dev/<verb>/<arg> | sh` or `irm https://intentic.dev/<verb>/<arg> | iex`. The verb table lives in `@intentic/constants` (`one-liner.ts`), so the Worker that serves a URL and the editor and sandbox that hand it out read the same patterns. [src/lib/worker-verbs.ts](src/lib/worker-verbs.ts) does the serving:
+
+- PowerShell gets the `.ps1` script when the User-Agent says `PowerShell`; everything else gets sh. A trailing `.ps1` or `.sh` on the last segment overrides that.
+- sh: right after the shebang come `set -- '<args>'`, `INTENTIC_SCRIPT_URL='<url>'` (for a script that re-runs itself under `sudo`) and the verb's env lines.
+- PowerShell: the script is wrapped as `& { … } -Param '<value>'`, so its `param(...)` binds as if it were called by name.
+- Each argument must match its verb's pattern and hold only `[A-Za-z0-9._~/-]`; anything else gets a one-sentence 400 and no script. Responses are `no-store` and vary on the User-Agent.
+
+The flat paths (`/connect`, `/fix.ps1`, …) keep answering as before.
 
 ## Key files
 
@@ -35,7 +46,7 @@ flowchart LR
 pnpm -C _site/site dev          # astro dev; /demo proxies to the demo's dev server
 pnpm -C _site/demo dev          # start it alongside to see /demo in dev
 pnpm -C _site/site build
-pnpm -C _site/site test         # desk palette and mark alignment checks
+pnpm -C _site/site test         # desk palette and mark alignment checks, then the Worker's verb-route tests
 pnpm -C _site/site test:compare --content-only  # copy and research-map invariants
 pnpm -C _site/site test:compare  # after build: generated comparison HTML and FAQ parity
 pnpm -C _site/site run deploy   # wrangler deploy, then IndexNow submission

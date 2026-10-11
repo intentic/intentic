@@ -1,6 +1,7 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import type { Pairings } from "../peers/enrollment.js";
 import type { SyncFleet, SyncMode } from "../peers/desktop-sync.js";
+import type { RedeemCodes } from "../peers/redeem-codes.js";
 import type { HostHub, HostStore } from "./host-peer.js";
 import type { HostDeviceReach } from "./self-host.js";
 import type { RunGrants } from "./device-door.js";
@@ -19,6 +20,11 @@ export interface HostsSlice {
     readonly syncFleet: () => Promise<SyncFleet>;
     // Desktop sync's pairing; only the pairing lives here, its SSH-keyed enrollment half stays in peers/desktop-sync.ts.
     readonly syncPairings: Pairings<SyncMode>;
+    // The short codes a copy-paste command carries instead of a token (peers/redeem-codes.ts).
+    readonly redeemCodes: RedeemCodes;
+    // Single-use tokens for POST /enroll, minted behind a server-connect code so the long-lived connect token never
+    // leaves the sandbox; what a server named at mint time rides along.
+    readonly enrollTokens: Pairings<{ readonly hostName?: string | undefined }>;
     // A device's own loopback ports, reached from the sandbox (`devices reach`, device-tunnels.ts).
     readonly deviceTunnels: DeviceTunnels;
     // What lets a run the owner started from the editor act on its one computer (device-door.ts).

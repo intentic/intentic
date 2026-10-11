@@ -13,13 +13,14 @@ export const app = buildApplication(commands, {
         // parse its bare string, which a flag's framing would break.
         versionInfo: { currentVersion: MACHINE_VERSION },
         scanner: { caseStyle: "allow-kebab-for-camel" },
-        // A failure reads as the sentence the command threw, not as frames inside a compiled binary (agentException),
-        // and without stricli's "Command failed, " in front of a sentence that already names the problem and its fix.
+        // A failure reads as the sentence the command threw, not as frames inside a compiled binary (agentException).
+        // Every local command ends a throw as the protocol's stop itself (cli-ui.ts, buildCommand); this is only the
+        // fallback for one that escapes it, in the same `error: ` words the desktop app reads.
         localization: {
             text: {
                 ...text_en,
                 formatException: agentException,
-                exceptionWhileRunningCommand: (exc: unknown) => `FAILED: ${agentException(exc)}`,
+                exceptionWhileRunningCommand: (exc: unknown) => `error: ${agentException(exc)}`,
             },
         },
     },

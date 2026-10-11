@@ -118,10 +118,10 @@ pub struct Facts {
     pub docker_denied: bool,
     /// `docker version --format {{.Server.Os}}` — `windows` here is Docker Desktop in Windows-container mode.
     pub docker_server_os: Option<String>,
-    /// Intentic engine on this PC (`facts::read`, once per probe). Ignored when sandboxes use Docker Desktop.
+    /// the intentic engine on this device (`facts::read`, once per probe). Ignored when sandboxes use Docker Desktop.
     #[serde(default)]
     pub engine_installed: bool,
-    /// The Docker this PC's sandboxes run on is the person's own to keep running (engine/choice.rs): checked here,
+    /// The Docker this device's sandboxes run on is the person's own to keep running (engine/choice.rs): checked here,
     /// never installed, started or repaired.
     #[serde(default)]
     pub bring_your_own: bool,
@@ -185,7 +185,7 @@ impl Action {
     }
 }
 
-/// One thing standing between this PC and a running sandbox.
+/// One thing standing between this device and a running sandbox.
 #[derive(Debug, Clone)]
 pub struct Requirement {
     /// Stable id — what analytics count and what the app switches on. Never reworded.
@@ -216,7 +216,7 @@ fn req(id: &'static str, title: &str, problem: &str, remedy: &str, action: Actio
 const FIRMWARE_STEPS: &str = "\
 How to turn it on:
 
-  1. Save your work and restart this PC.
+  1. Save your work and restart this device.
   2. As it starts, press the setup key repeatedly, before Windows loads:
        HP / Omen ............ Esc, then F10
        Asus / ROG ........... F2  (or Del)
@@ -372,12 +372,12 @@ pub fn restart_requirement() -> Requirement {
         "pending-restart",
         "A restart Windows is waiting for",
         "Windows has updates that only a restart finishes, and the features Docker needs cannot be set up until then.",
-        "Restart this PC; the setup continues once you are back.",
+        "Restart this device; the setup continues once you are back.",
         Action::Restart,
     )
 }
 
-/// Which container engine this PC's sandboxes use, from the probe and [`crate::engine::choose`].
+/// Which container engine this device's sandboxes use, from the probe and [`crate::engine::choose`].
 pub fn chosen_engine(facts: &Facts) -> crate::engine::Kind {
     #[cfg(test)]
     if let Some(kind) = facts.test_engine {
@@ -421,13 +421,13 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             )
         } else {
             (
-                "This PC's processor is not a 64-bit Intel or AMD one, which is what Intentic's Windows build needs.",
+                "This device's processor is not a 64-bit Intel or AMD one, which is what Intentic's Windows build needs.",
                 "Run your sandbox on a machine we host instead.",
             )
         };
         found.push(req(
             "arch",
-            "This PC's processor",
+            "This device's processor",
             problem,
             remedy,
             Action::Unsupported,
@@ -444,7 +444,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
                 facts.build,
                 if facts.display_version.is_empty() { "unknown release" } else { &facts.display_version }
             ),
-            "Install Windows updates (Settings, then Windows Update) until this PC is on 21H2 or later, then check again.",
+            "Install Windows updates (Settings, then Windows Update) until this device is on 21H2 or later, then check again.",
             Action::Unsupported,
         ));
         found.extend(disk(facts));
@@ -458,7 +458,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             "slat",
             "Processor features",
             "This processor lacks a feature Docker's Linux engine requires (Second Level Address Translation).",
-            "Docker cannot run on this PC. Run your sandbox on a machine we host instead.",
+            "Docker cannot run on this device. Run your sandbox on a machine we host instead.",
             Action::Unsupported,
         ));
         found.extend(disk(facts));
@@ -475,7 +475,9 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         found.push(req(
             "memory",
             "Physical memory",
-            &format!("This PC has about {gib:.1} GiB of memory; a sandbox needs at least 7 GiB."),
+            &format!(
+                "This device has about {gib:.1} GiB of memory; a sandbox needs at least 7 GiB."
+            ),
             "Use a PC with more memory, or run your sandbox on a machine we host instead.",
             Action::Unsupported,
         ));
@@ -486,7 +488,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         found.push(req(
             "windows-edition",
             "Windows edition",
-            "This PC is in Windows S mode, which cannot run the container engine a sandbox needs.",
+            "This device is in Windows S mode, which cannot run the container engine a sandbox needs.",
             "Switch out of S mode in Settings (Activation), or run your sandbox on a machine we host instead.",
             Action::Unsupported,
         ));
@@ -509,7 +511,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             req(
                 "virtualization",
                 "Hardware virtualization",
-                "Virtualization is switched off in this PC's firmware (BIOS/UEFI).",
+                "Virtualization is switched off in this device's firmware (BIOS/UEFI).",
                 "Restart into the firmware settings and turn it on: Windows cannot do this for you. The steps below walk you through it.",
                 Action::Firmware,
             )
@@ -635,7 +637,7 @@ fn append_docker_desktop(found: &mut Vec<Requirement>, facts: &Facts) {
         found.push(req(
             "docker-desktop",
             "Docker Desktop",
-            "Docker Desktop is not installed on this PC.",
+            "Docker Desktop is not installed on this device.",
             how,
             Action::Fix,
         ));
@@ -671,7 +673,7 @@ fn append_docker_desktop(found: &mut Vec<Requirement>, facts: &Facts) {
                 "docker-users",
                 "Permission to use Docker",
                 &format!(
-                    "{} does not have permission to use Docker on this PC yet.",
+                    "{} does not have permission to use Docker on this device yet.",
                     who(facts)
                 ),
                 "We will grant it. Windows asks for permission once, and then you need to sign out and back in.",
@@ -706,11 +708,11 @@ fn append_intentic_engine(found: &mut Vec<Requirement>, facts: &Facts) {
     if !facts.engine_installed {
         let mut requirement = req(
             "engine",
-            "Intentic engine",
+            "the intentic engine",
             if waiting {
-                "Intentic's container engine is not installed yet, and WSL2 has to finish first."
+                "the intentic engine is not installed yet, and WSL2 has to finish first."
             } else {
-                "Intentic's container engine is not installed on this PC."
+                "the intentic engine is not installed on this device."
             },
             if waiting {
                 "We install it after WSL2 is working (after the restart, if Windows needs one)."
@@ -729,16 +731,16 @@ fn append_intentic_engine(found: &mut Vec<Requirement>, facts: &Facts) {
     } else if !facts.engine_running {
         found.push(req(
             "engine-start",
-            "Intentic engine running",
-            "Intentic's container engine is installed but not running.",
+            "the intentic engine running",
+            "the intentic engine is installed but not running.",
             "We will start it and wait until it answers.",
             Action::Fix,
         ));
     } else if !facts.docker_daemon && !facts.docker_denied {
         found.push(req(
             "engine-start",
-            "Intentic engine running",
-            "Intentic's container engine is installed but not answering yet.",
+            "the intentic engine running",
+            "the intentic engine is installed but not answering yet.",
             "We will start it and wait until it answers.",
             Action::Fix,
         ));
@@ -756,7 +758,7 @@ fn disk(facts: &Facts) -> Option<Requirement> {
         "disk-space",
         "Free disk space",
         &format!(
-            "Only {free} GB is free on this PC's system drive, and the sandbox image alone needs more than that."
+            "Only {free} GB is free on this device's system drive, and the sandbox image alone needs more than that."
         ),
         "Free up at least 5 GB (Settings, then System, then Storage), then check again.",
         Action::User,
@@ -922,13 +924,13 @@ pub fn met(facts: &Facts) -> Vec<MetRow> {
         if facts.engine_running {
             rows.push(MetRow {
                 id: "engine",
-                title: "Intentic engine running".to_string(),
+                title: "the intentic engine running".to_string(),
                 detail: None,
             });
         } else if facts.engine_installed {
             rows.push(MetRow {
                 id: "engine",
-                title: "Intentic engine installed".to_string(),
+                title: "the intentic engine installed".to_string(),
                 detail: None,
             });
         }
@@ -994,6 +996,7 @@ pub fn print_unix_prepare_summary(state: &'static str) {
             std::env::consts::OS
         )
     });
+    // allow(terminal-output): a column-0 marker the desktop app and the machine agent parse.
     println!("intentic-prepare-summary: {line}");
 }
 
@@ -1004,6 +1007,7 @@ pub fn print_prepare_summary(facts: &Facts, unmet: &[Requirement], session_resta
             "{{\"state\":\"needsSetup\",\"engine\":\"native\",\"restart\":false,\"admin\":false,\"downloadBytes\":0,\"minutes\":0,\"machine\":{{\"os\":\"Windows\",\"build\":0,\"memoryBytes\":null,\"freeBytes\":null,\"cpus\":null,\"virtualization\":null}},\"met\":[],\"error\":\"{error}\"}}"
         )
     });
+    // allow(terminal-output): a column-0 marker the desktop app and the machine agent parse.
     println!("intentic-prepare-summary: {line}");
 }
 
@@ -1012,7 +1016,7 @@ pub fn print_prepare_summary(facts: &Facts, unmet: &[Requirement], session_resta
 /// Every area of the machine, in examination order, with the requirement ids that belong to it.
 pub const AREAS: [(&str, &[&str]); 9] = [
     (
-        "This PC",
+        "This device",
         &[
             "arch",
             "windows-version",
@@ -1033,7 +1037,7 @@ pub const AREAS: [(&str, &[&str]); 9] = [
         "Docker's engine",
         &["docker-running", "docker-linux-containers"],
     ),
-    ("Intentic engine", &["engine", "engine-start"]),
+    ("the intentic engine", &["engine", "engine-start"]),
     ("Free disk space", &["disk-space"]),
 ];
 
@@ -1109,12 +1113,12 @@ pub fn advisories(facts: &Facts) -> Vec<String> {
     }
     if virtualization_ok(facts).is_none() {
         notes.push(
-            "could not read this PC's virtualization settings, so the setup will find out by trying."
+            "could not read this device's virtualization settings, so the setup will find out by trying."
                 .to_string(),
         );
     }
     if facts.build == 0 {
-        notes.push("could not read this PC's Windows version.".to_string());
+        notes.push("could not read this device's Windows version.".to_string());
     }
     if facts.reboot_pending && !wsl_features_off(facts) {
         notes.push(
@@ -1994,7 +1998,7 @@ mod tests {
                 .map(|row| row.state.clone())
                 .expect("every area is drawn")
         };
-        assert_eq!(state("This PC"), RowState::Ok);
+        assert_eq!(state("This device"), RowState::Ok);
         assert!(matches!(
             state("Hardware virtualization"),
             RowState::Failed(_)

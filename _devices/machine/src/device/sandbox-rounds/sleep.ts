@@ -28,11 +28,6 @@ export const withSleepMinutes = (config: MachineConfig, minutes: number): Machin
     return minutes === DEFAULT_SLEEP_MINUTES ? rest : { ...rest, sandboxSleepMinutes: minutes };
 };
 
-export const sleepStatus = (minutes: number): string =>
-    minutes === 0
-        ? "Sleep: off. Every sandbox on this machine stays up until somebody stops it. `intentic-machine sandbox sleep-after 30` turns it back on."
-        : `Sleep: after ${minutes} min. A sandbox on this machine that nobody has needed for that long (no editor open on it, no agent working, no terminal typed in, no app of it open) is stopped by the keeper, and starts again by itself when somebody opens it. \`intentic-machine sandbox sleep-after off\` keeps them all up.`;
-
 export const sleepArgs = (minutes: number): string[] => ["sandbox", "sleep", "--idle", String(minutes), "--json", "--source", "agent"];
 export const WAKES_ARGS: readonly string[] = ["sandbox", "wakes", "--json", "--source", "agent"];
 

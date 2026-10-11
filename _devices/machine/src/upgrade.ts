@@ -13,11 +13,11 @@ import { agentAssetUrl, agentPath, download, launcherAssetUrl, launcherPath, ren
 // What an upgrade did, as a value the command prints and tests assert. `restarted` already had the right bytes
 // but served the old build; `agent-behind` is a swap that landed but didn't take.
 export type UpgradeOutcome =
-    | { readonly kind: "current"; readonly version: string; readonly note?: string }
+    | { readonly kind: "current"; readonly version: string; readonly note?: string; readonly later?: readonly [what: string, command: string] }
     | { readonly kind: "restarted"; readonly from: string; readonly to: string }
     | { readonly kind: "upgraded"; readonly from: string; readonly to: string }
     | { readonly kind: "agent-behind"; readonly installed: string; readonly running?: string }
-    | { readonly kind: "failed"; readonly reason: string };
+    | { readonly kind: "failed"; readonly reason: string; readonly fix?: string };
 
 // The upgrade's effects behind one seam, so the step order is testable without a network, a disk or a running agent.
 export interface UpgradeExec {
@@ -131,13 +131,13 @@ const restartOnto = async (exec: UpgradeExec, pieces: readonly Piece[], target: 
     log(`The new agent didn't stay running: putting the previous one back.`);
     await swapOut(exec, pieces);
     const back = await restartAgent(exec, log);
-    return {
-        kind: "failed",
-        reason:
-            back === undefined
-                ? `the new agent (${target}) wouldn't start, so ${installed} was put back, but it did not come up either: start it with \`intentic-machine run\` and check its log.`
-                : `the new agent (${target}) wouldn't start, so ${installed} was restored and is running again.`,
-    };
+    return back === undefined
+        ? {
+              kind: "failed",
+              reason: `the new agent (${target}) wouldn't start, so ${installed} was put back, but it did not come up either.`,
+              fix: "intentic-machine run",
+          }
+        : { kind: "failed", reason: `the new agent (${target}) wouldn't start, so ${installed} was restored and is running again.` };
 };
 
 // Never backwards: a machine already on `target` or past it keeps what it has, and a from-source build needs `force`.
@@ -146,7 +146,8 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
         return {
             kind: "current",
             version: installed,
-            note: `this agent was built from source, not installed from a release. \`intentic-machine upgrade --force\` replaces it with the published ${target}.`,
+            note: "this agent was built from source, not installed from a release.",
+            later: [`replace it with the published ${target}`, "intentic-machine upgrade --force"],
         };
     }
     if (installed !== DEV_VERSION && !isNewer(target, installed)) {
@@ -222,20 +223,32 @@ export const realUpgradeExec = (
 // What the command prints. One line per outcome, naming what is true now rather than what was attempted.
 export const upgradeMessage = (outcome: UpgradeOutcome): string => {
     if (outcome.kind === "current") {
-        return outcome.note === undefined ? `Already on the current agent (${outcome.version}). Nothing to do.` : `Left as it is: ${outcome.note}`;
+        return outcome.note === undefined ? `The agent is already on ${outcome.version}. Nothing to do.` : `Left as it is: ${outcome.note}`;
     }
     if (outcome.kind === "upgraded") {
-        return `Upgraded the agent: ${outcome.from} → ${outcome.to}.`;
+        return `Updated the agent from ${outcome.from} to ${outcome.to}.`;
     }
     if (outcome.kind === "restarted") {
-        return `Already on the current agent (${outcome.to}), but the background agent was still running ${outcome.from}: restarted it, so ${outcome.to} is what's serving now.`;
+        return `Restarted the agent on ${outcome.to}: it was still running ${outcome.from}.`;
     }
     if (outcome.kind === "agent-behind") {
         return outcome.running === undefined
-            ? `The agent on this machine is ${outcome.installed}, but the background agent didn't come back up. Start it with \`intentic-machine run\` and check its log.`
-            : `The agent on this machine is ${outcome.installed}, but the background agent is running ${outcome.running}. Stop it with \`intentic-machine run --stop\`, then start it with \`intentic-machine run\`.`;
+            ? `The agent on this device is ${outcome.installed}, but the background agent did not come back up.`
+            : `The agent on this device is ${outcome.installed}, but the background agent is running ${outcome.running}.`;
     }
-    return `Upgrade didn't happen: ${outcome.reason}`;
+    return `The agent was not updated: ${outcome.reason}`;
+};
+
+// An outcome that did not land, as a stop: what did not happen, why, and the one thing to do (explain's shape).
+export const upgradeStop = (outcome: UpgradeOutcome): { readonly headline: string; readonly problem?: string; readonly fix?: string } => {
+    if (outcome.kind === "agent-behind") {
+        // `run` restarts the background agent through its supervisor, which is what both of these need.
+        return { headline: upgradeMessage(outcome), fix: "intentic-machine run" };
+    }
+    if (outcome.kind === "failed") {
+        return { headline: "The agent was not updated.", problem: outcome.reason, ...(outcome.fix === undefined ? {} : { fix: outcome.fix }) };
+    }
+    return { headline: upgradeMessage(outcome) };
 };
 
 // Whether an outcome leaves this environment on the release it was asked for, running it.

@@ -291,7 +291,7 @@ export const whileHeld = async <T>(context: FolderContext, flush: boolean, opera
         await held.release?.();
     } catch (error) {
         throw new Error(
-            `${done(result)}, but this folder's file sync could not be resumed (${errorMessage(error)}). The next bring-back, restore or change listing resumes it, and so does \`intentic-machine sync resume --sandbox ${context.pairing.sandboxId}\`.`,
+            `${done(result)}, but this folder's file sync could not be resumed (${errorMessage(error)}). The next bring-back, restore or change listing resumes it, and so does sync resume --sandbox ${context.pairing.sandboxId}.`,
             { cause: error },
         );
     }

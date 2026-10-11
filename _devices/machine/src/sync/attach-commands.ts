@@ -3,7 +3,8 @@ import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { homeDir, type Log } from "@intentic/local-agent";
 import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import type { CommandContext } from "@stricli/core";
+import { buildCommand } from "../cli-ui.js";
 import { baseDir } from "../config.js";
 import { ensureResident } from "../resident.js";
 import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, upsertPairing } from "./config.js";
@@ -70,7 +71,7 @@ const expandedFolder = (dir: string): string => resolve(dir.replace(/^~(?=[\\/]|
 const asked = (ask: AttachAsk): { readonly sandboxUrl: string; readonly dir: string; readonly name: string } => {
     const missing = (value: string | undefined): boolean => value === undefined || value.trim() === "";
     if (missing(ask.sandboxUrl)) {
-        throw new Error("pass --sandbox-url with the address of this computer's sandbox");
+        throw new Error("pass --sandbox (or --sandbox-url) with the address of this device's sandbox");
     }
     if (missing(ask.dir)) {
         throw new Error("pass --dir with the folder to attach");
@@ -90,7 +91,7 @@ const refuseOverlap = async (folder: string, key: string, host: Pairing, pairing
     throw new Error(
         clash.sandboxId === host.sandboxId && isAttachedPairing(clash)
             ? `${folder} overlaps ${clash.localDir}, which is already attached as ${clash.remoteDir ?? "a folder of this sandbox"}: one folder is one sync. Detach that one first, or pick a folder that neither is, holds nor sits inside it.`
-            : `${folder} overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}: two syncs over one folder overwrite each other's files. Choose a folder that neither is, holds nor sits inside one this machine syncs (\`intentic-machine status\` lists them).`,
+            : `${folder} overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}: two syncs over one folder overwrite each other's files. Choose a folder that neither is, holds nor sits inside one this device syncs; intentic-machine status lists them.`,
     );
 };
 
@@ -100,7 +101,7 @@ export const planAttach = async (pairings: readonly Pairing[], ask: AttachAsk, s
     const host = projectsHostFor(pairings, sandboxUrl);
     if (host === undefined) {
         throw new Error(
-            `this computer's sandbox is not set up for folders yet: no sandbox at ${sandboxUrl} was enrolled here with \`intentic-machine sync setup --projects-host\``,
+            `this device's sandbox is not set up for folders yet: no sandbox at ${sandboxUrl} was enrolled here as the sandbox folders attach to (sync setup --projects-host)`,
         );
     }
     if (!isProjectDirName(name)) {
@@ -121,9 +122,7 @@ export const planAttach = async (pairings: readonly Pairing[], ask: AttachAsk, s
     const remoteDir = projectRemoteDir(name);
     const sameName = pairings.find((pairing) => pairingKey(pairing) === key);
     if (sameName?.localDir !== undefined && !sameFolder(await canonicalFolder(sameName.localDir), folder)) {
-        throw new Error(
-            `${sameName.localDir} is already attached as ${remoteDir}; detach it first (\`intentic-machine sync detach --dir ${JSON.stringify(sameName.localDir)}\`) or pick another name`,
-        );
+        throw new Error(`${sameName.localDir} is already attached as ${remoteDir}; detach it first, or pick another name`);
     }
     await refuseOverlap(folder, key, host, pairings);
     // (2026-10-05) And across the PC: a distro's folder and the Windows side's are compared in one spelling.
@@ -195,7 +194,7 @@ export const detachFolder = async (dir: string | undefined, stateDir: string, se
     const pairing = await projectPairingFor((await readState()).pairings, dir);
     if (!isAttachedPairing(pairing)) {
         throw new Error(
-            `${pairing.localDir} has a sandbox of its own (${pairing.sandboxId}), not attached to this computer's: \`intentic-machine sync uninstall --sandbox ${pairing.sandboxId}\` unpairs it`,
+            `${pairing.localDir} has a sandbox of its own (${pairing.sandboxId}) rather than being attached to this device's; unpair it with sync uninstall --sandbox ${pairing.sandboxId}`,
         );
     }
     const key = pairingKey(pairing);
@@ -207,6 +206,8 @@ export const detachFolder = async (dir: string | undefined, stateDir: string, se
 
 interface AttachFlags {
     readonly sandboxUrl?: string;
+    // --sandbox, the spelling every other command picks a sandbox with, standing in for --sandbox-url.
+    readonly sandbox?: string;
     readonly dir?: string;
     readonly name?: string;
     readonly json: boolean;
@@ -222,20 +223,26 @@ const attach = buildCommand<AttachFlags>({
                 optional: true,
                 brief: "This computer's sandbox, as `sync setup --projects-host` enrolled it",
             },
+            sandbox: { kind: "parsed", parse: String, optional: true, brief: "The same as --sandbox-url" },
             dir: { kind: "parsed", parse: String, optional: true, brief: "The folder to attach" },
             name: { kind: "parsed", parse: String, optional: true, brief: "Its name in the sandbox: it becomes /work/<name>" },
             json: { kind: "boolean", brief: "Print one JSON object, `ok` first (what the desktop app reads)" },
         },
     },
     async func(this: CommandContext, flags: AttachFlags) {
-        // Whatever starting the agent says goes to stderr under --json, so stdout stays the one object.
-        const log: Log = (message) => void (flags.json ? this.process.stderr : this.process.stdout).write(`${message}\n`);
+        // Whatever starting the agent says is narration, on stderr under --json, so stdout stays the one object.
         await answer(
             this,
             flags.json,
-            async () => await attachFolder(flags, log),
-            (result) =>
-                `Attached ${result.folder} as ${result.remoteDir}. Its first copy into the sandbox starts within a few seconds (\`intentic-machine status\` shows when it is done); landed work comes back into it by itself, a restore point first.`,
+            async (ui) => await attachFolder({ ...flags, sandboxUrl: flags.sandboxUrl ?? flags.sandbox }, ui.note),
+            (result, ui) => {
+                ui.note(
+                    "Its first copy into the sandbox starts within a few seconds. Landed work comes back into it by itself, a restore point first.",
+                );
+                ui.done(`Attached ${result.folder} as ${result.remoteDir}.`);
+                ui.later([["see when the copy is done", "intentic-machine status"]]);
+            },
+            { doing: "Attaching the folder to this device's sandbox", failed: "The folder was not attached." },
         );
     },
 });
@@ -258,7 +265,11 @@ const detach = buildCommand<DetachFlags>({
             this,
             flags.json,
             async () => await detachFolder(flags.dir, baseDir),
-            (result) => `Detached ${result.folder}: it no longer syncs with the sandbox. Its restore points are kept.`,
+            (result, ui) => {
+                ui.note("It no longer syncs with the sandbox. Its restore points are kept.");
+                ui.done(`Detached ${result.folder}.`);
+            },
+            { doing: "Detaching the folder", failed: "The folder was not detached." },
         );
     },
 });

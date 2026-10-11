@@ -145,7 +145,7 @@ pub fn probe_script() -> String {
 /// user, as a machine that mysteriously reports every fact as false.
 pub fn parse(json: &str) -> Result<Facts, String> {
     let mut facts: Facts = serde_json::from_str(json.trim())
-        .map_err(|error| format!("could not read this PC's own report: {error}"))?;
+        .map_err(|error| format!("could not read this device's own report: {error}"))?;
     // Older WSL builds print UTF-16 whatever the console is set to, which arrives here as text with NULs
     // through it. Only ever tested for emptiness, but it also gets shown, so clean it.
     facts.wsl_status = facts.wsl_status.replace('\0', "").trim().to_string();
@@ -153,7 +153,7 @@ pub fn parse(json: &str) -> Result<Facts, String> {
     Ok(facts)
 }
 
-/// Ask this PC about itself, then fold in what only [`crate::docker`] can answer. Docker's three facts are
+/// Ask this device about itself, then fold in what only [`crate::docker`] can answer. Docker's three facts are
 /// gathered here rather than in the probe because this binary already owns them, and a second implementation
 /// of "is the daemon up" in PowerShell is exactly the drift this module was built to avoid.
 #[cfg(windows)]
@@ -171,7 +171,7 @@ pub fn probe_within(limit: std::time::Duration) -> Result<Facts, String> {
 fn read(output: shell::Output) -> Result<Facts, String> {
     if output.stdout.trim().is_empty() {
         return Err(format!(
-            "could not read this PC's configuration{}",
+            "could not read this device's configuration{}",
             if output.stderr.trim().is_empty() {
                 String::new()
             } else {

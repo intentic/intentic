@@ -176,7 +176,7 @@ pub fn docker_outcome(facts: &DockerFacts) -> Outcome {
                 "Docker's engine did not answer within {} seconds — it is running but stuck.",
                 docker::ENGINE_PROBE.as_secs()
             ),
-            remedy: "run `ic sandbox fix`, which restarts it with your consent, then re-run."
+            remedy: "run ic sandbox fix, which restarts it with your consent, then re-run."
                 .to_string(),
         };
     }
@@ -376,7 +376,7 @@ pub fn check_windows() -> Outcome {
             .collect::<Vec<String>>()
             .join(" "),
         remedy: format!(
-            "{} Run `ic docker prepare` (or the setup one-liner) and it will do what it can.",
+            "{} Run ic docker prepare (or the setup one-liner) and it will do what it can.",
             unmet
                 .iter()
                 .map(|requirement| requirement.remedy.clone())
@@ -407,7 +407,7 @@ pub fn platform_outcome(result: &ProbeResult, platform_url: &str) -> Outcome {
         },
         ProbeResult::Unreachable(why) => Outcome::Fail {
             problem: format!("could not reach the platform at {platform_url} — {why}"),
-            remedy: "check this machine's internet connection (DNS, proxy, firewall), then re-run.".to_string(),
+            remedy: "check this device's internet connection (DNS, proxy, firewall), then re-run.".to_string(),
         },
     }
 }

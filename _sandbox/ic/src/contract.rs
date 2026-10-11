@@ -228,18 +228,18 @@ pub fn unsupported_on_this_host(probes: &[Probe]) -> Vec<String> {
                 .is_some_and(|runtimes| runtimes.contains(&format!("\"{}\"", probe.target))),
             "device" => std::path::Path::new(&probe.target).exists(),
             other => {
-                eprintln!(
-                    "intentic: unknown host probe '{other}' — treating {} as unavailable.",
+                crate::ui::warn(&format!(
+                    "this ic does not know the device check {other}, so {} counts as unavailable.",
                     probe.token
-                );
+                ));
                 false
             }
         };
         if !satisfied {
-            eprintln!(
-                "intentic: this host cannot provide {} — the sandbox starts without it.",
+            crate::ui::warn(&format!(
+                "this device cannot provide {}, so the sandbox starts without it.",
                 probe.token
-            );
+            ));
             unsupported.push(probe.token.clone());
         }
     }

@@ -98,16 +98,25 @@ pub fn hold(slug: &str, wait: Wait) -> Result<Option<Held>> {
                     return Ok(None);
                 }
                 if !told {
-                    println!(
-                        "intentic: another ic run is working on {slug} — waiting for it to finish…"
-                    );
+                    crate::ui::note(&format!(
+                        "Another ic run is working on {slug}. Waiting for it to finish…"
+                    ));
                     told = true;
                 }
                 if started.elapsed() >= WAIT_LIMIT {
                     bail!(
-                        "another ic run has held {slug} for over {} minutes, so this one gave up without changing anything. If nothing is running, remove {} and try again.",
-                        WAIT_LIMIT.as_secs() / 60,
-                        path.display()
+                        "{}",
+                        crate::ui::explain(
+                            "Nothing changed.",
+                            Some(&format!(
+                                "another ic run has held {slug} for over {} minutes.",
+                                WAIT_LIMIT.as_secs() / 60
+                            )),
+                            Some(&format!(
+                                "if nothing is running, delete {} and run the same command again.",
+                                path.display()
+                            )),
+                        )
                     );
                 }
                 std::thread::sleep(WAIT_STEP);

@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import { plural } from "@intentic/base/format";
+import { explain, type Item, type Ui } from "@intentic/local-agent";
+import type { CommandContext } from "@stricli/core";
+import { answeringUi, buildCommand, markFailed } from "../../cli-ui.js";
 import { z } from "zod";
 import { baseDir } from "../../config.js";
 import { readResidentPid } from "../../resident.js";
@@ -42,7 +45,7 @@ export const projectPairingFor = async (pairings: readonly Pairing[], dir: strin
         throw new Error(`${dir} syncs with ${same[0].pairing.sandboxId} as its whole workspace, not as a project: only a project's changes are brought back`);
     }
     const holder = held.find(({ pairing, folder }) => isProjectPairing(pairing) && foldersOverlap(wanted, folder, platform));
-    throw new Error(holder === undefined ? `no project on this machine syncs ${dir}` : `${dir} is inside the project folder ${holder.pairing.localDir}: pass that folder`);
+    throw new Error(holder === undefined ? `no project on this device syncs ${dir}` : `${dir} is inside the project folder ${holder.pairing.localDir}: pass that folder`);
 };
 
 // A message as the sentence the app shows: capitalised, ending in a full stop.
@@ -51,26 +54,70 @@ const sentence = (message: string): string => {
     return `${text.charAt(0).toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`;
 };
 
-// What every one of these commands prints, and the one exit code a failure has; `sync attach` and `sync detach` answer
-// the same way (attach-commands.ts).
-export const answer = async <R extends { readonly ok: true }>(cli: CommandContext, json: boolean, work: () => Promise<R>, human: (result: R) => string): Promise<void> => {
-    try {
-        const result = await work();
-        cli.process.stdout.write(`${json ? JSON.stringify(result) : human(result)}\n`);
-    } catch (error) {
-        const said = sentence(errorMessage(error));
-        if (json) {
-            cli.process.stdout.write(`${JSON.stringify({ ok: false, error: said })}\n`);
-        } else {
-            cli.process.stderr.write(`${said}\n`);
-        }
-        process.exitCode = 1;
+// A stop composed with explain, as the one sentence run a JSON reader shows: headline, why, and what to do.
+const flatSentence = (message: string): string =>
+    message
+        .split("\n")
+        .map((line) => line.replace(/^\s*(?:problem|fix):\s*/, ""))
+        .filter((line) => line.trim() !== "")
+        .map(sentence)
+        .join(" ");
+
+// How a command that answers through `answer` reads to a person: the live line while it works, and the headline its stop
+// opens with when it does not (the thrown sentence then says why).
+export interface Answering {
+    readonly doing?: string;
+    readonly failed: string;
+}
+
+// A thrown reason as a stop's `problem:`, or the whole stop when it was composed as one (explain) already.
+const asStop = (failed: string, message: string): string => {
+    if (message.includes("\n   problem: ") || message.includes("\n   fix: ")) {
+        return message;
     }
+    const text = message.trim();
+    return explain(failed, `${text.charAt(0).toLowerCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`);
+};
+
+// What every one of these commands prints, and the one exit code a failure has; `sync attach` and `sync detach` answer
+// the same way (attach-commands.ts). Under --json stdout is the one object, every human line goes to stderr, and a
+// failure is `{ ok: false, error }`; otherwise the result is drawn and a failure is the run's stop (cli-ui.ts).
+export const answer = async <R extends { readonly ok: true }>(
+    cli: CommandContext,
+    json: boolean,
+    work: (ui: Ui) => Promise<R>,
+    human: (result: R, ui: Ui) => void,
+    words: Answering,
+): Promise<void> => {
+    const ui = answeringUi(cli.process, json);
+    if (!json && words.doing !== undefined) {
+        ui.act(words.doing);
+    }
+    let result: R;
+    try {
+        result = await work(ui);
+    } catch (error) {
+        if (!json) {
+            throw new Error(asStop(words.failed, errorMessage(error)), { cause: error });
+        }
+        ui.close();
+        // allow(terminal-output): the --json failure object the desktop app reads
+        cli.process.stdout.write(`${JSON.stringify({ ok: false, error: flatSentence(errorMessage(error)) })}\n`);
+        markFailed(cli);
+        return;
+    }
+    if (json) {
+        ui.close();
+        // allow(terminal-output): the --json result object the desktop app reads
+        cli.process.stdout.write(`${JSON.stringify(result)}\n`);
+        return;
+    }
+    human(result, ui);
 };
 
 const pairingAt = async (dir: string | undefined): Promise<ProjectPairing> => {
     if (dir === undefined || dir.trim() === "") {
-        throw new Error("pass --dir with the project's folder on this machine");
+        throw new Error("pass --dir with the project's folder on this device");
     }
     return await projectPairingFor((await readState()).pairings, dir);
 };
@@ -91,10 +138,27 @@ const contextFor = async (pairing: ProjectPairing): Promise<ProjectContext> => (
 // A path as a line shows it: plain, or quoted where it holds a character a line would lose (a newline, a tab).
 const shown = (path: string): string => (/[\u0000-\u001F\u007F]/.test(path) ? JSON.stringify(path) : path);
 
-const skippedLines = (skipped: readonly Skipped[]): string[] => skipped.map((entry) => `  not brought back: ${shown(entry.path)} (${entry.reason})`);
+// What a bring-back or a restore left alone, each said under the running line.
+const sayLeft = (ui: Ui, skipped: readonly Skipped[], what: string): void => {
+    for (const entry of skipped) {
+        ui.warn(`${shown(entry.path)} was not ${what}: ${entry.reason}.`);
+    }
+};
 
-const changeLine = (change: ListedChange): string =>
-    `  ${change.kind.padEnd(8)}  ${shown(change.path)}${change.size === undefined ? "" : `  (${change.size} bytes)`}${change.conflict === true ? "  CONFLICT: bring-back leaves this folder's copy as it is" : ""}`;
+const changeItem = (change: ListedChange): Item => ({
+    tone: change.conflict === true ? "warn" : "ok",
+    name: shown(change.path),
+    meta: [
+        change.kind,
+        change.size === undefined ? undefined : plural(change.size, "byte"),
+        change.conflict === true ? "conflict: bring-back leaves this folder's copy as it is" : undefined,
+    ]
+        .filter((part) => part !== undefined)
+        .join(" · "),
+});
+
+// A folder as one argument of a command a person may paste: quoted when it holds a space or a quote.
+const asArgument = (dir: string): string => (/^[\w./:\\~-]+$/.test(dir) ? dir : JSON.stringify(dir));
 
 interface ProjectFlags {
     readonly dir?: string;
@@ -102,7 +166,7 @@ interface ProjectFlags {
 }
 
 const projectFlags = {
-    dir: { kind: "parsed", parse: String, optional: true, brief: "The project's folder on this machine" },
+    dir: { kind: "parsed", parse: String, optional: true, brief: "The project's folder on this device" },
     json: { kind: "boolean", brief: "Print one JSON object, `ok` first (what the desktop app reads)" },
 } as const;
 
@@ -119,15 +183,19 @@ const changes = buildCommand<ProjectFlags>({
                 dir = pairing.localDir;
                 return await projectChanges(await contextFor(pairing));
             },
-            (result) =>
-                result.changes.length === 0
-                    ? `The sandbox's copy of ${dir} has nothing to bring back.`
-                    : [
-                          `The sandbox's copy of ${dir} holds ${result.changes.length}${result.truncated === true ? "+" : ""} change(s) this folder does not (${result.direction}):`,
-                          ...result.changes.map(changeLine),
-                          ...(result.truncated === true ? [`  … and more: only the first ${result.changes.length} are listed.`] : []),
-                          `Bring them back with \`intentic-machine sync bring-back --dir ${JSON.stringify(dir)}\`, which keeps a restore point first.`,
-                      ].join("\n"),
+            (result, ui) => {
+                ui.report("intentic · changes to bring back", `${dir} · ${result.direction}`);
+                if (result.changes.length === 0) {
+                    ui.quiet(`The sandbox's copy of ${dir} has nothing to bring back.`);
+                    return;
+                }
+                ui.items(result.changes.map(changeItem));
+                if (result.truncated === true) {
+                    ui.quiet(`Only the first ${plural(result.changes.length, "change")} are listed; there are more.`);
+                }
+                ui.later([["bring them back, a restore point first", `intentic-machine sync bring-back --dir ${asArgument(dir)}`]]);
+            },
+            { failed: "The sandbox's changes could not be listed." },
         );
     },
 });
@@ -203,13 +271,17 @@ const bringBackCommand = buildCommand<BringBackFlags>({
                 const paths = await requestedPaths(flags);
                 return await bringBack(await contextFor(pairing), paths);
             },
-            (result) =>
-                [
-                    result.applied.length === 0
-                        ? `Nothing was brought back into ${dir}.`
-                        : `Brought ${result.applied.length} change(s) back into ${dir}. Restore point ${result.point} holds what they replaced: \`intentic-machine sync restore --dir ${JSON.stringify(dir)} --point ${result.point}\` puts it back.`,
-                    ...skippedLines(result.skipped),
-                ].join("\n"),
+            (result, ui) => {
+                sayLeft(ui, result.skipped, "brought back");
+                if (result.applied.length === 0) {
+                    ui.done(`Nothing was brought back into ${dir}.`);
+                    return;
+                }
+                ui.note(`Restore point ${result.point} holds what they replaced.`);
+                ui.done(`Brought ${plural(result.applied.length, "change")} back into ${dir}.`);
+                ui.later([["undo it", `intentic-machine sync restore --dir ${asArgument(dir)} --point ${result.point}`]]);
+            },
+            { doing: "Bringing changes back from the sandbox", failed: "Nothing was brought back." },
         );
     },
 });
@@ -227,10 +299,16 @@ const restorePointsCommand = buildCommand<ProjectFlags>({
                 dir = pairing.localDir;
                 return await restorePoints({ pairing, stateDir: baseDir });
             },
-            (result) =>
-                result.points.length === 0
-                    ? `No restore points for ${dir}: one is kept at each bring-back.`
-                    : [`Restore points for ${dir}, newest first:`, ...result.points.map((point) => `  ${point.id}  ${point.createdAt}  ${point.entries} file(s)`)].join("\n"),
+            (result, ui) => {
+                ui.report("intentic · restore points", `${dir} · newest first`);
+                if (result.points.length === 0) {
+                    ui.quiet("No restore points yet: one is kept at each bring-back.");
+                    return;
+                }
+                ui.items(result.points.map((point) => ({ tone: "ok", name: point.id, meta: `${point.createdAt} · ${plural(point.entries, "file")}` })));
+                ui.later([["undo a bring-back", `intentic-machine sync restore --dir ${asArgument(dir)} --point <id>`]]);
+            },
+            { failed: "The restore points could not be listed." },
         );
     },
 });
@@ -248,13 +326,18 @@ const restoreCommand = buildCommand<RestoreFlags>({
             flags.json,
             async () => {
                 if (flags.point === undefined || flags.point.trim() === "") {
-                    throw new Error("pass --point with a restore point's id (`intentic-machine sync restore-points` lists them)");
+                    throw new Error(
+                        explain("Nothing was restored.", "no restore point was named: pass --point with one of the ids the listing shows.", "intentic-machine sync restore-points"),
+                    );
                 }
                 const point = flags.point.trim();
                 return await restorePoint(await contextFor(await pairingAt(flags.dir)), point);
             },
-            (result) =>
-                [`Restored ${result.restored} file(s).`, ...result.skipped.map((entry) => `  not restored: ${shown(entry.path)} (${entry.reason})`)].join("\n"),
+            (result, ui) => {
+                sayLeft(ui, result.skipped, "restored");
+                ui.done(`Restored ${plural(result.restored, "file")}.`);
+            },
+            { doing: "Restoring the folder from its restore point", failed: "Nothing was restored." },
         );
     },
 });
@@ -281,7 +364,7 @@ const directionCommand = buildCommand<ProjectFlags, [string?]>({
             async (): Promise<DirectionResult> => {
                 const direction = DIRECTIONS.find((known) => known === value);
                 if (direction === undefined) {
-                    throw new Error(`say which way: \`to-sandbox\` (copy-first) or \`both\`${value === undefined ? "" : `, not ${JSON.stringify(value)}`}`);
+                    throw new Error(`say which way, to-sandbox (copy-first) or both${value === undefined ? "" : `, not ${value}`}`);
                 }
                 const pairing = await pairingAt(flags.dir);
                 dir = pairing.localDir;
@@ -289,15 +372,19 @@ const directionCommand = buildCommand<ProjectFlags, [string?]>({
                 running = (await readResidentPid()) !== undefined;
                 return { ok: true, direction };
             },
-            (result) =>
-                [
-                    result.direction === "both"
-                        ? `${dir} now syncs both ways: what an agent changes in the sandbox comes straight back here, deletions included. A file both sides changed is held as a conflict rather than overwritten.`
-                        : `${dir} is copy-first: it flows into the sandbox, and what an agent changes there comes back only when you bring it back.`,
-                    running
-                        ? "This machine's agent switches its file sync over within a few seconds."
-                        : "This machine's agent is not running, so the switch applies when it next starts (`intentic-machine run`).",
-                ].join("\n"),
+            (result, ui) => {
+                if (result.direction === "both") {
+                    ui.note("What an agent changes in the sandbox comes straight back here, deletions included. A file both sides changed is held as a conflict rather than overwritten.");
+                } else {
+                    ui.note("It flows into the sandbox, and what an agent changes there comes back only when you bring it back.");
+                }
+                ui.note(running ? "This device's agent switches its file sync over within a few seconds." : "This device's agent is not running, so the switch applies when it next starts.");
+                ui.done(result.direction === "both" ? `${dir} now syncs both ways.` : `${dir} is copy-first.`);
+                if (!running) {
+                    ui.later([["start the agent", "intentic-machine run"]]);
+                }
+            },
+            { doing: "Changing which way the project syncs", failed: "The direction was not changed." },
         );
     },
 });

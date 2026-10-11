@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ui, Code, Notice } from "@intentic/ui";
+import { Button, ui, Notice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { runDeviceCommand, useDevices } from "../useDevices";
 import { useDesktopSync } from "./useDesktopSync";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
-import ScriptSourceSwitch from "../../../capabilities/connect/ScriptSourceSwitch.vue";
+import RunCommand from "../../../../components/RunCommand.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Mints a device pairing: pick a folder, click Enable, run the one-liner on the target machine. Two modes:
@@ -15,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { canOperate, available, folder, pairToken, pairMode, minting, takeover, linuxCommand, windowsCommand, desktopLink, enable, start, stop } =
+const { canOperate, available, folder, pairToken, pairMode, pairExpiresAt, minting, takeover, command, desktopLink, enable, start, stop } =
     useDesktopSync();
 
 // Whether a device holds file sync, read off the already-fetched devices list (same query, no extra poll).
@@ -228,16 +228,15 @@ onUnmounted(stop);
                             {{ t(`sandbox.desktopSyncCard.runOnDeviceInstalls`) }}
                         </template>
                     </p>
-                    <!-- Both forms share the switch above them since it rewrites the pair; the device being enrolled need not be this one either. -->
-                    <ScriptSourceSwitch />
-                    <Code :code="linuxCommand" lang="bash" :label="t(`ui.useOsPreference.linuxMacos`)" :wrap="true" />
-                    <Code :code="windowsCommand" lang="powershell" :label="t(`sandbox.desktopSyncCard.windowsPowershell`)" :wrap="true" />
+                    <RunCommand
+                        v-if="command !== undefined"
+                        :command="command"
+                        source-switch
+                        :expires-at="pairExpiresAt"
+                        :renewing="minting"
+                        @renew="enable(pairMode ?? 'sync')"
+                    />
                     <p class="text-2xs text-subtle">
-                        {{ t(`sandbox.desktopSyncCard.commandSingleUseExpires`) }}
-                        <button type="button" class="text-link hover:underline" @click="enable(pairMode ?? 'sync')">
-                            {{ t(`sandbox.desktopSyncCard.regenerate`) }}
-                        </button>
-                        ·
                         <button type="button" class="text-link hover:underline" @click="showFootprint = !showFootprint">
                             {{ t(`sandbox.desktopSyncCard.whatStaysOnDevice`) }}
                         </button>

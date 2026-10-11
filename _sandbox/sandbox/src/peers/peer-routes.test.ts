@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
+import { PairingAnswerSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -11,6 +12,7 @@ import type { PeerHub } from "./peer-hub.js";
 import { admitPeer, createPeerRoutes, greetPeer } from "./peer-routes.js";
 import { type Presented, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
+import { redeemCodes } from "./redeem-codes.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 
 // A door's two documents on /history: a browser's, whose records carry nothing beside the digest.
@@ -408,4 +410,33 @@ test("listing an asleep peer's tools does not wake it", async () => {
     const app = routeFor({ online: false, knownTools: { tools: [] }, wake: { send, waitMs: 20_000 } });
     await post(app, { jsonrpc: "2.0", id: 9, method: "tools/list" });
     expect(send).not.toHaveBeenCalled();
+});
+
+// A door whose install command carries a short code (the device door) answers one beside the pairing token, which
+// stays exactly as before; a door without one answers the token alone.
+const pairWith = (codes: "device" | undefined) => {
+    const services = {
+        logger: { warn: () => {} },
+        auth: undefined,
+        capabilities: { list: async () => [{ id: "laptop", kind: "device", config: {} }] },
+        redeemCodes: redeemCodes(),
+    } as unknown as Services;
+    const store = {
+        cardFor: (id: string) => id,
+        mintPairing: () => ({ token: "pair-token", expiresIn: 600 }),
+    } as unknown as PeerStore<Record<never, never>>;
+    const routes = createPeerRoutes(services, door, { store, hub: {} as unknown as Hub, summaries: async () => [], ...(codes === undefined ? {} : { codes }) });
+    const app = new Hono().post("/pair", routes.pair);
+    return { services, pair: async () => (await app.request("/pair?id=laptop", { method: "POST" })).json() };
+};
+
+test("the device door's pairing answers a short code that redeems for its token", async () => {
+    const { services, pair } = pairWith("device");
+    const answer = PairingAnswerSchema.parse(await pair());
+    expect(answer).toMatchObject({ token: "pair-token", expiresIn: 600 });
+    expect(services.redeemCodes.redeem(answer.code)).toEqual({ kind: "device", pairToken: "pair-token" });
+});
+
+test("a door without codes answers its pairing unchanged", async () => {
+    expect(await pairWith(undefined).pair()).toEqual({ token: "pair-token", expiresIn: 600 });
 });

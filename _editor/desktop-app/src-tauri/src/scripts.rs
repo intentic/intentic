@@ -2368,7 +2368,7 @@ mod tests {
                  ({silenced:?}). On Windows PowerShell 5.1 that pair is fatal: the redirection turns docker's \
                  stderr into a terminating NativeCommandError, so a probe kills the run on the very outcome it \
                  exists to detect. Use 'Continue' — these scripts branch on $LASTEXITCODE themselves, and \
-                 every error they raise is a `Write-Error` followed by `exit 1`.",
+                 every error they raise is the kit's Stop-Intentic.",
                 path.display(),
             );
         }
@@ -2406,7 +2406,7 @@ mod tests {
         }
     }
 
-    /* `connect.ps1`, `connect-host.ps1`, `recreate.ps1` and `fix.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
+    /* `connect.ps1`, `connect-host.ps1`, `recreate.ps1`, `fix.ps1` and `cleanup.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
     #[test]
     fn every_copy_of_the_ic_download_is_the_same_download() {
         let scripts = powershell_scripts();
@@ -2417,8 +2417,8 @@ mod tests {
             }
         }
         assert!(
-            blocks.len() >= 4,
-            "expected connect/connect-host/recreate/fix to carry this block, found {}",
+            blocks.len() >= 5,
+            "expected connect/connect-host/recreate/fix/cleanup to carry this block, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];
@@ -2426,9 +2426,9 @@ mod tests {
             assert_eq!(
                 block,
                 first,
-                "{} and {} fetch the ic binary differently. These files cannot share code, so the copies \
-                 have to be identical apart from their narration line — fix the one that drifted rather \
-                 than relaxing this test.",
+                "{} and {} fetch the ic binary differently. These files cannot share code at run time, so \
+                 the block is generated from _site/site/scripts-kit/ic-fetch.ps1: run \
+                 node _tools/checks/scripts-kit.mjs --fix rather than relaxing this test.",
                 path.display(),
                 first_path.display(),
             );
@@ -2440,8 +2440,8 @@ mod tests {
     fn every_downloading_installer_puts_its_binary_on_path() {
         let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
         for (path, text) in powershell_scripts() {
-            // Downloads the ic CLI => owes the user a working command name. cleanup.ps1 downloads nothing,
-            // and the two agent installers delegate PATH to the agent's own setup.
+            // Downloads the ic CLI => owes the user a working command name. The two agent installers delegate
+            // PATH to the agent's own setup.
             if ic_fetch_block(&text).is_none() {
                 continue;
             }
@@ -2449,7 +2449,7 @@ mod tests {
                 panic!(
                     "{} downloads a binary but never defines Add-IntenticPath — the folder it installs into \
                      stays off the user's PATH, so every command this script's own output names is one the \
-                     shell cannot find. Copy the function from connect.ps1 verbatim.",
+                     shell cannot find. Add the generated add-path.ps1 region (_site/site/scripts-kit).",
                     path.display(),
                 )
             });
@@ -2461,8 +2461,8 @@ mod tests {
             blocks.push((path, block));
         }
         assert!(
-            blocks.len() == 4,
-            "expected connect/connect-host/recreate/fix to carry this, found {}",
+            blocks.len() == 5,
+            "expected connect/connect-host/recreate/fix/cleanup to carry this, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];
@@ -2476,6 +2476,51 @@ mod tests {
                 path.display(),
                 first_path.display(),
             );
+        }
+    }
+
+    /* UNDER `irm | iex`, `exit` ENDS THE PERSON'S WHOLE POWERSHELL. */
+    // A script piped into iex, or wrapped in the site Worker's `& { … }`, runs in the person's own session, where a
+    // top-level `exit` closes the window on the one line that said what went wrong (verified on Windows:
+    // `pwsh -Command "iex 'exit 3'; 'after'"` never prints `after`). Every script runs its body through the kit's
+    // Invoke-IntenticScript, which exits only when the script runs as a file ($PSCommandPath set), and nothing else
+    // in it may exit. Write-Error and Write-Warning are out too: pwsh 7 draws them as a red block with `Line |` and
+    // `~~~~` at the person, where the protocol's stop and warning shapes belong.
+    #[test]
+    fn no_powershell_script_ends_the_session_it_runs_in() {
+        for (path, text) in powershell_scripts() {
+            assert!(
+                text.contains("\nInvoke-IntenticScript {\n"),
+                "{} does not run its body through Invoke-IntenticScript (the generated kit.ps1 region).",
+                path.display(),
+            );
+            let exits: Vec<usize> = text
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| {
+                    let code = line.split('#').next().unwrap_or(line);
+                    code.split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+                        .any(|word| word.eq_ignore_ascii_case("exit"))
+                })
+                .map(|(index, _)| index + 1)
+                .collect();
+            assert!(
+                exits.len() == 1 && text.contains("    if ($PSCommandPath) { exit $IntenticKit.Code }\n"),
+                "{} exits outside the kit (lines {exits:?}): under irm | iex that closes the person's PowerShell. \
+                 Use Stop-Intentic, or Set-IntenticExit and return.",
+                path.display(),
+            );
+            for forbidden in ["Write-Error", "Write-Warning"] {
+                assert!(
+                    !text.lines().any(|line| line
+                        .split('#')
+                        .next()
+                        .unwrap_or(line)
+                        .contains(forbidden)),
+                    "{} calls {forbidden}; use the kit's Stop-Intentic or Write-IntenticWarn.",
+                    path.display(),
+                );
+            }
         }
     }
 

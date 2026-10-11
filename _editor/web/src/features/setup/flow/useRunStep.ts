@@ -54,8 +54,6 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, project
     // The compose tab is this page's own: choosing it must not overwrite the unix/windows preference.
     const composeSelected = ref(false);
     const showCommand = ref(false);
-    // Drops `sudo` where the machine already has Docker; a claim about the paste target, so never persisted.
-    const hasDocker = ref(false);
     // Desktop sync, on by default: the folder rides the command as SYNC_DIR.
     const syncEnabled = ref(true);
     // The local-dev platform this build runs against, if any.
@@ -114,8 +112,6 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, project
             fromCheckout: buildsFromCheckout.value,
             webOrigin,
             syncDir: syncRides.value ? syncDir.value : undefined,
-            // Root only installs Docker, and only in production: in local dev it breaks the pnpm-built image.
-            sudo: environment.production && !hasDocker.value,
         });
     });
     const selectedCommandLang = computed(() => commandLang(cmdOs.value));
@@ -164,7 +160,6 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, project
         runTab,
         runTabOptions,
         showCommand,
-        hasDocker,
         syncEnabled,
         throughApp,
         appFirst,

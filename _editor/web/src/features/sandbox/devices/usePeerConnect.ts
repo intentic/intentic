@@ -31,6 +31,10 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
     // The id/token pair the last Connect click minted; cleared on close so a stale command can't be copied.
     const pairId = ref<string | undefined>(undefined);
     const pairToken = ref<string | undefined>(undefined);
+    // The single-use short code a newer daemon mints beside a device's token, for the one-liner to carry instead of
+    // it, and when both lapse (epoch ms). Undefined from a daemon that predates codes, and on the other doors.
+    const pairCode = ref<string | undefined>(undefined);
+    const pairExpiresAt = ref<number | undefined>(undefined);
     const minting = ref(false);
     const error = ref<string | undefined>(undefined);
 
@@ -58,7 +62,10 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
                     response.status === 403 ? ownerOnly(door.noun) : t(`sandbox.usePeerConnect.startFailed`, { status: String(response.status) });
                 return;
             }
-            pairToken.value = ((await response.json()) as { token: string }).token;
+            const answer = (await response.json()) as { token: string; code?: string; expiresIn?: number };
+            pairToken.value = answer.token;
+            pairCode.value = answer.code;
+            pairExpiresAt.value = answer.expiresIn === undefined ? undefined : Date.now() + answer.expiresIn * 1000;
             pairId.value = id;
         } finally {
             minting.value = false;
@@ -78,6 +85,8 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
 
     const close = (): void => {
         pairToken.value = undefined;
+        pairCode.value = undefined;
+        pairExpiresAt.value = undefined;
         pairId.value = undefined;
         error.value = undefined;
     };
@@ -95,7 +104,7 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
 
     const peerFor = (id: string): Summary | undefined => peers.value.find((peer) => peer.id === id);
 
-    return { peers, peerFor, pairId, pairToken, minting, error, connect, revoke, refresh, start, stop, close };
+    return { peers, peerFor, pairId, pairToken, pairCode, pairExpiresAt, minting, error, connect, revoke, refresh, start, stop, close };
 }
 
 export const HOST_DOOR: PeerDoor = { slug: `hosts`, domain: `hosts`, listKey: `hosts`, noun: `device` };

@@ -4,6 +4,7 @@ use crate::docker;
 use crate::record::{self, ChannelRecord, Pin};
 use crate::sandbox::recreate::DEFAULT_REGISTRY;
 use crate::sandbox::{container_of, mirror, resolve_slug};
+use crate::ui;
 use crate::util::{bail, Result};
 
 /* THE WAYS BACK A SANDBOX HAS ON THIS MACHINE: `previous`, which `ic sandbox rollback` returns to, and up to
@@ -99,8 +100,15 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
         .map(|pin| pin.version.clone().unwrap_or_else(|| pin.image.clone()))
         .collect();
     bail!(
-        "nothing kept on this machine matches {to}, and it is not a release version to download.\n       Kept: {}",
-        if kept.is_empty() { "nothing".to_string() } else { kept.join(", ") }
+        "{}",
+        ui::explain(
+            &format!("Nothing kept on this device matches {to}, and it is not a release version to download."),
+            Some(&format!(
+                "kept: {}.",
+                if kept.is_empty() { "nothing".to_string() } else { kept.join(", ") }
+            )),
+            Some("ic sandbox versions"),
+        )
     );
 }
 
@@ -177,13 +185,47 @@ pub fn targets_json(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -
     )
 }
 
+/// One way back as a report row: the version, which way back it is, and whether its image is still on this device.
+/// Pure.
+fn target_item(index: usize, pin: &Pin, here: bool) -> ui::Item {
+    let label = if index == 0 {
+        "rollback goes back to this"
+    } else {
+        "also kept"
+    };
+    // A pin is a local tag no registry has: once its image is gone, only its version brings it back.
+    let (tone, meta) = match (here, reachable(pin, here)) {
+        (true, _) => (ui::Tone::Ok, label.to_string()),
+        (false, Some(source)) => (
+            ui::Tone::Warn,
+            format!("{label}; its image is gone from this device, so {source} is downloaded instead"),
+        ),
+        (false, None) => (
+            ui::Tone::Fail,
+            "its image is gone from this device and it names no version to download, so it is no way back".to_string(),
+        ),
+    };
+    ui::Item::new(
+        tone,
+        pin.version
+            .as_deref()
+            .unwrap_or("an unnamed build")
+            .to_string(),
+        meta,
+    )
+}
+
 /// `ic sandbox versions [slug] [--json]` — what this sandbox runs and every version it can go back to without a
 /// download (read-only).
 pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, "ic sandbox versions")?;
-    let record = mirror::reconcile(&slug);
     let running = docker::inspect(&container_of(&slug), "{{.Config.Image}}");
+    // A name this device has never had answers as one, not with an empty history that reads like a real sandbox's.
+    if running.is_none() && !super::list_slugs().contains(&slug) {
+        bail!("{}", super::missing(&slug));
+    }
+    let record = mirror::reconcile(&slug);
     if as_json {
         let mut out = Map::new();
         out.insert("slug".into(), json!(slug));
@@ -202,20 +244,32 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
         if let Some(until) = record.swap.as_ref().and_then(|swap| swap.until) {
             out.insert("probationUntil".into(), json!(until));
         }
+        // allow(terminal-output): the --json answer, one line the desktop app and the machine agent read.
         println!("{}", Value::Object(out));
         return Ok(());
     }
-    println!(
-        "intentic: {slug} runs {}{}.",
-        running
-            .or_else(|| record.current.clone())
-            .unwrap_or_else(|| "an image this ic has no record of".to_string()),
+    let runs = running
+        .or_else(|| record.current.clone())
+        .unwrap_or_else(|| "an image this ic has no record of".to_string());
+    ui::report(
+        &format!("intentic · {slug} versions"),
+        Some(&format!(
+            "runs {runs}{}",
+            record
+                .current_version
+                .as_deref()
+                .map(|version| format!(" ({version})"))
+                .unwrap_or_default()
+        )),
+    );
+    ui::plain(&format!(
+        "intentic: {slug} runs {runs}{}.",
         record
             .current_version
             .as_deref()
             .map(|version| format!(" ({version})"))
             .unwrap_or_default()
-    );
+    ));
     let targets: Vec<(Pin, bool)> = record
         .targets()
         .into_iter()
@@ -225,44 +279,38 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
         })
         .collect();
     if targets.is_empty() {
-        println!(
-            "          Nothing is kept to go back to yet: the next update keeps what runs now."
-        );
+        ui::quiet("Nothing is kept to go back to yet: the next update keeps what runs now.");
     }
-    for (index, (pin, here)) in targets.iter().enumerate() {
-        let label = if index == 0 {
-            "rollback goes back to"
-        } else {
-            "also kept"
-        };
-        // A pin is a local tag no registry has: once its image is gone, only its version brings it back.
-        let note = match (here, reachable(pin, *here)) {
-            (true, _) => String::new(),
-            (false, Some(source)) => {
-                format!(" — its pinned image is gone from this machine, so {source} is downloaded instead")
-            }
-            (false, None) => " — its image is gone from this machine and it names no version to download, so it can no longer be gone back to".to_string(),
-        };
-        println!(
-            "          {label}: {}{note}",
-            pin.version.as_deref().unwrap_or("an unnamed build"),
-        );
-    }
+    let rows: Vec<ui::Item> = targets
+        .iter()
+        .enumerate()
+        .map(|(index, (pin, here))| target_item(index, pin, *here))
+        .collect();
+    ui::items(&rows);
     if let Some(swap) = record
         .swap
         .as_ref()
         .filter(|swap| swap.phase == record::Phase::Probation)
     {
         if let Some(until) = swap.until {
-            println!(
-                "          The version before this update is parked and ready for {} more.",
+            ui::note(&format!(
+                "The version before this update is parked and ready for {} more.",
                 crate::sandbox::probation::remaining(until)
-            );
+            ));
         }
     }
-    println!(
-        "          Go back with: ic sandbox rollback {slug}   (or --to <version> for an older one)"
-    );
+    if !targets.is_empty() {
+        ui::later(&[
+            ("go back".to_string(), format!("ic sandbox rollback {slug}")),
+            (
+                "go back further".to_string(),
+                format!("ic sandbox rollback {slug} --to <version>"),
+            ),
+        ]);
+        ui::plain(&format!(
+            "Go back with: ic sandbox rollback {slug}   (or --to <version> for an older one)"
+        ));
+    }
     Ok(())
 }
 
@@ -376,7 +424,7 @@ mod tests {
             "what the listing offers for a pin whose image is gone"
         );
         let refused = resolve_to(&record, "yesterday").unwrap_err();
-        assert!(refused.0.contains("Kept: 1.2.0"), "{}", refused.0);
+        assert!(refused.0.contains("kept: 1.2.0"), "{}", refused.0);
     }
 
     #[test]

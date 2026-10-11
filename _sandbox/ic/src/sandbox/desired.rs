@@ -6,6 +6,7 @@ use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
 use crate::sandbox::{lock, mirror, CONTAINER_PREFIX};
 use crate::shape::{Ask, Shape};
+use crate::ui;
 use crate::util::{bail, Fail, Result};
 
 /* DESIRED VS RUNNING: the shape a sandbox runs with is on its container, the shape it should run with after its next restart is in its channel record, and this module is the only writer of the second. */
@@ -34,7 +35,14 @@ pub fn running(container: &str) -> Shape {
 /// only what they mean to change; the machine agent and the desktop app always send all four fields.
 pub fn set(slug: String, ask: Ask, when: When, preflight: Preflight) -> Result<()> {
     if ask.is_empty() {
-        bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus (`ic sandbox restart {slug}` applies what is saved).");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing changed.",
+                Some("the command names no change."),
+                Some("add --memory, --cpus, --privileged or --gpus."),
+            )
+        );
     }
     let container = existing(&slug)?;
     // Read, laid over and written under the sandbox's lock, so a swap or another save in between cannot be lost.
@@ -57,7 +65,14 @@ pub fn set(slug: String, ask: Ask, when: When, preflight: Preflight) -> Result<(
 /// result is validated and saved exactly as `shape --when next-restart` saves it.
 pub fn save_later(slug: String, ask: Ask) -> Result<()> {
     if ask.is_empty() {
-        bail!("nothing to save — give at least one of --memory, --cpus, --privileged, --gpus (or --forget to drop what is saved).");
+        bail!(
+            "{}",
+            ui::explain(
+                "Nothing was saved.",
+                Some("the command names no change."),
+                Some("add --memory, --cpus, --privileged or --gpus, or --forget to drop what is saved."),
+            )
+        );
     }
     let container = existing(&slug)?;
     let _held = lock::hold_for_person(&slug)?;
@@ -78,15 +93,15 @@ fn save(slug: &str, target: &Shape, running: &Shape) -> Result<()> {
     let _held = lock::hold_for_person(slug)?;
     if target == running {
         clear(slug)?;
-        println!(
-            "intentic: {slug} already runs with {} — nothing is saved for its next restart.",
+        ui::quiet(&format!(
+            "{slug} already runs with {}, so nothing is saved for its next restart.",
             target.describe()
-        );
+        ));
         return Ok(());
     }
     recreate::check_shape(slug, target).map_err(|Fail(reason)| {
         Fail(format!(
-            "{reason}\n       Nothing was saved, and the sandbox is untouched."
+            "{reason}\n   Nothing was saved, and the sandbox is untouched."
         ))
     })?;
     // An unreadable home record is still an error: writing over it would lose the rollback target it names.
@@ -100,11 +115,14 @@ fn save(slug: &str, target: &Shape, running: &Shape) -> Result<()> {
         },
     )?;
     mirror::push(slug);
-    println!(
-        "intentic: saved for the next restart of {slug} — {}. The sandbox keeps running as it is.",
+    ui::done(&format!(
+        "Saved for the next restart of {slug}: {}. The sandbox keeps running as it is.",
         target.describe()
-    );
-    println!("          Its next restart through ic applies it: ic sandbox restart {slug}");
+    ));
+    ui::later(&[(
+        "apply it now".to_string(),
+        format!("ic sandbox restart {slug}"),
+    )]);
     Ok(())
 }
 
@@ -116,7 +134,9 @@ pub fn forget(slug: String) -> Result<()> {
         adopt_legacy(&slug, &container)?;
     }
     clear(&slug)?;
-    println!("intentic: nothing is saved for the next restart of {slug} any more.");
+    ui::done(&format!(
+        "Nothing is saved for the next restart of {slug} any more."
+    ));
     Ok(())
 }
 
@@ -140,9 +160,7 @@ fn clear(slug: &str) -> Result<()> {
 fn existing(slug: &str) -> Result<String> {
     let container = format!("{CONTAINER_PREFIX}{slug}");
     if !docker::container_exists(&container) {
-        bail!(
-            "sandbox container {container} does not exist on this machine — nothing was changed."
-        );
+        bail!("{}", crate::sandbox::missing(slug));
     }
     Ok(container)
 }
@@ -167,16 +185,17 @@ fn adopt_legacy_at(path: &Path, slug: &str, running: impl FnOnce() -> Shape) -> 
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(err) => {
-            return Err(Fail(format!(
-                "could not read {}: {err}\n       It holds the share saved for this sandbox's next restart, so nothing was changed.",
-                path.display()
+            return Err(Fail(ui::explain(
+                "Nothing changed.",
+                Some(&format!("{} could not be read: {err}. It holds the share saved for this sandbox's next restart.", path.display())),
+                None,
             )))
         }
     };
     let (ask, dropped) = legacy_ask(&content);
     for line in &dropped {
         // stderr: `ic sandbox list --json` adopts too, and its stdout is JSON.
-        eprintln!("intentic: dropped '{line}' from the share saved for {slug}'s next restart — no sandbox could start with it.");
+        ui::warn(&format!("Dropped '{line}' from the share saved for {slug}'s next restart: no sandbox could start with it."));
     }
     let running = running();
     let target = running.with(&ask);

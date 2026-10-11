@@ -3,7 +3,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { buildApplication, buildRouteMap, run } from "@stricli/core";
+import { buildApplication, buildRouteMap, run, type StricliProcess } from "@stricli/core";
 
 // What the desktop app reads: exactly one JSON object on stdout per command, `{ ok: false, error }` and exit code 1 on
 // failure. config.ts fixes its paths at import time, so HOME points at a throwaway dir before the imports below.
@@ -54,11 +54,13 @@ const cli = async (
 ): Promise<{ readonly stdout: string; readonly stderr: string; readonly exitCode: number | string | null | undefined }> => {
     const out: string[] = [];
     const err: string[] = [];
-    process.exitCode = 0;
-    await run(app, args, {
-        process: { stdout: { write: (text: string) => void out.push(text) }, stderr: { write: (text: string) => void err.push(text) } },
-    });
-    return { stdout: out.join(""), stderr: err.join(""), exitCode: process.exitCode };
+    // A failure records its code on the process the command ran with (cli-ui.ts, markFailed).
+    const fake: StricliProcess = {
+        stdout: { write: (text: string) => void out.push(text) },
+        stderr: { write: (text: string) => void err.push(text) },
+    };
+    await run(app, args, { process: fake });
+    return { stdout: out.join(""), stderr: err.join(""), exitCode: fake.exitCode };
 };
 
 describe("sync direction", () => {
@@ -93,7 +95,7 @@ describe("sync direction", () => {
 
     it("refuses a direction it does not know, as JSON with exit code 1", async () => {
         expect(await cli("direction", "sideways", "--dir", project, "--json")).toEqual({
-            stdout: `${JSON.stringify({ ok: false, error: 'Say which way: `to-sandbox` (copy-first) or `both`, not "sideways".' })}\n`,
+            stdout: `${JSON.stringify({ ok: false, error: "Say which way, to-sandbox (copy-first) or both, not sideways." })}\n`,
             stderr: "",
             exitCode: 1,
         });
@@ -103,7 +105,7 @@ describe("sync direction", () => {
 describe("finding the project by its folder", () => {
     it("asks for --dir when it is missing", async () => {
         expect(await cli("changes", "--json")).toEqual({
-            stdout: `${JSON.stringify({ ok: false, error: "Pass --dir with the project's folder on this machine." })}\n`,
+            stdout: `${JSON.stringify({ ok: false, error: "Pass --dir with the project's folder on this device." })}\n`,
             stderr: "",
             exitCode: 1,
         });
@@ -120,12 +122,16 @@ describe("finding the project by its folder", () => {
         });
         expect(JSON.parse((await cli("restore-points", "--dir", join(home, "elsewhere"), "--json")).stdout)).toEqual({
             ok: false,
-            error: `No project on this machine syncs ${join(home, "elsewhere")}.`,
+            error: `No project on this device syncs ${join(home, "elsewhere")}.`,
         });
     });
 
-    it("writes a failure's sentence to stderr without --json", async () => {
-        expect(await cli("changes")).toEqual({ stdout: "", stderr: "Pass --dir with the project's folder on this machine.\n", exitCode: 1 });
+    it("ends as a stop on stderr without --json: error: and what did not happen first, then why", async () => {
+        expect(await cli("changes")).toEqual({
+            stdout: "",
+            stderr: "error: The sandbox's changes could not be listed.\n   problem: pass --dir with the project's folder on this device.\n",
+            exitCode: 1,
+        });
     });
 });
 

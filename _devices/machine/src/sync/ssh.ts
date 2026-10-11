@@ -347,7 +347,7 @@ export const probeSshTransport = async (ssh: string, alias: string, log: Log): P
     if (await sshTransportAnswers(ssh, alias)) {
         return;
     }
-    log(`note: a test SSH connection to the sandbox failed, sync may not start:\n${sshProbeReason}`);
+    log(`A test SSH connection to the sandbox failed, so sync may not start: ${sshProbeReason}`);
 };
 
 // Asked before replacing a running session (mutagen.ts): a create against an unreachable sandbox fails, leaving

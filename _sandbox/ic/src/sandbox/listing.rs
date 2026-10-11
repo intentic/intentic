@@ -296,12 +296,16 @@ pub fn list_json() -> Result<()> {
     let ps = docker::capture_bounded(&arg_refs, READ_LIMIT)?;
     if ps.timed_out || ps.code != Some(0) {
         bail!(
-            "docker could not list this machine's containers{}",
-            if ps.timed_out {
-                format!(" within {}s", READ_LIMIT.as_secs())
-            } else {
-                format!(": {}", ps.stderr)
-            }
+            "{}",
+            crate::ui::explain(
+                "The sandboxes on this device could not be listed.",
+                Some(&if ps.timed_out {
+                    format!("Docker did not answer within {}s.", READ_LIMIT.as_secs())
+                } else {
+                    format!("Docker refused: {}", ps.stderr.trim())
+                }),
+                Some("ic docker prepare --dry-run"),
+            )
         );
     }
     let rows = rows_from(&ps.stdout);
@@ -329,7 +333,7 @@ pub fn list_json() -> Result<()> {
         // A share an older ic saved becomes the record's desired shape here as anywhere; a record that cannot be
         // read lists the sandbox without what is waiting for it rather than failing the whole listing.
         if let Err(err) = desired::adopt_legacy(slug, &row.name) {
-            eprintln!("intentic: {}", err.0);
+            crate::ui::warn(&err.0);
         }
         // The inspect above carries the env already: keeping the report key costs a file write only when it changed.
         if let Some(env) = inspected
@@ -353,6 +357,7 @@ pub fn list_json() -> Result<()> {
             records.insert(slug.to_string(), record);
         }
     }
+    // allow(terminal-output): the --json answer, one line of JSON the desktop app and the machine agent read.
     println!(
         "{}",
         listing(&rows, &inspected, &records, &leases, &|image| {

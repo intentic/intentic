@@ -854,7 +854,7 @@
         },
         "hostConnectDialog": {
             "callsItself": "Dieser Rechner nennt sich",
-            "codeInCommandWorks": "Der Code in diesem Befehl funktioniert einmal und läuft in etwa zehn Minuten ab. Dieses Fenster aktualisiert sich von selbst, wenn das Gerät verbunden ist.",
+            "codeInCommandWorks": "Dieses Fenster aktualisiert sich von selbst, sobald sich das Gerät verbindet.",
             "connectedAgentWorkOn": "ist verbunden. Der Agent kann ab seinem nächsten Zug damit arbeiten.",
             "couldNotRename": "Dieser Name konnte nicht übernommen werden.",
             "inside": "in",
@@ -2018,6 +2018,12 @@
             "author": "Von",
             "automation": "Automation",
             "channel": "Kanal"
+        },
+        "runCommand": {
+            "codeLabel": "Auszuführender Befehl",
+            "expiresIn": "Einmalig gültig, läuft in {time} ab.",
+            "expired": "Dieser Befehl ist abgelaufen.",
+            "renew": "Neuer Befehl"
         }
     },
     "connect": {
@@ -2583,7 +2589,6 @@
             "buttonAsksToDo": "-Knopf bittet es, genau das zu tun.",
             "chooseFolderOnDevice": "Einen Ordner auf diesem Gerät wählen",
             "collaboratorMirrorSandboxsDev": "Als Mitarbeiter können Sie die Dev-Server der Sandbox für Live-Vorschauen auf Ihren eigenen localhost spiegeln. Es werden keine Dateien über das hinaus synchronisiert, was der Workspace ohnehin zeigt.",
-            "commandSingleUseExpires": "Dieser Befehl ist einmalig und läuft in ~10 Minuten ab.",
             "desktopSyncNeedsSsh": "Die Desktop-Synchronisierung braucht einen SSH-Weg in diese Sandbox. Sandboxes, die wir für Sie verbinden, haben noch keinen, aber eine hinter Ihrer eigenen Domain schon.",
             "device": "-Gerät.",
             "deviceThatGetsPorts": "das Gerät, das die Ports bekommen soll",
@@ -2597,7 +2602,6 @@
             "pairAnotherDeviceSandbox": "Koppeln Sie ein weiteres Gerät mit dieser Sandbox. Alles bereits Gekoppelte ist aufgeführt auf dem",
             "pickFolderInSystem": "Wählen Sie den Ordner in einem Systemdialog: er und die Dateien der Sandbox bleiben dann in beide Richtungen im Gleichschritt.",
             "portsOnlySandboxsDev": "Nur Ports: die Dev-Server der Sandbox erscheinen auf dem localhost des anmeldenden Geräts. Es werden keine Dateien synchronisiert.",
-            "regenerate": "Neu erzeugen",
             "removesAllDevices": "entfernt alles davon; das",
             "runOnDeviceInstalls": "Führen Sie das auf Ihrem Gerät aus. Es installiert den Agenten und startet zwei Dinge: die Dateisynchronisierung und eine Portspiegelung, die die Dev-Server der Sandbox auf Ihren localhost legt. Eine Anmeldung ist nicht nötig.",
             "runOnDeviceShould": "Führen Sie das auf dem Gerät aus, das die Ports bekommen soll. Es installiert den Agenten und spiegelt die Dev-Server der Sandbox auf dessen localhost. Es werden keine Dateien synchronisiert, und eine Anmeldung ist nicht nötig.",
@@ -3439,7 +3443,6 @@
             "whatSyncDoes": "Verbindet diesen Computer mit der Sandbox und spiegelt einen Ordner in beide Richtungen."
         },
         "sandboxBehindCard": {
-            "copyRestartCommand": "Neustart-Befehl kopieren",
             "restartTipTitle": "Schneller Neustart",
             "restartTipOn": "Baut neu auf",
             "restartTipTakes": "Dauer",
@@ -3450,10 +3453,11 @@
             "rebuiltOnReloadPage": "Auf {hostId} neu gebaut — laden Sie diese Seite neu, um es zu übernehmen.",
             "restartSandbox": "Sandbox neu starten",
             "restartingOn": "Wird auf {hostId} neu gebaut und neu gestartet. Diese Seite wird kurz still und kommt von selbst zurück.",
-            "run": "Ausführen",
+            "run": "Führe dies im Checkout aus:",
             "staysUpdateSandboxImage": "Wenn es bleibt, aktualisieren Sie das Sandbox-Image.",
-            "stillHereRun": "Immer noch da? Führen Sie",
-            "updateSandboxImage": "Aktualisieren Sie das Sandbox-Image."
+            "stillHereRun": "Immer noch da? Führe dies im Checkout aus:",
+            "updateSandboxImage": "Aktualisieren Sie das Sandbox-Image.",
+            "restartCommand": "Befehl zum Neustarten"
         },
         "recentlyDeleted": {
             "comesBackAsName": "Kommt mit einer neuen Adresse zurück, die Maschine, auf der sie lief, muss also erneut verbunden werden",
@@ -3508,7 +3512,7 @@
             "usage": "Nutzung"
         },
         "sandboxOutdatedNotice": {
-            "manual": "Selbst installiert? Installiere sie neu oder führe dies auf dem Rechner aus, auf dem sie läuft:",
+            "manual": "Selbst installiert? Installiere sie neu oder führe dies auf dem Gerät aus, auf dem sie läuft:",
             "title": "Diese Sandbox läuft mit einer älteren Version",
             "update": "Sandbox aktualisieren"
         },
@@ -3609,7 +3613,7 @@
         },
         "sandboxSwitcher": {
             "alsoDelete": "Auch löschen von",
-            "cleanupCommand": "Aufräum-Befehl",
+            "cleanupCommand": "Befehl zum Entfernen",
             "containerFilesHistoryGone": "— der Container dort wird gestoppt, und seine Dateien und seine Historie bleiben eine Woche erhalten, bevor sie gelöscht werden.",
             "inProgress": "Läuft gerade",
             "leaveLoseAccessSandbox": "„{name}“ verlassen? Sie verlieren den Zugriff; die Sandbox läuft weiter.",
@@ -3629,7 +3633,7 @@
             "sandboxSettings": "Sandbox-Einstellungen",
             "status": "Status",
             "switchSandbox": "Sandbox wechseln: {switcherLabel}",
-            "toAlsoRemoveMachine": "Um sie auch von der Maschine zu entfernen, die sie beherbergt — einschließlich ihrer Dateien — führen Sie dort aus:",
+            "toAlsoRemoveMachine": "Um sie auch von dem Gerät zu entfernen, auf dem sie läuft, führe dies dort aus. Dort bleibt sie 7 Tage wiederherstellbar.",
             "undoLastUpdate": "Letztes Update rückgängig",
             "update": "Update",
             "waitingUnknown": "Offenes unbekannt"
@@ -4365,7 +4369,6 @@
             "hideCommand": "Befehl ausblenden",
             "hostedSandboxesSwitchedOff": "Gehostete Sandboxes sind für dieses Konto abgeschaltet; die E-Mail, die wir geschickt haben, sagt warum und wohin Sie schreiben können. Der Betrieb auf Ihrem eigenen Computer ist davon nicht betroffen.",
             "httpsAddressSandboxAlready": "Die https-Adresse, unter der Ihre Sandbox bereits antwortet (https:// ist optional).",
-            "iAlreadyDocker": "Ich habe Docker schon",
             "installsDockerNeedStarts": "Installiert Docker, falls Sie es brauchen, startet Ihre Sandbox und ihren Tunnel und öffnet Ihren Workspace, sobald er antwortet. Kein Terminal.",
             "keepAddress": "Diese Adresse behalten",
             "localDevBuildsCheckout": "Lokale Entwicklung: baut aus Ihrem Checkout",
@@ -4378,7 +4381,6 @@
             "nothingRunsUntilPress": "Nichts läuft, bis Sie oben „Jetzt einrichten“ drücken.",
             "nothingToDoAccount": "Hat nichts mit Ihrem Konto zu tun, und wir bauen aus. Die Einrichtung auf Ihrem eigenen Computer dauert ein paar Minuten und hat überhaupt keine Grenzen — oder schauen Sie etwas später wieder vorbei, dann haben wir Platz.",
             "nothingToForwardTo": "ohne Ziel zum Weiterleiten. Starten Sie den Sandbox-Container",
-            "oneJobInstallingDocker": "ist für eine einzige Aufgabe da: Docker zu installieren, wenn es fehlt.",
             "openChat": "Chat öffnen",
             "otherWaysToSet": "Andere Wege zur Einrichtung",
             "otherWaysToSet2": "Andere Wege zur Einrichtung:",
@@ -4399,7 +4401,6 @@
             "runOnComputerNotPhone": "Führen Sie das in einem Terminal auf Ihrem Computer aus, nicht auf diesem Telefon.",
             "runOnMyOwn": "Auf meinem eigenen Computer laufen lassen",
             "running": "läuft.",
-            "runsNo": "Läuft als Sie, kein",
             "runsOnComputerYours": "Sie läuft auf einem Computer von Ihnen. In ein, zwei Minuten arbeiten Sie darin.",
             "runsOnOurServers": "Läuft auf unseren Servern",
             "sandbox": "Sandbox",
@@ -4486,7 +4487,7 @@
             "dials": "Stellschrauben",
             "installDockerYourself": "Docker selbst installieren",
             "out": "raus",
-            "removesAll": "Entfernt alles davon",
+            "removesAll": "Entfernt sie wieder. Es fragt, welche Sandbox, und sie bleibt 7 Tage wiederherstellbar.",
             "startsSandboxIn": "Startet Ihre Sandbox in",
             "toReachBrowserNo": "um Ihren Browser zu erreichen, keine eingehenden Ports",
             "useDesktopApp": "Oder nutzen Sie die Desktop-App",
@@ -4810,18 +4811,20 @@
             "doesntLookLikeCloudflare": "Das sieht nicht nach einem Cloudflare-API-Token aus: prüfen Sie auf Kopierfehler.",
             "hostNameOptional": "Hostname (optional)",
             "howConnectingMachineWorks": "Wie das Verbinden einer Maschine funktioniert",
-            "oneCommandRunOn": "Ein Befehl, auf dem Zielhost als root ausgeführt. Cloudflare wird dabei mit eingerichtet.",
+            "oneCommandRunOn": "Ein Befehl, auf dem Server ausgeführt. Er fragt nach Root-Rechten und richtet Cloudflare dabei mit ein.",
             "ownerConnectsServers": "Nur der Eigentümer dieser Sandbox kann einen Server verbinden: Der Befehl enthält ihr Verbindungstoken, das nur er hat.",
             "repeatPerMachine": "Pro Maschine wiederholen",
-            "runInPowershellOn": "In PowerShell auf der Maschine ausführen, auf die Sie ausliefern wollen (braucht Docker Desktop)",
             "runOn": "Ausführen auf",
-            "runOnMachineWant": "Auf der Maschine ausführen, auf die Sie ausliefern wollen (braucht root)",
+            "runOnMachineWant": "Befehl für den Server, auf den du deployen willst",
             "savedInIntent": "✓ In der Absicht gespeichert als",
             "shortNameMachineIn": "Ein Kurzname für diese Maschine in Ihrer Absicht.",
             "useLowercaseLettersDigits": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
             "userKeyTunnel": "Benutzer, SSH-Schlüssel, Tunnel",
             "waitingMachinesToRegister": "Es wird gewartet, dass sich Maschinen anmelden: jede erscheint in Ihrer Serverliste, sobald Sie sie verbinden. Führen Sie den Befehl auf jedem Host aus, den Sie hinzufügen wollen.",
-            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Es reitet auf dem Befehl in Ihren Host, nie zur Plattform."
+            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Es reitet auf dem Befehl in Ihren Host, nie zur Plattform.",
+            "showCommand": "Befehl anzeigen",
+            "codeFailed": "Die Sandbox konnte keinen Befehl erstellen ({status}).",
+            "asksCloudflareToken": "Führe dies auf dem Server aus; er fragt dort nach deinem Cloudflare-API-Token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), sodass das Token ihn nie verlässt."
         },
         "coreViews": {
             "health": "Gesundheit"

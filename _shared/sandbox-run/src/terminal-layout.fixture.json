@@ -1,0 +1,413 @@
+{
+    "$comment": "The terminal design system's shapes, as both renderers must draw them with colour off at this width: _devices/local-agent/src/layout.ts and _sandbox/ic/src/ui.rs are each tested against every case. The rules are docs/ops/cli-output-protocol.md. Regenerate from layout.ts only after changing both renderers on purpose.",
+    "width": 72,
+    "cases": [
+        {
+            "shape": "heading",
+            "args": {
+                "title": "intentic · remove a sandbox",
+                "stamp": "ic 1.42.0",
+                "scope": "sandbox-40ebeea77f90 · recoverable for 7 days"
+            },
+            "lines": [
+                "",
+                "  intentic · remove a sandbox                                 ic 1.42.0",
+                "  sandbox-40ebeea77f90 · recoverable for 7 days",
+                ""
+            ]
+        },
+        {
+            "shape": "heading",
+            "args": {
+                "title": "intentic · sandboxes on this device"
+            },
+            "lines": [
+                "",
+                "  intentic · sandboxes on this device",
+                ""
+            ]
+        },
+        {
+            "shape": "planSummary",
+            "args": {
+                "steps": 3,
+                "seconds": 70
+            },
+            "lines": [
+                "3 steps, roughly 1 minute."
+            ]
+        },
+        {
+            "shape": "planSummary",
+            "args": {
+                "steps": 1,
+                "seconds": 400
+            },
+            "lines": [
+                "1 step, roughly 7 minutes."
+            ]
+        },
+        {
+            "shape": "settled",
+            "args": {
+                "tone": "ok",
+                "ordinal": 1,
+                "label": "Stop its containers",
+                "took": "1.2s"
+            },
+            "lines": [
+                "  ✓   1  Stop its containers                                       1.2s"
+            ]
+        },
+        {
+            "shape": "settled",
+            "args": {
+                "tone": "fail",
+                "ordinal": 12,
+                "label": "Download ic",
+                "took": "8.0s"
+            },
+            "lines": [
+                "  ✗  12  Download ic                                               8.0s"
+            ]
+        },
+        {
+            "shape": "settled",
+            "args": {
+                "tone": "ok",
+                "label": "Stopped sandbox-82789f4106b4.",
+                "took": "2.1s"
+            },
+            "lines": [
+                "  ✓  Stopped sandbox-82789f4106b4.                                 2.1s"
+            ]
+        },
+        {
+            "shape": "settled",
+            "args": {
+                "tone": "skip",
+                "label": "Cancelled. Nothing changed.",
+                "took": "",
+                "ascii": true
+            },
+            "lines": [
+                "  -  Cancelled. Nothing changed."
+            ]
+        },
+        {
+            "shape": "verdict",
+            "args": {
+                "tone": "ok",
+                "verdict": "sandbox-40ebeea77f90 is removed.",
+                "took": "took 1.6s"
+            },
+            "lines": [
+                "",
+                "  ✓  sandbox-40ebeea77f90 is removed.                         took 1.6s"
+            ]
+        },
+        {
+            "shape": "footnotes",
+            "args": {
+                "footnotes": [
+                    [
+                        "bring it back",
+                        "ic sandbox restore sandbox-40ebeea77f90"
+                    ],
+                    [
+                        "delete it now",
+                        "ic sandbox purge sandbox-40ebeea77f90 --confirm sandbox-40ebeea77f90"
+                    ]
+                ]
+            },
+            "lines": [
+                "     later  bring it back   ic sandbox restore sandbox-40ebeea77f90",
+                "            delete it now   ic sandbox purge sandbox-40ebeea77f90 --confirm sandbox-40ebeea77f90"
+            ]
+        },
+        {
+            "shape": "row",
+            "args": {
+                "tone": "warn",
+                "name": "Disk space",
+                "note": "12 GiB free, and the image needs about 9 GiB of it once it is unpacked on this device"
+            },
+            "lines": [
+                "        ! Disk space — 12 GiB free, and the image needs about 9 GiB of",
+                "          it once it is unpacked on this device"
+            ]
+        },
+        {
+            "shape": "plainRow",
+            "args": {
+                "tone": "fail",
+                "name": "Platform reachable",
+                "note": ""
+            },
+            "lines": [
+                "  FAIL  Platform reachable"
+            ]
+        },
+        {
+            "shape": "plainRow",
+            "args": {
+                "tone": "skip",
+                "name": "Public URL",
+                "note": "no public URL to probe"
+            },
+            "lines": [
+                "  skip  Public URL — no public URL to probe"
+            ]
+        },
+        {
+            "shape": "items",
+            "args": {
+                "items": [
+                    {
+                        "tone": "ok",
+                        "name": "sandbox-82789f4106b4",
+                        "meta": "running"
+                    },
+                    {
+                        "tone": "skip",
+                        "name": "sandbox-1ea6479e2362",
+                        "meta": "stopped"
+                    },
+                    {
+                        "tone": "warn",
+                        "name": "sandbox-574ea8038415",
+                        "meta": "running · not answering for 4m"
+                    },
+                    {
+                        "tone": "ok",
+                        "name": "a-short-one"
+                    }
+                ]
+            },
+            "lines": [
+                "  ✓  sandbox-82789f4106b4   running",
+                "  ·  sandbox-1ea6479e2362   stopped",
+                "  !  sandbox-574ea8038415   running · not answering for 4m",
+                "  ✓  a-short-one"
+            ]
+        },
+        {
+            "shape": "plainItems",
+            "args": {
+                "items": [
+                    {
+                        "tone": "ok",
+                        "name": "sandbox-82789f4106b4",
+                        "meta": "running"
+                    },
+                    {
+                        "tone": "skip",
+                        "name": "sandbox-1ea6479e2362",
+                        "meta": "stopped"
+                    },
+                    {
+                        "tone": "warn",
+                        "name": "sandbox-574ea8038415",
+                        "meta": "running · not answering for 4m"
+                    },
+                    {
+                        "tone": "ok",
+                        "name": "a-short-one"
+                    }
+                ]
+            },
+            "lines": [
+                "  ok    sandbox-82789f4106b4 — running",
+                "  skip  sandbox-1ea6479e2362 — stopped",
+                "  warn  sandbox-574ea8038415 — running · not answering for 4m",
+                "  ok    a-short-one"
+            ]
+        },
+        {
+            "shape": "section",
+            "args": {
+                "title": "removed, recoverable"
+            },
+            "lines": [
+                "",
+                "     removed, recoverable"
+            ]
+        },
+        {
+            "shape": "plainSection",
+            "args": {
+                "title": "removed, recoverable"
+            },
+            "lines": [
+                "",
+                "removed, recoverable:"
+            ]
+        },
+        {
+            "shape": "fields",
+            "args": {
+                "fields": [
+                    [
+                        "Installed",
+                        "yes"
+                    ],
+                    [
+                        "Running",
+                        "no"
+                    ],
+                    [
+                        "Distro",
+                        "intentic-engine"
+                    ]
+                ]
+            },
+            "lines": [
+                "     Installed   yes",
+                "     Running     no",
+                "     Distro      intentic-engine"
+            ]
+        },
+        {
+            "shape": "plainFields",
+            "args": {
+                "fields": [
+                    [
+                        "Installed",
+                        "yes"
+                    ],
+                    [
+                        "Running",
+                        "no"
+                    ],
+                    [
+                        "Distro",
+                        "intentic-engine"
+                    ]
+                ]
+            },
+            "lines": [
+                "Installed: yes",
+                "Running: no",
+                "Distro: intentic-engine"
+            ]
+        },
+        {
+            "shape": "quiet",
+            "args": {
+                "sentence": "No sandboxes on this device."
+            },
+            "lines": [
+                "  ·  No sandboxes on this device."
+            ]
+        },
+        {
+            "shape": "quiet",
+            "args": {
+                "sentence": "Cancelled. Nothing changed."
+            },
+            "lines": [
+                "  ·  Cancelled. Nothing changed."
+            ]
+        },
+        {
+            "shape": "question",
+            "args": {
+                "question": "Remove sandbox-40ebeea77f90?",
+                "consequence": "Its agents stop now. /work and /history stay recoverable for 7 days with ic sandbox restore."
+            },
+            "lines": [
+                "  ?  Remove sandbox-40ebeea77f90?",
+                "     Its agents stop now. /work and /history stay recoverable for 7",
+                "     days with ic sandbox restore."
+            ]
+        },
+        {
+            "shape": "question",
+            "args": {
+                "question": "Restart now?",
+                "consequence": ""
+            },
+            "lines": [
+                "  ?  Restart now?"
+            ]
+        },
+        {
+            "shape": "explain",
+            "args": {
+                "headline": "ic could not be downloaded, and no copy is installed.",
+                "problem": "github.com did not answer from this device.",
+                "fix": "check the network, then run the same command again."
+            },
+            "lines": [
+                "ic could not be downloaded, and no copy is installed.",
+                "   problem: github.com did not answer from this device.",
+                "   fix:     check the network, then run the same command again."
+            ]
+        },
+        {
+            "shape": "explain",
+            "args": {
+                "headline": "Nothing to remove."
+            },
+            "lines": [
+                "Nothing to remove."
+            ]
+        },
+        {
+            "shape": "stop",
+            "args": {
+                "message": "ic could not be downloaded, and no copy is installed.\n   problem: github.com did not answer from this device, after three tries over about forty seconds.\n   fix:     check the network, then run the same command again."
+            },
+            "lines": [
+                "",
+                "  ✗  ic could not be downloaded, and no copy is installed.",
+                "     problem: github.com did not answer from this device, after three",
+                "              tries over about forty seconds.",
+                "     fix:     check the network, then run the same command again.",
+                ""
+            ]
+        },
+        {
+            "shape": "stop",
+            "args": {
+                "message": "found 2 problems — fix them and run the same command again:\n\n  1. Docker\n     problem: Docker is not running.\n     fix:     start Docker Desktop.\n  2. Disk space\n     problem: 3 GiB free.\n     fix:     free at least 9 GiB."
+            },
+            "lines": [
+                "",
+                "  ✗  found 2 problems — fix them and run the same command again:",
+                "",
+                "    1. Docker",
+                "       problem: Docker is not running.",
+                "       fix:     start Docker Desktop.",
+                "    2. Disk space",
+                "       problem: 3 GiB free.",
+                "       fix:     free at least 9 GiB.",
+                ""
+            ]
+        },
+        {
+            "shape": "pick",
+            "args": {
+                "items": [
+                    [
+                        "sandbox-82789f4106b4",
+                        "running"
+                    ],
+                    [
+                        "sandbox-1ea6479e2362",
+                        "stopped"
+                    ],
+                    [
+                        "x",
+                        ""
+                    ]
+                ]
+            },
+            "lines": [
+                "   1  sandbox-82789f4106b4   running",
+                "   2  sandbox-1ea6479e2362   stopped",
+                "   3  x"
+            ]
+        }
+    ]
+}

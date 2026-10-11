@@ -14,7 +14,7 @@ const environment: WebEnvironment = {
 };
 jest.mock("./environment", () => ({ environment }));
 
-const { SCRIPT_PATHS, bashCommand, psCommand, scriptSource } = await import("./scriptCommand");
+const { SCRIPT_PATHS, bashCommand, oneLiner, psCommand, scriptSource } = await import("./scriptCommand");
 
 // The delivery preference is a dev-only knob the cases below set for themselves; `checkout` is what an empty store
 // reads as.
@@ -74,4 +74,35 @@ test("every script key points at a file that exists in the repo", () => {
     for (const path of Object.values(SCRIPT_PATHS)) {
         expect(existsSync(join(repoRoot, path)), `${path} is missing`).toBe(true);
     }
+});
+
+describe(`the one-liner`, () => {
+    test(`production hands out the verb route in each shell`, () => {
+        load(true);
+        expect(oneLiner(`remove`, [`sandbox-abc123`], `unix`)).toBe(`curl -fsSL https://intentic.dev/remove/sandbox-abc123 | sh`);
+        expect(oneLiner(`rollback`, [`sandbox-abc123`], `windows`)).toBe(`irm https://intentic.dev/rollback/sandbox-abc123 | iex`);
+        expect(oneLiner(`rebuild`, [`sandbox-abc123`, `0123abcd`], `unix`)).toBe(`curl -fsSL https://intentic.dev/rebuild/sandbox-abc123/0123abcd | sh`);
+        expect(oneLiner(`remove`, [], `windows`)).toBe(`irm https://intentic.dev/remove | iex`);
+    });
+
+    test(`a deployed build ignores a source passed in`, () => {
+        load(true);
+        expect(oneLiner(`update`, [`sandbox-abc123`], `unix`, `checkout`)).toBe(`curl -fsSL https://intentic.dev/update/sandbox-abc123 | sh`);
+    });
+
+    test(`a dev build on the checkout runs the same script by path with the verb's arguments`, () => {
+        load(false);
+        expect(oneLiner(`restart`, [`sandbox-abc123`], `unix`)).toBe(`sh _site/site/public/scripts/recreate.sh 'sandbox-abc123' '--restart'`);
+        expect(oneLiner(`restart`, [`sandbox-abc123`], `windows`)).toBe(`& ./_site/site/public/scripts/recreate.ps1 -Slug 'sandbox-abc123' -Restart`);
+        expect(oneLiner(`device`, [`box.example.com`, `AB12CD34`], `windows`)).toBe(
+            `& ./_site/site/public/scripts/device.ps1 -Sandbox 'box.example.com' -Code 'AB12CD34'`,
+        );
+        expect(oneLiner(`remove`, [], `unix`)).toBe(`sh _site/site/public/scripts/cleanup.sh`);
+        expect(oneLiner(`fix`, [`Q7XK2M9P`], `unix`, `published`)).toBe(`curl -fsSL https://intentic.dev/fix/Q7XK2M9P | sh`);
+    });
+
+    test(`an argument the verb cannot carry is refused rather than handed out`, () => {
+        load(true);
+        expect(() => oneLiner(`update`, [`Not A Slug`], `unix`)).toThrow();
+    });
 });

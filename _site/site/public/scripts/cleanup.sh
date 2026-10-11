@@ -1,309 +1,451 @@
 #!/bin/sh
-# intentic cleanup — remove intentic sandboxes' Docker footprint on THIS machine, INCLUDING the named /work volumes.
-#
-# Why this exists: a sandbox's /work is a NAMED Docker volume (intentic-workspace-<slug>). `docker rm -v` and
-# lazydocker's "remove with volumes" only prune ANONYMOUS volumes — a named volume survives every container remove,
-# so a stale /work persists across re-runs and the daemon's boot gate then skips re-scaffolding. This removes the
-# containers AND the named volumes AND the networks. It deliberately leaves the platform's own resources
-# (intentic-app-*) untouched.
-#
-# A machine can host several sandboxes at once (each is suffixed by its <slug>). By DEFAULT this lists them and lets
-# you PICK which to remove — it never wipes everything unless you ask. Removing a sandbox DELETES its data (/work +
-# /history), so every removal is confirmed unless you pass -y.
-#
-# The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME — the AI-provider OAuth logins for ALL
-# dev sandboxes) survives cleanup by default: pass --agent-auth to remove it too, or answer the interactive question
-# offered once the last sandbox is gone. -y alone never removes it.
+# intentic remove: a bootstrap shim. It finds or downloads the ic CLI and hands over to `ic sandbox remove`, which
+# takes sandboxes off this device: their containers, networks and named /work volumes, with /work and /history kept
+# recoverable for 7 days (`ic sandbox restore <slug>` brings one back). The flow, its questions and its output are ic's
+# (_sandbox/ic/src/sandbox/remove.rs); this file only maps the flags every older command handed out onto it.
 #
 # Usage:
-#   curl -fsSL https://intentic.dev/cleanup | sh                 # pick which sandbox(es) to remove (interactive)
-#   curl -fsSL https://intentic.dev/cleanup | sh -s -- SLUG      # remove one sandbox by slug
-#   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all     # remove EVERY sandbox
-#   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all -y  # …skip the confirm (scripts/CI)
+#   curl -fsSL https://intentic.dev/remove/<SLUG> | sh            # remove one sandbox (the card's command)
+#   curl -fsSL https://intentic.dev/remove | sh                   # pick which sandboxes to remove
+#   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all       # the older shape, still served
 #   ./_site/site/public/scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth] [--purge]
 #
-# Once no sandbox is left, the machine agent's state goes too, all but two things it keeps on purpose, as its own
-# `device uninstall` does: the restore points of synced folders (copies of the owner's own files, taken before a
-# bring-back or a delivery wrote over them) and the record of what agents did on this machine (audit.jsonl). They are
-# moved to ~/.intentic/kept-<date>/ and the script says so; --purge deletes them with the rest.
+# Flags, mapped onto ic's:
+#   SLUG...                 the sandboxes to remove (none: ic asks which)
+#   -a, --all               every sandbox on this device
+#   -y, --yes, --force      answer the recoverable remove's question (--yes); never a permanent delete's
+#   --agent-auth            also remove the shared dev agent-auth volume (the AI logins of every dev sandbox)
+#   --purge, --now          delete the data now instead of keeping it recoverable (--now); ic asks for the name
+#   -h, --help              ic's own help for the command
 #
-# Non-interactive runs (no terminal, e.g. a bare pipe with no controlling tty) NEVER auto-remove: they print the
-# list and exit. Pass a SLUG or --all to act.
-#
-# NOT removed (host-level, only exist after a SELF_HOST=1 run; recreated on the next one): the
-# `intentic-host-ssh-tunnel` systemd unit, the natively-installed cloudflared, and the `intentic` service user.
-# Remove them by hand if you want a full teardown:
-#   sudo systemctl disable --now intentic-host-ssh-tunnel.service; sudo rm -f /etc/systemd/system/intentic-host-ssh-tunnel.service
-#   sudo userdel -r intentic
-# POSIX sh (this is piped into `sh`, which is dash on Debian/Ubuntu/WSL — no `pipefail`).
+# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`). Piped, stdin is this script, so ic asks
+# its questions on the controlling terminal (/dev/tty), never on stdin.
 set -eu
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker is not installed — nothing to clean up." >&2
-    exit 1
+# >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
+# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
+# is dash on Debian, Ubuntu and WSL.
+#
+#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
+#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
+#   kit_say <sentence>                       narration under the running step
+#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
+#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
+#   kit_settle                               the running step is done
+#   kit_finished <verdict>                   a flow's past-tense verdict
+#   kit_stop <headline> [problem] [fix] [code]
+#                                            stop: the running step settles as failed, the stop block goes to stderr,
+#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
+#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_confirm <question> <consequence> <flag>
+#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
+#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+
+case "${INTENTIC_UI:-}" in
+    rich | plain | nested) kit_mode="$INTENTIC_UI" ;;
+    *)
+        if [ "${INTENTIC_PLAIN:-}" = 1 ]; then
+            kit_mode=plain
+        elif [ -t 1 ]; then
+            kit_mode=rich
+        else
+            kit_mode=plain
+        fi
+        ;;
+esac
+kit_color=""
+if [ "$kit_mode" = rich ] && { [ -n "${FORCE_COLOR:-}" ] || [ -z "${NO_COLOR:-}" ]; }; then
+    kit_color=1
 fi
+# Unicode unless the locale says the console cannot draw it, as ic decides.
+case "$(printf '%s' "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" | tr '[:upper:]' '[:lower:]')" in
+    "" | *utf-8* | *utf8*)
+        kit_ok="✓" kit_fail="✗" kit_skip="·" kit_run="⠹" kit_more="…"
+        ;;
+    *)
+        kit_ok="+" kit_fail="x" kit_skip="-" kit_run="|" kit_more="..."
+        ;;
+esac
+kit_label=""
+kit_open=""
+kit_started=0
+kit_width=""
 
-usage() {
-    echo "intentic cleanup — remove sandbox(es) on this machine (containers + named /work volumes + networks)."
-    echo "Usage: cleanup.sh [SLUG...] [--all] [-y] [--agent-auth] [--purge]"
-    echo "  (no arg)      pick which sandbox(es) to remove (interactive); non-interactive runs list and stop"
-    echo "  SLUG...       remove the named sandbox(es)"
-    echo "  -a, --all     remove EVERY sandbox on this machine"
-    echo "  -y, --yes     skip confirmation prompts (scripts/CI); alias --force"
-    echo "  --agent-auth  also remove the shared dev agent-auth volume (AI logins for ALL dev sandboxes)"
-    echo "  --purge       also delete the restore points of synced folders and the agents' audit log (kept otherwise)"
-    echo "  -h, --help    show this help"
-}
-
-# shared helpers
-# NOTE: this script is fetched and run standalone (curl … | sh), so it can't source a shared lib — these helpers are
-# duplicated in connect.sh. Keep the two in lockstep. Under curl|sh only STDIN is the pipe: stdout/stderr are the
-# terminal (plain echo is fine) but interactive input must come from /dev/tty, not stdin.
-
-# Distinct sandbox slugs on this machine — the primary containers only (the -tunnel- sidecar shares the prefix).
-list_sandboxes() {
-    docker ps -a --filter 'name=intentic-sandbox-' --format '{{.Names}}' 2>/dev/null \
-        | grep -v '^intentic-sandbox-tunnel-' \
-        | sed 's/^intentic-sandbox-//' || true
-}
-
-# True when a controlling terminal is available to prompt on (false under a bare no-tty pipe / CI).
-have_tty() { { true >/dev/tty; } 2>/dev/null; }
-
-# Prompt on the tty and read one line into REPLY. Returns non-zero (never aborting under set -e) if there's no tty.
-ask() {
-    have_tty || return 1
-    printf '%s' "$1" >/dev/tty
-    IFS= read -r REPLY </dev/tty 2>/dev/null || return 1
-}
-
-# yes/no confirmation, default NO. Honors -y (FORCE). Returns 0 for yes.
-confirm() {
-    [ "$FORCE" = 1 ] && return 0
-    ask "$1 [y/N] " || return 1
-    case "$REPLY" in [Yy]*) return 0 ;; *) return 1 ;; esac
-}
-
-# The Nth word (1-based) of the remaining args: `nth 2 a b c` -> b.
-nth() { _n="$1"; shift; while [ "$_n" -gt 1 ]; do shift; _n=$((_n - 1)); done; printf '%s' "$1"; }
-
-# Tell the platform this sandbox is going, BEFORE it goes — its connect token lives in the container's own env, and a
-# removed container answers no questions. Without this the owner's browser cannot tell a deleted sandbox from a sleeping
-# laptop, and waits forever on one that is never coming back. Best-effort to the point of silence: no curl, no platform,
-# no network, old container missing either value — all are simply nothing, and none may cost the removal.
-announce_removal() {
-    command -v curl >/dev/null 2>&1 || return 0
-    env_of() { docker inspect -f "{{range .Config.Env}}{{println .}}{{end}}" "intentic-sandbox-$1" 2>/dev/null | sed -n "s/^$2=//p" | head -1; }
-    tok="$(env_of "$1" CONNECT_TOKEN)"
-    plat="$(env_of "$1" PLATFORM_URL)"
-    [ -n "$tok" ] && [ -n "$plat" ] || return 0
-    # The container's spelling of "this machine" resolves nowhere out here.
-    plat="$(printf '%s' "$plat" | sed 's#//host.docker.internal#//localhost#')"
-    curl -fsS -m 5 -X POST "$plat/sandbox/farewell" -H "x-intentic-connect: $tok" -H 'content-type: application/json' \
-        -d "{\"removedBy\":\"$(hostname 2>/dev/null || echo '')\"}" >/dev/null 2>&1 || true
-}
-
-# Remove one sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op).
-remove_slug() {
-    s="$1"
-    echo "intentic: removing sandbox '$s' (containers + named volumes + network)…"
-    announce_removal "$s"
-    for c in "intentic-sandbox-$s" "intentic-sandbox-tunnel-$s" "intentic-dind-host-$s"; do
-        docker rm -f "$c" >/dev/null 2>&1 || true
-    done
-    for v in "intentic-workspace-$s" "intentic-history-$s" "intentic-docker-$s" "intentic-dind-docker-$s"; do
-        docker volume rm "$v" >/dev/null 2>&1 || true
-    done
-    docker network rm "intentic-workspace-$s" >/dev/null 2>&1 || true
-}
-
-# Remove EVERY sandbox by name prefix (also sweeps orphaned volumes/networks a per-slug pass would miss). Prefixes
-# never overlap the platform's intentic-app-* resources.
-remove_all() {
-    # Before the sweep: each token is read from its own container, which the first `rm -f` below would already have taken.
-    for s in $(list_sandboxes); do announce_removal "$s"; done
-    echo "intentic: removing sandbox containers…"
-    for c in $(docker ps -aq --filter 'name=intentic-sandbox-'; docker ps -aq --filter 'name=intentic-dind-host-'); do
-        docker rm -f "$c" >/dev/null 2>&1 || true
-    done
-    # `docker rm -v` prunes only ANONYMOUS volumes; the named /work volume must be removed explicitly.
-    echo "intentic: removing named volumes (the persistent /work)…"
-    for v in $(docker volume ls -q --filter 'name=intentic-workspace-'; docker volume ls -q --filter 'name=intentic-history-'; docker volume ls -q --filter 'name=intentic-docker-'; docker volume ls -q --filter 'name=intentic-dind-docker-'); do
-        docker volume rm "$v" >/dev/null 2>&1 || true
-    done
-    echo "intentic: removing sandbox network(s)…"
-    for n in $(docker network ls -q --filter 'name=intentic-workspace-'); do
-        docker network rm "$n" >/dev/null 2>&1 || true
-    done
-}
-
-# Host-side machine-agent state (per-user: ~/.intentic/machine, ~/.ssh/intentic-machine.conf and the Include of
-# it, the Mutagen sessions + daemon registration) — removed as the INVOKING user, mirroring how connect.sh
-# installed it. This is host/desktop-wide, not per-sandbox, so it runs only when NO sandboxes remain (or on
-# --all). The agent's own `uninstall` terminates the sessions and strips the ssh-config Include; best-effort,
-# state may be absent.
-remove_sync_state() {
-    echo "intentic: removing machine-agent state…"
-    if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
-        sync_user="sudo -u $SUDO_USER -H"
-        sync_home="$(eval echo "~$SUDO_USER")"
+# kit_paint <sgr> <text>: the text in one SGR style when colour is on, as it is otherwise.
+kit_paint() {
+    if [ -n "$kit_color" ]; then
+        printf '\033[%sm%s\033[0m' "$1" "$2"
     else
-        sync_user=""
-        sync_home="$HOME"
+        printf '%s' "$2"
     fi
-    if [ -x "$sync_home/.intentic/machine/bin/intentic-machine" ]; then
-        # shellcheck disable=SC2086 -- $sync_user word-splits into `sudo -u <user> -H` on purpose (empty when not under sudo)
-        $sync_user "$sync_home/.intentic/machine/bin/intentic-machine" uninstall >/dev/null 2>&1 || true
+}
+
+kit_columns() {
+    if [ -z "$kit_width" ]; then
+        kit_width="$( (stty size </dev/tty) 2>/dev/null | cut -d' ' -f2)"
+        case "$kit_width" in "" | *[!0-9]*) kit_width=80 ;; esac
+        [ "$kit_width" -le 100 ] || kit_width=100
     fi
-    # What the agent's own uninstall keeps on purpose survives this too (2026-10-05): the restore points hold copies of
-    # the owner's own files, and the audit log is their record of what agents ran here. A blanket rm -rf deleted both.
-    machine="$sync_home/.intentic/machine"
-    if [ "$PURGE" != 1 ]; then
-        kept="$sync_home/.intentic/kept-$(date +%Y-%m-%d-%H%M%S)"
-        moved=""
-        for keep in restore audit.jsonl audit.jsonl.1; do
-            [ -e "$machine/$keep" ] || continue
-            # shellcheck disable=SC2086 -- see above
-            $sync_user mkdir -p "$kept" && $sync_user mv "$machine/$keep" "$kept/$keep" && moved="$moved $keep"
-        done
-        if [ -n "$moved" ]; then
-            echo "intentic: kept your synced folders' restore points and the record of what agents did here in $kept (${moved# })."
-            echo "          Delete that folder if you do not need them; --purge removes them with the rest next time."
+}
+
+# The running step's line, which stays the last line on the screen until it settles.
+kit_draw() {
+    printf '  %s  %s%s' "$(kit_paint 36 "$kit_run")" "$kit_label" "$kit_more"
+    kit_open=1
+}
+
+kit_clear() {
+    if [ -n "$kit_open" ]; then
+        printf '\r\033[K'
+        kit_open=""
+    fi
+}
+
+# kit_above <line>: a whole line above the live one.
+kit_above() {
+    was_open="$kit_open"
+    kit_clear
+    printf '%s\n' "$1"
+    [ -z "$was_open" ] || kit_draw
+}
+
+# kit_settle [ok|fail|skip]: the running step, settled in place with how long it took.
+kit_settle() {
+    [ -n "$kit_label" ] || return 0
+    if [ "$kit_mode" = rich ]; then
+        case "${1:-ok}" in
+            fail) glyph="$(kit_paint 31 "$kit_fail")" ;;
+            skip) glyph="$(kit_paint 2 "$kit_skip")" ;;
+            *) glyph="$(kit_paint 32 "$kit_ok")" ;;
+        esac
+        took=$(($(date +%s) - kit_started))
+        if [ "$took" -ge 60 ]; then
+            took="$((took / 60))m"
+        elif [ "$took" -ge 1 ]; then
+            took="${took}s"
+        else
+            took=""
+        fi
+        kit_columns
+        kit_clear
+        if [ -z "$took" ]; then
+            # Under a second: sh has no finer clock, and a row of spaces leading to nothing reads as a missing value.
+            printf "  %s  %s\n" "$glyph" "$kit_label"
+        else
+            pad=$((kit_width - 7 - ${#kit_label} - ${#took}))
+            [ "$pad" -ge 2 ] || pad=2
+            printf "  %s  %s%${pad}s%s\n" "$glyph" "$kit_label" "" "$(kit_paint 2 "$took")"
         fi
     fi
-    # shellcheck disable=SC2086 -- see above
-    $sync_user rm -rf "$machine" "$sync_home/.local/bin/intentic-machine" "$sync_home/.ssh/intentic-machine.conf" 2>/dev/null || true
+    kit_label=""
 }
 
-# The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME): the AI-provider OAuth stores for
-# ALL dev sandboxes on this machine. It survives cleanup on purpose and is removed only on explicit --agent-auth
-# or an interactive yes — NEVER implied by -y, which callers rely on to keep their AI logins across resets (so
-# this cannot use confirm(), whose FORCE path auto-answers yes).
-AUTH_VOLUME="${INTENTIC_AGENT_AUTH_VOLUME:-intentic-dev-agent-auth}"
-
-remove_agent_auth() {
-    echo "intentic: removing shared dev agent-auth volume '$AUTH_VOLUME' (AI logins)…"
-    docker volume rm "$AUTH_VOLUME" >/dev/null 2>&1 \
-        || echo "intentic: could not remove '$AUTH_VOLUME' — still referenced by a container." >&2
+kit_begin() {
+    [ "$kit_mode" = rich ] || return 0
+    printf '\n  %s\n' "$(kit_paint 1 "intentic · $1")"
+    [ -z "${2:-}" ] || printf '  %s\n' "$(kit_paint 2 "$2")"
+    printf '\n'
 }
 
-maybe_remove_agent_auth() {
-    case "$AUTH_VOLUME" in /*) return 0 ;; esac # an absolute host path (connect.sh option) — no docker volume to remove
-    docker volume inspect "$AUTH_VOLUME" >/dev/null 2>&1 || return 0
-    if [ "$AUTH" = 1 ]; then
-        remove_agent_auth
-        return 0
-    fi
-    if [ "$FORCE" = 1 ] || ! have_tty; then
-        echo "intentic: kept shared dev agent-auth volume '$AUTH_VOLUME' (AI logins) — pass --agent-auth to remove."
-        return 0
-    fi
-    ask "Also remove the shared dev agent-auth volume '$AUTH_VOLUME'? Logs AI accounts out of ALL dev sandboxes. [y/N] " || return 0
-    case "$REPLY" in [Yy]*) remove_agent_auth ;; esac
-}
-
-# args
-FORCE=0
-ALL=0
-AUTH=0
-PURGE=0
-SLUGS=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -a | --all) ALL=1 ;;
-        -y | --yes | --force) FORCE=1 ;;
-        --agent-auth) AUTH=1 ;;
-        --purge) PURGE=1 ;;
-        -h | --help) usage; exit 0 ;;
-        --) shift; break ;;
-        -*) echo "error: unknown flag '$1'." >&2; usage >&2; exit 2 ;;
-        *) SLUGS="$SLUGS $1" ;;
-    esac
-    shift
-done
-for a in "$@"; do SLUGS="$SLUGS $a"; done  # positionals after --
-
-# resolve which slugs to remove
-if [ "$ALL" = 1 ]; then
-    all="$(list_sandboxes)"
-    [ -n "$all" ] || { echo "intentic: no sandboxes found on this machine."; maybe_remove_agent_auth; exit 0; }
-    echo "intentic: about to PERMANENTLY DELETE ALL sandboxes on this machine and their data (/work + /history):"
-    for s in $all; do echo "    $s"; done
-    echo "This cannot be undone."
-    confirm "Remove all of them?" || { echo "intentic: cancelled — nothing removed."; exit 0; }
-    remove_all
-    remove_sync_state
-    maybe_remove_agent_auth
-    echo "intentic: all sandboxes removed. Re-run connect to start fresh."
-    exit 0
-fi
-
-if [ -z "$SLUGS" ]; then
-    # No slug given and not --all: pick interactively, or (no tty) list and stop without touching anything.
-    slugs="$(list_sandboxes)"
-    [ -n "$slugs" ] || { echo "intentic: no sandboxes found on this machine."; maybe_remove_agent_auth; exit 0; }
-
-    echo "intentic: sandboxes on this machine:"
-    i=0
-    for s in $slugs; do
-        i=$((i + 1))
-        st="$(docker inspect -f '{{.State.Status}}' "intentic-sandbox-$s" 2>/dev/null || echo '?')"
-        printf '  %d) %-9s %s\n' "$i" "$st" "$s"
-    done
-
-    if ! have_tty; then
-        echo "intentic: no terminal for interactive selection — nothing removed." >&2
-        echo "Re-run with a SLUG, or --all to remove every sandbox (add -y to skip prompts)." >&2
-        exit 1
-    fi
-
-    ask 'Select sandbox(es) to remove — numbers (e.g. "1 3"), "a" = all, "q" = cancel: ' \
-        || { echo "intentic: cancelled — nothing removed."; exit 0; }
-    case "$REPLY" in
-        "" | q | Q) echo "intentic: cancelled — nothing removed."; exit 0 ;;
-        a | A) SLUGS="$slugs" ;;
+kit_step() {
+    case "$kit_mode" in
+        plain)
+            if [ -n "$1" ]; then
+                printf 'intentic: [%s] %s\n' "$1" "$2"
+            else
+                printf 'intentic: %s\n' "$2"
+            fi
+            ;;
+        nested) printf '        %s\n' "$3" ;;
         *)
-            for tok in $REPLY; do
-                case "$tok" in
-                    '' | *[!0-9]*) echo "intentic: ignoring invalid selection '$tok'." >&2; continue ;;
-                esac
-                if [ "$tok" -lt 1 ] || [ "$tok" -gt "$i" ]; then
-                    echo "intentic: ignoring out-of-range selection '$tok'." >&2
-                    continue
-                fi
-                # shellcheck disable=SC2086 -- $slugs is a whitespace-separated slug list (slugs never contain spaces)
-                SLUGS="$SLUGS $(nth "$tok" $slugs)"
-            done
+            kit_settle ok
+            kit_label="$3"
+            kit_started="$(date +%s)"
+            kit_draw
             ;;
     esac
-fi
+}
 
-# Normalize and bail if the selection was empty/all-invalid.
-# shellcheck disable=SC2086 -- re-split the accumulated slug list
-set -- $SLUGS
-[ $# -gt 0 ] || { echo "intentic: nothing selected — nothing removed."; exit 0; }
+kit_say() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '        %s\n' "$1" ;;
+        *) kit_above "        $(kit_paint 2 "$1")" ;;
+    esac
+}
 
-echo "intentic: about to PERMANENTLY DELETE these sandbox(es) and their data (/work + /history):"
-for s in "$@"; do echo "    $s"; done
-echo "This cannot be undone."
-confirm "Proceed?" || { echo "intentic: cancelled — nothing removed."; exit 0; }
+kit_warn() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" >&2 ;;
+        nested) printf '     !  %s\n' "$1" ;;
+        *) kit_above "     $(kit_paint 33 !)  $(kit_paint 2 "$1")" ;;
+    esac
+}
 
-for s in "$@"; do
-    remove_slug "$s"
-done
+kit_suspend() {
+    [ "$kit_mode" = rich ] || return 0
+    kit_clear
+}
 
-# Desktop sync and the agent-auth volume are host-wide, not per-slug (and the volume stays docker-locked while any
-# sandbox container references it): tear them down only once every sandbox is gone. A docker that cannot list its
-# containers has not said that, and list_sandboxes alone would read its silence as "none left".
-if ! docker ps -a >/dev/null 2>&1; then
-    echo "intentic: docker could not list this machine's sandboxes, so the host-wide state they share was kept." >&2
-elif [ -n "$(list_sandboxes)" ]; then
-    if [ "$AUTH" = 1 ]; then
-        echo "intentic: kept shared dev agent-auth volume '$AUTH_VOLUME' — other sandboxes still reference it." >&2
+kit_resume() {
+    [ "$kit_mode" = rich ] && [ -n "$kit_label" ] && [ -z "$kit_open" ] && kit_draw
+    return 0
+}
+
+kit_finished() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '     %s  %s\n' "$kit_ok" "$1" ;;
+        *)
+            kit_settle ok
+            printf '\n  %s  %s\n\n' "$(kit_paint 32 "$kit_ok")" "$(kit_paint 1 "$1")"
+            ;;
+    esac
+}
+
+kit_stop() {
+    if [ "$kit_mode" = plain ]; then
+        printf 'error: %s\n' "$1" >&2
+        [ -z "${2:-}" ] || printf '   problem: %s\n' "$2" >&2
+        [ -z "${3:-}" ] || printf '   fix:     %s\n' "$3" >&2
+    else
+        kit_settle fail
+        {
+            printf '\n  %s  %s\n' "$(kit_paint 31 "$kit_fail")" "$(kit_paint 31 "$1")"
+            [ -z "${2:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'problem: ')" "$2"
+            [ -z "${3:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'fix:     ')" "$3"
+            printf '\n'
+        } >&2
     fi
-else
-    remove_sync_state
-    maybe_remove_agent_auth
+    exit "${4:-1}"
+}
+
+kit_cancelled() {
+    case "$kit_mode" in
+        plain) printf 'intentic: Cancelled. Nothing changed.\n' ;;
+        *)
+            kit_settle skip
+            printf '  %s  %s\n' "$(kit_paint 2 "$kit_skip")" "$(kit_paint 2 'Cancelled. Nothing changed.')"
+            ;;
+    esac
+}
+
+# Questions go to the controlling terminal, never stdin, so `curl … | sh` can still ask. The open is the probe, in a
+# subshell: `[ -r /dev/tty ]` passes even where opening fails (systemd, cron, setsid).
+kit_confirm() {
+    if [ "${INTENTIC_NO_PROMPT:-}" != 1 ] && (exec </dev/tty) 2>/dev/null; then
+        kit_suspend
+        {
+            if [ "$kit_mode" = rich ]; then
+                printf '  %s  %s\n' "$(kit_paint 36 ?)" "$(kit_paint 1 "$1")"
+                [ -z "$2" ] || printf '%s\n' "$2" | while IFS= read -r line; do printf '     %s\n' "$(kit_paint 2 "$line")"; done
+                printf '     [y/N] '
+            else
+                printf '%s\n' "$1"
+                [ -z "$2" ] || printf '%s\n' "$2"
+                printf '[y/N] '
+            fi
+        } >/dev/tty
+        if read -r kit_answer </dev/tty; then
+            case "$kit_answer" in
+                y* | Y*)
+                    kit_resume
+                    return 0
+                    ;;
+            esac
+            kit_cancelled
+            exit 0
+        fi
+    fi
+    kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
+}
+
+# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
+# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
+# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
+# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
+kit_need_root() {
+    [ "$(id -u)" != 0 ] || return 0
+    if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_say "$1"
+        kit_suspend
+        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+    fi
+    kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
+}
+# <<< end of generated kit.sh
+
+# >>> generated from _site/site/scripts-kit/checkout.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there is none, which is the normal case: the piped
+# `curl … | sh` form has no path in $0 at all. Found by walking up to the workspace marker rather than counting levels,
+# so it is right wherever the file is served from; every use still GATES on finding the specific file it needs.
+checkout_root() {
+    case "$0" in
+        */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;
+        *) return 0 ;; # piped curl|sh: no path, no checkout
+    esac
+    while [ -n "$_dir" ] && [ "$_dir" != "/" ]; do
+        if [ -f "$_dir/pnpm-workspace.yaml" ]; then
+            printf '%s\n' "$_dir"
+            return 0
+        fi
+        _dir="$(dirname "$_dir")"
+    done
+}
+
+# ic_from_checkout: run BY PATH from a checkout (the dev platform's one-liners, a hand-run in the repo), prefer the
+# checkout's OWN ic: a flow change and its CLI change land in one commit and are tested together, and a released ic may
+# predate both. Sets $IC when it built one; IC_BIN, the piped form and a checkout without cargo skip it.
+ic_from_checkout() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
+    CHECKOUT="$(checkout_root)"
+    [ -n "$CHECKOUT" ] || return 0
+    ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
+    if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
+        kit_step fetching-ic "building the checkout's ic CLI…" "Build ic from the checkout"
+        kit_suspend
+        if cargo build --quiet --manifest-path "$ic_manifest"; then
+            IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
+        else
+            kit_warn "the checkout's ic did not build, so the released ic runs instead."
+        fi
+        kit_resume
+        kit_settle
+    fi
+}
+# <<< end of generated checkout.sh
+
+# >>> generated from _site/site/scripts-kit/ic-fetch.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# ic_fetch: find or download the ic CLI into $IC, unless $IC is already set. IC_BIN overrides (a checkout's own
+# build). An unpinned run downloads every time, which is how re-running a one-liner upgrades a device; only a failed
+# download falls back to an installed ic. Download beside the target and rename into place: overwriting a running
+# executable fails outright ("Text file busy"), and a half-downloaded binary must never be what runs.
+ic_fetch() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    case "$os" in
+        linux | darwin) ;;
+        *) kit_stop "ic could not be installed." "this device runs $os, and ic is built for Linux and macOS." "on Windows, use the PowerShell command from the same card." ;;
+    esac
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64 | amd64) arch="amd64" ;;
+        arm64 | aarch64) arch="arm64" ;;
+        *) kit_stop "ic could not be installed." "this device's processor is $arch, and ic is built for amd64 and arm64." ;;
+    esac
+    if [ "$(id -u)" = 0 ]; then
+        dest="/usr/local/bin/ic"
+    else
+        dest="$HOME/.intentic/ic/bin/ic"
+        mkdir -p "$(dirname "$dest")"
+    fi
+    # A run pinned to a release (IC_VERSION beside IC_URL, which the desktop app sets to its own) that finds that
+    # release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds. Never "exactly that
+    # release": the machine agent moves ic up by itself, so a desktop app left in the tray for days put an older ic
+    # back on every Start, Stop or Restart it ran (2026-10-05).
+    #
+    # Compared as versions: major.minor.patch first, then a pre-release below its own release. An installed ic whose
+    # answer is not a version this can read counts as older, and is replaced.
+    ic_not_older() {
+        ic_seen="$("$1" --version 2>/dev/null || true)"
+        ic_have="${ic_seen#ic }"
+        ic_have="${ic_have#v}"
+        ic_want="${2#v}"
+        ic_have_pre=""
+        ic_want_pre=""
+        case "$ic_have" in *-*)
+            ic_have_pre="${ic_have#*-}"
+            ic_have="${ic_have%%-*}"
+            ;;
+        esac
+        case "$ic_want" in *-*)
+            ic_want_pre="${ic_want#*-}"
+            ic_want="${ic_want%%-*}"
+            ;;
+        esac
+        for ic_part in 1 2 3; do
+            ic_h="$(printf '%s' "$ic_have" | cut -d. -f"$ic_part")"
+            ic_w="$(printf '%s' "$ic_want" | cut -d. -f"$ic_part")"
+            case "$ic_h" in "" | *[!0-9]*) return 1 ;; esac
+            case "$ic_w" in "" | *[!0-9]*) return 1 ;; esac
+            [ "$ic_h" -gt "$ic_w" ] && return 0
+            [ "$ic_h" -lt "$ic_w" ] && return 1
+        done
+        [ -z "$ic_have_pre" ] || [ "$ic_have_pre" = "$ic_want_pre" ]
+    }
+    if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && ic_not_older "$dest" "$IC_VERSION"; then
+        IC="$dest"
+        kit_say "$ic_seen is installed, and this run asks for ic ${IC_VERSION#v} or newer, so nothing is downloaded."
+    else
+        kit_step fetching-ic "fetching the ic CLI…" "Download ic"
+        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside it
+        # (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that release
+        # is the very binary the download would fetch, minus the network: a device that cannot reach github.com still
+        # gets its ic. Anything else (no pin, no file, another version, a copy that fails) leaves the download to run.
+        ic_carried() {
+            [ -n "${INTENTIC_IC_PATH:-}" ] && [ -n "${IC_VERSION:-}" ] && [ -f "$INTENTIC_IC_PATH" ] &&
+                [ "$("$INTENTIC_IC_PATH" --version 2>/dev/null || true)" = "ic ${IC_VERSION#v}" ] &&
+                cp "$INTENTIC_IC_PATH" "${dest}.tmp" &&
+                kit_say "installed ic ${IC_VERSION#v} from the copy the desktop app carries."
+        }
+        ic_base="${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}"
+        # curl's own sentence would land on the live line; the stop below says the same thing in this page's words.
+        if ic_carried || curl -fsL "${ic_base}/ic-${os}-${arch}" -o "${dest}.tmp" 2>/dev/null; then
+            chmod +x "${dest}.tmp"
+            mv -f "${dest}.tmp" "$dest"
+            IC="$dest"
+            if [ "$(id -u)" != 0 ]; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$dest" "$HOME/.local/bin/ic"
+            fi
+        else
+            rm -f "${dest}.tmp"
+            IC="$(command -v ic || true)"
+            if [ -n "$IC" ]; then
+                kit_warn "the newest ic could not be downloaded, so the one installed at $IC runs instead."
+            else
+                ic_host="${ic_base#*://}"
+                kit_stop "ic could not be downloaded, and no copy is installed." "${ic_host%%/*} did not answer from this device." "check the network, then run the same command again."
+            fi
+        fi
+        kit_settle
+    fi
+}
+# <<< end of generated ic-fetch.sh
+
+# The arguments, read before anything is downloaded, so a mistyped flag costs nothing. Rebuilt into ic's own words in
+# place: `set --` after the loop replaces the positional parameters with the mapped list.
+mapped=""
+for arg in "$@"; do
+    case "$arg" in
+        -a | --all) mapped="$mapped --all" ;;
+        -y | --yes | --force) mapped="$mapped --yes" ;;
+        --agent-auth) mapped="$mapped --agent-auth" ;;
+        --purge | --now) mapped="$mapped --now" ;;
+        -h | --help) mapped="$mapped --help" ;;
+        --) ;;
+        -*) kit_stop "Nothing was removed." "$arg is not an option this command knows." "" 2 ;;
+        *)
+            case "$arg" in
+                *[!a-z0-9-]*) kit_stop "Nothing was removed." "$arg is not the name of a sandbox." "" 2 ;;
+            esac
+            mapped="$mapped $arg"
+            ;;
+    esac
+done
+# shellcheck disable=SC2086 # every word in $mapped is a flag or a slug checked above, with no spaces or globs.
+set -- $mapped
+
+if ! command -v curl >/dev/null 2>&1; then
+    kit_stop "ic could not be installed." "curl is not installed on this device." "install curl, then run the same command again."
 fi
 
-echo "intentic: done. Remaining sandboxes: $(list_sandboxes | tr '\n' ' ' | sed 's/ *$//' || true)"
+IC="${IC_BIN:-}"
+ic_from_checkout
+ic_fetch
+kit_suspend
+exec "$IC" sandbox remove "$@"

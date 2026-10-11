@@ -1,206 +1,294 @@
 #!/bin/sh
-# intentic connect — bootstrap shim: get Docker onto this machine (the ONE step that needs a dependency-free,
-# possibly-root start), fetch the `ic` CLI, and hand the flow over to `ic sandbox connect`, which does
-# everything else — the setup-code claim, tunnels, the launch, desktop sync. The flow lives in _sandbox/ic;
-# this file stays the thing a user can read before piping into sh.
+# intentic connect: a bootstrap shim. It gets Docker onto this device (the one step that may need administrator
+# rights), finds or downloads the ic CLI, and hands the flow over to `ic sandbox connect`, which does everything else:
+# the setup-code claim, tunnels, the launch, desktop sync. The flow lives in _sandbox/ic; this file stays the thing a
+# person can read before piping it into sh.
 #
 # Usage (the platform's setup screen hands you a copy-paste one-liner):
-#   curl -fsSL https://intentic.dev/connect | sudo sh -s -- <SETUP_CODE>
+#   curl -fsSL https://intentic.dev/setup/<SETUP_CODE> | sh
+#   curl -fsSL https://intentic.dev/connect | sh -s -- <SETUP_CODE>          (the older shape, still served)
 #   Headless/scripted: skip the code and pass everything as env vars (CONNECT_TOKEN=… SANDBOX_GRANT=… ./connect.sh).
 #
-# The setup code carries the sandbox's reachability grant on intentic's own edge (SANDBOX_GRANT, plus the
-# INGRESS_URL it dials); the sandbox opens the tunnel outbound with it from inside. CF_TOKEN is only for
-# SELF_HOST, which publishes THIS machine's SSH for the deploy engine — nothing to do with reaching the sandbox.
+# The setup code carries the sandbox's reachability grant on intentic's own edge (SANDBOX_GRANT, plus the INGRESS_URL it
+# dials); the sandbox opens the tunnel outbound with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS
+# device's SSH for the deploy engine; it has nothing to do with reaching the sandbox.
 #
-# The `sudo` is for INSTALLING DOCKER and nothing else — every other step is a docker/curl call the invoking
-# user can make themselves (SELF_HOST=1 is the one opt-in that needs root for its own reasons; ic acquires it
-# itself). Drop it on a machine that already has Docker; the setup page offers exactly that as "I already
-# have Docker", and a sudo-less run that then finds no Docker stops with the two ways forward rather than
-# escalating on its own.
+# ELEVATION IS ASKED FOR, NEVER BAKED IN (docs/ops/cli-output-protocol.md). Installing Docker is the one step that
+# needs root, so it is the one step that asks for it, through sudo, after saying why. Everything else is a docker/curl
+# call the person can make themselves. A run that already IS root (the older `| sudo sh` one-liners, the desktop app's
+# pkexec when Docker is missing) installs without asking for sudo, as before.
 #
-# The ic binary is downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a
-# failed download falls back to what's installed. IC_BIN overrides for local dev (a checkout's own build).
-# A run the desktop app pins to its release copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one
-# is exactly the release asked for.
-# POSIX sh (this is piped into `sh`, which is dash on Debian/Ubuntu/WSL — no `pipefail`).
+# The ic binary is downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed
+# download falls back to what is installed. IC_BIN overrides for local dev (a checkout's own build). A run the desktop
+# app pins to its release copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
+# release asked for.
+#
+# POSIX sh (this is piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`).
 set -eu
 
-# The script curls GitHub (the ic download) and possibly get.docker.com; a box without curl would otherwise
-# fail with a raw "command not found" mid-run (direct ./connect.sh runs — the piped form obviously has curl).
-if ! command -v curl >/dev/null 2>&1; then
-    echo "error: curl is required — install it and re-run." >&2
-    exit 1
-fi
-
-# A PHASE OF THE INSTALL, ANNOUNCED ONCE — prose for a terminal, and a name for anything watching.
+# >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
+# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
+# is dash on Debian, Ubuntu and WSL.
 #
-# The desktop app spawns this script and turns its stdout into a progress bar, so it has to know WHICH phase
-# started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
-# ic's util::step, and the same vocabulary — anything echoed WITHOUT a phase is detail under the step that is
-# running, never a step of its own.
-#
-# The two audiences are split the same way ic splits them (its ui.rs): a PIPE gets the marker, unchanged and
-# forever, because something is parsing it. A TERMINAL gets the sentence alone — the bracketed id there says
-# the same thing twice in a shape that reads like an error code, and these two lines sit directly above the
-# checklist ic is about to draw, where they would otherwise look like a different program's output.
-#
-# This shim keeps NARRATING either way. Going quiet in a terminal would be silence across a Docker install
-# that can run ten minutes, which is the one stretch of this script that most needs to say something.
-step() {
-    if [ -t 1 ]; then
-        printf '  ·  %s\n' "$2"
-    else
-        echo "intentic: [$1] $2"
-    fi
-}
+#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
+#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
+#   kit_say <sentence>                       narration under the running step
+#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
+#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
+#   kit_settle                               the running step is done
+#   kit_finished <verdict>                   a flow's past-tense verdict
+#   kit_stop <headline> [problem] [fix] [code]
+#                                            stop: the running step settles as failed, the stop block goes to stderr,
+#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
+#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_confirm <question> <consequence> <flag>
+#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
+#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
 
-# THE SETUP CODE IS THE FIRST ARGUMENT, and it is lifted out here rather than forwarded in the pile.
-#
-# It is a value the platform minted, so it may be any string at all — and `-*` cannot tell a code that begins
-# with a hyphen from a flag. The flags this shim is ever handed are ic's own and are named one by one for that
-# reason; anything else in first position is the code, whatever it starts with. It reaches ic behind `--`
-# (the exec at the foot), which is the only place a hyphen-leading value is safe from being read as a flag.
-SETUP_CODE=""
-if [ $# -gt 0 ]; then
-    case "$1" in
-        -y | --yes | --force | --replace) ;;
-        *)
-            SETUP_CODE="$1"
-            shift
-            ;;
-    esac
-fi
-
-# The one-liner carries `sudo` ONLY so that a missing Docker can be installed. Docker is missing and we are
-# not root, so there is nothing to do but name the two ways forward. Printing the exact command back is the
-# point — the user is looking at a terminal, not at the setup page. The own-Cloudflare command carries
-# CF_TOKEN, which is NOT echoed back: a secret that reached this shell in a paste does not get reprinted.
-require_root_to_install_docker() {
-    echo "error: Docker is not installed, and installing it needs root — this command is running without sudo." >&2
-    echo >&2
-    echo "  Install Docker yourself, then re-run this exact command:" >&2
-    echo "      https://docs.docker.com/get-docker/" >&2
-    echo >&2
-    echo "  …or let intentic install it, by re-running with sudo:" >&2
-    if [ -n "${CF_TOKEN:-}" ]; then
-        echo "      copy the command from the setup page again with \"I already have Docker\" switched off" >&2
-    elif [ -n "$SETUP_CODE" ]; then
-        echo "      curl -fsSL https://intentic.dev/connect | sudo sh -s -- $SETUP_CODE" >&2
-    else
-        echo "      curl -fsSL https://intentic.dev/connect | sudo sh" >&2
-    fi
-    exit 1
-}
-
-# Consent gate for installing Docker: a root-level system change beyond the sandbox itself, so never silent.
-# INSTALL_DOCKER=1 pre-consents (headless runs); otherwise ask on /dev/tty (the human is at a terminal even
-# under `curl … | sh` — stdin is the script), and fail with the remedy when there is no terminal to ask.
-#
-# WHETHER /dev/tty CAN BE OPENED is the question, and `[ -r /dev/tty ]` does not answer it: the node is
-# world-readable on every machine, but opening it fails with ENXIO whenever the process has no CONTROLLING
-# terminal — a systemd unit, a CI step, anything under `setsid`. That test passed in exactly those cases, and
-# the one prompt that must never be silent silently approved a root-level install on every headless run.
-# Probed in a SUBSHELL because a redirection error on a special built-in may exit the shell outright, and a
-# failed read is a refusal rather than consent.
-confirm_install_docker() {
-    if [ "${INSTALL_DOCKER:-}" = "1" ]; then
-        return 0
-    fi
-    if ! (exec </dev/tty) 2>/dev/null; then
-        echo "error: docker is not installed and there is no terminal to ask — re-run with INSTALL_DOCKER=1" >&2
-        echo "       to install it automatically, or install it yourself: https://docs.docker.com/get-docker/" >&2
-        exit 1
-    fi
-    printf '%s [Y/n] ' "$1" >&2
-    read -r answer </dev/tty || answer="n"
-    case "$answer" in
-        n* | N*)
-            echo "error: docker is required — install it (https://docs.docker.com/get-docker/) and re-run." >&2
-            exit 1
-            ;;
-    esac
-}
-
-# Docker Engine via Docker's official convenience script. Enabling dockerd on boot is also what brings the
-# sandbox + tunnel containers (--restart unless-stopped) back after a reboot. Reached only as root (the
-# caller guards), so nothing here escalates behind the user's back.
-install_docker_linux() {
-    confirm_install_docker "intentic: Docker is not installed. Install it now via get.docker.com?"
-    step installing-docker "installing Docker Engine (get.docker.com)…"
-    curl -fsSL https://get.docker.com | sh
-    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-        systemctl enable --now docker >/dev/null 2>&1 || true
-    elif command -v service >/dev/null 2>&1; then
-        service docker start >/dev/null 2>&1 || true
-    fi
-}
-
-# Docker Desktop, guided: its dmg ships a CLI installer, so under the one-liner's sudo this installs without
-# clicking — only the first-run dialog stays manual (the daemon wait below covers it). --accept-license is
-# passed only after the consent prompt named Docker's terms. --user skips the privileged-helper prompt.
-install_docker_macos() {
-    confirm_install_docker "intentic: Docker Desktop is not installed. Download (~1.5 GB) and install it now? Continuing accepts Docker's terms (https://www.docker.com/legal/docker-subscription-service-agreement)."
-    case "$(uname -m)" in
-        arm64) dmg_arch="arm64" ;;
-        *) dmg_arch="amd64" ;;
-    esac
-    dmg="$(mktemp -d)/Docker.dmg"
-    step installing-docker "downloading Docker Desktop (~1.5 GB)…"
-    curl -fL "https://desktop.docker.com/mac/main/${dmg_arch}/Docker.dmg" -o "$dmg"
-    step installing-docker "installing Docker Desktop…"
-    hdiutil attach "$dmg" -nobrowse -quiet
-    /Volumes/Docker/Docker.app/Contents/MacOS/install --accept-license --user="${SUDO_USER:-$USER}"
-    hdiutil detach /Volumes/Docker -quiet || true
-    rm -f "$dmg"
-    # Docker Desktop is a user-session app — launch it as the human who invoked sudo, not as root.
-    if [ -n "${SUDO_USER:-}" ]; then
-        sudo -u "$SUDO_USER" open -a Docker
-    else
-        open -a Docker
-    fi
-}
-
-step checking-docker "checking Docker…"
-if ! command -v docker >/dev/null 2>&1; then
-    # Installing Docker is the ONE thing here that needs root, so it is also the one thing that can fail on a
-    # deliberately sudo-less run — say so with the remedy instead of escalating behind the user's back.
-    [ "$(id -u)" = 0 ] || require_root_to_install_docker
-    case "$(uname -s)" in
-        Linux) install_docker_linux ;;
-        Darwin) install_docker_macos ;;
-        *)
-            echo "error: docker is not installed. Install Docker Desktop (https://docs.docker.com/get-docker/), then re-run." >&2
-            exit 1
-            ;;
-    esac
-    # A freshly installed daemon takes a moment (Docker Desktop: first-run dialog + VM boot) — wait up to
-    # 5 min. An already-installed-but-unreachable daemon is diagnosed by ic instead (it can tell a stopped
-    # daemon from one this user may not talk to).
-    step installing-docker "waiting for the Docker daemon (accept Docker Desktop's first-run dialog if shown)…"
-    i=0
-    until docker version --format '{{.Server.Version}}' >/dev/null 2>&1; do
-        i=$((i + 1))
-        if [ "$i" -ge 60 ]; then
-            echo "error: the Docker daemon did not come up — start Docker, then re-run this command." >&2
-            exit 1
+case "${INTENTIC_UI:-}" in
+    rich | plain | nested) kit_mode="$INTENTIC_UI" ;;
+    *)
+        if [ "${INTENTIC_PLAIN:-}" = 1 ]; then
+            kit_mode=plain
+        elif [ -t 1 ]; then
+            kit_mode=rich
+        else
+            kit_mode=plain
         fi
-        sleep 5
-    done
+        ;;
+esac
+kit_color=""
+if [ "$kit_mode" = rich ] && { [ -n "${FORCE_COLOR:-}" ] || [ -z "${NO_COLOR:-}" ]; }; then
+    kit_color=1
 fi
+# Unicode unless the locale says the console cannot draw it, as ic decides.
+case "$(printf '%s' "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" | tr '[:upper:]' '[:lower:]')" in
+    "" | *utf-8* | *utf8*)
+        kit_ok="✓" kit_fail="✗" kit_skip="·" kit_run="⠹" kit_more="…"
+        ;;
+    *)
+        kit_ok="+" kit_fail="x" kit_skip="-" kit_run="|" kit_more="..."
+        ;;
+esac
+kit_label=""
+kit_open=""
+kit_started=0
+kit_width=""
 
-# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there isn't one — which is the normal case, since the
-# piped `curl … | sh` form has no path in $0 at all.
-#
-# Found by walking up to the workspace marker rather than counting a fixed number of levels. This file is
-# served from two places in the repo (_site/site/public/scripts and the built _apps/site/dist/scripts), and a
-# fixed `../../../..` is only right while both stay exactly four deep; a walk is right wherever it is served
-# from, and survives being copied, moved or symlinked. Everything below still GATES on finding the specific
-# file it needs, so an unrelated checkout that happens to be a pnpm workspace falls through exactly as before.
-# CANNOT be shared with _tools/scripts/lib/repo-root.sh: this file is downloaded and run on its own.
+# kit_paint <sgr> <text>: the text in one SGR style when colour is on, as it is otherwise.
+kit_paint() {
+    if [ -n "$kit_color" ]; then
+        printf '\033[%sm%s\033[0m' "$1" "$2"
+    else
+        printf '%s' "$2"
+    fi
+}
+
+kit_columns() {
+    if [ -z "$kit_width" ]; then
+        kit_width="$( (stty size </dev/tty) 2>/dev/null | cut -d' ' -f2)"
+        case "$kit_width" in "" | *[!0-9]*) kit_width=80 ;; esac
+        [ "$kit_width" -le 100 ] || kit_width=100
+    fi
+}
+
+# The running step's line, which stays the last line on the screen until it settles.
+kit_draw() {
+    printf '  %s  %s%s' "$(kit_paint 36 "$kit_run")" "$kit_label" "$kit_more"
+    kit_open=1
+}
+
+kit_clear() {
+    if [ -n "$kit_open" ]; then
+        printf '\r\033[K'
+        kit_open=""
+    fi
+}
+
+# kit_above <line>: a whole line above the live one.
+kit_above() {
+    was_open="$kit_open"
+    kit_clear
+    printf '%s\n' "$1"
+    [ -z "$was_open" ] || kit_draw
+}
+
+# kit_settle [ok|fail|skip]: the running step, settled in place with how long it took.
+kit_settle() {
+    [ -n "$kit_label" ] || return 0
+    if [ "$kit_mode" = rich ]; then
+        case "${1:-ok}" in
+            fail) glyph="$(kit_paint 31 "$kit_fail")" ;;
+            skip) glyph="$(kit_paint 2 "$kit_skip")" ;;
+            *) glyph="$(kit_paint 32 "$kit_ok")" ;;
+        esac
+        took=$(($(date +%s) - kit_started))
+        if [ "$took" -ge 60 ]; then
+            took="$((took / 60))m"
+        elif [ "$took" -ge 1 ]; then
+            took="${took}s"
+        else
+            took=""
+        fi
+        kit_columns
+        kit_clear
+        if [ -z "$took" ]; then
+            # Under a second: sh has no finer clock, and a row of spaces leading to nothing reads as a missing value.
+            printf "  %s  %s\n" "$glyph" "$kit_label"
+        else
+            pad=$((kit_width - 7 - ${#kit_label} - ${#took}))
+            [ "$pad" -ge 2 ] || pad=2
+            printf "  %s  %s%${pad}s%s\n" "$glyph" "$kit_label" "" "$(kit_paint 2 "$took")"
+        fi
+    fi
+    kit_label=""
+}
+
+kit_begin() {
+    [ "$kit_mode" = rich ] || return 0
+    printf '\n  %s\n' "$(kit_paint 1 "intentic · $1")"
+    [ -z "${2:-}" ] || printf '  %s\n' "$(kit_paint 2 "$2")"
+    printf '\n'
+}
+
+kit_step() {
+    case "$kit_mode" in
+        plain)
+            if [ -n "$1" ]; then
+                printf 'intentic: [%s] %s\n' "$1" "$2"
+            else
+                printf 'intentic: %s\n' "$2"
+            fi
+            ;;
+        nested) printf '        %s\n' "$3" ;;
+        *)
+            kit_settle ok
+            kit_label="$3"
+            kit_started="$(date +%s)"
+            kit_draw
+            ;;
+    esac
+}
+
+kit_say() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '        %s\n' "$1" ;;
+        *) kit_above "        $(kit_paint 2 "$1")" ;;
+    esac
+}
+
+kit_warn() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" >&2 ;;
+        nested) printf '     !  %s\n' "$1" ;;
+        *) kit_above "     $(kit_paint 33 !)  $(kit_paint 2 "$1")" ;;
+    esac
+}
+
+kit_suspend() {
+    [ "$kit_mode" = rich ] || return 0
+    kit_clear
+}
+
+kit_resume() {
+    [ "$kit_mode" = rich ] && [ -n "$kit_label" ] && [ -z "$kit_open" ] && kit_draw
+    return 0
+}
+
+kit_finished() {
+    case "$kit_mode" in
+        plain) printf 'intentic: %s\n' "$1" ;;
+        nested) printf '     %s  %s\n' "$kit_ok" "$1" ;;
+        *)
+            kit_settle ok
+            printf '\n  %s  %s\n\n' "$(kit_paint 32 "$kit_ok")" "$(kit_paint 1 "$1")"
+            ;;
+    esac
+}
+
+kit_stop() {
+    if [ "$kit_mode" = plain ]; then
+        printf 'error: %s\n' "$1" >&2
+        [ -z "${2:-}" ] || printf '   problem: %s\n' "$2" >&2
+        [ -z "${3:-}" ] || printf '   fix:     %s\n' "$3" >&2
+    else
+        kit_settle fail
+        {
+            printf '\n  %s  %s\n' "$(kit_paint 31 "$kit_fail")" "$(kit_paint 31 "$1")"
+            [ -z "${2:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'problem: ')" "$2"
+            [ -z "${3:-}" ] || printf '     %s%s\n' "$(kit_paint 2 'fix:     ')" "$3"
+            printf '\n'
+        } >&2
+    fi
+    exit "${4:-1}"
+}
+
+kit_cancelled() {
+    case "$kit_mode" in
+        plain) printf 'intentic: Cancelled. Nothing changed.\n' ;;
+        *)
+            kit_settle skip
+            printf '  %s  %s\n' "$(kit_paint 2 "$kit_skip")" "$(kit_paint 2 'Cancelled. Nothing changed.')"
+            ;;
+    esac
+}
+
+# Questions go to the controlling terminal, never stdin, so `curl … | sh` can still ask. The open is the probe, in a
+# subshell: `[ -r /dev/tty ]` passes even where opening fails (systemd, cron, setsid).
+kit_confirm() {
+    if [ "${INTENTIC_NO_PROMPT:-}" != 1 ] && (exec </dev/tty) 2>/dev/null; then
+        kit_suspend
+        {
+            if [ "$kit_mode" = rich ]; then
+                printf '  %s  %s\n' "$(kit_paint 36 ?)" "$(kit_paint 1 "$1")"
+                [ -z "$2" ] || printf '%s\n' "$2" | while IFS= read -r line; do printf '     %s\n' "$(kit_paint 2 "$line")"; done
+                printf '     [y/N] '
+            else
+                printf '%s\n' "$1"
+                [ -z "$2" ] || printf '%s\n' "$2"
+                printf '[y/N] '
+            fi
+        } >/dev/tty
+        if read -r kit_answer </dev/tty; then
+            case "$kit_answer" in
+                y* | Y*)
+                    kit_resume
+                    return 0
+                    ;;
+            esac
+            kit_cancelled
+            exit 0
+        fi
+    fi
+    kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
+}
+
+# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
+# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
+# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
+# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
+kit_need_root() {
+    [ "$(id -u)" != 0 ] || return 0
+    if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_say "$1"
+        kit_suspend
+        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+    fi
+    kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
+}
+# <<< end of generated kit.sh
+
+# >>> generated from _site/site/scripts-kit/checkout.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there is none, which is the normal case: the piped
+# `curl … | sh` form has no path in $0 at all. Found by walking up to the workspace marker rather than counting levels,
+# so it is right wherever the file is served from; every use still GATES on finding the specific file it needs.
 checkout_root() {
     case "$0" in
         */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;
-        *) return 0 ;; # piped curl|sh — no path, no checkout
+        *) return 0 ;; # piped curl|sh: no path, no checkout
     esac
     while [ -n "$_dir" ] && [ "$_dir" != "/" ]; do
         if [ -f "$_dir/pnpm-workspace.yaml" ]; then
@@ -210,66 +298,48 @@ checkout_root() {
         _dir="$(dirname "$_dir")"
     done
 }
-CHECKOUT="$(checkout_root)"
 
-# Dev QoL that must live HERE, not in ic: a registry-less SANDBOX_IMAGE (e.g. intentic-sandbox:dev) run BY
-# PATH from a checkout is rebuilt from that checkout on EVERY run — a cached image would otherwise silently
-# outlive Dockerfile or source edits, and docker's layer cache makes an unchanged rebuild near-instant. The
-# ic binary ships without a checkout, so only this script (which has a path when invoked by path — the piped
-# curl|sh form has none, and then simply runs the existing local image) can do this.
-case "${SANDBOX_IMAGE:-}" in
-    "" | *.*/* | *:*/* | localhost/*) ;; # empty or registry-carrying — nothing to rebuild
-    *)
-        repo_root="$CHECKOUT"
-        if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
-            step pulling-image "building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
-            if ! (cd "$repo_root" && bash _tools/scripts/image/prepare-image-trees.sh &&
-                node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard &&
-                docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
-                if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
-                    echo "intentic: building ${SANDBOX_IMAGE} failed (see the docker output above) — continuing with the PREVIOUS local build, which does NOT include your latest changes." >&2
-                else
-                    echo "intentic: building ${SANDBOX_IMAGE} failed (see the docker output above) — fix the build, or unset SANDBOX_IMAGE to use the published image." >&2
-                    exit 1
-                fi
-            fi
-        fi
-        ;;
-esac
-
-# ---- fetch the ic CLI (keep in lockstep with recreate.sh / connect-host.sh — standalone curl|sh files) ----
-IC="${IC_BIN:-}"
-# Run BY PATH from a checkout (the dev platform's one-liners), prefer the checkout's OWN ic — a flow change
-# and its CLI change land in one commit and are tested together, and a released ic may predate both. The
-# piped curl|sh form has no path in $0 and skips this; so does a checkout without cargo.
-if [ -z "$IC" ] && [ -n "$CHECKOUT" ]; then
+# ic_from_checkout: run BY PATH from a checkout (the dev platform's one-liners, a hand-run in the repo), prefer the
+# checkout's OWN ic: a flow change and its CLI change land in one commit and are tested together, and a released ic may
+# predate both. Sets $IC when it built one; IC_BIN, the piped form and a checkout without cargo skip it.
+ic_from_checkout() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
+    CHECKOUT="$(checkout_root)"
+    [ -n "$CHECKOUT" ] || return 0
     ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
     if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
-        step fetching-ic "building the checkout's ic CLI…"
+        kit_step fetching-ic "building the checkout's ic CLI…" "Build ic from the checkout"
+        kit_suspend
         if cargo build --quiet --manifest-path "$ic_manifest"; then
             IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
         else
-            echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
+            kit_warn "the checkout's ic did not build, so the released ic runs instead."
         fi
+        kit_resume
+        kit_settle
     fi
-fi
-if [ -z "$IC" ]; then
+}
+# <<< end of generated checkout.sh
+
+# >>> generated from _site/site/scripts-kit/ic-fetch.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# ic_fetch: find or download the ic CLI into $IC, unless $IC is already set. IC_BIN overrides (a checkout's own
+# build). An unpinned run downloads every time, which is how re-running a one-liner upgrades a device; only a failed
+# download falls back to an installed ic. Download beside the target and rename into place: overwriting a running
+# executable fails outright ("Text file busy"), and a half-downloaded binary must never be what runs.
+ic_fetch() {
+    IC="${IC:-${IC_BIN:-}}"
+    [ -z "$IC" ] || return 0
     os="$(uname -s | tr '[:upper:]' '[:lower:]')"
     case "$os" in
         linux | darwin) ;;
-        *)
-            echo "error: unsupported OS '$os' — on Windows use the .ps1 one-liner from the setup page." >&2
-            exit 1
-            ;;
+        *) kit_stop "ic could not be installed." "this device runs $os, and ic is built for Linux and macOS." "on Windows, use the PowerShell command from the same card." ;;
     esac
     arch="$(uname -m)"
     case "$arch" in
         x86_64 | amd64) arch="amd64" ;;
         arm64 | aarch64) arch="arm64" ;;
-        *)
-            echo "error: unsupported CPU arch '$arch'." >&2
-            exit 1
-            ;;
+        *) kit_stop "ic could not be installed." "this device's processor is $arch, and ic is built for amd64 and arm64." ;;
     esac
     if [ "$(id -u)" = 0 ]; then
         dest="/usr/local/bin/ic"
@@ -280,7 +350,7 @@ if [ -z "$IC" ]; then
     # A run pinned to a release (IC_VERSION beside IC_URL, which the desktop app sets to its own) that finds that
     # release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds. Never "exactly that
     # release": the machine agent moves ic up by itself, so a desktop app left in the tray for days put an older ic
-    # back on every Start, Stop or Restart it ran (2026-10-05). An unpinned run still downloads.
+    # back on every Start, Stop or Restart it ran (2026-10-05).
     #
     # Compared as versions: major.minor.patch first, then a pre-release below its own release. An installed ic whose
     # answer is not a version this can read counts as older, and is replaced.
@@ -313,23 +383,22 @@ if [ -z "$IC" ]; then
     }
     if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && ic_not_older "$dest" "$IC_VERSION"; then
         IC="$dest"
-        echo "note: $ic_seen is installed (this run asks for ic ${IC_VERSION} or newer) — not downloading it."
+        kit_say "$ic_seen is installed, and this run asks for ic ${IC_VERSION#v} or newer, so nothing is downloaded."
     else
-        step fetching-ic "fetching the ic CLI…"
+        kit_step fetching-ic "fetching the ic CLI…" "Download ic"
         # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded. The app names the ic its installer put beside it
         # (INTENTIC_IC_PATH) and pins the run to its own release (IC_VERSION), so a copy that answers exactly that release
-        # is the very binary the download would fetch, minus the network: a machine that cannot reach github.com still
-        # gets its ic. Anything else — no pin, no file, another version, a copy that fails — leaves the download to run
-        # as it always has, and that download is all the curl|sh one-liner ever does.
+        # is the very binary the download would fetch, minus the network: a device that cannot reach github.com still
+        # gets its ic. Anything else (no pin, no file, another version, a copy that fails) leaves the download to run.
         ic_carried() {
             [ -n "${INTENTIC_IC_PATH:-}" ] && [ -n "${IC_VERSION:-}" ] && [ -f "$INTENTIC_IC_PATH" ] &&
                 [ "$("$INTENTIC_IC_PATH" --version 2>/dev/null || true)" = "ic ${IC_VERSION#v}" ] &&
                 cp "$INTENTIC_IC_PATH" "${dest}.tmp" &&
-                echo "note: installed ic ${IC_VERSION#v} from the copy the desktop app carries — not downloading it."
+                kit_say "installed ic ${IC_VERSION#v} from the copy the desktop app carries."
         }
-        # Download beside the target and rename into place: overwriting a running executable fails outright
-        # ("Text file busy"), and a half-downloaded binary must never be what runs.
-        if ic_carried || curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then
+        ic_base="${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}"
+        # curl's own sentence would land on the live line; the stop below says the same thing in this page's words.
+        if ic_carried || curl -fsL "${ic_base}/ic-${os}-${arch}" -o "${dest}.tmp" 2>/dev/null; then
             chmod +x "${dest}.tmp"
             mv -f "${dest}.tmp" "$dest"
             IC="$dest"
@@ -341,18 +410,188 @@ if [ -z "$IC" ]; then
             rm -f "${dest}.tmp"
             IC="$(command -v ic || true)"
             if [ -n "$IC" ]; then
-                echo "note: could not download the latest ic CLI — continuing with the installed $IC." >&2
+                kit_warn "the newest ic could not be downloaded, so the one installed at $IC runs instead."
             else
-                echo "error: could not download the ic CLI and none is installed — check your network and re-run." >&2
-                exit 1
+                ic_host="${ic_base#*://}"
+                kit_stop "ic could not be downloaded, and no copy is installed." "${ic_host%%/*} did not answer from this device." "check the network, then run the same command again."
             fi
         fi
+        kit_settle
     fi
+}
+# <<< end of generated ic-fetch.sh
+
+# The script curls GitHub (the ic download) and possibly get.docker.com; a device without curl would otherwise fail
+# with a raw "command not found" mid-run (direct ./connect.sh runs; the piped form obviously has curl).
+if ! command -v curl >/dev/null 2>&1; then
+    kit_stop "This device could not be connected." "curl is not installed on this device." "install curl, then run the same command again."
 fi
 
-# Everything else — claim, tunnels, launch, sync — is ic's. Flags pass through untouched; the setup code goes
-# last, behind `--`, so a code beginning with a hyphen is a value rather than an unknown flag. The env this
-# shell carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, …) rides along.
+# THE SETUP CODE IS THE FIRST ARGUMENT, and it is lifted out here rather than forwarded in the pile.
+#
+# It is a value the platform minted, so it may be any string at all, and `-*` cannot tell a code that begins with a
+# hyphen from a flag. The flags this shim is ever handed are ic's own and are named one by one for that reason;
+# anything else in first position is the code, whatever it starts with. It reaches ic behind `--` (the exec at the
+# foot), which is the only place a hyphen-leading value is safe from being read as a flag.
+SETUP_CODE=""
+if [ $# -gt 0 ]; then
+    case "$1" in
+        -y | --yes | --force | --replace) ;;
+        *)
+            SETUP_CODE="$1"
+            shift
+            ;;
+    esac
+fi
+
+# Run a command as root: directly when this run already is root, through sudo otherwise, after the one sentence that
+# says why (the caller passes it). No sudo on a device that needs it is a stop with the way forward.
+as_root() {
+    why="$1"
+    shift
+    if [ "$(id -u)" = 0 ]; then
+        "$@"
+        return
+    fi
+    if ! command -v sudo >/dev/null 2>&1; then
+        kit_stop "Docker could not be installed." "installing it needs administrator rights, and sudo is not available on this device." "install Docker from https://docs.docker.com/get-docker/, then run the same command again."
+    fi
+    if [ -z "${as_root_said:-}" ]; then
+        kit_say "$why"
+        as_root_said=1
+    fi
+    kit_suspend
+    sudo "$@"
+    kit_resume
+}
+ROOT_WHY="Installing Docker changes the system, so sudo asks for your password once."
+
+# Consent gate for installing Docker: a system change beyond the sandbox itself, so never silent. INSTALL_DOCKER=1
+# pre-consents (headless runs, the desktop app); otherwise the kit asks on the controlling terminal (the person is at a
+# terminal even under `curl … | sh`; stdin is the script), and stops with the remedy when there is nobody to ask.
+confirm_install_docker() {
+    [ "${INSTALL_DOCKER:-}" = 1 ] && return 0
+    kit_confirm "$1" "$2" "INSTALL_DOCKER=1 set, or install Docker yourself from https://docs.docker.com/get-docker/"
+}
+
+# Docker Engine via Docker's official convenience script. Enabling dockerd on boot is also what brings the sandbox and
+# tunnel containers (--restart unless-stopped) back after a reboot. A person who is not root is added to the docker
+# group, so the engine answers them without sudo from then on.
+install_docker_linux() {
+    confirm_install_docker "Install Docker Engine?" "Docker is not installed. It comes from get.docker.com and runs the sandbox on this device."
+    kit_step installing-docker "installing Docker Engine (get.docker.com)…" "Install Docker"
+    docker_script="$(mktemp)"
+    curl -fsSL https://get.docker.com -o "$docker_script" ||
+        kit_stop "Docker could not be installed." "get.docker.com did not answer from this device." "check the network, then run the same command again."
+    as_root "$ROOT_WHY" sh "$docker_script"
+    rm -f "$docker_script"
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+        as_root "$ROOT_WHY" systemctl enable --now docker >/dev/null 2>&1 || true
+    elif command -v service >/dev/null 2>&1; then
+        as_root "$ROOT_WHY" service docker start >/dev/null 2>&1 || true
+    fi
+    if [ "$(id -u)" != 0 ]; then
+        as_root "$ROOT_WHY" usermod -aG docker "$(id -un)" || true
+    fi
+}
+
+# Docker Desktop, guided: its dmg ships a CLI installer, so this installs without clicking; only the first-run dialog
+# stays manual (the daemon wait below covers it). --accept-license is passed only after the question named Docker's
+# terms. --user skips the privileged-helper prompt.
+install_docker_macos() {
+    confirm_install_docker "Install Docker Desktop?" "Docker Desktop is not installed. It is about 1.5 GB, and installing it accepts Docker's terms (https://www.docker.com/legal/docker-subscription-service-agreement)."
+    case "$(uname -m)" in
+        arm64) dmg_arch="arm64" ;;
+        *) dmg_arch="amd64" ;;
+    esac
+    dmg="$(mktemp -d)/Docker.dmg"
+    kit_step installing-docker "downloading Docker Desktop (~1.5 GB)…" "Download Docker Desktop"
+    kit_suspend
+    curl -fL "https://desktop.docker.com/mac/main/${dmg_arch}/Docker.dmg" -o "$dmg" ||
+        kit_stop "Docker Desktop could not be downloaded." "desktop.docker.com did not answer from this device." "check the network, then run the same command again."
+    kit_resume
+    kit_step installing-docker "installing Docker Desktop…" "Install Docker Desktop"
+    hdiutil attach "$dmg" -nobrowse -quiet
+    as_root "$ROOT_WHY" /Volumes/Docker/Docker.app/Contents/MacOS/install --accept-license --user="${SUDO_USER:-$(id -un)}"
+    hdiutil detach /Volumes/Docker -quiet || true
+    rm -f "$dmg"
+    # Docker Desktop is a user-session app: launch it as the person, not as root.
+    if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" = 0 ]; then
+        sudo -u "$SUDO_USER" open -a Docker
+    else
+        open -a Docker
+    fi
+}
+
+kit_step checking-docker "checking Docker…" "Check Docker"
+DOCKER_INSTALLED=""
+if ! command -v docker >/dev/null 2>&1; then
+    case "$(uname -s)" in
+        Linux) install_docker_linux ;;
+        Darwin) install_docker_macos ;;
+        *) kit_stop "Docker is not installed." "this device runs $(uname -s), where intentic cannot install it." "install Docker Desktop from https://docs.docker.com/get-docker/, then run the same command again." ;;
+    esac
+    DOCKER_INSTALLED=1
+    # A freshly installed daemon takes a moment (Docker Desktop: first-run dialog and VM boot), so wait up to 5 min.
+    # An already-installed but unreachable daemon is diagnosed by ic instead (it can tell a stopped daemon from one
+    # this person may not talk to). The person was only just added to the docker group, which this session does not
+    # carry yet, so the wait asks as root when it has to.
+    kit_step installing-docker "waiting for the Docker daemon (accept Docker Desktop's first-run dialog if shown)…" "Wait for Docker to start"
+    i=0
+    until docker version --format '{{.Server.Version}}' >/dev/null 2>&1 ||
+        { [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ] && sudo -n docker version --format '{{.Server.Version}}' >/dev/null 2>&1; }; do
+        i=$((i + 1))
+        if [ "$i" -ge 60 ]; then
+            kit_stop "Docker did not start." "its engine did not answer within 5 minutes." "start Docker, then run the same command again."
+        fi
+        sleep 5
+    done
+fi
+kit_settle
+
+# A registry-less SANDBOX_IMAGE run from a checkout is rebuilt from it below (checkout_root is in the generated region).
+CHECKOUT="$(checkout_root)"
+
+# Dev QoL that must live HERE, not in ic: a registry-less SANDBOX_IMAGE (e.g. intentic-sandbox:dev) run BY PATH from a
+# checkout is rebuilt from that checkout on EVERY run, since a cached image would otherwise silently outlive Dockerfile or
+# source edits, and docker's layer cache makes an unchanged rebuild near-instant.
+case "${SANDBOX_IMAGE:-}" in
+    "" | *.*/* | *:*/* | localhost/*) ;; # empty or registry-carrying: nothing to rebuild
+    *)
+        repo_root="$CHECKOUT"
+        if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
+            kit_step pulling-image "building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…" "Build $SANDBOX_IMAGE from the checkout"
+            kit_suspend
+            if ! (cd "$repo_root" && bash _tools/scripts/image/prepare-image-trees.sh &&
+                node _tools/scripts/image/compose-image-dockerfile.mjs standard >.image-out/Dockerfile.standard &&
+                docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
+                if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
+                    kit_warn "building $SANDBOX_IMAGE failed (the docker output above says why), so the previous local build runs, without your latest changes."
+                else
+                    kit_stop "$SANDBOX_IMAGE could not be built." "the docker output above says why." "fix the build, or unset SANDBOX_IMAGE to use the published image."
+                fi
+            fi
+            kit_resume
+            kit_settle
+        fi
+        ;;
+esac
+
+IC="${IC_BIN:-}"
+ic_from_checkout
+ic_fetch
+
+# Everything else (claim, tunnels, launch, sync) is ic's. Flags pass through untouched; the setup code goes last,
+# behind `--`, so a code beginning with a hyphen is a value rather than an unknown flag. The env this shell carries
+# (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, SYNC_DIR, …) rides along. A person this run just added to the docker group does
+# not carry that group in this session yet, so ic runs under it through sudo, as that same person.
+kit_suspend
+if [ -n "$DOCKER_INSTALLED" ] && [ "$(id -u)" != 0 ] && ! docker version >/dev/null 2>&1; then
+    if [ -n "$SETUP_CODE" ]; then
+        exec sudo -E -u "$(id -un)" -g docker "$IC" sandbox connect "$@" -- "$SETUP_CODE"
+    fi
+    exec sudo -E -u "$(id -un)" -g docker "$IC" sandbox connect "$@"
+fi
 if [ -n "$SETUP_CODE" ]; then
     exec "$IC" sandbox connect "$@" -- "$SETUP_CODE"
 fi

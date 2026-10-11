@@ -323,7 +323,7 @@ pub fn still_there(slug: &str, listing: &str) -> Vec<String> {
 /// of this: its volumes belong to the running sandbox, not to the removal they outlived.
 pub fn sweep() -> Vec<String> {
     let Some(live) = crate::sandbox::live_slugs() else {
-        eprintln!("intentic: docker could not list this machine's sandboxes, so nothing past its recovery window was deleted this time.");
+        crate::ui::warn("Docker could not list the sandboxes on this device, so nothing past its recovery window was deleted this time.");
         return Vec::new();
     };
     drop_superseded_markers(&live);
@@ -342,7 +342,7 @@ pub fn sweep() -> Vec<String> {
         };
         match purge(&slug) {
             Ok(()) => purged.push(slug),
-            Err(why) => eprintln!("intentic: {why}."),
+            Err(why) => crate::ui::warn(&format!("{why}.")),
         }
     }
     purged

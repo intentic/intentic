@@ -1,5 +1,6 @@
 use super::{fetch, record, Kind, Status};
 use super::{fetch::FetchOutcome, pins};
+use crate::ui;
 use crate::util::{Fail, Result};
 
 pub fn run_fetch() -> Result<()> {
@@ -64,6 +65,7 @@ pub fn run_status(json: bool) -> Result<()> {
     if json {
         let mut facts = super::choice_facts(docker_desktop_installed());
         facts.gpu = gpu_in_use();
+        // allow(terminal-output): --json: one document on stdout for the desktop app and the smoke tests.
         println!(
             "{}",
             status_json(kind, &facts, super::choice::DOCKER_DESKTOP_PCS, &status)
@@ -75,9 +77,10 @@ pub fn run_status(json: bool) -> Result<()> {
 }
 
 pub fn run_install() -> Result<()> {
-    // A fresh PC's engine is the one its sandboxes run on. On a PC with Docker Desktop, installing makes it ready and
+    // A fresh device's engine is the one its sandboxes run on. On a device with Docker Desktop, installing makes it ready and
     // switches nothing: Docker Desktop's sandboxes would otherwise vanish from every `docker` this account runs.
     let activate = chosen() == Kind::Intentic;
+    ui::act("Installing the intentic engine");
     // A line per step and per percent, not per downloaded chunk.
     let mut last: Option<(String, Option<u64>)> = None;
     super::install(
@@ -88,28 +91,40 @@ pub fn run_install() -> Result<()> {
             }
             last = Some(now);
             if let Some(pct) = percent {
-                println!("{sentence} ({pct}%)");
+                ui::detail(&format!("{sentence} ({pct}%)"));
             } else {
-                println!("{sentence}");
+                ui::detail(sentence);
             }
         },
         activate,
     )
     .map_err(Fail::from)?;
+    ui::done("The intentic engine is installed.");
     if super::in_use() != Kind::Intentic {
-        println!(
-            "Intentic's engine is installed and running beside Docker Desktop. Your sandboxes stay on Docker Desktop until you move them: ic engine move --to intentic"
+        ui::note(
+            "The intentic engine is installed and running beside Docker Desktop. Your sandboxes stay on Docker Desktop until you move them.",
         );
+        ui::later(&[(
+            "move sandboxes".to_string(),
+            "ic engine move --to intentic".to_string(),
+        )]);
     }
     Ok(())
 }
 
 pub fn run_start(quiet: bool) -> Result<()> {
-    if quiet {
+    if !quiet {
+        ui::act("Starting the intentic engine");
+    }
+    let res = if quiet {
         super::start_quiet().map_err(Fail::from)
     } else {
         super::start().map_err(Fail::from)
+    };
+    if !quiet && res.is_ok() {
+        ui::done("The intentic engine is running.");
     }
+    res
 }
 
 pub fn run_wsl(action: Option<String>, distro: Option<String>) -> Result<()> {
@@ -125,25 +140,49 @@ pub fn run_relay() -> Result<()> {
 }
 
 pub fn run_stop() -> Result<()> {
+    ui::act("Stopping the intentic engine");
     super::stop().map_err(Fail::from)?;
-    println!("Intentic's engine is stopped and stays stopped until `ic engine start`.");
+    ui::done("The intentic engine is stopped.");
+    ui::later(&[("start it".to_string(), "ic engine start".to_string())]);
     Ok(())
 }
 
 pub fn run_hold() -> Result<()> {
-    super::hold().map_err(Fail::from)
+    ui::act("Holding the intentic engine down");
+    super::hold().map_err(Fail::from)?;
+    ui::done("The intentic engine is stopped and held down on purpose.");
+    ui::later(&[("start it".to_string(), "ic engine start".to_string())]);
+    Ok(())
 }
 
 pub fn run_restart() -> Result<()> {
-    super::restart().map_err(Fail::from)
+    ui::act("Restarting the intentic engine");
+    super::restart().map_err(Fail::from)?;
+    ui::done("The intentic engine is restarted.");
+    Ok(())
 }
 
 pub fn run_update() -> Result<()> {
-    super::update().map_err(Fail::from)
+    ui::act("Updating the intentic engine");
+    super::update().map_err(Fail::from)?;
+    ui::done("The intentic engine is updated.");
+    Ok(())
 }
 
 pub fn run_remove(yes: bool) -> Result<()> {
-    super::remove(yes).map_err(Fail::from)
+    // Asked before the live line starts: a spinner repainting over a question garbles the one line being read.
+    if !ui::confirm(
+        "Remove the intentic engine?",
+        "Every sandbox's Docker data in its distro is deleted. This cannot be undone.",
+        yes,
+    )? {
+        ui::cancelled();
+        return Ok(());
+    }
+    ui::act("Removing the intentic engine");
+    super::remove(true).map_err(Fail::from)?;
+    ui::done("The intentic engine is removed.");
+    Ok(())
 }
 
 /// The engine a fresh setup here would pick.
@@ -159,12 +198,16 @@ pub fn run_prefer(engine: &str) -> Result<()> {
             "prefer `intentic` or `docker-desktop`, not '{engine}'."
         )));
     };
+    ui::act(&format!("Choosing {} for new sandboxes", kind.name()));
     super::set_preferred(kind).map_err(Fail::from)?;
-    println!("intentic: noted — {} from now on.", kind.name());
+    ui::done(&format!(
+        "New sandboxes on this device use {} from now on.",
+        kind.name()
+    ));
     Ok(())
 }
 
-/// One of the sandboxes on the engine in use was handed this PC's GPU, which keeps the PC on Docker Desktop.
+/// One of the sandboxes on the engine in use was handed this device's GPU, which keeps the PC on Docker Desktop.
 pub fn gpu_in_use() -> bool {
     let Ok(listed) = crate::docker::capture_bounded(
         &[
@@ -208,42 +251,75 @@ pub fn docker_desktop_installed() -> bool {
 }
 
 fn print_human_status(kind: Kind, status: &Status) {
-    println!("Engine: {}", kind.id());
+    ui::report("intentic · engine status", None);
+    let mut fields = Vec::new();
+    fields.push(("Engine".to_string(), kind.id().to_string()));
     if kind == Kind::Intentic || status.installed {
-        println!("Installed: {}", if status.installed { "yes" } else { "no" });
-        println!("Running: {}", if status.running { "yes" } else { "no" });
-        println!(
-            "Sandboxes run on it: {}",
-            if status.active { "yes" } else { "no" }
-        );
+        fields.push((
+            "Installed".to_string(),
+            if status.installed {
+                "yes".to_string()
+            } else {
+                "no".to_string()
+            },
+        ));
+        fields.push((
+            "Running".to_string(),
+            if status.running {
+                "yes".to_string()
+            } else {
+                "no".to_string()
+            },
+        ));
+        fields.push((
+            "Sandboxes run on it".to_string(),
+            if status.active {
+                "yes".to_string()
+            } else {
+                "no".to_string()
+            },
+        ));
         if status.held {
-            println!("Held: yes (stopped on purpose; `ic engine start` brings it back)");
+            fields.push(("Held".to_string(), "yes (stopped on purpose)".to_string()));
         }
         if let Some(version) = &status.version {
-            println!("Version: {version}");
+            fields.push(("Version".to_string(), version.clone()));
         }
-        println!("Distro: {}", status.distro);
+        fields.push(("Distro".to_string(), status.distro.clone()));
         if let Some(network) = &status.network {
-            println!(
-                "Network: {}",
+            fields.push((
+                "Network".to_string(),
                 if network == "isolated" {
-                    "its own (a network namespace of the engine's, as Docker Desktop's engine has)"
+                    "its own (a network namespace of the engine's, as Docker Desktop's engine has)".to_string()
                 } else {
-                    "WSL's shared one (the fallback: see /var/log/intentic-engine.log in its distro)"
-                }
-            );
+                    "WSL's shared one (the fallback: see /var/log/intentic-engine.log in its distro)".to_string()
+                },
+            ));
         }
         if let Some(record) = record::EngineRecord::load() {
-            println!("Endpoint: {}", record.host);
+            fields.push(("Endpoint".to_string(), record.host));
         }
         if let Some(pipe) = &status.pipe {
-            println!("Named pipe: {pipe} (what docker uses while it is there)");
+            fields.push((
+                "Named pipe".to_string(),
+                format!("{pipe} (what docker uses while it is there)"),
+            ));
         }
     }
     if kind == Kind::DockerDesktop {
-        println!("Sandboxes on this PC run on Docker Desktop.");
+        fields.push((
+            "Note".to_string(),
+            "Sandboxes on this device run on Docker Desktop.".to_string(),
+        ));
     } else if kind == Kind::Native {
-        println!("Using this system's own Docker installation.");
+        fields.push((
+            "Note".to_string(),
+            "Using this system's own Docker installation.".to_string(),
+        ));
+    }
+    ui::fields(&fields);
+    if status.held {
+        ui::later(&[("start it".to_string(), "ic engine start".to_string())]);
     }
 }
 

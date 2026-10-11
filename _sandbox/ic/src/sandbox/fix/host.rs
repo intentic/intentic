@@ -628,7 +628,7 @@ pub fn prerequisites(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Op
         Err(why) => {
             return Some(Check::skip(
                 PREREQUISITES,
-                format!("this PC did not describe itself ({why})"),
+                format!("this device did not describe itself ({why})"),
             ))
         }
     };
@@ -667,10 +667,10 @@ pub fn docker_app(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Optio
         Desktop::Absent => return None,
         Desktop::NotInstalled => Check::fail(
             DOCKER_APP,
-            "Docker Desktop is not installed on this machine.",
+            "Docker Desktop is not installed on this device.",
             match facts.os {
-                Os::Wsl => "install Docker Desktop on Windows and switch on its WSL integration for this distro — never Docker Engine inside the distro — then run `ic sandbox fix` again.",
-                Os::Macos => "install Docker Desktop (https://docs.docker.com/desktop/setup/install/mac-install/), then run `ic sandbox fix` again.",
+                Os::Wsl => "install Docker Desktop on Windows and switch on its WSL integration for this distro — never Docker Engine inside the distro — then run ic sandbox fix again.",
+                Os::Macos => "install Docker Desktop (https://docs.docker.com/desktop/setup/install/mac-install/), then run ic sandbox fix again.",
                 _ => "run the setup command from your browser again: it installs Docker Desktop, then your sandbox.",
             },
             Fix::You,
@@ -678,19 +678,19 @@ pub fn docker_app(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Optio
         Desktop::Stopped if !tried(&Repair::StartDesktop) => Check::fail(
             DOCKER_APP,
             "Docker Desktop is not running, so neither is your sandbox.",
-            "start Docker Desktop and wait for its engine: `ic sandbox fix` does this by itself.",
+            "start Docker Desktop and wait for its engine: ic sandbox fix does this by itself.",
             Fix::Do(Repair::StartDesktop),
         ),
         Desktop::Stopped => Check::fail(
             DOCKER_APP,
             "Docker Desktop was started and has not come up.",
-            "open Docker Desktop and finish what it shows (its terms, a sign-in, an update); once it says the engine is running, run `ic sandbox fix` again.",
+            "open Docker Desktop and finish what it shows (its terms, a sign-in, an update); once it says the engine is running, run ic sandbox fix again.",
             Fix::You,
         ),
         Desktop::Running => match facts.autostart {
             Some(false) => Check::warn_fix(
                 DOCKER_APP,
-                "Docker Desktop does not start when you sign in, so a restart of this machine stops your sandbox until someone opens it.",
+                "Docker Desktop does not start when you sign in, so a restart of this device stops your sandbox until someone opens it.",
                 "turn on \"Start Docker Desktop when you sign in\" in Docker Desktop's settings (General).",
                 if tried(&Repair::AutoStart) {
                     Fix::You
@@ -715,7 +715,7 @@ pub fn docker(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
                 Check::fail(
                     DOCKER,
                     problem,
-                    "switch Docker Desktop to Linux containers: `ic sandbox fix` does it once you say yes.",
+                    "switch Docker Desktop to Linux containers: ic sandbox fix does it once you say yes.",
                     Fix::Do(Repair::LinuxContainers),
                 )
             } else {
@@ -735,9 +735,9 @@ pub fn docker(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
             _ if facts.os == Os::Wsl => Check::skip(DOCKER, "the WSL check names what is missing"),
             _ => Check::fail(
                 DOCKER,
-                "docker is not installed on this machine.",
+                "docker is not installed on this device.",
                 if facts.os == Os::Linux {
-                    "install Docker Engine (https://docs.docker.com/engine/install/), then run `ic sandbox fix` again."
+                    "install Docker Engine (https://docs.docker.com/engine/install/), then run ic sandbox fix again."
                 } else {
                     "run the setup command from your browser again: it installs Docker, then your sandbox."
                 },
@@ -789,7 +789,7 @@ fn wedged(facts: &DeviceFacts, engine: &Engine, tried: &dyn Fn(&Repair) -> bool)
         return Check::fail(
             DOCKER,
             problem,
-            "restart Docker Desktop: quit it from its icon and open it again, or say yes when `ic sandbox fix` asks.",
+            "restart Docker Desktop: quit it from its icon and open it again, or say yes when ic sandbox fix asks.",
             Fix::Do(Repair::RestartDesktop),
         );
     }
@@ -797,14 +797,14 @@ fn wedged(facts: &DeviceFacts, engine: &Engine, tried: &dyn Fn(&Repair) -> bool)
         return Check::fail(
             DOCKER,
             format!("{problem} Restarting Docker Desktop did not help."),
-            "restart WSL under it: quit Docker Desktop, run `wsl --shutdown`, then open Docker Desktop (`ic sandbox fix` does this once you say yes).",
+            "restart WSL under it: quit Docker Desktop, run wsl --shutdown, then open Docker Desktop (ic sandbox fix does this once you say yes).",
             Fix::Do(Repair::ShutdownWsl),
         );
     }
     Check::fail(
         DOCKER,
         format!("{problem} Restarting it did not help."),
-        "open Docker Desktop and finish what it shows (its terms, a sign-in, an update); once it says the engine is running, run `ic sandbox fix` again.",
+        "open Docker Desktop and finish what it shows (its terms, a sign-in, an update); once it says the engine is running, run ic sandbox fix again.",
         Fix::You,
     )
 }
@@ -828,7 +828,7 @@ fn engine_down(
                 "Docker's engine did not answer within {} seconds — it is running but stuck.",
                 ENGINE_ASK.as_secs()
             ),
-            "restart it (sudo systemctl restart docker), then run `ic sandbox fix` again.",
+            "restart it (sudo systemctl restart docker), then run ic sandbox fix again.",
             Fix::You,
         );
     }
@@ -846,11 +846,11 @@ fn engine_down(
         DOCKER,
         problem,
         if windowsish {
-            "start Docker Desktop, then run `ic sandbox fix` again."
+            "start Docker Desktop, then run ic sandbox fix again."
         } else if facts.os == Os::Macos {
-            "start your Docker runtime, then run `ic sandbox fix` again."
+            "start your Docker runtime, then run ic sandbox fix again."
         } else {
-            "start it (sudo systemctl start docker, or sudo service docker start), then run `ic sandbox fix` again."
+            "start it (sudo systemctl start docker, or sudo service docker start), then run ic sandbox fix again."
         },
         Fix::You,
     )
@@ -864,7 +864,7 @@ pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair)
     if held && !stuck {
         return Check::fail(
             DOCKER,
-            "The intentic engine was stopped on purpose (`ic engine stop`), and your sandboxes run on it.",
+            "The intentic engine was stopped on purpose (ic engine stop), and your sandboxes run on it.",
             "start it again: ic engine start",
             Fix::You,
         );
@@ -885,9 +885,9 @@ pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair)
             DOCKER,
             problem,
             if stuck {
-                "restart it: `ic sandbox fix` does this once you say yes."
+                "restart it: ic sandbox fix does this once you say yes."
             } else {
-                "start it: `ic sandbox fix` does this by itself."
+                "start it: ic sandbox fix does this by itself."
             },
             Fix::Do(first),
         );
@@ -896,14 +896,14 @@ pub fn intentic_engine_down(engine: &Engine, held: bool, tried: &dyn Fn(&Repair)
         return Check::fail(
             DOCKER,
             format!("{problem} Starting it again did not help."),
-            "restart WSL under it (`ic sandbox fix` does this once you say yes): every WSL distro on this PC stops for a moment.",
+            "restart WSL under it (ic sandbox fix does this once you say yes): every WSL distro on this device stops for a moment.",
             Fix::Do(Repair::ShutdownWsl),
         );
     }
     Check::fail(
         DOCKER,
         format!("{problem} Restarting WSL did not help either."),
-        "restart this PC; if that does not bring it back, run `ic engine status` and send its output with `ic sandbox doctor`'s.",
+        "restart this device; if that does not bring it back, run ic engine status and send its output with ic sandbox doctor's.",
         Fix::You,
     )
 }
@@ -940,14 +940,14 @@ pub fn wsl_check(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option
     let check = match &facts.wsl {
         Wsl::NotApplicable => return None,
         Wsl::Windows { running: None } => {
-            let problem = "WSL does not answer (`wsl --list --running` did not finish in 15 seconds), and the container engine runs inside it.";
+            let problem = "WSL does not answer (wsl --list --running did not finish in 15 seconds), and the container engine runs inside it.";
             if tried(&Repair::ShutdownWsl) {
-                Check::fail(WSL, problem, "restart this PC.", Fix::You)
+                Check::fail(WSL, problem, "restart this device.", Fix::You)
             } else {
                 Check::fail(
                     WSL,
                     problem,
-                    "restart WSL: quit Docker Desktop if it runs, run `wsl --shutdown`, then start the engine again (`ic sandbox fix` does this once you say yes).",
+                    "restart WSL: quit Docker Desktop if it runs, run wsl --shutdown, then start the engine again (ic sandbox fix does this once you say yes).",
                     Fix::Do(Repair::ShutdownWsl),
                 )
             }
@@ -988,7 +988,7 @@ pub fn wsl_check(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Option
                     Check::fail(
                         WSL,
                         problem,
-                        "re-apply it: `docker desktop restart` on Windows (`ic sandbox fix` does this once you say yes).",
+                        "re-apply it: docker desktop restart on Windows (ic sandbox fix does this once you say yes).",
                         Fix::Do(Repair::ReapplyIntegration),
                     )
                 }
@@ -1009,7 +1009,7 @@ pub fn disk(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
         return Check::skip(
             DISK,
             if facts.disk_place.is_empty() {
-                "could not read this machine's free space".to_string()
+                "could not read this device's free space".to_string()
             } else {
                 format!("could not read free space on {}", facts.disk_place)
             },
@@ -1020,7 +1020,7 @@ pub fn disk(facts: &DeviceFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
         let problem = format!(
             "only {free} GiB free on {place} — a full disk stops Docker's engine answering and the sandbox writing."
         );
-        let yours = "free at least 5 GiB (on Windows: Settings → System → Storage), then run `ic sandbox fix` again.";
+        let yours = "free at least 5 GiB (on Windows: Settings → System → Storage), then run ic sandbox fix again.";
         if !facts.engine.up() {
             return Check::fail(DISK, problem, yours, Fix::You);
         }
@@ -1057,13 +1057,13 @@ pub fn agent_check(facts: &DeviceFacts) -> Check {
         Agent::Itself | Agent::Running => Check::ok(AGENT),
         Agent::NotInstalled => Check::warn_fix(
             AGENT,
-            "this machine's agent is not installed, so nothing here notices when your sandbox stops answering.",
+            "this device's agent is not installed, so nothing here notices when your sandbox stops answering.",
             "run the setup command from your browser again: it connects this device, which installs the agent.",
             Fix::You,
         ),
         Agent::Stopped => Check::warn_fix(
             AGENT,
-            "this machine's agent is installed but not running, so nothing here notices when your sandbox stops answering.",
+            "this device's agent is installed but not running, so nothing here notices when your sandbox stops answering.",
             "start it: intentic-machine run",
             Fix::You,
         ),
@@ -1169,8 +1169,8 @@ pub fn network(facts: &NetFacts) -> Check {
     if let Err(why) = &facts.dns {
         return Check::fail(
             NETWORK,
-            format!("this machine cannot resolve {host}: {why}."),
-            format!("check this machine's DNS (a VPN or a captive portal is the usual cause), then run `ic sandbox fix` again.{proxied}"),
+            format!("this device cannot resolve {host}: {why}."),
+            format!("check this device's DNS (a VPN or a captive portal is the usual cause), then run ic sandbox fix again.{proxied}"),
             Fix::You,
         );
     }
@@ -1178,8 +1178,8 @@ pub fn network(facts: &NetFacts) -> Check {
         Err(why) => {
             return Check::fail(
                 NETWORK,
-                format!("this machine could not reach {} over HTTPS within {} seconds: {why}", facts.platform, NET_LIMIT.as_secs()),
-                format!("check this machine's internet connection and firewall, then run `ic sandbox fix` again.{proxied}"),
+                format!("this device could not reach {} over HTTPS within {} seconds: {why}", facts.platform, NET_LIMIT.as_secs()),
+                format!("check this device's internet connection and firewall, then run ic sandbox fix again.{proxied}"),
                 Fix::You,
             )
         }
@@ -1196,7 +1196,7 @@ pub fn network(facts: &NetFacts) -> Check {
             return Check::fail(
                 NETWORK,
                 format!(
-                    "this machine's clock is {minutes} minutes {} the platform's, and signed requests from it are refused.",
+                    "this device's clock is {minutes} minutes {} the platform's, and signed requests from it are refused.",
                     if *skew > 0 { "ahead of" } else { "behind" }
                 ),
                 "set the clock automatically: Windows, Settings → Time & language → Date & time → Sync now; Linux, sudo timedatectl set-ntp true; macOS, System Settings → General → Date & Time.",
@@ -1208,8 +1208,8 @@ pub fn network(facts: &NetFacts) -> Check {
     if let Some((url, Err(why))) = &facts.ingress {
         return Check::fail(
             NETWORK,
-            format!("this machine reaches the platform but not the edge your sandbox dials ({url}): {why}"),
-            format!("check this machine's firewall for outbound HTTPS to {url}, then run `ic sandbox fix` again.{proxied}"),
+            format!("this device reaches the platform but not the edge your sandbox dials ({url}): {why}"),
+            format!("check this device's firewall for outbound HTTPS to {url}, then run ic sandbox fix again.{proxied}"),
             Fix::You,
         );
     }

@@ -27,6 +27,7 @@ const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
     pairedDir: undefined,
     connections: [],
     pairToken: undefined,
+    pairCode: undefined,
     ...over,
 });
 
@@ -366,9 +367,22 @@ test("sends a sync switch to the environment whose folder the pairing names", ()
     expect(doorRoute(DEVICE_COMMANDS["mirror-on"], facts(pc), asked("mirror-on"))).toEqual({});
 });
 
-// The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell
-// the device actually runs.
-test("enrolls a connected device in its own shell's dialect", () => {
+// The same enrollment the card's copyable one-liner carries — `sync/<host>/<code>`, the code standing for the token, mode
+// and folder — spoken in the shell the device actually runs.
+test("enrolls a connected device with the sync one-liner, in its own shell's dialect", () => {
+    const coded = { pairToken: "pair_abc", pairCode: "AB12CD34", mode: "sync" as const, localDir: "~/intentic/work" };
+    expect(DEVICE_COMMANDS["sync-install"].line(facts(coded))).toBe("curl -fsSL https://intentic.dev/sync/work-abc.intentic.dev/AB12CD34 | sh");
+    expect(DEVICE_COMMANDS["sync-install"].line(facts({ ...coded, platform: "windows" }))).toBe(
+        "irm https://intentic.dev/sync/work-abc.intentic.dev/AB12CD34 | iex",
+    );
+});
+
+// Local dev, or no code: a sandbox on localhost has no address a one-liner could carry, so the values ride as
+// environment in the older form.
+test("enrolls a connected device in its own shell's dialect without a code", () => {
+    expect(
+        DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", pairCode: "AB12CD34", publicUrl: "https://localhost:8788", mode: "sync" })),
+    ).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://localhost:8788' PAIR_TOKEN='pair_abc' sh");
     const unix = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "sync", localDir: "~/intentic/work" }));
     expect(unix).toBe(
         "curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://work-abc.intentic.dev' PAIR_TOKEN='pair_abc' SYNC_DIR=\"$HOME/intentic/work\" sh",

@@ -104,15 +104,15 @@ fn quiet_for(signal: Option<WorkSignal>, now_ms: u64) -> String {
     )
 }
 
-/// One sandbox's line: `{"slug","slept","why"}` for `--json`, else a sentence. Pure.
+/// One sandbox's line: `{"slug","slept","why"}` for `--json`, else the sentence a person reads. Pure.
 fn line(slug: &str, slept: bool, why: &str, json: bool) -> String {
     if json {
         return json!({ "slug": slug, "slept": slept, "why": why }).to_string();
     }
     if slept {
-        format!("intentic: {slug} is asleep; it starts again when somebody opens it.")
+        format!("{slug} is asleep. It starts again when somebody opens it.")
     } else {
-        format!("intentic: {slug} stays awake: {why}.")
+        format!("{slug} stays awake: {why}.")
     }
 }
 
@@ -120,8 +120,10 @@ fn say(slug: &str, slept: bool, why: &str, json: bool) {
     let said = line(slug, slept, why, json);
     if json {
         report::emit(&said);
+    } else if slept {
+        ui::done(&said);
     } else {
-        println!("{said}");
+        ui::quiet(&said);
     }
 }
 
@@ -142,9 +144,7 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
     let _held = lock::hold_for_person(&slug)?;
     let container = container_of(&slug);
     let refused = if !docker::container_exists(&container) {
-        Some(format!(
-            "sandbox container {container} does not exist on this machine."
-        ))
+        Some(crate::sandbox::missing(&slug))
     } else if let Some(why) = held_back(
         &mirror::reconcile(&slug),
         docker::container_exists(&parked_of(&slug)),
@@ -153,7 +153,7 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
         Some(format!("{slug} was not put to sleep: {why}."))
     } else if !inside::running(&container) {
         Some(format!(
-            "{slug} is not running, so there is nothing to put to sleep (ic sandbox start {slug} starts it)."
+            "{slug} is not running, so there is nothing to put to sleep."
         ))
     } else {
         put_to_sleep(&slug, source).err().map(|fail| fail.0)
@@ -176,7 +176,14 @@ fn sleep_idle(slug: Option<String>, minutes: u64, json: bool, source: Source) ->
         Some(slug) => vec![resolve_slug(Some(slug), "ic sandbox sleep")?],
         None => match crate::sandbox::live_slugs() {
             Some(slugs) => slugs,
-            None => bail!("docker could not list this machine's sandboxes."),
+            None => bail!(
+                "{}",
+                ui::explain(
+                    "No sandbox was put to sleep.",
+                    Some("Docker could not list the sandboxes on this device."),
+                    Some("ic docker prepare --dry-run"),
+                )
+            ),
         },
     };
     for slug in slugs {
@@ -413,7 +420,7 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
         } else if let Some(error) = &failed {
             ui::warn(&format!("{slug} could not be woken: {error}"));
         } else {
-            println!("intentic: {slug} woke up: somebody opened it.");
+            ui::done(&format!("{slug} woke up because somebody opened it."));
         }
     }
     if let Some(poster) = &mut poster {
@@ -427,7 +434,10 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
     if args.json {
         report::emit(&asleep_line(left));
     } else if woken.is_empty() {
-        println!("intentic: nothing to wake ({} asleep on this side).", left);
+        ui::quiet(&format!(
+            "Nothing to wake. {} asleep here.",
+            crate::util::plural(left, "sandbox")
+        ));
     }
     Ok(())
 }
@@ -606,11 +616,11 @@ mod tests {
         );
         assert_eq!(
             line("sandbox-0123456789ab", true, "x", false),
-            "intentic: sandbox-0123456789ab is asleep; it starts again when somebody opens it."
+            "sandbox-0123456789ab is asleep. It starts again when somebody opens it."
         );
         assert_eq!(
             line("work", false, "busy", false),
-            "intentic: work stays awake: busy."
+            "work stays awake: busy."
         );
         assert_eq!(quiet_for(Some(quiet(40)), NOW), "quiet for 40 minutes");
         assert_eq!(quiet_for(Some(quiet(1)), NOW), "quiet for 1 minute");

@@ -145,7 +145,7 @@ pub fn docker_stage(log: &str) -> Option<String> {
     // Docker's phase names, as its 4.8x and 4.9x installers write them, in the order they come. A name not on
     // this list is still shown, as Docker wrote it: a newer installer is not a reason to go quiet.
     let known = [
-        ("pre-check", "checking this PC"),
+        ("pre-check", "checking this device"),
         ("staging", "copying Docker's files"),
         ("teardown", "stopping the old version"),
         ("backup", "setting the old version aside"),

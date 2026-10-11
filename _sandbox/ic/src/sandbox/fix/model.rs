@@ -216,11 +216,11 @@ impl Repair {
         let of = slug.map(|slug| format!(" {slug}")).unwrap_or_default();
         match self {
             Repair::RestartDesktop => {
-                "Restart Docker Desktop? Every sandbox on this machine restarts with it.".to_string()
+                "Restart Docker Desktop? Every sandbox on this device restarts with it.".to_string()
             }
-            Repair::ShutdownWsl => "Restart WSL and the container engine? This stops every WSL distro on this PC, including anything running in them.".to_string(),
+            Repair::ShutdownWsl => "Restart WSL and the container engine? This stops every WSL distro on this device, including anything running in them.".to_string(),
             Repair::RestartIntenticEngine => {
-                "Restart the intentic engine? Every sandbox on this PC restarts with it.".to_string()
+                "Restart the intentic engine? Every sandbox on this device restarts with it.".to_string()
             }
             Repair::ReapplyIntegration => {
                 "Restart Docker Desktop to re-apply its WSL integration?".to_string()

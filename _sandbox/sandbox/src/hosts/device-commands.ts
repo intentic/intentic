@@ -1,4 +1,4 @@
-import { type InstallScript, installScriptUrl } from "@intentic/constants";
+import { type InstallScript, installScriptUrl, oneLinerCommand, oneLinerHostOf } from "@intentic/constants";
 import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, DeviceFacts } from "@intentic/sandbox-contract";
 
 import {
@@ -62,6 +62,9 @@ export interface DeviceCommandFacts {
     readonly connections: readonly string[];
     /** Minted for this one call, and only for a command whose spec asks for one. */
     readonly pairToken: string | undefined;
+    // The single-use short code minted beside it, standing for the token, the mode and the folder: what the line
+    // carries instead of them (`sync/<host>/<code>`).
+    readonly pairCode: string | undefined;
 }
 
 // Where this command will run, once the route is known: the environment it lands in decides the dialect a line is
@@ -128,7 +131,15 @@ const WITH_PNPM = 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; exp
 // shape that has always worked there.
 const OWN_SESSION = "detach=$(command -v setsid 2>/dev/null || true);";
 
-// An agent's install one-liner in its target's own dialect; every value arrives already quoted for that shell.
+// An agent's install one-liner in its target's own dialect, `device/<host>/<code>` or `sync/<host>/<code>` from the
+// shared table (@intentic/constants), so this side and the editor spell the URL one way. Undefined for a sandbox no
+// one-liner can reach (localhost, in local dev) or no code; the caller then falls back to `agentInstallLine`.
+export const codedInstallLine = (dialect: "powershell" | "sh", verb: "device" | "sync", publicUrl: string, code: string | undefined): string | undefined => {
+    const host = oneLinerHostOf(publicUrl);
+    return host === undefined || code === undefined ? undefined : oneLinerCommand(verb, [host, code], dialect === "powershell" ? "ps1" : "sh");
+};
+
+// The older form, for a sandbox reached on localhost: the values as environment, every one already quoted for that shell.
 export const agentInstallLine = (
     dialect: "powershell" | "sh",
     scripts: { readonly powershell: InstallScript; readonly sh: InstallScript },
@@ -142,10 +153,10 @@ export const agentInstallLine = (
               .map(([name, value]) => `${name}=${value}`)
               .join(" ")} sh`;
 
-// The install one-liner for this sandbox, in the dialect of the environment it will RUN in — the same script,
-// environment and single-use token the card's copyable command carries, built from the same table
-// (@intentic/constants). The folder is what picks that environment (`doorRoute`), so a folder in a distro gets the sh
-// form inside that distro even when the door is the PC's Windows side.
+// The install one-liner for this sandbox, in the dialect of the environment it will RUN in — the same `sync/<host>/<code>`
+// the card's copyable command is, built from the same table (@intentic/constants); the folder and mode ride the code.
+// The folder is what picks that environment (`doorRoute`), so a folder in a distro gets the sh form inside that distro
+// even when the door is the PC's Windows side.
 const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}): string | undefined => {
     if (facts.pairToken === undefined || facts.publicUrl === "") {
         return undefined;
@@ -153,6 +164,10 @@ const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}):
     // Mirror enrollments carry no folder at all: they forward ports and touch no files.
     const dir = facts.mode === "mirror" ? undefined : facts.localDir;
     const windowsTarget = route.environment === undefined ? facts.platform === "windows" : route.environment === HOST_NATIVE_ENVIRONMENT;
+    const coded = codedInstallLine(windowsTarget ? "powershell" : "sh", "sync", facts.publicUrl, facts.pairCode);
+    if (coded !== undefined) {
+        return coded;
+    }
     return agentInstallLine(windowsTarget ? "powershell" : "sh", { powershell: "desktopPs1", sh: "desktopSh" }, {
         SANDBOX_URL: `'${facts.publicUrl}'`,
         PAIR_TOKEN: `'${facts.pairToken}'`,
@@ -314,8 +329,17 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         port: input.port,
         pairedDir: door?.report?.pairings.find((pairing) => pairing.sandboxId === input.sandboxId)?.localDir,
         connections: siblings.filter((entry) => services.hostHub.online(entry.id)).map((entry) => entry.environment),
-        pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
+        ...(spec.mints === true ? mintSyncInstall(services, input) : { pairToken: undefined, pairCode: undefined }),
     };
+};
+
+// The pairing a sync install spends, and the code that stands for it with the mode and folder bound to it.
+const mintSyncInstall = (services: Services, input: DeviceCommandInput): { readonly pairToken: string; readonly pairCode: string } => {
+    const mode = input.mode ?? "sync";
+    const minted = services.syncPairings.mint(mode);
+    const syncDir = mode === "mirror" ? undefined : input.localDir;
+    const pairCode = services.redeemCodes.mint({ kind: "sync", pairToken: minted.token, mode, syncDir }, minted.expiresIn);
+    return { pairToken: minted.token, pairCode };
 };
 
 // How this door runs this command: itself, or by crossing into the environment of the same computer that holds the

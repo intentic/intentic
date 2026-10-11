@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { plural } from "@intentic/base/format";
-import { homeDir } from "@intentic/local-agent";
+import { explain, homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
     DeviceSandboxSchema,
@@ -503,13 +503,15 @@ export const runIcAttached = async (args: readonly string[]): Promise<number> =>
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
-        const code = await new Promise<number | "missing">((resolve) => {
+        const code = await new Promise<number | "missing">((resolve, reject) => {
             const child = spawn(binary, [...args], { stdio: "inherit", windowsHide: true });
             child.once("error", (error: NodeJS.ErrnoException) => {
-                if (error.code !== "ENOENT") {
-                    process.stderr.write(`${error.message}\n`);
+                // A binary that is there and will not start is this run's stop (cli-ui.ts), said in its own words.
+                if (error.code === "ENOENT") {
+                    resolve("missing");
+                } else {
+                    reject(error);
                 }
-                resolve(error.code === "ENOENT" ? "missing" : 1);
             });
             child.once("close", (exit) => resolve(exit ?? 1));
         });
@@ -517,7 +519,7 @@ export const runIcAttached = async (args: readonly string[]): Promise<number> =>
             return code;
         }
         if (index === candidates.length - 1) {
-            throw new Error("This device has no `ic` command. Re-run a sandbox's install command on it to get one.");
+            throw new Error(explain("This device has no ic command.", "no ic was found where this agent installs it.", "run a sandbox's install command on this device again."));
         }
     }
     throw new Error("no ic candidate was tried");

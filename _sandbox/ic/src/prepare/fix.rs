@@ -101,7 +101,7 @@ exit 1\n";
 #[cfg(windows)]
 pub fn install_intentic_engine() -> Fixed {
     let mut progress = |sentence: &str, _percent: Option<u64>| super::progress(sentence);
-    // `ic docker prepare` installs the engine only where it chose it: this PC's sandboxes run on it.
+    // `ic docker prepare` installs the engine only where it chose it: this device's sandboxes run on it.
     crate::engine::install(&mut progress, true)
         .map(|_| Done::Now)
         .map_err(Trouble::Failed)
@@ -310,7 +310,7 @@ pub fn run_elevated_batch(
     let _ = std::fs::remove_file(&steps_path);
     let script = build_elevated_batch_script(&steps_path, &bodies);
     let steps_for_watch = steps_path.clone();
-    let mut watch = super::elevated_watch("Setting up this PC", move || {
+    let mut watch = super::elevated_watch("Setting up this device", move || {
         let text = std::fs::read(&steps_for_watch).ok()?;
         let text = String::from_utf8_lossy(&text);
         text.lines().rev().find_map(|line| {
@@ -483,7 +483,7 @@ pub fn download_installer(into: &std::path::Path, row: &'static str) -> Result<(
         },
     )
     .map_err(|error| {
-        format!("Docker Desktop could not be downloaded ({error}). Check this PC's internet connection, then try again: the download continues from where it stopped.")
+        format!("Docker Desktop could not be downloaded ({error}). Check this device's internet connection, then try again: the download continues from where it stopped.")
     })?;
     crate::ui::note(&super::watch::download_resumed(
         last.0,
@@ -822,7 +822,7 @@ pub fn restart_windows() -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "Windows refused to restart ({}). Restart this PC yourself; the setup continues once you are back.",
+        "Windows refused to restart ({}). Restart this device yourself; the setup continues once you are back.",
         output.stderr.trim()
     ))
 }

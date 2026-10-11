@@ -5,17 +5,13 @@ import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@in
 import {
     AnchoredOverlay,
     browserOwnsClick,
-    Code,
-    commandLang,
     ConfirmDialog,
     Notice,
-    osOptions,
     SandboxLogo,
-    SegmentedControl,
     StatusBadge,
     type Tip,
     type TipRow,
-    useOsPreference,
+    type CommandOs,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
@@ -40,7 +36,9 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { oneLiner } from "../../../app/environments/scriptCommand";
+import RunCommand from "../../../components/RunCommand.vue";
+import { oneLinerFits } from "@intentic/constants";
 import { announceDesktopRoster, DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
 import { removalTakes } from "./switcherRows";
@@ -60,7 +58,6 @@ const router = useRouter();
 const route = useRoute();
 // Everything the sandbox needs from its owner: a badge from `needs`, plus rows for `needs` and `notes`.
 const { needs: attention, notes: attentionNotes, badge: attentionBadge } = useSandboxAttention();
-const { cmdOs } = useOsPreference();
 // WORK THAT ENDS BY REPLACING THIS SANDBOX, while it is still running. Not on the attention badge, which counts what
 // the sandbox needs from its owner: this needs nothing, interrupts nothing yet, and is over in minutes — a standing
 // badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
@@ -313,13 +310,13 @@ watch(pending, async (target) => {
     cleanupSlug.value = sandboxSubdomain(await sandboxIdFromToken(target.token));
 });
 
-// Follows the shared OS preference, since the host may be Windows where the POSIX one-liner can't run.
+// The remove one-liner for the device it runs on (recoverable there for 7 days), in the shell the reader picks.
 const cleanupCommand = computed(() => {
     const slug = cleanupSlug.value;
-    if (slug === undefined) {
+    if (slug === undefined || !oneLinerFits(`remove`, [slug])) {
         return undefined;
     }
-    return cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``, `-Slug ${slug} -Yes`) : bashCommand(`cleanup`, ``, `${slug} -y`);
+    return (os: CommandOs): string => oneLiner(`remove`, [slug], os);
 });
 
 // The machine running this sandbox, when it is one of the owner's connected devices: then deleting the container
@@ -670,14 +667,7 @@ const confirmRemove = async (): Promise<void> => {
             </template>
             <template v-else>
                 <p class="mt-3 text-sm text-muted">{{ t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`) }}</p>
-                <SegmentedControl class="mt-2" v-model="cmdOs" :options="osOptions()" />
-                <Code
-                    class="mt-1.5"
-                    :code="cleanupCommand"
-                    :lang="commandLang(cmdOs)"
-                    :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)"
-                    :wrap="true"
-                />
+                <RunCommand class="mt-2" :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
             </template>
         </template>
     </ConfirmDialog>

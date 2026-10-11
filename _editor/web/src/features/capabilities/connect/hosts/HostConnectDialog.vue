@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
-import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom, toneTint } from "@intentic/ui";
+import { Button, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom, toneTint } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
+import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../../../app/environments/scriptCommand";
+import RunCommand from "../../../../components/RunCommand.vue";
 import { cleanName } from "../../model/form";
-import ScriptSourceSwitch from "../ScriptSourceSwitch.vue";
 import { useCapabilities } from "../useCapabilities";
 import { useT } from "@intentic/ui/i18n";
 
@@ -25,7 +25,7 @@ const t = useT();
 const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string; unnamed?: boolean }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void; (event: "renamed", to: string): void }>();
 
-const { peerFor, pairToken, minting, error, connect, start, stop, close } = usePeerConnect<HostSummary>(HOST_DOOR);
+const { peerFor, pairToken, pairCode, pairExpiresAt, minting, error, connect, start, stop, close } = usePeerConnect<HostSummary>(HOST_DOOR);
 const { daemonUrl } = useSandbox();
 
 // The distros every connected Windows PC lists, read off the fleet already held (no poll): the Linux one-liner can
@@ -100,10 +100,19 @@ const takeHostname = async (): Promise<void> => {
 // The Linux one-liner as PowerShell hands it to a distro: one double-quoted argument for `sh -c`, which wsl.exe
 // passes through verbatim under `--exec`. The line carries no `$` or backtick, so PowerShell leaves it alone.
 const fromPowerShell = computed(() => props.platform === `linux` && via.value === `powershell` && distro.value !== ``);
+// The `device/<host>/<code>` one-liner, carrying the single-use code the daemon minted beside the token. A sandbox no
+// one-liner can reach (localhost, in local dev) or a daemon that mints no code keeps the token in environment variables.
+const commandOs = computed(() => (props.platform === `windows` || fromPowerShell.value ? `windows` : `unix`));
 const command = computed(() => {
     const url = daemonUrl.value ?? ``;
     if (url === `` || pairToken.value === undefined) {
         return ``;
+    }
+    const address = oneLinerHost(url);
+    const code = pairCode.value;
+    if (address !== undefined && code !== undefined) {
+        const line = oneLiner(`device`, [address, code], props.platform === `windows` ? `windows` : `unix`);
+        return fromPowerShell.value ? `wsl -d ${distro.value} --exec sh -c "${line}"` : line;
     }
     if (props.platform === `windows`) {
         return psCommand(`devicePs1`, `$env:SANDBOX_URL='${url}'; $env:PAIR_TOKEN='${pairToken.value}'; `);
@@ -192,8 +201,14 @@ onBeforeUnmount(stop);
                         <SegmentedControl v-model="distro" :options="distroOptions" size="xs" />
                     </template>
                 </div>
-                <ScriptSourceSwitch />
-                <Code :code="command" :lang="platform === `windows` || fromPowerShell ? `powershell` : `bash`" :wrap="true" />
+                <RunCommand
+                    :command="command"
+                    :os="commandOs"
+                    source-switch
+                    :expires-at="pairExpiresAt"
+                    :renewing="minting"
+                    @renew="void connect(id)"
+                />
                 <p class="text-2xs text-subtle">
                     {{ t(`capabilities.hostConnectDialog.codeInCommandWorks`) }}
                 </p>

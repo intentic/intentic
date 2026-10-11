@@ -1318,7 +1318,7 @@ export const registerMutagenAutostart = (mutagen: string, launcher: CliLauncher,
         spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
         setWindowsRunValue(MUTAGEN_RUN_VALUE, quotedCommandLine(stubCommand(stub, mutagenDaemonLogPath, [mutagen, "daemon", "start"])));
     } catch (error) {
-        log(`note: could not register the Mutagen daemon for autostart (${errorMessage(error)}); it still runs while you're logged in.`);
+        log(`Could not register the Mutagen daemon for autostart (${errorMessage(error)}); it still runs while you're signed in.`);
     }
 };
 

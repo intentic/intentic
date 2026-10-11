@@ -863,7 +863,7 @@
         },
         "hostConnectDialog": {
             "callsItself": "Esta máquina se llama a sí misma",
-            "codeInCommandWorks": "El código de este comando funciona una vez y caduca en unos diez minutos. Esta ventana se actualiza sola cuando el dispositivo conecta.",
+            "codeInCommandWorks": "Esta ventana se actualiza sola cuando el dispositivo se conecta.",
             "connectedAgentWorkOn": "está conectado. El agente puede trabajar con él desde su próximo turno.",
             "couldNotRename": "No se pudo tomar ese nombre.",
             "inside": "dentro de",
@@ -2028,6 +2028,12 @@
             "author": "De",
             "automation": "Automatización",
             "channel": "Canal"
+        },
+        "runCommand": {
+            "codeLabel": "Comando para ejecutar",
+            "expiresIn": "De un solo uso, caduca en {time}.",
+            "expired": "Este comando ha caducado.",
+            "renew": "Nuevo comando"
         }
     },
     "connect": {
@@ -2594,7 +2600,6 @@
             "buttonAsksToDo": "le pide que haga exactamente eso.",
             "chooseFolderOnDevice": "Elige una carpeta de este dispositivo",
             "collaboratorMirrorSandboxsDev": "Como colaborador, puedes replicar los servidores de desarrollo del sandbox en tu propio localhost para ver vistas previas en vivo. No se sincroniza ningún archivo más allá de lo que el espacio de trabajo ya muestra.",
-            "commandSingleUseExpires": "Este comando es de un solo uso y caduca en ~10 minutos.",
             "desktopSyncNeedsSsh": "La sincronización de escritorio necesita una vía SSH hacia este sandbox. Los sandboxes que conectamos por ti todavía no la tienen, pero uno detrás de tu propio dominio sí.",
             "device": ".",
             "deviceThatGetsPorts": "el dispositivo que debería recibir los puertos",
@@ -2608,7 +2613,6 @@
             "pairAnotherDeviceSandbox": "Empareja otro dispositivo con este sandbox. Todo lo ya emparejado aparece en el",
             "pickFolderInSystem": "Elige la carpeta en un diálogo del sistema: ella y los archivos del sandbox se mantienen al paso, en ambos sentidos.",
             "portsOnlySandboxsDev": "Solo puertos: los servidores de desarrollo del sandbox aparecen en el localhost del dispositivo que se da de alta. No se sincroniza ningún archivo.",
-            "regenerate": "Regenerar",
             "removesAllDevices": "lo elimina todo; ese",
             "runOnDeviceInstalls": "Ejecuta esto en tu dispositivo. Instala el agente y arranca dos cosas: la sincronización de archivos y una réplica de puertos que pone los servidores de desarrollo del sandbox en tu localhost. No hace falta iniciar sesión.",
             "runOnDeviceShould": "Ejecuta esto en el dispositivo que debería recibir los puertos. Instala el agente y replica los servidores de desarrollo del sandbox en su localhost. No se sincroniza ningún archivo y no hace falta iniciar sesión.",
@@ -3453,7 +3457,6 @@
             "whatSyncDoes": "Empareja este ordenador con el sandbox y refleja una carpeta en ambos sentidos."
         },
         "sandboxBehindCard": {
-            "copyRestartCommand": "Copiar el comando de reinicio",
             "restartTipTitle": "Reinicio rápido",
             "restartTipOn": "Reconstruye en",
             "restartTipTakes": "Tarda",
@@ -3464,10 +3467,11 @@
             "rebuiltOnReloadPage": "Reconstruido en {hostId}: recarga esta página para recogerlo.",
             "restartSandbox": "Reiniciar el sandbox",
             "restartingOn": "Reconstruyendo en {hostId} y reiniciando. Esta página se quedará en silencio un momento y volverá por sí sola.",
-            "run": "Ejecuta",
+            "run": "Ejecuta esto en el checkout:",
             "staysUpdateSandboxImage": "Si se queda, actualiza la imagen del sandbox.",
-            "stillHereRun": "¿Sigue aquí? Ejecuta",
-            "updateSandboxImage": "Actualiza la imagen del sandbox."
+            "stillHereRun": "¿Sigue aquí? Ejecuta esto en el checkout:",
+            "updateSandboxImage": "Actualiza la imagen del sandbox.",
+            "restartCommand": "Comando para reiniciar"
         },
         "recentlyDeleted": {
             "comesBackAsName": "Vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina donde se ejecutaba",
@@ -3522,7 +3526,7 @@
             "usage": "Uso"
         },
         "sandboxOutdatedNotice": {
-            "manual": "¿Lo instalaste tú? Reinstálalo o ejecuta esto en la máquina donde corre:",
+            "manual": "¿La instalaste tú? Reinstálala o ejecuta esto en el dispositivo donde se ejecuta:",
             "title": "Este sandbox ejecuta una versión anterior",
             "update": "Actualizar el sandbox"
         },
@@ -3623,7 +3627,7 @@
         },
         "sandboxSwitcher": {
             "alsoDelete": "Eliminarlo también de",
-            "cleanupCommand": "Comando de limpieza",
+            "cleanupCommand": "Comando para quitar",
             "containerFilesHistoryGone": "— su contenedor allí se detiene, y sus archivos y su historial se conservan una semana antes de eliminarse.",
             "inProgress": "En curso",
             "leaveLoseAccessSandbox": "¿Salir de «{name}»? Pierdes el acceso; el sandbox sigue funcionando.",
@@ -3643,7 +3647,7 @@
             "sandboxSettings": "Ajustes del sandbox",
             "status": "Estado",
             "switchSandbox": "Cambiar de sandbox: {switcherLabel}",
-            "toAlsoRemoveMachine": "Para quitarlo también de la máquina que lo aloja, incluidos sus archivos, ejecuta allí:",
+            "toAlsoRemoveMachine": "Para quitarla también del dispositivo donde se ejecuta, ejecuta esto allí. Seguirá siendo recuperable allí durante 7 días.",
             "undoLastUpdate": "Deshace la última actualización",
             "update": "Actualización",
             "waitingUnknown": "Pendientes desconocidos"
@@ -4385,7 +4389,6 @@
             "hideCommand": "Ocultar el comando",
             "hostedSandboxesSwitchedOff": "Los sandboxes alojados están desactivados para esta cuenta; el correo que enviamos explica por qué y a dónde escribir. Ejecutarlo en tu propio ordenador no se ve afectado.",
             "httpsAddressSandboxAlready": "La dirección https en la que tu sandbox ya responde (https:// es opcional).",
-            "iAlreadyDocker": "Ya tengo Docker",
             "installsDockerNeedStarts": "Instala Docker si lo necesitas, inicia tu sandbox y su túnel, y abre tu espacio de trabajo en cuanto responda. Sin terminal.",
             "keepAddress": "Quedarse con esta dirección",
             "localDevBuildsCheckout": "Desarrollo local: compila desde tu checkout",
@@ -4398,7 +4401,6 @@
             "nothingRunsUntilPress": "Nada se ejecuta hasta que pulses «Prepáralo ahora» arriba.",
             "nothingToDoAccount": "No tiene nada que ver con tu cuenta, y estamos añadiendo más. Prepararlo en tu propio ordenador lleva un par de minutos y no tiene límite alguno; o vuelve un poco más tarde y tendremos sitio.",
             "nothingToForwardTo": "sin nada a lo que reenviar. Inicia el contenedor del sandbox",
-            "oneJobInstallingDocker": "está ahí para una sola tarea: instalar Docker si falta.",
             "openChat": "Abrir chat",
             "otherWaysToSet": "Otras formas de prepararlo",
             "otherWaysToSet2": "Otras formas de prepararlo:",
@@ -4419,7 +4421,6 @@
             "runOnComputerNotPhone": "Ejecuta esto en un terminal de tu ordenador, no en este teléfono.",
             "runOnMyOwn": "Ejecutarlo en mi propio ordenador",
             "running": "en marcha.",
-            "runsNo": "Se ejecuta como tú, sin",
             "runsOnComputerYours": "Se ejecuta en un ordenador tuyo. Estarás trabajando en él en un minuto o dos.",
             "runsOnOurServers": "Se ejecuta en nuestros servidores",
             "sandboxReachableAt": "✓ Tu sandbox estará accesible en",
@@ -4505,7 +4506,7 @@
             "dials": "Mandos",
             "installDockerYourself": "Instalar Docker yo mismo",
             "out": "fuera",
-            "removesAll": "Lo elimina todo",
+            "removesAll": "Lo vuelve a quitar. Pregunta qué sandbox y la deja recuperable durante 7 días.",
             "startsSandboxIn": "Inicia tu sandbox en",
             "toReachBrowserNo": "para llegar a tu navegador, sin puertos de entrada",
             "useDesktopApp": "O usa la aplicación de escritorio",
@@ -4835,18 +4836,20 @@
             "doesntLookLikeCloudflare": "Eso no parece un token de API de Cloudflare: revisa si se ha colado algo al copiar y pegar.",
             "hostNameOptional": "Nombre de host (opcional)",
             "howConnectingMachineWorks": "Cómo funciona conectar una máquina",
-            "oneCommandRunOn": "Un comando, ejecutado en el host de destino como root. Cloudflare se configura como parte de él.",
+            "oneCommandRunOn": "Un comando, ejecutado en el servidor. Pide permisos de root y configura Cloudflare de paso.",
             "ownerConnectsServers": "Solo el propietario de este sandbox puede conectar un servidor: el comando lleva su token de conexión, que solo tiene él.",
             "repeatPerMachine": "Repite en cada máquina",
-            "runInPowershellOn": "Ejecútalo en PowerShell en la máquina en la que quieres desplegar (necesita Docker Desktop)",
             "runOn": "Ejecutar en",
-            "runOnMachineWant": "Ejecútalo en la máquina en la que quieres desplegar (necesita root)",
+            "runOnMachineWant": "Comando para ejecutar en el servidor donde quieres desplegar",
             "savedInIntent": "✓ Guardado en la intención como",
             "shortNameMachineIn": "Un nombre corto para esta máquina en tu intención.",
             "useLowercaseLettersDigits": "Usa solo minúsculas, dígitos y guiones.",
             "userKeyTunnel": "Usuario, clave SSH, túnel",
             "waitingMachinesToRegister": "Esperando a que las máquinas se registren: cada una aparece en tu lista de servidores según la conectas. Vuelve a ejecutar el comando en cada host que quieras añadir.",
-            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Viaja con el comando hasta tu host, nunca a la plataforma."
+            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Viaja con el comando hasta tu host, nunca a la plataforma.",
+            "showCommand": "Mostrar el comando",
+            "codeFailed": "La sandbox no pudo crear un comando ({status}).",
+            "asksCloudflareToken": "Ejecuta esto en el servidor, que te pedirá allí tu token de API de Cloudflare (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), así el token nunca sale de él."
         },
         "coreViews": {
             "health": "Salud",

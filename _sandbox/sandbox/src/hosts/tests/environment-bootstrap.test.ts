@@ -32,16 +32,27 @@ interface Ran {
     readonly in: unknown;
 }
 
-const services = (over: { enrolled?: (id: string) => boolean; answer?: () => { text: string; refused: boolean } } = {}) => {
+const services = (
+    over: { enrolled?: (id: string) => boolean; answer?: () => { text: string; refused: boolean }; publicUrl?: string } = {},
+) => {
     const ran: Ran[] = [];
     const minted: string[] = [];
+    // What each short code was minted to stand for, in mint order; the code is its index.
+    const codes: unknown[] = [];
     const logged: object[] = [];
     return {
         ran,
         minted,
+        codes,
         logged,
         services: {
-            config: { sandbox: { publicUrl: "https://work-abc.intentic.dev" } },
+            config: { sandbox: { publicUrl: over.publicUrl ?? "https://work-abc.intentic.dev" } },
+            redeemCodes: {
+                mint: (grant: unknown) => {
+                    codes.push(grant);
+                    return `CODE000${codes.length}`;
+                },
+            },
             hosts: {
                 enrolled: async (id: string) => over.enrolled?.(id) ?? false,
                 // Which card and environment the connection that came up is: its enrollment's record says.
@@ -94,6 +105,17 @@ test("installs the agent in the distro from the Windows side, with a token minte
     // Sent through the door that IS connected, carried into the one that is not.
     expect(world.ran[0]?.id).toBe("rog");
     expect(world.ran[0]?.in).toBe("wsl:archlinux");
+    // The command carries a single-use code standing for that token, never the token itself.
+    expect(world.ran[0]?.command).toBe("curl -fsSL https://intentic.dev/device/work-abc.intentic.dev/CODE0001 | sh");
+    expect(world.codes).toEqual([{ kind: "device", pairToken: "iht_for_rog::wsl:archlinux" }]);
+});
+
+// Local dev: a sandbox on localhost has no address a one-liner could carry, so the token rides as environment.
+test("keeps the token in environment variables for a sandbox reached on localhost", async () => {
+    const world = services({ publicUrl: "https://localhost:8788" });
+    bootstrapEnvironments(world.services, "rog", WINDOWS);
+    await settle();
+
     expect(world.ran[0]?.command).toContain("intentic.dev/device");
     expect(world.ran[0]?.command).toContain("PAIR_TOKEN='iht_for_rog::wsl:archlinux'");
 });
@@ -106,8 +128,7 @@ test("installs the agent on the Windows side from inside a distro, in PowerShell
     expect(world.minted).toEqual(["rog"]);
     expect(world.ran[0]?.id).toBe("rog::wsl:archlinux");
     expect(world.ran[0]?.in).toBe("windows");
-    expect(world.ran[0]?.command).toContain("irm https://intentic.dev/device.ps1 | iex");
-    expect(world.ran[0]?.command).toContain("$env:PAIR_TOKEN='iht_for_rog'");
+    expect(world.ran[0]?.command).toBe("irm https://intentic.dev/device/work-abc.intentic.dev/CODE0001 | iex");
 });
 
 // The state this runs in most often: everything already connected, on every reconnect of every environment.

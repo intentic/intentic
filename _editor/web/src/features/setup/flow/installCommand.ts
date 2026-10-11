@@ -1,9 +1,12 @@
-import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { DEFAULT_SYNC_ROOT, oneLinerFits, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scriptCommand";
 
-// The install command a reader pastes on their own machine: the setup code, plus what rides with it as environment
-// (the own-zone Cloudflare token, the local-dev platform, this page's origin, the sync folder). Everything between the
-// pipe and `sh` on unix; `$env:` assignments ahead of the script on Windows.
+// The install command a reader pastes on their own device. Almost always the one-liner, `…/setup/<code>` (plus the
+// sync folder's leaf, `…/setup/<code>/<leaf>`, while sync is on with a folder under ~/intentic). Only what that URL
+// cannot carry keeps the older form with the values as environment: the own-zone Cloudflare token, the local-dev
+// platform, a page origin other than the default, a sync folder somewhere else. Everything between the pipe and `sh`
+// on unix; `$env:` assignments ahead of the script on Windows. Never `sudo`: connect.sh asks for root itself, at the
+// one step that needs it.
 
 // Locally built dev image; without it connect.sh pulls `:stable`, whose daemon predates unreleased routes.
 export const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
@@ -21,8 +24,6 @@ export interface CommandInput {
     readonly webOrigin: string | undefined;
     // The folder desktop sync mirrors, while sync is on.
     readonly syncDir: string | undefined;
-    // Root, which only installing Docker needs.
-    readonly sudo: boolean;
 }
 
 // Local dev only: the localhost platform origin rides into the command; undefined for the hosted platform.
@@ -57,7 +58,7 @@ export const unixPrefix = (input: CommandInput): string => {
         input.webOrigin === undefined ? `` : ` WEB_ORIGIN='${input.webOrigin}'`,
         input.syncDir === undefined ? `` : ` SYNC_DIR='${input.syncDir}'`,
     ].join(``);
-    return `${input.sudo ? `sudo ` : ``}${envs === `` ? `` : `env${envs} `}`;
+    return envs === `` ? `` : `env${envs} `;
 };
 
 // The `$env:` assignments ahead of the script, the setup code last.
@@ -70,8 +71,27 @@ export const windowsEnv = (input: CommandInput): string =>
         `$env:SETUP_CODE='${input.code}'; `,
     ].join(``);
 
-export const installCommand = (input: CommandInput): string =>
-    input.os === `windows` ? psCommand(`ps1`, windowsEnv(input)) : bashCommand(`sh`, unixPrefix(input), input.code);
+// The one-liner's arguments, or undefined where something rides that the URL cannot carry. The sync folder rides as its
+// leaf only, and only under ~/intentic: the folder itself never goes through the platform.
+export const setupOneLinerArgs = (input: CommandInput): readonly string[] | undefined => {
+    if (input.cfToken !== undefined || input.platformUrl !== undefined || input.webOrigin !== undefined) {
+        return undefined;
+    }
+    const leaf = input.syncDir?.startsWith(`${DEFAULT_SYNC_ROOT}/`) === true ? input.syncDir.slice(DEFAULT_SYNC_ROOT.length + 1) : undefined;
+    if (input.syncDir !== undefined && leaf === undefined) {
+        return undefined;
+    }
+    const args = leaf === undefined ? [input.code] : [input.code, leaf];
+    return oneLinerFits(`setup`, args) ? args : undefined;
+};
 
-// The uninstaller offered beside it: removes every container, volume and network the install command creates.
-export const uninstallCommand = (os: CommandInput[`os`]): string => (os === `windows` ? psCommand(`cleanupPs1`, ``) : bashCommand(`cleanup`, ``, ``));
+export const installCommand = (input: CommandInput): string => {
+    const args = setupOneLinerArgs(input);
+    if (args !== undefined) {
+        return oneLiner(`setup`, args, input.os);
+    }
+    return input.os === `windows` ? psCommand(`ps1`, windowsEnv(input)) : bashCommand(`sh`, unixPrefix(input), input.code);
+};
+
+// The undo offered beside it: lists the sandboxes on the device and removes the one picked, recoverable for 7 days.
+export const uninstallCommand = (os: CommandInput[`os`]): string => oneLiner(`remove`, [], os);

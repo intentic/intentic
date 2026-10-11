@@ -1,6 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { pairings } from "../peers/enrollment.js";
+import { redeemCodes } from "../peers/redeem-codes.js";
 import { enrolledFleet, syncPairBurns, type SyncMode } from "../peers/desktop-sync.js";
 import type { HostsSlice } from "./hosts-slice.js";
 
@@ -10,6 +11,8 @@ export const hostsSliceFake = ({ historyRoot }: SliceFakeContext) =>
     ({
         // Real pairing table so mint and redeem share one implementation, following the test's own history root.
         syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
+        redeemCodes: redeemCodes(),
+        enrollTokens: pairings(),
         // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
         // so every route running a turn needs it.
         hostReach: async () => undefined,

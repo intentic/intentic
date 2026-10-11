@@ -1,5 +1,5 @@
 import { agentAssetUrl, agentPath, launcherAssetUrl, launcherPath } from "./release.js";
-import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
+import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage, upgradeStop } from "./upgrade.js";
 
 // Records every effect in order, so a test checks the sequence and not just the outcome. Three versions are scripted
 // (downloaded, running, came up) because collapsing them let "upgraded" mean only "bytes on disk".
@@ -190,14 +190,16 @@ describe("runUpgrade reconciles the running agent", () => {
         const { exec } = scripted({ running: "0.9.0", came: "0.9.0" });
         const outcome = await upgrade(exec, TARGET);
         expect(outcome).toEqual({ kind: "agent-behind", installed: TARGET, running: "0.9.0" });
-        expect(upgradeMessage(outcome)).toContain("intentic-machine run --stop");
+        expect(upgradeMessage(outcome)).toContain("is running 0.9.0");
+        expect(upgradeStop(outcome).fix).toBe("intentic-machine run");
     });
 
     it("says nothing came back when the restart leaves the machine unserved", async () => {
         const { exec } = scripted({ running: "0.9.0", came: undefined });
         const outcome = await upgrade(exec, TARGET);
         expect(outcome).toEqual({ kind: "agent-behind", installed: TARGET });
-        expect(upgradeMessage(outcome)).toContain("didn't come back up");
+        expect(upgradeMessage(outcome)).toContain("did not come back up");
+        expect(upgradeStop(outcome).fix).toBe("intentic-machine run");
     });
 });
 
@@ -214,7 +216,7 @@ describe("runUpgrade never moves a machine backwards", () => {
         const { steps, exec } = scripted();
         const outcome = await upgrade(exec, "0.0.0");
         expect(outcome.kind).toBe("current");
-        expect(upgradeMessage(outcome)).toContain("--force");
+        expect(outcome.kind === "current" && outcome.later).toEqual([`replace it with the published ${TARGET}`, "intentic-machine upgrade --force"]);
         expect(steps).toEqual([]);
     });
 

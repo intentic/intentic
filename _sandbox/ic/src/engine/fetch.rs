@@ -14,6 +14,7 @@ pub fn prefetch_line(state: &str, done: u64, total: u64) -> String {
 }
 
 pub fn say_prefetch(state: &str, done: u64, total: u64) {
+    // allow(terminal-output): a column-0 marker the desktop app parses (prefetch.rs, onboarding.rs).
     println!("intentic-prefetch: {}", prefetch_line(state, done, total));
 }
 

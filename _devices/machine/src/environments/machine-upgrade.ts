@@ -58,7 +58,7 @@ export const skippedRefusal = (config: MachineConfig, target: string, force: boo
         return undefined;
     }
     const utcDay = new Date(skipped.at).toISOString().slice(0, 10);
-    return `the agent ${target} kept stopping on this machine and was rolled back on ${utcDay} (UTC), so it is skipped until a newer release is published (\`intentic-machine upgrade --force\` installs it anyway).`;
+    return `the agent ${target} kept stopping on this device and was rolled back on ${utcDay} (UTC), so it is skipped until a newer release is published.`;
 };
 
 // This environment alone, to `target`: what one leg of a machine-wide upgrade and setup's self-update both run. First
@@ -70,7 +70,7 @@ export const upgradeHere = async (target: string, force: boolean, log: Log): Pro
         // allow(silent-catch): a config that does not read holds no skip; the upgrade itself does not depend on it
         const refused = skippedRefusal(await readMachineConfig().catch((): MachineConfig => ({})), target, force);
         if (refused !== undefined) {
-            return { kind: "failed", reason: refused };
+            return { kind: "failed", reason: refused, fix: "intentic-machine upgrade --force" };
         }
         const running = async (): Promise<string | undefined> => (await readResident())?.build;
         const restart = async (): Promise<string | undefined> => {
@@ -141,46 +141,72 @@ export interface MachineUpgradeAsk {
 
 const askArgs = (ask: MachineUpgradeAsk): readonly string[] => [...(ask.force ? ["--force"] : []), ...(ask.level ? ["--level"] : [])];
 
+// How a machine-wide upgrade ended, for the command to draw: the outcome on the side that was asked (absent when it never
+// got that far), the sentence that says it, and the distros whose own leg did not land.
+export interface MachineUpgradeEnd {
+    readonly landed: boolean;
+    readonly said: string;
+    readonly outcome?: UpgradeOutcome;
+    readonly legsFailed: readonly string[];
+    // The Windows side ran it and drew its own ending, failure included, on this same terminal.
+    readonly delegated?: true;
+}
+
 // The children first, the side that was asked last: its own restart is what ends a stream a sandbox is reading.
-const upgradeFromRoot = async (io: MachineIo, ask: MachineUpgradeAsk, log: Log): Promise<boolean> => {
+const upgradeFromRoot = async (io: MachineIo, ask: MachineUpgradeAsk, log: Log): Promise<MachineUpgradeEnd> => {
     const children = await io.children();
     const [published, ...theirs] = await Promise.all([ask.level ? Promise.resolve(undefined) : io.published(), ...children.map(io.installedIn)]);
     const target = machineTarget(published, [io.installedHere(), ...theirs]);
     // Levelling never asks the channel, so no target there is a machine with no released side, which is nothing to do.
     if (target === undefined) {
-        log(
-            ask.level
-                ? "Nothing to level: no side of this machine runs a released agent."
-                : "Upgrade didn't happen: couldn't reach the release channel, nothing was changed.",
-        );
-        return ask.level;
+        return ask.level
+            ? { landed: true, said: "Nothing to level: no side of this device runs a released agent.", legsFailed: [] }
+            : { landed: false, said: "The release channel did not answer, so nothing was changed.", legsFailed: [] };
     }
     if (children.length > 0) {
-        log(`Bringing this PC to ${target}: ${[...children, "this side"].join(", ")}.`);
+        log(`Bringing every side of this device to ${target}: ${[...children, "this side"].join(", ")}.`);
     }
-    const legs: boolean[] = [];
+    const legsFailed: string[] = [];
     for (const child of children) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one environment at a time; each restarts what it upgrades
-        legs.push(await io.upgradeIn(child, target));
+        if (!(await io.upgradeIn(child, target))) {
+            legsFailed.push(child);
+        }
     }
     const here = await io.upgradeHere(target);
-    log(upgradeMessage(here));
-    const landed = legs.every(Boolean) && upgradeLanded(here);
+    const landed = legsFailed.length === 0 && upgradeLanded(here);
     await io.recorded(landed ? undefined : target);
-    return landed;
+    return { landed, said: upgradeMessage(here), outcome: here, legsFailed };
 };
 
 // A leg upgrades only itself; a distro hands the whole job to its Windows side; anything else is the root and does it.
-export const upgradeMachine = async (io: MachineIo, ask: MachineUpgradeAsk, log: Log): Promise<boolean> => {
+// True when every side ended on the release; `end` draws the ending (by default, one more line through `log`).
+export const upgradeMachine = async (
+    io: MachineIo,
+    ask: MachineUpgradeAsk,
+    log: Log,
+    end: (ending: MachineUpgradeEnd) => void = (ending) => log(ending.said),
+): Promise<boolean> => {
+    const ending = await machineUpgradeEnding(io, ask, log);
+    end(ending);
+    return ending.landed;
+};
+
+const machineUpgradeEnding = async (io: MachineIo, ask: MachineUpgradeAsk, log: Log): Promise<MachineUpgradeEnd> => {
     if (io.leg !== undefined) {
         const outcome = await io.upgradeHere(io.leg);
-        log(upgradeMessage(outcome));
-        return upgradeLanded(outcome);
+        return { landed: upgradeLanded(outcome), said: upgradeMessage(outcome), outcome, legsFailed: [] };
     }
     const root = await io.windowsRoot();
     if (root !== undefined) {
-        log("This is a WSL distro: the whole PC is upgraded from its Windows side.");
-        return io.delegate(root, ["upgrade", ...askArgs(ask)]) === 0;
+        log("This is a WSL distro: the whole device is updated from its Windows side.");
+        const landed = io.delegate(root, ["upgrade", ...askArgs(ask)]) === 0;
+        return {
+            landed,
+            said: landed ? "Updated the agent from the Windows side." : "The Windows side did not finish the update.",
+            legsFailed: [],
+            delegated: true,
+        };
     }
     return await upgradeFromRoot(io, ask, log);
 };

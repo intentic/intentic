@@ -95,6 +95,10 @@ export const installScriptUrl = (key: InstallScript): string => `${PLATFORM_SITE
 /** Script's path in the checkout, for local dev that runs the working tree instead of the published copy. */
 export const installScriptPath = (key: InstallScript): string => `${INSTALL_SCRIPTS_DIR}/${INSTALL_SCRIPTS[key].file}`;
 
+// The verb routes over the same scripts (`https://intentic.dev/<verb>/<arg>`): which verbs exist, what each argument
+// may be, and what it becomes in the script. Its functions read the two values above only when called.
+export * from "./one-liner.js";
+
 // Every port bound inside the container is declared here and asserted distinct, so two services can never silently
 // collide.
 export const DAEMON_PORT = 8787;

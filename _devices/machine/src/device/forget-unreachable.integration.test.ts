@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
 import * as residentOriginal from "../resident.js";
+import { recordingUi } from "../testing.js";
 
 // Dropping the links a machine can no longer reach: the one delete on this device driven from a sandbox, so what it is
 // allowed to act on is the whole subject. It deletes ONLY on live evidence — the resident agent's own stamp — because
@@ -45,9 +46,9 @@ beforeEach(async () => {
 // is unknowable, and a drop that guessed would disconnect a machine whose agent had merely been stopped.
 test("a machine whose agent is not stamping drops nothing at all", async () => {
     await config.upsertLink(link("https://one.example"));
-    const said: string[] = [];
+    const { ui, said } = recordingUi();
 
-    await commands.dropUnreachableLinks((message) => said.push(message));
+    await commands.dropUnreachableLinks(ui);
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
     expect(ensured).not.toHaveBeenCalled();
@@ -57,9 +58,9 @@ test("a machine whose agent is not stamping drops nothing at all", async () => {
 test("every link answering is an answer, not a reason to delete one", async () => {
     await config.upsertLink(link("https://one.example"));
     await config.stampLinkStates({ "https://one.example": { state: "open" } });
-    const said: string[] = [];
+    const { ui, said } = recordingUi();
 
-    await commands.dropUnreachableLinks((message) => said.push(message));
+    await commands.dropUnreachableLinks(ui);
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
     expect(ensured).not.toHaveBeenCalled();
@@ -76,9 +77,9 @@ test("only the links that stopped answering go, and the running agent is left to
         // One attempt short of the threshold: a sandbox that is restarting, not one that is gone.
         "https://blipping.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS - 1, since: 1_700_000_000_000 } },
     });
-    const said: string[] = [];
+    const { ui, said } = recordingUi();
 
-    await commands.dropUnreachableLinks((message) => said.push(message));
+    await commands.dropUnreachableLinks(ui);
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://open.example", "https://blipping.example"]);
     // The agent re-reads its links every pass; what is asked here is only that one is running (or retired if none are left).

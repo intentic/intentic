@@ -49,6 +49,8 @@ export const RAW_ROUTES = {
     "GET /system/desktop-view": { auth: "door", beforeBoot: true, control: "never" },
     // Deploy-target enrollment, gated by the connect token.
     "POST /enroll": { auth: "door", control: "never" },
+    // A server-connect code for the owner's command: its single-use enroll token stands in for the connect token.
+    "POST /system/enroll/code": { floor: "owner", control: "never" },
     // An event automation's webhook, gated by the automation's own token.
     "POST /automations/{id}/fire": { auth: "door" },
     // The release gate a pipeline runner waits on, gated by the workflow's minted gate token.
@@ -154,6 +156,9 @@ export const RAW_ROUTES = {
     "POST /ci/webhook/{host}": { auth: "door" },
     // Below maintainer a pairing is capped to port-mirror, so a collaborator may mint a preview tunnel.
     "POST /system/sync/pair": { floor: "collaborator", control: "never" },
+    // A copy-paste command's short code, redeemed by the install script it was handed to: a device's first contact,
+    // gated by the code itself and a limit on failed attempts (peers/redeem-codes.ts).
+    "POST /system/redeem/{code}": { auth: "door", control: "never" },
     // The peer doors: a device, browser or runner redeems its pairing at `enroll` and dials `connect` with the token.
     "POST /system/hosts/pair": { control: "never" },
     "POST /system/hosts/enroll": { auth: "door", control: "never" },

@@ -1,9 +1,9 @@
 use crate::docker;
 use crate::sandbox::lock;
 use crate::sandbox::trash::GRACE_DAYS;
-use crate::sandbox::{list_slugs, trash};
-use crate::tty;
-use crate::util::{bail, Result};
+use crate::sandbox::{days_left, list_slugs, trash};
+use crate::ui;
+use crate::util::{bail, plural, Result};
 
 /* Bring a removed sandbox back from the trash, inside the week its data is kept. */
 
@@ -13,17 +13,27 @@ pub struct Args {
     pub yes: bool,
 }
 
+fn no_docker(what: &str) -> String {
+    ui::explain(
+        &format!("Nothing was {what}."),
+        Some("Docker is not installed on this device, so there is no removed sandbox here."),
+        None,
+    )
+}
+
 pub fn run(args: Args) -> Result<()> {
     if !docker::cli_present() {
-        bail!("docker is not installed — nothing to restore from.");
+        bail!("{}", no_docker("restored"));
     }
     // Anything past its window is gone before it can be offered: listing it would promise a recovery this
-    // machine can no longer perform.
+    // device can no longer perform.
     trash::sweep();
 
     let recoverable = trash::list();
     if recoverable.is_empty() {
-        println!("intentic: nothing to restore — no sandbox has been removed in the last {GRACE_DAYS} days.");
+        ui::quiet(&format!(
+            "Nothing to restore: no sandbox was removed from this device in the last {GRACE_DAYS} days."
+        ));
         return Ok(());
     }
 
@@ -31,28 +41,14 @@ pub fn run(args: Args) -> Result<()> {
     let slug = match args.slug {
         Some(slug) => slug,
         None => {
-            println!("intentic: sandboxes you can bring back:");
-            for (i, entry) in recoverable.iter().enumerate() {
-                println!(
-                    "  {}) {:<24} {} day(s) left",
-                    i + 1,
-                    entry.slug,
-                    entry.days_left(now)
-                );
-            }
-            if !tty::have_tty() {
-                bail!("no terminal for interactive selection — nothing restored.\nRe-run with a SLUG, e.g. 'ic sandbox restore {}'.", recoverable[0].slug);
-            }
-            let Some(reply) = tty::ask("Restore which — a number, \"q\" = cancel: ") else {
-                println!("intentic: cancelled — nothing restored.");
-                return Ok(());
-            };
-            match reply.trim().parse::<usize>() {
-                Ok(number) if (1..=recoverable.len()).contains(&number) => {
-                    recoverable[number - 1].slug.clone()
-                }
+            let choices: Vec<(String, String)> = recoverable
+                .iter()
+                .map(|entry| (entry.slug.clone(), days_left(entry.days_left(now))))
+                .collect();
+            match ui::pick("Which sandbox should be restored?", &choices, false)? {
+                Some(picked) if !picked.is_empty() => recoverable[picked[0]].slug.clone(),
                 _ => {
-                    println!("intentic: cancelled — nothing restored.");
+                    ui::cancelled();
                     return Ok(());
                 }
             }
@@ -62,33 +58,59 @@ pub fn run(args: Args) -> Result<()> {
     // Checked before the lookup: a live slug is deliberately absent from the trash listing, so asking there first
     // would answer "not recoverable" to somebody whose sandbox is simply already back.
     if list_slugs().iter().any(|live| live == &slug) {
-        bail!("a sandbox named '{slug}' is already running on this machine — it is holding the same /work the removed one left behind, so there is nothing to bring back.");
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("{slug} is already running on this device."),
+                Some("it holds the same /work the removed one left behind, so there is nothing to bring back."),
+                None,
+            )
+        );
     }
     let Some(entry) = recoverable.iter().find(|entry| entry.slug == slug) else {
-        let names: String = recoverable
+        let names: Vec<&str> = recoverable
             .iter()
-            .map(|entry| format!("  {}\n", entry.slug))
+            .map(|entry| entry.slug.as_str())
             .collect();
-        bail!("no removed sandbox named '{slug}' is still recoverable. These are:\n{names}");
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("No removed sandbox named {slug} can still be restored."),
+                Some(&format!("these can: {}.", names.join(", "))),
+                Some(&format!("ic sandbox restore {}", names[0])),
+            )
+        );
     };
 
-    println!(
-        "intentic: about to restore '{}' ({} day(s) of its recovery window left).",
-        entry.slug,
-        entry.days_left(now)
-    );
-    if !tty::confirm("Restore it?", args.yes) {
-        println!("intentic: cancelled — nothing restored.");
+    if !ui::confirm(
+        &format!("Restore {}?", entry.slug),
+        &format!(
+            "{} comes back with its files and history as they were. {} of its recovery window are left.",
+            entry.slug,
+            plural(entry.days_left(now) as usize, "day")
+        ),
+        args.yes,
+    )? {
+        ui::cancelled();
         return Ok(());
     }
 
     // One ic at a time on a sandbox: a sweep or a purge of the same slug must not run underneath the restore.
     let _held = lock::hold_for_person(&slug)?;
+    ui::act(&format!("Restoring {slug}"));
     trash::restore(&slug);
-    println!("intentic: restored '{slug}'. Its /work and /history are as they were.");
+    ui::done(&format!(
+        "{slug} is restored. Its /work and /history are as they were."
+    ));
     // Its address is minted per connection, so a restored container answers where it used to only if the
     // platform still knows it; say so rather than let a stale bookmark be the discovery.
-    println!("intentic: if the browser can't reach it, run 'ic sandbox doctor {slug}'.");
+    ui::later(&[(
+        "if the browser can't reach it".to_string(),
+        format!("ic sandbox doctor {slug}"),
+    )]);
+    ui::plain(&format!(
+        "intentic: if the browser can't reach it, run 'ic sandbox doctor {slug}'."
+    ));
     Ok(())
 }
 
@@ -96,66 +118,130 @@ pub fn run(args: Args) -> Result<()> {
 pub struct PurgeArgs {
     pub slugs: Vec<String>,
     pub all: bool,
-    pub yes: bool,
+    /// The typed answer given on the command line: the sandbox's name, or the count. `--yes` never stands in for it.
+    pub confirm: Option<String>,
 }
 
 pub fn purge(args: PurgeArgs) -> Result<()> {
     if !docker::cli_present() {
-        bail!("docker is not installed — nothing to purge.");
+        bail!("{}", no_docker("deleted"));
     }
     let recoverable = trash::list();
     if recoverable.is_empty() {
-        println!("intentic: nothing to purge — the trash is empty.");
+        ui::quiet("Nothing to delete: no removed sandbox is waiting on this device.");
         return Ok(());
     }
+    let names: Vec<&str> = recoverable
+        .iter()
+        .map(|entry| entry.slug.as_str())
+        .collect();
     let selected: Vec<String> = if args.all {
-        recoverable.iter().map(|entry| entry.slug.clone()).collect()
+        names.iter().map(|name| name.to_string()).collect()
     } else {
         args.slugs.clone()
     };
     if selected.is_empty() {
         bail!(
-            "name a sandbox to purge, or pass --all. In the trash now:\n{}",
-            recoverable
-                .iter()
-                .map(|entry| format!("  {}\n", entry.slug))
-                .collect::<String>()
+            "{}",
+            ui::explain(
+                "Nothing was deleted.",
+                Some(&format!(
+                    "the command names no sandbox. Removed and waiting: {}.",
+                    names.join(", ")
+                )),
+                Some(&format!(
+                    "ic sandbox purge {}, or --all for every one",
+                    names[0]
+                )),
+            )
         );
     }
     for slug in &selected {
-        if !recoverable.iter().any(|entry| &entry.slug == slug) {
-            bail!("'{slug}' is not in the trash — nothing purged.");
+        if !names.contains(&slug.as_str()) {
+            bail!(
+                "{}",
+                ui::explain(
+                    "Nothing was deleted.",
+                    Some(&format!(
+                        "{slug} is not a removed sandbox. Removed and waiting: {}.",
+                        names.join(", ")
+                    )),
+                    None,
+                )
+            );
         }
     }
 
-    println!(
-        "intentic: about to PERMANENTLY DELETE the data of {}:",
-        crate::util::plural(selected.len(), "removed sandbox")
-    );
-    for slug in &selected {
-        println!("    {slug}");
-    }
-    println!("This cannot be undone.");
-    if !tty::confirm("Proceed?", args.yes) {
-        println!("intentic: cancelled — nothing purged.");
+    let (asked, consequence) = purge_question(&selected);
+    if !ui::confirm_typed(
+        &asked,
+        &consequence,
+        &crate::sandbox::remove::typed_name(&selected),
+        args.confirm.as_deref(),
+    )? {
+        ui::cancelled();
         return Ok(());
     }
     let mut kept: Vec<String> = Vec::new();
     for slug in &selected {
         let _held = lock::hold_for_person(slug)?;
-        println!("intentic: deleting '{slug}'…");
+        ui::act(&format!("Deleting {slug}"));
         if let Err(why) = trash::purge(slug) {
-            eprintln!("intentic: {why}.");
+            ui::warn(&format!("{why}."));
             kept.push(slug.clone());
         }
     }
     if !kept.is_empty() {
         bail!(
-            "{} could not be deleted completely and stay in the trash, so the next purge or the sweep tries again: {}",
-            crate::util::plural(kept.len(), "sandbox"),
-            kept.join(", ")
+            "{}",
+            ui::explain(
+                &format!(
+                    "{} could not be deleted completely: {}.",
+                    plural(kept.len(), "sandbox"),
+                    kept.join(", ")
+                ),
+                Some("they stay removed, and the next purge or the weekly sweep tries again."),
+                Some("ic sandbox purge --all"),
+            )
         );
     }
-    println!("intentic: done.");
+    ui::done(&format!("{} deleted.", plural(selected.len(), "sandbox")));
     Ok(())
+}
+
+/// The purge's question and what answering does, said first. Pure.
+pub fn purge_question(selected: &[String]) -> (String, String) {
+    let asked = match selected {
+        [one] => format!("Delete {one} for good?"),
+        many => format!(
+            "Delete {} for good? Type {} to confirm.",
+            plural(many.len(), "removed sandbox"),
+            many.len()
+        ),
+    };
+    (
+        asked,
+        format!(
+            "This deletes the files and history of {}, which are otherwise kept until their {GRACE_DAYS} days are up. It cannot be undone.",
+            selected.join(", ")
+        ),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_purge_asks_for_the_name_of_one_or_the_count_of_several() {
+        let one = vec!["work".to_string()];
+        assert_eq!(purge_question(&one).0, "Delete work for good?");
+        assert!(purge_question(&one).1.contains("cannot be undone"));
+        let three: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            purge_question(&three).0,
+            "Delete 3 removed sandboxes for good? Type 3 to confirm."
+        );
+        assert_eq!(crate::sandbox::remove::typed_name(&three), "3");
+    }
 }

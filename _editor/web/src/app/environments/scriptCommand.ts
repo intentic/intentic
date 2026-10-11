@@ -1,4 +1,14 @@
-import { INSTALL_SCRIPTS, type InstallScript, installScriptPath, installScriptUrl } from "@intentic/constants";
+import {
+    INSTALL_SCRIPTS,
+    type InstallScript,
+    installScriptPath,
+    installScriptUrl,
+    oneLinerByPath,
+    oneLinerCommand,
+    oneLinerHostOf,
+    type OneLinerVerb,
+} from "@intentic/constants";
+import type { CommandOs } from "@intentic/ui";
 import { ref, watch } from "vue";
 import { environment } from "./environment";
 
@@ -62,3 +72,18 @@ export const psCommand = (key: ScriptKey, env: string, args = ``): string => {
     }
     return args ? `${env}& ([scriptblock]::Create((irm ${installScriptUrl(key)}))) ${args}` : `${env}irm ${installScriptUrl(key)} | iex`;
 };
+
+/**
+ * THE ONE-LINER for an action (`curl -fsSL https://intentic.dev/<verb>/<arg> | sh`, `irm … | iex`), from the verb table
+ * in @intentic/constants that the site's Worker serves. In a dev build set to the checkout, the same action runs the
+ * working tree's script by path with the same arguments. Throws when an argument does not fit the verb: check with
+ * `oneLinerFits` where it comes from outside.
+ */
+export const oneLiner = (verb: OneLinerVerb, args: readonly string[], os: CommandOs, source?: ScriptSource): string => {
+    const shell = os === `windows` ? `ps1` : `sh`;
+    const published = environment.production || (source ?? scriptSource.value) === `published`;
+    return published ? oneLinerCommand(verb, args, shell) : oneLinerByPath(verb, args, shell);
+};
+
+/** The sandbox's address as a device, sync or server one-liner carries it (@intentic/constants' `oneLinerHostOf`). */
+export const oneLinerHost = oneLinerHostOf;

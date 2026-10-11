@@ -96,6 +96,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |
 | [engines](engines-blessed.mjs) | an `engines.json` version this repository does not pin |
 | [tool-pins](tool-pins.mjs) | a tool the sandbox image pins (ripgrep, gh, cloudflared, pnpm…) at two versions in two places |
+| [scripts-kit](scripts-kit.mjs) | an install script whose generated kit or download region drifted from its source in `_site/site/scripts-kit/` (`--fix` rewrites it) |
 | [build-cache](build-cache-mounts.mjs) | a sandbox image fragment without BuildKit cache mounts |
 | [mirror-roots](mirror-roots.mjs) | replacing a directory an agent turn overlays instead of emptying it |
 | [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |

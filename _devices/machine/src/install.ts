@@ -42,7 +42,7 @@ export const selfUpdateBeforeSetup = async (
         io.reexec(args, outcome.to);
     }
     if (outcome.kind === "failed") {
-        out(`note: couldn't update the agent first (${outcome.reason}) — continuing with ${io.installed}.`);
+        out(`Couldn't update the agent first (${outcome.reason}); continuing with ${io.installed}.`);
     }
 };
 
@@ -67,11 +67,11 @@ const posixPathRepair = async (out: Log): Promise<void> => {
         await rm(link, { force: true });
         await symlink(agentPath, link);
     } catch (error) {
-        out(`note: couldn't link ${link} (${errorMessage(error)}) — run ${agentPath} directly.`);
+        out(`Couldn't link ${link} (${errorMessage(error)}); run ${agentPath} directly.`);
         return;
     }
     if (!(process.env["PATH"] ?? "").split(":").includes(linkDir)) {
-        out(`note: add ~/.local/bin to your PATH to use \`intentic-machine\` directly (or run ${agentPath}).`);
+        out(`Add ~/.local/bin to your PATH to run intentic-machine by name, or run ${agentPath}.`);
     }
 };
 
@@ -147,12 +147,10 @@ const windowsPathRepair = (out: Log): void => {
             return;
         }
         writeWindowsPath(kind, next);
-        out(`note: ${binDir} was added to your PATH — open a new terminal to use \`intentic-machine\` directly.`);
+        out(`${binDir} was added to your PATH: a new terminal runs intentic-machine by name.`);
     } catch (error) {
         // Best-effort: PATH is the convenience, connecting is the job.
-        out(
-            `note: couldn't put ${binDir} on your PATH (${errorMessage(error)}). Run intentic-machine from that folder, or add it to your PATH yourself.`,
-        );
+        out(`Couldn't put ${binDir} on your PATH (${errorMessage(error)}). Run intentic-machine from that folder, or add it to your PATH yourself.`);
     }
 };
 
@@ -169,7 +167,7 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);
         out(
-            `note: couldn't download the windowless launcher (${errorMessage(error)}). Everything still works; a console window will flash on your desktop when this machine starts the agent at login.`,
+            `Couldn't download the windowless launcher (${errorMessage(error)}). Everything still works; a console window flashes on your desktop when this device starts the agent at login.`,
         );
     }
 };
@@ -200,6 +198,6 @@ export const completeSetup = async (out: Log): Promise<void> => {
     }
     delete process.env[UPGRADE_ENV];
     await launchUpgrade(true).catch((error: unknown) =>
-        out(`note: couldn't bring the rest of this PC to this release (${errorMessage(error)}); it catches up within the hour.`),
+        out(`Couldn't bring the rest of this device to this release (${errorMessage(error)}); it catches up within the hour.`),
     );
 };

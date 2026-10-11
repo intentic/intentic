@@ -1,7 +1,7 @@
 import { windowsRunDeleteArgs } from "@intentic/local-agent";
 import type { UpkeepItem } from "./reconcile.js";
 import { reportOf, summaryLine } from "./reconcile.js";
-import { itemLine } from "./doctor.js";
+import { doctorItem } from "./doctor.js";
 import { isInside, trashedAt, trashStamp } from "./trash.js";
 import { loginEntryFinding, mutagenRunDecision, runValueData } from "./login.js";
 import { MANIFEST } from "./manifest.js";
@@ -143,8 +143,8 @@ test("a pass is counted by kind, found and fixed, with every line it left and wh
     expect(summaryLine(reportOf([], NOW, "1.327.0"), true)).toBe("upkeep: nothing left over from older releases, and every store within its bounds.");
 });
 
-test("doctor says each line in the words of what is, or would be, done", () => {
-    expect(itemLine(item({ outcome: "would-fix" }))).toBe("  would move to the trash: /x");
-    expect(itemLine(item({}))).toBe("  moved to the trash: /x");
-    expect(itemLine(item({ outcome: "skipped", why: "in use" }))).toBe("  left: /x — in use");
+test("doctor says each row in the words of what is, or would be, done", () => {
+    expect(doctorItem(item({ outcome: "would-fix" }))).toEqual({ tone: "warn", name: "/x", meta: "would move to the trash" });
+    expect(doctorItem(item({}))).toEqual({ tone: "ok", name: "/x", meta: "moved to the trash" });
+    expect(doctorItem(item({ outcome: "skipped", why: "in use" }))).toEqual({ tone: "skip", name: "/x", meta: "left: in use" });
 });

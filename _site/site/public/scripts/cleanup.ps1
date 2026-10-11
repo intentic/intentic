@@ -1,153 +1,477 @@
 <#
 .SYNOPSIS
-  intentic cleanup (Windows) - remove intentic sandboxes' Docker footprint on THIS PC, INCLUDING the named volumes.
+  intentic remove (Windows): a bootstrap shim. It finds or downloads the ic CLI and hands over to ic sandbox remove,
+  which takes sandboxes off this device: their containers, networks and named /work volumes, with /work and /history
+  kept recoverable for 7 days (ic sandbox restore <slug> brings one back). The flow, its questions and its output are
+  ic's (_sandbox/ic/src/sandbox/remove.rs); this file only maps the parameters older commands handed out onto it.
 
-.DESCRIPTION
-  A sandbox's /work is a NAMED Docker volume (intentic-workspace-<slug>). Removing a container "with volumes" only
-  prunes ANONYMOUS volumes - a named volume survives, so a stale /work persists across re-runs and the daemon's boot
-  gate then skips re-scaffolding. This removes the containers (incl. the Docker-in-Docker deploy target) AND the
-  named volumes AND the networks. It leaves the platform's own resources (intentic-app-*) untouched.
-
-  A PC can host several sandboxes at once (each suffixed by its <slug>). By DEFAULT this lists them and lets you PICK
-  which to remove - it never wipes everything unless you ask. Removing a sandbox DELETES its data (/work + /history),
-  so every removal is confirmed unless you pass -Yes. Non-interactive runs (no console) never auto-remove.
+  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
 
 .PARAMETER Slug
-  One or more sandbox slugs to remove. Omit to pick interactively.
+  One or more sandboxes to remove. Omit to pick (ic asks which).
 
 .PARAMETER All
-  Remove EVERY sandbox on this PC.
+  Remove every sandbox on this device.
 
 .PARAMETER Yes
-  Skip confirmation prompts (scripts/CI).
+  Answer the recoverable remove's question. It never answers a permanent delete's.
+
+.PARAMETER Now
+  Delete the data now instead of keeping it recoverable. ic asks for the sandbox's name to confirm.
+
+.PARAMETER AgentAuth
+  Also remove the shared dev agent-auth volume (the AI logins of every dev sandbox).
 
 .EXAMPLE
-  irm https://intentic.dev/cleanup.ps1 | iex                                   # pick which to remove (interactive)
+  irm https://intentic.dev/remove/<slug> | iex                                  # remove one sandbox (the card's command)
 
 .EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/cleanup.ps1))) -All -Yes  # remove every sandbox, no prompt
+  irm https://intentic.dev/remove | iex                                         # pick which to remove
 
 .EXAMPLE
-  ./cleanup.ps1 -Slug abc123def456
+  & ([scriptblock]::Create((irm https://intentic.dev/cleanup.ps1))) -All -Yes  # the older shape, still served
 #>
 param(
     [string[]]$Slug,
     [switch]$All,
     [switch]$Yes,
+    [switch]$Now,
+    [switch]$AgentAuth,
     [switch]$Help
 )
-# Removal is a long list of docker calls that are ALLOWED to fail (the container/volume/network may already be
-# gone), each silenced with `*> $null`. Not 'Stop': Windows PowerShell 5.1 promotes a redirected native stderr
-# to a terminating error, which would end the cleanup at the first thing that was already clean. See connect.ps1.
+
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-if ($Help) {
-    Write-Host 'intentic cleanup - remove sandbox(es) on this PC (containers + named /work volumes + networks).'
-    Write-Host 'Usage: cleanup.ps1 [-Slug <slug>...] [-All] [-Yes]'
-    Write-Host '  (no arg)   pick which sandbox(es) to remove (interactive); non-interactive runs list and stop'
-    Write-Host '  -Slug      remove the named sandbox(es)'
-    Write-Host '  -All       remove EVERY sandbox on this PC'
-    Write-Host '  -Yes       skip confirmation prompts (scripts/CI)'
-    exit 0
+# >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
+# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
+#
+# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
+# their code points instead.
+#
+#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
+#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
+#   Write-IntenticStep <phase> <sentence> <label>
+#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
+#   Write-IntenticSay <sentence>             narration under the running step
+#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
+#   Suspend-IntenticLine / Resume-IntenticLine
+#                                            hand the screen to a command that prints its own lines, and take it back
+#   Complete-IntenticStep                    the running step is done
+#   Write-IntenticFinished <verdict> [address]
+#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
+#   Stop-Intentic <headline> [problem] [fix] [code]
+#                                            the running step settles as failed, the stop block goes to stderr, and
+#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
+#   Read-IntenticConfirm <question> <consequence> <flag>
+#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
+#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
+#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
+#
+# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
+# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
+# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
+# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+
+$IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
+if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {
+    $IntenticKit.Mode = $env:INTENTIC_UI
+} elseif ($env:INTENTIC_PLAIN -ne '1' -and -not [Console]::IsOutputRedirected) {
+    $IntenticKit.Mode = 'rich'
+}
+$IntenticKit.Color = $IntenticKit.Mode -eq 'rich' -and ($env:FORCE_COLOR -or -not $env:NO_COLOR)
+# Unicode where the console can draw it: pwsh, Windows Terminal, or a console host that took VT processing. The old
+# console with a raster font cannot, and gets ASCII.
+$IntenticUnicode = $PSVersionTable.PSVersion.Major -ge 6 -or [bool]$env:WT_SESSION
+if (-not $IntenticUnicode) { try { $IntenticUnicode = [bool]$Host.UI.SupportsVirtualTerminal } catch { $IntenticUnicode = $false } }
+if ($IntenticUnicode) {
+    $IntenticKit.Ok = [string][char]0x2713; $IntenticKit.Fail = [string][char]0x2717; $IntenticKit.Skip = [string][char]0x00B7
+    $IntenticKit.Run = [string][char]0x2839; $IntenticKit.More = [string][char]0x2026; $IntenticKit.Dot = [string][char]0x00B7
+} else {
+    $IntenticKit.Ok = '+'; $IntenticKit.Fail = 'x'; $IntenticKit.Skip = '-'; $IntenticKit.Run = '|'; $IntenticKit.More = '...'; $IntenticKit.Dot = '-'
+}
+try { if ($Host.UI.RawUI.WindowSize.Width -gt 20) { $IntenticKit.Width = [Math]::Min(100, $Host.UI.RawUI.WindowSize.Width) } } catch { $IntenticKit.Width = 80 }
+
+# One run of text, coloured when colour is on, never ending the line.
+function Write-IntenticRun {
+    param([string]$Text, [string]$Color = '')
+    if ($IntenticKit.Color -and $Color) { Write-Host $Text -NoNewline -ForegroundColor $Color } else { Write-Host $Text -NoNewline }
 }
 
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Error 'docker is not installed - nothing to clean up.'
-    exit 1
+function Write-IntenticLive {
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun $IntenticKit.Run 'Cyan'
+    Write-Host "  $($IntenticKit.Label)$($IntenticKit.More)" -NoNewline
+    $IntenticKit.Open = $true
 }
 
-# -- shared helpers (duplicated in connect.ps1 - this script runs standalone via `irm | iex`, so it can't dot-source
-# a shared file; keep the two in lockstep) ----------------------------------------------------------------------
-
-# True when a console is available to prompt on (false under a non-interactive host / CI).
-function Test-Interactive { [Environment]::UserInteractive -and -not [Console]::IsInputRedirected }
-
-# Distinct sandbox slugs on this PC - the primary containers only (the -tunnel- sidecar shares the prefix).
-function Get-Sandboxes {
-    @(docker ps -a --filter 'name=intentic-sandbox-' --format '{{.Names}}' 2>$null) |
-        Where-Object { $_ -and $_ -notlike 'intentic-sandbox-tunnel-*' } |
-        ForEach-Object { $_ -replace '^intentic-sandbox-', '' }
-}
-
-# yes/no confirmation, default NO. Honors -Yes. Non-interactive => no.
-function Confirm-Action($Message) {
-    if ($Yes) { return $true }
-    if (-not (Test-Interactive)) { return $false }
-    return (Read-Host "$Message [y/N]") -match '^[yY]'
-}
-
-# Remove one sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op).
-function Remove-Slug($s) {
-    Write-Host "intentic: removing sandbox '$s' (containers + named volumes + network)..."
-    foreach ($c in @("intentic-sandbox-$s", "intentic-sandbox-tunnel-$s", "intentic-dind-host-$s")) { docker rm -f $c *> $null }
-    foreach ($v in @("intentic-workspace-$s", "intentic-history-$s", "intentic-docker-$s", "intentic-dind-docker-$s")) { docker volume rm $v *> $null }
-    docker network rm "intentic-workspace-$s" *> $null
-}
-
-# Remove EVERY sandbox by name prefix (also sweeps orphaned volumes/networks a per-slug pass would miss).
-function Remove-All {
-    Write-Host 'intentic: removing sandbox containers...'
-    foreach ($c in (@(docker ps -aq --filter 'name=intentic-sandbox-') + @(docker ps -aq --filter 'name=intentic-dind-host-'))) { if ($c) { docker rm -f $c *> $null } }
-    Write-Host 'intentic: removing named volumes (the persistent /work)...'
-    foreach ($v in (@(docker volume ls -q --filter 'name=intentic-workspace-') + @(docker volume ls -q --filter 'name=intentic-history-') + @(docker volume ls -q --filter 'name=intentic-docker-') + @(docker volume ls -q --filter 'name=intentic-dind-docker-'))) { if ($v) { docker volume rm $v *> $null } }
-    Write-Host 'intentic: removing sandbox network(s)...'
-    foreach ($n in @(docker network ls -q --filter 'name=intentic-workspace-')) { if ($n) { docker network rm $n *> $null } }
-}
-
-# -- resolve which slugs to remove -----------------------------------------------------------------------------
-if ($All) {
-    $all = @(Get-Sandboxes)
-    if ($all.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC - nothing to clean up.'; exit 0 }
-    Write-Host 'intentic: about to PERMANENTLY DELETE ALL sandboxes on this PC and their data (/work + /history):'
-    $all | ForEach-Object { Write-Host "    $_" }
-    Write-Host 'This cannot be undone.'
-    if (-not (Confirm-Action 'Remove all of them?')) { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
-    Remove-All
-    Write-Host 'intentic: all sandboxes removed. Re-run connect to start fresh.'
-    exit 0
-}
-
-$targets = @($Slug | Where-Object { $_ })
-if ($targets.Count -eq 0) {
-    # No -Slug and not -All: pick interactively, or (no console) list and stop without touching anything.
-    $slugs = @(Get-Sandboxes)
-    if ($slugs.Count -eq 0) { Write-Host 'intentic: no sandboxes found on this PC - nothing to clean up.'; exit 0 }
-
-    Write-Host 'intentic: sandboxes on this PC:'
-    for ($i = 0; $i -lt $slugs.Count; $i++) {
-        $st = (docker inspect -f '{{.State.Status}}' "intentic-sandbox-$($slugs[$i])" 2>$null)
-        if (-not $st) { $st = '?' }
-        Write-Host ('  {0,2}) {1,-9} {2}' -f ($i + 1), $st, $slugs[$i])
+function Clear-IntenticLive {
+    if ($IntenticKit.Open) {
+        Write-Host ("`r" + (' ' * ($IntenticKit.Width - 1)) + "`r") -NoNewline
+        $IntenticKit.Open = $false
     }
+}
 
-    if (-not (Test-Interactive)) {
-        Write-Warning 'no console for interactive selection - nothing removed.'
-        Write-Host 'Re-run with -Slug <slug>, or -All to remove every sandbox (add -Yes to skip prompts).'
-        exit 1
+# A whole line above the live one: the live line steps aside and comes back under it.
+function Write-IntenticAbove {
+    param([scriptblock]$Line)
+    $wasOpen = $IntenticKit.Open
+    Clear-IntenticLive
+    & $Line
+    Write-Host ''
+    if ($wasOpen) { Write-IntenticLive }
+}
+
+function Format-IntenticDuration {
+    param([TimeSpan]$Took)
+    if ($Took.TotalSeconds -lt 10) { return ('{0:0.0}s' -f $Took.TotalSeconds) }
+    if ($Took.TotalSeconds -lt 60) { return ('{0}s' -f [int][Math]::Floor($Took.TotalSeconds)) }
+    return ('{0}m' -f [int][Math]::Floor($Took.TotalMinutes))
+}
+
+function Complete-IntenticStep {
+    param([string]$Tone = 'ok')
+    if (-not $IntenticKit.Label) { return }
+    if ($IntenticKit.Mode -eq 'rich') {
+        $took = Format-IntenticDuration $IntenticKit.Clock.Elapsed
+        Clear-IntenticLive
+        Write-Host '  ' -NoNewline
+        switch ($Tone) {
+            'fail' { Write-IntenticRun $IntenticKit.Fail 'Red' }
+            'skip' { Write-IntenticRun $IntenticKit.Skip 'DarkGray' }
+            default { Write-IntenticRun $IntenticKit.Ok 'Green' }
+        }
+        $pad = [Math]::Max(2, $IntenticKit.Width - 7 - $IntenticKit.Label.Length - $took.Length)
+        Write-Host ("  " + $IntenticKit.Label + (' ' * $pad)) -NoNewline
+        Write-IntenticRun $took 'DarkGray'
+        Write-Host ''
     }
+    $IntenticKit.Label = ''
+}
 
-    $sel = Read-Host 'Select sandbox(es) to remove - numbers (e.g. "1 3"), "a" = all, "q" = cancel'
-    if ([string]::IsNullOrWhiteSpace($sel) -or $sel -match '^[qQ]$') { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
-    if ($sel -match '^[aA]$') {
-        $targets = $slugs
-    } else {
-        foreach ($tok in ($sel -split '\s+' | Where-Object { $_ })) {
-            if ($tok -notmatch '^\d+$') { Write-Warning "ignoring invalid selection '$tok'."; continue }
-            $idx = [int]$tok
-            if ($idx -lt 1 -or $idx -gt $slugs.Count) { Write-Warning "ignoring out-of-range selection '$tok'."; continue }
-            $targets += $slugs[$idx - 1]
+function Write-IntenticBegin {
+    param([string]$What, [string]$Scope = '')
+    if ($IntenticKit.Mode -ne 'rich') { return }
+    Write-Host ''
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun "intentic $($IntenticKit.Dot) $What" 'White'
+    Write-Host ''
+    if ($Scope) {
+        Write-Host '  ' -NoNewline
+        Write-IntenticRun $Scope 'DarkGray'
+        Write-Host ''
+    }
+    Write-Host ''
+}
+
+function Write-IntenticStep {
+    param([string]$Phase, [string]$Sentence, [string]$Label)
+    switch ($IntenticKit.Mode) {
+        'plain' { if ($Phase) { Write-Host "intentic: [$Phase] $Sentence" } else { Write-Host "intentic: $Sentence" } }
+        'nested' { Write-Host "        $Label" }
+        default {
+            Complete-IntenticStep 'ok'
+            $IntenticKit.Label = $Label
+            $IntenticKit.Clock = [Diagnostics.Stopwatch]::StartNew()
+            Write-IntenticLive
         }
     }
 }
 
-$targets = @($targets | Where-Object { $_ })
-if ($targets.Count -eq 0) { Write-Host 'intentic: nothing selected - nothing removed.'; exit 0 }
+function Write-IntenticSay {
+    param([string]$Sentence)
+    switch ($IntenticKit.Mode) {
+        'plain' { Write-Host "intentic: $Sentence" }
+        'nested' { Write-Host "        $Sentence" }
+        default { Write-IntenticAbove { Write-Host '        ' -NoNewline; Write-IntenticRun $Sentence 'DarkGray' } }
+    }
+}
 
-Write-Host 'intentic: about to PERMANENTLY DELETE these sandbox(es) and their data (/work + /history):'
-$targets | ForEach-Object { Write-Host "    $_" }
-Write-Host 'This cannot be undone.'
-if (-not (Confirm-Action 'Proceed?')) { Write-Host 'intentic: cancelled - nothing removed.'; exit 0 }
+function Write-IntenticWarn {
+    param([string]$Sentence)
+    switch ($IntenticKit.Mode) {
+        'plain' { [Console]::Error.WriteLine("intentic: $Sentence") }
+        'nested' { Write-Host "     !  $Sentence" }
+        default { Write-IntenticAbove { Write-Host '     ' -NoNewline; Write-IntenticRun '!' 'Yellow'; Write-Host '  ' -NoNewline; Write-IntenticRun $Sentence 'DarkGray' } }
+    }
+}
 
-foreach ($s in $targets) { Remove-Slug $s }
-Write-Host "intentic: done. Remaining sandboxes: $((Get-Sandboxes) -join ' ')"
+function Suspend-IntenticLine { if ($IntenticKit.Mode -eq 'rich') { Clear-IntenticLive } }
+
+function Resume-IntenticLine { if ($IntenticKit.Mode -eq 'rich' -and $IntenticKit.Label -and -not $IntenticKit.Open) { Write-IntenticLive } }
+
+function Write-IntenticFinished {
+    param([string]$Verdict, [string]$Address = '')
+    switch ($IntenticKit.Mode) {
+        'plain' { Write-Host "intentic: $Verdict"; if ($Address) { Write-Host "intentic: $Address" } }
+        'nested' { Write-Host "     $($IntenticKit.Ok)  $Verdict"; if ($Address) { Write-Host "        $Address" } }
+        default {
+            Complete-IntenticStep 'ok'
+            Write-Host ''
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $IntenticKit.Ok 'Green'
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $Verdict 'White'
+            Write-Host ''
+            if ($Address) {
+                Write-Host ''
+                Write-Host '     ' -NoNewline
+                Write-IntenticRun $Address 'Cyan'
+                Write-Host ''
+            }
+            Write-Host ''
+        }
+    }
+}
+
+# The commands the reader will want later, as (what, command) pairs given flat: Write-IntenticLater 'stop it', 'ic ...'.
+# Rich only: a log has no use for them.
+function Write-IntenticLater {
+    param([string[]]$Pairs)
+    if ($IntenticKit.Mode -ne 'rich' -or $Pairs.Count -lt 2) { return }
+    $column = 0
+    for ($i = 0; $i -lt $Pairs.Count; $i += 2) { $column = [Math]::Max($column, $Pairs[$i].Length) }
+    for ($i = 0; $i + 1 -lt $Pairs.Count; $i += 2) {
+        $heading = if ($i -eq 0) { 'later' } else { '' }
+        Write-Host '     ' -NoNewline
+        Write-IntenticRun ('{0,-6} {1}' -f $heading, $Pairs[$i].PadRight($column)) 'DarkGray'
+        Write-Host "   $($Pairs[$i + 1])"
+    }
+    Write-Host ''
+}
+
+function Write-IntenticCancelled {
+    if ($IntenticKit.Mode -eq 'plain') { Write-Host 'intentic: Cancelled. Nothing changed.'; return }
+    Complete-IntenticStep 'skip'
+    Write-Host '  ' -NoNewline
+    Write-IntenticRun "$($IntenticKit.Skip)  Cancelled. Nothing changed." 'DarkGray'
+    Write-Host ''
+}
+
+# The stop block on stderr, then the sentinel Invoke-IntenticScript catches. Never called inside a try whose catch
+# would swallow it.
+function Stop-Intentic {
+    param([string]$Headline, [string]$Problem = '', [string]$Fix = '', [int]$Code = 1)
+    $err = [Console]::Error
+    if ($IntenticKit.Mode -eq 'plain') {
+        $err.WriteLine("error: $Headline")
+        if ($Problem) { $err.WriteLine("   problem: $Problem") }
+        if ($Fix) { $err.WriteLine("   fix:     $Fix") }
+    } else {
+        Complete-IntenticStep 'fail'
+        $was = [Console]::ForegroundColor
+        $err.WriteLine('')
+        if ($IntenticKit.Color) { [Console]::ForegroundColor = 'Red' }
+        $err.WriteLine("  $($IntenticKit.Fail)  $Headline")
+        if ($IntenticKit.Color) { [Console]::ForegroundColor = $was }
+        if ($Problem) { $err.WriteLine("     problem: $Problem") }
+        if ($Fix) { $err.WriteLine("     fix:     $Fix") }
+        $err.WriteLine('')
+    }
+    $IntenticKit.Code = $Code
+    throw 'intentic:stop'
+}
+
+function Set-IntenticExit {
+    param([int]$Code)
+    $IntenticKit.Code = $Code
+}
+
+function Read-IntenticConfirm {
+    param([string]$Question, [string]$Consequence, [string]$Flag)
+    if ($env:INTENTIC_NO_PROMPT -ne '1' -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Suspend-IntenticLine
+        if ($IntenticKit.Mode -eq 'rich') {
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun '?' 'Cyan'
+            Write-Host '  ' -NoNewline
+            Write-IntenticRun $Question 'White'
+            Write-Host ''
+            foreach ($line in ($Consequence -split "`n")) { if ($line) { Write-Host '     ' -NoNewline; Write-IntenticRun $line 'DarkGray'; Write-Host '' } }
+            $answer = Read-Host '     [y/N]'
+        } else {
+            Write-Host $Question
+            if ($Consequence) { Write-Host $Consequence }
+            $answer = Read-Host '[y/N]'
+        }
+        if ($answer -match '^\s*[yY]') {
+            Resume-IntenticLine
+            return $true
+        }
+        Write-IntenticCancelled
+        return $false
+    }
+    Stop-Intentic 'Nothing was changed.' "nobody is at this terminal to answer: $Question" "run it again with $Flag"
+}
+
+function Invoke-IntenticScript {
+    param([scriptblock]$Body)
+    $IntenticKit.Code = 0
+    try {
+        & $Body
+        Complete-IntenticStep 'ok'
+    } catch {
+        if ("$($_.Exception.Message)" -ne 'intentic:stop') {
+            # Anything this script did not expect still ends in the protocol's stop block, never PowerShell's red one.
+            $said = "$($_.Exception.Message)"
+            try {
+                Stop-Intentic 'The script stopped unexpectedly.' $said 'run the same command again; if it stops here again, report it with this message.'
+            } catch {
+                $IntenticKit.Code = 1
+            }
+        }
+    }
+    $global:LASTEXITCODE = $IntenticKit.Code
+    if ($PSCommandPath) { exit $IntenticKit.Code }
+}
+# <<< end of generated kit.ps1
+
+# >>> generated from _site/site/scripts-kit/add-path.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# THE FOLDER THE ic CLI LANDS IN, PUT ON THE USER'S PATH - so the commands ic prints when it finishes are real
+# commands rather than a promise the installer that made them cannot keep. The .sh twin gets this free with a symlink
+# into ~/.local/bin; Windows has no such folder, so the user's own PATH is the only place to say it.
+#
+# HKCU\Environment is written DIRECTLY rather than through [Environment]::SetEnvironmentVariable, which stores the
+# value back as REG_SZ: every %USERPROFILE%- or %PNPM_HOME%-style entry already in that PATH would stop expanding, and
+# each tool behind one would vanish from the user's shell. Reading with DoNotExpandEnvironmentNames keeps them as
+# tokens, and the value goes back under the kind it already had.
+#
+# Best-effort: PATH is the convenience, the install is the job. A device that refuses the edit is told where the
+# binary is and keeps everything else.
+function Add-IntenticPath {
+    param([string]$Folder, [string]$Command)
+    try {
+        $key = Get-Item -Path 'HKCU:\Environment' -ErrorAction Stop
+        $stored = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if (($stored -split ';') -notcontains $Folder) {
+            $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+            $kept = @($stored -split ';' | Where-Object { $_ -ne '' })
+            Set-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -Value (($kept + $Folder) -join ';') -Type $kind -ErrorAction Stop
+            # Explorer hands every terminal it starts a COPY of the environment, taken when Explorer itself
+            # started. Without this broadcast - the one the Control Panel's environment editor sends - the new
+            # PATH would reach nothing until the next sign-in. SendMessageTimeout, so one wedged window on this
+            # desktop cannot wedge an install.
+            if (-not ('Intentic.Native' -as [type])) {
+                $signature = '[DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr word, string text, uint flags, uint timeout, out UIntPtr answer);'
+                Add-Type -Namespace 'Intentic' -Name 'Native' -MemberDefinition $signature -ErrorAction Stop
+            }
+            $answer = [UIntPtr]::Zero
+            [void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
+        }
+        # This window has its own copy as well, and it is the one the user is looking at when the output tells them
+        # what to run next.
+        if (($env:Path -split ';') -notcontains $Folder) { $env:Path = "$env:Path;$Folder" }
+    } catch {
+        Write-IntenticWarn "$Folder could not be added to your PATH ($($_.Exception.Message)), so $Command runs from that folder until you add it."
+    }
+}
+# <<< end of generated add-path.ps1
+
+# >>> generated from _site/site/scripts-kit/ic-fetch.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# Get-IntenticIc: the ic CLI to run, found or downloaded. IC_BIN overrides (a checkout's own build). Downloaded on
+# every run that pins no release, so re-running a one-liner upgrades a device; a run pinned to a release (IC_VERSION)
+# that finds it or a newer one installed skips it, and only a failed download falls back to an installed ic. Download-
+# then-rename: overwriting a running executable fails, and a half-downloaded binary must never be what runs. A pinned
+# run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
+# release asked for.
+function Get-IntenticIc {
+    $Ic = $env:IC_BIN
+    if ($Ic) { return $Ic }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $IcDir = "$env:USERPROFILE\.intentic\ic\bin"
+    New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
+    $IcDest = "$IcDir\ic.exe"
+    $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
+    # Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the tray for days
+    # put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions, major.minor.patch
+    # first, a pre-release below its own release; an installed ic whose answer is not a version is replaced.
+    $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
+    $IcCurrent = $false
+    if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)$') {
+        $IcHaveCore = [version]$Matches[1]
+        $IcHavePre = $Matches[2]
+        if ($env:IC_VERSION -match '^v?(\d+\.\d+\.\d+)(\S*)$') {
+            $IcPinCore = [version]$Matches[1]
+            $IcCurrent = ($IcHaveCore -gt $IcPinCore) -or ($IcHaveCore -eq $IcPinCore -and (-not $IcHavePre -or $IcHavePre -eq $Matches[2]))
+        }
+    }
+    if ($IcCurrent) {
+        Write-IntenticSay "$IcHave is installed, and this run asks for ic $($env:IC_VERSION -replace '^v', '') or newer, so nothing is downloaded."
+        $Ic = $IcDest
+        Add-IntenticPath -Folder $IcDir -Command 'ic'
+    } else {
+        Write-IntenticStep 'fetching-ic' 'fetching the ic CLI...' 'Download ic'
+        # THE ic THE DESKTOP APP CARRIES, copied instead of downloaded: a copy that answers exactly the pinned release is
+        # the very binary the download would fetch, minus the network, so a device that cannot reach github.com still
+        # gets its ic. Anything else leaves the download below to run, and that download is all the one-liner ever does.
+        $IcCopied = $false
+        if ($env:INTENTIC_IC_PATH -and $env:IC_VERSION -and (Test-Path -LiteralPath $env:INTENTIC_IC_PATH -PathType Leaf)) {
+            $IcCarried = ''
+            try { $IcCarried = (& $env:INTENTIC_IC_PATH --version | Out-String).Trim() } catch { $IcCarried = '' }
+            if ($IcCarried -eq ('ic ' + ($env:IC_VERSION -replace '^v', ''))) {
+                try {
+                    Copy-Item -LiteralPath $env:INTENTIC_IC_PATH -Destination "$IcDest.tmp" -Force -ErrorAction Stop
+                    Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
+                    $IcCopied = $true
+                } catch {
+                    Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        if ($IcCopied) {
+            Write-IntenticSay "installed $IcCarried from the copy the desktop app carries."
+            $Ic = $IcDest
+            Add-IntenticPath -Folder $IcDir -Command 'ic'
+        } else {
+            # Windows PowerShell 5.1 redraws its progress bar for every chunk Invoke-WebRequest reads, which makes a
+            # five-megabyte download take several seconds instead of a fraction of one.
+            $ProgressPreference = 'SilentlyContinue'
+            $IcFetched = $false
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp" -ErrorAction Stop
+                Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
+                $IcFetched = $true
+            } catch {
+                Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+            }
+            if ($IcFetched) {
+                $Ic = $IcDest
+                Add-IntenticPath -Folder $IcDir -Command 'ic'
+            } elseif (Test-Path $IcDest) {
+                Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $IcDest runs instead."
+                $Ic = $IcDest
+            } else {
+                $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
+                if ($IcInstalled) {
+                    Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $($IcInstalled.Source) runs instead."
+                    $Ic = $IcInstalled.Source
+                } else {
+                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' "$(([uri]$IcBase).Host) did not answer from this device." 'check the network, then run the same command again.'
+                }
+            }
+        }
+        Complete-IntenticStep
+    }
+    return $Ic
+}
+# <<< end of generated ic-fetch.ps1
+
+Invoke-IntenticScript {
+    # The names, read before anything is downloaded, so a mistyped one costs nothing. ic checks them again.
+    $names = @($Slug | Where-Object { $_ })
+    foreach ($name in $names) {
+        if ($name -cnotmatch '^[a-z0-9-]+$') { Stop-Intentic 'Nothing was removed.' "$name is not the name of a sandbox." '' 2 }
+    }
+    $IcArgs = @('sandbox', 'remove') + $names
+    if ($All) { $IcArgs += '--all' }
+    if ($Yes) { $IcArgs += '--yes' }
+    if ($Now) { $IcArgs += '--now' }
+    if ($AgentAuth) { $IcArgs += '--agent-auth' }
+    if ($Help) { $IcArgs = @('sandbox', 'remove', '--help') }
+
+    $Ic = Get-IntenticIc
+    Suspend-IntenticLine
+    & $Ic @IcArgs
+    Set-IntenticExit $LASTEXITCODE
+}

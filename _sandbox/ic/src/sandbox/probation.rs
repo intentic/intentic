@@ -412,8 +412,8 @@ impl Report {
             other => other.to_string(),
         };
         match &self.reason {
-            Some(reason) => format!("intentic: {}: {what} ({reason}).", self.slug),
-            None => format!("intentic: {}: {what}.", self.slug),
+            Some(reason) => format!("{}: {what} ({reason}).", self.slug),
+            None => format!("{}: {what}.", self.slug),
         }
     }
 }
@@ -452,12 +452,17 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
             }
         };
         if as_json {
+            // allow(terminal-output): the --json answer, one line per sandbox, read by the machine agent's probation watch.
             println!("{}", report.json());
         } else {
             if let Some(adopted) = &report.adopted {
-                println!("intentic: {}: {adopted}", report.slug);
+                crate::ui::note(&format!("{}: {adopted}", report.slug));
             }
-            println!("{}", report.sentence());
+            match report.action {
+                "rolled-back" | "restored" => crate::ui::warn(&report.sentence()),
+                "kept" => crate::ui::done(&report.sentence()),
+                _ => crate::ui::quiet(&report.sentence()),
+            }
         }
     }
     Ok(())

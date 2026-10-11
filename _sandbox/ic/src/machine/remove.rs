@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::selfhost::Root;
-use crate::tty;
-use crate::util::{bail, Result};
+use crate::ui;
+use crate::util::Result;
 
 /* Remove EVERYTHING intentic put on THIS machine as a deploy target — cleanup-host.sh as a verb. */
 
@@ -108,53 +108,113 @@ pub fn run(args: Args) -> Result<()> {
         && !unit_present
         && !user_present
     {
-        println!("intentic: nothing to clean — no intentic footprint found on this machine.");
+        ui::quiet("nothing to clean — no intentic footprint found on this server.");
         return Ok(());
     }
 
-    // ---- announce the plan, then confirm ----
-    println!("intentic: this will remove the following from THIS machine:");
+    // ---- announce the consequence, then confirm ----
+    let mut consequence = String::new();
+    consequence.push_str("This will remove the following from this server:\n");
     if !containers.is_empty() {
-        println!("  containers ({}):", containers.len());
+        consequence.push_str(&format!("  containers ({}):\n", containers.len()));
         for name in &containers {
-            println!("    - {name}");
+            consequence.push_str(&format!("    - {name}\n"));
         }
     }
     if !volumes.is_empty() {
-        println!("  docker volumes ({}) — databases included:", volumes.len());
+        consequence.push_str(&format!(
+            "  docker volumes ({}) — databases included:\n",
+            volumes.len()
+        ));
         for name in &volumes {
-            println!("    - {name}");
+            consequence.push_str(&format!("    - {name}\n"));
         }
     }
     if state_present {
-        println!("  {STATE_DIR} — all deployment state + secrets, INCLUDING the on-host restic backup repo:");
-        println!("    any backups stored only here are gone with it.");
+        consequence.push_str(&format!("  {STATE_DIR} — all deployment state + secrets, including the on-host restic backup repo:\n"));
+        consequence.push_str("    any backups stored only here are gone with it.\n");
     }
     if unit_present {
-        println!("  the {TUNNEL_UNIT} systemd unit (this host's SSH tunnel connector)");
+        consequence.push_str(&format!(
+            "  the {TUNNEL_UNIT} systemd unit (this server's SSH tunnel connector)\n"
+        ));
     }
     if user_present {
-        println!("  the '{host_user}' service user, its home directory and SSH keys");
+        consequence.push_str(&format!(
+            "  the {host_user} service user, its home directory and SSH keys\n"
+        ));
     }
-    println!("kept: Docker Engine, openssh-server, the cloudflared binary, pulled docker images.");
-    println!("not reachable from here: this host's Cloudflare tunnels + DNS records — remove the server on the");
-    println!("Infra screen and apply (or run `intentic deploy destroy` in your sandbox) so the prune deletes them.");
+    consequence.push_str(
+        "kept: Docker Engine, openssh-server, the cloudflared binary, pulled docker images.\n",
+    );
+    consequence.push_str("not reachable from here: this server's Cloudflare tunnels + DNS records — remove the server on the\n");
+    consequence.push_str("Infra screen and apply (or run `intentic deploy destroy` in your sandbox) so the prune deletes them.");
 
-    if !args.yes && !confirm_env {
-        match tty::ask("intentic: remove all of the above? [y/N] ") {
-            None => bail!("no terminal to confirm on — re-run with -y (or CONFIRM=1) to proceed non-interactively."),
-            Some(answer) if answer.starts_with(['y', 'Y']) => {}
-            Some(_) => {
-                println!("intentic: aborted — nothing was removed.");
-                return Ok(());
-            }
+    let yes = args.yes || confirm_env;
+    if !ui::confirm(
+        "Remove all of the above from this server?",
+        &consequence,
+        yes,
+    )? {
+        ui::cancelled();
+        return Ok(());
+    }
+
+    // ---- remove flow ----
+    let mut plan = Vec::new();
+    if have_docker {
+        if !projects.is_empty() {
+            plan.push(ui::PlanStep {
+                phase: "teardown-stacks",
+                label: "Tear down deployed stacks",
+                weight: 5,
+            });
+        }
+        if !containers.is_empty() {
+            plan.push(ui::PlanStep {
+                phase: "remove-containers",
+                label: "Remove remaining containers",
+                weight: 3,
+            });
+        }
+        if !volumes.is_empty() {
+            plan.push(ui::PlanStep {
+                phase: "remove-volumes",
+                label: "Remove docker volumes",
+                weight: 3,
+            });
         }
     }
+    if unit_present {
+        plan.push(ui::PlanStep {
+            phase: "remove-tunnel",
+            label: "Remove SSH tunnel connector",
+            weight: 2,
+        });
+    }
+    if state_present {
+        plan.push(ui::PlanStep {
+            phase: "remove-state",
+            label: "Remove state directory",
+            weight: 2,
+        });
+    }
+    if user_present {
+        plan.push(ui::PlanStep {
+            phase: "remove-user",
+            label: "Remove service user",
+            weight: 2,
+        });
+    }
 
-    // ---- remove ----
+    ui::begin("disconnect this server", plan, None);
+
     if have_docker {
         for project in &projects {
-            println!("intentic: tearing down the '{project}' stack…");
+            ui::step(
+                "teardown-stacks",
+                &format!("tearing down the {project} stack…"),
+            );
             let dir = format!("{STATE_DIR}/{project}");
             root.quiet(
                 "docker",
@@ -174,23 +234,23 @@ pub fn run(args: Args) -> Result<()> {
             );
         }
         if !containers.is_empty() {
-            println!("intentic: removing the remaining containers…");
+            ui::step("remove-containers", "removing the remaining containers…");
             for name in &containers {
                 root.quiet("docker", &["rm", "-f", name]);
             }
         }
         if !volumes.is_empty() {
-            println!("intentic: removing the docker volumes…");
+            ui::step("remove-volumes", "removing the docker volumes…");
             for volume in &volumes {
                 root.quiet("docker", &["volume", "rm", "-f", volume]);
             }
         }
     } else if !projects.is_empty() {
-        eprintln!("intentic: warning — docker is not running, so deployed containers/volumes could not be removed.");
+        ui::warn("docker is not running, so deployed containers and volumes could not be removed.");
     }
 
     if unit_present {
-        println!("intentic: removing the host SSH tunnel connector…");
+        ui::step("remove-tunnel", "removing the SSH tunnel connector…");
         root.quiet("systemctl", &["disable", "--now", TUNNEL_UNIT]);
         root.quiet("rm", &["-f", &format!("/etc/systemd/system/{TUNNEL_UNIT}")]);
         root.quiet("systemctl", &["daemon-reload"]);
@@ -200,20 +260,30 @@ pub fn run(args: Args) -> Result<()> {
     root.quiet("rm", &["-f", TUNNEL_LOG]);
 
     if state_present {
-        println!("intentic: removing {STATE_DIR}…");
+        ui::step("remove-state", &format!("removing {STATE_DIR}…"));
         root.quiet("rm", &["-rf", STATE_DIR]);
     }
 
     if user_present {
-        println!("intentic: removing the '{host_user}' service user…");
+        ui::step(
+            "remove-user",
+            &format!("removing the {host_user} service user…"),
+        );
         root.quiet("pkill", &["-u", &host_user]);
         if !root.quiet("userdel", &["-r", &host_user]) {
             root.quiet("userdel", &[&host_user]);
         }
     }
 
-    println!("intentic: done — this machine no longer runs anything intentic put on it.");
-    println!("Reclaim image disk space with `docker image prune -a` if you want it back.");
+    ui::finished(
+        "This server no longer runs anything Intentic put on it.",
+        None,
+        "",
+        &[(
+            "reclaim disk space".to_string(),
+            "docker image prune -a".to_string(),
+        )],
+    );
     Ok(())
 }
 

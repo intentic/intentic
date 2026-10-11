@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { machinesOf } from "@intentic/sandbox-contract";
-import { Button, Code, CopyButton, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
+import { Button, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
 import { computed, ref, watchEffect } from "vue";
 import {
     appBehind,
@@ -15,6 +15,7 @@ import {
 import { appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
 import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../../../../client/sandbox/contractFreshness";
 import { useEnvironment } from "../../environment/useEnvironment";
+import RunCommand from "../../../../components/RunCommand.vue";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
 import { useHubWork } from "../../../../workbench/hub/hubWork";
 import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
@@ -252,20 +253,12 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                         </span>
                     </div>
                     <Notice v-if="failed" tone="warning" class="text-2xs">{{ failed }}</Notice>
-                    <div v-if="showCommand" class="flex flex-wrap items-center gap-2">
-                        <span class="text-2xs text-subtle">{{
-                            daemonDrifted && !failed ? t(`sandbox.sandboxBehindCard.stillHereRun`) : t(`sandbox.sandboxBehindCard.run`)
-                        }}</span>
-                        <div class="sandbox-restart-command flex min-w-0 flex-1 items-center rounded-md border border-line bg-canvas">
-                            <Code class="min-w-0 flex-1" :code="restartCommand" lang="bash" :copyable="false" />
-                            <CopyButton
-                                :text="restartCommand"
-                                :label="t(`ui.action.copy`)"
-                                :aria-label="t(`sandbox.sandboxBehindCard.copyRestartCommand`)"
-                                class="mr-1"
-                            />
-                        </div>
-                    </div>
+                    <RunCommand
+                        v-if="showCommand"
+                        :command="restartCommand"
+                        :explanation="daemonDrifted && !failed ? t(`sandbox.sandboxBehindCard.stillHereRun`) : t(`sandbox.sandboxBehindCard.run`)"
+                        :label="t(`sandbox.sandboxBehindCard.restartCommand`)"
+                    />
                     <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
                     <ConnectDeviceHint v-if="!hostId" :slug="slug" :gains="t(`sandbox.sandboxBehindCard.restartBecomesButton`)" />
                 </div>
@@ -275,12 +268,3 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
         </RowNote>
     </RowGroup>
 </template>
-
-<style scoped>
-/* Keep Code's syntax highlighting and theme; let the row itself own the border and copy button styling. */
-.sandbox-restart-command :deep(.shiki),
-.sandbox-restart-command :deep(pre) {
-    border: 0;
-    background-color: transparent !important;
-}
-</style>

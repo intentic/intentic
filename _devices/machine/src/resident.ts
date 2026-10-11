@@ -87,7 +87,7 @@ export const keptSandboxes = async (): Promise<readonly string[]> => {
 };
 
 const keptNote = (kept: readonly string[]): string =>
-    `this machine runs ${plural(kept.length, "sandbox", "sandboxes")} (${kept.join(", ")}), so the agent stays to bring ${kept.length === 1 ? "it" : "them"} back after a restart. \`intentic-machine sandbox keeper off\` lets it go.`;
+    `this device runs ${plural(kept.length, "sandbox", "sandboxes")} (${kept.join(", ")}), so the agent stays to bring ${kept.length === 1 ? "it" : "them"} back after a restart; turning the sandbox keeper off lets it go.`;
 
 // The agent after a change it absorbs by itself: started if nothing is running, retired once nothing is left to serve.
 // `forGood` is `uninstall`, which retires it whatever this machine hosts.
@@ -142,7 +142,7 @@ const claim = async (record: PidRecord, supervised: boolean, log: Log): Promise<
     }
     const claimed = await claimPidFile(runPidPath, baseDir, record);
     if (!claimed.claimed) {
-        log(`a machine agent is already running (pid ${claimed.holder.pid}): leaving it alone. Stop it with \`intentic-machine run --stop\` first.`);
+        log(`An agent is already running (pid ${claimed.holder.pid}): leaving it alone. intentic-machine run --stop stops it first.`);
     }
     return claimed.claimed;
 };

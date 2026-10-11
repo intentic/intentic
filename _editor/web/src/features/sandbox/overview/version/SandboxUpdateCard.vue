@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import {
     Button,
-    Code,
-    commandLang,
     CopyButton,
     type IconName,
     Notice,
@@ -24,6 +22,7 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
+import RunCommand from "../../../../components/RunCommand.vue";
 import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
 import UpdateAutoStatus from "./UpdateAutoStatus.vue";
 import UpdateAutoSwitch from "./UpdateAutoSwitch.vue";
@@ -608,11 +607,11 @@ const finePrint = computed(
                             <!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
                             <template v-if="updateAvailable">
                                 <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.publishedNewerThanWhat`, { latest }) }}</p>
-                                <Code
-                                    :code="`ic sandbox update ${slug} --force`"
-                                    :lang="commandLang(cmdOs)"
+                                <!-- ic's own spelling, the same in either shell; no one-liner carries --force. -->
+                                <RunCommand
+                                    :command="`ic sandbox update ${slug} --force`"
+                                    :os="cmdOs"
                                     :label="t(`sandbox.sandboxUpdateCard.takePublishedImageInstead`)"
-                                    :wrap="true"
                                 />
                             </template>
                         </template>

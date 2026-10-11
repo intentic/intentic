@@ -41,7 +41,7 @@ fn launch(facts: &DeviceFacts) -> std::result::Result<(), String> {
         // launcher is wherever the shared discovery found it on the Windows side, not where a default install puts it.
         Os::Wsl => {
             let exe = super::host::windows_desktop_exe(Os::Wsl).ok_or_else(|| {
-                "Docker Desktop could not be found on the Windows side of this PC.".to_string()
+                "Docker Desktop could not be found on the Windows side of this device.".to_string()
             })?;
             run_in(
                 "cmd.exe",

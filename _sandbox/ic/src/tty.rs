@@ -59,6 +59,74 @@ pub fn ask(prompt: &str) -> Option<String> {
     Some(line.trim_end_matches(['\r', '\n']).to_string())
 }
 
+/// Like [`ask`], with what is typed kept off the screen: for a secret (an API token) a person pastes. None when there is
+/// no terminal, when the read fails, or when the echo could not be turned off, since a secret is never read where it
+/// would show.
+#[cfg(unix)]
+pub fn ask_secret(prompt: &str) -> Option<String> {
+    if prompting_disabled() {
+        return None;
+    }
+    let mut out = std::fs::OpenOptions::new().write(true).open(TTY_OUT).ok()?;
+    let input = std::fs::File::open(TTY_IN).ok()?;
+    // `stty` on the terminal itself, not on whatever stdin is: no new dependency for one hidden line.
+    let stty = |setting: &str| {
+        std::fs::File::open(TTY_IN).ok().is_some_and(|tty| {
+            std::process::Command::new("stty")
+                .arg(setting)
+                .stdin(tty)
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
+    };
+    /// Echo comes back on every way out of the read, an early return and a panic included.
+    struct EchoBack<F: Fn(&str) -> bool>(F);
+    impl<F: Fn(&str) -> bool> Drop for EchoBack<F> {
+        fn drop(&mut self) {
+            (self.0)("echo");
+        }
+    }
+    if !stty("-echo") {
+        return None;
+    }
+    let _echo = EchoBack(stty);
+    out.write_all(prompt.as_bytes()).ok()?;
+    out.flush().ok()?;
+    let mut line = String::new();
+    let read = BufReader::new(input).read_line(&mut line);
+    // The Enter that ended the line was not echoed either.
+    let _ = out.write_all(b"\n");
+    let _ = out.flush();
+    read.ok()?;
+    if line.is_empty() {
+        return None;
+    }
+    Some(line.trim_end_matches(['\r', '\n']).to_string())
+}
+
+/// Windows has no `stty`, and nothing that asks for a secret runs there (server enrollment is Linux only): no answer,
+/// which callers treat as nobody at the terminal and stop with the variable to set instead.
+#[cfg(windows)]
+pub fn ask_secret(_prompt: &str) -> Option<String> {
+    None
+}
+
+/// Write one line to the terminal, beside a question: what answering does, or the rows to pick from. Nothing when
+/// there is no terminal, since a line meant for the person asking has no other reader.
+pub fn say(line: &str) {
+    if prompting_disabled() {
+        return;
+    }
+    if let Ok(mut out) = std::fs::OpenOptions::new().write(true).open(TTY_OUT) {
+        let _ = writeln!(out, "{line}");
+        let _ = out.flush();
+    }
+}
+
+// The engine's Windows removal is its one caller left (engine/windows.rs, compiled on Windows only); everything else
+// asks through ui::confirm.
+#[cfg_attr(not(windows), allow(dead_code))]
 /// yes/no with default NO — `[y/N]`. `force` (the -y flag) short-circuits to yes; no terminal is no.
 pub fn confirm(question: &str, force: bool) -> bool {
     if force {

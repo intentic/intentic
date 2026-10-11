@@ -361,7 +361,7 @@ pub fn own_engine(check: Check) -> Check {
         fix: Fix::You,
         remedy: Some(
             format!(
-                "{remedy} Docker here is your own engine, so Intentic leaves this to you (`ic engine move --to intentic` hands the sandboxes to Intentic's engine instead)."
+                "{remedy} Docker here is your own engine, so Intentic leaves this to you (ic engine move --to intentic hands the sandboxes to Intentic's engine instead)."
             )
             .trim()
             .to_string(),
@@ -482,7 +482,7 @@ fn next(
 impl Engine {
     fn go(&mut self) -> Result<()> {
         ui::note(&format!(
-            "{} — checking this machine and {}…",
+            "{} — checking this device and {}…",
             if self.doctor { "doctor" } else { "fix" },
             match &self.explicit {
                 Some(slug) => format!("sandbox {slug}"),
@@ -541,10 +541,8 @@ impl Engine {
             Some(&question),
             scope.as_ref().map(|_| (scope, id)),
         );
-        ui::suspend();
-        let yes = crate::tty::confirm(&question, false);
-        ui::resume();
-        yes
+        let consequence = doing_because(repair, snapshot.check(scope, id));
+        ui::confirm(&question, &consequence, false).unwrap_or(false)
     }
 
     /// Apply one repair and say how it went. True when it ran without an error.
@@ -572,7 +570,7 @@ impl Engine {
             Ok(Applied::AfterRestart | Applied::AfterSignOut) => {
                 self.session = true;
                 ui::note(
-                    "done — Windows applies it once this PC restarts, or you sign out and back in.",
+                    "done — Windows applies it once this device restarts, or you sign out and back in.",
                 );
                 false
             }
@@ -784,7 +782,7 @@ impl Engine {
             self.shown.insert(key, now);
             if heading.as_ref() != Some(&scope) {
                 ui::note(&match &scope {
-                    None => "this machine".to_string(),
+                    None => "this device".to_string(),
                     Some(slug) => format!("sandbox {slug}"),
                 });
                 heading = Some(scope.clone());
@@ -982,7 +980,7 @@ impl Engine {
             return;
         }
         if snapshot.sandboxes.is_empty() && left.is_empty() {
-            ui::note("there is no sandbox on this machine — run the setup command from your browser to set one up.");
+            ui::note("there is no sandbox on this device — run the setup command from your browser to set one up.");
             return;
         }
         let several = outcomes.len() > 1;
@@ -1015,7 +1013,7 @@ impl Engine {
                 .any(|(_, check)| check.who() == Some(Who::Consent))
         {
             ui::note(if self.auto {
-                "the fixes above that need a yes were left alone: run `ic sandbox fix` in a terminal to be asked."
+                "the fixes above that need a yes were left alone: run ic sandbox fix in a terminal to be asked."
             } else {
                 "nobody could be asked for the fixes above that need a yes: re-run with --yes, or --accept <check>, to go ahead."
             });
@@ -1051,7 +1049,7 @@ impl Engine {
                     "every link checks out — the sandbox is reachable at {url}."
                 )),
                 _ if snapshot.sandboxes.is_empty() => {
-                    ui::note("no sandbox on this machine to check.")
+                    ui::note("no sandbox on this device to check.")
                 }
                 _ => ui::note("every checkable link checks out."),
             }
@@ -1059,7 +1057,7 @@ impl Engine {
         }
         let count = crate::util::plural(left.len(), "problem");
         let mut text = format!(
-            "found {count} — `ic sandbox fix` puts right what it can:\n{}",
+            "found {count} — ic sandbox fix puts right what it can:\n{}",
             model::left_block(left)
         );
         if let [sandbox] = snapshot.sandboxes.as_slice() {

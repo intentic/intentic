@@ -1,11 +1,13 @@
-import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import type { Footnote, Item, Ui } from "@intentic/local-agent";
+import { buildCommand, machineUi } from "../cli-ui.js";
 import { runLogPath } from "../config.js";
 import { type MachineConfig, readMachineConfig, updateMachineConfig } from "../environments/machine.js";
 import { ensureResident } from "../resident.js";
 import { runIcAttached } from "./tools/sandboxes.js";
-import { sleepMinutesOf, sleepStatus, withSleepMinutes } from "./sandbox-rounds/sleep.js";
+import { sleepMinutesOf, withSleepMinutes } from "./sandbox-rounds/sleep.js";
 
-// `intentic-machine sandbox <verb> [slug]`: ic's own sandbox verbs, passed through, so a sandbox on this machine can be
+// `intentic-machine sandbox <verb> [slug]`: ic's own sandbox verbs, passed through, so a sandbox on this device can be
 // looked at and repaired from the agent's CLI when no browser can reach it (the one it runs in is down, say). Nothing
 // is decided here: ic prints what it prints, straight to this terminal, and its exit code is this command's.
 
@@ -31,7 +33,7 @@ const pass = async (verb: string, slug: string | undefined, flags: PassedFlags):
     process.exitCode = await runIcAttached(icPassArgs(verb, slug, flags));
 };
 
-const SLUG = { brief: "The sandbox (omit when this machine runs exactly one)", parse: String, optional: true, placeholder: "slug" } as const;
+const SLUG = { brief: "The sandbox (omit when this device runs exactly one)", parse: String, optional: true, placeholder: "slug" } as const;
 
 // One verb that takes an optional slug and the flags given, all passed through.
 const verbCommand = <F extends PassedFlags>(verb: string, brief: string, flags: FlagParametersForType<F>) =>
@@ -56,7 +58,7 @@ type JsonFlags = {
 };
 
 const list = buildCommand<JsonFlags>({
-    docs: { brief: "List the sandboxes on this machine" },
+    docs: { brief: "List the sandboxes on this device" },
     parameters: { flags: { json } },
     async func(this: CommandContext, given: JsonFlags) {
         await pass("list", undefined, given);
@@ -95,7 +97,7 @@ type FixFlags = {
 // A positive whole number, as ic's `--tail` takes it; anything else is refused here rather than by ic's usage text.
 const lineCount = (value: string): string => {
     if (!/^\d+$/.test(value) || Number(value) === 0) {
-        throw new Error(`"${value}" is not a number of lines.`);
+        throw new Error(`${value} is not a number of lines.`);
     }
     return value;
 };
@@ -110,7 +112,7 @@ const keeperWord = (value: string): KeeperWord => {
     if (value === "on" || value === "off" || value === "status") {
         return value;
     }
-    throw new Error(`"${value}" is not on, off or status.`);
+    throw new Error(`${value} is not on, off or status.`);
 };
 
 // The config with the keeper switched as asked, every other key as it was. Pure, so what is written is asserted.
@@ -119,13 +121,41 @@ export const withKeeper = (config: MachineConfig, on: boolean): MachineConfig =>
     return on ? rest : { ...rest, sandboxKeeper: false };
 };
 
-export const keeperStatus = (on: boolean): string =>
+// A switch's state as a report draws it: its row, the sentence the row is too short for, and what to type next.
+export interface SwitchStatus {
+    readonly item: Item;
+    readonly said: string;
+    readonly later: readonly Footnote[];
+}
+
+export const keeperStatus = (on: boolean): SwitchStatus =>
     on
-        ? `Keeper: on. When a sandbox on this machine stops answering (and half a minute after this agent starts, and every five minutes), this agent runs \`ic sandbox fix --auto\`: it starts Docker Desktop, starts a sandbox nobody stopped on purpose, restarts one whose registration gave up and tidies a full disk. A fix that needs your yes is only reported; \`intentic-machine sandbox fix <slug>\` asks you for it. What it did is in ${runLogPath}. Turn it off with \`intentic-machine sandbox keeper off\`.`
-        : "Keeper: off. Nothing brings this machine's sandboxes back by itself; `intentic-machine sandbox fix` does when you run it. Turn it back on with `intentic-machine sandbox keeper on`.";
+        ? {
+              item: { tone: "ok", name: "keeper", meta: "on" },
+              said: `When a sandbox on this device stops answering, half a minute after this agent starts, and every five minutes, this agent runs ic's fix in its automatic mode: it starts Docker Desktop, starts a sandbox nobody stopped on purpose, restarts one whose registration gave up and tidies a full disk. A fix that needs your yes is only reported. What it did is in ${runLogPath}.`,
+              later: [
+                  ["answer the fixes that ask", "intentic-machine sandbox fix"],
+                  ["turn it off", "intentic-machine sandbox keeper off"],
+              ],
+          }
+        : {
+              item: { tone: "skip", name: "keeper", meta: "off" },
+              said: "Nothing brings this device's sandboxes back by itself.",
+              later: [
+                  ["fix them now", "intentic-machine sandbox fix"],
+                  ["turn it back on", "intentic-machine sandbox keeper on"],
+              ],
+          };
+
+// What a switch's report draws, after its header.
+const drawSwitch = (ui: Ui, status: SwitchStatus): void => {
+    ui.items([status.item]);
+    ui.note(status.said);
+    ui.later(status.later);
+};
 
 const keeper = buildCommand<Record<never, never>, [KeeperWord | undefined]>({
-    docs: { brief: "Whether this agent brings this machine's sandboxes back by itself (`ic sandbox fix --auto`): on, off, or status" },
+    docs: { brief: "Whether this agent brings this device's sandboxes back by itself (`ic sandbox fix --auto`): on, off, or status" },
     parameters: {
         positional: {
             kind: "tuple",
@@ -133,16 +163,34 @@ const keeper = buildCommand<Record<never, never>, [KeeperWord | undefined]>({
         },
     },
     async func(this: CommandContext, _flags: Record<never, never>, word: KeeperWord | undefined) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const ui = machineUi(this.process);
         if (word === "on" || word === "off") {
+            ui.act(word === "on" ? "Turning the keeper on" : "Turning the keeper off");
             await updateMachineConfig((config) => withKeeper(config, word === "on"));
-            // The keeper is one reason the agent stays resident on a machine with nothing linked: on starts it for the
+            // The keeper is one reason the agent stays resident on a device with nothing linked: on starts it for the
             // sandboxes here, off lets it go when they were all it had (resident.ts, keptSandboxes).
-            await ensureResident(out);
+            await ensureResident(ui.note);
+            ui.done(word === "on" ? "The keeper is on." : "The keeper is off.");
+            ui.later(keeperStatus(word === "on").later.slice(1));
+            return;
         }
-        out(keeperStatus((await readMachineConfig()).sandboxKeeper !== false));
+        ui.report("intentic · sandbox keeper");
+        drawSwitch(ui, keeperStatus((await readMachineConfig()).sandboxKeeper !== false));
     },
 });
+
+export const sleepStatus = (minutes: number): SwitchStatus =>
+    minutes === 0
+        ? {
+              item: { tone: "skip", name: "sleep", meta: "off" },
+              said: "Every sandbox on this device stays up until somebody stops it.",
+              later: [["turn it back on", "intentic-machine sandbox sleep-after 30"]],
+          }
+        : {
+              item: { tone: "ok", name: "sleep", meta: `after ${minutes} min` },
+              said: "A sandbox on this device that nobody has needed for that long (no editor open on it, no agent working, no terminal typed in, no app of it open) is stopped by the keeper, and starts again by itself when somebody opens it.",
+              later: [["keep them all up", "intentic-machine sandbox sleep-after off"]],
+          };
 
 /* HOW LONG AN UNNEEDED SANDBOX STAYS UP (sandbox-rounds/sleep.ts), in this environment's machine.json beside the
    keeper's switch: the default is stored as the key's absence, `off` as 0. */
@@ -160,7 +208,7 @@ export const sleepWord = (value: string): SleepWord => {
     if (/^\d+$/.test(value) && Number(value) <= 7 * 24 * 60) {
         return { minutes: Number(value) };
     }
-    throw new Error(`"${value}" is not a number of minutes, off or status.`);
+    throw new Error(`${value} is not a number of minutes, off or status.`);
 };
 
 const sleepAfter = buildCommand<Record<never, never>, [SleepWord | undefined]>({
@@ -172,11 +220,16 @@ const sleepAfter = buildCommand<Record<never, never>, [SleepWord | undefined]>({
         },
     },
     async func(this: CommandContext, _flags: Record<never, never>, word: SleepWord | undefined) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const ui = machineUi(this.process);
         if (word !== undefined && word !== "status") {
+            ui.act(word.minutes === 0 ? "Turning sandbox sleep off" : `Setting sandbox sleep to ${word.minutes} min`);
             await updateMachineConfig((config) => withSleepMinutes(config, word.minutes));
+            ui.done(word.minutes === 0 ? "Sandboxes on this device no longer sleep." : `A sandbox nobody needs sleeps after ${word.minutes} min.`);
+            ui.later(sleepStatus(word.minutes).later);
+            return;
         }
-        out(sleepStatus(sleepMinutesOf(await readMachineConfig())));
+        ui.report("intentic · sandbox sleep");
+        drawSwitch(ui, sleepStatus(sleepMinutesOf(await readMachineConfig())));
     },
 });
 
@@ -192,11 +245,11 @@ export const sandboxRoutes = buildRouteMap({
             force: { kind: "boolean", optional: true, brief: "Update a sandbox built from a checkout anyway, leaving its local image behind" },
             skipPreflight,
         }),
-        rollback: verbCommand<RollbackFlags>("rollback", "Put a sandbox back on the version it ran before, or on an older one kept on this machine", {
+        rollback: verbCommand<RollbackFlags>("rollback", "Put a sandbox back on the version it ran before, or on an older one kept on this device", {
             to: { kind: "parsed", parse: String, optional: true, brief: "The version or image to go back to (`versions` lists them)" },
             skipPreflight,
         }),
-        versions: verbCommand<JsonFlags>("versions", "The versions a sandbox can go back to on this machine", { json }),
+        versions: verbCommand<JsonFlags>("versions", "The versions a sandbox can go back to on this device", { json }),
         logs: verbCommand<LogsFlags>("logs", "The tail of a sandbox's own log, both streams", {
             tail: { kind: "parsed", parse: lineCount, optional: true, brief: "How many of the last lines to print (200 unless given)" },
         }),
@@ -204,14 +257,14 @@ export const sandboxRoutes = buildRouteMap({
         watch: verbCommand<JsonFlags>("watch", "Finish or undo an interrupted swap, and judge a new version on probation (every sandbox unless one is named)", {
             json,
         }),
-        backup: verbCommand<BackupFlags>("backup", "Back a sandbox up now, encrypted, on this machine", {
+        backup: verbCommand<BackupFlags>("backup", "Back a sandbox up now, encrypted, on this device", {
             auto: { kind: "boolean", optional: true, brief: "Skip it when one ran recently, the disk is low or a swap is in flight, as the daily backup does" },
             json,
         }),
-        backups: verbCommand<JsonFlags>("backups", "The backups this machine holds of a sandbox", { json }),
+        backups: verbCommand<JsonFlags>("backups", "The backups this device holds of a sandbox", { json }),
         fix: verbCommand<FixFlags>(
             "fix",
-            "Check every layer a sandbox needs on this machine, fix what is safe and ask before anything else (every sandbox unless one is named)",
+            "Check every layer a sandbox needs on this device, fix what is safe and ask before anything else (every sandbox unless one is named)",
             {
                 code: { kind: "parsed", parse: String, optional: true, brief: "The fix code from the browser's recovery panel, so that page follows this run" },
                 auto: { kind: "boolean", optional: true, brief: "Apply only the fixes that need no yes and report the rest, as the keeper does" },
@@ -224,5 +277,5 @@ export const sandboxRoutes = buildRouteMap({
         keeper,
         "sleep-after": sleepAfter,
     },
-    docs: { brief: "Look at and repair the sandboxes on this machine without a browser: ic's own verbs, passed through" },
+    docs: { brief: "Look at and repair the sandboxes on this device without a browser: ic's own verbs, passed through" },
 });

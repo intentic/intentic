@@ -36,8 +36,12 @@ test("the keeper's switch writes only an explicit off, and says which way it is"
     const config = { agentUpdates: false, children: ["Ubuntu"] };
     expect(withKeeper(config, false)).toEqual({ agentUpdates: false, children: ["Ubuntu"], sandboxKeeper: false });
     expect(withKeeper({ ...config, sandboxKeeper: false }, true)).toEqual({ agentUpdates: false, children: ["Ubuntu"] });
-    expect(keeperStatus(true)).toMatch(/^Keeper: on\. .*`ic sandbox fix --auto`.*`intentic-machine sandbox keeper off`\.$/);
-    expect(keeperStatus(false)).toBe(
-        "Keeper: off. Nothing brings this machine's sandboxes back by itself; `intentic-machine sandbox fix` does when you run it. Turn it back on with `intentic-machine sandbox keeper on`.",
-    );
+    expect(keeperStatus(true).item).toEqual({ tone: "ok", name: "keeper", meta: "on" });
+    expect(keeperStatus(true).said).not.toContain("`");
+    expect(keeperStatus(true).later.at(-1)).toEqual(["turn it off", "intentic-machine sandbox keeper off"]);
+    expect(keeperStatus(false).item).toEqual({ tone: "skip", name: "keeper", meta: "off" });
+    expect(keeperStatus(false).later).toEqual([
+        ["fix them now", "intentic-machine sandbox fix"],
+        ["turn it back on", "intentic-machine sandbox keeper on"],
+    ]);
 });

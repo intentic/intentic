@@ -71,7 +71,7 @@ export const stopResident = async (): Promise<number | undefined> => {
 };
 
 const started = (log: Log, held: PidRecord, by: string): void =>
-    log(`machine agent running in the background (pid ${held.pid}, ${by}). Details: ${runLogPath}`);
+    log(`The agent is running in the background (pid ${held.pid}, ${by}); its log is ${runLogPath}.`);
 
 // A distro whose Windows side has an agent is started by it, so the one supervisor of this environment is the PC's own.
 const startThroughWindows = async (log: Log): Promise<boolean> => {
@@ -80,7 +80,7 @@ const startThroughWindows = async (log: Log): Promise<boolean> => {
     }
     const held = await waitForResident();
     if (held === undefined) {
-        log("note: the Windows side took this distro over but its agent did not come up here in time; starting it directly.");
+        log("The Windows side took this distro over, but its agent did not come up here in time; starting it directly.");
         return false;
     }
     started(log, held, "kept running by the Windows side");
@@ -104,7 +104,7 @@ export const startResident = async (log: Log): Promise<void> => {
             started(log, held, `started by its ${kind} entry`);
             return;
         }
-        log(`note: the ${kind} login entry did not start the agent within ${START_TIMEOUT_MS / 1000}s; starting it directly.`);
+        log(`The ${kind} login entry did not start the agent within ${START_TIMEOUT_MS / 1000}s; starting it directly.`);
     }
     const pid = await spawnDetached(runLogPath, machineLauncher(), MACHINE_AUTOSTART.foregroundArgs);
     log(`machine agent running in the background (pid ${pid}). Details: ${runLogPath}`);

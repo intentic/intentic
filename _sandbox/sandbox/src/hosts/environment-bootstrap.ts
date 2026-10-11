@@ -1,6 +1,6 @@
 import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, type HostConnection, hostConnectionKey, userDistrosOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { agentInstallLine } from "./device-commands.js";
+import { agentInstallLine, codedInstallLine } from "./device-commands.js";
 import { callTool } from "./device-reports.js";
 import { hostConnectionOf } from "./host-connection.js";
 
@@ -35,12 +35,15 @@ export const bootstrapTargets = (environment: string, facts: DeviceFacts): strin
 };
 
 // The one-liner that puts the agent in the target environment, in that environment's own dialect, plus the `in` that
-// carries it there. The token is single-use and minted for the connection it enrolls, so a redeemed one can only ever
-// become the environment it was meant for.
-const installLine = (target: string, url: string, token: string): { readonly command: string; readonly in: string } => {
+// carries it there: `device/<host>/<code>`, the code standing for a token minted for the connection it enrolls, so a
+// redeemed one can only ever become the environment it was meant for. On localhost the token rides as environment.
+const installLine = (target: string, url: string, token: string, code: string): { readonly command: string; readonly in: string } => {
     const native = target === HOST_NATIVE_ENVIRONMENT;
+    const dialect = native ? "powershell" : "sh";
     return {
-        command: agentInstallLine(native ? "powershell" : "sh", { powershell: "devicePs1", sh: "deviceSh" }, { SANDBOX_URL: `'${url}'`, PAIR_TOKEN: `'${token}'` }),
+        command:
+            codedInstallLine(dialect, "device", url, code) ??
+            agentInstallLine(dialect, { powershell: "devicePs1", sh: "deviceSh" }, { SANDBOX_URL: `'${url}'`, PAIR_TOKEN: `'${token}'` }),
         in: native ? "windows" : `wsl:${target.slice("wsl:".length)}`,
     };
 };
@@ -57,8 +60,9 @@ const bootstrapOne = async (services: Services, from: string, card: string, targ
     if (await services.hosts.enrolled(connection)) {
         return "already connected";
     }
-    const { token } = services.hosts.mintPairing(connection);
-    const line = installLine(target, url, token);
+    const { token, expiresIn } = services.hosts.mintPairing(connection);
+    const code = services.redeemCodes.mint({ kind: "device", pairToken: token }, expiresIn);
+    const line = installLine(target, url, token, code);
     const answer = await callTool(
         services,
         from,

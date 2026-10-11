@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Button, Code, DeviceRunLog, Icon, toneTint } from "@intentic/ui";
+import { Button, DeviceRunLog, Icon, toneTint } from "@intentic/ui";
+import RunCommand from "../../../../components/RunCommand.vue";
 import { computed, ref } from "vue";
 import { type AgentRun, agentRunDetail, agentRunTitle } from "../runners/agentRun";
 import { useT } from "@intentic/ui/i18n";
@@ -81,12 +82,10 @@ const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, fai
             :note="t(`sandbox.devicePage.runsOnDeviceKeeps`)"
         />
         <!-- The same act as a line to type out there: the usual reason a press is refused is a route this browser can't open. -->
-        <Code
+        <RunCommand
             v-if="run.state === `failed` && run.failure?.command"
-            :code="run.failure.command"
-            lang="bash"
+            :command="run.failure.command"
             :label="t(`sandbox.deviceOpFailure.runOnYourself`, { machine })"
-            wrap
         />
     </div>
 </template>

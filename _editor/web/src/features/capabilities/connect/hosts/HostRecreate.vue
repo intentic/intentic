@@ -3,15 +3,12 @@ import type { DeviceSandboxOp } from "@intentic/sandbox-contract";
 import {
     Button,
     ui,
-    Code,
-    commandLang,
     ConfirmDialog,
     DeviceRunLog,
     type IconName,
     Notice,
     type NoticeModel,
-    SegmentedControl,
-    useOsPreference,
+    type CommandOs,
 } from "@intentic/ui";
 import { noticeFrom, usePoll } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
@@ -28,7 +25,9 @@ import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
-import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
+import { bashCommand, oneLiner, psCommand } from "../../../../app/environments/scriptCommand";
+import RunCommand from "../../../../components/RunCommand.vue";
+import { oneLinerFits } from "@intentic/constants";
 import { useT } from "@intentic/ui/i18n";
 
 // Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders
@@ -81,7 +80,6 @@ defineSlots<{
     beside?: () => VNode[];
 }>();
 
-const { cmdOs } = useOsPreference();
 const { activeSandboxId, reachable } = useSandbox();
 const desktop = computed(() => desktopVersion() !== undefined);
 
@@ -474,21 +472,25 @@ watch(
     { immediate: true },
 );
 
-// Rollback rides the update script with a flag, exactly as rebuild does with its hash (recreate.sh/recreate.ps1's
-// `-Rollback` switch).
-const command = computed(() => {
-    const key = props.hash === undefined ? `update` : `rebuild`;
+// One verb per mode, each the same recreate script underneath: rollback, rebuild onto a hash, or update. An argument no
+// one-liner can carry (an odd hash) keeps the script's older spelling.
+const command = (os: CommandOs): string => {
     const rollback = props.action === `Roll back`;
-    if (cmdOs.value === `windows`) {
-        const args = rollback ? `-Slug ${props.slug} -Rollback` : props.hash === undefined ? `-Slug ${props.slug}` : `-Slug ${props.slug} -Hash ${props.hash}`;
-        return psCommand(props.hash === undefined ? `updatePs1` : `rebuildPs1`, ``, args);
+    const [route, args] = rollback
+        ? ([`rollback`, [props.slug]] as const)
+        : props.hash === undefined
+          ? ([`update`, [props.slug]] as const)
+          : ([`rebuild`, [props.slug, props.hash]] as const);
+    if (oneLinerFits(route, args)) {
+        return oneLiner(route, args, os);
     }
-    if (rollback) {
-        return bashCommand(key, ``, `${props.slug} --rollback`);
+    const key = props.hash === undefined ? `update` : `rebuild`;
+    if (os === `windows`) {
+        const flags = rollback ? `-Slug ${props.slug} -Rollback` : props.hash === undefined ? `-Slug ${props.slug}` : `-Slug ${props.slug} -Hash ${props.hash}`;
+        return psCommand(props.hash === undefined ? `updatePs1` : `rebuildPs1`, ``, flags);
     }
-    return bashCommand(key, ``, props.hash === undefined ? props.slug : `${props.slug} ${props.hash}`);
-});
-</script>
+    return bashCommand(key, ``, rollback ? `${props.slug} --rollback` : props.hash === undefined ? props.slug : `${props.slug} ${props.hash}`);
+};</script>
 
 <template>
     <div :class="gilded ? `flex flex-col gap-3` : bare ? undefined : `flex flex-col gap-2`">
@@ -607,18 +609,7 @@ const command = computed(() => {
                 v-if="!gilded || open"
                 :class="gilded ? `flex flex-col gap-2.5 rounded-lg border border-line-subtle bg-canvas/50 p-3.5` : `flex flex-col gap-2`"
             >
-                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-                    <p class="text-xs text-content">{{ t(`capabilities.hostRecreate.runInTerminal`) }}</p>
-                    <SegmentedControl
-                        v-model="cmdOs"
-                        size="xs"
-                        :options="[
-                            { label: `Linux / macOS`, value: `unix` },
-                            { label: `Windows`, value: `windows` },
-                        ]"
-                    />
-                </div>
-                <Code :code="command" :lang="commandLang(cmdOs)" :wrap="true" />
+                <RunCommand :command="command" :explanation="t(`capabilities.hostRecreate.runInTerminal`)" />
                 <p v-if="!gilded" class="text-2xs text-subtle">{{ cost }}</p>
                 <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
                 <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />

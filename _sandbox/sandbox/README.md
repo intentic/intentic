@@ -35,6 +35,11 @@ flowchart LR
   with the ticket the owner's browser got and the grant the daemon holds. A browser opening the sandbox's own address
   is sent to the app's `/open` on it (`GET /`, `system/boot/open-in-app.ts`). (2026-10-02) It used to give up after
   ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
+- A device, desktop sync or a server joins with a command that carries a short code, never a token
+  (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
+  it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry.
+  A server's code stands for a single-use enroll token, so the sandbox's long-lived connect token stays here. Codes live
+  in memory only, so a restart voids them and the person copies a new command.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. When an isolated Claude Code turn is about to stop, each repository's own `turn` checks run

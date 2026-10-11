@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { clearWindowsRunValue, createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { clearWindowsRunValue, explain, type Footnote, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import {
     environmentKeyOf,
     projectDirNameOf,
@@ -13,7 +13,8 @@ import {
     type SyncEnrollmentRequest,
     SyncEnrollmentAnswerSchema,
 } from "@intentic/sandbox-contract";
-import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { buildCommand, machineUi, type Narration, sandboxUrlOf } from "../cli-ui.js";
 import { z } from "zod";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
@@ -82,23 +83,46 @@ export { transportFor } from "./endpoint.js";
 // Which pairings a command acts on. No selector means every one this machine holds; `--sandbox` takes the
 // sandbox id or any substring matching exactly one (real ids are `sandbox-<hex>-<zone>`-shaped), and selects every
 // pairing of that sandbox: its own, and each folder attached to it.
+// The host of a sandbox's address, or undefined for anything that is not one.
+const urlHost = (value: string): string | undefined => {
+    if (!value.includes("://")) {
+        return undefined;
+    }
+    try {
+        return new URL(value).host;
+    } catch {
+        // allow(silent-catch): a value that is not a URL is matched as an id
+        return undefined;
+    }
+};
+
 export const selectPairings = (state: SyncState, selector: string | undefined): readonly Pairing[] => {
     if (selector === undefined) {
         return state.pairings;
     }
     const ids = [...new Set(state.pairings.map((pairing) => pairing.sandboxId))];
-    const exact = ids.filter((id) => id === sanitizeId(selector));
+    // The sandbox's address names it too, as setup derives its id from it: one spelling of --sandbox for every command.
+    const wanted = sanitizeId(urlHost(selector) ?? selector);
+    const exact = ids.filter((id) => id === wanted);
     const matched = exact.length === 1 ? exact : ids.filter((id) => id.includes(selector));
     if (matched.length === 0) {
-        throw new Error(`no paired sandbox matches "${selector}". This machine pairs: ${ids.join(", ") || "none"}`);
+        throw new Error(explain(`No paired sandbox matches ${selector}.`, `this device pairs ${ids.length === 0 ? "no sandbox" : ids.join(", ")}.`));
     }
     if (matched.length > 1) {
-        throw new Error(`"${selector}" matches more than one paired sandbox: ${matched.join(", ")}`);
+        throw new Error(
+            explain(
+                `${selector} matches more than one paired sandbox.`,
+                `it matches ${matched.join(", ")}.`,
+                "name one of them in full with --sandbox.",
+            ),
+        );
     }
     return state.pairings.filter((pairing) => pairing.sandboxId === matched[0]);
 };
 
-// Enrolls this machine's SSH key with the single-use pairing token; a 423 or any other 4xx is the daemon's final answer.
+const SYNC_NOT_SET_UP = "Desktop sync was not set up.";
+
+// Enrolls this device's SSH key with the single-use pairing token; a 423 or any other 4xx is the daemon's final answer.
 export const enrollKey = async (
     sandboxUrl: string,
     pairToken: string,
@@ -108,6 +132,7 @@ export const enrollKey = async (
         delayMs,
         takeover = false,
         identity,
+        say,
     }: {
         attempts?: number;
         delayMs?: number;
@@ -115,6 +140,8 @@ export const enrollKey = async (
         // Which computer and which OS install on it is enrolling, so the sandbox joins this enrollment to the same
         // machine's card; an older sandbox ignores both.
         identity?: { readonly machineId: string; readonly environment: string };
+        // Where a retry while the sandbox warms up is narrated.
+        say?: Log;
     } = {},
 ): Promise<{ syncToken: string; mode: SyncMode; hostKey: string | undefined }> => {
     const response = await postWhileWarming(
@@ -130,7 +157,8 @@ export const enrollKey = async (
         },
         {
             doing: "enrolling the sync key",
-            expired: "pairing expired: click 'Enable desktop sync' again in your browser for a fresh command.",
+            expired: explain(SYNC_NOT_SET_UP, "the pairing has expired.", "click Enable desktop sync again in your browser for a fresh command."),
+            say,
             attempts,
             delayMs,
         },
@@ -140,20 +168,32 @@ export const enrollKey = async (
         const held = (await response.json().catch(() => ({}))) as { machine?: string };
         const from = held.machine !== undefined ? ` from "${held.machine}"` : "";
         throw new Error(
-            `desktop sync is already active on this sandbox${from}. Re-run with --takeover to move it to this machine (this stops syncing on the other one).`,
+            explain(
+                `Desktop sync is already active on this sandbox${from}.`,
+                "one device at a time holds a sandbox's file sync.",
+                "run the same command again with --takeover to move it to this device; the other one stops syncing.",
+            ),
         );
     }
     if (!response.ok) {
-        throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
+        throw new Error(explain(SYNC_NOT_SET_UP, `enrolling the sync key failed (${response.status}): ${await response.text()}`));
     }
     const answer = SyncEnrollmentAnswerSchema.safeParse(await response.json());
     if (!answer.success) {
-        throw new Error(`the sandbox enrolled this machine but its answer could not be read: ${z.prettifyError(answer.error)}`);
+        throw new Error(
+            explain(SYNC_NOT_SET_UP, `the sandbox enrolled this device but its answer could not be read: ${z.prettifyError(answer.error)}`),
+        );
     }
     const body = answer.data;
     // The sync token authorizes the port read, the machine report and the SSH transport: without one, fail here, not as a dead session.
     if (body.syncToken === undefined) {
-        throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
+        throw new Error(
+            explain(
+                SYNC_NOT_SET_UP,
+                "the sandbox enrolled this device but returned no sync credential.",
+                "update the sandbox, then enable sync again.",
+            ),
+        );
     }
     // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number). The
     // sshd host key, when a sandbox hands it over, is what this machine pins for it (ssh.ts, replaceKnownHost).
@@ -174,6 +214,8 @@ const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<
 
 interface SetupFlags {
     readonly url: string;
+    // --sandbox, the spelling every other command picks a sandbox with, standing in for --url.
+    readonly sandbox?: string;
     readonly pair: string;
     readonly dir?: string;
     readonly sandboxId?: string;
@@ -229,13 +271,16 @@ const wantedFolder = (flags: Pick<SetupFlags, "dir" | "url">, sandboxId: string)
             : flags.dir.replace(/^~(?=[\\/]|$)/, homeDir()),
     );
 
-const setup = buildCommand<SetupFlags>({
+type SetupGiven = Omit<SetupFlags, "url"> & { readonly url?: string };
+
+const setup = buildCommand<SetupGiven>({
     docs: {
-        brief: "Enroll this machine with a pairing token and start a Mutagen sync of the local dir ↔ sandbox /work (or a project folder in it), over ssh or, for a project on this machine's Docker engine, through Docker",
+        brief: "Enroll this device with a pairing token and start a Mutagen sync of the local dir ↔ sandbox /work (or a project folder in it), over ssh or, for a project on this device's Docker engine, through Docker",
     },
     parameters: {
         flags: {
-            url: { kind: "parsed", parse: String, brief: "The sandbox's public URL (e.g. https://sandbox-xxx.example.dev)" },
+            url: { kind: "parsed", parse: String, optional: true, brief: "The sandbox's public URL (e.g. https://sandbox-xxx.example.dev)" },
+            sandbox: { kind: "parsed", parse: String, optional: true, brief: "The same as --url" },
             pair: { kind: "parsed", parse: String, brief: "The one-time pairing token from the Desktop sync card" },
             dir: {
                 kind: "parsed",
@@ -244,7 +289,7 @@ const setup = buildCommand<SetupFlags>({
                 brief: "Local directory to sync (default: ~/intentic/<sandbox id>, the id in the sandbox's own URL)",
             },
             sandboxId: { kind: "parsed", parse: String, optional: true, brief: "Session/alias id (default: the sandbox URL host)" },
-            takeover: { kind: "boolean", brief: "Take over sync from another machine already enrolled on this sandbox (revokes its key)" },
+            takeover: { kind: "boolean", brief: "Take over sync from another device already enrolled on this sandbox (revokes its key)" },
             remoteDir: {
                 kind: "parsed",
                 parse: parseRemoteDir,
@@ -259,7 +304,7 @@ const setup = buildCommand<SetupFlags>({
                 kind: "parsed",
                 parse: parseTransport,
                 optional: true,
-                brief: "How the sandbox is reached: auto (the default: Docker for a project whose sandbox runs on this machine's engine, ssh otherwise), ssh or docker",
+                brief: "How the sandbox is reached: auto (the default: Docker for a project whose sandbox runs on this device's engine, ssh otherwise), ssh or docker",
             },
             projectsHost: {
                 kind: "boolean",
@@ -268,31 +313,29 @@ const setup = buildCommand<SetupFlags>({
             },
         },
     },
-    async func(this: CommandContext, flags: SetupFlags) {
-        // Self-update, PATH, the Windows launcher run first (install.ts), in plain lines before the renderer opens: on
-        // an actual update this process re-execs the new agent with the same argv, and a UI opened here would be a
-        // second banner there.
-        await prepareSetup((message) => void this.process.stdout.write(`${message}\n`), process.argv.slice(2));
+    async func(this: CommandContext, given: SetupGiven) {
+        const flags: SetupFlags = { ...given, url: sandboxUrlOf(given.url, given.sandbox, "Desktop sync was not set up.") };
         // Rendered through the shared renderer (@intentic/local-agent), also what `ic` renders through: `ic` sets
         // INTENTIC_UI=nested so these lines land as detail under its own step rather than a second banner.
-        const ui = createUi(this.process);
+        const ui = machineUi(this.process);
+        // Self-update, PATH, the Windows launcher run first (install.ts), as narration before the header: on an actual
+        // update this process re-execs the new agent with the same argv, which draws the header itself.
+        await prepareSetup(ui.note, process.argv.slice(2));
         // Every helper below takes a `Log` and narrates through it, so the whole command's prose is placed, wrapped
         // and coloured without any of them knowing.
         const out: Log = ui.note;
         ui.begin("intentic · desktop sync", SETUP_PLAN);
-        try {
-            await runSetup(ui, out, flags);
-        } finally {
-            // The spinner is an interval; a CLI that leaves one running is a CLI that does not exit.
-            ui.close();
-        }
+        // A throw is left to the run's stop (cli-ui.ts), which settles the running step as failed and stops the spinner;
+        // closing here first would settle it as done.
+        await runSetup(ui, out, flags);
+        ui.close();
     },
 });
 
 // What `setup` is going to do, said before it does it. Phases are this agent's own vocabulary, deliberately not
 // in the desktop app's setup plan: a phase that plan doesn't carry is narration under whichever step is running.
 const SETUP_PLAN: readonly PlanStep[] = [
-    { phase: "sync-enrolling", label: "Enrol this machine", weight: 25 },
+    { phase: "sync-enrolling", label: "Connect this device", weight: 25 },
     { phase: "sync-linking", label: "Link the folder", weight: 5 },
     { phase: "sync-starting", label: "Start syncing", weight: 20 },
 ];
@@ -308,8 +351,14 @@ export const placementChange = (held: Pairing | undefined, placement: Pick<Pairi
     const same = pairingRemoteDir(held) === pairingRemoteDir(placement) && isProjectPairing(held) === isProjectPairing(placement);
     return same
         ? undefined
-        : `${held.sandboxId} already syncs ${held.localDir} with its ${pairingRemoteDir(held)}${isProjectPairing(held) ? " as a project" : ""}; setting it up again for ${pairingRemoteDir(placement)}${isProjectPairing(placement) ? " as a project" : ""} would rewrite what that folder holds. Unpair it first (\`intentic-machine sync uninstall --sandbox ${held.sandboxId}\`), then set it up again.`;
+        : explain(
+              `${held.sandboxId} was not set up again.`,
+              `it already syncs ${held.localDir} with its ${pairingRemoteDir(held)}${isProjectPairing(held) ? " as a project" : ""}; setting it up again for ${pairingRemoteDir(placement)}${isProjectPairing(placement) ? " as a project" : ""} would rewrite what that folder holds. Unpair it first, then set it up again.`,
+              unpairCommand(held.sandboxId),
+          );
 };
+
+const unpairCommand = (sandboxId: string): string => `intentic-machine sync uninstall --sandbox ${sandboxId}`;
 
 // A project asked for in the environment but not in the flags: `ic` and the desktop app say a project with SYNC_PROJECT
 // and SYNC_REMOTE_DIR, and an install script older than this agent drops them instead of passing the flags. Enrolled
@@ -319,7 +368,11 @@ export const projectAskedWithoutFlag = (flags: Pick<SetupFlags, "project">, env:
     const remote = env["SYNC_REMOTE_DIR"] ?? ``;
     const asked = (env["SYNC_PROJECT"] ?? ``) !== `` || (remote !== `` && remote !== WORKSPACE_ROOT);
     return asked && !flags.project
-        ? `This setup was asked to sync a project folder (SYNC_PROJECT, SYNC_REMOTE_DIR), but the install script that ran it did not pass --project: it is older than this agent. Nothing was enrolled. Run the setup again once the script is current.`
+        ? explain(
+              "Nothing was enrolled.",
+              "this setup was asked to sync a project folder (SYNC_PROJECT, SYNC_REMOTE_DIR), but the install script that ran it did not pass --project: it is older than this agent.",
+              "run the setup again once the script is current.",
+          )
         : undefined;
 };
 
@@ -332,16 +385,28 @@ export const projectsHostChange = (
     flags: Pick<SetupFlags, "projectsHost" | "dir" | "remoteDir" | "project">,
 ): string | undefined => {
     if (flags.projectsHost === true && (flags.dir !== undefined || flags.remoteDir !== undefined || flags.project)) {
-        return "--projects-host enrolls this computer's sandbox with no folder of its own, so it takes no --dir, --remote-dir or --project. Attach folders to it afterwards with `intentic-machine sync attach`.";
+        return explain(
+            "Nothing was enrolled.",
+            "--projects-host enrolls this device's sandbox with no folder of its own, so it takes no --dir, --remote-dir or --project; folders attach to it afterwards.",
+            "run the same command again without --dir, --remote-dir and --project.",
+        );
     }
     if (held === undefined) {
         return undefined;
     }
     if (flags.projectsHost === true && held.localDir !== undefined) {
-        return `${held.sandboxId} already syncs ${held.localDir}; setting it up as this computer's sandbox for folders would stop that. Unpair it first (\`intentic-machine sync uninstall --sandbox ${held.sandboxId}\`), then set it up again.`;
+        return explain(
+            `${held.sandboxId} was not set up again.`,
+            `it already syncs ${held.localDir}; setting it up as this device's sandbox for folders would stop that. Unpair it first, then set it up again.`,
+            unpairCommand(held.sandboxId),
+        );
     }
     if (flags.projectsHost !== true && held.projectsHost === true) {
-        return `${held.sandboxId} is this computer's sandbox for folders, which attach to it; setting it up for a folder of its own would leave them without it. Set it up again with --projects-host, or unpair it first (\`intentic-machine sync uninstall --sandbox ${held.sandboxId}\`).`;
+        return explain(
+            `${held.sandboxId} was not set up again.`,
+            "it is this device's sandbox for folders, which attach to it; setting it up for a folder of its own would leave them without it. Set it up again with --projects-host, or unpair it first.",
+            unpairCommand(held.sandboxId),
+        );
     }
     return undefined;
 };
@@ -387,7 +452,11 @@ const planSetup = async (
     const clash = await overlappingPairing(folder, sandboxId, pairings);
     if (clash !== undefined) {
         throw new Error(
-            `${folder} overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}: two syncs over one folder overwrite each other's files. Choose a folder that neither is, holds nor sits inside one this machine syncs (\`intentic-machine status\` lists them).`,
+            explain(
+                `${folder} was not set up.`,
+                `it overlaps ${clash.localDir}, which already syncs with ${clash.sandboxId}, and two syncs over one folder overwrite each other's files.`,
+                "choose a folder that neither is, holds nor sits inside one this device syncs; intentic-machine status lists them.",
+            ),
         );
     }
     // (2026-10-05) And the other environments of this PC, each with a sync.json of its own (siblings.ts).
@@ -400,11 +469,11 @@ const planSetup = async (
 };
 
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
-    ui.step("sync-enrolling", "enrolling this machine with your sandbox…");
+    ui.step("sync-enrolling", "enrolling this device with your sandbox…");
     const { sandboxId, placement, folder, reach, unread = [] } = await planSetup(flags);
     if (unread.length > 0) {
-        out(
-            `note: ${unread.join(", ")} could not be asked which folders ${unread.length === 1 ? "it syncs" : "they sync"}, so ${folder ?? "this folder"} was not checked against ${unread.length === 1 ? "it" : "them"}.`,
+        ui.warn(
+            `${unread.join(", ")} could not be asked which folders ${unread.length === 1 ? "it syncs" : "they sync"}, so ${folder ?? "this folder"} was not checked against ${unread.length === 1 ? "it" : "them"}.`,
         );
     }
     const publicKey = await ensureSshKey();
@@ -413,6 +482,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     const [{ syncToken, mode, hostKey }, mutagen] = await Promise.all([
         enrollKey(flags.url, flags.pair, publicKey, {
             takeover: flags.takeover,
+            say: out,
             identity: { machineId: machineId(), environment: environmentKeyOf({ wsl: await wslEnvironment() }) },
         }),
         ensureMutagen(),
@@ -427,12 +497,16 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // projects host likewise: the folders that attach to it are file sync.
     if ((placement.project === true || flags.projectsHost === true) && mode !== "sync") {
         await revokeEnrollment(flags.url, syncToken).catch((error: unknown) =>
-            out(
-                `note: ${flags.url} could not be told to forget this machine (${errorMessage(error)}), so its sync key is still authorized there. Remove this machine from that sandbox's Devices view.`,
+            ui.warn(
+                `${flags.url} could not be told to forget this device (${errorMessage(error)}), so its sync key is still authorized there. Remove this device from that sandbox's Devices view.`,
             ),
         );
         throw new Error(
-            `another machine holds file sync for this sandbox, so ${flags.projectsHost === true ? "no folder can attach to it" : "this project folder cannot sync"} here. Re-run with --takeover to move sync to this machine.`,
+            explain(
+                flags.projectsHost === true ? "No folder can attach to this sandbox here." : "This project folder cannot sync here.",
+                "another device holds file sync for this sandbox.",
+                "run the same command again with --takeover to move sync to this device.",
+            ),
         );
     }
 
@@ -471,16 +545,20 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await writeManagedSshConfig(pairingSshConfig(pairings));
 
     ui.step("sync-starting", "starting the sync engine…");
+    // What a late start adds to the ending's footnotes.
+    const later: Footnote[] = [];
     await ensureResident(out);
     await completeSetup(out);
-    await proveTransport(out, sandboxId, container);
+    await proveTransport(out, ui.warn, sandboxId, container);
 
     // THIS pairing's file sync is the agent's to start (mirror.ts prepares every setup it has not seen), never this
     // command's as well. The two used to race, and one name ended up holding two identical sessions. Waiting for it is
     // only so the lines below can say it began. Every other pairing's session keeps running; only sessions no pairing
     // claims are swept.
     if (mode === "sync" && localDir !== undefined && !(await syncSessionAppears(mutagen, sandboxId, SESSION_READY_MS))) {
-        out(await notStartedYet(localDir));
+        const late = await notStartedYet(localDir);
+        ui.warn(late.said);
+        later.push(late.later);
     }
     retireOrphanSessions(mutagen, pairings, out);
     // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from the first
@@ -489,7 +567,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // Register the Mutagen daemon to autostart and resume sessions across reboots; it holds both sync and forward
     // sessions, so this covers mirror-only too. Best-effort: already-registered isn't worth failing on.
     registerMutagenAutostart(mutagen, machineLauncher(), out);
-    finishSetup(ui, flags.url, pairing, pairings);
+    finishSetup(ui, flags.url, pairing, pairings, later);
 };
 
 // Whether a folder exists and has anything in it; what it holds is adopt.ts's to compare.
@@ -514,15 +592,15 @@ const pinHostKey = async (sandboxId: string, hostKey: string | undefined, contai
 // is not the `ssh` on PATH but the first hit in its own hardcoded list (ssh.ts). Through Docker nothing rides ssh
 // (endpoint.ts): whether the container is this sandbox was checked before the token was spent, and is checked again
 // before each session is made.
-const proveTransport = async (out: Log, sandboxId: string, container: string | undefined): Promise<void> => {
+const proveTransport = async (out: Log, warn: Log, sandboxId: string, container: string | undefined): Promise<void> => {
     if (container !== undefined) {
-        out(`reaching ${sandboxId} through Docker on this machine (${container}): no ssh key, tunnel or public address on the data path`);
+        out(`reaching ${sandboxId} through Docker on this device (${container}): no ssh key, tunnel or public address on the data path`);
         return;
     }
     const alias = sshAlias(sandboxId);
     const port = syncSshPort(sandboxId);
     if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
-        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet, syncing starts as soon as it is.`);
+        warn(`The sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet; syncing starts as soon as it is.`);
     }
     const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
     assertSshConfigVisible(ssh, alias, port);
@@ -542,23 +620,24 @@ const syncedSentence = (pairing: Pairing): string => {
 // The ending block. The fleet is said out loud first: pairing a sandbox on a machine that already had one is the exact
 // moment the user needs to know the others are still syncing. The address a person acts on is the folder, the thing
 // they open, and an immediately visible path is the anchor that setup worked.
-const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: readonly Pairing[]): void => {
+const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: readonly Pairing[], later: readonly Footnote[] = []): void => {
     if (pairings.length > 1) {
-        ui.note(`This machine now syncs ${pairings.length} pairings:`);
+        ui.note(`This device now syncs ${pairings.length} pairings:`);
         for (const held of pairings) {
             ui.note(
-                `  ${pairingKey(held)}${held.projectsHost === true ? " (this computer's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`,
+                `  ${pairingKey(held)}${held.projectsHost === true ? " (this device's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`,
             );
         }
     }
     if (pairing.projectsHost === true) {
         ui.finished(
-            "This computer's sandbox is ready for folders.",
+            "This device's sandbox is ready for folders.",
             undefined,
-            `Ports from ${sandboxUrl} answer on this machine's localhost, and folders attach to it as ${WORKSPACE_ROOT}/<name>.`,
+            `Ports from ${sandboxUrl} answer on this device's localhost, and folders attach to it as ${WORKSPACE_ROOT}/<name>.`,
             [
-                ["attach a folder", "intentic-machine sync attach --sandbox-url <url> --dir <folder> --name <name>"],
+                ["attach a folder", `intentic-machine sync attach --sandbox-url ${sandboxUrl} --dir <folder> --name <name>`],
                 ["check it", "intentic-machine status"],
+                ...later,
             ],
         );
         return;
@@ -567,11 +646,8 @@ const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: rea
     ui.finished(
         syncing ? "Desktop sync is running." : "Enrolled for port mirroring.",
         syncing ? pairing.localDir : undefined,
-        syncing ? syncedSentence(pairing) : `Ports from ${sandboxUrl} now answer on this machine's localhost (mirror-only, no file sync).`,
-        [
-            ["check it", "intentic-machine status"],
-            ["remove it", "intentic-machine sync uninstall"],
-        ],
+        syncing ? syncedSentence(pairing) : `Ports from ${sandboxUrl} now answer on this device's localhost (mirror-only, no file sync).`,
+        [["check it", "intentic-machine status"], ["remove it", unpairCommand(pairing.sandboxId)], ...later],
     );
 };
 
@@ -598,11 +674,17 @@ const syncSessionAppears = async (mutagen: string, key: string, withinMs: number
 
 // Said when that wait runs out. An agent older than this one prepares only the pairings it started with, and it is
 // still running here only if setup's own update failed. Otherwise the sandbox is just answering slowly.
-const notStartedYet = async (folder: string): Promise<string> => {
+const notStartedYet = async (folder: string): Promise<{ readonly said: string; readonly later: Footnote }> => {
     const running = await readResidentBuild();
     return running !== undefined && running !== MACHINE_VERSION
-        ? `note: the agent running here is ${running}, which starts file sync for ${folder} only at its next start; \`intentic-machine upgrade\` brings it to ${MACHINE_VERSION} now.`
-        : `note: this machine's agent has not started file sync for ${folder} yet; it keeps trying, and \`intentic-machine status\` shows when it is running.`;
+        ? {
+              said: `The agent running here is ${running}, which starts file sync for ${folder} only at its next start; ${MACHINE_VERSION} starts it at once.`,
+              later: ["update it now", "intentic-machine upgrade"],
+          }
+        : {
+              said: `This device's agent has not started file sync for ${folder} yet; it keeps trying.`,
+              later: ["see when it runs", "intentic-machine status"],
+          };
 };
 
 // Which sandbox a command acts on, every one this machine pairs unless named. Shared by pause/resume/uninstall.
@@ -615,7 +697,7 @@ const sandboxFlag = {
         kind: "parsed",
         parse: String,
         optional: true,
-        brief: "Act on one paired sandbox (its id, or any substring matching exactly one). Default: all of them",
+        brief: "Act on one paired sandbox (its URL, its id, or any part of the id matching exactly one). Default: all of them",
     },
 } as const;
 
@@ -641,28 +723,29 @@ const pairingCommand = <F extends SandboxFlags>(
     brief: string,
     flags: FlagParametersForType<F>,
     none: string,
-    act: (selected: readonly Pairing[], flags: F, out: Log) => Promise<void>,
+    act: (selected: readonly Pairing[], flags: F, ui: Ui) => Promise<void>,
 ) =>
     buildCommand<F>({
         docs: { brief },
         parameters: { flags },
         async func(this: CommandContext, given: F) {
-            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+            const ui = machineUi(this.process);
             const selected = selectPairings(await readState(), given.sandbox);
             if (selected.length === 0) {
-                out(none);
+                ui.quiet(none);
                 return;
             }
-            await act(selected, given, out);
+            await act(selected, given, ui);
         },
     });
 
-const NONE_TO_MIRROR = "no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.";
+const NONE_TO_MIRROR = "No sandbox is paired on this device, so there is nothing to mirror. Desktop sync starts from a sandbox's Desktop sync card.";
 
 // The watcher is what gives mirrored ports back, so a stopped agent turns that into a promise nothing keeps.
-const noteIfStopped = async (out: Log): Promise<void> => {
+const noteIfStopped = async (ui: Ui): Promise<void> => {
     if ((await readResidentPid()) === undefined) {
-        out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
+        ui.warn("This device's agent is not running, so nothing mirrors until it starts.");
+        ui.later([["start the agent", "intentic-machine run"]]);
     }
 };
 
@@ -671,14 +754,18 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
     pairingCommand<SandboxFlags>(
         brief,
         sandboxFlag,
-        `no sandboxes are paired on this machine: nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`,
-        async (selected, _flags, out) => {
+        `No sandbox is paired on this device, so there is nothing to ${verb}. Desktop sync starts from a sandbox's Desktop sync card.`,
+        async (selected, _flags, ui) => {
+            const done = verb === "pause" ? "paused" : "resumed";
             // The projects host holds no folder of its own: its folders' sessions are theirs.
             const syncing = selected.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
             if (syncing.length === 0) {
-                out(`mirror-only enrollment${selected.length > 1 ? "s" : ""}, no file sync to ${verb}.`);
+                ui.quiet(
+                    `${selected.length > 1 ? "These enrollments only mirror ports" : "This enrollment only mirrors ports"}, so there is no file sync to ${verb}.`,
+                );
                 return;
             }
+            ui.act(`${verb === "pause" ? "Pausing" : "Resuming"} file sync`);
             const mutagen = await ensureMutagen();
             // Both sessions of the pair, and only names the daemon holds: one it can't resolve fails the whole call.
             const held = existingSyncSessions(
@@ -687,26 +774,33 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
             );
             if (held === undefined) {
                 throw new Error(
-                    `Mutagen did not answer when asked which sessions it holds, so nothing was ${verb === "pause" ? "paused" : "resumed"}. Try again in a moment.`,
+                    explain(
+                        `File sync was not ${done}.`,
+                        "Mutagen did not answer when asked which sessions it holds.",
+                        "run the same command again in a moment.",
+                    ),
                 );
             }
             const plan = syncSwitchPlan(syncing, held);
             if (plan.names.length === 0) {
                 // Not a failure: a sandbox that has never answered has no session yet, and the agent creates one when it does.
-                out(`No file-sync session is running for: ${named(syncing)}. Nothing to ${verb}; syncing starts when the sandbox answers again.`);
+                ui.done(
+                    `No file-sync session is running for ${named(syncing)}, so nothing was ${done}. Syncing starts when the sandbox answers again.`,
+                );
                 return;
             }
             runMutagen(mutagen, ["sync", verb, ...plan.names]);
-            out(`${verb === "pause" ? "Paused" : "Resumed"} file sync for: ${named(plan.acted)}`);
             if (plan.idle.length > 0) {
-                out(`No file-sync session to ${verb} for: ${named(plan.idle)}.`);
+                ui.note(`No file-sync session to ${verb} for ${named(plan.idle)}.`);
             }
+            ui.done(`${verb === "pause" ? "Paused" : "Resumed"} file sync for ${named(plan.acted)}.`);
         },
     );
 
 // Port mirroring on or off, durable and local (config.ts setMirrorOff), so it holds through a reboot and an unreachable sandbox.
 const mirrorSwitch = (brief: string, off: boolean) =>
-    pairingCommand<SandboxFlags>(brief, sandboxFlag, NONE_TO_MIRROR, async (selected, _flags, out) => {
+    pairingCommand<SandboxFlags>(brief, sandboxFlag, NONE_TO_MIRROR, async (selected, _flags, ui) => {
+        ui.act(off ? "Turning port mirroring off" : "Turning port mirroring on");
         const mutagen = await ensureMutagen();
         // Every pairing of the sandbox carries the switch (a folder attached to it reports it), and the forwards are the
         // sandbox's, torn down once.
@@ -720,13 +814,13 @@ const mirrorSwitch = (brief: string, off: boolean) =>
                 // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox's teardown at a time, as everywhere else here
                 await retirePairingMirror(mutagen, sandboxId);
             }
-        }
-        if (off) {
-            out(`Port mirroring OFF for: ${named(selected)}. Those ports are off this device's localhost. File syncing is untouched.`);
+            ui.note("Those ports are off this device's localhost. File syncing is untouched.");
+            ui.done(`Turned port mirroring off for ${named(selected)}.`);
             return;
         }
-        out(`Port mirroring on for: ${named(selected)}. Their ports return to localhost within a few seconds.`);
-        await noteIfStopped(out);
+        ui.note("Their ports return to localhost within a few seconds.");
+        ui.done(`Turned port mirroring on for ${named(selected)}.`);
+        await noteIfStopped(ui);
     });
 
 // The one numeric flag this CLI takes. Parsed strictly rather than through a bare Number(): a NaN reaching the
@@ -734,7 +828,7 @@ const mirrorSwitch = (brief: string, off: boolean) =>
 const parsePort = (value: string): number => {
     const port = Number(value);
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-        throw new Error(`"${value}" is not a port number (1-65535).`);
+        throw new Error(`${value} is not a port number (1-65535).`);
     }
     return port;
 };
@@ -743,13 +837,14 @@ interface MirrorPortFlags extends SandboxFlags {
     readonly port: number;
 }
 
-// One port left off THIS machine's localhost, where something of its own holds it; every other machine keeps mirroring it.
+// One port left off THIS device's localhost, where something of its own holds it; every other device keeps mirroring it.
 const mirrorPortSwitch = (brief: string, ignored: boolean) =>
     pairingCommand<MirrorPortFlags>(
         brief,
         { ...sandboxFlag, port: { kind: "parsed", parse: parsePort, brief: "The port number, as the sandbox serves it" } },
         NONE_TO_MIRROR,
-        async (selected, flags, out) => {
+        async (selected, flags, ui) => {
+            ui.act(ignored ? `Leaving port ${flags.port} off this device` : `Mirroring port ${flags.port} again`);
             const mutagen = await ensureMutagen();
             let taken = 0;
             // Only the pairing that mirrors its sandbox's ports (never a folder attached to it) holds the number.
@@ -762,15 +857,13 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
                 }
             }
             if (ignored) {
-                out(
-                    `Port ${flags.port} will not be mirrored for: ${named(selected)}.${taken === 0 ? "" : ` Took localhost:${flags.port} off this device.`} Every other port is untouched.`,
-                );
+                ui.note(`${taken === 0 ? "" : `Took localhost:${flags.port} off this device. `}Every other port is untouched.`);
+                ui.done(`Port ${flags.port} is no longer mirrored for ${named(selected)}.`);
                 return;
             }
-            out(
-                `Port ${flags.port} will be mirrored again for: ${named(selected)}. It returns to localhost within a few seconds, unless something else on this machine is holding it.`,
-            );
-            await noteIfStopped(out);
+            ui.note(`It returns to localhost within a few seconds, unless something else on this device is holding it.`);
+            ui.done(`Port ${flags.port} is mirrored again for ${named(selected)}.`);
+            await noteIfStopped(ui);
         },
     );
 
@@ -793,50 +886,62 @@ const clean = buildCommand<SandboxFlags>({
     docs: { brief: "Clear build output this device left in directories the sandbox deleted, so those deletions can land" },
     parameters: { flags: sandboxFlag },
     async func(this: CommandContext, flags: SandboxFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const ui = machineUi(this.process);
         const syncing = selectPairings(await readState(), flags.sandbox).filter((pairing) => pairing.mode === "sync");
         if (syncing.length === 0) {
-            out("no file-syncing sandbox is paired on this machine: there is no folder here to clear anything from.");
+            ui.quiet("No file-syncing sandbox is paired on this device, so there is no folder here to clear anything from.");
             return;
         }
+        ui.act("Clearing build output the sandbox's deletions are waiting on");
         const mutagen = await ensureMutagen();
         let removed = 0;
         let standing = 0;
         for (const pairing of syncing) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing at a time, so a log line names one sandbox
-            const outcome = await healDerivedConflicts(mutagen, pairing, out, true);
+            const outcome = await healDerivedConflicts(mutagen, pairing, ui.note, true);
             removed += outcome.removed.length;
             standing += outcome.standing;
         }
-        out(
+        if (standing > 0) {
+            // Said plainly rather than folded into the number: these are the ones this command must not touch. Not
+            // called "real disagreements" — most are, but the count also holds anything that failed the check on disk,
+            // and overstating what it knows is how a reader learns to distrust the rest.
+            ui.warn(
+                `${plural(standing, "conflict")} still standing, and not this command's to settle: two copies somebody wrote is a choice only a person makes.`,
+            );
+        }
+        ui.done(
             removed === 0
-                ? "Nothing to clear: no directory the sandbox deleted is being held open by build output on this device."
-                : `Cleared ${removed} director${removed === 1 ? "y" : "ies"}. The deletions they were holding back land within a few seconds.`,
+                ? "Nothing to clear: no directory the sandbox deleted is held open by build output on this device."
+                : `Cleared ${plural(removed, "directory", "directories")}. The deletions they held back land within a few seconds.`,
         );
         if (standing > 0) {
-            // Said plainly rather than folded into the number above: these are the ones this command must not touch.
-            // Not called "real disagreements" — most are, but the count also holds anything that failed the check on
-            // disk, and overstating what it knows is how a reader learns to distrust the rest.
-            out(
-                `${plural(standing, "conflict")} still standing, and not this command's to settle: two copies somebody wrote is a choice only a person makes. \`intentic-machine status\` lists the paths.`,
-            );
+            ui.later([["see the paths", "intentic-machine status"]]);
         }
     },
 });
 
 // Whether the watcher clears build output by itself, durable and per pairing; `clean` is not gated by it.
 const autoHealSwitch = (brief: string, off: boolean) =>
-    pairingCommand<SandboxFlags>(brief, sandboxFlag, "no sandboxes are paired on this machine: nothing to switch.", async (selected, _flags, out) => {
-        for (const pairing of selected) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-            await setAutoHealOff(pairingKey(pairing), off);
-        }
-        out(
-            off
-                ? `Clearing derived residue is OFF for: ${named(selected)}. A deletion the sandbox makes will now stop syncing whenever this device has build output inside it; \`intentic-machine sync clean\` clears one by hand.`
-                : `Clearing derived residue is on for: ${named(selected)}.`,
-        );
-    });
+    pairingCommand<SandboxFlags>(
+        brief,
+        sandboxFlag,
+        "No sandbox is paired on this device, so there is nothing to switch.",
+        async (selected, _flags, ui) => {
+            ui.act(off ? "Turning off clearing build output" : "Turning on clearing build output");
+            for (const pairing of selected) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                await setAutoHealOff(pairingKey(pairing), off);
+            }
+            if (!off) {
+                ui.done(`This device clears build output that holds back a deletion for ${named(selected)}.`);
+                return;
+            }
+            ui.note("A deletion the sandbox makes now stops syncing whenever this device has build output inside it.");
+            ui.done(`This device no longer clears build output by itself for ${named(selected)}.`);
+            ui.later([["clear it by hand", "intentic-machine sync clean"]]);
+        },
+    );
 
 const autoheal = buildRouteMap({
     routes: {
@@ -848,9 +953,10 @@ const autoheal = buildRouteMap({
 
 // The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
 // sandbox and leaves every other pairing served; bare, it removes everything, self-revoking each dropped
-// enrollment so a machine walking away cleans up after itself.
-// `forGood` is the top-level `uninstall`, which retires the agent whatever this machine hosts.
-export const syncUninstall = async (out: Log, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<void> => {
+// enrollment so a device walking away cleans up after itself. Narrates through `say` and answers the verdict, for the
+// caller to settle its one live line with.
+// `forGood` is the top-level `uninstall`, which retires the agent whatever this device hosts.
+export const syncUninstall = async (say: Narration, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<string> => {
     const state = await readState();
     const dropped = selectPairings(state, sandbox);
     const mutagen = await ensureMutagen();
@@ -866,13 +972,13 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
         if (pairing.syncToken !== undefined && firstOfSandbox) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Drops are sequenced so failures identify one sandbox.
             await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch((error: unknown) =>
-                out(
-                    `note: ${pairing.sandboxUrl} could not be told to forget this machine (${errorMessage(error)}), so its sync key is still authorized there. Remove this machine from that sandbox's Devices view.`,
+                say.warn(
+                    `${pairing.sandboxUrl} could not be told to forget this device (${errorMessage(error)}), so its sync key is still authorized there. Remove this device from that sandbox's Devices view.`,
                 ),
             );
         }
         if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
-            // The pair goes together: a surviving backup session would keep mirroring a sandbox this machine has just
+            // The pair goes together: a surviving backup session would keep mirroring a sandbox this device has just
             // unpaired, writing into a folder the owner considers released.
             spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], {
                 stdio: "ignore",
@@ -886,24 +992,23 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
         await removePairing(pairingKey(pairing));
-        out(`unpaired ${pairingKey(pairing)}${pairing.localDir === undefined ? "" : ` (${pairing.localDir} is no longer synced)`}.`);
+        say.note(`Unpaired ${pairingKey(pairing)}${pairing.localDir === undefined ? "" : `; ${pairing.localDir} is no longer synced`}.`);
     }
 
     if (remaining.length > 0) {
         // Sync stays: regenerate the ssh fragment for pairings still live. The agent is left running — it re-reads its
-        // pairing list every tick (mirror.ts), and restarting it would drop this machine's socket to every linked
+        // pairing list every tick (mirror.ts), and restarting it would drop this device's socket to every linked
         // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
         // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
-        await ensureResident(out, { forGood });
-        out(`Still syncing ${plural(remaining.length, "pairing")}: ${named(remaining)}`);
-        return;
+        await ensureResident(say.note, { forGood });
+        return `Unpaired ${plural(dropped.length, "pairing")}. Still syncing ${plural(remaining.length, "pairing")}: ${named(remaining)}.`;
     }
 
     // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); the agent retires only when this
     // environment holds nothing at all.
-    await ensureResident(out, { forGood });
-    await teardownAllForwards(mutagen, out);
+    await ensureResident(say.note, { forGood });
+    await teardownAllForwards(mutagen, say.note);
     await removeManagedSshConfig();
     // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A `mutagen` of the user's
     // own, found on PATH, may hold their own sessions: leave its daemon alone and say so instead. ensureMutagen answers an
@@ -913,23 +1018,24 @@ export const syncUninstall = async (out: Log, sandbox?: string, { forGood = fals
     if (ownCopy) {
         unregisterMutagenAutostart(mutagen);
         spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    } else if (process.platform === "win32") {
-        // Only this agent's own logon entry for the daemon; Mutagen's own registration is the user's.
-        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
+        say.note("Removed the ssh-config include, and stopped and unregistered the Mutagen daemon.");
+    } else {
+        if (process.platform === "win32") {
+            // Only this agent's own logon entry for the daemon; Mutagen's own registration is the user's.
+            clearWindowsRunValue(MUTAGEN_RUN_VALUE);
+        }
+        say.note("Removed the ssh-config include. Your own Mutagen install and its daemon are untouched.");
     }
-    out(
-        ownCopy
-            ? "Sync terminated; ssh-config include removed; Mutagen daemon stopped and unregistered."
-            : "Sync terminated; ssh-config include removed. (Your own Mutagen install is untouched, `mutagen daemon unregister` if you no longer want its daemon at login.)",
-    );
+    return dropped.length === 0 ? "Nothing was syncing. Removed any leftovers." : "Stopped syncing on this device.";
 };
 
 const uninstall = buildCommand<SandboxFlags>({
-    docs: { brief: "Unpair a sandbox (--sandbox), or stop syncing every sandbox on this machine" },
+    docs: { brief: "Unpair a sandbox (--sandbox), or stop syncing every sandbox on this device" },
     parameters: { flags: sandboxFlag },
     async func(this: CommandContext, flags: SandboxFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        await syncUninstall(out, flags.sandbox);
+        const ui = machineUi(this.process);
+        ui.act(flags.sandbox === undefined ? "Stopping sync on this device" : `Unpairing ${flags.sandbox}`);
+        ui.done(await syncUninstall(ui, flags.sandbox));
     },
 });
 

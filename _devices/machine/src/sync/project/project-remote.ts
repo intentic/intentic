@@ -110,9 +110,9 @@ const walk = async (relative) => {
     }
 };
 fs.promises.stat(root).then(
-    (info) => info.isDirectory() ? walk("").then(() => process.stdout.write(fields.map((field) => field + "\0").join(""))) : Promise.reject(new Error(root + " is not a folder")),
+    (info) => info.isDirectory() ? walk("").then(() => process.stdout.write(fields.map((field) => field + "\0").join(""))) : Promise.reject(new Error(root + " is not a folder")), // allow(terminal-output): the sandbox-side program's own output, which this agent parses
     (error) => { if (error.code === "ENOENT") process.exitCode = 3; else throw error; },
-).catch((error) => { process.stderr.write(error.message + "\n"); process.exitCode = 1; });
+).catch((error) => { process.stderr.write(error.message + "\n"); process.exitCode = 1; }); // allow(terminal-output): the sandbox-side program's own output, which this agent parses
 `;
 
 // The files asked for (NUL-separated on stdin), in that order, each as a header line and then exactly its bytes:
@@ -123,7 +123,7 @@ export const FETCH_PROGRAM = String.raw`
 const fs = require("fs");
 const path = require("path");
 const { root } = JSON.parse(Buffer.from(process.argv[1], "base64").toString());
-const write = (data) => new Promise((resolve, reject) => process.stdout.write(data, (error) => (error ? reject(error) : resolve())));
+const write = (data) => new Promise((resolve, reject) => process.stdout.write(data, (error) => (error ? reject(error) : resolve()))); // allow(terminal-output): the sandbox-side program's own output, which this agent parses
 const header = (frame) => write(JSON.stringify(frame) + "\n");
 const plainFolders = async (name) => {
     let at = root;
@@ -162,7 +162,7 @@ process.stdin.on("data", (chunk) => input.push(chunk));
 process.stdin.on("end", () => {
     const names = Buffer.concat(input).toString().split("\0").filter((name) => name !== "");
     (async () => { for (const [i, name] of names.entries()) await send(i, name); })()
-        .catch((error) => { process.stderr.write(error.message + "\n"); process.exitCode = 1; });
+        .catch((error) => { process.stderr.write(error.message + "\n"); process.exitCode = 1; }); // allow(terminal-output): the sandbox-side program's own output, which this agent parses
 });
 `;
 

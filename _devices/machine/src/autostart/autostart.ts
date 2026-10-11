@@ -15,5 +15,5 @@ export const MACHINE_AUTOSTART: AutostartSpec = {
     detachedArgs: ["run"],
     foregroundArgs: ["run", "--foreground"],
     failureNote: (reason) =>
-        `note: couldn't register this machine's agent to start at login (${reason}); it runs until this machine restarts, then re-run \`intentic-machine run\`. Logs: ${runLogPath}`,
+        `Couldn't register this device's agent to start at login (${reason}); it runs until this device restarts, and starts again with intentic-machine run. Its log is ${runLogPath}.`,
 };

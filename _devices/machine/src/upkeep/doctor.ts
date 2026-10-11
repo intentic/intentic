@@ -1,7 +1,9 @@
-import { buildCommand, type CommandContext } from "@stricli/core";
+import type { CommandContext } from "@stricli/core";
+import { explain, type Item } from "@intentic/local-agent";
+import { answeringUi, buildCommand, markFailed } from "../cli-ui.js";
 import { readResident } from "../supervision.js";
 import { MANIFEST } from "./manifest.js";
-import { runUpkeep, summaryLine, type UpkeepItem, type UpkeepOutcome } from "./reconcile.js";
+import { runUpkeep, summaryLine, type UpkeepItem } from "./reconcile.js";
 
 /* `intentic-machine doctor [--fix] [--json]`: the resident's upkeep pass (reconcile.ts), on demand. Without `--fix` it
    only lists what the pass would do, and changes nothing, not even upkeep.json. With it, it does what the resident
@@ -31,19 +33,21 @@ const DONE: Readonly<Record<UpkeepItem["action"], string>> = {
     report: "reported",
 };
 
-// One line per thing found, in the words of what is (or would be) done with it. Pure.
-export const itemLine = (item: UpkeepItem): string => {
-    const said: Readonly<Record<UpkeepOutcome, string>> = {
-        fixed: `${DONE[item.action]}: ${item.what}`,
-        "would-fix": `would ${VERB[item.action]}: ${item.what}`,
-        skipped: `left: ${item.what} — ${item.why ?? ""}`,
-    };
-    return `  ${said[item.outcome]}`;
+// One row per thing found: the thing, and what is (or would be) done with it. Pure.
+export const doctorItem = (item: UpkeepItem): Item => {
+    switch (item.outcome) {
+        case "fixed":
+            return { tone: "ok", name: item.what, meta: DONE[item.action] };
+        case "would-fix":
+            return { tone: "warn", name: item.what, meta: `would ${VERB[item.action]}` };
+        default:
+            return { tone: "skip", name: item.what, meta: `left: ${item.why ?? "no reason given"}` };
+    }
 };
 
 // Why each kind of thing goes, said once per entry that found something. Pure.
-const reasonLines = (items: readonly UpkeepItem[]): string[] =>
-    MANIFEST.filter((entry) => items.some((item) => item.id === entry.id)).map((entry) => `  ${entry.id}: ${entry.reason}`);
+export const reasonLines = (items: readonly UpkeepItem[]): string[] =>
+    MANIFEST.filter((entry) => items.some((item) => item.id === entry.id)).map((entry) => `${entry.id}: ${entry.reason}`);
 
 export const doctor = buildCommand<DoctorFlags>({
     docs: { brief: "Check this environment for what older releases left and stores past their bounds; --fix puts it right" },
@@ -54,36 +58,51 @@ export const doctor = buildCommand<DoctorFlags>({
         },
     },
     async func(this: CommandContext, flags: DoctorFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const ui = answeringUi(this.process, flags.json);
         const resident = await readResident();
-        const run = await runUpkeep({ fix: flags.fix, resident: false, supervisor: resident?.supervisor, log: flags.json ? () => undefined : out });
+        if (!flags.json) {
+            ui.report("intentic · doctor", flags.fix ? "fixing what it finds" : "checking only: nothing is changed");
+        }
+        const run = await runUpkeep({
+            fix: flags.fix,
+            resident: false,
+            supervisor: resident?.supervisor,
+            log: flags.json ? () => undefined : ui.note,
+        });
         if ("busy" in run) {
-            const why = `the agent's own upkeep pass is running (pid ${run.busy}); try again in a minute.`;
-            if (flags.json) {
-                out(JSON.stringify({ ok: false, error: why }));
-            } else {
-                out(why);
+            const why = `the agent's own upkeep pass is running (pid ${run.busy})`;
+            if (!flags.json) {
+                throw new Error(explain("The check did not run.", `${why}.`, "run the same command again in a minute."));
             }
-            process.exitCode = 1;
+            // allow(terminal-output): the --json failure object
+            this.process.stdout.write(`${JSON.stringify({ ok: false, error: `The check did not run: ${why}; try again in a minute.` })}\n`);
+            markFailed(this);
             return;
         }
         if (flags.json) {
-            out(JSON.stringify({ ok: true, fix: flags.fix, ...run.report, items: run.items }));
+            // allow(terminal-output): the --json document
+            this.process.stdout.write(`${JSON.stringify({ ok: true, fix: flags.fix, ...run.report, items: run.items })}\n`);
             return;
         }
-        for (const item of run.items) {
-            out(itemLine(item));
+        const summary = summaryLine(run.report, flags.fix);
+        if (run.items.length === 0) {
+            ui.quiet("Nothing is left over from older releases, and every store is within its bounds.");
+            ui.plain(summary);
+            return;
         }
+        ui.items(run.items.map(doctorItem));
         const reasons = reasonLines(run.items);
         if (reasons.length > 0) {
-            out("Why:");
+            ui.section("why");
             for (const line of reasons) {
-                out(line);
+                ui.note(line);
             }
         }
-        out(summaryLine(run.report, flags.fix));
+        // A log reads the counts as one line; a screen has just listed them.
+        ui.plain(summary);
         if (!flags.fix && run.items.some((item) => item.outcome === "would-fix")) {
-            out("Run `intentic-machine doctor --fix` to do it now; the agent does it by itself within six hours.");
+            ui.note("The agent does it by itself within six hours.");
+            ui.later([["do it now", "intentic-machine doctor --fix"]]);
         }
     },
 });

@@ -581,7 +581,7 @@ pub fn container(facts: &ChainFacts, engine_up: bool, tried: &dyn Fn(&Repair) ->
         Container::Missing { parked: false } => {
             return Check::fail(
                 CONTAINER,
-                format!("there is no container named {name} on this machine."),
+                format!("there is no container named {name} on this device."),
                 "run the setup command from your browser again: it brings the sandbox back with its files.",
                 Fix::You,
             )
@@ -934,7 +934,7 @@ pub fn registration(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Chec
         "unreachable" => Check::fail(
             REGISTRATION,
             detail,
-            "it keeps retrying; the Network check says whether this machine reaches the platform, and a firewall or proxy may be stopping the container alone.",
+            "it keeps retrying; the Network check says whether this device reaches the platform, and a firewall or proxy may be stopping the container alone.",
             Fix::You,
         ),
         other => Check::skip(REGISTRATION, format!("unrecognized registration state '{other}'")),
@@ -960,14 +960,14 @@ pub fn tunnel(facts: &ChainFacts, tried: &dyn Fn(&Repair) -> bool) -> Check {
         Public::NotAsked => Check::skip(TUNNEL, "unknowable while the daemon does not answer"),
         Public::Dns(why) => Check::fail(
             TUNNEL,
-            format!("DNS for {host} does not resolve from this machine: {why}."),
-            "a fresh name can take a minute to reach every resolver; if this persists, check this machine's DNS.",
+            format!("DNS for {host} does not resolve from this device: {why}."),
+            "a fresh name can take a minute to reach every resolver; if this persists, check this device's DNS.",
             Fix::You,
         ),
         Public::Unreachable(why) => Check::fail(
             TUNNEL,
-            format!("could not reach https://{host} from this machine: {why}"),
-            "check this machine's outbound HTTPS; the Network check says whether the platform is reachable.",
+            format!("could not reach https://{host} from this device: {why}"),
+            "check this device's outbound HTTPS; the Network check says whether the platform is reachable.",
             Fix::You,
         ),
         Public::Answered { status: 200, .. } => Check::ok(TUNNEL),
@@ -1042,7 +1042,7 @@ pub fn swap_note(record: &ChannelRecord, slug: &str) -> Option<String> {
             swap.to.as_deref().unwrap_or("a new version"),
             crate::sandbox::probation::remaining(until)
         ),
-        _ => format!("a swap of {slug} was interrupted; `ic sandbox watch {slug}` finishes or undoes it."),
+        _ => format!("a swap of {slug} was interrupted; ic sandbox watch {slug} finishes or undoes it."),
     })
 }
 

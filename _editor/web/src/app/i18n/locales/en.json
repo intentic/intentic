@@ -1143,7 +1143,7 @@
         },
         "hostConnectDialog": {
             "callsItself": "This machine calls itself",
-            "codeInCommandWorks": "The code in this command works once and expires in about ten minutes. This window updates by itself when the device connects.",
+            "codeInCommandWorks": "This window updates by itself when the device connects.",
             "connectedAgentWorkOn": "is connected. The agent can work on it from its next turn.",
             "couldNotRename": "Could not take that name.",
             "inside": "inside",
@@ -3799,6 +3799,12 @@
         },
         "imageDataUrl": {
             "noCanvas": "Canvas is unavailable in this browser."
+        },
+        "runCommand": {
+            "codeLabel": "Command to run",
+            "expiresIn": "Single use, expires in {time}.",
+            "expired": "This command has expired.",
+            "renew": "New command"
         }
     },
     "connect": {
@@ -5373,7 +5379,6 @@
             "checkingSync": "Checking whether this sandbox can sync with a device…",
             "chooseFolderOnDevice": "Choose a folder on this device",
             "collaboratorMirrorSandboxsDev": "As a collaborator, you can mirror the sandbox's dev servers onto your own localhost for live previews. No files are synced beyond what the workspace already shows.",
-            "commandSingleUseExpires": "This command is single-use and expires in ~10 minutes.",
             "desktopSyncNeedsSsh": "Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.",
             "device": "device.",
             "deviceThatGetsPorts": "the device that should get the ports",
@@ -5387,7 +5392,6 @@
             "pairAnotherDeviceSandbox": "Pair another device with this sandbox. Anything already paired is listed on the",
             "pickFolderInSystem": "Pick the folder in a system dialog: it and the sandbox's files then stay in step, both ways.",
             "portsOnlySandboxsDev": "Ports only: the sandbox's dev servers appear on the enrolling device's localhost. No files are synced.",
-            "regenerate": "Regenerate",
             "removesAllDevices": "removes all of it; that device's",
             "runOnDeviceInstalls": "Run this on your device. It installs the agent and starts two things: file sync, and a port mirror that puts the sandbox's dev servers on your localhost. No sign-in is needed.",
             "runOnDeviceShould": "Run this on the device that should get the ports. It installs the agent and mirrors the sandbox's dev servers onto its localhost. No files are synced, and no sign-in is needed.",
@@ -5398,8 +5402,7 @@
             "takesOverFrom": "This takes over from {device}. Its file sync stops when you run the command below.",
             "that": "that",
             "theOtherDevice": "the other device",
-            "whatStaysOnDevice": "What stays on your device?",
-            "windowsPowershell": "Windows (PowerShell)"
+            "whatStaysOnDevice": "What stays on your device?"
         },
         "devRebuild": {
             "approvedRecipeAppliedPart": "Your approved recipe is applied as part of this, so the pending rebuild clears once the sandbox is back.",
@@ -6510,7 +6513,6 @@
             "whatSyncDoes": "Pairs this computer with the sandbox and mirrors a folder both ways."
         },
         "sandboxBehindCard": {
-            "copyRestartCommand": "Copy restart command",
             "newerSide": "newer",
             "olderSide": "older",
             "restartTipTitle": "Quick restart",
@@ -6524,9 +6526,9 @@
             "restarting": "Restarting…",
             "restartingOn": "Rebuilding on {hostId} and restarting. This page will go quiet for a moment and come back on its own.",
             "restartSandbox": "Restart sandbox",
-            "run": "Run",
+            "run": "Run this in the checkout:",
             "staysUpdateSandboxImage": "If it's still here afterwards, update your sandbox.",
-            "stillHereRun": "Still here? Run",
+            "stillHereRun": "Still here? Run this in the checkout:",
             "updateSandboxImage": "Update your sandbox to a newer version.",
             "headingUncompiled": "Your sandbox hasn't picked up your latest changes",
             "headingForked": "This page and your sandbox are from different versions",
@@ -6541,7 +6543,8 @@
             "appOlder": "This page is the older of the two.",
             "wholesaleNote": "Nearly every part of the app is affected, so they aren't listed one by one.",
             "restartBecomesButton": "this becomes a button.",
-            "restartingTheSandbox": "Restarting the sandbox"
+            "restartingTheSandbox": "Restarting the sandbox",
+            "restartCommand": "Restart command"
         },
         "recentlyDeleted": {
             "comesBackAsName": "Comes back with a new address, so the machine it ran on has to be connected again",
@@ -6603,7 +6606,7 @@
             "usage": "Usage"
         },
         "sandboxOutdatedNotice": {
-            "manual": "Installed it yourself? Reinstall it, or run this on the machine that runs it:",
+            "manual": "Installed it yourself? Reinstall it, or run this on the device that runs it:",
             "title": "This sandbox runs an older version",
             "update": "Update the sandbox"
         },
@@ -6691,7 +6694,7 @@
         },
         "sandboxSwitcher": {
             "alsoDelete": "Also delete it from",
-            "cleanupCommand": "Cleanup command",
+            "cleanupCommand": "Remove command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",
             "inProgress": "In progress",
             "leaveLoseAccessSandbox": "Leave \"{name}\"? You lose access; the sandbox keeps running.",
@@ -6715,7 +6718,7 @@
             "takesAccounts": "The accounts connected to it, such as ChatGPT, Claude or GitHub",
             "takesChats": "Its chats and its files",
             "takesSettings": "Its settings, agent instructions and capabilities",
-            "toAlsoRemoveMachine": "To also remove it from the machine hosting it: including its files, run there:",
+            "toAlsoRemoveMachine": "To also remove it from the device it runs on, run this there. It stays recoverable there for 7 days.",
             "undoLastUpdate": "Undo last update",
             "update": "Update",
             "waitingUnknown": "Waiting items unknown",
@@ -8382,7 +8385,6 @@
             "hideCommand": "Hide the command",
             "hostedSandboxesSwitchedOff": "Hosted sandboxes are switched off for this account; the email we sent says why and where to write. Running it on your own computer is unaffected.",
             "httpsAddressSandboxAlready": "The https address your sandbox already answers on (https:// is optional).",
-            "iAlreadyDocker": "I already have Docker",
             "installsDockerNeedStarts": "Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it answers. No terminal.",
             "keepAddress": "Keep this address",
             "localDevBuildsCheckout": "Local dev: builds from your checkout",
@@ -8396,7 +8398,6 @@
             "nothingRunsUntilPress": "Nothing runs until you press \"Set it up now\" above.",
             "nothingToDoAccount": "Nothing to do with your account, and we're adding more. Setting it up on your own computer takes a couple of minutes and has no limits at all, or check back a little later and we'll have room.",
             "nothingToForwardTo": "with nothing to forward to. Start the sandbox container",
-            "oneJobInstallingDocker": "is there for one job: installing Docker if it's missing.",
             "openChat": "Open chat",
             "otherWaysToSet": "Other ways to set up",
             "otherWaysToSet2": "Other ways to set up:",
@@ -8419,7 +8420,6 @@
             "runOnComputerNotPhone": "Run this in a terminal on your computer, not on this phone.",
             "runOnMyOwn": "Run it on my own computer",
             "running": "running.",
-            "runsNo": "Runs as you, no",
             "runsOnComputerYours": "It runs on a computer of yours. You'll be working in it in a minute or two.",
             "runsOnOurServers": "Runs on our servers",
             "sandbox": "sandbox",
@@ -8510,7 +8510,7 @@
             "dials": "Dials",
             "installDockerYourself": "Install Docker yourself",
             "out": "out",
-            "removesAll": "Removes all of it",
+            "removesAll": "Removes it again. It asks which sandbox, and keeps it recoverable for 7 days.",
             "startsSandboxIn": "Starts your sandbox in",
             "toReachBrowserNo": "to reach your browser, no inbound ports",
             "useDesktopApp": "Or use the desktop app",
@@ -9046,19 +9046,21 @@
             "enterTokenToReveal": "Enter your Cloudflare API token to reveal the command.",
             "hostNameOptional": "Host name (optional)",
             "howConnectingMachineWorks": "How connecting a machine works",
-            "oneCommandRunOn": "One command, run on the target host as root. Cloudflare is set up as part of it.",
+            "oneCommandRunOn": "One command, run on the server. It asks for root and sets up Cloudflare as part of it.",
             "ownerConnectsServers": "Only this sandbox's owner can connect a server: the command carries its connect token, which stays with them.",
             "preparingCommand": "Preparing your command…",
             "repeatPerMachine": "Repeat per machine",
-            "runInPowershellOn": "Run in PowerShell on the machine you want to deploy onto (needs Docker Desktop)",
             "runOn": "Run on",
-            "runOnMachineWant": "Run on the machine you want to deploy onto (needs root)",
+            "runOnMachineWant": "Command to run on the server you want to deploy onto",
             "savedInIntent": "✓ Saved in intent as",
             "shortNameMachineIn": "A short name for this machine in your intent.",
             "useLowercaseLettersDigits": "Use lowercase letters, digits and hyphens only.",
             "userKeyTunnel": "User, SSH key, tunnel",
             "waitingMachinesToRegister": "Waiting for machines to register: each appears in your server list as you connect it. Re-run the command on each host you want to add.",
-            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Rides the command into your host, never to the platform."
+            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Rides the command into your host, never to the platform.",
+            "showCommand": "Show the command",
+            "codeFailed": "The sandbox could not make a command ({status}).",
+            "asksCloudflareToken": "Run this on the server, which asks there for your Cloudflare API token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), so the token never leaves it."
         },
         "coreViews": {
             "health": "Health",

@@ -1,24 +1,35 @@
 <script setup lang="ts">
-import { ui, Code, commandLang, InfoHint, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
-import { computed, onUnmounted, ref } from "vue";
+import { Button, type CommandOs, ui, InfoHint, Notice } from "@intentic/ui";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
 import { onFilesChanged } from "../../workbench/workspace-events/fileEvents";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { bashCommand, psCommand } from "../../app/environments/scriptCommand";
-import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSourceSwitch.vue";
+import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../app/environments/scriptCommand";
+import RunCommand from "../../components/RunCommand.vue";
+import { sandboxRaw } from "../../client/sandbox/sandboxRaw";
+import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { INVENTORY_PATH, zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 import { useT } from "@intentic/ui/i18n";
 
 // Shared connect-a-server flow, shown as InfraDeclare's requirement card and behind its Add-server button.
 // One command sets up the host and self-registers via /enroll; no sandbox recreate, no keys pasted here.
-// Always carries the user's own Cloudflare token: intentic's tunnels carry web traffic only.
+// The command is `server/<host>/<code>`: the sandbox mints a single-use code behind a single-use enroll token, the
+// script redeems it, and asks for the person's own Cloudflare token on the server's terminal (intentic's tunnels carry
+// web traffic only), so no token is ever in the command. A sandbox reached on localhost (local dev) has no address a
+// server could redeem at, and keeps the older command with every value as an environment variable.
 const t = useT();
 
 const { entries, refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
-// SANDBOX_URL, CONNECT_TOKEN, CF_TOKEN and ZONE when known; url/token come from the active sandbox.
+// The address a server redeems its code at; undefined on localhost, where only the environment-variable form works.
+const host = computed(() => oneLinerHost(daemonUrl.value));
+// A sandbox whose daemon predates codes answers the mint with 404; it keeps the environment-variable command too.
+const mintUnsupported = ref(false);
+const coded = computed(() => host.value !== undefined && !mintUnsupported.value);
+
+// Local dev only: SANDBOX_URL, CONNECT_TOKEN, CF_TOKEN and ZONE when known; url/token come from the active sandbox.
 const cfToken = ref(``);
 const hostName = ref(``);
 // Lenient check (Cloudflare tokens are [A-Za-z0-9_-]); the connect-host script does the real verify.
@@ -43,13 +54,13 @@ const commandReady = computed(() => {
     if (active.value === undefined) {
         return false;
     }
-    return cfTokenValid.value && hostNameReady.value;
+    return (coded.value || cfTokenValid.value) && hostNameReady.value;
 });
 const lockedReason = computed(() => {
-    if (cfToken.value.trim().length === 0) {
+    if (!coded.value && cfToken.value.trim().length === 0) {
         return t(`views.connectHost.enterTokenToReveal`);
     }
-    if (!cfTokenValid.value) {
+    if (!coded.value && !cfTokenValid.value) {
         return t(`views.connectHost.commandOnceTokenValid`);
     }
     if (!hostNameReady.value) {
@@ -57,8 +68,38 @@ const lockedReason = computed(() => {
     }
     return t(`views.connectHost.preparingCommand`);
 });
-// One command at a time; the preferred OS is a persisted singleton shared across screens.
-const { cmdOs } = useOsPreference();
+
+// The code the sandbox minted for this server, bound to the name asked for, and when it lapses (epoch ms).
+const code = ref<string | undefined>(undefined);
+const codeExpiresAt = ref<number | undefined>(undefined);
+const minting = ref(false);
+const mintError = ref<string | undefined>(undefined);
+const mint = async (): Promise<void> => {
+    minting.value = true;
+    mintError.value = undefined;
+    try {
+        const answer = await sandboxRaw(`POST /system/enroll/code`, { input: canonicalHostName.value === `` ? {} : { hostName: canonicalHostName.value } });
+        code.value = answer.code;
+        codeExpiresAt.value = Date.now() + answer.expiresIn * 1000;
+    } catch (error) {
+        if (error instanceof SandboxHttpError && error.status === 404) {
+            mintUnsupported.value = true;
+            return;
+        }
+        mintError.value = t(`views.connectHost.codeFailed`, { status: error instanceof SandboxHttpError ? String(error.status) : `0` });
+    } finally {
+        minting.value = false;
+    }
+};
+// The name is bound to the code, so a new name retires the command on screen; so does another sandbox, which may also
+// be new enough to mint one where the last was not.
+watch([canonicalHostName, daemonUrl], ([, url], [, before]) => {
+    code.value = undefined;
+    codeExpiresAt.value = undefined;
+    if (url !== before) {
+        mintUnsupported.value = false;
+    }
+});
 
 const connectHostCommand = computed(() => {
     const sandbox = active.value;
@@ -88,6 +129,14 @@ const connectHostCommandPs = computed(() => {
     const nameEnv = canonicalHostName.value !== `` ? `$env:HOST_NAME='${canonicalHostName.value}'; ` : ``;
     return psCommand(`hostPs1`, `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; ${zoneEnv}${nameEnv}`);
 });
+
+// The same `server/<host>/<code>` for both shells; the environment-variable form on localhost.
+const command = (os: CommandOs): string => {
+    if (host.value !== undefined && code.value !== undefined) {
+        return oneLiner(`server`, [host.value, code.value], os);
+    }
+    return os === `windows` ? connectHostCommandPs.value : connectHostCommand.value;
+};
 
 // An enrolled machine lands in deploy.config.ts, whose write the daemon's file push names.
 const inventoryWatch = onFilesChanged([INVENTORY_PATH], () => void refetch());
@@ -121,7 +170,7 @@ onUnmounted(() => inventoryWatch.dispose());
         </div>
         <form v-else class="flex flex-col gap-3" @submit.prevent>
             <div class="grid gap-3 @lg:grid-cols-2">
-                <label class="ui-field">
+                <label v-if="!coded" class="ui-field">
                     <span class="ui-field-label">{{ t(`views.connectHost.cloudflareApiToken`) }}</span>
                     <input
                         v-model="cfToken"
@@ -164,21 +213,27 @@ onUnmounted(() => inventoryWatch.dispose());
                 <Icon name="lock" />
                 <span>{{ lockedReason }}</span>
             </div>
-            <template v-else>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <SegmentedControl v-model="cmdOs" :options="osOptions()" />
-                    <!-- The strongest case for the switch: this runs on a SERVER, which never has the developer's checkout. -->
-                    <ScriptSourceSwitch />
+            <div v-else-if="coded && code === undefined" class="flex flex-col gap-2">
+                <div>
+                    <Button size="small" :label="t(`views.connectHost.showCommand`)" :loading="minting" @click="void mint()">
+                        <template #icon><Icon name="terminal" /></template>
+                    </Button>
                 </div>
-                <Code
-                    :code="cmdOs === `windows` ? connectHostCommandPs : connectHostCommand"
-                    :lang="commandLang(cmdOs)"
-                    :label="cmdOs === `windows` ? t(`views.connectHost.runInPowershellOn`) : t(`views.connectHost.runOnMachineWant`)"
-                    :wrap="true"
-                />
-            </template>
+                <Notice v-if="mintError" tone="danger" class="text-2xs">{{ mintError }}</Notice>
+            </div>
+            <!-- The strongest case for the source switch: this runs on a SERVER, which never has the developer's checkout. -->
+            <RunCommand
+                v-else
+                :command="command"
+                :explanation="coded ? t(`views.connectHost.asksCloudflareToken`) : undefined"
+                :label="t(`views.connectHost.runOnMachineWant`)"
+                source-switch
+                :expires-at="coded ? codeExpiresAt : undefined"
+                :renewing="minting"
+                @renew="void mint()"
+            />
 
-            <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
+            <div v-if="commandReady && (!coded || code !== undefined)" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
                 <span>{{ t(`views.connectHost.waitingMachinesToRegister`) }}</span>
             </div>

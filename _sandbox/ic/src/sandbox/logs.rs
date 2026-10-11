@@ -11,7 +11,7 @@ pub fn run(slug: Option<String>, tail: u32) -> Result<()> {
     let slug = resolve_slug(slug, "ic sandbox logs")?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
     if !docker::container_exists(&container) {
-        bail!("sandbox container {container} does not exist on this machine.");
+        bail!("{}", crate::sandbox::missing(&slug));
     }
     docker::logs_passthrough(&container, tail)
 }

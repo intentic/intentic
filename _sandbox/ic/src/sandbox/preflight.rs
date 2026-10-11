@@ -110,7 +110,10 @@ pub fn check(
     if_broken: IfBroken,
     log: &Log,
 ) -> Result<()> {
-    println!("intentic: pre-flighting the state conversions of {image} on this sandbox's data (read-only)…");
+    // The plain sentence is a stage mark the desktop app reads (deviceUpdateStages.ts): its opening words are frozen.
+    crate::ui::note(&format!(
+        "pre-flighting the state conversions of {image} on this sandbox's data (read-only)…"
+    ));
     let (plan, _) = probe(container, slug, image, extra, log);
     log.line(&format!("state pre-flight: {plan:?}"));
     report(plan, image, verb, if_broken)
@@ -368,7 +371,7 @@ fn report(plan: Plan, image: &str, verb: &str, if_broken: IfBroken) -> Result<()
         }
         Plan::Clear { steps, downgrade } => {
             if !steps.is_empty() {
-                println!("intentic: {}", summary(&steps));
+                crate::ui::note(&summary(&steps));
                 for step in &steps {
                     // A settled line under the summary. `ui::detail` alone would show nothing here: it
                     // decorates a running step's live line, and a recreate never starts one.

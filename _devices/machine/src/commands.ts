@@ -1,13 +1,17 @@
-import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
+import { explain, type Ui } from "@intentic/local-agent";
+import { buildRouteMap, type CommandContext } from "@stricli/core";
+import { buildCommand, machineUi } from "./cli-ui.js";
+import { runLogPath } from "./config.js";
 import { deviceCommands, deviceUninstall } from "./device/commands.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
-import { realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
+import { type MachineUpgradeEnd, realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident.js";
 import { readResident, restartResident, stopResident } from "./supervision.js";
 import { status } from "./status.js";
 import { syncCommands, syncUninstall } from "./sync/commands.js";
 import { doctor } from "./upkeep/doctor.js";
+import { upgradeLanded, upgradeStop } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
@@ -21,7 +25,7 @@ interface RunFlags {
 }
 
 const run = buildCommand<RunFlags>({
-    docs: { brief: "Restart this machine's agent: sandbox connections, file sync, port mirroring (setup starts it for you)" },
+    docs: { brief: "Restart this device's agent: sandbox connections, file sync, port mirroring (setup starts it for you)" },
     parameters: {
         flags: {
             foreground: { kind: "boolean", brief: "Run the agent in this terminal instead of the background" },
@@ -29,22 +33,31 @@ const run = buildCommand<RunFlags>({
         },
     },
     async func(this: CommandContext, flags: RunFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        if (flags.foreground) {
+            // The log is long-lived: every line is timestamped since bare lines would be useless.
+            // allow(terminal-output): the foreground agent's own log stream, read from a file or a supervisor, not a person's report
+            await runForeground((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
+            return;
+        }
+        const ui = machineUi(this.process);
         if (flags.stop) {
+            ui.act("Stopping the background agent");
             const pid = await stopResident();
-            out(pid === undefined ? "not running." : `stopped (pid ${pid}).`);
             // Said because it is not obvious: whatever supervises the agent brings it back, which is what supervising means.
-            out("It comes back at your next sign-in, and sooner if this machine's supervisor notices it gone. `intentic-machine uninstall` is what stops it for good.");
+            ui.note("It comes back at your next sign-in, and sooner if this device's supervisor notices it gone.");
+            ui.done(pid === undefined ? "The background agent was not running." : `Stopped the background agent (pid ${pid}).`);
+            ui.later([["stop it for good", "intentic-machine uninstall"]]);
             return;
         }
-        if (!flags.foreground) {
-            await restartResident(out);
-            const held = await readResident();
-            out(held === undefined ? "the agent did not come back up: check its log." : `running (pid ${held.pid}, ${held.build ?? "unknown build"}).`);
-            return;
+        ui.act("Restarting the background agent");
+        await restartResident(ui.note);
+        const held = await readResident();
+        if (held === undefined) {
+            throw new Error(
+                explain("The background agent did not come back up.", `it stopped while starting; its log is ${runLogPath}.`, "intentic-machine run --foreground"),
+            );
         }
-        // The log is long-lived: every line is timestamped since bare lines would be useless.
-        await runForeground((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
+        ui.done(`Restarted the background agent (pid ${held.pid}, ${held.build ?? "unknown build"}).`);
     },
 });
 
@@ -53,6 +66,7 @@ const version = buildCommand({
     docs: { brief: "Print this agent's version" },
     parameters: {},
     func(this: CommandContext) {
+        // allow(terminal-output): the bare X.Y.Z the release build and `upgrade` parse
         this.process.stdout.write(`${MACHINE_VERSION}\n`);
         return Promise.resolve();
     },
@@ -65,39 +79,71 @@ interface UpgradeFlags {
 
 // The whole PC, never one side of it: every environment ends on one release, and a side that could not says why.
 const upgrade = buildCommand<UpgradeFlags>({
-    docs: { brief: "Upgrade the agent on this whole machine (Windows and every WSL distro on it) to the newest release" },
+    docs: { brief: "Update the agent on this whole device (Windows and every WSL distro on it) to the newest release" },
     parameters: {
         flags: {
             force: {
                 kind: "boolean",
-                brief: "Install the published agent even over one built from source, or onto a release this machine rolled back from (both otherwise left alone)",
+                brief: "Install the published agent even over one built from source, or onto a release this device rolled back from (both otherwise left alone)",
             },
             level: { kind: "boolean", brief: "Bring every side to the newest release one of them already runs, without asking for a newer one", default: false, hidden: true },
         },
     },
     async func(this: CommandContext, flags: UpgradeFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        if (!(await upgradeMachine(realMachineIo(flags, out), flags, out))) {
-            process.exitCode = 1;
-        }
+        const ui = machineUi(this.process);
+        ui.act("Updating the agent on this device");
+        await upgradeMachine(realMachineIo(flags, ui.note), flags, ui.note, (ending) => upgradeEnded(ui, ending));
     },
 });
+
+// The ending of a machine-wide upgrade as the protocol draws it: a verdict, or a stop that says what to do.
+const upgradeEnded = (ui: Ui, ending: MachineUpgradeEnd): void => {
+    if (ending.landed) {
+        ui.done(ending.said);
+        if (ending.outcome?.kind === "current" && ending.outcome.later !== undefined) {
+            ui.later([ending.outcome.later]);
+        }
+        return;
+    }
+    if (ending.delegated === true) {
+        // The Windows side drew its own stop on this terminal; a second one here would only repeat it.
+        ui.close();
+        process.exitCode = 1;
+        return;
+    }
+    if (ending.legsFailed.length > 0 && (ending.outcome === undefined || upgradeLanded(ending.outcome))) {
+        throw new Error(
+            explain(
+                "The agent was not updated on every side of this device.",
+                `${ending.legsFailed.join(", ")} did not finish; the lines above say why.`,
+                "intentic-machine upgrade",
+            ),
+        );
+    }
+    if (ending.outcome === undefined) {
+        throw new Error(explain("The agent was not updated.", "the release channel did not answer, and nothing was changed.", "check the network, then run the same command again."));
+    }
+    const stop = upgradeStop(ending.outcome);
+    throw new Error(explain(stop.headline, stop.problem, stop.fix));
+};
 
 // Removes this environment's links and pairings in one command; sync tears down first while its credentials still exist.
 const uninstall = buildCommand({
     docs: { brief: "Remove this environment's agent: every sandbox link, every sync pairing, the login entry" },
     parameters: {},
     async func(this: CommandContext) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        // For good: the agent goes even from a machine that hosts sandboxes, which it would otherwise stay to keep.
-        await syncUninstall(out, undefined, { forGood: true });
-        await deviceUninstall(out, undefined, { forGood: true });
+        const ui = machineUi(this.process);
+        ui.act("Removing the agent from this device");
+        // For good: the agent goes even from a device that hosts sandboxes, which it would otherwise stay to keep.
+        ui.note(await syncUninstall(ui, undefined, { forGood: true }));
+        ui.note(await deviceUninstall(ui, undefined, { forGood: true }));
         const still = await readResident();
-        out(
-            still === undefined
-                ? "Nothing intentic stays resident here."
-                : `The agent keeps running (pid ${still.pid}) only to keep this PC's WSL distros running; uninstall inside each of them to remove it entirely.`,
-        );
+        if (still === undefined) {
+            ui.done("Removed the agent. Nothing intentic stays running on this device.");
+            return;
+        }
+        ui.note("Run the uninstall inside each of this device's WSL distros to remove it entirely.");
+        ui.done(`Removed this side's links. The agent keeps running (pid ${still.pid}) only to keep this device's WSL distros running.`);
     },
 });
 
@@ -109,7 +155,7 @@ export const commands = buildRouteMap({
         }),
         sync: buildRouteMap({
             routes: syncCommands,
-            docs: { brief: "Mirror a sandbox's files and ports onto this machine (the Desktop sync card)" },
+            docs: { brief: "Mirror a sandbox's files and ports onto this device (the Desktop sync card)" },
         }),
         sandbox: sandboxRoutes,
         environment: environmentRoutes,

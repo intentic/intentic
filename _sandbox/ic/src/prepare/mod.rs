@@ -60,6 +60,7 @@ fn announce(requirement: &plan::Requirement) {
         "admin": admin,
         "ours": ours,
     });
+    // allow(terminal-output): a column-0 marker the desktop app parses (onboarding.rs, desktop.ts).
     println!("intentic-requirement: {line}");
 }
 
@@ -106,6 +107,7 @@ fn announce_live(id: &str, state: &str, detail: Option<&str>, live: Live) {
     if !piped() {
         return;
     }
+    // allow(terminal-output): a column-0 marker the desktop app parses (onboarding.rs, desktop.ts).
     println!(
         "intentic-requirement-state: {}",
         live_marker(id, state, detail, live)
@@ -273,7 +275,7 @@ pub fn run(args: Args) -> Result<()> {
     use crate::util::step;
     use plan::Action;
 
-    step("checking-docker", "checking this PC for Docker...");
+    step("checking-docker", "checking this device for Docker...");
     let mut facts = match facts::probe() {
         Ok(facts) => facts,
         Err(problem) => {
@@ -286,7 +288,7 @@ pub fn run(args: Args) -> Result<()> {
 
     let unmet = plan::requirements(&facts);
     if unmet.is_empty() {
-        crate::ui::note("Docker is ready on this PC.");
+        crate::ui::note("Docker is ready on this device.");
         print_summary(&facts, false);
         return Ok(());
     }
@@ -319,7 +321,12 @@ pub fn run(args: Args) -> Result<()> {
     // took the ones that are not, as a real failure), so this is the consent stop with the asking left out.
     // Dry-run returns through `stop` here, before `consent` and before any fixer runs.
     if args.dry_run {
-        println!("{}", explain(&unmet));
+        for line in explain(&unmet)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+        {
+            crate::ui::note(line.trim());
+        }
         print_summary(
             &facts,
             unmet.iter().any(|r| r.action == plan::Action::Restart),
@@ -455,7 +462,7 @@ pub fn run(args: Args) -> Result<()> {
                         Ok(fix::Done::AfterRestart) => {
                             let mut pending = requirement.clone();
                             pending.action = plan::Action::Restart;
-                            pending.remedy = "restart this PC and run the same command again - the setup picks up from here.".to_string();
+                            pending.remedy = "restart this device and run the same command again - the setup picks up from here.".to_string();
                             announce(&pending);
                             announce_state(requirement.id, "done", Some("waiting for the restart"));
                             restart_after = Some(pending);
@@ -531,7 +538,7 @@ pub fn run(args: Args) -> Result<()> {
                     let mut pending = requirement.clone();
                     pending.action = Action::Restart;
                     pending.remedy =
-                        "restart this PC and run the same command again - the setup picks up from here."
+                        "restart this device and run the same command again - the setup picks up from here."
                             .to_string();
                     announce(&pending);
                     // Done as far as anything here can take it — the row is finished, and what is left is
@@ -569,9 +576,7 @@ pub fn run(args: Args) -> Result<()> {
                         announce_state(
                             "engine",
                             "running",
-                            Some(&format!(
-                                "downloading Intentic's container engine ({percent}%)"
-                            )),
+                            Some(&format!("downloading the intentic engine ({percent}%)")),
                         );
                     }
                 });
@@ -617,14 +622,14 @@ fn apply(
         }
         "wsl-kernel" => "updating WSL2 (Windows will ask for permission)...",
         "docker-desktop" => "downloading and installing Docker Desktop (about 600 MB)...",
-        "docker-path" => "finding Docker on this PC...",
+        "docker-path" => "finding Docker on this device...",
         "docker-users" => {
             "allowing this account to use Docker (Windows will ask for permission)..."
         }
         "docker-running" => "starting Docker Desktop in the system tray...",
         "docker-linux-containers" => "switching Docker to Linux containers...",
-        "engine" => "installing Intentic's container engine...",
-        "engine-start" => "starting Intentic's container engine...",
+        "engine" => "installing the intentic engine...",
+        "engine-start" => "starting the intentic engine...",
         _ => "preparing Docker...",
     };
     step("installing-docker", doing);
@@ -691,36 +696,49 @@ fn apply(
 /* Turning on WSL2 succeeds and does nothing until Windows restarts, and this is the moment where a setup that merely SAYS so gets abandoned. */
 #[cfg(windows)]
 fn restart(unmet: &[plan::Requirement], pre_consented: bool, facts: &plan::Facts) -> Result<()> {
-    use crate::tty;
-
     // A restart request owns the screen: the live step line is erased and the spinner stopped, or it repaints
     // over the one command the reader has to copy before rebooting.
     crate::ui::suspend();
-    println!();
-    println!("{}", explain(unmet));
-    println!("Windows has to restart before Docker can run.");
-    println!("Save your work in other apps first.");
-    println!();
-    println!("{}", resume_hint("After it comes back"));
-    println!();
+    crate::ui::note(&explain(unmet));
+    crate::ui::note("Windows has to restart before Docker can run.");
+    crate::ui::note("Save your work in other apps first.");
+    crate::ui::note("");
+    crate::ui::note(&resume_hint("After it comes back"));
     /* Pre-consent covers installing things, never a restart: the desktop app passes it. */
     print_summary(facts, true);
-    if !pre_consented
-        && tty::have_tty()
-        && tty::confirm("Restart now? Save your work in other apps first.", false)
-    {
-        fix::restart_windows().map_err(crate::util::Fail)?;
-        stop(
-            EXIT_NEEDS_RESTART,
-            "this PC is restarting now - run the command above once it is back.",
-        );
+    if !pre_consented {
+        match crate::ui::confirm("Restart now?", "Save your work in other apps first.", false) {
+            Ok(true) => {
+                fix::restart_windows().map_err(crate::util::Fail)?;
+                stop(
+                    EXIT_NEEDS_RESTART,
+                    "this device is restarting now — run the command above once it is back.",
+                );
+            }
+            Ok(false) => {
+                stop(
+                    EXIT_NEEDS_RESTART,
+                    "this device has to restart before Docker can run — restart it, then run the command above.",
+                );
+            }
+            Err(_) => {
+                stop(
+                    EXIT_NEEDS_RESTART,
+                    if unattended() {
+                        "this device has to restart before Docker can run."
+                    } else {
+                        "this device has to restart before Docker can run — restart it, then run the command above."
+                    },
+                );
+            }
+        }
     }
     stop(
         EXIT_NEEDS_RESTART,
         if unattended() {
-            "this PC has to restart before Docker can run."
+            "this device has to restart before Docker can run."
         } else {
-            "this PC has to restart before Docker can run - restart it, then run the command above."
+            "this device has to restart before Docker can run — restart it, then run the command above."
         },
     )
 }
@@ -755,18 +773,16 @@ fn sign_out(unmet: &[plan::Requirement], user: &str, facts: &plan::Facts) -> Res
         user
     };
     crate::ui::suspend();
-    println!();
-    println!("{}", explain(unmet));
-    println!("{who} has the permission already. Windows hands it out with a new sign-in,");
-    println!("and only then - so nothing else can happen first.");
-    println!();
-    println!("{}", resume_hint("After you sign back in"));
-    println!();
+    crate::ui::note(&explain(unmet));
+    crate::ui::note(&format!(
+        "{who} has the permission already. Windows hands it out with a new sign-in,\nand only then — so nothing else can happen first.\n"
+    ));
+    crate::ui::note(&resume_hint("After you sign back in"));
     print_summary(facts, true);
     stop(
         EXIT_NEEDS_RESTART,
         if unattended() {
-            "sign out of Windows and back in; if you already have, restart the PC instead."
+            "sign out of Windows and back in; if you already have, restart this device instead."
         } else {
             "sign out of Windows and back in, then run the command above."
         },
@@ -817,35 +833,33 @@ fn rerun_command() -> String {
 /// prompts in a row on a fresh PC, which is how a setup starts feeling like an interrogation.
 #[cfg(windows)]
 fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
-    use crate::tty;
-
     if pre_consented {
         return Ok(());
     }
     // Same handover as the restart below — a question is not narration and must not be repainted over.
     crate::ui::suspend();
-    println!();
-    println!("To run a sandbox here, this needs to happen:");
+    let mut consequences = String::from("To run a sandbox here, this needs to happen:\n");
     for requirement in unmet {
-        println!("  - {}", requirement.remedy);
+        consequences.push_str(&format!("  - {}\n", requirement.remedy));
     }
-    println!();
-    println!("Docker Desktop is Docker Inc.'s software and its own licence applies:");
-    println!("  https://www.docker.com/legal/docker-subscription-service-agreement");
-    println!();
-    if !tty::have_tty() {
-        /* The desktop app's first setup pass enters here. */
-        stop(
-            EXIT_NEEDS_CONSENT,
-            "nothing has been changed yet - re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above.",
-        );
+    consequences.push_str("\nDocker Desktop is Docker Inc.'s software and its own licence applies:\n  https://www.docker.com/legal/docker-subscription-service-agreement");
+
+    match crate::ui::confirm("Go ahead?", &consequences, false) {
+        Ok(true) => {
+            crate::ui::resume();
+            Ok(())
+        }
+        Ok(false) => {
+            stop(EXIT_NEEDS_CONSENT, "nothing was changed.");
+        }
+        Err(_) => {
+            /* Non-interactive or no tty without --yes/INSTALL_DOCKER=1 */
+            stop(
+                EXIT_NEEDS_CONSENT,
+                "nothing has been changed yet — re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above.",
+            );
+        }
     }
-    if !tty::confirm("Go ahead?", false) {
-        stop(EXIT_NEEDS_CONSENT, "nothing was changed.");
-    }
-    println!();
-    crate::ui::resume();
-    Ok(())
 }
 
 /* Unix keeps its own route. */
@@ -863,7 +877,7 @@ pub fn run(_args: Args) -> Result<()> {
             if piped_stdout() {
                 plan::print_unix_prepare_summary("ready");
             }
-            println!("  Docker is ready on this machine.");
+            crate::ui::note("Docker is ready on this device.");
             Ok(())
         }
         Err(failure) => {

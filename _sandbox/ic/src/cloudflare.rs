@@ -129,28 +129,20 @@ pub fn resolve_zone(token: &str, subject: &str) -> Result<String> {
         return Ok(zones[0].clone());
     }
     if tty::have_tty() {
-        // A question owns the screen while it is asked — see the same handover in sandbox/connect.rs.
-        crate::ui::suspend();
-        eprintln!("\nintentic: this Cloudflare token can use several zones — pick the one {subject} should use:");
-        for (i, zone) in zones.iter().enumerate() {
-            eprintln!("  {}) {zone}", i + 1);
+        let choices: Vec<(String, String)> =
+            zones.iter().map(|z| (z.clone(), String::new())).collect();
+        let question = format!("Pick the Cloudflare zone {subject} should use:");
+        match crate::ui::pick(&question, &choices, false)? {
+            Some(indices) if !indices.is_empty() => {
+                let zone = &zones[indices[0]];
+                crate::ui::note(&format!("using zone {zone}."));
+                return Ok(zone.clone());
+            }
+            _ => {
+                crate::ui::cancelled();
+                bail!("no zone was selected.");
+            }
         }
-        let choice = tty::ask("intentic: zone number [1]: ").unwrap_or_default();
-        let choice = if choice.is_empty() {
-            "1".to_string()
-        } else {
-            choice
-        };
-        let index: usize = choice
-            .parse()
-            .map_err(|_| crate::util::Fail(format!("invalid selection '{choice}'.")))?;
-        let zone = zones
-            .get(index.wrapping_sub(1))
-            .ok_or_else(|| crate::util::Fail(format!("'{choice}' is out of range.")))?;
-        println!();
-        crate::ui::resume();
-        crate::ui::note(&format!("using zone {zone}."));
-        return Ok(zone.clone());
     }
     let listing: String = zones.iter().map(|zone| format!("  - {zone}\n")).collect();
     bail!(

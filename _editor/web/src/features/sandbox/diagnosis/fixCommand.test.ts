@@ -9,8 +9,8 @@ beforeEach(() => {
 });
 
 it(`carries the fix code in each shell's own spelling`, () => {
-    expect(fixCommand(`Q7XK2M9PLT4`, `unix`)).toBe(`curl -fsSL ${installScriptUrl(`fix`)} | sh -s -- Q7XK2M9PLT4`);
-    expect(fixCommand(`Q7XK2M9PLT4`, `windows`)).toBe(`$env:FIX_CODE='Q7XK2M9PLT4'; irm ${installScriptUrl(`fixPs1`)} | iex`);
+    expect(fixCommand(`Q7XK2M9PLT4`, `unix`)).toBe(`curl -fsSL https://intentic.dev/fix/Q7XK2M9PLT4 | sh`);
+    expect(fixCommand(`Q7XK2M9PLT4`, `windows`)).toBe(`irm https://intentic.dev/fix/Q7XK2M9PLT4 | iex`);
 });
 
 it(`still works with no code, only unobserved`, () => {

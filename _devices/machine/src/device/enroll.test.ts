@@ -17,9 +17,7 @@ test("a redeemed pairing answers the id and durable token the sandbox bound it t
 // device's config, to fail every later dial as unauthorized.
 test("an answer without a token is refused rather than stored", async () => {
     stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { id: "omen" })));
-    await expect(enroll("https://sandbox-abc.example.dev/", "pair-token")).rejects.toThrow(
-        "connecting this device failed: the sandbox's answer is not an enrollment",
-    );
+    await expect(enroll("https://sandbox-abc.example.dev/", "pair-token")).rejects.toThrow("the sandbox's answer is not an enrollment");
 });
 
 test("a 401 is the expired pairing, said once and not retried", async () => {

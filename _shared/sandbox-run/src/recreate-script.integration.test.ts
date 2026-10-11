@@ -104,8 +104,20 @@ test("--remove moves the sandbox to ic's trash without a prompt, never deleting 
     expect(argv(shimArgs("abc123", "--remove"))).toEqual(["sandbox", "remove", "abc123", "-y"]);
 });
 
+// A wrong command line is the protocol's stop (docs/ops/cli-output-protocol.md): the stop block on stderr, nothing on
+// stdout, exit code 2, and never read as an overlay hash.
 test("--channel needs a tag and an unknown flag is refused rather than read as an overlay hash", () => {
-    expect(shimArgs("slug", "--channel").err).toContain("--channel needs a tag");
-    expect(shimArgs("slug", "--rollback-to").err).toContain("--rollback-to needs a version or an image");
-    expect(shimArgs("slug", "--nonsense").err).toContain("unknown option");
+    const channel = shimArgs("slug", "--channel");
+    expect(channel.status).toBe(2);
+    expect(channel.out).toBe("");
+    expect(channel.err).toContain("--channel needs the release channel");
+    expect(shimArgs("slug", "--rollback-to").err).toContain("--rollback-to needs the version or image");
+    const unknown = shimArgs("slug", "--nonsense");
+    expect(unknown.status).toBe(2);
+    expect(unknown.err).toContain("--nonsense is not an option");
+});
+
+// What stdout carries is the handover's own: the kit's lines before it go nowhere a reader of `--list --json` parses.
+test("the shim prints nothing of its own on stdout before it hands over", () => {
+    expect(shimArgs("--list").out).toBe("sandbox\nlist\n--json\n");
 });

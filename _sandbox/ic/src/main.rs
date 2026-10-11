@@ -71,7 +71,7 @@ pub const VERSION: &str = match option_env!("IC_VERSION") {
 #[command(
     name = "ic",
     version = VERSION,
-    about = "intentic on this machine — sandboxes and deploy targets",
+    about = "intentic on this device — sandboxes and deploy targets",
     disable_help_subcommand = true
 )]
 struct Cli {
@@ -81,16 +81,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// The sandbox containers on this machine
+    /// The sandbox containers on this device
     #[command(subcommand)]
     Sandbox(SandboxCommand),
-    /// This machine as a deploy target for a sandbox
+    /// This server as a deploy target for a sandbox
     #[command(subcommand)]
     Machine(DeviceCommand),
-    /// Runners on this machine — execution containers a parent sandbox dispatches turns to
+    /// Runners on this device — execution containers a parent sandbox dispatches turns to
     #[command(subcommand)]
     Runner(RunnerCommand),
-    /// Docker on this machine — what it needs, and getting it there
+    /// Docker on this device — what it needs, and getting it there
     #[command(subcommand)]
     Docker(DockerCommand),
     /// The sandbox image, ahead of Docker
@@ -125,10 +125,10 @@ enum EngineCommand {
     Hold,
     /// Stop the engine and start it again: for one that is up and does not answer
     Restart,
-    /// Move every sandbox this side of the PC keeps to another engine, and switch the PC onto it. The engine left
+    /// Move every sandbox this side of the device keeps to another engine, and switch the device onto it. The engine left
     /// keeps its copies, stopped, for 7 days; moving back is a move the other way
     Move {
-        /// The engine to move onto: `intentic` (Intentic's own) or `docker-desktop`
+        /// The engine to move onto: `intentic` (the intentic engine) or `docker-desktop`
         #[arg(long)]
         to: String,
         /// Skip the confirmation (the desktop app asks it on its own card)
@@ -140,7 +140,7 @@ enum EngineCommand {
         #[arg(long)]
         now: bool,
     },
-    /// Say which engine this PC's new sandboxes should use from now on: `intentic` or `docker-desktop` (moves nothing)
+    /// Say which engine this device's new sandboxes should use from now on: `intentic` or `docker-desktop` (moves nothing)
     Prefer { engine: String },
     /// Fetch newer docker binaries into the running distro and restart
     Update,
@@ -216,7 +216,7 @@ fn image_or_default(image: Option<String>) -> String {
 
 #[derive(Subcommand)]
 enum DockerCommand {
-    /// Check every prerequisite for running a sandbox here and, with consent, put them right
+    /// Check every prerequisite for running a sandbox on this device and, with consent, put them right
     Prepare {
         /// Go ahead without asking (the shims and the desktop app pass this; INSTALL_DOCKER=1 also works)
         #[arg(short = 'y', long = "yes", alias = "force")]
@@ -229,7 +229,7 @@ enum DockerCommand {
 
 #[derive(Subcommand)]
 enum SandboxCommand {
-    /// Run a sandbox on this machine and expose it to your browser (the setup one-liner's flow)
+    /// Run a sandbox on this device and expose it to your browser (the setup one-liner's flow)
     Connect {
         /// The short-lived code from the platform's setup screen (or SETUP_CODE / CONNECT_TOKEN env)
         #[arg(env = "SETUP_CODE")]
@@ -237,7 +237,7 @@ enum SandboxCommand {
         /// Start without prompting even if other sandboxes are already running
         #[arg(short = 'y', long = "yes", alias = "force")]
         yes: bool,
-        /// Reinstall a sandbox this machine already has. Without it, connect refuses one that exists (-y included); with
+        /// Reinstall a sandbox this device already has. Without it, connect refuses one that exists (-y included); with
         /// it, the sandbox keeps its files, history, logins volume, image, settings and device, and is put back as it was
         /// if the reinstalled one does not come up
         #[arg(long)]
@@ -245,7 +245,7 @@ enum SandboxCommand {
     },
     /// Update onto the newest image of this sandbox's release channel, re-applying the approved overlay
     Update {
-        /// The sandbox to update (omit when this machine runs exactly one)
+        /// The sandbox to update (omit when this device runs exactly one)
         slug: Option<String>,
         /// Move onto a release channel and stay there (e.g. stable)
         #[arg(long)]
@@ -265,7 +265,7 @@ enum SandboxCommand {
     },
     /// Download and build the next update WITHOUT applying it, so the update itself is a short restart
     Prepare {
-        /// The sandbox to prepare an update for (omit when this machine runs exactly one)
+        /// The sandbox to prepare an update for (omit when this device runs exactly one)
         slug: Option<String>,
         /// Prepare a release channel other than the one this sandbox follows — preparing does NOT move it
         #[arg(long)]
@@ -294,7 +294,7 @@ enum SandboxCommand {
     },
     /// Back to the image this sandbox ran before its last update (or, with --to, an older one kept here)
     Rollback {
-        /// The sandbox to roll back (omit when this machine runs exactly one)
+        /// The sandbox to roll back (omit when this device runs exactly one)
         slug: Option<String>,
         /// Go back to this version (or kept image) instead of the previous one: see `ic sandbox versions`. A release
         /// version nothing kept here is downloaded by its tag
@@ -312,7 +312,7 @@ enum SandboxCommand {
     /// Finish or undo a swap that was interrupted, and judge the probation after an update: go back to the parked
     /// previous version by itself if the new one keeps crashing, never becomes ready, or loses its tunnel
     Watch {
-        /// The sandbox to look at (omit for every sandbox on this machine)
+        /// The sandbox to look at (omit for every sandbox on this device)
         slug: Option<String>,
         /// One line of JSON per sandbox: what was done (the machine agent reads this)
         #[arg(long)]
@@ -320,14 +320,14 @@ enum SandboxCommand {
     },
     /// What this sandbox runs and every version it can go back to without a download (read-only)
     Versions {
-        /// The sandbox (omit when this machine runs exactly one)
+        /// The sandbox (omit when this device runs exactly one)
         slug: Option<String>,
         #[arg(long)]
         json: bool,
     },
-    /// Back up the sandbox's /work and /history, encrypted, to this machine's own disk outside Docker
+    /// Back up the sandbox's /work and /history, encrypted, to this device's own disk outside Docker
     Backup {
-        /// The sandbox to back up (omit when this machine runs exactly one)
+        /// The sandbox to back up (omit when this device runs exactly one)
         slug: Option<String>,
         /// Unattended mode (the machine agent's daily tick): skip when a backup ran within a day, the disk is
         /// short, or a swap is in flight
@@ -336,9 +336,9 @@ enum SandboxCommand {
         #[arg(long)]
         json: bool,
     },
-    /// The backups kept for a sandbox on this machine (read-only)
+    /// The backups kept for a sandbox on this device (read-only)
     Backups {
-        /// The sandbox (omit when this machine runs exactly one)
+        /// The sandbox (omit when this device runs exactly one)
         slug: Option<String>,
         #[arg(long)]
         json: bool,
@@ -351,7 +351,7 @@ enum SandboxCommand {
         /// Which backup (an id from `ic sandbox backups`, or `latest`)
         #[arg(long)]
         snapshot: String,
-        /// A folder on this machine to restore the files into
+        /// A folder on this device to restore the files into
         #[arg(long)]
         to: Option<std::path::PathBuf>,
         /// A sandbox whose volumes the backup is written back into (it is stopped for it and started again)
@@ -386,7 +386,7 @@ enum SandboxCommand {
     },
     /// Swap onto the locally-built intentic-sandbox:dev image (the dogfood loop)
     Dev {
-        /// The sandbox to swap (omit when this machine runs exactly one)
+        /// The sandbox to swap (omit when this device runs exactly one)
         slug: Option<String>,
         /// Swap without first running the target image's state conversions against read-only mounts of
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
@@ -397,7 +397,7 @@ enum SandboxCommand {
         #[arg(long = "no-resume")]
         no_resume: bool,
     },
-    /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
+    /// Change a sandbox's share of this device, or its privileges — a restart of about a minute onto the
     /// same image. The values live on the container and survive every later update, rollback and rebuild.
     /// With no ask at all, the shape saved for the next restart is applied now. `--later` and `--forget` are
     /// the older spellings of `ic sandbox shape … --when next-restart` and `ic sandbox shape --forget`.
@@ -405,7 +405,7 @@ enum SandboxCommand {
     Reshape {
         /// The sandbox to reshape (always named: this changes a container's privileges)
         slug: String,
-        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine
+        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this device
         #[arg(long, group = "ask")]
         memory: Option<String>,
         /// CPU cap in whole cores, e.g. 4 — or `default` for every core the engine has
@@ -415,7 +415,7 @@ enum SandboxCommand {
         /// approved environment demands (the Docker capability's) stays in force
         #[arg(long, value_enum, group = "ask")]
         privileged: Option<Switch>,
-        /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
+        /// Pass this device's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
         #[arg(long, value_enum, group = "ask")]
         gpus: Option<Switch>,
         /// Save the ask, laid over what runs, for the sandbox's next restart through ic instead of restarting it
@@ -435,7 +435,7 @@ enum SandboxCommand {
         #[arg(long = "no-resume", conflicts_with_all = ["later", "forget"])]
         no_resume: bool,
     },
-    /// Set a sandbox's shape — its share of this machine and its privileges — now, or for its next restart.
+    /// Set a sandbox's shape — its share of this device and its privileges — now, or for its next restart.
     /// Fields left out keep what is saved for the next restart, else what runs. A shape saved for later is
     /// checked against the image's run contract first, and applied by the next restart through ic: `start`,
     /// `restart`, an update, a rollback or a rebuild (not by Docker restarting the container by itself).
@@ -445,12 +445,12 @@ enum SandboxCommand {
         /// The sandbox to shape (always named: this changes a container's privileges)
         slug: String,
         /// One field of the shape in the sandbox contract's own spelling, FIELD=JSON: memoryGib=12,
-        /// memoryGib=null (the share derived from this machine), cpus=4, cpus=null (every core),
+        /// memoryGib=null (the share derived from this device), cpus=4, cpus=null (every core),
         /// privileged=true, gpu=false. Repeat it per field; a field ic does not know is refused. What every
         /// program calling ic sends (the contract's `icShapeArgs`, the desktop app)
         #[arg(long = "set", value_name = "FIELD=JSON", group = "fields", conflicts_with_all = ["memory", "cpus", "privileged", "gpus"])]
         set: Vec<String>,
-        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine. The
+        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this device. The
         /// older spelling of `--set memoryGib=…`, kept for machine agents older than `--set`
         #[arg(long, group = "fields")]
         memory: Option<String>,
@@ -461,7 +461,7 @@ enum SandboxCommand {
         /// (`--set privileged=…`)
         #[arg(long, value_enum, group = "fields")]
         privileged: Option<Switch>,
-        /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
+        /// Pass this device's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
         /// (`--set gpu=…`)
         #[arg(long, value_enum, group = "fields")]
         gpus: Option<Switch>,
@@ -481,7 +481,7 @@ enum SandboxCommand {
     },
     /// Start a stopped sandbox and its tunnel, applying the shape saved for its next restart if there is one
     Start {
-        /// The sandbox to start (omit when this machine runs exactly one)
+        /// The sandbox to start (omit when this device runs exactly one)
         slug: Option<String>,
         /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
         /// it is back (and withdraw an earlier restart's ask that is still standing)
@@ -490,12 +490,12 @@ enum SandboxCommand {
     },
     /// Stop a sandbox and its tunnel; its data and anything saved for its next restart are kept
     Stop {
-        /// The sandbox to stop (omit when this machine runs exactly one)
+        /// The sandbox to stop (omit when this device runs exactly one)
         slug: Option<String>,
     },
     /// Restart a sandbox and its tunnel, applying the shape saved for its next restart if there is one
     Restart {
-        /// The sandbox to restart (omit when this machine runs exactly one)
+        /// The sandbox to restart (omit when this device runs exactly one)
         slug: Option<String>,
         /// Leave the agents' turns this restart cuts for you instead of having the sandbox pick them up again once
         /// it is back (and withdraw an earlier restart's ask that is still standing)
@@ -505,7 +505,7 @@ enum SandboxCommand {
     /// Put a sandbox to sleep: stopped like `stop`, but started again as soon as somebody opens it (`ic sandbox
     /// wakes`). With `--idle`, only sandboxes whose daemon says nobody has needed them for that long
     Sleep {
-        /// The sandbox to put to sleep (omit when this machine runs exactly one; with `--idle`, omit for every
+        /// The sandbox to put to sleep (omit when this device runs exactly one; with `--idle`, omit for every
         /// sandbox this side of the computer keeps)
         slug: Option<String>,
         /// Sleep only what has been quiet at least this many minutes, with no wake promised sooner (the machine
@@ -534,27 +534,27 @@ enum SandboxCommand {
     },
     /// Print the tail of a sandbox's own log, both streams (read-only)
     Logs {
-        /// The sandbox whose log to read (omit when this machine runs exactly one)
+        /// The sandbox whose log to read (omit when this device runs exactly one)
         slug: Option<String>,
         /// How many of the last lines to print
         #[arg(long, default_value_t = 200)]
         tail: u32,
     },
-    /// Check every layer between this machine and a sandbox and name what is broken, with its fix (read-only:
+    /// Check every layer between this device and a sandbox and name what is broken, with its fix (read-only:
     /// `ic sandbox fix` without the fixing)
     Doctor {
-        /// The sandbox to diagnose (omit for every sandbox on this machine)
+        /// The sandbox to diagnose (omit for every sandbox on this device)
         slug: Option<String>,
         /// One line of JSON per sandbox on stdout, `{"slug":…,"report":…}` (the platform's HostReportInput); every
         /// human line goes to stderr
         #[arg(long)]
         json: bool,
     },
-    /// Check every layer between this machine and a sandbox, fix what is safe to fix, ask before anything
+    /// Check every layer between this device and a sandbox, fix what is safe to fix, ask before anything
     /// disruptive, and say what is left for you. Exit 0 healthy or fixed, 1 something is left, 3 a fix needs a yes
     /// and nobody could be asked, 4 Windows has to restart or sign you out first
     Fix {
-        /// The sandbox to fix (omit for every sandbox on this machine)
+        /// The sandbox to fix (omit for every sandbox on this device)
         slug: Option<String>,
         /// The code your browser's recovery panel put in the command, so this run reports back to that page (or
         /// FIX_CODE env); it names the sandbox, too
@@ -579,7 +579,7 @@ enum SandboxCommand {
         #[arg(long, value_enum, default_value_t = FixSource::Command)]
         source: FixSource,
     },
-    /// List the sandboxes on this machine
+    /// List the sandboxes on this device
     List {
         /// One line of JSON: each sandbox's state, its share as docker enforces it, the shape it runs with, the
         /// shape saved for its next restart and the update staged for it (what the desktop app and the machine
@@ -587,41 +587,47 @@ enum SandboxCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Remove sandboxes — asks which, confirms; their data stays recoverable for a week
+    /// Remove sandboxes: asks which, then confirms. Their data stays recoverable for 7 days
     Remove {
         /// Which sandboxes to remove; none = pick interactively
         slugs: Vec<String>,
-        /// Remove EVERY sandbox on this machine
+        /// Remove every sandbox on this device, the volumes no sandbox uses, and this device's machine agent connection
         #[arg(short = 'a', long)]
         all: bool,
-        /// Skip confirmation prompts (scripts/CI)
+        /// Answer yes to the confirmation (scripts). It does not answer the typed confirmation of --now
         #[arg(short = 'y', long = "yes", alias = "force")]
         yes: bool,
         /// Also remove the shared dev agent-auth volume (AI logins for ALL dev sandboxes)
         #[arg(long = "agent-auth")]
         agent_auth: bool,
-        /// Delete the data now instead of keeping it recoverable for a week
+        /// Delete the data now instead of keeping it recoverable for 7 days
         #[arg(long)]
         now: bool,
+        /// Answer the typed confirmation of --now without a terminal: the sandbox's name, or the number of sandboxes
+        #[arg(long, value_name = "NAME")]
+        confirm: Option<String>,
     },
     /// Bring a removed sandbox back, with its /work and /history as they were
     Restore {
         /// The sandbox to bring back (omit to pick from what is recoverable)
         slug: Option<String>,
-        /// Skip confirmation prompts (scripts/CI)
+        /// Answer yes to the confirmation (scripts)
         #[arg(short = 'y', long = "yes")]
         yes: bool,
     },
     /// Delete a removed sandbox's data now, before its recovery window runs out
     Purge {
-        /// Which removed sandboxes to delete; none = pick with --all
+        /// Which removed sandboxes to delete
         slugs: Vec<String>,
-        /// Delete everything in the trash
+        /// Delete every removed sandbox
         #[arg(short = 'a', long)]
         all: bool,
-        /// Skip confirmation prompts (scripts/CI)
-        #[arg(short = 'y', long = "yes")]
+        /// Accepted for older scripts. It answers nothing: a delete is confirmed by typing, or by --confirm
+        #[arg(short = 'y', long = "yes", hide = true)]
         yes: bool,
+        /// Answer the typed confirmation without a terminal: the sandbox's name, or the number of sandboxes
+        #[arg(long, value_name = "NAME")]
+        confirm: Option<String>,
     },
 }
 
@@ -725,7 +731,7 @@ enum RunnerCommand {
         #[arg(long = "environment-hash")]
         environment_hash: Option<String>,
     },
-    /// List the runners on this machine
+    /// List the runners on this device
     List,
     /// Remove a runner: container and volumes — its work lives in the parent's git, so nothing user-owned dies
     Remove {
@@ -739,7 +745,7 @@ enum RunnerCommand {
 
 #[derive(Subcommand)]
 enum DeviceCommand {
-    /// Enroll this machine as a deploy target for an existing sandbox (the Infra screen's one-liner)
+    /// Enroll this server as a deploy target for an existing sandbox (the Infra screen's one-liner)
     Enroll,
     /// Remove everything intentic put on this deploy target — stacks, volumes, state, tunnel, service user
     Remove {
@@ -760,7 +766,11 @@ fn main() {
     // A move between engines stops sandboxes and copies their volumes: nothing else may change them meanwhile, and a
     // background round (the machine agent's watch, keeper, tidy) is told so rather than restarting one mid-copy.
     if engine::moves::in_progress() && !allowed_during_a_move(&cli.command) {
-        ui::error("a move between container engines is running on this PC: try again once it has finished (`ic engine status` shows it).");
+        ui::error(&ui::explain(
+            "Nothing was changed: sandboxes are being moved between engines on this device.",
+            None,
+            Some("wait for the move to finish, then run the same command again."),
+        ));
         std::process::exit(3);
     }
     let result = match cli.command {
@@ -957,19 +967,31 @@ fn main() {
                 yes,
                 agent_auth,
                 now,
-            } => sandbox::remove::run(sandbox::remove::Args {
-                slugs,
-                all,
-                yes,
-                agent_auth,
-                now,
-            }),
+                confirm,
+            } => sandbox::remove::run_typed(
+                sandbox::remove::Args {
+                    slugs,
+                    all,
+                    yes,
+                    agent_auth,
+                    now,
+                },
+                confirm,
+            ),
             SandboxCommand::Restore { slug, yes } => {
                 sandbox::restore::run(sandbox::restore::Args { slug, yes })
             }
-            SandboxCommand::Purge { slugs, all, yes } => {
-                sandbox::restore::purge(sandbox::restore::PurgeArgs { slugs, all, yes })
-            }
+            // --yes still parses for the scripts that pass it, and answers nothing: a purge is typed or --confirm.
+            SandboxCommand::Purge {
+                slugs,
+                all,
+                yes: _,
+                confirm,
+            } => sandbox::restore::purge(sandbox::restore::PurgeArgs {
+                slugs,
+                all,
+                confirm,
+            }),
         },
         Command::Machine(command) => run_machine(command),
         Command::Runner(command) => match command {
@@ -1391,6 +1413,7 @@ mod tests {
                     yes,
                     agent_auth,
                     now,
+                    confirm,
                 }),
         }) = parse(&["sandbox", "remove", "a", "b", "--agent-auth", "-y"])
         else {
@@ -1400,6 +1423,8 @@ mod tests {
         assert!(yes && agent_auth);
         // The week of recovery is what a removal gives by default; only --now takes it away.
         assert!(!now, "--now must never be implied");
+        // --confirm is only for --now, and never implied.
+        assert!(confirm.is_none(), "--confirm must never be implied");
         // Naming slugs must never widen into --all: that is the difference between removing two sandboxes
         // and removing every sandbox on the machine.
         assert!(!all);
@@ -1428,6 +1453,15 @@ mod tests {
             panic!("remove --now did not parse")
         };
         assert!(now);
+        // --confirm answers the typed confirmation for --now non-interactively.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Remove { now, confirm, .. }),
+        }) = parse(&["sandbox", "remove", "a", "--now", "--confirm", "a"])
+        else {
+            panic!("remove --now --confirm did not parse")
+        };
+        assert!(now);
+        assert_eq!(confirm.as_deref(), Some("a"));
     }
 
     #[test]
@@ -1450,13 +1484,20 @@ mod tests {
         assert!(slug.is_none() && !yes);
         // Purge ends the window early, and like every other data deletion it is never implied.
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Purge { slugs, all, yes }),
+            command:
+                Command::Sandbox(SandboxCommand::Purge {
+                    slugs,
+                    all,
+                    yes,
+                    confirm,
+                }),
         }) = parse(&["sandbox", "purge", "abc"])
         else {
             panic!("purge did not parse")
         };
         assert_eq!(slugs, vec!["abc"]);
         assert!(!all && !yes);
+        assert!(confirm.is_none(), "--confirm must never be implied");
         let Ok(Cli {
             command: Command::Sandbox(SandboxCommand::Purge { all, .. }),
         }) = parse(&["sandbox", "purge", "-a"])
@@ -1464,6 +1505,14 @@ mod tests {
             panic!("purge -a did not parse")
         };
         assert!(all);
+        // --confirm answers the typed confirmation non-interactively.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Purge { confirm, .. }),
+        }) = parse(&["sandbox", "purge", "abc", "--confirm", "abc"])
+        else {
+            panic!("purge --confirm did not parse")
+        };
+        assert_eq!(confirm.as_deref(), Some("abc"));
     }
 
     #[test]

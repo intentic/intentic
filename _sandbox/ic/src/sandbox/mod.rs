@@ -96,21 +96,44 @@ pub(crate) fn slugs_of(names: &[String]) -> Vec<String> {
     slugs
 }
 
+/// The stop for a sandbox this device does not have, with the one command that says which it does have.
+pub fn missing(slug: &str) -> String {
+    crate::ui::explain(
+        &format!("There is no sandbox named {slug} on this device."),
+        None,
+        Some("ic sandbox list"),
+    )
+}
+
 /// An explicit slug names the sandbox; only its absence falls back to detecting the single one — never
-/// guess which sandbox to touch when the machine runs several (`verb` names the re-run, e.g. "ic sandbox
-/// update <slug>").
+/// guess which sandbox to touch when the device runs several (`verb` names the re-run, e.g. "ic sandbox
+/// update").
 pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     if let Some(slug) = given {
         return Ok(slug_named(slug));
     }
     let slugs = list_slugs();
     match slugs.len() {
-        0 => bail!("no sandbox container found — run the connect one-liner first."),
+        0 => bail!(
+            "{}",
+            crate::ui::explain(
+                "There is no sandbox on this device.",
+                None,
+                Some("run the setup command from your browser first."),
+            )
+        ),
         1 => Ok(slugs.into_iter().next().expect("one slug")),
-        _ => {
-            let listing: String = slugs.iter().map(|slug| format!("  {slug}\n")).collect();
-            bail!("this machine runs more than one sandbox — name the one to touch, '{verb} <slug>':\n{listing}")
-        }
+        _ => bail!(
+            "{}",
+            crate::ui::explain(
+                &format!(
+                    "This device has {}, so the command has to name one.",
+                    crate::util::plural(slugs.len(), "sandbox")
+                ),
+                Some(&format!("they are {}.", slugs.join(", "))),
+                Some(&format!("{verb} {}", slugs[0])),
+            )
+        ),
     }
 }
 
@@ -153,20 +176,36 @@ pub fn container_status(slug: &str) -> String {
 pub fn list() -> Result<()> {
     docker::require_daemon()?;
     let slugs = list_slugs();
+    crate::ui::report("intentic · sandboxes on this device", None);
     if slugs.is_empty() {
-        println!("intentic: no sandboxes on this machine.");
-        print_recoverable();
-        return Ok(());
+        crate::ui::quiet("There is no sandbox on this device.");
     }
-    for slug in slugs {
-        let asleep = crate::record::read(&slug).is_ok_and(|record| record.asleep);
-        println!(
-            "{:<9} {slug}",
-            shown_status(&container_status(&slug), asleep)
-        );
+    let mut rows: Vec<crate::ui::Item> = Vec::new();
+    for slug in &slugs {
+        let asleep = crate::record::read(slug).is_ok_and(|record| record.asleep);
+        let status = shown_status(&container_status(slug), asleep).to_string();
+        // The log's row stays `<status> <slug>`, the shape anything reading a listing already knows.
+        crate::ui::plain(&format!("{status:<9} {slug}"));
+        rows.push(crate::ui::Item::new(
+            status_tone(&status),
+            slug.clone(),
+            status,
+        ));
+    }
+    if crate::ui::is_rich() {
+        crate::ui::items(&rows);
     }
     print_recoverable();
     Ok(())
+}
+
+/// The glyph a listing row carries: running is well, stopped or asleep is neutral, anything else wants a look. Pure.
+fn status_tone(status: &str) -> crate::ui::Tone {
+    match status {
+        "running" => crate::ui::Tone::Ok,
+        "exited" | "created" | "asleep" => crate::ui::Tone::Skip,
+        _ => crate::ui::Tone::Warn,
+    }
 }
 
 /// The state a listing row shows: docker's word, or `asleep` for a sandbox the keeper put to sleep that is still down
@@ -187,15 +226,40 @@ pub fn print_recoverable() {
         return;
     }
     let now = trash::now_secs();
-    println!("\nremoved, still recoverable ('ic sandbox restore <slug>'):");
+    if crate::ui::is_rich() {
+        crate::ui::section("removed, recoverable");
+        let rows: Vec<crate::ui::Item> = recoverable
+            .iter()
+            .map(|entry| {
+                crate::ui::Item::new(
+                    crate::ui::Tone::Skip,
+                    entry.slug.clone(),
+                    days_left(entry.days_left(now)),
+                )
+            })
+            .collect();
+        crate::ui::items(&rows);
+        crate::ui::later(&[(
+            "bring one back".to_string(),
+            format!("ic sandbox restore {}", recoverable[0].slug),
+        )]);
+        return;
+    }
+    crate::ui::plain("\nremoved, still recoverable ('ic sandbox restore <slug>'):");
+    // The machine agent reads these rows by name (_devices/machine/src/sync/gone.ts `trashedSlugs`).
     for entry in &recoverable {
-        println!(
+        crate::ui::plain(&format!(
             "{:<9} {} ({} day(s) left)",
             "removed",
             entry.slug,
             entry.days_left(now)
-        );
+        ));
     }
+}
+
+/// How long a removed sandbox stays recoverable, spelled out. Pure.
+pub fn days_left(days: u64) -> String {
+    format!("{} left", crate::util::plural(days as usize, "day"))
 }
 
 #[cfg(test)]
@@ -228,6 +292,17 @@ mod tests {
         assert_eq!(shown_status("exited", true), "asleep");
         assert_eq!(shown_status("exited", false), "exited");
         assert_eq!(shown_status("running", true), "running");
+    }
+
+    #[test]
+    fn a_listing_row_wants_a_look_only_when_it_is_neither_running_nor_resting() {
+        assert_eq!(status_tone("running"), crate::ui::Tone::Ok);
+        assert_eq!(status_tone("asleep"), crate::ui::Tone::Skip);
+        assert_eq!(status_tone("exited"), crate::ui::Tone::Skip);
+        assert_eq!(status_tone("restarting"), crate::ui::Tone::Warn);
+        assert_eq!(status_tone("?"), crate::ui::Tone::Warn);
+        assert_eq!(days_left(1), "1 day left");
+        assert_eq!(days_left(6), "6 days left");
     }
 
     fn names(list: &[&str]) -> Vec<String> {

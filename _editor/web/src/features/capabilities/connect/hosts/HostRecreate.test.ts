@@ -11,7 +11,7 @@ import { type App, computed, createApp, defineComponent, h, nextTick, ref } from
 import { useOsPreference } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import * as useDevicesOriginal from "../../../sandbox/devices/useDevices";
-import { bashCommand } from "../../../../app/environments/scriptCommand";
+import { oneLiner } from "../../../../app/environments/scriptCommand";
 
 const reachable = ref(true);
 const fleet = ref<{ id: string; title: string; status: string }[]>([]);
@@ -371,7 +371,7 @@ it(`folds a gilded update's command behind its gold button on a machine this pag
     button?.click();
     await nextTick();
     expect(shown()).toContain(`Run this in a terminal on the computer that runs your sandbox:`);
-    expect(el.querySelector(`pre`)?.textContent).toBe(bashCommand(`update`, ``, `work`));
+    expect(el.querySelector(`pre`)?.textContent).toBe(oneLiner(`update`, [`work`], `unix`));
     expect(buttonNamed(`Update now`)?.getAttribute(`aria-expanded`)).toBe(`true`);
     buttonNamed(`Update now`)?.click();
     await nextTick();
@@ -382,7 +382,7 @@ it(`prints the command at once where the button is not the update card's, with w
     hostRunning.value = undefined;
     useOsPreference().cmdOs.value = `unix`;
     const el = mount();
-    expect(el.querySelector(`pre`)?.textContent).toBe(bashCommand(`update`, ``, `work`));
+    expect(el.querySelector(`pre`)?.textContent).toBe(oneLiner(`update`, [`work`], `unix`));
     expect(shown()).toContain(`It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute.`);
 });
 

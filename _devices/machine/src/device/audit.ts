@@ -50,6 +50,7 @@ export const audit = async (entry: { tool: string; ok: boolean; detail: string }
         });
     } catch (error) {
         // A failed write must not block the call it records, but the gap in the record lands in the agent's log.
+        // allow(terminal-output): a line of the resident agent's own log, which its supervisor captures from stderr
         process.stderr.write(`audit: could not record ${entry.tool} in ${auditPath} (${errorMessage(error)})\n`);
     }
 };

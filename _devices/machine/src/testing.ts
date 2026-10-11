@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createUi, type Ui } from "@intentic/local-agent";
 import type { FixCheck, KeeperSeams, LinkView, ListedSandbox } from "./device/sandbox-rounds/keeper.js";
 import type { IcRun } from "./device/tools/sandboxes.js";
 import { FETCH_PROGRAM, LISTING_PROGRAM, type ProjectRunner, realProjectRunner, type Spawned } from "./sync/project/project-remote.js";
@@ -250,4 +251,12 @@ export const fakeKeeper = (start: number): FakeKeeper => {
         },
     };
     return fake;
+};
+
+// A command's renderer in plain mode, as a pipe sees it, with every line it printed kept: stdout and stderr in order.
+export const recordingUi = (): { readonly ui: Ui; readonly said: string[] } => {
+    const said: string[] = [];
+    const keep = (chunk: string): void => void said.push(...chunk.split("\n").filter((line) => line !== ""));
+    const ui = createUi({ stdout: { write: keep }, stderr: { write: keep }, env: { INTENTIC_UI: "plain" } });
+    return { ui, said };
 };
