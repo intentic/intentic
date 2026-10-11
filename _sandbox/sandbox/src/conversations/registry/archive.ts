@@ -43,7 +43,7 @@ export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
     // What a purge disposes through, the one way a conversation's in-memory state and entry leave together; and where
     // the children of a conversation leaving are read and stopped.
-    readonly conversations: Pick<ConversationActors, "running" | "dispose" | "holdings" | "state" | "send">;
+    readonly conversations: Pick<ConversationActors, "running" | "dispose" | "holdings" | "state" | "send" | "queued">;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
     // Hard stop for everything the conversation still runs (terminals, viewers); archiving already committed its work,
@@ -110,6 +110,18 @@ const reasonOf = (error: unknown): string => {
     );
 };
 
+// Drops every message booked for later in the conversation, each as it reads now; what waits unbooked (held by a stop or
+// a refusal) stays, since it goes only when somebody presses for it.
+const cancelBookings = (deps: AgentArchiveDeps, id: string): void => {
+    const booked = deps.conversations.queued(id).items.filter(isBooked);
+    for (const item of booked) {
+        deps.conversations.send(id, { kind: "queue-removed", id: item.id, revision: item.revision });
+    }
+    if (booked.length > 0) {
+        deps.logger.info({ id, messages: booked.length }, "agents: archived with messages scheduled in it, which were cancelled");
+    }
+};
+
 // Retires each checkout before stamping the marker, so a mid-way failure leaves the agent on the board, worktree
 // intact. Retires run concurrently; the marker is still one persist and broadcast for the batch.
 export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string[], now: number): Promise<AgentArchiveResult> => {
@@ -123,12 +135,10 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         if (id === undefined || entry === undefined) {
             return;
         }
-        // A message booked for later goes out by itself at its time, into a conversation it would find archived: the
-        // person's words would be lost. It stays on the board until they send it, re-time it or take it back.
-        if ((entry.queue?.items ?? []).some(isBooked)) {
-            refused[index] = { id, reason: "a message is scheduled to send in it: send it now or take it back first" };
-            return;
-        }
+        // A message booked for later would go out by itself at its time, into a conversation it would find archived
+        // and be refused there. Filing the conversation away says it is done with, so its bookings are cancelled, before
+        // the checkout goes, so none fires into a checkout being retired. The aged sweep never reaches one (archivable).
+        cancelBookings(deps, id);
         // A workspace conversation has no checkout to retire; archiving it is only the registry's presentation change.
         if (!isIsolated(entry)) {
             done[index] = id;

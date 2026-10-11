@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import type { QueuedMessage } from "@intentic/sandbox-contract";
-import { Button, Icon, type SwipeAction, SwipeRow, type TooltipValue, ui, useDevice } from "@intentic/ui";
+import { Button, Icon, type SwipeAction, SwipeRow, type TooltipValue, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
 import { usePaneView } from "../../panel/useChat-view";
 import { pickUpWhen, wakesHeldUntil } from "../../run/endings/pickUp";
 import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with
-// each message's own doors (reword, take back). A HELD queue is not drawn here: nothing goes by itself then, so its
+// each message's one door: a person's words go back into the composer to be edited there, anyone else's are removed. A HELD queue is not drawn here: nothing goes by itself then, so its
 // messages stand at the transcript's foot as the prompts that did not go out (ChatHeldMessages). Nor is a message booked
 // for later, which stands there too, with the time it goes.
 
 const t = useT();
-const { waiting, queuePaused, streaming, awaitingDecision, pickUp, unqueue, reword, resumeQueue } = usePaneView();
+const { waiting, queuePaused, streaming, awaitingDecision, pickUp, unqueue, resumeQueue } = usePaneView();
 
 // The sandbox's own words stranded behind a spent allowance go with the held turn when it reopens (wakesHeldUntil), and
 // not before: the agent is free, yet nothing can take them, so "as soon as the agent is free" and a Send now (which the
@@ -35,9 +35,6 @@ const hint = computed(() => {
     return awaitingDecision.value ? t(`chat.chatQueue.goesAfterAnswer`) : t(`chat.chatQueue.goesAfterTurn`);
 });
 
-// The message being reworded here, and the words it is being given; one at a time.
-const rewording = ref<{ readonly id: string; text: string } | undefined>();
-
 // Who a message is from when a person did not type it.
 const fromLine = (message: QueuedMessage): string | undefined => {
     if (message.voice === `person`) {
@@ -55,22 +52,23 @@ const picturesOf = (message: QueuedMessage) =>
 const filesOf = (message: QueuedMessage): string[] =>
     (message.attachments ?? []).filter((path) => attachmentPreview(path) === undefined).map((path) => basename(path));
 
-// A person's words go back into the composer below, which the hover says, since a ✕ alone read as throwing them away.
-const takeBackTip = (message: QueuedMessage): TooltipValue =>
-    message.voice === `person` ? { title: t(`chat.chatQueue.takeBack`), note: t(`chat.chatQueue.takeBackNote`) } : t(`chat.chatQueue.takeBack`);
+// Editing happens in the composer below, the box the reader already writes in: the press takes the message out of line
+// and puts its words and files there (TurnClient.takenBack), and sending it again queues it afresh. The sandbox's or an
+// agent's words were nobody's here to write: removed. The hover says which, since the glyph alone does not.
+const doorTip = (message: QueuedMessage): TooltipValue =>
+    message.voice === `person` ? { title: t(`chat.chatQueue.edit`), note: t(`chat.chatQueue.editNote`) } : t(`chat.chatQueue.remove`);
 
-// On a touch screen a waiting message is swiped aside to take it back: its ✕ was the one way, a 20px target a thumb kept
-// missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four seconds). The
-// button stays, now with a thumb's target, for whoever reaches for it. Not while it is being reworded: that row holds a field.
+// On a touch screen a waiting message is swiped aside for the same door: its button was the one way, a 20px target a
+// thumb kept missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four
+// seconds). The button stays, now with a thumb's target, for whoever reaches for it.
 const { coarse } = useDevice();
-const takeBack = (message: QueuedMessage): SwipeAction | undefined =>
-    coarse.value ? { label: t(`chat.chatQueue.takeBack`), icon: message.voice === `person` ? `undo` : `times`, tone: `danger` } : undefined;
-
-const save = async (message: QueuedMessage): Promise<void> => {
-    const text = rewording.value?.text.trim() ?? ``;
-    if (text.length === 0 || (await reword(message, text))) {
-        rewording.value = undefined;
+const swipe = (message: QueuedMessage): SwipeAction | undefined => {
+    if (!coarse.value) {
+        return undefined;
     }
+    return message.voice === `person`
+        ? { label: t(`chat.chatQueue.edit`), icon: `pencil`, tone: `accent` }
+        : { label: t(`chat.chatQueue.remove`), icon: `times`, tone: `danger` };
 };
 </script>
 
@@ -80,26 +78,13 @@ const save = async (message: QueuedMessage): Promise<void> => {
         <SwipeRow
             v-for="message in waiting"
             :key="message.id"
-            :action="rewording?.id === message.id ? undefined : takeBack(message)"
+            :action="swipe(message)"
             class="rounded-xl"
             @commit="unqueue(message)"
         >
             <div class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2">
                 <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                <form v-if="rewording?.id === message.id" class="flex min-w-0 flex-1 flex-col gap-1" @submit.prevent="save(message)">
-                    <textarea
-                        v-model="rewording.text"
-                        rows="2"
-                        :class="ui.input({ size: `sm` }, 'w-full resize-y')"
-                        :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                        @keydown.esc.prevent="rewording = undefined"
-                    />
-                    <div class="flex justify-end gap-1">
-                        <Button size="small" thumb tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
-                        <Button size="small" thumb type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
-                    </div>
-                </form>
-                <div v-else class="flex min-w-0 flex-1 items-start gap-2">
+                <div class="flex min-w-0 flex-1 items-start gap-2">
                     <ChatImageThumb
                         v-for="picture in picturesOf(message)"
                         :key="picture.path"
@@ -117,24 +102,13 @@ const save = async (message: QueuedMessage): Promise<void> => {
                     </div>
                 </div>
                 <button
-                    v-if="message.voice === `person` && rewording?.id !== message.id"
                     type="button"
                     class="composer-ghost touch-target h-5 w-5 shrink-0"
-                    v-tooltip.top="t(`chat.chatQueue.reword`)"
-                    :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                    @click="rewording = { id: message.id, text: message.text }"
-                >
-                    <Icon name="pencil" class="text-2xs" />
-                </button>
-                <!-- Set apart on a touch screen, so its 44px target and the pencil's barely meet: a near miss on reword is not a take-back. -->
-                <button
-                    type="button"
-                    class="composer-ghost touch-target h-5 w-5 shrink-0 pointer-coarse:ml-3"
-                    v-tooltip.top="takeBackTip(message)"
-                    :aria-label="t(`chat.chatQueue.removeLabel`)"
+                    v-tooltip.top="doorTip(message)"
+                    :aria-label="message.voice === `person` ? t(`chat.chatQueue.editLabel`) : t(`chat.chatQueue.removeLabel`)"
                     @click="unqueue(message)"
                 >
-                    <Icon :name="message.voice === `person` ? `undo` : `times`" class="text-2xs" />
+                    <Icon :name="message.voice === `person` ? `pencil` : `times`" class="text-2xs" />
                 </button>
             </div>
         </SwipeRow>

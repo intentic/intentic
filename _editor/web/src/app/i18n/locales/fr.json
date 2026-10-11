@@ -9,6 +9,7 @@
         "agentCard": {
             "archive": "Archiver",
             "archiveAgent": "Archiver l'agent",
+            "archiveCancelsScheduled": "Annule le message programmé ; tout le reste est conservé | Annule les {count} messages programmés ; tout le reste est conservé",
             "archived": "Archivé {archivedAt}",
             "asking": "Demande…",
             "back": "de retour {limitBackAt}",
@@ -45,6 +46,8 @@
             "movingTo": "passage à {account}",
             "stopCommand": "Arrêter la commande",
             "stopCommandNote": "Pour intégrer le travail.",
+            "sends": "part {at}",
+            "scheduledMessages": "Messages",
             "sendsWhenRoom": "envoi quand la mémoire se libère"
         },
         "agentConflictReport": {
@@ -1441,18 +1444,17 @@
             "writeAnswerToSubmit": "Écrivez votre réponse pour l'envoyer."
         },
         "chatQueue": {
+            "edit": "Modifier",
+            "editLabel": "Modifier le message en attente",
             "fromAgent": "D’un autre agent",
             "fromSandbox": "De la sandbox",
             "goesAfterAnswer": "Part dès que vous répondez à la demande ci-dessus",
             "goesAfterTurn": "Part à la fin de ce tour",
             "goesWhenFree": "Part dès que l’agent est libre",
             "goesWithHeldTurn": "Part avec le tour en attente quand la limite se réinitialise · {when}",
-            "removeLabel": "Reprendre le message en attente",
-            "reword": "Reformuler",
-            "rewordLabel": "Reformuler le message en attente",
-            "save": "Enregistrer",
-            "sendNow": "Envoyer maintenant",
-            "takeBack": "Reprendre"
+            "remove": "Retirer",
+            "removeLabel": "Retirer le message en attente",
+            "sendNow": "Envoyer maintenant"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Votre agent vous attend",

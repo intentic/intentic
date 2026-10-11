@@ -154,27 +154,30 @@ describe("archiveAgents", () => {
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
 
-    // A message booked for later is work still to come, and filing the conversation away would have it dropped at its
-    // time (archivable's rule, which only the aged sweep applied): the archive names it and leaves the conversation be.
-    it("refuses a conversation whose scheduled message has not gone out, and leaves it on the board", async () => {
+    // A message booked for later would go out at its time into a conversation it found archived, and be refused there.
+    // Filing the conversation away by hand says it is done with: its bookings are cancelled with it, and the words held
+    // unbooked (by a stop, a refusal) stay, since they go only when somebody presses for them.
+    it("cancels the messages scheduled in a conversation it archives, and keeps the ones held unbooked", async () => {
         const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences());
         await agents.init();
         await beginTurn(conversations, turn(), 1_000);
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const item = { id: "m-1", voice: "person", queuedAt: 3_000, turn: { conversationId: "c1", prompt: "then tag it", messageId: "m-1" } } as const;
         await conversations.send("c1", { kind: "queue-scheduled", item, booking: { until: 90_000 } }, 3_000).settled;
-        // A message sent the ordinary way since goes on its own; the booked one still waits for its time.
-        const now = { ...item, id: "m-2", turn: { ...item.turn, prompt: "and the docs", messageId: "m-2" } } as const;
-        await conversations.send("c1", { kind: "queue-joined", item: now }, 4_000).settled;
-        await conversations.send("c1", { kind: "queue-taken", ids: ["m-2"] }, 4_500).settled;
+        const after = { ...item, id: "m-2", turn: { ...item.turn, prompt: "and the docs", messageId: "m-2" } } as const;
+        await conversations.send("c1", { kind: "queue-scheduled", item: after, booking: { after: { conversationId: "c9", since: 3_500 } } }, 3_500).settled;
+        const held = { ...item, id: "m-3", turn: { ...item.turn, prompt: "and the readme", messageId: "m-3" } } as const;
+        await conversations.send("c1", { kind: "queue-returned", items: [held] }, 4_000).settled;
         const { worktrees, retire } = stubWorktrees();
 
         const { archived, failed } = await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
 
-        expect(archived).toEqual([]);
-        expect(failed).toEqual([{ id: "c1", reason: expect.stringContaining("scheduled") }]);
-        expect(retire).not.toHaveBeenCalled();
-        expect(agents.get("c1")?.archivedAt).toBeUndefined();
+        expect(archived).toEqual(["c1"]);
+        expect(failed).toEqual([]);
+        expect(retire).toHaveBeenCalledTimes(1);
+        expect(agents.get("c1")?.archivedAt).toBe(9_000);
+        expect(conversations.queued("c1").items.map((waiting) => waiting.id)).toEqual(["m-3"]);
+        expect(conversations.booked().filter(({ conversationId }) => conversationId === "c1")).toEqual([]);
     });
 
     it("disarms the conversation's watches along with its checkout", async () => {

@@ -5,7 +5,7 @@ import { formatUntil } from "@intentic/ui/time";
 // has landed in the workspace. A setting of the composer like its model or mode, not words in the message: it rides
 // the row as a pill while set, turns Send into a booking, and is spent by that booking. Where the message waits after
 // that is the conversation's queue, the daemon's, which every window draws as scheduled and where it can be sent
-// sooner, re-timed, reworded or taken back, each booked message on its own time (bookings.ts). Pure and value-typed;
+// sooner, re-timed, or taken back into the composer to be edited, each booked message on its own time (bookings.ts). Pure and value-typed;
 // the clock is always handed in.
 
 export type SendLater = { readonly kind: `at`; readonly at: number } | { readonly kind: `after`; readonly conversationId: string };

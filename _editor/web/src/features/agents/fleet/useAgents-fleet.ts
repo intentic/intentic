@@ -363,11 +363,16 @@ watch(
 // - running/stopping: no, it's the live turn's worktree
 // - draft: no registry entry to archive
 // - awaiting/plan/question/permission: would bury the question
-// - a message booked for later: no, it would reach an archived conversation at its time and be dropped (the sandbox
-//   refuses it too); it goes, is re-timed or is taken back first
+// - a message booked for later: yes, and the sandbox cancels it with the archive (the card's hint says so), since
+//   filed away the conversation is done with and the message would only be refused there at its time
 // - error/conflict/stopped/landed/idle: yes
 export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
-    agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent) && !scheduledSend(agent);
+    agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
+
+// What a press that does not name the card itself may file away (the lane's Clear, the children going with a parent):
+// what canArchive allows less a conversation with a message scheduled in it, whose cancel only a press on that card says.
+export const clearable = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
+    canArchive(agent) && !scheduledSend(agent);
 
 // What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
 // at work. That child rides in its parent's tray as the parent's history (board/view/childFold.ts), and filing it alone
@@ -407,7 +412,7 @@ export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): 
         return false;
     };
     return [...grouped.finished, ...grouped.attention.filter(heard)].filter(
-        (agent) => canArchive(agent) && !underLive(agent) && !liveFamilies.has(agent.id),
+        (agent) => clearable(agent) && !underLive(agent) && !liveFamilies.has(agent.id),
     );
 };
 

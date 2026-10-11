@@ -194,28 +194,19 @@ describe(`a message the sandbox held for low memory`, () => {
         expect(pressNamed(unnamed, `Send anyway`)).toHaveLength(1);
     });
 
-    it(`gives each held message its own doors: reword it in place, or take it back`, async () => {
+    // Editing happens in the composer, never in a second box here: the one door takes the message out of the queue, and
+    // TurnClient.takenBack puts its words, files and booking back where they were written.
+    it(`gives each held message one door, Edit, which takes it back into the composer`, async () => {
         const chat = chatHolding({ items: [held()], paused: `refused` });
-        const reword = jest.spyOn(chat.turn, `reword`).mockResolvedValue(true);
         const unqueue = jest.spyOn(chat.turn, `unqueue`).mockResolvedValue(true);
         const element = mount(chat);
         await nextTick();
 
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Reword waiting message"]`)!.click();
-        await nextTick();
-        const box = element.querySelector(`textarea`)!;
-        expect(box.value).toBe(`We should be consistent and always use the same icon for "attention".`);
-        // The picture stays on screen while the words change: a reword keeps the files.
-        expect(element.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:${SHOT}`);
-        box.value = `Use the circle for attention, everywhere.`;
-        box.dispatchEvent(new Event(`input`));
-        element.querySelector(`form`)!.dispatchEvent(new Event(`submit`));
+        expect(element.querySelector(`button[aria-label="Take back waiting message"]`)).toBeNull();
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Edit waiting message"]`)!.click();
         await settled();
-        expect(reword.mock.calls).toEqual([[held(), `Use the circle for attention, everywhere.`]]);
-        expect(element.querySelector(`textarea`)).toBeNull();
-
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Take back waiting message"]`)!.click();
         expect(unqueue.mock.calls).toEqual([[held()]]);
+        expect(element.querySelector(`textarea`)).toBeNull();
     });
 
     // The refusal's row lasts a minute (a turn that ran nothing is never recorded): opened later, the chat still says
@@ -333,13 +324,13 @@ describe(`the other holds, drawn the same way`, () => {
         expect(empty.textContent?.trim()).toBe(``);
     });
 
-    it(`marks a message nobody typed by who sent it, and offers it no reword`, async () => {
+    it(`marks a message nobody typed by who sent it, and offers it no edit, only its removal`, async () => {
         const element = mount(chatHolding({ items: [held({ voice: `agent`, attachments: [] })], paused: `stopped` }));
         await nextTick();
 
         expect(element.textContent).toContain(`From another agent`);
-        expect(element.querySelector(`button[aria-label="Reword waiting message"]`)).toBeNull();
-        expect(element.querySelector(`button[aria-label="Take back waiting message"]`)?.tagName).toBe(`BUTTON`);
+        expect(element.querySelector(`button[aria-label="Edit waiting message"]`)).toBeNull();
+        expect(element.querySelector(`button[aria-label="Remove waiting message"]`)?.tagName).toBe(`BUTTON`);
     });
 });
 

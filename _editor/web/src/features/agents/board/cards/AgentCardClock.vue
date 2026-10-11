@@ -6,7 +6,7 @@ import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, limitClosed, limitCorner, memoryCorner, promptLine, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
+import { activityIcon, promptLine, selfStart, selfStartTicks, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
 import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import { effectivePolicy } from "../../../chat/run/endings/turnBreak";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
@@ -14,7 +14,8 @@ import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import AgentCardDate from "./AgentCardDate.vue";
 
-// An agent card's "when" corner: the settled date, or the running elapsed, a watch, a limit or a cache countdown.
+// An agent card's "when" corner: the settled date, or the running elapsed, a watch, when it goes again by itself (a
+// limit's resend, a message held for memory or booked for later) or a cache countdown.
 // Live clock ticks redraw only this corner; relative dates below tick in their own minute-rate leaf.
 
 const props = defineProps<{
@@ -23,6 +24,8 @@ const props = defineProps<{
     activityText: string | undefined;
     // An action of the card's own is in flight, so the watch's stop press is pressed out.
     busy: boolean;
+    // The card another agent's id names, for "sends after <agent> lands".
+    titleOf?: (conversationId: string) => string | undefined;
 }>();
 const emit = defineEmits<{
     unwatch: [];
@@ -34,30 +37,32 @@ const emit = defineEmits<{
 
 const t = useT();
 const { mobile } = useDevice();
-// Second-rate ticks only for live clocks (turn, watch, limit countdown, warm cache); dates use AgentCardDate.
+// Second-rate ticks only for live clocks (turn, watch, a self-start's countdown, warm cache); dates use AgentCardDate.
 // On the sandbox's clock: every instant this corner counts to or from is one the sandbox stamped (sandboxClock.ts).
-const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
+const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || selfStartTicks(props.agent) || cacheWarm(props.agent));
 const now = computed(() => sandboxNow(tick.value));
-// Shares the card's "when" corner with the running elapsed and the watch countdown; the chip already says what
-// happened, this says what comes of it: when the allowance is back, or, for a booked resend or move, when or where it
-// goes by itself, which is why a card resting in Active is there (agentStatus.limitCorner). Undefined once nothing is
-// booked and the window is open, or the provider gave no instant; the corner then falls back to the ordinary date.
-// The answer to the limit is read whole (this conversation's own, else the sandbox's), as the card's menu reads it, so the
-// corner can say when "Send again" is chosen but nothing is booked to do it.
+// When the card goes again by itself, one reading for all of it (agentStatus.selfStart): a spent allowance's resend or
+// move, or when it is back when nothing is booked; a message held for memory once its answer is to send it when memory
+// frees; messages booked for a time or another agent's land. The chip says why it waits, this says what goes and when,
+// which is also why a card resting in Active is there. The answers to the limit and to memory are read whole (this
+// conversation's own, else the sandbox's), as the card's menu reads them, so the corner can say when "Send again" is
+// chosen but nothing is booked to do it.
 const { query: settings } = useSandboxQuery(rpcQuery(`settings.get`));
-const limit = computed(() => limitCorner(props.agent, now.value, effectivePolicy(`limit`, props.agent, settings.data.value)));
-// The same corner for a message held because memory was short, once its answer is to send it when memory frees up: no
-// instant to count to, so it says the condition it waits for. Never beside a limit's: the card is held by one or the other.
-const memory = computed(() => (limit.value !== undefined ? undefined : memoryCorner(props.agent, effectivePolicy(`memory`, props.agent, settings.data.value))));
-const memoryTip = computed((): Tip => ({ title: t(`agents.agentStatus.heldMemory`), tone: `info`, note: t(`agents.agentCard.noPressNeeded`) }));
-// Whichever hold speaks in the corner: what the watch, the cache and the date yield it to.
-const holding = computed(() => limit.value !== undefined || memory.value !== undefined);
+const answers = computed(() => ({
+    limit: effectivePolicy(`limit`, props.agent, settings.data.value),
+    memory: effectivePolicy(`memory`, props.agent, settings.data.value),
+}));
+const goes = computed(() => selfStart(props.agent, now.value, answers.value, props.titleOf));
+// A held turn or held message takes the corner from the watch, the cache and the date: a watch firing into a shut window
+// or a full sandbox runs nothing (turn-admission holds its words back), so the hold's end is the next moment the card
+// can move. A message booked for later does not: a watch's wake would run before it, and a live turn's readout speaks
+// for the card while it runs, so either takes the corner and the booking has it back once they are done.
+const holding = computed(() => goes.value !== undefined && goes.value.kind !== `send`);
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
-// the moment the turn ends. And yields to a spent allowance, so the corner holds ONE clock: a watch firing into a shut
-// window runs nothing (turn-admission holds its words back), so the reset is the next moment the card can move, and
-// the watch's countdown comes back with its Stop press once the limit has had its say.
+// the moment the turn ends. The watch's countdown comes back with its Stop press once a hold has had its say.
 const watch = computed(() => (props.working || holding.value ? undefined : watchLine(props.agent, now.value)));
+const shown = computed(() => (goes.value?.kind === `send` && (props.working || watch.value !== undefined) ? undefined : goes.value));
 // Takes the watch's place when what the watch waits on is a command at a prompt: its countdown promised a wake that the
 // command's exit would bring, and that exit will not come by itself. Amber, and its Stop always shown rather than on
 // hover, since this is the card's one way forward.
@@ -67,13 +72,22 @@ const stopsCommand = computed(() => {
     const armed = new Set((props.agent.watches ?? []).map((entry) => entry.id));
     return (props.agent.jobs ?? []).some((job) => job.endedAt === undefined && job.watch !== undefined && armed.has(job.watch));
 });
-// Its hover from the facts the card holds (whose limit, when it reopens) rather than the provider's refusal sentence;
-// the corner says the wait, the hover the instant. A booked resend or move says it goes by itself, so nothing needs
-// pressing (and the card offers no press: AgentCard's `resendable`).
-const limitTip = computed((): Tip | undefined => {
-    const corner = limit.value;
+// Its hover from the facts the card holds (whose limit, when it reopens, when a message goes) rather than the provider's
+// refusal sentence; the corner says the wait, the hover the instant. Whatever goes by itself says so, so nothing needs
+// pressing (and the card offers no press: AgentCard's `resendable`); a limit nothing is booked for says when it is back.
+const goesTip = computed((): Tip | undefined => {
+    const corner = shown.value;
     if (corner === undefined) {
         return undefined;
+    }
+    const noPress = t(`agents.agentCard.noPressNeeded`);
+    if (corner.kind === `room`) {
+        return { title: t(`agents.agentStatus.heldMemory`), tone: `info`, note: noPress };
+    }
+    if (corner.kind === `send`) {
+        const when = corner.after !== undefined ? t(`chat.sendLater.afterLands`, { title: corner.after }) : corner.clock === undefined ? corner.text : formatWhen(corner.clock.at, now.value);
+        const many = corner.count > 1 ? [{ label: t(`agents.agentCard.scheduledMessages`), value: corner.count }] : [];
+        return { title: t(`chat.chatHeld.scheduled`), tone: `info`, rows: [{ label: t(`chat.composerIntent.sendsAt`), value: when }, ...many], note: noPress };
     }
     const provider = { label: t(`agents.words.provider`), value: providerLabel(props.agent.provider) };
     if (corner.kind === `back`) {
@@ -89,7 +103,7 @@ const limitTip = computed((): Tip | undefined => {
         title: corner.kind === `moving` ? t(`agents.agentStatus.movingTo`, { account: corner.account }) : t(`agents.agentCard.resendBooked`),
         tone: `info`,
         rows: [provider, ...at],
-        note: t(`agents.agentCard.noPressNeeded`),
+        note: noPress,
     };
 });
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
@@ -111,21 +125,16 @@ const coolingTip = computed((): Tip | undefined =>
     <span v-if="agent.archivedAt !== undefined" class="shrink-0">
         <AgentCardDate :at="agent.archivedAt" archived />
     </span>
-    <!-- Takes the date's slot: "back in 27m" tells the reader something to plan around, unlike "last active". -->
+    <!-- Takes the date's slot: "resends 02:00", "sends in 12m", "back in 27m" tell the reader something to plan around, unlike "last active". -->
     <!-- Amber when "Send again" is the answer but nothing is booked to send it: the press is still the reader's. -->
     <span
-        v-else-if="limit !== undefined"
+        v-else-if="shown !== undefined"
         class="inline-flex shrink-0 items-center gap-1"
-        :class="limit.kind === `back` && limit.unbooked === true ? 'text-warning' : undefined"
-        v-tooltip.top="limitTip"
+        :class="shown.kind === `back` && shown.unbooked === true ? 'text-warning' : undefined"
+        v-tooltip.top="goesTip"
     >
         <Icon name="clock" class="shrink-0 text-2xs" />
-        <span class="tabular-nums">{{ limit.text }}</span>
-    </span>
-    <!-- A message held for memory that goes by itself once memory frees up: the condition it waits for, in the date's slot. -->
-    <span v-else-if="memory !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="memoryTip">
-        <Icon name="clock" class="shrink-0 text-2xs" />
-        <span>{{ memory }}</span>
+        <span class="tabular-nums">{{ shown.text }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
     <button

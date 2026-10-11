@@ -207,8 +207,8 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
         track(`message_sent`, { agent: conversation.value.selection.provider.value, queued: conversation.value.turn.streaming.value });
         return conversation.value.turn.say(prompt, staged, editorContext);
     },
-    // The queue's doors, each acting on the message as this window read it, and letting a held queue go.
-    // A person's message taken back is in the composer again (TurnClient.takenBack), so the caret goes where its words are.
+    // The queue's door, acting on the message as this window read it, and letting a held queue go. A person's message is
+    // edited in the composer, so it comes back there (TurnClient.takenBack) and the caret goes where its words are.
     unqueue: async (message: QueuedMessage): Promise<boolean> => {
         const taken = await conversation.value.turn.unqueue(message);
         if (taken && message.voice === `person`) {
@@ -216,7 +216,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
         }
         return taken;
     },
-    reword: (message: QueuedMessage, text: string): Promise<boolean> => conversation.value.turn.reword(message, text),
     resumeQueue: (ids?: readonly string[]): Promise<void> => conversation.value.turn.resume(ids),
     // Forks the conversation at `cut` (the index of the first message below the line) into a fresh tab, leaving the
     // source untouched. A cut above a user message reopens that prompt in the new composer instead of sending it.

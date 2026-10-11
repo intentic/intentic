@@ -40,11 +40,10 @@ const stop = jest.fn<SandboxRpc["agent"]["stop"]>();
 const resume = jest.fn<SandboxRpc["agent"]["resume"]>();
 const queueResume = jest.fn<SandboxRpc["agent"]["queueResume"]>();
 const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
-const queueEdit = jest.fn<SandboxRpc["agent"]["queueEdit"]>();
 const switchAccount = jest.fn<SandboxRpc["agent"]["switchAccount"]>();
 const queueSchedule = jest.fn<SandboxRpc["agent"]["queueSchedule"]>();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({
-    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit, switchAccount, queueSchedule } }),
+    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, switchAccount, queueSchedule } }),
 }));
 
 const { TurnClient } = await import("./turnClient");
@@ -194,7 +193,7 @@ beforeEach(() => {
 
 afterEach(() => {
     unstubAllGlobals();
-    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueEdit, queueSchedule]) {
+    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueSchedule]) {
         procedure.mockReset();
     }
 });
@@ -884,23 +883,18 @@ describe(`an account picked by hand`, () => {
 });
 
 describe(`the queue's doors`, () => {
-    it(`takes back or rewords a waiting message as this window read it, and keeps the queue the daemon answered with`, async () => {
+    it(`takes a waiting message out as this window read it, and keeps the queue the daemon answered with`, async () => {
         const { client, host } = clientOf();
         host.queue.value = WAITING;
         const [waiting] = WAITING.items;
-        queueEdit.mockImplementation(async () => ({ items: [{ ...waiting!, text: `and the docs, briefly`, revision: 2 }], revision: 2 }));
         queueRemove.mockImplementation(async () => ({ items: [], revision: 3 }));
 
-        expect(await client.reword(waiting!, `and the docs, briefly`)).toBe(true);
-        expect(queueEdit.mock.calls[0]?.[0]).toEqual({ conversationId: `c1`, id: `m-wait`, revision: 1, text: `and the docs, briefly` });
-        expect(host.queue.value).toEqual({ items: [{ ...waiting!, text: `and the docs, briefly`, revision: 2 }], revision: 2 });
-
-        expect(await client.unqueue({ ...waiting!, revision: 2 })).toBe(true);
-        expect(queueRemove.mock.calls[0]?.[0]).toEqual({ conversationId: `c1`, id: `m-wait`, revision: 2 });
+        expect(await client.unqueue(waiting!)).toBe(true);
+        expect(queueRemove.mock.calls[0]?.[0]).toEqual({ conversationId: `c1`, id: `m-wait`, revision: 1 });
         expect(host.queue.value).toEqual({ items: [], revision: 3 });
     });
 
-    // Take back is the inverse of the press that sent it: the words were the person's, so they come back to the box
+    // Edit is the inverse of the press that sent it: the words were the person's, so they come back to the box
     // they were written in rather than vanishing, ahead of whatever was typed since, with their files.
     it(`puts a person's words and files back into the composer, ahead of what was typed since`, async () => {
         const { client, host } = clientOf();

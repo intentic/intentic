@@ -879,18 +879,6 @@ export class TurnClient {
         host.queue.value = undefined;
     }
 
-    // Rewords a waiting message where it stands in the queue, as this window read it; refused like a removal.
-    async reword(message: QueuedMessage, text: string): Promise<boolean> {
-        const { host } = this;
-        const left = await orRefusal(
-            sandboxRpc.agent.queueEdit(
-                { conversationId: host.conversationId, id: message.id, revision: message.revision, text },
-                { context: { at: host.box.value } },
-            ),
-        );
-        return this.heard(left);
-    }
-
     // The queue a change left, or why it was refused.
     private heard(left: ConversationQueue | SandboxHttpError): boolean {
         if (left instanceof SandboxHttpError) {

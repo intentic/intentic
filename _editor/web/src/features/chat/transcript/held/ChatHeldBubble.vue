@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { QueuedMessage } from "@intentic/sandbox-contract";
-import { Button, Icon, type TooltipValue, ui, useDevice } from "@intentic/ui";
+import { Icon, type TooltipValue, useDevice } from "@intentic/ui";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
@@ -10,7 +10,7 @@ import { attachmentPreview } from "../../drafts/attachmentPreviews";
 import { usePaneView } from "../../panel/useChat-view";
 import ChatImageThumb from "../attachments/ChatImageThumb.vue";
 
-/* One message that did not go out, drawn as the prompt it would have been (its words, its pictures) with an edge that says it was not sent, and its own two doors: reword it, take it back. */
+/* One message that did not go out, drawn as the prompt it would have been (its words, its pictures) with an edge that says it was not sent, and its one door: a person's words go back into the composer to be edited there (and sent, or booked, again), anyone else's are removed. */
 
 const props = defineProps<{
     message: QueuedMessage;
@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const t = useT();
-const { unqueue, reword } = usePaneView();
+const { unqueue } = usePaneView();
 const { mobile } = useDevice();
 
 // Who it is from when a person did not type it; a person's own reads as theirs, like any prompt.
@@ -59,21 +59,12 @@ watch(
     { immediate: true, flush: `post` },
 );
 
-// The words being given to it, while its reword is open; the queue keeps its place in line.
-const rewording = ref<string | undefined>();
-// The box takes the caret as it opens, since the press that opened it is a request to type.
-const editor = useTemplateRef<HTMLTextAreaElement>(`editor`);
-watch(editor, (element) => element?.focus());
-const save = async (): Promise<void> => {
-    const text = rewording.value?.trim() ?? ``;
-    if (text.length === 0 || (await reword(props.message, text))) {
-        rewording.value = undefined;
-    }
-};
-
-// A person's words go back into the composer, which the hover says, since the glyph alone read as throwing them away.
-const takeBackTip = computed((): TooltipValue =>
-    props.message.voice === `person` ? { title: t(`chat.chatQueue.takeBack`), note: t(`chat.chatQueue.takeBackNote`) } : t(`chat.chatQueue.takeBack`),
+// Editing happens where words are written: the press takes the message out of the queue and into the composer, its
+// files and its booking with it (TurnClient.takenBack), so the box the reader already knows is the editor. A second,
+// smaller one here was the poorer copy of it. The sandbox's or an agent's words were nobody's here to write: removed.
+const own = computed(() => props.message.voice === `person`);
+const doorTip = computed((): TooltipValue =>
+    own.value ? { title: t(`chat.chatQueue.edit`), note: t(`chat.chatQueue.editNote`) } : t(`chat.chatQueue.remove`),
 );
 
 const queuedClock = computed(() => formatClock(props.message.queuedAt));
@@ -81,70 +72,51 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
 </script>
 
 <template>
-    <!-- In the quick bar's row everything is in line, the doors included, since no gutter stands beside a composer. -->
-    <div
-        class="group relative flex gap-1.5"
-        :class="[compact ? `w-full items-center` : `max-w-[85%] flex-col items-end`, { 'w-full': rewording !== undefined }]"
-    >
+    <!-- In the quick bar's row everything is in line, the door included, since no gutter stands beside a composer. -->
+    <div class="group relative flex gap-1.5" :class="compact ? `w-full items-center` : `max-w-[85%] flex-col items-end`">
         <span v-if="from" class="text-2xs text-subtle">{{ from }}</span>
-        <!-- Stacked above the words when they cannot sit beside them, and while they are being reworded, which keeps the files. -->
+        <!-- Stacked above the words when they cannot sit beside them. -->
         <ChatAttachmentStrip
             v-if="!compact && attachments.length > 0"
             :attachments="attachments"
             class="flex-wrap justify-end"
-            :class="aside && rewording === undefined && '@lg:hidden'"
+            :class="aside && '@lg:hidden'"
         />
-        <form v-if="rewording !== undefined" class="flex w-full flex-col gap-1" @submit.prevent="save">
-            <textarea
-                ref="editor"
-                v-model="rewording"
-                rows="3"
-                :class="ui.input({ size: `sm` }, 'w-full resize-y')"
-                :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                @keydown.esc.prevent="rewording = undefined"
-            />
-            <div class="flex justify-end gap-1">
-                <Button size="small" thumb tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
-                <Button size="small" thumb type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
-            </div>
-        </form>
-        <template v-else>
-            <!-- The quick bar's row keeps the pictures small and in line with the words. -->
-            <div class="flex max-w-full min-w-0 items-center gap-1.5" :class="compact && `flex-1`">
-                <ChatAttachmentStrip v-if="!compact && aside" :attachments="attachments" class="mr-1 hidden shrink-0 self-start @lg:flex" />
-                <template v-if="compact">
-                    <ChatImageThumb v-for="picture in pictures" :key="picture.path" :src="picture.previewUrl!" :alt="picture.name" size="h-8 w-8" />
-                    <span v-if="files.length > 0" class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
-                        <Icon name="file" class="shrink-0 text-2xs" /><span class="truncate">{{ files.map((file) => file.name).join(`, `) }}</span>
-                    </span>
-                </template>
-                <!-- Dashed: the one mark that it never went out; everything else about it is the prompt it would have been. -->
+        <!-- The quick bar's row keeps the pictures small and in line with the words. -->
+        <div class="flex max-w-full min-w-0 items-center gap-1.5" :class="compact && `flex-1`">
+            <ChatAttachmentStrip v-if="!compact && aside" :attachments="attachments" class="mr-1 hidden shrink-0 self-start @lg:flex" />
+            <template v-if="compact">
+                <ChatImageThumb v-for="picture in pictures" :key="picture.path" :src="picture.previewUrl!" :alt="picture.name" size="h-8 w-8" />
+                <span v-if="files.length > 0" class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                    <Icon name="file" class="shrink-0 text-2xs" /><span class="truncate">{{ files.map((file) => file.name).join(`, `) }}</span>
+                </span>
+            </template>
+            <!-- Dashed: the one mark that it never went out; everything else about it is the prompt it would have been. -->
+            <div
+                v-if="message.text"
+                class="chat-surface chat-surface-held relative min-w-0 rounded-lg"
+                :class="{ 'flex-1': compact, 'chat-prompt-clamped': overflowing && !expanded, 'chat-prompt-open': expanded }"
+            >
                 <div
-                    v-if="message.text"
-                    class="chat-surface chat-surface-held relative min-w-0 rounded-lg"
-                    :class="{ 'flex-1': compact, 'chat-prompt-clamped': overflowing && !expanded, 'chat-prompt-open': expanded }"
+                    ref="bubble"
+                    class="chat-prompt-text text-xs leading-relaxed text-muted"
+                    :class="[compact ? 'truncate px-2.5 py-1' : 'whitespace-pre-wrap px-3 py-2', { 'cursor-pointer': overflowing && !expanded }]"
+                    @click="overflowing && !expanded && (expanded = true)"
                 >
-                    <div
-                        ref="bubble"
-                        class="chat-prompt-text text-xs leading-relaxed text-muted"
-                        :class="[compact ? 'truncate px-2.5 py-1' : 'whitespace-pre-wrap px-3 py-2', { 'cursor-pointer': overflowing && !expanded }]"
-                        @click="overflowing && !expanded && (expanded = true)"
-                    >
-                        {{ message.text }}
-                    </div>
-                    <button
-                        v-if="overflowing && !compact"
-                        type="button"
-                        class="chat-prompt-toggle touch-target"
-                        :aria-expanded="expanded"
-                        :aria-label="expanded ? t(`chat.chatMessageView.collapseMessage`) : t(`chat.chatMessageView.expandMessage`)"
-                        @click="expanded = !expanded"
-                    >
-                        <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    </button>
+                    {{ message.text }}
                 </div>
+                <button
+                    v-if="overflowing && !compact"
+                    type="button"
+                    class="chat-prompt-toggle touch-target"
+                    :aria-expanded="expanded"
+                    :aria-label="expanded ? t(`chat.chatMessageView.collapseMessage`) : t(`chat.chatMessageView.expandMessage`)"
+                    @click="expanded = !expanded"
+                >
+                    <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                </button>
             </div>
-        </template>
+        </div>
         <!-- When it was sent, in the margin on hover, as on a sent prompt. -->
         <span
             v-if="!compact"
@@ -152,9 +124,8 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
             class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
             >{{ queuedClock }}</span
         >
-        <!-- Its doors hang in the gutter where a sent prompt's pencil does: in reach, and out of the words' way. -->
+        <!-- Its door hangs in the gutter where a sent prompt's pencil does: in reach, and out of the words' way. -->
         <div
-            v-if="rewording === undefined"
             class="flex"
             :class="
                 compact
@@ -166,25 +137,14 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
             "
         >
             <button
-                v-if="message.voice === `person`"
                 type="button"
                 class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content max-md:h-9"
                 :class="compact ? `w-6 max-md:w-9` : `w-full`"
-                v-tooltip.right="t(`chat.chatQueue.reword`)"
-                :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                @click="rewording = message.text"
-            >
-                <Icon name="pencil" class="text-2xs" />
-            </button>
-            <button
-                type="button"
-                class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content max-md:h-9"
-                :class="compact ? `w-6 max-md:w-9` : `w-full`"
-                v-tooltip.right="takeBackTip"
-                :aria-label="t(`chat.chatQueue.removeLabel`)"
+                v-tooltip.right="doorTip"
+                :aria-label="own ? t(`chat.chatQueue.editLabel`) : t(`chat.chatQueue.removeLabel`)"
                 @click="unqueue(message)"
             >
-                <Icon :name="message.voice === `person` ? `undo` : `times`" class="text-2xs" />
+                <Icon :name="own ? `pencil` : `times`" class="text-2xs" />
             </button>
         </div>
     </div>

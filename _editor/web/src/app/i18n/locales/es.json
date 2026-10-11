@@ -9,6 +9,7 @@
         "agentCard": {
             "archive": "Archivar",
             "archiveAgent": "Archivar el agente",
+            "archiveCancelsScheduled": "Cancela el mensaje programado; todo lo demás se conserva | Cancela los {count} mensajes programados; todo lo demás se conserva",
             "archived": "Archivado {archivedAt}",
             "asking": "Preguntando…",
             "back": "vuelve {limitBackAt}",
@@ -45,6 +46,8 @@
             "movingTo": "pasando a {account}",
             "stopCommand": "Detener el comando",
             "stopCommandNote": "Para que el trabajo llegue.",
+            "sends": "se envía {at}",
+            "scheduledMessages": "Mensajes",
             "sendsWhenRoom": "se envía al liberarse memoria"
         },
         "agentConflictReport": {
@@ -1448,18 +1451,17 @@
             "writeAnswerToSubmit": "Escribe tu respuesta para enviarla."
         },
         "chatQueue": {
+            "edit": "Editar",
+            "editLabel": "Editar el mensaje en espera",
             "fromAgent": "De otro agente",
             "fromSandbox": "Del sandbox",
             "goesAfterAnswer": "Entra en cuanto respondas a la solicitud de arriba",
             "goesAfterTurn": "Sale cuando termine este turno",
             "goesWhenFree": "Sale en cuanto el agente esté libre",
             "goesWithHeldTurn": "Sale con el turno retenido cuando se restablezca el límite · {when}",
-            "removeLabel": "Retirar el mensaje en espera",
-            "reword": "Reformular",
-            "rewordLabel": "Reformular el mensaje en espera",
-            "save": "Guardar",
-            "sendNow": "Enviar ya",
-            "takeBack": "Retirar"
+            "remove": "Quitar",
+            "removeLabel": "Quitar el mensaje en espera",
+            "sendNow": "Enviar ya"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Tu agente te está esperando",

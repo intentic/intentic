@@ -14,6 +14,7 @@
         "agentCard": {
             "archive": "Zarchiwizuj",
             "archiveAgent": "Zarchiwizuj agenta",
+            "archiveCancelsScheduled": "Anuluje zaplanowaną wiadomość; reszta zostaje | Anuluje zaplanowane wiadomości ({count}); reszta zostaje",
             "archived": "Zarchiwizowano {archivedAt}",
             "asking": "Pyta…",
             "back": "wraca {limitBackAt}",
@@ -59,6 +60,8 @@
             "askedToLand": "{name} prosi o scalenie tego",
             "couldntSendAgain": "Nie udało się wysłać tego ponownie.",
             "couldntRename": "Nie udało się zmienić nazwy agenta.",
+            "sends": "wyśle {at}",
+            "scheduledMessages": "Wiadomości",
             "sendsWhenRoom": "wyśle, gdy zwolni się pamięć"
         },
         "agentConflictReport": {
@@ -2856,19 +2859,18 @@
             "fewQuestions": "Kilka pytań"
         },
         "chatQueue": {
+            "edit": "Edytuj",
+            "editLabel": "Edytuj oczekującą wiadomość",
+            "editNote": "Wraca do pola wpisywania, by ją zmienić i wysłać ponownie",
             "fromAgent": "Od innego agenta",
             "fromSandbox": "Od sandboksa",
             "goesAfterAnswer": "Trafi dalej, gdy odpowiesz na prośbę powyżej",
             "goesAfterTurn": "Wyjdzie, gdy ta tura się skończy",
             "goesWhenFree": "Wyjdzie, gdy tylko agent będzie wolny",
             "goesWithHeldTurn": "Wyjdzie razem ze wstrzymaną turą, gdy limit się odnowi · {when}",
-            "removeLabel": "Wycofaj oczekującą wiadomość",
-            "reword": "Przeredaguj",
-            "rewordLabel": "Przeredaguj oczekującą wiadomość",
-            "save": "Zapisz",
-            "sendNow": "Wyślij teraz",
-            "takeBack": "Wycofaj",
-            "takeBackNote": "Słowa wracają do pola wpisywania"
+            "remove": "Usuń",
+            "removeLabel": "Usuń oczekującą wiadomość",
+            "sendNow": "Wyślij teraz"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Twój agent na Ciebie czeka",

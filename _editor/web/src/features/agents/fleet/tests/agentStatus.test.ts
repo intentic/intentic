@@ -30,7 +30,11 @@ import {
     type RimAgent,
     reviewAction,
     scheduledSend,
+    scheduledCount,
     scheduledWhen,
+    selfStart,
+    selfStartTicks,
+    sendCorner,
     standingChip,
     tileRim,
     turnInFlight,
@@ -1050,6 +1054,53 @@ describe("a conversation with messages booked for later", () => {
             rows: [{ label: `Sends`, value: `After Fix the login bug lands` }],
         });
         expect(standingChip({ ...waiting, status: `conflict`, unread: false }, titleOf)?.label).toBe(attentionReason({ ...waiting, status: `conflict` }));
+    });
+
+    // The date's corner says when it goes, in the words and the countdown a spent allowance's resend uses ("resends
+    // 02:00"): one corner, one grammar, for everything that goes by itself.
+    it("says in the card's corner when it goes, as a resend says it, and how many wait", () => {
+        const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug in the settings page` : undefined);
+        expect(sendCorner(timed, NOW)).toMatchObject({ kind: `send`, count: 1, clock: { at, wait: false } });
+        expect(sendCorner(timed, NOW)?.text).toMatch(/^sends (?:\S.* )?\d{2}:\d{2}$/u);
+        expect(sendCorner(timed, at - 12 * 60 * 1000)?.text).toBe(`sends in 12m`);
+        // The instant was chosen, not guessed: the hour booked a few seconds ago reads as the hour, not "61m".
+        expect(sendCorner(timed, at - 60 * 60 * 1000 - 8_000)?.text).toBe(`sends in 60m`);
+        expect(sendCorner(timed, at - 5_000)?.text).toBe(`sends in 1m`);
+        // Past its instant the sandbox's deadline is due: said so, never the date it was last active.
+        expect(sendCorner(timed, at + 1_000)).toEqual({ kind: `send`, count: 1, text: `sends in a moment` });
+        // Waiting on a land names the agent, clipped to the corner; the hover carries the whole title.
+        expect(sendCorner(waiting, NOW, titleOf)).toEqual({
+            kind: `send`,
+            count: 1,
+            after: `Fix the login bug in the settings page`,
+            text: `sends after Fix the login bug in th… lands`,
+        });
+        expect(sendCorner(waiting, NOW)?.text).toBe(`sends after another agent lands`);
+        const two: AgentStanding = { status: `idle`, attention: none, queue: { items: [{ until: at + 60_000 }, {}, { until: at }] } };
+        expect(sendCorner(two, NOW)).toMatchObject({ count: 2, clock: { at } });
+        expect(sendCorner({ queue: { paused: `stopped`, items: [{}] } }, NOW)).toBeUndefined();
+    });
+
+    // A card goes one way first: a held turn's resend before a message held for memory, that before one booked for later.
+    it("reads one corner for whatever goes by itself, the held turn first", () => {
+        const limitedToo: AgentStanding = { ...timed, status: `error`, ...SHUT, limitScheduled: true };
+        expect(selfStart(limitedToo, NOW, {})?.kind).toBe(`resend`);
+        const memoryToo: AgentStanding = { ...timed, status: `error`, failureCode: `sandbox-memory-low`, queue: { paused: `refused`, items: [{}, { until: at }] } };
+        expect(selfStart(memoryToo, NOW, { memory: `resend` })).toEqual({ kind: `room`, text: `sends when memory frees` });
+        expect(selfStart(memoryToo, NOW, { memory: `wait` })?.kind).toBe(`send`);
+        expect(selfStart(timed, NOW, {})?.kind).toBe(`send`);
+        expect(selfStart({ status: `idle`, attention: none }, NOW, {})).toBeUndefined();
+        // Its clock ticks only while it counts to an instant.
+        expect(selfStartTicks(timed, NOW)).toBe(true);
+        expect(selfStartTicks(waiting, NOW)).toBe(false);
+        expect(selfStartTicks(limitedToo, NOW)).toBe(true);
+    });
+
+    // What an archive by hand cancels, which the card's Archive says first.
+    it("counts the messages booked, each by its own booking or the whole queue an older sandbox booked", () => {
+        expect(scheduledCount({ queue: { paused: `stopped`, items: [{ until: at }, {}, { after: `brave-otter` }] } })).toBe(2);
+        expect(scheduledCount({ queue: { paused: `scheduled`, until: at, items: [{}, {}, {}] } })).toBe(3);
+        expect(scheduledCount({})).toBe(0);
     });
 
     // A Stop holds the messages with no booking, and the queue's own field says `stopped` then: the booked messages beside

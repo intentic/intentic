@@ -9,6 +9,7 @@
         "agentCard": {
             "archive": "Archivieren",
             "archiveAgent": "Agent archivieren",
+            "archiveCancelsScheduled": "Bricht die geplante Nachricht ab; alles andere bleibt | Bricht die {count} geplanten Nachrichten ab; alles andere bleibt",
             "archived": "Archiviert {archivedAt}",
             "asking": "Fragt…",
             "back": "zurück {limitBackAt}",
@@ -45,6 +46,8 @@
             "movingTo": "wechselt zu {account}",
             "stopCommand": "Befehl stoppen",
             "stopCommandNote": "Damit die Arbeit landet.",
+            "sends": "sendet {at}",
+            "scheduledMessages": "Nachrichten",
             "sendsWhenRoom": "sendet, sobald Speicher frei ist"
         },
         "agentConflictReport": {
@@ -1439,18 +1442,17 @@
             "writeAnswerToSubmit": "Schreiben Sie Ihre Antwort zum Absenden."
         },
         "chatQueue": {
+            "edit": "Bearbeiten",
+            "editLabel": "Wartende Nachricht bearbeiten",
             "fromAgent": "Von einem anderen Agenten",
             "fromSandbox": "Von der Sandbox",
             "goesAfterAnswer": "Geht hinein, sobald du die Anfrage oben beantwortest",
             "goesAfterTurn": "Geht raus, wenn dieser Durchlauf endet",
             "goesWhenFree": "Geht raus, sobald der Agent frei ist",
             "goesWithHeldTurn": "Geht mit dem angehaltenen Durchlauf raus, sobald das Limit zurückgesetzt ist · {when}",
-            "removeLabel": "Wartende Nachricht zurücknehmen",
-            "reword": "Umformulieren",
-            "rewordLabel": "Wartende Nachricht umformulieren",
-            "save": "Speichern",
-            "sendNow": "Jetzt senden",
-            "takeBack": "Zurücknehmen"
+            "remove": "Entfernen",
+            "removeLabel": "Wartende Nachricht entfernen",
+            "sendNow": "Jetzt senden"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Ihr Agent wartet auf Sie",

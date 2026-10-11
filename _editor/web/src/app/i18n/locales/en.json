@@ -14,6 +14,7 @@
         "agentCard": {
             "archive": "Archive",
             "archiveAgent": "Archive agent",
+            "archiveCancelsScheduled": "Cancels the scheduled message; everything else is kept | Cancels the {count} scheduled messages; everything else is kept",
             "archived": "Archived {archivedAt}",
             "asking": "Asking…",
             "back": "back {limitBackAt}",
@@ -59,6 +60,8 @@
             "askedToLand": "{name} asked to land this",
             "couldntSendAgain": "Couldn't send that again.",
             "couldntRename": "Couldn't rename the agent.",
+            "sends": "sends {at}",
+            "scheduledMessages": "Messages",
             "sendsWhenRoom": "sends when memory frees"
         },
         "agentConflictReport": {
@@ -2856,19 +2859,18 @@
             "fewQuestions": "A few questions"
         },
         "chatQueue": {
+            "edit": "Edit",
+            "editLabel": "Edit waiting message",
+            "editNote": "Back into the composer, to change and send again",
             "fromAgent": "From another agent",
             "fromSandbox": "From the sandbox",
             "goesAfterAnswer": "Goes in once you answer the request above",
             "goesAfterTurn": "Goes when this turn ends",
             "goesWhenFree": "Goes out as soon as the agent is free",
             "goesWithHeldTurn": "Goes with the held turn when the limit resets · {when}",
-            "removeLabel": "Take back waiting message",
-            "reword": "Reword",
-            "rewordLabel": "Reword waiting message",
-            "save": "Save",
-            "sendNow": "Send now",
-            "takeBack": "Take back",
-            "takeBackNote": "Words return to the composer"
+            "remove": "Remove",
+            "removeLabel": "Remove waiting message",
+            "sendNow": "Send now"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",

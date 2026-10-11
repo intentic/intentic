@@ -53,6 +53,7 @@ import {
     loopMeta,
     memoryHeld,
     reviewAction,
+    scheduledCount,
     type StandingChip,
     standingChip,
     tileRim,
@@ -209,7 +210,16 @@ const closeHint = computed(
 );
 // Archive and restore say how many children ride along, when any do; archive also that nothing is lost by it.
 const familyRows = computed(() => (takesFamily.value ? [{ label: t(`agents.words.childAgents`), value: props.family ?? 0 }] : []));
-const archiveHint = computed((): Tip => ({ title: t(`agents.agentCard.archive`), rows: familyRows.value, note: t(`agents.words.allKept`) }));
+// Everything is kept, except what would go by itself: a message scheduled in it is cancelled (the sandbox's archive.ts),
+// since at its time it would only meet a conversation filed away. Said before the press, as the one thing it loses.
+const archiveHint = computed((): Tip => {
+    const cancels = scheduledCount(props.agent);
+    return {
+        title: t(`agents.agentCard.archive`),
+        rows: familyRows.value,
+        note: cancels > 0 ? t(`agents.agentCard.archiveCancelsScheduled`, { count: cancels }, cancels) : t(`agents.words.allKept`),
+    };
+});
 const restoreHint = computed((): TooltipValue => (takesFamily.value ? { title: t(`ui.action.restore`), rows: familyRows.value } : t(`ui.action.restore`)));
 // The filter's own key for opening the card its id names, drawn as the key cap the tip wears.
 const enterKey = formatChord(`enter`, isApplePlatform());
@@ -951,6 +961,7 @@ const grab = (event: PointerEvent): void => {
                         :working="working"
                         :activity-text="activityText"
                         :busy="busy"
+                        :title-of="titleOfAgent"
                         @unwatch="emit(`unwatch`)"
                         @stop-job="(jobId) => emit(`stopJob`, jobId)"
                         @warm="openWarm"

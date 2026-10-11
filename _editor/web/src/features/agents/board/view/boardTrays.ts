@@ -2,7 +2,7 @@ import type { SubagentSession } from "@intentic/sandbox-contract";
 import { computed, type Ref, shallowRef } from "vue";
 import type { SubagentRoster } from "../../fleet/subagentRoster";
 import { type FamilyChip, familyChip } from "../../fleet/agentStatus";
-import { canArchive, type FleetAgent, withKeptWords } from "../../fleet/useAgents-fleet";
+import { clearable, type FleetAgent, withKeptWords } from "../../fleet/useAgents-fleet";
 import { insideRun } from "../../fleet/useWorkflowRuns";
 import {
     ARCHIVE_RULES,
@@ -129,10 +129,10 @@ export const useBoardTrays = (host: TraysHost) => {
     const trayFor = (card: FleetAgent): Tray | undefined => trayOf(childrenOf(card), trayState(card), subagentsOf(card));
     // What files away or comes back with a card: the settled children riding under it, as a run's archive takes its
     // steps. Filing the parent alone would spill every helper it ever started back onto the board as cards of their
-    // own; restoring it brings back the ones filed under it. A child still working is never taken, and stands as its
-    // own card once its parent has left.
+    // own; restoring it brings back the ones filed under it. A child still working, or with a message scheduled in it, is
+    // never taken, and stands as its own card once its parent has left.
     const familyOf = (card: FleetAgent): readonly FleetAgent[] =>
-        card.archivedAt === undefined ? childrenOf(card).filter(canArchive) : childrenOf(card);
+        card.archivedAt === undefined ? childrenOf(card).filter(clearable) : childrenOf(card);
     const familyIds = (card: FleetAgent): string[] => [card.id, ...familyOf(card).map((child) => child.id)];
     // The ids a press names, each widened to its family, for a press that names cards by id (the card menu's).
     const withFamilies = (ids: readonly string[], byId: (id: string) => FleetAgent | undefined): string[] => [

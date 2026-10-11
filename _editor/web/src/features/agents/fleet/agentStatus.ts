@@ -106,6 +106,13 @@ const soonestHold = (queue: QueueHold | undefined): QueueHold | undefined => {
 // nobody pressing anything, so it is not finished, and nothing is owed by the reader for it to.
 export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => soonestHold(agent.queue) !== undefined;
 
+// How many messages are booked to go by themselves: each by its own booking, or all of them when an older sandbox booked
+// the queue whole. What an archive by hand cancels (the sandbox's archive.ts), which the card's Archive says first.
+export const scheduledCount = (agent: Pick<AgentStanding, "queue">): number => {
+    const items = agent.queue?.items ?? [];
+    return agent.queue?.paused === `scheduled` ? items.length : items.filter((item) => item.until !== undefined || item.after !== undefined).length;
+};
+
 // The scheduled hold alone, copied for a standing that outlives its card (standingFrom); undefined for any other queue.
 const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => soonestHold(agent.queue);
 
@@ -1134,27 +1141,38 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
 // be arithmetic); same threshold as the chat strip's own switch (chat/pickUp.ts).
 export const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
-// When a spent allowance reopens, in the few characters a card's corner has: whole minutes while that is a wait a
-// person can hold (rounded up, as the chat's own press counts them), the clock later today, the day past that. Minutes,
-// never seconds: the instant is the provider's guess and routinely early, so a corner ticking "26m 26s" claimed a
-// precision nobody had. `wait` says which it is, since a wait reads "in 27m" and an instant stands bare ("back 14:05");
-// `at` is the instant (ms), for a hover that names it whatever the corner says. Undefined once the window is open, and
-// for a provider that published no instant (Grok, Cursor).
+// An instant a card's corner counts to (a spent allowance's reopen, a scheduled message's time), in the few characters
+// the corner has: whole minutes while that is a wait a person can hold (rounded up, as the chat's own press counts
+// them), the clock later today, the day past that. Minutes, never seconds: a reset instant is the provider's guess and
+// routinely early, so a corner ticking "26m 26s" claimed a precision nobody had. `wait` says which it is, since a wait
+// reads "in 27m" and an instant stands bare ("back 14:05"); `at` is the instant (ms), for a hover that names it
+// whatever the corner says. Undefined once the instant has passed. `exact` is an instant somebody chose (a booked send),
+// counted to the nearest minute as the chat counts it, where a guessed one rounds up so it is never promised early: the
+// hour a person booked reads "60m", not "61m".
 export interface LimitClock {
     readonly at: number;
     readonly text: string;
     readonly wait: boolean;
 }
+export const countdownTo = (at: number, now: number, exact = false): LimitClock | undefined => {
+    if (at <= now) {
+        return undefined;
+    }
+    if (at - now < CLOCK_FROM_MS) {
+        const minutes = (exact ? Math.round : Math.ceil)((at - now) / 60_000);
+        return { at, text: t(`agents.agentStatus.minutes`, { minutes: Math.max(1, minutes) }), wait: true };
+    }
+    return { at, text: new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWhen(at, now), wait: false };
+};
+
+// When a spent allowance reopens (countdownTo). Undefined once the window is open, and for a provider that published no
+// instant (Grok, Cursor).
 export const limitCountdown = (agent: AgentStanding, now: number): LimitClock | undefined => {
     const reopensAt = agent.limitResetsAt;
     if (!limitClosed(agent, now) || reopensAt === undefined) {
         return undefined;
     }
-    const at = reopensAt * 1_000;
-    if (at - now < CLOCK_FROM_MS) {
-        return { at, text: t(`agents.agentStatus.minutes`, { minutes: Math.max(1, Math.ceil((at - now) / 60_000)) }), wait: true };
-    }
-    return { at, text: new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWhen(at, now), wait: false };
+    return countdownTo(reopensAt * 1_000, now);
 };
 
 // "back in 27m", "back Thu 14:05": when the allowance returns, the one thing a card nothing is booked for can plan around.
@@ -1208,6 +1226,79 @@ export const limitCorner = (agent: AgentStanding, now: number, answer?: TurnBrea
 export const memoryCorner = (agent: AgentStanding, answer: TurnBreakPolicy): string | undefined =>
     // A refusal's hold stands only while a message it holds still waits (conversation-queue.ts, `next`).
     memoryHeld(agent) && agent.queue?.paused === `refused` && answer !== `wait` ? t(`agents.agentCard.sendsWhenRoom`) : undefined;
+
+// The few characters of a title a corner names another agent by; past them the hover has it whole.
+const CORNER_TITLE = 24;
+const cornerTitle = (title: string): string => (title.length > CORNER_TITLE ? `${title.slice(0, CORNER_TITLE - 1).trimEnd()}…` : title);
+
+/**
+ * Messages a person booked for later (sendLater.ts), in the corner a spent allowance's resend uses and the same grammar:
+ * "sends in 12m", "sends 14:05", "sends Thu 09:00", "sends after <agent> lands", and "sends in a moment" once the instant
+ * has passed and the sandbox's deadline is due. The soonest booking speaks; `count` is how many wait, for the hover.
+ */
+export const sendCorner = (
+    agent: Pick<AgentStanding, "queue">,
+    now: number,
+    titleOf?: (conversationId: string) => string | undefined,
+): Extract<SelfStart, { readonly kind: `send` }> | undefined => {
+    const hold = soonestHold(agent.queue);
+    if (hold === undefined) {
+        return undefined;
+    }
+    const count = Math.max(1, scheduledCount(agent));
+    if (hold.after !== undefined) {
+        const title = titleOf?.(hold.after);
+        return {
+            kind: `send`,
+            count,
+            after: title ?? t(`chat.sendLater.anotherAgent`),
+            text: t(`chat.chatHeld.sendsAfter`, { title: title === undefined ? t(`chat.sendLater.anotherAgent`) : cornerTitle(title) }),
+        };
+    }
+    const clock = hold.until === undefined ? undefined : countdownTo(hold.until, now, true);
+    if (clock === undefined) {
+        return { kind: `send`, count, text: t(`chat.chatHeld.sendsShortly`) };
+    }
+    return {
+        kind: `send`,
+        count,
+        clock,
+        text: clock.wait ? t(`chat.chatHeld.sendsIn`, { wait: clock.text }) : t(`agents.agentCard.sends`, { at: clock.text }),
+    };
+};
+
+/**
+ * WHEN A CARD GOES AGAIN BY ITSELF, one reading for every way it does. A conversation starts again with nobody pressing
+ * in three cases: a turn a spent allowance stranded, re-run at the reset or moved to another account (limit-hold.ts); a
+ * message held for memory, sent once memory frees (turn-admission); and messages a person booked for a time or another
+ * agent's land (sendLater.ts). The sandbox keeps each as a deadline or a condition on the conversation, and the card
+ * says each the same way: the chip beside the title says why it waits (Usage limit, Memory low, Scheduled), and this
+ * corner, in the date's seat, says what goes and when. Read once here, so the three never again drift into three
+ * grammars (a scheduled card said "Scheduled" and then the date it was last active, where a limited one said
+ * "resends 02:00"). A held turn outranks a held message, and a message held for memory one booked for later, since the
+ * card can only go one way first.
+ */
+export type SelfStart =
+    | LimitCorner
+    | { readonly kind: `room`; readonly text: string }
+    | { readonly kind: `send`; readonly text: string; readonly count: number; readonly clock?: LimitClock; readonly after?: string };
+export const selfStart = (
+    agent: AgentStanding,
+    now: number,
+    answers: { readonly limit?: TurnBreakPolicy; readonly memory?: TurnBreakPolicy },
+    titleOf?: (conversationId: string) => string | undefined,
+): SelfStart | undefined => {
+    const limit = limitCorner(agent, now, answers.limit);
+    if (limit !== undefined) {
+        return limit;
+    }
+    const room = answers.memory === undefined ? undefined : memoryCorner(agent, answers.memory);
+    return room !== undefined ? { kind: `room`, text: room } : sendCorner(agent, now, titleOf);
+};
+
+// Whether a card's corner counts to an instant, so its clock must tick: a shut allowance, or a message booked for a time.
+export const selfStartTicks = (agent: AgentStanding, now: number = Date.now()): boolean =>
+    limitClosed(agent, now) || soonestHold(agent.queue)?.until !== undefined;
 
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One
 // definition, since the chat's own watch row asks the same question about the same conversation.

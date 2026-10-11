@@ -64,6 +64,7 @@ import { queryClient } from "../../../../lib/queryPersistence";
 import { desyncAgents, useAgents } from "../useAgents";
 import {
     canArchive,
+    clearable,
     clearableOf,
     doneWith,
     FINISHED_WINDOW,
@@ -317,11 +318,20 @@ describe("canArchive", () => {
         expect(canArchive({ status: `idle`, attention: none })).toBe(true);
     });
 
-    it("refuses an agent holding a message booked for later: archiving would drop the words when their time comes", () => {
-        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `scheduled`, until: 90_000 } })).toBe(false);
-        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `scheduled`, after: `brave-otter-k2` } })).toBe(false);
+    // Filed away by a press on the card itself, the conversation is done with: the sandbox cancels what was booked in it,
+    // which the card's hint says first. A press that does not name the card (Clear, a parent's family) leaves it be.
+    it("takes an agent holding a message booked for later by hand, and leaves it out of every bulk filing", () => {
+        const card = (queue: FleetAgent["queue"]): Pick<FleetAgent, "status" | "attention" | "queue"> => ({ status: `idle`, attention: none, queue });
+        const until = card({ items: [], revision: 1, paused: `scheduled`, until: 90_000 });
+        const after = card({ items: [], revision: 1, paused: `scheduled`, after: `brave-otter-k2` });
+        expect(canArchive(until)).toBe(true);
+        expect(canArchive(after)).toBe(true);
+        expect(clearable(until)).toBe(false);
+        expect(clearable(after)).toBe(false);
         // Words held for a press (a stop, a refusal) wait for that press, wherever the conversation is filed.
-        expect(canArchive({ status: `idle`, attention: none, queue: { items: [], revision: 1, paused: `stopped` } })).toBe(true);
+        const held = card({ items: [], revision: 1, paused: `stopped` });
+        expect(canArchive(held)).toBe(true);
+        expect(clearable(held)).toBe(true);
     });
 
     it("refuses an agent waiting to be told something: archiving would bury the question, not answer it", () => {
