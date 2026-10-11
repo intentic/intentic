@@ -40,8 +40,8 @@ const figures = computed(() => memoryTip(memoryReading(props.message.text)));
         </div>
     </div>
     <!-- Settled: what happened, in the past tense, since the press it offered is gone with the hold. -->
-    <div v-else-if="!folded" class="flex items-center gap-x-2 self-center py-0.5 text-2xs text-subtle" v-tooltip.top="figures">
-        <Icon name="info-circle" class="shrink-0 text-xs" />
+    <div v-else-if="!folded" class="chat-meta flex w-full items-start gap-x-2 py-0.5 text-2xs text-subtle" v-tooltip.top="figures">
+        <span class="chat-mark"><Icon name="info-circle" class="text-xs" /></span>
         <span class="min-w-0">{{ message.sandboxHeld === true ? t(`chat.chatHeld.turnWasHeld`) : t(`chat.chatHeld.wasHeld`) }}</span>
     </div>
 </template>

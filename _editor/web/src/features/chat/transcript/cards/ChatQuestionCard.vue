@@ -281,13 +281,13 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
         <div class="chat-card-body flex flex-col gap-4">
             <div v-for="(question, index) in card.questions" :key="index" class="flex flex-col gap-1">
                 <!-- Only on a multi-question card, where the header's title cannot be this ask. -->
-                <span v-if="card.questions.length > 1" class="chat-card-column chat-question-title text-xs font-semibold text-content">{{
+                <span v-if="card.questions.length > 1" class="chat-question-title text-xs font-semibold text-content">{{
                     question.question
                 }}</span>
 
                 <template v-if="card.status === 'pending'">
                     <!-- States in words what the square marks say by shape; becomes a running count once picked. -->
-                    <span v-if="question.multiSelect" class="chat-card-column text-2xs text-subtle">{{
+                    <span v-if="question.multiSelect" class="text-2xs text-subtle">{{
                         pickedCount(index) > 0
                             ? t(`chat.chatQuestionCard.selected`, { index: pickedCount(index) })
                             : t(`chat.chatQuestionCard.selectAllApply`)
@@ -418,7 +418,7 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                     <ChatAttachmentStrip
                         v-if="decidedFiles(question).length > 0"
                         :attachments="decidedFiles(question)"
-                        class="chat-card-column flex-wrap pt-1"
+                        class="flex-wrap pt-1"
                     />
                 </template>
             </div>

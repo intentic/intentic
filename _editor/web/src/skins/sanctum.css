@@ -697,12 +697,14 @@
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 24%, transparent);
 }
 
-/* Decision cards inherit the shared card surface and carve only their marks. */
-[data-skin="sanctum"] .chat-card-header > :first-child {
-    color: rgba(201, 160, 92, 0.55);
+/* Decision cards inherit the shared card surface and carve only their marks — and only while they wait on the reader. A
+   transcript of settled cards all in gold read as nine headings shouting at once; settled, a card wears the ink of the
+   words around it, and the one still asking is the one lit. */
+[data-skin="sanctum"] .chat-card-live > .chat-card-header > :first-child {
+    color: var(--sanctum-gold);
 }
-[data-skin="sanctum"] .chat-card-title,
-[data-skin="sanctum"] .chat-question-title {
+[data-skin="sanctum"] .chat-card-live .chat-card-title,
+[data-skin="sanctum"] .chat-card-live .chat-question-title {
     color: var(--sanctum-gold-bright);
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }

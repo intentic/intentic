@@ -142,6 +142,29 @@ const subagentFacts = computed<string[]>(() => {
     ];
 });
 
+// The row already says this diff's file and line counts: the call's one diff, on the path the row shows, and whole. Paths
+// are compared by their tail, since a row may show a path relative to the workspace and the diff carry it absolute.
+const namesDiff = (diff: { readonly path: string; readonly truncated?: boolean }): boolean => {
+    const shown = props.tool.target ?? location.value?.path;
+    return (
+        view.value.diffs.length === 1 &&
+        diff.truncated !== true &&
+        shown !== undefined &&
+        (diff.path.endsWith(shown) || shown.endsWith(diff.path))
+    );
+};
+
+// Whether something earlier in the row already pushed to its far edge (the facts, the clock, the summary, a live door),
+// so the subagent door only claims that edge itself when nothing else did.
+const trailerTaken = computed(
+    () =>
+        (subagentFacts.value.length > 0 && subagentLive.value) ||
+        unfinished.value ||
+        Boolean(view.value.summary) ||
+        (agentTerminal.value !== undefined && surface.watchTerminal !== undefined) ||
+        (agentBrowser.value !== undefined && surface.watchBrowser !== undefined),
+);
+
 // Where the card's door leads: the subagent's own work, shown in the chat. A spawned one's is its conversation, which is
 // also an address (a modified click opens its page); an in-process one's is its transcript, shown in the column of the
 // conversation whose turn ran it. A surface with no chat (a published page) offers no door.
@@ -188,6 +211,10 @@ const openSubagent = (event: MouseEvent): void => {
              presses fill it (ChatToolGroup's row says why). -->
         <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted max-md:min-h-8">
             <!-- Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an output-less call keeps a plain header. -->
+            <!-- The fold's chevron stands in the column's mark box (chat.css `.chat-mark`), where a notice's glyph and a card's
+                 icon stand; the call's own glyph and name then start on the hang, where the material it opens starts too. -->
+            <!-- The mark box's 2px margin plus the row's 6px gap is the column's mark gap (--chat-mark-gap), kept in one flat
+                 group so the name's no-wrap boundary still stands directly beside the elastic target. -->
             <button
                 v-if="hasContent"
                 type="button"
@@ -195,13 +222,15 @@ const openSubagent = (event: MouseEvent): void => {
                 :aria-expanded="isOpen"
                 @click="toggleOpen"
             >
-                <Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                <span class="chat-mark mr-0.5"><Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-bind="statusIcon" class="text-2xs" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
             </button>
             <template v-else>
-                <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. -->
+                <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. An empty mark box
+                     keeps a call with nothing to open on the same edge as one with a chevron. -->
                 <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                    <span class="chat-mark mr-0.5" aria-hidden="true"></span>
                     <Icon v-bind="statusIcon" class="text-2xs" />
                     <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
                 </span>
@@ -269,12 +298,14 @@ const openSubagent = (event: MouseEvent): void => {
                 <Icon name="globe" class="text-2xs" />
             </button>
             <!-- The third door: the subagent's own work, shown in the chat; an address as well for a spawned one. -->
+            <!-- At the row's far edge, where every other row keeps its trailing controls, unless something before it already took it. -->
             <component
                 :is="subagentDoor.href === undefined ? `button` : `a`"
                 v-if="subagentDoor"
                 :href="subagentDoor.href"
                 :type="subagentDoor.href === undefined ? `button` : undefined"
                 class="flex shrink-0 items-center self-stretch transition-colors hover:text-content max-md:min-w-8 max-md:justify-center"
+                :class="{ 'ml-auto': !trailerTaken }"
                 v-tooltip.top="subagentDoor.label"
                 :aria-label="subagentDoor.label"
                 @click="openSubagent($event)"
@@ -286,7 +317,7 @@ const openSubagent = (event: MouseEvent): void => {
             <!-- What the child concluded (its own last words, or the tail of what it printed). -->
             <p
                 v-if="subagent?.summary"
-                class="chat-inset ml-4 px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
+                class="chat-inset ml-[var(--chat-hang)] px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
                 :class="subagent.error ? 'text-danger' : 'text-muted'"
             >
                 {{ subagent.summary }}
@@ -294,10 +325,10 @@ const openSubagent = (event: MouseEvent): void => {
             <!-- A sub-agent's own thinking, grouped on its card rather than merged into the parent turn's. -->
             <pre
                 v-if="tool.thinking"
-                class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic"
+                class="chat-inset ml-[var(--chat-hang)] max-h-40 overflow-auto px-2.5 py-1.5 font-sans text-2xs leading-relaxed whitespace-pre-wrap text-muted italic"
                 >{{ tool.thinking }}</pre>
             <!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
-            <div v-if="children.length" class="ml-4 flex flex-col gap-1">
+            <div v-if="children.length" class="ml-[var(--chat-hang)] flex flex-col gap-1">
                 <ChatToolCard v-for="child in children" :key="child.id" :tool="child" :live="live" />
             </div>
             <!-- Agent output is re-minted from the workspace in-app when needed. -->
@@ -306,7 +337,7 @@ const openSubagent = (event: MouseEvent): void => {
                 v-for="image in view.images"
                 :key="image.path"
                 :type="viewPicture ? 'button' : undefined"
-                class="chat-inset ml-4 overflow-hidden text-left"
+                class="chat-inset ml-[var(--chat-hang)] overflow-hidden text-left"
                 v-tooltip.top="pictureHint"
                 @click="viewPicture?.(tool.id, image.path)"
             >
@@ -319,7 +350,7 @@ const openSubagent = (event: MouseEvent): void => {
                 <span v-else class="block px-2 py-1 font-mono text-2xs text-subtle">{{ image.path }}</span>
             </component>
             <!-- What the call wrote for the reader, above the machine-facing halves: a whole markdown file is drawn as prose, not as the diff it arrived as. -->
-            <ChatDocumentBody v-if="view.document" :document="view.document" :titled="false" max-height="32rem" class="ml-4" />
+            <ChatDocumentBody v-if="view.document" :document="view.document" :titled="false" max-height="32rem" class="ml-[var(--chat-hang)]" />
             <ChatToolDiff
                 v-for="diff in view.diffs"
                 :key="diff.path"
@@ -328,10 +359,11 @@ const openSubagent = (event: MouseEvent): void => {
                 :new-text="diff.newText"
                 :truncated="diff.truncated"
                 :openable="openFile !== undefined"
+                :bare="namesDiff(diff)"
                 @open="openFile?.(diff.path)"
             />
             <!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
-            <div v-if="view.body?.kind === 'command'" class="chat-inset ml-4 overflow-hidden">
+            <div v-if="view.body?.kind === 'command'" class="chat-inset ml-[var(--chat-hang)] overflow-hidden">
                 <div v-if="view.body.command" class="chat-inset-rule flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
                     <span class="shrink-0 select-none text-subtle">$</span>
                     <span class="whitespace-pre-wrap">{{ view.body.command }}</span>
@@ -342,7 +374,7 @@ const openSubagent = (event: MouseEvent): void => {
                     :class="failed ? 'text-danger' : 'text-muted'"
                     >{{ view.body.output }}</pre>
             </div>
-            <div v-else-if="view.body?.kind === 'files'" class="chat-inset ml-4 flex max-h-40 flex-col overflow-auto p-1.5">
+            <div v-else-if="view.body?.kind === 'files'" class="chat-inset ml-[var(--chat-hang)] flex max-h-40 flex-col overflow-auto p-1.5">
                 <component
                     :is="openFile ? 'button' : 'div'"
                     v-for="(entry, index) in view.body.entries"
@@ -364,7 +396,7 @@ const openSubagent = (event: MouseEvent): void => {
             <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />
             <pre
                 v-else-if="view.body"
-                class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
+                class="chat-inset ml-[var(--chat-hang)] max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
                 :class="failed ? 'text-danger' : 'text-muted'"
                 >{{ view.body.text }}</pre>
         </template>

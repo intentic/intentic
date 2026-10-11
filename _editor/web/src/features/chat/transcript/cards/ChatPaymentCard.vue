@@ -37,7 +37,7 @@ const { isOwner } = useRole();
                 t(`chat.chatMessageView.to`, { payTo: card.offer.payTo })
             }}</span>
             <span v-if="card.offer.why" class="text-2xs text-subtle">{{ t(`chat.chatMessageView.agentsCase`, { why: card.offer.why }) }}</span>
-            <span class="pt-1 font-mono text-xs text-content">{{
+            <span class="pt-1 text-xs tabular-nums text-content">{{
                 t(`chat.chatMessageView.spentToday`, {
                     amountUsd: card.offer.amountUsd,
                     spentTodayUsd: card.offer.spentTodayUsd,

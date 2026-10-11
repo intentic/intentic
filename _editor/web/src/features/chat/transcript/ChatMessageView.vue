@@ -443,6 +443,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
             'chat-doomed': doomed,
+            // A one-line row of the meta lane (a notice, a background job): a run of them closes up into one log (chat.css).
+            'chat-message-meta': message.role === 'notice' && message.need === undefined,
         }"
         :data-card-request="card === undefined ? undefined : requestId"
         @click="onMarkdownClick"
@@ -537,20 +539,24 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <NoticeMemory v-else-if="isMemoryHold(message)" :message="message" />
         <!-- Something the agent asked a person for: a card of its own, drawn from the need's live state, which outlives the turn (docs/architecture/needs.md). -->
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
+        <!-- A META ROW (chat.css `.chat-meta`): on the column's edge, its glyph in the mark box and its words on the hang, so a
+             run of notices reads as one log down a single edge rather than a stack of centred lines of every width. -->
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
-            class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"
+            class="chat-meta flex w-full flex-wrap items-start gap-x-2 gap-y-0.5 py-0.5 text-2xs"
             :class="watchGaveUp ? `text-danger` : (agentNoticeLook?.tone ?? `text-subtle`)"
             :data-agent-notice="message.agentNotice?.level"
         >
             <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
-            <span class="flex min-w-0 items-center gap-x-2">
+            <span class="flex min-w-0 items-start gap-x-2">
                 <!-- Spins and shows the wait's clock while it runs, then settles to a plain line (ChatMessage.noticeWait). -->
                 <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
-                <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
+                <span v-if="pendingWait" class="chat-mark"><Icon name="spinner" spin class="text-xs text-info" /></span>
                 <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
                 <!-- A failure's glyph alone takes the warning colour: the line stays as quiet as every notice, the mark says which kind it is. -->
-                <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" :class="{ 'text-warning': failure && !agentNoticeLook }" />
+                <span v-else class="chat-mark"
+                    ><Icon :name="noticeIcon" class="text-xs" :class="{ 'text-warning': failure && !agentNoticeLook }"
+                /></span>
                 <!-- Who said it, when the runtime named an extension: its words are not the sandbox's. -->
                 <span class="min-w-0" :class="{ 'whitespace-pre-line': message.agentNotice }"
                     ><span v-if="message.agentNotice?.source" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
@@ -601,10 +607,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <!-- Marks a message the user wrote in the agent's voice (composer "as agent"); the agent itself never sees this flag. -->
             <p
                 v-if="message.placed"
-                class="flex items-center gap-1 px-1 text-2xs text-subtle"
+                class="chat-meta flex items-start gap-2 text-2xs text-subtle"
                 v-tooltip.top="{ title: t(`chat.chatMessageView.agentsVoice`), note: t(`chat.chatMessageView.readAsItsOwn`) }"
             >
-                <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatMessageView.placedBy`) }}
+                <span class="chat-mark"><Icon name="pencil" class="text-2xs" /></span>{{ t(`chat.chatMessageView.placedBy`) }}
             </p>
 
             <!-- A page the agent showed here, drawn inline where its reply continues (ChatPageView). -->

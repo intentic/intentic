@@ -170,7 +170,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             checklistViews.get(message.id),
                             heldRow === message.id,
                         ]"
-                        class="contents"
+                        class="chat-row contents"
                         :class="cutsAbove.get(message.id) !== undefined && !props.subagent && `chat-cut-row`"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->

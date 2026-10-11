@@ -4,6 +4,7 @@ import { automationApprovals } from "../fixture/automations";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../fixture/desk";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../fixture/fleet";
 import { demoNeeds } from "../fixture/needs";
+import { specimenCard } from "../fixture/specimen";
 import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
@@ -17,7 +18,9 @@ export const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
 
 const servedRoster = (): AgentSummary[] => {
     const agents = deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
-    return demoQuiet() ? agents.map(quietCard) : agents;
+    // The transcript specimen (fixture/specimen.ts) rides along in a dev build only, whatever the mode.
+    const served = import.meta.env.DEV ? [...agents, specimenCard(STARTED_AT)] : agents;
+    return demoQuiet() ? served.map(quietCard) : served;
 };
 export const roster = { agents: servedRoster(), rev: 1 };
 

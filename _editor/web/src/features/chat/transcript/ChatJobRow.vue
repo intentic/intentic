@@ -89,19 +89,19 @@ const commandOpen = ref(false);
 
 <template>
     <div class="flex w-full min-w-0 flex-col gap-1">
-        <div
-            class="flex max-w-full min-w-0 items-center gap-2 self-start rounded-lg border border-line px-2.5 py-1 text-2xs text-muted max-md:min-h-9 max-md:py-0"
-        >
+        <!-- A META ROW (chat.css `.chat-meta`), the same as a notice: the state's glyph in the mark box on the column's edge, the
+             label on the hang. What sets it apart is the glyph still moving, not a box drawn round it. -->
+        <div class="chat-meta flex max-w-full min-w-0 items-center gap-2 self-start py-0.5 text-2xs text-muted max-md:min-h-9 max-md:py-0">
             <!-- The label doubles as the command's fold, as a tool card's name does. -->
             <button
                 type="button"
-                class="flex min-w-0 items-center gap-1.5 self-stretch transition-colors hover:text-content"
+                class="flex min-w-0 items-center gap-2 self-stretch transition-colors hover:text-content"
                 :aria-expanded="commandOpen"
                 v-tooltip.top="commandOpen ? t(`chat.chatJobRow.hideCommand`) : t(`chat.chatJobRow.showCommand`)"
                 @click="commandOpen = !commandOpen"
             >
-                <Icon :name="glyph.name" :spin="glyph.spin" class="shrink-0 text-2xs" :class="glyph.tone" />
-                <span class="truncate font-medium">{{ job.label }}</span>
+                <span class="chat-mark"><Icon :name="glyph.name" :spin="glyph.spin" class="text-xs" :class="glyph.tone" /></span>
+                <span class="truncate">{{ job.label }}</span>
             </button>
             <span class="shrink-0 tabular-nums" :class="phase.kind === `failed` ? `text-danger` : `text-subtle`">{{ status }}</span>
             <button
@@ -115,7 +115,7 @@ const commandOpen = ref(false);
                 <Icon name="desktop" class="text-2xs" />
             </button>
         </div>
-        <div v-if="commandOpen" class="chat-inset flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
+        <div v-if="commandOpen" class="chat-inset ml-[calc(var(--chat-edge)+var(--chat-hang))] flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
             <span class="shrink-0 select-none text-subtle">$</span>
             <span class="min-w-0 whitespace-pre-wrap">{{ job.command }}</span>
         </div>

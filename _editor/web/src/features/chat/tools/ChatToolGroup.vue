@@ -49,13 +49,14 @@ const location = computed(() => {
         <!-- A phone's row is 32px rather than its 16px line, and its two presses fill it: the fold and the file were each a
              strip a thumb could not land on. -->
         <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted max-md:min-h-8">
+            <!-- Chevron in the mark box, glyph and name on the hang: the same edges as a single call's row (ChatToolCard). -->
             <button
                 type="button"
                 class="flex shrink-0 items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
                 :aria-expanded="expanded"
                 @click="toggle"
             >
-                <Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                <span class="chat-mark mr-0.5"><Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-if="running && live" name="spinner" :spin="true" class="text-2xs text-link" />
                 <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
@@ -72,10 +73,11 @@ const location = computed(() => {
             <span v-else-if="location || group.target" class="min-w-0 truncate font-mono">{{ group.target ?? location?.path }}</span>
             <span class="ml-auto flex shrink-0 items-center gap-2">
                 <span v-if="summary" class="tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ summary }}</span>
-                <span class="ui-status-pill bg-overlay text-subtle">×{{ group.tools.length }}</span>
+                <!-- A count like any other row's figure: plain, subtle, tabular. A pill made it the one boxed number in the run. -->
+                <span class="tabular-nums text-subtle">×{{ group.tools.length }}</span>
             </span>
         </div>
-        <div v-if="expanded" class="ml-4 flex flex-col gap-1">
+        <div v-if="expanded" class="ml-[var(--chat-hang)] flex flex-col gap-1">
             <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="tool as TranscriptTool" :live="live" />
         </div>
     </div>

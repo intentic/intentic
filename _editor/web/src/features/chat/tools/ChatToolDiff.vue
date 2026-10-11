@@ -17,6 +17,9 @@ const props = defineProps<{
     // Whether the header leads anywhere. False on a conversation published to the public, which has no
     // workspace behind it: the diff is the same record either way, so only the affordance is withdrawn.
     openable?: boolean;
+    // The row above already names this file and counts its lines (ChatToolCard), so a header saying both again one line
+    // lower is dropped and the diff starts at its first line.
+    bare?: boolean;
 }>();
 
 const emit = defineEmits<{ open: [] }>();
@@ -40,8 +43,9 @@ const rowClass = (row: DiffRow): string => {
 </script>
 
 <template>
-    <div class="chat-inset ml-4 overflow-hidden">
+    <div class="chat-inset ml-[var(--chat-hang)] overflow-hidden">
         <component
+            v-if="!bare"
             :is="openable ? 'button' : 'div'"
             :type="openable ? 'button' : undefined"
             class="chat-inset-rule flex w-full items-center gap-1.5 px-2.5 py-1.5 text-2xs text-muted transition-colors"

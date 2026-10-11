@@ -1,3 +1,4 @@
+import { SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
 import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE, SEPTEMBER_PAGE, SEPTEMBER_PAGE_PATH, SEPTEMBER_PRINT_PATH } from "./desk";
@@ -509,6 +510,7 @@ const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [MAYA_CHAT_ID]: MAYA_SUPPORT,
     [OWEN_CHAT_ID]: OWEN_LAUNCH,
     [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,
+    [SPECIMEN_CHAT_ID]: SPECIMEN_TRANSCRIPT,
 };
 
 // Each recording is one whole page: it starts at the record's first message, and nothing older precedes it.

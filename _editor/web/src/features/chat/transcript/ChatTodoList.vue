@@ -92,24 +92,27 @@ const hint = computed(() =>
 <template>
     <div class="flex w-full flex-col">
         <!-- One line for the change, at the list's own indent and text size: it stands in for rows, so it reads as one. -->
+        <!-- A META ROW (chat.css `.chat-meta`): its first glyph in the mark box on the column's edge, its words on the hang,
+             where a notice's and a background job's stand. -->
         <button
             v-if="delta"
             type="button"
-            class="group/todo flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors hover:bg-overlay max-md:py-2.5"
+            class="chat-meta group/todo flex w-full items-center gap-2 rounded-md py-1 pr-3 text-left text-2xs transition-colors hover:bg-overlay max-md:py-2.5"
             :aria-expanded="expanded"
             :aria-label="hint"
             @click="toggle"
         >
             <!-- No strikethrough here, unlike the row it stands for: this is the news that it got done, not a settled row. -->
             <template v-if="delta.finished.length > 0">
-                <Icon name="check-circle" class="shrink-0 text-2xs text-success" />
+                <span class="chat-mark"><Icon name="check-circle" class="text-xs text-success" /></span>
                 <span class="min-w-0 truncate text-muted">{{ delta.finished[0]!.content }}</span>
                 <span v-if="delta.finished.length > 1" class="shrink-0 text-2xs text-subtle">+{{ delta.finished.length - 1 }}</span>
             </template>
 
             <template v-if="delta.started.length > 0">
                 <Icon v-if="delta.finished.length > 0" name="arrow-right" class="shrink-0 text-2xs text-subtle" />
-                <Icon v-bind="todoIcon(delta.started[0]!)" class="shrink-0 text-2xs" />
+                <span v-if="delta.finished.length === 0" class="chat-mark"><Icon v-bind="todoIcon(delta.started[0]!)" class="text-xs" /></span>
+                <Icon v-else v-bind="todoIcon(delta.started[0]!)" class="shrink-0 text-2xs" />
                 <span class="min-w-0 truncate text-content">{{ todoText(delta.started[0]!) }}</span>
             </template>
 
@@ -131,17 +134,28 @@ const hint = computed(() =>
         <Transition name="chat-run-reveal">
             <div v-if="delta === undefined || expanded" class="grid">
                 <div class="min-h-0 overflow-hidden">
-                    <div class="flex w-full flex-col" :class="dense ? 'gap-1.5' : 'gap-1 px-3 py-2'">
+                    <!-- In a transcript, a META ROW per task: the circle in the mark box on the column's edge, the task on the hang,
+                         and the meta tier's size — a tier under the answer, so a checklist redrawn every few calls never
+                         out-shouts the words it is tracking. -->
+                    <div class="flex w-full flex-col" :class="dense ? 'gap-1.5' : 'chat-meta gap-1 py-1'">
                         <!-- A row the rail's checklist plays in (`data-reveal`, ChatRailChecklist); inert in a transcript, which reveals nothing. -->
                         <div
                             v-for="(todo, index) in todos"
                             :key="index"
-                            class="flex items-start gap-2"
-                            :class="dense ? 'text-2xs' : 'text-xs'"
+                            class="flex items-start gap-2 text-2xs"
                             data-reveal
                         >
-                            <Icon v-bind="todoIcon(todo)" class="mt-0.5" :class="dense ? 'text-3xs' : 'text-2xs'" />
-                            <span :class="{ 'text-subtle': todo.status === 'completed', 'line-through': todo.status === 'completed' }">{{
+                            <Icon v-if="dense" v-bind="todoIcon(todo)" class="mt-0.5 text-3xs" />
+                            <span v-else class="chat-mark"><Icon v-bind="todoIcon(todo)" class="text-xs" /></span>
+                            <!-- Three inks for three states: done recedes, open waits a step down, and the one in hand reads at full ink.
+                                 The tick already says done, so no strikethrough rules a line through every settled row. -->
+                            <span
+                                :class="{
+                                    'text-subtle': todo.status === 'completed',
+                                    'text-muted': todo.status === 'pending',
+                                    'text-content': todo.status === 'in_progress',
+                                }"
+                                >{{
                                 todoText(todo)
                             }}</span>
                         </div>

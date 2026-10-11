@@ -148,7 +148,8 @@ const tip = computed((): TooltipValue => {
             :hidden.attr="shown ? undefined : `until-found`"
             @beforematch="onFound"
         >
-            <pre class="px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic">{{ thought }}</pre>
+            <!-- A thought is prose, so it is set in the reading face: a <pre> keeps its line breaks, not its code font. -->
+            <pre class="px-2.5 py-1.5 font-sans text-2xs leading-relaxed whitespace-pre-wrap text-muted italic">{{ thought }}</pre>
         </div>
         <!-- A thought open by itself is not the whole row: the run it led to keeps its band under the thought, so the
              same mark never stands for "everything" and hides the calls behind a second press. -->
