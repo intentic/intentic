@@ -634,7 +634,7 @@ const runPending = async (): Promise<void> => {
                     <button
                         type="button"
                         class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left"
-                        :class="{ 'ui-row-select-on': commit.sha === openSha, 'opacity-40': dimmed(row.color) }"
+                        :class="{ 'ui-row-open': commit.sha === openSha, 'opacity-40': dimmed(row.color) }"
                         :style="{ height: `${ROW_H}px` }"
                         @click="toggle(commit.sha)"
                         @contextmenu.prevent.stop="openMenu($event, commit)"
@@ -742,7 +742,7 @@ const runPending = async (): Promise<void> => {
                     </button>
 
                     <!-- Inline detail: commit metadata and its changed files; click a file for a diff at that commit. -->
-                    <div v-if="commit.sha === openSha" class="border-y border-line bg-card px-3 py-2">
+                    <div v-if="commit.sha === openSha" class="ui-row-open border-y border-line px-3 py-2">
                         <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
                         <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
                             <dt class="text-subtle">{{ t(`gitHistoryTab.commit`) }}</dt>

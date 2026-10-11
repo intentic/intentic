@@ -46,6 +46,9 @@ flowchart LR
   `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
   `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
   or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
+  `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details. Handwritten expanded rows
+  use the same class; `ui-row-select-on` is reserved for selection. The translucent `--ui-row-open-wash` token uses
+  the theme's text color at 3%, preserving the enclosing surface and its texture rather than painting over them.
 - **Motion.** One module, `src/motion/` (`@intentic/ui/motion`), with its stylesheet `src/styles/motion.css`.
   Appearance's Animations row (`useMotion`: System, On or Off) writes `data-motion="reduced"` on `<html>` when
   motion is off, or when it is left at System and the OS asks for less. Under that attribute every duration token is

@@ -98,7 +98,7 @@ const tint = computed(() => {
         return ``;
     }
     if (open) {
-        return `bg-content/6`;
+        return `ui-row-open`;
     }
     return ``;
 });

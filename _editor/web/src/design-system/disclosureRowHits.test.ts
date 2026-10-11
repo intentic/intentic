@@ -192,20 +192,21 @@ it(`ignores a press that travelled, so text can be selected out of the row`, asy
     expect(row.isOpen()).toBe(true);
 });
 
-// A drawer's hover wash rides the wrapper, not the header <Row>, since the header loses its bottom padding when the
-// drawer opens and a wash stopping there would look cut off over the evidence below.
-it(`puts the hover wash on the wrapper when the body is a drawer, not on the header row`, async () => {
+// Both bodies share one opened surface with their header; painting either child again would compound the tint.
+it.each([`rail`, `drawer`] as const)(`keeps the %s header and evidence on one shared opened surface`, async (body) => {
     const host = document.createElement(`div`);
     document.body.append(host);
     const open = ref(true);
+    const disabled = ref(false);
     const app: App = createApp({
         render: () =>
             h(
                 DisclosureRow,
                 {
-                    body: `drawer`,
+                    body,
                     density: `compact`,
                     open: open.value,
+                    disabled: disabled.value,
                     "onUpdate:open": (next: boolean) => {
                         open.value = next;
                     },
@@ -220,7 +221,25 @@ it(`puts the hover wash on the wrapper when the body is a drawer, not on the hea
     mounted.push({ app, host });
 
     const wrapper = host.firstElementChild as HTMLElement;
-    const header = host.querySelector<HTMLElement>(`.group.block`);
-    expect(wrapper?.className).toContain(`ui-row-select`);
-    expect(header?.className ?? ``).not.toContain(`ui-row-select`);
+    const header = host.querySelector<HTMLElement>(`.group.flex`);
+    expect(wrapper.classList.contains(`ui-row-select`)).toBe(true);
+    expect(header?.classList.contains(`ui-row-select`)).toBe(false);
+    expect(wrapper.classList.contains(`ui-row-open`)).toBe(true);
+    expect(header?.closest(`.ui-row-open`)).toBe(wrapper);
+    expect(host.querySelector(`.evidence-text`)?.closest(`.ui-row-open`)).toBe(wrapper);
+    expect(host.querySelectorAll(`.ui-row-open`)).toHaveLength(1);
+    expect(wrapper.classList.contains(`bg-content/6`)).toBe(false);
+
+    const toggle = host.querySelector(`button[aria-expanded]`)!;
+    await press(toggle);
+    expect(open.value).toBe(false);
+    expect(wrapper.classList.contains(`ui-row-open`)).toBe(false);
+    await press(toggle);
+    expect(open.value).toBe(true);
+    expect(wrapper.classList.contains(`ui-row-open`)).toBe(true);
+
+    disabled.value = true;
+    await nextTick();
+    expect(wrapper.classList.contains(`ui-row-open`)).toBe(false);
+    expect(wrapper.classList.contains(`ui-row-select`)).toBe(false);
 });

@@ -90,6 +90,14 @@ test("every class the first-party extensions use is one the surface promises", a
     expect(offSurface).toEqual([]);
 }, 60_000);
 
+test("opened rows preserve the enclosing surface and change no layout properties", async () => {
+    const css = (await surfaceBuild())([]);
+    // Match the entire rule: the opened state paints only a background, never padding, display, or row sizing.
+    expect(css).toMatch(/\.ui-row-open\s*\{\s*background-color:\s*var\(--ui-row-open-wash\);?\s*\}/u);
+    // A card-colored opaque fill hides Sanctum's texture on the ancestor, even when its text contrast passes.
+    expect(css).toContain(`--ui-row-open-wash: color-mix(in oklab, var(--color-content) 3%, transparent);`);
+});
+
 // The bill for the promise, asserted rather than admired: declaring a family whole emits utilities nobody is using yet.
 // The ceiling is generous enough that ordinary additions do not trip it and tight enough that a multiplied family
 // cannot land unnoticed. Raise it on purpose, with the new figure in the commit.

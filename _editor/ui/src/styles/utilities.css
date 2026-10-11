@@ -1,5 +1,10 @@
 /* Custom utilities — scrollbar exceptions and loading placeholders, themed via role tokens. */
 @layer utilities {
+    /* A persistent opened surface outranks the transient row hover/press rules, including skin overrides. */
+    .ui-row-open {
+        background-color: var(--ui-row-open-wash);
+    }
+
     /* Hover utilities use the scheme's overlay surface. */
     /* The hover half answers a pointer only, as Tailwind's own `hover:` does: on a touch screen :hover lands on the tap
        and stays after the finger has gone, which reads as a row still being pointed at. The press is `active:`. */

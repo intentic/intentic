@@ -143,6 +143,9 @@
     --ui-tooltip-content: var(--role-content);
     --ui-tooltip-border: var(--role-line-strong);
 
+    /* Half the original 6% highlight; keep it translucent so the enclosing surface and its texture remain visible. */
+    --ui-row-open-wash: color-mix(in oklab, var(--color-content) 3%, transparent);
+
     /* Hover surfaces warm the current semantic surface. */
     --ui-hover-wash: color-mix(in oklab, var(--color-primary-600) 8%, transparent);
     --ui-press-wash: color-mix(in oklab, var(--color-primary-600) 13%, transparent);
