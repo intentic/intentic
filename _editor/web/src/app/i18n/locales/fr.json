@@ -77,10 +77,12 @@
             "needsMaintainer": "Requiert un mainteneur",
             "nothingFinalArrivesUncommitted": "Rien n'est définitif : cela arrive sous forme de changements non committés à relire, et le reste du tour s'intègre par-dessus quand l'agent a fini.",
             "openingAgentsReview": "Ouverture de la revue de cet agent…",
+            "pages": "Discussion et modifications",
             "sessionActions": "Actions de la session",
             "stillWriting": "Écrit encore",
             "switchChat": ", changer de chat",
             "switchesWindow": "Change de fenêtre",
+            "toLand": "{count} à intégrer",
             "toWorkspace": "Vers le workspace",
             "workAlreadyLandedStays": "Le travail déjà intégré reste dans votre espace de travail : seul ce qui est encore sur la branche est perdu.",
             "writtenSoFar": "Écrit jusqu'ici"

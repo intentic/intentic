@@ -1,8 +1,9 @@
 // jsdom pins what the header row is allowed to hold, per two measured failures: a longer status word squeezed the
-// title (fixed by hiding words below @md), and at 390px the mode switch left no room for the title (fixed by
-// moving it outside `.view-header`). Asserted structurally, not just as "present somewhere".
+// title (fixed by hiding words below @md), and at 390px a worded Chat | Changes switch left no room for the title. The
+// switch rides the header again only as two glyphs of fixed width, never words. Asserted structurally, not just as
+// "present somewhere".
 import "@intentic/testing/dom";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, defineComponent, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 // The threshold the header's bars wait for, read from where it's defined rather than restated as a number here.
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
@@ -41,7 +42,6 @@ jest.mock("@intentic/ui", () => {
         Modal: empty(`Modal`),
         Notice: empty(`Notice`),
         ResponsiveOverlay: empty(`ResponsiveOverlay`),
-        SegmentedControl: defineComponent({ name: `SegmentedControl`, render: () => h(`div`, { "data-mode-switch": `` }) }),
         useDevice: () => ({ mobile: ref(knobs.mobile) }),
     };
 });
@@ -145,7 +145,7 @@ afterEach(() => {
     jest.useRealTimers();
 });
 
-it(`keeps a mobile running agent's title slot: the view switch is not in the header, and only the status words compact`, async () => {
+it(`keeps a mobile running agent's title slot: the view switch is two glyphs, and only the status words compact`, async () => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp(AgentDetail);
@@ -161,9 +161,13 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
     const status = header.querySelector<HTMLElement>(`[aria-label="Running"]`)!;
     const words = [...status.querySelectorAll(`span`)].find((node) => node.textContent === `Running`)!;
 
-    // The switch renders, and outside the header: it has no width to spare for it.
-    expect(el.querySelector(`[data-mode-switch]`)).not.toBeNull();
-    expect(header.querySelector(`[data-mode-switch]`)).toBeNull();
+    // The switch rides the header at a fixed width, glyphs only (nothing to land here, so no count either): no word in it
+    // can grow and take the title's room. The row of tabs it replaced is gone.
+    const views = header.querySelector<HTMLElement>(`[role="tablist"]`)!;
+    expect(views.classList).toContain(`shrink-0`);
+    expect([...views.querySelectorAll(`[role="tab"]`)].map((tab) => tab.getAttribute(`aria-label`))).toEqual([`Chat`, `Changes`]);
+    expect(views.textContent?.trim()).toBe(``);
+    expect(el.querySelectorAll(`[role="tablist"]`)).toHaveLength(1);
     expect(name.textContent).toBe(`Readable mobile title`);
     expect(title.classList).toContain(`flex-1`);
     // Rename and the session chip left the row for the session menu; nothing but the title, its status and the menu remain.

@@ -77,11 +77,13 @@
             "needsMaintainer": "Requiere responsable",
             "nothingFinalArrivesUncommitted": "Nada es definitivo: esto llega como cambios sin commit para que los revises, y el resto del turno se integra encima cuando el agente termine.",
             "openingAgentsReview": "Abriendo la revisión de este agente…",
+            "pages": "Chat y cambios",
             "session": "Sesión",
             "sessionActions": "Acciones de la sesión",
             "stillWriting": "Aún escribe",
             "switchChat": ", cambiar de chat",
             "switchesWindow": "Cambia la ventana",
+            "toLand": "{count} por integrar",
             "toWorkspace": "Al workspace",
             "workAlreadyLandedStays": "El trabajo ya integrado se queda en tu espacio de trabajo: solo se pierde lo que siga en la rama.",
             "writtenSoFar": "Lo escrito hasta ahora"

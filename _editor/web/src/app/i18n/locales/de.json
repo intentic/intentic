@@ -77,10 +77,12 @@
             "needsMaintainer": "Braucht Maintainer",
             "nothingFinalArrivesUncommitted": "Nichts ist endgültig: das kommt als nicht committete Änderungen zu Ihnen zur Durchsicht, und der Rest des Zugs landet darauf, wenn der Agent fertig ist.",
             "openingAgentsReview": "Die Durchsicht dieses Agenten wird geöffnet…",
+            "pages": "Chat und Änderungen",
             "sessionActions": "Session-Aktionen",
             "stillWriting": "Schreibt noch",
             "switchChat": ", Chat wechseln",
             "switchesWindow": "Wechselt das Fenster",
+            "toLand": "{count} zu übernehmen",
             "toWorkspace": "In den Workspace",
             "workAlreadyLandedStays": "Arbeit, die bereits gelandet ist, bleibt in Ihrem Workspace: nur was noch auf dem Branch liegt, geht verloren.",
             "writtenSoFar": "Bisher geschrieben"

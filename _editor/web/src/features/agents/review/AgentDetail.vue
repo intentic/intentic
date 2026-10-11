@@ -6,13 +6,12 @@ import {
     Modal,
     Notice,
     ResponsiveOverlay,
-    SegmentedControl,
     type Tip,
     useDevice,
     useLoadingReveal,
 } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
-import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
@@ -22,6 +21,7 @@ import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
 import { mobileChatPath } from "../../../lib/routes/tabRoots";
 import { afterPaint } from "../../../lib/afterPaint";
+import { whenIdle } from "../../../lib/whenIdle";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../chat/transcript/transcriptWait";
 import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
@@ -35,6 +35,8 @@ import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import AgentLandPress from "./AgentLandPress.vue";
+import ChatChangesSwitch from "./pager/ChatChangesSwitch.vue";
+import SwipePages from "./pager/SwipePages.vue";
 import AgentReactions from "../board/cards/AgentReactions.vue";
 import AgentSessionMenu from "../board/session/AgentSessionMenu.vue";
 import SessionChip from "../board/session/SessionChip.vue";
@@ -42,7 +44,7 @@ import SessionIdentity from "../board/session/SessionIdentity.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Drill-in for one agent (/agents/:id): one canonical chat surface per form factor.
-// - mobile: this IS the chat surface, Chat | Changes segmented, chat by default
+// - mobile: this IS the chat surface, Chat and Changes as two pages a finger turns, chat by default
 // - desktop: the conversation lives only in the docked ChatPanel; this view is review-only (diff, Land, Discard)
 //
 // This row owns the session; the panel below owns the review.
@@ -212,11 +214,6 @@ onMounted(() => {
 
 // Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
-// The Changes tab counts what is still to land, so the chat says there is work to review without being left.
-const viewOptions = computed((): { label: string; value: `chat` | `changes`; badge?: number }[] => [
-    { label: t(`shared.chat`), value: `chat` },
-    { label: t(`shared.changes`), value: `changes`, badge: changes.pending.value.length },
-]);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
@@ -317,6 +314,40 @@ const localOnly = computed(() => !remote.value);
 // Whether the header draws the session menu (☰): a local agent with work to review. On a phone it also carries the
 // session's marks, which is what frees the header's width for the title.
 const sessionMenuShown = computed(() => reviewable.value && localOnly.value);
+
+// A PHONE'S TWO PAGES. The chat and its changes lie side by side under this one header and a finger turns between
+// them (SwipePages); the header's switch says which shows and how much is still to land, in the width of two glyphs
+// rather than a row of tabs the transcript paid a line of its height for. Until the agent has a branch there is only
+// the chat: nothing to turn to, and no switch.
+const paged = computed(() => mobile.value && reviewable.value && localOnly.value);
+const pageIds = computed((): readonly (`chat` | `changes`)[] => (paged.value ? [`chat`, `changes`] : [`chat`]));
+const PAGE_IDS = `agent-page`;
+const pageSwitch = useTemplateRef<InstanceType<typeof ChatChangesSwitch>>(`pageSwitch`);
+watch(paged, (on) => {
+    if (!on && mobile.value) {
+        view.value = `chat`;
+    }
+});
+// The review is drawn once the chat has painted and the phone is idle, so a swipe finds its page ready; a finger
+// coming down before then, or a press on the switch, draws it at once.
+const reviewDrawn = ref(view.value === `changes`);
+const drawReview = (): void => {
+    reviewDrawn.value = true;
+};
+watch(
+    chatMounted,
+    (on) => {
+        if (on && mobile.value) {
+            whenIdle(drawReview);
+        }
+    },
+    { immediate: true },
+);
+watch(view, (shown) => {
+    if (shown === `changes`) {
+        drawReview();
+    }
+});
 
 // `heardFrom` tells "not told yet" apart from "told, and this agent isn't in it" (fleetAcross's `readAt`), so a
 // box that answered but lacks this id gets a sentence saying so, not a false "hasn't answered".
@@ -509,6 +540,8 @@ const confirmHandOver = async (): Promise<void> => {
                 </button>
             </template>
             <template v-if="reviewable">
+                <!-- A phone's Chat | Changes, folded into this row: its thumb rides the pages as a finger turns them. -->
+                <ChatChangesSwitch v-if="paged" ref="pageSwitch" v-model="view" :pending="changes.pending.value.length" :id-prefix="PAGE_IDS" />
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
                 <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. A phone draws it under the review instead (below). -->
                 <AgentLandPress
@@ -553,18 +586,50 @@ const confirmHandOver = async (): Promise<void> => {
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
              the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->
         <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
-        <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. Tabs, not a
-             boxed track: the switch says what the whole screen is, and a second bordered box under the header cost the
-             transcript a row of its height. -->
-        <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
-        <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-4 pt-1.5">
-            <SegmentedControl v-model="view" :options="viewOptions" variant="underline" />
-        </div>
-        <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
-        <template v-if="mobile && localOnly && (view === 'chat' || !reviewable)">
-            <ChatPanel v-if="chatMounted" :tabs="false" class="min-h-0 flex-1" />
-            <div v-else class="min-h-0 flex-1" aria-hidden="true" />
-        </template>
+        <!-- A phone's chat and changes, as pages a finger turns. Local-only: a remote conversation lives elsewhere, so a
+             phone gets the full review below instead. -->
+        <SwipePages
+            v-if="mobile && localOnly"
+            v-model="view"
+            :pages="pageIds"
+            :follower="pageSwitch?.thumb"
+            :id-prefix="PAGE_IDS"
+            @wake="drawReview"
+        >
+            <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
+            <template #chat>
+                <ChatPanel v-if="chatMounted" :tabs="false" class="min-h-0 flex-1" />
+            </template>
+            <template #changes>
+                <!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->
+                <AgentReviewPanel
+                    v-if="reviewDrawn"
+                    :agent-id="agentId"
+                    :at="remoteBox"
+                    :changes="changes"
+                    :streaming="streaming"
+                    :writing="writing"
+                    class="min-h-0 flex-1"
+                    @chat="view = 'chat'"
+                />
+                <!-- The review ends in its one press, full width at the thumb, and leaves with its page. -->
+                <div v-if="landPending" class="shrink-0 border-t border-line bg-card px-4 py-3">
+                    <AgentLandPress
+                        block
+                        :can-ship="canShip"
+                        :requested="fleetAgent?.landRequested !== undefined"
+                        :land-disabled="!canLand"
+                        :requesting="requestingLand"
+                        :land-hint="landHint"
+                        :request-hint="requestLandHint"
+                        :fix="fixPress"
+                        @land="pressLand"
+                        @request="requestLand"
+                        @fix="changes.fixConflicts()"
+                    />
+                </div>
+            </template>
+        </SwipePages>
         <!-- Still asking about this id: the review's frame and one line saying so, never another agent's review replayed. -->
         <template v-else-if="looking">
             <AgentReviewOutline v-if="outline" :label="t(`agents.agentDetail.openingAgentsReview`)" />
@@ -573,7 +638,7 @@ const confirmHandOver = async (): Promise<void> => {
         <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">
             {{ remoteUnavailable }}
         </p>
-        <!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->
+        <!-- The review alone: a desktop's (its chat is the docked panel) and any remote agent's. -->
         <AgentReviewPanel
             v-else-if="agentId !== '' && reviewable"
             :agent-id="agentId"
@@ -584,26 +649,6 @@ const confirmHandOver = async (): Promise<void> => {
             class="min-h-0 flex-1"
             @chat="view = 'chat'"
         />
-
-        <!-- A phone's review ends in its one press, full width at the thumb, for as long as the review is on screen. -->
-        <div
-            v-if="mobile && landPending && localOnly && view === 'changes'"
-            class="shrink-0 border-t border-line bg-card px-4 py-3"
-        >
-            <AgentLandPress
-                block
-                :can-ship="canShip"
-                :requested="fleetAgent?.landRequested !== undefined"
-                :land-disabled="!canLand"
-                :requesting="requestingLand"
-                :land-hint="landHint"
-                :request-hint="requestLandHint"
-                :fix="fixPress"
-                @land="pressLand"
-                @request="requestLand"
-                @fix="changes.fixConflicts()"
-            />
-        </div>
 
         <!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
         <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />

@@ -18,7 +18,7 @@ import {
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
 import { draftStrayAsk, stopAgent } from "../fleet/agentActions";
@@ -494,8 +494,15 @@ const viewGroupAndAdvance = (): void => {
     }
 };
 
+// The panel's own box, for asking whether it is on screen to be keyed at all.
+const panel = useTemplateRef<HTMLElement>(`panel`);
+
 const onKey = (event: KeyboardEvent): void => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+    }
+    // A review held behind a phone's chat page (SwipePages) is inert: a `v` there would mark files nobody is looking at.
+    if ((panel.value?.closest(`[inert]`) ?? null) !== null) {
         return;
     }
     // Typing beats navigating: this guard leaves arrows and F7 to the chat composer or Monaco when focused.
@@ -644,7 +651,7 @@ const seamWidth = computed<number>({
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div ref="panel" class="flex min-h-0 flex-1 flex-col">
         <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">
             <span class="block font-medium">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</span>
             <span class="block break-words text-muted">{{ changes.error.value }}</span>
@@ -940,7 +947,13 @@ const seamWidth = computed<number>({
                 :title="t(`ui.resizeSeam.doubleClickResets`)"
             />
 
-            <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <!-- An open diff on a phone keeps its sideways touches (pager/swipeYields.ts): a finger across code is reading
+                 it, not turning back to the chat. Its own back arrow, and the header's switch, still leave it. -->
+            <section
+                v-if="!mobile || selected !== undefined"
+                class="flex min-h-0 min-w-0 flex-1 flex-col"
+                :data-own-swipe="mobile ? `` : undefined"
+            >
                 <template v-if="selected !== undefined">
                     <!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
                     <DiffToolbar
