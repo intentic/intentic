@@ -1338,8 +1338,16 @@ fn run_agent_script(url: &str, what: &str, vars: &[(&str, &str)]) -> bool {
     }
     #[cfg(windows)]
     {
+        // A script under `iex` reports through $LASTEXITCODE and never exits (that would close a person's window),
+        // so `-Command` alone ends 0 whatever happened; the tail hands its code on, and a failed download as 1.
         let mut cmd = std::process::Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", &format!("irm {url} | iex")]);
+        cmd.args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "irm {url} | iex; $ok = $?; if ($LASTEXITCODE) {{ exit $LASTEXITCODE }}; if (-not $ok) {{ exit 1 }}"
+            ),
+        ]);
         for (key, value) in vars {
             cmd.env(key, value);
         }

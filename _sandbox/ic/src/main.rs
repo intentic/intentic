@@ -362,7 +362,8 @@ enum SandboxCommand {
         yes: bool,
     },
     /// Remove what updates left behind: images and records of sandboxes that are gone, superseded and dangling
-    /// builds, stale backups, and the trash past its window. Never deletes a volume
+    /// builds, stale backups, and the trash past its window. The only volumes it deletes are those of sandboxes
+    /// removed longer ago than their recovery window
     Tidy {
         /// Say what would be removed and remove nothing
         #[arg(long = "dry-run")]

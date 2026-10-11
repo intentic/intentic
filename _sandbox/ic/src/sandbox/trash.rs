@@ -152,13 +152,35 @@ pub fn list() -> Vec<Trashed> {
 }
 
 fn recoverable(live: &[String]) -> Vec<Trashed> {
-    let mut entries: Vec<Trashed> = marker_volumes()
+    recoverable_in(&marker_volumes(), live)
+}
+
+/// The entries a marker listing holds, the live slugs left out, newest removal first. Pure.
+fn recoverable_in(markers: &[String], live: &[String]) -> Vec<Trashed> {
+    let mut entries: Vec<Trashed> = markers
         .iter()
         .filter_map(|volume| parse_marker(volume))
         .filter(|entry| !live.contains(&entry.slug))
         .collect();
     entries.sort_by_key(|entry| std::cmp::Reverse(entry.removed_at));
     entries
+}
+
+/// This slug's entry as the trash holds it NOW, read again rather than carried over from an earlier listing: the
+/// verbs that delete decide what to delete before they hold the sandbox's lock, and a person can take as long as they
+/// like over a purge's question. A restore that ran meanwhile brought the slug back to life, and the volumes that
+/// listing named belong to a running sandbox now (2026-10-11: a purge confirmed after a restore deleted the restored
+/// sandbox and its /work). None when docker would not list the containers either: a delete never guesses.
+pub fn still_trashed(slug: &str) -> Option<Trashed> {
+    let live = crate::sandbox::live_slugs()?;
+    entry_of(slug, &marker_volumes(), &live)
+}
+
+/// One slug's entry in a marker listing, the newest marker standing for it; None once the slug is live again. Pure.
+fn entry_of(slug: &str, markers: &[String], live: &[String]) -> Option<Trashed> {
+    recoverable_in(markers, live)
+        .into_iter()
+        .find(|entry| entry.slug == slug)
 }
 
 /// This slug's markers, live or not. Deliberately NOT `list`: the callers below are the ones that delete, and a
@@ -187,7 +209,7 @@ fn drop_superseded_markers(live: &[String]) {
 /// Clears what an earlier removal of this slug left in the trash NAMESPACE — never the data volumes, which carry
 /// one name per slug and so already belong to whatever lives under it now.
 fn clear_trash_names(slug: &str) {
-    for (_, trashed) in container_pairs(slug) {
+    for trashed in trash_names(slug) {
         docker::quiet(&["rm", "-f", &trashed]);
     }
     for marker in markers_for(slug) {
@@ -195,29 +217,91 @@ fn clear_trash_names(slug: &str) {
     }
 }
 
-/// Moves one sandbox out of the live namespace with its data untouched. A second removal of the same slug
-/// supersedes the first, whose containers would otherwise collide with the renames below.
-pub fn stash(slug: &str) {
-    clear_trash_names(slug);
-    settle_parked(slug);
-    for (live, trashed) in container_pairs(slug) {
-        if !docker::container_exists(&live) {
-            continue;
-        }
-        docker::quiet(&["stop", &live]);
-        docker::quiet(&["rename", &live, &trashed]);
+/// What a removal does with one slug, by what it finds. Pure.
+#[derive(Debug, PartialEq, Eq)]
+enum Stash {
+    /// Live containers to move into the trash, superseding whatever an earlier removal of the slug left there.
+    Move,
+    /// Nothing live, and the trash already holds the slug: that IS this sandbox, removed already (a second pass over
+    /// the same name, or another ic run that got there first). Its containers and its clock are left as they are.
+    AlreadyTrashed,
+    /// Nothing live and nothing in the trash: the volumes a container removed by hand left, which the marker alone
+    /// puts in the trash.
+    MarkOnly,
+}
+
+fn stash_plan(live_containers: bool, in_trash: bool) -> Stash {
+    match (live_containers, in_trash) {
+        (true, _) => Stash::Move,
+        (false, true) => Stash::AlreadyTrashed,
+        (false, false) => Stash::MarkOnly,
     }
-    mark(slug);
+}
+
+/// Moves one sandbox out of the live namespace with its data untouched. A second removal of the same slug
+/// supersedes the first, whose containers would otherwise collide with the renames below — but only when there is a
+/// live container to move: with none, what the trash holds under this slug is the sandbox itself (2026-10-11:
+/// `ic sandbox remove a a` cleared, on its second pass, the containers its first had just put in the trash).
+///
+/// Err says what docker refused and where that left the sandbox. A rename or a marker that fails puts back what had
+/// moved, so a sandbox is never half in the trash: trash names with no marker are restorable by nothing and listed
+/// nowhere.
+pub fn stash(slug: &str) -> std::result::Result<(), String> {
+    settle_parked(slug);
+    let present: Vec<(String, String)> = container_pairs(slug)
+        .into_iter()
+        .filter(|(live, _)| docker::container_exists(live))
+        .collect();
+    match stash_plan(!present.is_empty(), !markers_for(slug).is_empty()) {
+        Stash::AlreadyTrashed => return Ok(()),
+        Stash::MarkOnly if mark(slug) => return Ok(()),
+        Stash::MarkOnly => {
+            return Err(format!(
+                "docker would not create the marker that keeps {slug}'s data restorable, so its volumes were left as they are"
+            ))
+        }
+        Stash::Move => {}
+    }
+    clear_trash_names(slug);
+    let mut moved: Vec<(String, String)> = Vec::new();
+    for (live, trashed) in present {
+        docker::quiet(&["stop", &live]);
+        if !docker::ok(&["rename", &live, &trashed]) {
+            put_back(&moved);
+            return Err(format!(
+                "docker would not rename {live}, so {slug} is still on this device under its own name, stopped (ic sandbox start {slug} starts it again)"
+            ));
+        }
+        moved.push((live, trashed));
+    }
+    if !mark(slug) {
+        put_back(&moved);
+        return Err(format!(
+            "docker would not create the marker that keeps it restorable, so {slug} was put back under its own name, stopped (ic sandbox start {slug} starts it again)"
+        ));
+    }
+    Ok(())
+}
+
+/// Undoes the renames of a removal that could not finish, last first.
+fn put_back(moved: &[(String, String)]) {
+    for (live, trashed) in moved.iter().rev() {
+        docker::quiet(&["rename", trashed, live]);
+    }
 }
 
 /// The marker that starts a sandbox's recovery window, labelled like everything ic makes (labels.rs).
 fn mark(slug: &str) -> bool {
+    mark_at(slug, now_secs())
+}
+
+fn mark_at(slug: &str, at: u64) -> bool {
     let mut args: Vec<String> = vec!["volume".to_string(), "create".to_string()];
     args.extend(crate::sandbox::labels::here(
         slug,
         crate::sandbox::labels::Kind::TrashMarker,
     ));
-    args.push(marker_name(slug, now_secs()));
+    args.push(marker_name(slug, at));
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     docker::ok(&refs)
 }
@@ -257,9 +341,31 @@ fn settle_parked(slug: &str) {
     crate::record::remove_before(slug);
 }
 
+/// Whether the trash holds this sandbox's container, or only its data: a set of volumes tidy put there has no
+/// container to bring back (tidy.rs, `adopt_orphan`).
+pub fn has_container(slug: &str) -> bool {
+    docker::container_exists(&format!("{TRASH_PREFIX}{slug}"))
+}
+
 /// Brings one back under its live names and starts it. The volumes never moved, so nothing is copied here.
-pub fn restore(slug: &str) {
-    for (live, trashed) in container_pairs(slug) {
+///
+/// Err, with the marker kept and so the clock still running, when there is no container in the trash to bring back
+/// (only data, which a restore cannot start: 2026-10-11, it dropped the marker and said "restored" over volumes no
+/// container ran on, and the next tidy put them back in the trash with a fresh week), or when docker would not rename
+/// it back.
+pub fn restore(slug: &str) -> std::result::Result<(), String> {
+    let [(live, trashed), others @ ..] = container_pairs(slug);
+    if !docker::container_exists(&trashed) {
+        return Err(format!(
+            "the trash holds only {slug}'s data, no container to start"
+        ));
+    }
+    if !docker::ok(&["rename", &trashed, &live]) {
+        return Err(format!(
+            "docker would not rename {trashed} back to {live}, so {slug} stays in the trash"
+        ));
+    }
+    for (live, trashed) in others {
         if docker::container_exists(&trashed) {
             docker::quiet(&["rename", &trashed, &live]);
         }
@@ -272,20 +378,64 @@ pub fn restore(slug: &str) {
             docker::quiet(&["start", &live]);
         }
     }
+    Ok(())
 }
 
-/// Deletes one sandbox for good — both namespaces, since a purge may be aimed at a slug that was never trashed.
-/// Idempotent: every step no-ops on what is already gone.
+/// The container names a purge removes: the trash's alone. Pure.
+fn trash_names(slug: &str) -> [String; 3] {
+    container_pairs(slug).map(|(_, trashed)| trashed)
+}
+
+/// Whether the slug runs on this device, under its own name or parked by a swap.
+fn is_live(slug: &str) -> bool {
+    docker::container_exists(&crate::sandbox::container_of(slug))
+        || docker::container_exists(&crate::sandbox::parked_of(slug))
+}
+
+/// Deletes one removed sandbox for good: its containers in the trash and its data. Idempotent: every step no-ops on
+/// what is already gone.
+///
+/// Never a live-named container (2026-10-11): it used to `rm -f` those too, so a purge decided on before a restore of
+/// the same slug deleted the restored sandbox. A slug that is live again is refused whole, since its volumes are the
+/// running sandbox's. Deleting a sandbox that is live is `delete`, which only `ic sandbox remove --now` asks for.
 ///
 /// The marker goes only once every data volume has (2026-10-05): it is the one record that these volumes are the
 /// trash's, and dropping it beside a volume docker refused to remove left that volume claimed by nothing, for good
 /// (rog's `sandbox-fc55412d2c28`). Err names what is still there, or that docker would not say.
 pub fn purge(slug: &str) -> std::result::Result<(), String> {
+    if is_live(slug) {
+        return Err(format!(
+            "{slug} is on this device again (restored or set up anew), so none of it was deleted"
+        ));
+    }
+    discard(slug)
+}
+
+/// A sandbox deleted for good whether it runs or sits in the trash: `ic sandbox remove --now`. Its live containers go
+/// first, then everything `purge` deletes. What docker would not delete stays in the trash, due at once, so the next
+/// sweep tries again rather than leaving volumes no marker claims.
+pub fn delete(slug: &str) -> std::result::Result<(), String> {
     // A parked container holds the same volumes, and docker refuses to remove a volume any container still names.
     docker::quiet(&["rm", "-f", &crate::sandbox::parked_of(slug)]);
-    for (live, trashed) in container_pairs(slug) {
-        docker::quiet(&["rm", "-f", &trashed]);
+    for (live, _) in container_pairs(slug) {
         docker::quiet(&["rm", "-f", &live]);
+    }
+    if is_live(slug) {
+        return Err(format!(
+            "docker would not remove {}, so none of {slug} was deleted",
+            crate::sandbox::container_of(slug)
+        ));
+    }
+    let deleted = discard(slug);
+    if deleted.is_err() && markers_for(slug).is_empty() {
+        mark_at(slug, now_secs().saturating_sub(GRACE_SECS));
+    }
+    deleted
+}
+
+fn discard(slug: &str) -> std::result::Result<(), String> {
+    for trashed in trash_names(slug) {
+        docker::quiet(&["rm", "-f", &trashed]);
     }
     for volume in data_volumes(slug) {
         docker::quiet(&["volume", "rm", &volume]);
@@ -340,6 +490,11 @@ pub fn sweep() -> Vec<String> {
         else {
             continue;
         };
+        // Read again under the lock: a restore that finished between the listing above and the lock brought it
+        // back, and a removal of the same slug since restarted its clock.
+        if !still_trashed(&slug).is_some_and(|entry| entry.expired(now_secs())) {
+            continue;
+        }
         match purge(&slug) {
             Ok(()) => purged.push(slug),
             Err(why) => crate::ui::warn(&format!("{why}.")),
@@ -421,6 +576,61 @@ mod tests {
             still_there("abc", "intentic-dind-docker-abc\n"),
             vec!["intentic-dind-docker-abc"]
         );
+    }
+
+    fn markers(list: &[&str]) -> Vec<String> {
+        list.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn a_slug_that_came_back_to_life_is_no_longer_the_trashs_to_delete() {
+        let listing = markers(&["intentic-trashed-100-bbb", "intentic-trashed-100-ccc"]);
+        // A restore between a purge's listing and its lock: the slug is live, so nothing of it is the trash's.
+        assert!(entry_of("bbb", &listing, &markers(&["aaa", "bbb"])).is_none());
+        assert_eq!(
+            entry_of("bbb", &listing, &markers(&["aaa"]))
+                .expect("still trashed")
+                .marker,
+            "intentic-trashed-100-bbb"
+        );
+        // Its marker gone meanwhile (a restore, or another purge that got there first): nothing to delete.
+        assert!(entry_of("bbb", &markers(&["intentic-trashed-100-ccc"]), &[]).is_none());
+    }
+
+    #[test]
+    fn the_newest_marker_decides_whether_a_slug_is_due() {
+        let now = 100 * DAY;
+        let listing = markers(&[
+            &format!("intentic-trashed-{}-bbb", 10 * DAY),
+            &format!("intentic-trashed-{}-bbb", 99 * DAY),
+        ]);
+        let entry = entry_of("bbb", &listing, &[]).expect("trashed");
+        assert_eq!(entry.removed_at, 99 * DAY);
+        assert!(!entry.expired(now), "a removal a day old is not due");
+    }
+
+    #[test]
+    fn a_second_removal_with_nothing_live_leaves_what_the_trash_holds() {
+        // `ic sandbox remove a a`: the second pass finds no live container and the slug already in the trash.
+        assert_eq!(stash_plan(false, true), Stash::AlreadyTrashed);
+        assert_eq!(stash_plan(true, true), Stash::Move);
+        assert_eq!(stash_plan(true, false), Stash::Move);
+        assert_eq!(stash_plan(false, false), Stash::MarkOnly);
+    }
+
+    #[test]
+    fn a_purge_names_only_the_trashs_containers_never_a_live_one() {
+        let live = [
+            crate::sandbox::container_of("abc"),
+            crate::sandbox::parked_of("abc"),
+        ];
+        for name in trash_names("abc") {
+            assert!(name.starts_with(TRASH_PREFIX), "{name}");
+            for prefix in [CONTAINER_PREFIX, TUNNEL_PREFIX, DIND_PREFIX] {
+                assert!(!name.starts_with(prefix), "{name} is a live name");
+            }
+            assert!(!live.contains(&name));
+        }
     }
 
     #[test]

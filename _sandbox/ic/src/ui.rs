@@ -144,12 +144,126 @@ impl Item {
 /// The sentence a declined question settles on, everywhere.
 pub const CANCELLED: &str = "Cancelled. Nothing changed.";
 
-fn chars(text: &str) -> usize {
-    text.chars().count()
+/* HOW MANY TERMINAL CELLS A STRING TAKES, which is what every column here is counted in: a CJK ideograph or an emoji
+takes two, a combining mark or a zero-width joiner none, a colour escape none. Characters would undercount the first and
+overcount the second, and a line counted short is a line the terminal wraps. The tables are a compact cut of Unicode 15.1
+(East Asian Wide/Fullwidth; nonspacing, enclosing and format marks in the scripts a name or a message is likely to carry),
+identical to layout.ts's and held there by the fixture's `widths` case. */
+#[rustfmt::skip]
+const WIDE: &[(u32, u32)] = &[
+    (0x1100, 0x115f), (0x231a, 0x231b), (0x2329, 0x232a), (0x23e9, 0x23ec), (0x23f0, 0x23f0), (0x23f3, 0x23f3),
+    (0x25fd, 0x25fe), (0x2614, 0x2615), (0x2648, 0x2653), (0x267f, 0x267f), (0x2693, 0x2693), (0x26a1, 0x26a1),
+    (0x26aa, 0x26ab), (0x26bd, 0x26be), (0x26c4, 0x26c5), (0x26ce, 0x26ce), (0x26d4, 0x26d4), (0x26ea, 0x26ea),
+    (0x26f2, 0x26f3), (0x26f5, 0x26f5), (0x26fa, 0x26fa), (0x26fd, 0x26fd), (0x2705, 0x2705), (0x270a, 0x270b),
+    (0x2728, 0x2728), (0x274c, 0x274c), (0x274e, 0x274e), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797),
+    (0x27b0, 0x27b0), (0x27bf, 0x27bf), (0x2b1b, 0x2b1c), (0x2b50, 0x2b50), (0x2b55, 0x2b55), (0x2e80, 0x3029),
+    (0x302e, 0x303e), (0x3041, 0x3096), (0x309b, 0x3247), (0x3250, 0x4dbf), (0x4e00, 0xa4c6), (0xa960, 0xa97c),
+    (0xac00, 0xd7a3), (0xf900, 0xfaff), (0xfe10, 0xfe19), (0xfe30, 0xfe6b), (0xff01, 0xff60), (0xffe0, 0xffe6),
+    (0x16fe0, 0x16fe3), (0x16ff0, 0x1b2fb), (0x1f004, 0x1f004), (0x1f0cf, 0x1f0cf), (0x1f18e, 0x1f18e),
+    (0x1f191, 0x1f19a), (0x1f200, 0x1f320), (0x1f32d, 0x1f335), (0x1f337, 0x1f37c), (0x1f37e, 0x1f393),
+    (0x1f3a0, 0x1f3ca), (0x1f3cf, 0x1f3d3), (0x1f3e0, 0x1f3f0), (0x1f3f4, 0x1f3f4), (0x1f3f8, 0x1f43e),
+    (0x1f440, 0x1f440), (0x1f442, 0x1f4fc), (0x1f4ff, 0x1f53d), (0x1f54b, 0x1f54e), (0x1f550, 0x1f567),
+    (0x1f57a, 0x1f57a), (0x1f595, 0x1f596), (0x1f5a4, 0x1f5a4), (0x1f5fb, 0x1f64f), (0x1f680, 0x1f6c5),
+    (0x1f6cc, 0x1f6cc), (0x1f6d0, 0x1f6d2), (0x1f6d5, 0x1f6df), (0x1f6eb, 0x1f6ec), (0x1f6f4, 0x1f6fc),
+    (0x1f7e0, 0x1f7f0), (0x1f90c, 0x1f93a), (0x1f93c, 0x1f945), (0x1f947, 0x1f9ff), (0x1fa70, 0x1faf8),
+    (0x20000, 0x3fffd),
+];
+#[rustfmt::skip]
+const ZERO: &[(u32, u32)] = &[
+    (0x0300, 0x036f), (0x0483, 0x0489), (0x0591, 0x05bd), (0x05bf, 0x05bf), (0x05c1, 0x05c2), (0x05c4, 0x05c5),
+    (0x05c7, 0x05c7), (0x0610, 0x061a), (0x061c, 0x061c), (0x064b, 0x065f), (0x0670, 0x0670), (0x06d6, 0x06dc),
+    (0x06df, 0x06e4), (0x06e7, 0x06e8), (0x06ea, 0x06ed), (0x0711, 0x0711), (0x0730, 0x074a), (0x07a6, 0x07b0),
+    (0x07eb, 0x07f3), (0x07fd, 0x07fd), (0x0816, 0x0819), (0x081b, 0x0823), (0x0825, 0x0827), (0x0829, 0x082d),
+    (0x0859, 0x085b), (0x0890, 0x089f), (0x08ca, 0x08e1), (0x08e3, 0x08ff), (0x0e31, 0x0e31), (0x0e34, 0x0e3a),
+    (0x0e47, 0x0e4e), (0x1160, 0x11ff), (0x1ab0, 0x1ace), (0x1dc0, 0x1dff), (0x200b, 0x200f), (0x202a, 0x202e),
+    (0x2060, 0x206f), (0x20d0, 0x20f0), (0x302a, 0x302d), (0x3099, 0x309a), (0xfe00, 0xfe0f), (0xfe20, 0xfe2f),
+    (0xfeff, 0xfeff), (0xe0001, 0xe01ef),
+];
+
+fn in_table(table: &[(u32, u32)], point: u32) -> bool {
+    table
+        .binary_search_by(|&(low, high)| {
+            if high < point {
+                std::cmp::Ordering::Less
+            } else if low > point {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
 }
 
+/// Cells one character takes: 0 for a control character or a zero-width mark, 2 for a wide one, 1 otherwise.
+fn char_width(c: char) -> usize {
+    let point = c as u32;
+    if c.is_control() {
+        0
+    } else if point < 0x300 {
+        1
+    } else if in_table(ZERO, point) {
+        0
+    } else if in_table(WIDE, point) {
+        2
+    } else {
+        1
+    }
+}
+
+/// The byte length of the CSI escape (colour, cursor) `text` starts with, if it starts with one: drawn as nothing, and
+/// never cut in half. ESC `[`, parameters 0x30-0x3F, intermediates 0x20-0x2F, one final 0x40-0x7E: layout.ts's ESCAPE.
+fn escape_at(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    if bytes.len() < 3 || bytes[0] != 0x1b || bytes[1] != b'[' {
+        return None;
+    }
+    let mut at = 2;
+    while at < bytes.len() && (0x30..=0x3f).contains(&bytes[at]) {
+        at += 1;
+    }
+    while at < bytes.len() && (0x20..=0x2f).contains(&bytes[at]) {
+        at += 1;
+    }
+    (at < bytes.len() && (0x40..=0x7e).contains(&bytes[at])).then_some(at + 1)
+}
+
+/// `text` as escapes and characters, in order: `Err` an escape, `Ok` a character.
+fn pieces(text: &str) -> impl Iterator<Item = Result<char, &str>> {
+    let mut rest = text;
+    std::iter::from_fn(move || {
+        if let Some(length) = escape_at(rest) {
+            let (escape, after) = rest.split_at(length);
+            rest = after;
+            return Some(Err(escape));
+        }
+        let first = rest.chars().next()?;
+        rest = &rest[first.len_utf8()..];
+        Some(Ok(first))
+    })
+}
+
+/// Cells `text` takes on a terminal, escapes included as nothing.
+fn display_width(text: &str) -> usize {
+    pieces(text).map(|piece| piece.map_or(0, char_width)).sum()
+}
+
+/// `text` followed by spaces up to `column` cells.
 fn pad_to(text: &str, column: usize) -> String {
-    format!("{text}{}", " ".repeat(column.saturating_sub(chars(text))))
+    format!(
+        "{text}{}",
+        " ".repeat(column.saturating_sub(display_width(text)))
+    )
+}
+
+/// Text as one line: every control character (a newline, a tab, a carriage return) becomes a space; an escape stays.
+fn clean(text: &str) -> String {
+    pieces(text)
+        .map(|piece| match piece {
+            Ok(c) if c.is_control() => " ".to_string(),
+            Ok(c) => c.to_string(),
+            Err(escape) => escape.to_string(),
+        })
+        .collect()
 }
 
 /// The header of a flow or a report: the title, a dim version stamp on the right, and one dim scope line.
@@ -160,7 +274,7 @@ fn heading_lines(pen: &Pen, title: &str, stamp: &str, scope: &str) -> Vec<String
         format!(
             "  {}{}{}",
             pen.paint(title, BOLD),
-            pen.gap(2 + chars(title), chars(stamp)),
+            pen.gap(2 + display_width(title), display_width(stamp)),
             pen.paint(stamp, DIM)
         )
     };
@@ -194,13 +308,66 @@ fn settled_line(pen: &Pen, tone: Tone, ordinal: Option<usize>, label: &str, took
         ),
         None => (String::new(), String::new()),
     };
-    let left = 5 + chars(&number) + chars(label);
+    let left = 5 + display_width(&number) + display_width(label);
     format!(
         "  {}  {shown}{label}{}{}",
         pen.glyph(tone),
-        pen.gap(left, chars(took)),
+        pen.gap(left, display_width(took)),
         pen.paint(took, DIM)
     )
+}
+
+/// The one repainted line: spinner, the step's ordinal (a flow's) or none (an action's), its label, a dim detail, and
+/// the time on the right. It must never reach the last column, or the terminal wraps it and every later carriage
+/// return lands a row late; so it is one line (control characters become spaces) cut to `width - 1` cells, the detail
+/// first and then the label, and the time is dropped when not even that fits. layout.ts's liveLine draws the same.
+fn live_line(
+    pen: &Pen,
+    spinner: &str,
+    ordinal: Option<usize>,
+    label: &str,
+    detail: &str,
+    took: &str,
+) -> String {
+    let number = ordinal
+        .map(|ordinal| format!("{ordinal:>2}  "))
+        .unwrap_or_default();
+    let budget = pen.width.saturating_sub(1);
+    let lead = 4 + display_width(spinner) + display_width(&number);
+    let time = clean(took);
+    let right = if lead + display_width(&time) + 1 > budget {
+        String::new()
+    } else {
+        time
+    };
+    let reserved = if right.is_empty() {
+        0
+    } else {
+        display_width(&right) + 1
+    };
+    let room = budget.saturating_sub(lead + reserved);
+    let shown_label = truncate(&clean(label), room);
+    let middle = if detail.is_empty() {
+        String::new()
+    } else {
+        truncate(
+            &format!("  ·  {}", clean(detail)),
+            room.saturating_sub(display_width(&shown_label)),
+        )
+    };
+    let shown_number = ordinal
+        .map(|ordinal| format!("{}  ", pen.paint(&format!("{ordinal:>2}"), DIM)))
+        .unwrap_or_default();
+    let head = format!(
+        "  {}  {shown_number}{shown_label}{}",
+        pen.paint(spinner, CYAN),
+        pen.paint(&middle, DIM)
+    );
+    if right.is_empty() {
+        return head;
+    }
+    let pad = room.saturating_sub(display_width(&shown_label) + display_width(&middle));
+    format!("{head}{} {}", " ".repeat(pad), pen.paint(&right, DIM))
 }
 
 /// The end of a flow: one bold verdict and the run's whole duration.
@@ -211,7 +378,7 @@ fn verdict_lines(pen: &Pen, tone: Tone, verdict: &str, took: &str) -> Vec<String
             "  {}  {}{}{}",
             pen.glyph(tone),
             pen.paint(verdict, BOLD),
-            pen.gap(5 + chars(verdict), chars(took)),
+            pen.gap(5 + display_width(verdict), display_width(took)),
             pen.paint(took, DIM)
         ),
     ]
@@ -222,7 +389,7 @@ fn verdict_lines(pen: &Pen, tone: Tone, verdict: &str, took: &str) -> Vec<String
 fn footnote_lines(pen: &Pen, footnotes: &[(String, String)]) -> Vec<String> {
     let column = footnotes
         .iter()
-        .map(|(what, _)| chars(what))
+        .map(|(what, _)| display_width(what))
         .max()
         .unwrap_or(0);
     footnotes
@@ -269,7 +436,7 @@ fn plain_row_line(tone: Tone, name: &str, note: &str) -> String {
 fn item_lines(pen: &Pen, items: &[Item]) -> Vec<String> {
     let column = items
         .iter()
-        .map(|item| chars(&item.name))
+        .map(|item| display_width(&item.name))
         .max()
         .unwrap_or(0);
     items
@@ -307,7 +474,11 @@ fn plain_section_lines(title: &str) -> Vec<String> {
 
 /// Facts as key and value, keys dim in one column.
 fn field_lines(pen: &Pen, fields: &[(String, String)]) -> Vec<String> {
-    let column = fields.iter().map(|(key, _)| chars(key)).max().unwrap_or(0);
+    let column = fields
+        .iter()
+        .map(|(key, _)| display_width(key))
+        .max()
+        .unwrap_or(0);
     fields
         .iter()
         .map(|(key, value)| format!("     {}   {value}", pen.paint(&pad_to(key, column), DIM)))
@@ -421,7 +592,11 @@ fn stop_lines(pen: &Pen, message: &str) -> Vec<String> {
 
 /// A numbered list to pick from.
 fn pick_lines(pen: &Pen, items: &[(String, String)]) -> Vec<String> {
-    let column = items.iter().map(|(name, _)| chars(name)).max().unwrap_or(0);
+    let column = items
+        .iter()
+        .map(|(name, _)| display_width(name))
+        .max()
+        .unwrap_or(0);
     items
         .iter()
         .enumerate()
@@ -579,16 +754,170 @@ fn emit(lines: &[String]) {
     let _ = out.flush();
 }
 
-/// Terminal width, without a crate for it and without spawning anything. `COLUMNS` is exported by most
-/// interactive shells; 80 is the floor every terminal has agreed on since 1978, and being wrong low only
-/// costs a shorter line, while being wrong high wraps the one line we repaint and corrupts it.
+/// The narrowest line laid out: below it a budget would reach zero. The same floor and ceiling as ui.ts's widthFrom.
+const MIN_WIDTH: usize = 20;
+/// Past this a line is too long to read in one sweep, whatever the terminal could hold.
+const MAX_WIDTH: usize = 120;
+
+/// Terminal width, without a crate for it and without spawning anything: what the terminal itself reports, else
+/// `COLUMNS`, else 80. The terminal is asked because an interactive shell keeps `COLUMNS` to itself rather than
+/// exporting it, and being wrong high wraps the one line we repaint and corrupts it.
 fn terminal_width() -> usize {
-    std::env::var("COLUMNS")
-        .ok()
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .filter(|columns| *columns >= 40)
+    width_from(reported_width(), std::env::var("COLUMNS").ok().as_deref())
+}
+
+/// The rule apart from the probes, so a test can hold it: a reported width wins, then `COLUMNS`, then 80, held between
+/// MIN_WIDTH and MAX_WIDTH, and never inflated, so a real 30-column terminal is drawn 30 wide. ui.ts's widthFrom.
+fn width_from(reported: Option<usize>, columns: Option<&str>) -> usize {
+    let named = columns
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|columns| *columns > 0);
+    reported
+        .filter(|columns| *columns > 0)
+        .or(named)
         .unwrap_or(80)
-        .min(120)
+        .clamp(MIN_WIDTH, MAX_WIDTH)
+}
+
+/// The width the terminal reports for stdout, else stderr, else the controlling terminal: the first is a pipe when a
+/// caller captures the output, and a live line is only drawn where one of them is a terminal.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
+fn reported_width() -> Option<usize> {
+    use std::os::fd::AsRawFd;
+    // libc is not a dependency of this crate, so the one call is declared here, as enable_vt declares kernel32's.
+    #[repr(C)]
+    #[derive(Default)]
+    struct WindowSize {
+        rows: u16,
+        columns: u16,
+        x_pixels: u16,
+        y_pixels: u16,
+    }
+    #[cfg(any(target_env = "musl", target_os = "android"))]
+    type Request = core::ffi::c_int;
+    #[cfg(not(any(target_env = "musl", target_os = "android")))]
+    type Request = core::ffi::c_ulong;
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        not(any(
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "sparc64"
+        ))
+    ))]
+    const TIOCGWINSZ: Request = 0x5413;
+    #[cfg(not(all(
+        any(target_os = "linux", target_os = "android"),
+        not(any(
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "sparc64"
+        ))
+    )))]
+    const TIOCGWINSZ: Request = 0x4008_7468;
+    extern "C" {
+        fn ioctl(fd: core::ffi::c_int, request: Request, ...) -> core::ffi::c_int;
+    }
+    let ask = |fd: core::ffi::c_int| -> Option<usize> {
+        let mut size = WindowSize::default();
+        // SAFETY: TIOCGWINSZ writes one winsize, which WindowSize lays out, and nothing else.
+        let asked = unsafe { ioctl(fd, TIOCGWINSZ, &mut size as *mut WindowSize) };
+        (asked == 0 && size.columns > 0).then_some(usize::from(size.columns))
+    };
+    ask(1).or_else(|| ask(2)).or_else(|| {
+        let tty = std::fs::File::open("/dev/tty").ok()?;
+        ask(tty.as_raw_fd())
+    })
+}
+
+#[cfg(windows)]
+fn reported_width() -> Option<usize> {
+    use std::os::windows::io::AsRawHandle;
+    #[repr(C)]
+    #[derive(Default)]
+    struct Coord {
+        x: i16,
+        y: i16,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct SmallRect {
+        left: i16,
+        top: i16,
+        right: i16,
+        bottom: i16,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct ScreenBufferInfo {
+        size: Coord,
+        cursor: Coord,
+        attributes: u16,
+        window: SmallRect,
+        maximum: Coord,
+    }
+    const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
+    const STD_ERROR_HANDLE: u32 = -12i32 as u32;
+    extern "system" {
+        fn GetStdHandle(handle: u32) -> *mut core::ffi::c_void;
+        fn GetConsoleScreenBufferInfo(
+            console: *mut core::ffi::c_void,
+            info: *mut ScreenBufferInfo,
+        ) -> i32;
+    }
+    let ask = |handle: *mut core::ffi::c_void| -> Option<usize> {
+        if handle.is_null() || handle as isize == -1 {
+            return None;
+        }
+        let mut info = ScreenBufferInfo::default();
+        // SAFETY: the call fills one CONSOLE_SCREEN_BUFFER_INFO, which ScreenBufferInfo lays out, or fails.
+        if unsafe { GetConsoleScreenBufferInfo(handle, &mut info) } == 0 {
+            return None;
+        }
+        let columns = i32::from(info.window.right) - i32::from(info.window.left) + 1;
+        usize::try_from(columns).ok().filter(|columns| *columns > 0)
+    };
+    // SAFETY: GetStdHandle only reads the process's standard handles.
+    ask(unsafe { GetStdHandle(STD_OUTPUT_HANDLE) })
+        .or_else(|| ask(unsafe { GetStdHandle(STD_ERROR_HANDLE) }))
+        .or_else(|| {
+            let console = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("CONOUT$")
+                .ok()?;
+            ask(console.as_raw_handle().cast())
+        })
+}
+
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+)))]
+fn reported_width() -> Option<usize> {
+    None
 }
 
 #[cfg(windows)]
@@ -628,15 +957,23 @@ fn enable_vt() -> bool {
 /// anything; only an explicitly non-UTF-8 locale is.
 #[cfg(not(windows))]
 fn unicode_safe() -> bool {
-    match std::env::var("LC_ALL")
-        .or_else(|_| std::env::var("LC_CTYPE"))
-        .or_else(|_| std::env::var("LANG"))
+    locale_is_utf8(|name| std::env::var(name).ok())
+}
+
+/// The rule apart from the environment, so a test can hold it: the first of LC_ALL, LC_CTYPE and LANG that is set AND
+/// not empty names the encoding, as POSIX reads them (an empty LC_ALL defers to LANG); none at all is no evidence.
+/// ui.ts's unicodeSafe reads them the same way.
+#[cfg_attr(windows, allow(dead_code))]
+fn locale_is_utf8(var: impl Fn(&str) -> Option<String>) -> bool {
+    match ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| var(name).filter(|value| !value.is_empty()))
     {
-        Ok(locale) if !locale.is_empty() => {
+        Some(locale) => {
             let locale = locale.to_ascii_lowercase();
             locale.contains("utf-8") || locale.contains("utf8")
         }
-        _ => true,
+        None => true,
     }
 }
 
@@ -1341,8 +1678,14 @@ fn erase(state: &mut State) {
     }
     let mut out = std::io::stdout().lock();
     // Spaces rather than an erase-to-end-of-line escape: this is the one repaint that has to work on a
-    // console that refused virtual-terminal processing, where an escape would print as literal text.
-    let _ = write!(out, "\r{:width$}\r", "", width = state.width);
+    // console that refused virtual-terminal processing, where an escape would print as literal text. One short of
+    // the width, as the live line is: a console that wraps on reaching the last column would push this a row down.
+    let _ = write!(
+        out,
+        "\r{:width$}\r",
+        "",
+        width = state.width.saturating_sub(1)
+    );
     let _ = out.flush();
     state.live = false;
 }
@@ -1359,45 +1702,14 @@ fn repaint(state: &mut State) {
         }
         _ => elapsed,
     };
-    let number = if state.numbered {
-        format!("{:>2}  ", state.ordinal)
-    } else {
-        String::new()
-    };
-    let head = format!("  {spinner}  {number}{}", state.label);
-    let middle = if state.detail.is_empty() {
-        String::new()
-    } else {
-        format!("  ·  {}", state.detail)
-    };
-    // Budget: the line must never reach the last column, or a terminal wraps it and the carriage return
-    // above no longer returns to its start.
-    let budget = state.width.saturating_sub(1);
-    let fixed = head.chars().count() + right.chars().count() + 1;
-    let middle = truncate(&middle, budget.saturating_sub(fixed));
-    let pad = budget.saturating_sub(fixed + middle.chars().count());
-    let text = if state.color {
-        let middle = if middle.is_empty() {
-            String::new()
-        } else {
-            state.paint(&middle, DIM)
-        };
-        let number = if state.numbered {
-            format!("{}  ", state.paint(&format!("{:>2}", state.ordinal), DIM))
-        } else {
-            String::new()
-        };
-        format!(
-            "  {}  {number}{}{middle}{:pad$} {}",
-            state.paint(spinner, CYAN),
-            state.label,
-            "",
-            state.paint(&right, DIM),
-            pad = pad
-        )
-    } else {
-        format!("{head}{middle}{:pad$} {right}", "", pad = pad)
-    };
+    let text = live_line(
+        &state.pen(),
+        spinner,
+        state.numbered.then_some(state.ordinal),
+        &state.label,
+        &state.detail,
+        &right,
+    );
     let mut out = std::io::stdout().lock();
     let _ = write!(out, "\r{text}");
     let _ = out.flush();
@@ -1484,16 +1796,22 @@ fn remaining(state: &State) -> Option<String> {
     )
 }
 
+/// A duration as a person would say it: precise while that's interesting, rounded once it isn't. Counted in whole
+/// tenths and minutes, half up, as ui.ts's humanDuration counts them: floating point rounds 150 ms one way in an f32
+/// and the other in a JavaScript number.
 fn human_duration(elapsed: Duration) -> String {
-    let seconds = elapsed.as_secs();
+    let millis = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX / 2);
+    let tenths = (millis + 50) / 100;
+    if tenths < 100 {
+        return format!("{}.{}s", tenths / 10, tenths % 10);
+    }
+    // 9.95 s rounds up to ten, which is read in whole seconds.
+    let seconds = (millis / 1000).max(10);
     if seconds >= 90 {
-        let minutes = (seconds as f32 / 60.0).round() as u64;
-        return format!("{minutes}m");
+        format!("{}m", (seconds + 30) / 60)
+    } else {
+        format!("{seconds}s")
     }
-    if seconds >= 10 {
-        return format!("{seconds}s");
-    }
-    format!("{:.1}s", elapsed.as_secs_f32())
 }
 
 /// Fold `text` onto lines of at most `width`. Used for everything that SETTLES on the screen — a caution, a
@@ -1511,7 +1829,7 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     for word in text.split_whitespace() {
         if current.is_empty() {
             current.push_str(word);
-        } else if current.chars().count() + 1 + word.chars().count() <= width {
+        } else if display_width(&current) + 1 + display_width(word) <= width {
             current.push(' ');
             current.push_str(word);
         } else {
@@ -1528,16 +1846,35 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Clips to `limit` cells, marking the cut; used only on the repainted line, which must not wrap. Never cuts inside an
+/// escape or a character, and keeps the escapes past the cut, so a colour reset still lands.
 fn truncate(text: &str, limit: usize) -> String {
-    if text.chars().count() <= limit {
+    if display_width(text) <= limit {
         return text.to_string();
     }
     if limit <= 1 {
         return String::new();
     }
-    let mut out: String = text.chars().take(limit - 1).collect();
-    out.push('…');
-    out
+    let mut kept = String::new();
+    let mut escapes = String::new();
+    let mut cells = 0;
+    let mut cut = false;
+    for piece in pieces(text) {
+        match piece {
+            Err(escape) if cut => escapes.push_str(escape),
+            Err(escape) => kept.push_str(escape),
+            Ok(c) => {
+                let cost = char_width(c);
+                if cut || cells + cost > limit - 1 {
+                    cut = true;
+                } else {
+                    kept.push(c);
+                    cells += cost;
+                }
+            }
+        }
+    }
+    format!("{kept}…{escapes}")
 }
 
 fn capitalize(text: &str) -> String {
@@ -1687,6 +2024,29 @@ mod tests {
             .collect(),
             "stop" => stop_lines(&pen, &text("message")),
             "pick" => pick_lines(&pen, &pairs("items")),
+            "live" => vec![live_line(
+                &pen,
+                args["spinner"].as_str().unwrap_or(pen.glyphs.spinner[0]),
+                args["ordinal"].as_u64().map(|ordinal| ordinal as usize),
+                &text("label"),
+                &text("detail"),
+                &text("took"),
+            )],
+            "duration" => vec![human_duration(Duration::from_millis(
+                args["ms"].as_u64().expect("ms"),
+            ))],
+            "width" => vec![display_width(&text("text")).to_string()],
+            "widths" => vec![text("codepoints")
+                .split(' ')
+                .map(|point| {
+                    let point = u32::from_str_radix(point, 16).expect("a hex code point");
+                    char_width(char::from_u32(point).expect("a character")).to_string()
+                })
+                .collect()],
+            "truncate" => vec![truncate(
+                &text("text"),
+                args["limit"].as_u64().expect("a limit") as usize,
+            )],
             other => panic!("the fixture names a shape ui.rs does not draw: {other}"),
         }
     }
@@ -1708,6 +2068,10 @@ mod tests {
                 .iter()
                 .map(|line| line.as_str().expect("a line").to_string())
                 .collect();
+            // A case may draw at its own width (a narrow terminal's live line); the rest share the fixture's.
+            let width = case["args"]["width"]
+                .as_u64()
+                .map_or(width, |own| own as usize);
             assert_eq!(
                 draw(shape, &case["args"], width),
                 expected,
@@ -1879,6 +2243,114 @@ mod tests {
         assert_eq!(human_duration(Duration::from_secs(89)), "89s");
         assert_eq!(human_duration(Duration::from_secs(90)), "2m");
         assert_eq!(human_duration(Duration::from_secs(291)), "5m");
+        // Whole tenths, half up, in integers, as ui.ts counts them: the f32 said 0.2s for 150 ms where ui.ts's float
+        // said 0.1s, and 1.0s for 1050 ms where ui.ts said 1.1s.
+        let read = |ms: u64| human_duration(Duration::from_millis(ms));
+        assert_eq!(
+            [150, 250, 1050, 9949, 9950].map(read),
+            ["0.2s", "0.3s", "1.1s", "9.9s", "10s"]
+        );
+    }
+
+    #[test]
+    fn the_live_line_never_reaches_the_last_column() {
+        // The label used to be drawn whole and only the detail cut, by characters: a long label, or a short CJK one
+        // (two cells a character), wrapped the repainted line, and a newline in it broke the line outright.
+        let pen = Pen {
+            color: false,
+            glyphs: &UNICODE,
+            width: 40,
+        };
+        for (label, detail) in [
+            (
+                "Disconnecting this device from https://swift-otter-4821.sandboxes.intentic.dev",
+                "asking",
+            ),
+            ("同步文件夹到沙箱", "正在复制项目文件夹中的所有文件和目录"),
+            ("Working", "line one\nline two\tand a tab\r"),
+        ] {
+            let line = live_line(&pen, "⠋", Some(3), label, detail, "12s · ~3m left");
+            assert_eq!(display_width(&line), 39, "{line:?}");
+            assert!(!line.contains(['\n', '\r', '\t']), "{line:?}");
+        }
+        // In colour the escapes are not cells, and a cut never lands inside one.
+        let pen = Pen {
+            color: true,
+            glyphs: &UNICODE,
+            width: 30,
+        };
+        let line = live_line(
+            &pen,
+            "⠋",
+            None,
+            "下载镜像文件下载镜像文件下载镜像文件",
+            "",
+            "0.4s",
+        );
+        assert_eq!(display_width(&line), 29, "{line:?}");
+        assert_eq!(line.matches("\x1b[").count(), 4, "{line:?}");
+    }
+
+    #[test]
+    fn width_is_counted_in_terminal_cells() {
+        assert_eq!(display_width("plain"), 5);
+        assert_eq!(display_width("下载镜像"), 8);
+        assert_eq!(display_width("e\u{301}"), 1);
+        assert_eq!(display_width("😀"), 2);
+        assert_eq!(display_width("\x1b[31mred\x1b[0m"), 3);
+        assert_eq!(truncate("下载镜像文件", 6), "下载…");
+        assert_eq!(
+            truncate("\x1b[2mhello world\x1b[0m", 6),
+            "\x1b[2mhello…\x1b[0m"
+        );
+        assert_eq!(pad_to("😀", 4), "😀  ");
+        assert_eq!(clean("a\nb\tc\x1b[2md"), "a b c\x1b[2md");
+    }
+
+    #[test]
+    fn the_terminal_width_is_trusted_and_never_inflated() {
+        assert_eq!(width_from(Some(30), None), 30);
+        assert_eq!(width_from(Some(30), Some("200")), 30);
+        assert_eq!(width_from(None, Some("50")), 50);
+        assert_eq!(width_from(None, Some(" 64 ")), 64);
+        // COLUMNS=30 used to read as 80, and a 30-column terminal then wrapped every repaint.
+        assert_eq!(width_from(None, Some("30")), 30);
+        assert_eq!(width_from(None, Some("wide")), 80);
+        assert_eq!(width_from(None, None), 80);
+        assert_eq!(width_from(Some(0), None), 80);
+        // Clamped only so a budget cannot reach zero, and so a line stays readable on a very wide one.
+        assert_eq!(width_from(Some(8), None), 20);
+        assert_eq!(width_from(Some(400), None), 120);
+    }
+
+    #[test]
+    fn the_locale_is_read_as_posix_reads_it() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| value.to_string())
+            }
+        };
+        assert!(locale_is_utf8(env(&[])));
+        assert!(locale_is_utf8(env(&[("LANG", "en_US.UTF-8")])));
+        assert!(!locale_is_utf8(env(&[("LANG", "C")])));
+        assert!(!locale_is_utf8(env(&[
+            ("LC_ALL", "C"),
+            ("LANG", "en_US.UTF-8")
+        ])));
+        assert!(locale_is_utf8(env(&[
+            ("LC_CTYPE", "de_DE.utf8"),
+            ("LANG", "C")
+        ])));
+        // An empty variable is unset: LC_ALL="" defers to LANG rather than meaning "no locale, draw Unicode".
+        assert!(!locale_is_utf8(env(&[("LC_ALL", ""), ("LANG", "C")])));
+        assert!(locale_is_utf8(env(&[
+            ("LC_ALL", ""),
+            ("LC_CTYPE", ""),
+            ("LANG", "en_US.UTF-8")
+        ])));
     }
 
     #[test]
@@ -1887,11 +2359,11 @@ mod tests {
         // later repaint lands on the wrong row.
         assert_eq!(truncate("hello", 10), "hello");
         assert_eq!(truncate("hello", 5), "hello");
-        assert_eq!(truncate("hello", 4).chars().count(), 4);
+        assert_eq!(display_width(&truncate("hello", 4)), 4);
         assert_eq!(truncate("hello", 1), "");
         assert_eq!(truncate("hello", 0), "");
-        // Multi-byte characters are counted as characters, not bytes.
-        assert_eq!(truncate("★★★★★", 3).chars().count(), 3);
+        // Multi-byte characters are counted as cells, not bytes.
+        assert_eq!(display_width(&truncate("★★★★★", 3)), 3);
     }
 
     fn layers(fractions: &[f32]) -> BTreeMap<String, f32> {

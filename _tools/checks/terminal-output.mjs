@@ -24,9 +24,10 @@ const SOURCES = [
         // The renderer itself, and main.rs, which only defines the crate's println!/eprintln! (rerouted under --json).
         exempt: (path) => path === `_sandbox/ic/src/ui.rs` || path === `_sandbox/ic/src/main.rs` || /(^|\/)tests?(\.rs|\/)/.test(path),
         print: /\b(?:e?println!|e?print!)\s*\(/g,
-        // ic keeps its unit tests in a trailing `#[cfg(test)] mod tests`, which may print what it likes.
+        // ic keeps its unit tests in a trailing `#[cfg(test)] mod tests { … }`, which may print what it likes. Only an
+        // inline module ends the body: a `#[cfg(test)] mod helpers;` declaration near the top is not the tests.
         body: (text) => {
-            const at = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod\s+\w+/m);
+            const at = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod\s+\w+\s*\{/m);
             return at === -1 ? text : text.slice(0, at);
         },
     },

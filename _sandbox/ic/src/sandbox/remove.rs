@@ -74,25 +74,43 @@ fn remove(args: Args, permanent: Permanent) -> Result<()> {
         if args.now {
             every.extend(trash::list().into_iter().map(|entry| entry.slug));
         }
-        every
+        crate::sandbox::each_once(every)
     } else if !args.slugs.is_empty() {
-        // A name this device has neither running nor recoverable is said and passed over rather than "removed": a
-        // caller removing what is already gone still finishes, but nobody is told a sandbox went that never was here.
+        // A name this device has neither running nor recoverable is said and passed over rather than "removed": nobody
+        // is told a sandbox went that never was here. One already in the trash is already removed, and is said so.
         let live = list_slugs();
-        let trashed: Vec<String> = trash::list().into_iter().map(|entry| entry.slug).collect();
-        let (here, absent): (Vec<String>, Vec<String>) = args
-            .slugs
-            .iter()
-            .cloned()
-            .partition(|slug| {
-                live.contains(slug)
-                    || (args.now && trashed.contains(slug))
-                    // A container removed by hand leaves its volumes, which a removal still puts away.
-                    || (!trashed.contains(slug)
-                        && docker::ok(&["volume", "inspect", &format!("intentic-workspace-{slug}")]))
+        let trashed = trash::list();
+        let (mut here, mut already, mut unknown) = (Vec::new(), Vec::new(), Vec::new());
+        for slug in crate::sandbox::each_once(args.slugs.clone()) {
+            let in_trash = trashed.iter().find(|entry| entry.slug == slug);
+            // A container removed by hand leaves its volumes, which a removal still puts away.
+            let named = named_as(live.contains(&slug), in_trash.is_some(), args.now, || {
+                docker::ok(&["volume", "inspect", &format!("intentic-workspace-{slug}")])
             });
-        for slug in &absent {
+            match (named, in_trash) {
+                (Named::Here, _) => here.push(slug),
+                (Named::AlreadyRemoved, Some(entry)) => {
+                    already.push((slug, entry.days_left(trash::now_secs())))
+                }
+                _ => unknown.push(slug),
+            }
+        }
+        for (slug, days) in &already {
+            ui::note(&format!(
+                "{slug} is already removed: ic sandbox restore {slug} brings it back, {}.",
+                crate::sandbox::days_left(*days)
+            ));
+        }
+        // Every name unknown is a stop that touches nothing: read as "nothing to remove", it went on to say there was
+        // no sandbox on this device beside a running one, and took the shared agent logins with it (2026-10-11).
+        if here.is_empty() && !unknown.is_empty() {
+            bail!("{}", unknown_names(&unknown));
+        }
+        for slug in &unknown {
             ui::warn(&format!("There is no sandbox named {slug} on this device."));
+        }
+        if here.is_empty() {
+            return Ok(());
         }
         here
     } else {
@@ -107,11 +125,11 @@ fn remove(args: Args, permanent: Permanent) -> Result<()> {
             .map(|slug| (slug.clone(), container_status(slug)))
             .collect();
         match ui::pick("Which sandboxes should be removed?", &choices, true)? {
-            Some(picked) => picked
+            Some(picked) if !picked.is_empty() => picked
                 .into_iter()
                 .map(|index| slugs[index].clone())
                 .collect(),
-            None => {
+            _ => {
                 ui::cancelled();
                 return Ok(());
             }
@@ -127,13 +145,74 @@ fn remove(args: Args, permanent: Permanent) -> Result<()> {
         ui::cancelled();
         return Ok(());
     }
+    let (mut removed, mut failed) = (0, Vec::new());
     for slug in &selected {
-        remove_slug(slug, args.now);
+        match remove_slug(slug, args.now) {
+            Ok(()) => removed += 1,
+            Err(why) => failed.push((slug.clone(), why)),
+        }
     }
     if args.all {
         teardown(args.now);
     }
-    finish(&args, selected.len())
+    finish(&args, removed, &failed)
+}
+
+/// How a name given to `ic sandbox remove` stands on this device.
+#[derive(Debug, PartialEq, Eq)]
+enum Named {
+    /// Something to remove: a sandbox, the trash's copy of one under `--now`, or volumes a container removed by hand
+    /// left behind.
+    Here,
+    /// In the trash already, and this is no `--now`.
+    AlreadyRemoved,
+    /// Nothing of it here.
+    Unknown,
+}
+
+/// Pure but for `has_volumes`, which is asked only when nothing else decides.
+fn named_as(live: bool, in_trash: bool, now: bool, has_volumes: impl FnOnce() -> bool) -> Named {
+    if live || (now && in_trash) {
+        Named::Here
+    } else if in_trash {
+        Named::AlreadyRemoved
+    } else if has_volumes() {
+        Named::Here
+    } else {
+        Named::Unknown
+    }
+}
+
+/// The stop for a removal none of whose names this device has. Pure.
+fn unknown_names(unknown: &[String]) -> String {
+    ui::explain(
+        "Nothing was removed.",
+        Some(&format!(
+            "there is no sandbox named {} on this device.",
+            unknown.join(" or ")
+        )),
+        Some("ic sandbox list"),
+    )
+}
+
+/// The stop for the sandboxes a removal could not finish, with what docker refused for each. Pure.
+fn removal_stop(failed: &[(String, String)], now: bool) -> String {
+    let slugs: Vec<&str> = failed.iter().map(|(slug, _)| slug.as_str()).collect();
+    let reasons: Vec<&str> = failed.iter().map(|(_, why)| why.as_str()).collect();
+    ui::explain(
+        &format!(
+            "{} could not be {}: {}.",
+            plural(failed.len(), "sandbox"),
+            if now { "deleted" } else { "removed" },
+            slugs.join(", ")
+        ),
+        Some(&format!("{}.", reasons.join("; "))),
+        Some(&format!(
+            "ic sandbox remove {}{} runs it again",
+            slugs.join(" "),
+            if now { " --now" } else { "" }
+        )),
+    )
 }
 
 /// What the person typing a permanent delete has to type: the sandbox's name for one, the count for several. Pure.
@@ -219,15 +298,20 @@ fn teardown(now: bool) {
 /// it under a running agent broke it rather than retiring it. Each removed sandbox's pairings are retired through the
 /// agent instead (`forget_pairings`), and the agent retires itself once it has nothing left to serve, as it already
 /// does.
-fn finish(args: &Args, removed: usize) -> Result<()> {
+fn finish(args: &Args, removed: usize, failed: &[(String, String)]) -> Result<()> {
+    let stop = (!failed.is_empty()).then(|| removal_stop(failed, args.now));
     let Some(remaining) = crate::sandbox::live_slugs() else {
         ui::warn(
             "Docker could not list the sandboxes on this device, so the state they share was kept.",
         );
-        return Ok(());
+        return match stop {
+            Some(stop) => Err(crate::util::Fail(stop)),
+            None => Ok(()),
+        };
     };
     let recoverable = trash::list();
-    if remaining.is_empty() && recoverable.is_empty() {
+    // A removal that did not finish leaves the shared state alone: what it left behind may still use it.
+    if remaining.is_empty() && recoverable.is_empty() && failed.is_empty() {
         maybe_remove_agent_auth(args)?;
     } else if args.agent_auth {
         ui::warn(&format!(
@@ -235,11 +319,13 @@ fn finish(args: &Args, removed: usize) -> Result<()> {
             auth_volume()
         ));
     }
-    ui::done(&format!(
-        "{} {}.",
-        plural(removed, "sandbox"),
-        if args.now { "deleted" } else { "removed" }
-    ));
+    if removed > 0 {
+        ui::done(&format!(
+            "{} {}.",
+            plural(removed, "sandbox"),
+            if args.now { "deleted" } else { "removed" }
+        ));
+    }
     ui::plain(&format!(
         "intentic: remaining sandboxes: {}",
         if remaining.is_empty() {
@@ -267,7 +353,10 @@ fn finish(args: &Args, removed: usize) -> Result<()> {
             format!("ic sandbox restore {}", recoverable[0].slug),
         )]);
     }
-    Ok(())
+    match stop {
+        Some(stop) => Err(crate::util::Fail(stop)),
+        None => Ok(()),
+    }
 }
 
 /// How many times the removal notice is tried, and how long a removal waits on it in all: a flaky network must not
@@ -317,25 +406,27 @@ fn announce_removal(slug: &str) {
 /// One sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op). The
 /// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox. Takes the sandbox's lock,
 /// waiting for a swap or a backup of it to finish rather than pulling its containers out from under it.
-pub fn remove_slug(slug: &str, now: bool) {
-    let _held = match lock::hold_for_person(slug) {
-        Ok(held) => held,
-        Err(fail) => {
-            ui::warn(&format!("{slug} was left as it is: {}", fail.0));
-            return;
-        }
-    };
+///
+/// Err says what was not done and where that left the sandbox; the caller counts it as not removed (2026-10-11: every
+/// selected slug was counted, so a removal docker refused said "1 sandbox removed" and exited 0).
+pub fn remove_slug(slug: &str, now: bool) -> std::result::Result<(), String> {
+    let _held = lock::hold_for_person(slug).map_err(|fail| {
+        let why: Vec<&str> = fail.0.lines().map(str::trim).collect();
+        format!("{slug} was left as it is: {}", why.join(" "))
+    })?;
     announce_removal(slug);
-    if now {
+    let outcome = if now {
         ui::act(&format!("Deleting {slug}"));
-        if let Err(why) = trash::purge(slug) {
-            ui::warn(&format!("{why}."));
-        }
+        trash::delete(slug)
     } else {
         ui::act(&format!("Removing {slug}"));
-        trash::stash(slug);
+        trash::stash(slug)
+    };
+    // Its pairings go once it has left the live namespace, whether or not every step after that went through.
+    if !docker::container_exists(&container_of(slug)) {
+        forget_pairings(slug);
     }
-    forget_pairings(slug);
+    outcome
 }
 
 /// How long the machine agent gets to retire a sandbox's pairings.
@@ -633,6 +724,49 @@ mod tests {
         // --confirm with the right name answers without a terminal; a wrong one stops rather than deleting.
         assert!(crate::ui::confirm_typed("q", "c", "3", Some("3")).unwrap());
         assert!(crate::ui::confirm_typed("q", "c", "work", Some("other")).is_err());
+    }
+
+    #[test]
+    fn a_name_is_removed_only_when_something_of_it_is_here() {
+        let never = || -> bool { panic!("volumes are asked about only when nothing else decides") };
+        assert_eq!(named_as(true, false, false, never), Named::Here);
+        assert_eq!(named_as(false, true, true, never), Named::Here);
+        // In the trash and no --now: already removed, never removed again (which would restart its clock).
+        assert_eq!(named_as(false, true, false, never), Named::AlreadyRemoved);
+        assert_eq!(named_as(false, false, false, || true), Named::Here);
+        assert_eq!(named_as(false, false, false, || false), Named::Unknown);
+    }
+
+    #[test]
+    fn a_removal_of_names_this_device_does_not_have_stops_and_names_them() {
+        let stop = unknown_names(&names(&["sandbox-typo"]));
+        assert!(stop.starts_with("Nothing was removed."));
+        assert!(stop.contains("there is no sandbox named sandbox-typo on this device."));
+        assert!(stop.contains("ic sandbox list"));
+        assert!(!stop.contains("There is no sandbox on this device"));
+    }
+
+    #[test]
+    fn a_removal_docker_refused_is_counted_as_not_removed_and_says_why() {
+        let failed = vec![(
+            "sandbox-aaa".to_string(),
+            "docker would not rename intentic-sandbox-sandbox-aaa".to_string(),
+        )];
+        let stop = removal_stop(&failed, false);
+        assert!(stop.starts_with("1 sandbox could not be removed: sandbox-aaa."));
+        assert!(stop.contains("docker would not rename intentic-sandbox-sandbox-aaa."));
+        assert!(stop.contains("ic sandbox remove sandbox-aaa runs it again"));
+        let deleted = removal_stop(&failed, true);
+        assert!(deleted.starts_with("1 sandbox could not be deleted: sandbox-aaa."));
+        assert!(deleted.contains("ic sandbox remove sandbox-aaa --now"));
+    }
+
+    #[test]
+    fn a_sandbox_named_twice_is_removed_once_and_confirmed_by_its_name() {
+        let twice = crate::sandbox::each_once(names(&["work", "work"]));
+        assert_eq!(typed_name(&twice), "work");
+        assert_eq!(question(&twice, true, false).0, "Delete work for good?");
+        assert_eq!(question(&twice, false, false).0, "Remove work?");
     }
 
     #[test]

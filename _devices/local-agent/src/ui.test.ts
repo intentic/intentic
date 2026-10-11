@@ -1,4 +1,4 @@
-import { asLabel, createUi, estimate, explain, humanDuration, truncate, wrap, type UiProcess } from "./ui.js";
+import { asLabel, createUi, displayWidth, estimate, explain, humanDuration, truncate, unicodeSafe, widthFrom, wrap, type UiProcess } from "./ui.js";
 
 // plain is a wire contract: the desktop app parses its markers into a progress bar and CI reads them from a log, so the
 // redrawing path must be unreachable from it.
@@ -95,6 +95,18 @@ describe("nested mode", () => {
         expect(lines.some((line) => line.includes("Sync started."))).toBe(true);
         expect(out()).not.toContain("\r");
     });
+
+    it("keeps a stop's problem and fix under its headline", () => {
+        // The parent only says its child failed; without these two lines the person learns neither why nor what to do.
+        // LANG=C: a console that cannot draw the Unicode glyphs, so the marker is the ASCII one.
+        const { ui, err } = fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "nested", NO_COLOR: "1", LANG: "C" } });
+        ui.fail(explain("Desktop sync was not set up.", "the pairing code expired 2 minutes ago.", "copy a fresh command from the card."));
+        expect(err().split("\n").filter(Boolean)).toEqual([
+            "     x  Desktop sync was not set up.",
+            "        problem: the pairing code expired 2 minutes ago.",
+            "        fix:     copy a fresh command from the card.",
+        ]);
+    });
 });
 
 describe("rich mode", () => {
@@ -128,8 +140,75 @@ describe("rich mode", () => {
         ui.close();
         // One character over and the terminal wraps it, after which every carriage return lands a row late.
         for (const frame of out().split("\r")) {
-            expect([...frame.split("\n")[0]!].length).toBeLessThanOrEqual(columns);
+            expect(displayWidth(frame.split("\n")[0]!)).toBeLessThanOrEqual(columns - 1);
         }
+    });
+
+    it("cuts a long label, a wide one and a multi-line one to the line, counting terminal cells", () => {
+        // The label used to be drawn whole and only the detail cut, by code points: a long label, or a short CJK one
+        // (two cells a character), wrapped the repainted line, and a newline in it broke the line outright.
+        for (const [label, detail] of [
+            ["Disconnecting this device from https://swift-otter-4821.sandboxes.intentic.dev and its folder", "asking"],
+            ["同步文件夹到沙箱", "正在复制项目文件夹中的所有文件和目录"],
+            ["Working", "line one\nline two\tand a tab"],
+        ] as const) {
+            const columns = 40;
+            const { ui, out } = fake({ stdout: { write: () => {}, isTTY: true, columns }, env: { NO_COLOR: "1" } });
+            ui.act(label);
+            ui.detail(detail);
+            ui.progress(detail);
+            ui.done("Done.");
+            const repaints = out()
+                .split("\r")
+                .map((frame) => frame.split("\n")[0]!)
+                .filter((frame) => frame.startsWith("  ⠋") || frame.startsWith("  ⠙"));
+            expect(repaints.length).toBeGreaterThan(0);
+            for (const frame of repaints) {
+                expect(displayWidth(frame)).toBe(columns - 1);
+            }
+            // Nothing but the repaints and the settled verdict: no stray line a newline in the text would have made.
+            expect(out().split("\n").filter(Boolean)).toHaveLength(1);
+        }
+    });
+
+    it("draws at the terminal's own width, however narrow, and falls back to COLUMNS then 80", () => {
+        expect(widthFrom(30, undefined)).toBe(30);
+        expect(widthFrom(30, "200")).toBe(30);
+        expect(widthFrom(undefined, "50")).toBe(50);
+        expect(widthFrom(undefined, " 64 ")).toBe(64);
+        expect(widthFrom(undefined, "wide")).toBe(80);
+        expect(widthFrom(undefined, undefined)).toBe(80);
+        expect(widthFrom(0, undefined)).toBe(80);
+        // Clamped only so a budget cannot reach zero, and so a line stays readable on a very wide one.
+        expect(widthFrom(8, undefined)).toBe(20);
+        expect(widthFrom(400, undefined)).toBe(120);
+        const { ui, out } = fake({ stdout: { write: () => {}, isTTY: true, columns: 30 }, env: { NO_COLOR: "1" } });
+        ui.act("Stopping");
+        ui.detail("sandbox-40ebeea77f90");
+        for (const repaint of out().split("\r").filter((frame) => frame.startsWith("  "))) {
+            expect(displayWidth(repaint)).toBe(29);
+        }
+    });
+
+    it("picks glyphs by what the console can draw, never by colour", () => {
+        expect(unicodeSafe({}, "linux")).toBe(true);
+        expect(unicodeSafe({ LANG: "en_US.UTF-8" }, "linux")).toBe(true);
+        expect(unicodeSafe({ LANG: "C" }, "linux")).toBe(false);
+        expect(unicodeSafe({ LC_ALL: "C", LANG: "en_US.UTF-8" }, "linux")).toBe(false);
+        expect(unicodeSafe({ LC_CTYPE: "de_DE.utf8", LANG: "C" }, "linux")).toBe(true);
+        // An empty variable is unset, as POSIX reads the three: LC_ALL="" defers to LANG.
+        expect(unicodeSafe({ LC_ALL: "", LANG: "C" }, "linux")).toBe(false);
+        expect(unicodeSafe({ LC_ALL: "", LC_CTYPE: "", LANG: "en_US.UTF-8" }, "linux")).toBe(true);
+        expect(unicodeSafe({ LANG: "C" }, "win32")).toBe(true);
+        // NO_COLOR on a UTF-8 terminal keeps the Unicode glyphs; a C locale with colour on draws ASCII.
+        const plainColour = fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1", LANG: "en_US.UTF-8" } });
+        plainColour.ui.act("Stopping");
+        plainColour.ui.done("Stopped.");
+        expect(plainColour.out()).toContain("  ✓  Stopped.");
+        const asciiColour = fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { LANG: "C" } });
+        asciiColour.ui.act("Stopping");
+        asciiColour.ui.done("Stopped.");
+        expect(asciiColour.out()).toContain("\u001b[32m+\u001b[0m  Stopped.");
     });
 
     it("ranks the ending: one address, one instruction, then footnotes", () => {
@@ -155,7 +234,8 @@ describe("rich mode", () => {
 const screen = (written: string): string[] => written.split("\n").map((line) => line.split("\r").at(-1) ?? "");
 
 describe("actions and reports", () => {
-    const rich = () => fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1" } });
+    // LANG=C draws the ASCII glyphs, which keeps the assertions below in plain characters; colour has no say in it.
+    const rich = () => fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1", LANG: "C" } });
 
     it("settles an action's live line into its past-tense verdict", () => {
         const { ui, out } = rich();
@@ -212,7 +292,7 @@ describe("actions and reports", () => {
 
 describe("a stopped run", () => {
     it("settles the running step as failed before the stop block", () => {
-        const { ui, out, err } = fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1" } });
+        const { ui, out, err } = fake({ stdout: { write: () => {}, isTTY: true, columns: 72 }, env: { NO_COLOR: "1", LANG: "C" } });
         ui.begin("intentic · connect this device", [{ phase: "fetch", label: "Download the agent", weight: 5 }]);
         ui.step("fetch", "downloading…");
         ui.fail(explain("The agent could not be downloaded.", "github.com did not answer.", "run the same command again."));
@@ -255,6 +335,10 @@ describe("wrapping", () => {
         expect([...truncate("hello", 4)]).toHaveLength(4);
         expect(truncate("hello", 1)).toBe("");
         expect([...truncate("★★★★★", 3)]).toHaveLength(3);
+        // Counted in terminal cells, and never cut inside a character or a colour escape.
+        expect(truncate("下载镜像文件", 6)).toBe("下载…");
+        expect(truncate("😀😀😀", 4)).toBe("😀…");
+        expect(truncate("\u001b[2mhello world\u001b[0m", 6)).toBe("\u001b[2mhello…\u001b[0m");
     });
 });
 
@@ -266,6 +350,9 @@ describe("durations and estimates", () => {
         expect(humanDuration(89_000)).toBe("89s");
         expect(humanDuration(90_000)).toBe("2m");
         expect(humanDuration(291_000)).toBe("5m");
+        // Whole tenths, half up, in integers, as ui.rs counts them: toFixed on a float said 0.1s for 150 ms and 1.1s
+        // for 1050 ms, ui.rs's f32 said 0.2s and 1.0s.
+        expect([150, 250, 1050, 9949, 9950].map(humanDuration)).toEqual(["0.2s", "0.3s", "1.1s", "9.9s", "10s"]);
     });
 
     it("holds the estimate still rather than letting it swing", () => {

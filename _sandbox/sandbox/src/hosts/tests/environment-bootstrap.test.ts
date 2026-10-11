@@ -128,7 +128,9 @@ test("installs the agent on the Windows side from inside a distro, in PowerShell
     expect(world.minted).toEqual(["rog"]);
     expect(world.ran[0]?.id).toBe("rog::wsl:archlinux");
     expect(world.ran[0]?.in).toBe("windows");
-    expect(world.ran[0]?.command).toBe("irm https://intentic.dev/device/work-abc.intentic.dev/CODE0001 | iex");
+    expect(world.ran[0]?.command).toBe(
+        "irm https://intentic.dev/device/work-abc.intentic.dev/CODE0001 | iex; $ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $ok) { exit 1 }",
+    );
 });
 
 // The state this runs in most often: everything already connected, on every reconnect of every environment.

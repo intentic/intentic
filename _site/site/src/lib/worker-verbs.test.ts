@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ONE_LINER_VERBS, type ResolvedOneLiner } from "@intentic/constants";
-import { injectPs1, injectSh, isPowerShell, parseVerbRoute, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./worker-verbs";
+import { injectPs1, injectSh, isPowerShell, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./worker-verbs";
 
 const SCRIPTS = resolve(import.meta.dir, "../../public/scripts");
 const script = (file: string): string => readFileSync(resolve(SCRIPTS, file), "utf8");
@@ -138,6 +138,26 @@ describe("refusals", () => {
         expect(refused("/device/localhost/AB12CD34")).toBe("That is not a valid sandbox address for device.");
         expect(refused("/device/host.example.com:8443/AB12CD34")).toBe("That is not a valid sandbox address for device.");
         expect(refused("/sync/host.example.com/AB12")).toBe("That is not a valid code for sync.");
+    });
+
+    test("a shell is told why, where `curl -f | sh` and 5.1's irm would hide the 400", () => {
+        const sh = refusalScript("sh", "That is not a valid code for device.", "curl/8.5.0");
+        expect(sh).toBe(
+            "#!/bin/sh\nprintf '%s\\n' 'error: That is not a valid code for device.' '   fix:     copy the command again from intentic: this one was changed on the way.' >&2\nexit 2\n",
+        );
+        const ps1 = refusalScript("ps1", "update takes a sandbox's name.", "Mozilla/5.0 (Windows NT 10.0) WindowsPowerShell/5.1.26100");
+        expect(ps1).toContain("[Console]::Error.WriteLine('error: update takes a sandbox''s name.')");
+        expect(ps1).toContain("$global:LASTEXITCODE = 2");
+        // Never `exit` under iex: it would close the person's window.
+        expect(ps1).not.toMatch(/\bexit\b/u);
+        // A browser reads the plain 400 as it is.
+        expect(refusalScript("sh", "x", "Mozilla/5.0 (X11; Linux x86_64) Firefox/140.0")).toBeUndefined();
+        expect(refusalScript("sh", "x", null)).toBeUndefined();
+    });
+
+    test("an argument that would reach ic as a flag is refused", () => {
+        expect(refused("/fix/--yes")).toBe("That is not a valid fix code for fix.");
+        expect(refused("/fix/-y.ps1")).toBe("That is not a valid fix code for fix.");
     });
 
     test("the wrong number of arguments is refused in one sentence", () => {

@@ -37,7 +37,8 @@ set -eu
 #   kit_stop <headline> [problem] [fix] [code]
 #                                            stop: the running step settles as failed, the stop block goes to stderr,
 #                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_need_root <why> <headline> <fix> [names]
+#                                            run again through sudo when not root, keeping the named settings (see below)
 #   kit_confirm <question> <consequence> <flag>
 #                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
 #                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
@@ -261,17 +262,41 @@ kit_confirm() {
     kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
 }
 
-# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
-# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
-# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
-# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# kit_need_root <why> <headline> <fix> [names]: elevation, asked for at the step that needs it and never baked into the
+# command. Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came
+# from): say why in one sentence, fetch the same script again into a file, and run that through sudo. The copy carries
+# the arguments (the Worker writes them into it). Not `sudo -E`, which many sudoers refuse, and sudo's env_reset drops
+# everything else, so `sudo env` hands over by name the settings that are set: the kit's own and the script's [names]
+# (consent like INSTALL_DOCKER=1, which a headless fix tells the person to set). Tokens are not among them: a command
+# line is what ps and sudo's log show, so a token the person exported is asked for again on the terminal.
+# INTENTIC_ELEVATED=1 marks the copy sudo runs; a copy that is still not root stops instead of asking sudo again.
 # Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
 kit_need_root() {
     [ "$(id -u)" != 0 ] || return 0
+    if [ "${INTENTIC_ELEVATED:-}" = 1 ]; then
+        kit_stop "$2" "sudo ran this script again, and it is still not root." "$3"
+    fi
     if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_root_headline="$2"
+        kit_root_names="INTENTIC_UI INTENTIC_PLAIN NO_COLOR FORCE_COLOR INTENTIC_NO_PROMPT IC_BIN IC_URL IC_VERSION INTENTIC_IC_PATH ${4:-}"
         kit_say "$1"
+        kit_root_copy="$(mktemp 2>/dev/null)" || kit_root_copy=""
+        # An empty answer is a failure too: `sudo sh` would read nothing, run nothing, and exit 0.
+        if [ -z "$kit_root_copy" ] || ! curl -fsSL "$INTENTIC_SCRIPT_URL" -o "$kit_root_copy" 2>/dev/null || [ ! -s "$kit_root_copy" ]; then
+            [ -z "$kit_root_copy" ] || rm -f "$kit_root_copy"
+            kit_root_host="${INTENTIC_SCRIPT_URL#*://}"
+            kit_stop "$kit_root_headline" "it needs administrator rights, and ${kit_root_host%%/*} did not answer when it was fetched again to run through sudo." "check the network, then run the same command again."
+        fi
+        set -- INTENTIC_ELEVATED=1
+        for kit_root_name in $kit_root_names; do
+            eval "[ -z \"\${$kit_root_name+x}\" ] || set -- \"\$@\" \"$kit_root_name=\${$kit_root_name}\""
+        done
         kit_suspend
-        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+        # `|| …`, not `$?` on the next line: a script under `set -e` would end at a refused password with the copy left.
+        kit_root_code=0
+        sudo env "$@" sh "$kit_root_copy" || kit_root_code=$?
+        rm -f "$kit_root_copy"
+        exit "$kit_root_code"
     fi
     kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
 }
@@ -322,7 +347,8 @@ ic_from_checkout() {
 # ic_fetch: find or download the ic CLI into $IC, unless $IC is already set. IC_BIN overrides (a checkout's own
 # build). An unpinned run downloads every time, which is how re-running a one-liner upgrades a device; only a failed
 # download falls back to an installed ic. Download beside the target and rename into place: overwriting a running
-# executable fails outright ("Text file busy"), and a half-downloaded binary must never be what runs.
+# executable fails outright ("Text file busy"), and a half-downloaded binary must never be what runs. What arrives is
+# probed by running it before it replaces anything: a 200 can be a captive portal's login page or an empty body.
 ic_fetch() {
     IC="${IC:-${IC_BIN:-}}"
     [ -z "$IC" ] || return 0
@@ -341,8 +367,21 @@ ic_fetch() {
         dest="/usr/local/bin/ic"
     else
         dest="$HOME/.intentic/ic/bin/ic"
-        mkdir -p "$(dirname "$dest")"
     fi
+    # A minimal server image can lack /usr/local/bin, which would otherwise read as a download that failed.
+    mkdir -p "$(dirname "$dest")" 2>/dev/null || true
+    # ic_runs <file>: the file is a program (an ELF or Mach-O header first, because a shell handed anything else runs it
+    # as a script: a login page, or an empty file that "succeeds" having done nothing) that answers `--version` as ic.
+    ic_runs() {
+        case "$(od -A n -t x1 -N 4 "$1" 2>/dev/null | tr -d ' \n')" in
+            7f454c46 | cffaedfe | cafebabe) ;;
+            *) return 1 ;;
+        esac
+        case "$( ("$1" --version) 2>/dev/null)" in
+            "ic "*) return 0 ;;
+        esac
+        return 1
+    }
     # A run pinned to a release (IC_VERSION beside IC_URL, which the desktop app sets to its own) that finds that
     # release OR A NEWER ONE installed has nothing to fetch: asking the binary costs milliseconds. Never "exactly that
     # release": the machine agent moves ic up by itself, so a desktop app left in the tray for days put an older ic
@@ -377,7 +416,7 @@ ic_fetch() {
         done
         [ -z "$ic_have_pre" ] || [ "$ic_have_pre" = "$ic_want_pre" ]
     }
-    if [ -n "${IC_VERSION:-}" ] && [ -x "$dest" ] && ic_not_older "$dest" "$IC_VERSION"; then
+    if [ -n "${IC_VERSION:-}" ] && ic_runs "$dest" && ic_not_older "$dest" "$IC_VERSION"; then
         IC="$dest"
         kit_say "$ic_seen is installed, and this run asks for ic ${IC_VERSION#v} or newer, so nothing is downloaded."
     else
@@ -393,23 +432,35 @@ ic_fetch() {
                 kit_say "installed ic ${IC_VERSION#v} from the copy the desktop app carries."
         }
         ic_base="${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}"
+        ic_host="${ic_base#*://}"
+        ic_why="${ic_host%%/*} did not answer from this device."
         # curl's own sentence would land on the live line; the stop below says the same thing in this page's words.
         if ic_carried || curl -fsL "${ic_base}/ic-${os}-${arch}" -o "${dest}.tmp" 2>/dev/null; then
             chmod +x "${dest}.tmp"
-            mv -f "${dest}.tmp" "$dest"
-            IC="$dest"
-            if [ "$(id -u)" != 0 ]; then
-                mkdir -p "$HOME/.local/bin"
-                ln -sf "$dest" "$HOME/.local/bin/ic"
+            if ic_runs "${dest}.tmp"; then
+                mv -f "${dest}.tmp" "$dest"
+                IC="$dest"
+                if [ "$(id -u)" != 0 ]; then
+                    mkdir -p "$HOME/.local/bin"
+                    ln -sf "$dest" "$HOME/.local/bin/ic"
+                fi
+            else
+                ic_why="what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture."
             fi
-        else
+        fi
+        if [ -z "$IC" ]; then
             rm -f "${dest}.tmp"
-            IC="$(command -v ic || true)"
+            # The one this script installed before, in its own place (off PATH on macOS), then whatever PATH finds.
+            for ic_old in "$dest" "$(command -v ic || true)"; do
+                if [ -n "$ic_old" ] && ic_runs "$ic_old"; then
+                    IC="$ic_old"
+                    break
+                fi
+            done
             if [ -n "$IC" ]; then
                 kit_warn "the newest ic could not be downloaded, so the one installed at $IC runs instead."
             else
-                ic_host="${ic_base#*://}"
-                kit_stop "ic could not be downloaded, and no copy is installed." "${ic_host%%/*} did not answer from this device." "check the network, then run the same command again."
+                kit_stop "ic could not be downloaded, and no copy is installed." "$ic_why" "check the network, then run the same command again."
             fi
         fi
         kit_settle

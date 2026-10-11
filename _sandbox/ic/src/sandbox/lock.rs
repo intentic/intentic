@@ -47,10 +47,15 @@ pub enum Wait {
     Skip,
 }
 
-fn path(slug: &str) -> PathBuf {
-    intentic_home()
+/// The lock file, for a name that is a slug and nothing else: one given on a command line reaches here before
+/// anything has asked docker whether it exists, and `../../x` made a file outside the locks folder (2026-10-11).
+fn path(slug: &str) -> Result<PathBuf> {
+    if !crate::sandbox::is_slug(slug) {
+        bail!("{}", crate::sandbox::missing(slug));
+    }
+    Ok(intentic_home()
         .join("locks")
-        .join(format!("sandbox-{slug}.lock"))
+        .join(format!("sandbox-{slug}.lock")))
 }
 
 fn already_held(slug: &str) -> bool {
@@ -71,13 +76,13 @@ fn remember(slug: &str) {
 /// user's ic home, so it orders the runs that share that home: an ic run from another account, or from the other side
 /// of a Windows/WSL machine, has a home of its own.
 pub fn hold(slug: &str, wait: Wait) -> Result<Option<Held>> {
+    let path = path(slug)?;
     if already_held(slug) {
         return Ok(Some(Held {
             slug: slug.to_string(),
             file: None,
         }));
     }
-    let path = path(slug);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)
             .map_err(|err| Fail(format!("could not create {}: {err}", dir.display())))?;
@@ -167,6 +172,23 @@ mod tests {
         second
             .try_lock()
             .expect("free again once the first lets go");
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_slug_is_refused_before_any_file_is_made() {
+        for slug in ["../../x", "a/b", "..", ""] {
+            assert!(path(slug).is_err(), "{slug}");
+            assert!(hold(slug, Wait::Skip).is_err(), "{slug}");
+        }
+        let made = path("sandbox-2e8d89d75865").expect("a slug");
+        assert_eq!(
+            made.file_name().and_then(|name| name.to_str()),
+            Some("sandbox-sandbox-2e8d89d75865.lock")
+        );
+        assert_eq!(
+            made.parent().and_then(|dir| dir.file_name()),
+            Some(std::ffi::OsStr::new("locks"))
+        );
     }
 
     #[test]

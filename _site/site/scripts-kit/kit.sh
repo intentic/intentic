@@ -12,7 +12,8 @@
 #   kit_stop <headline> [problem] [fix] [code]
 #                                            stop: the running step settles as failed, the stop block goes to stderr,
 #                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_need_root <why> <headline> <fix> [names]
+#                                            run again through sudo when not root, keeping the named settings (see below)
 #   kit_confirm <question> <consequence> <flag>
 #                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
 #                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
@@ -236,17 +237,41 @@ kit_confirm() {
     kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
 }
 
-# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
-# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
-# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
-# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# kit_need_root <why> <headline> <fix> [names]: elevation, asked for at the step that needs it and never baked into the
+# command. Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came
+# from): say why in one sentence, fetch the same script again into a file, and run that through sudo. The copy carries
+# the arguments (the Worker writes them into it). Not `sudo -E`, which many sudoers refuse, and sudo's env_reset drops
+# everything else, so `sudo env` hands over by name the settings that are set: the kit's own and the script's [names]
+# (consent like INSTALL_DOCKER=1, which a headless fix tells the person to set). Tokens are not among them: a command
+# line is what ps and sudo's log show, so a token the person exported is asked for again on the terminal.
+# INTENTIC_ELEVATED=1 marks the copy sudo runs; a copy that is still not root stops instead of asking sudo again.
 # Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
 kit_need_root() {
     [ "$(id -u)" != 0 ] || return 0
+    if [ "${INTENTIC_ELEVATED:-}" = 1 ]; then
+        kit_stop "$2" "sudo ran this script again, and it is still not root." "$3"
+    fi
     if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_root_headline="$2"
+        kit_root_names="INTENTIC_UI INTENTIC_PLAIN NO_COLOR FORCE_COLOR INTENTIC_NO_PROMPT IC_BIN IC_URL IC_VERSION INTENTIC_IC_PATH ${4:-}"
         kit_say "$1"
+        kit_root_copy="$(mktemp 2>/dev/null)" || kit_root_copy=""
+        # An empty answer is a failure too: `sudo sh` would read nothing, run nothing, and exit 0.
+        if [ -z "$kit_root_copy" ] || ! curl -fsSL "$INTENTIC_SCRIPT_URL" -o "$kit_root_copy" 2>/dev/null || [ ! -s "$kit_root_copy" ]; then
+            [ -z "$kit_root_copy" ] || rm -f "$kit_root_copy"
+            kit_root_host="${INTENTIC_SCRIPT_URL#*://}"
+            kit_stop "$kit_root_headline" "it needs administrator rights, and ${kit_root_host%%/*} did not answer when it was fetched again to run through sudo." "check the network, then run the same command again."
+        fi
+        set -- INTENTIC_ELEVATED=1
+        for kit_root_name in $kit_root_names; do
+            eval "[ -z \"\${$kit_root_name+x}\" ] || set -- \"\$@\" \"$kit_root_name=\${$kit_root_name}\""
+        done
         kit_suspend
-        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+        # `|| …`, not `$?` on the next line: a script under `set -e` would end at a refused password with the copy left.
+        kit_root_code=0
+        sudo env "$@" sh "$kit_root_copy" || kit_root_code=$?
+        rm -f "$kit_root_copy"
+        exit "$kit_root_code"
     fi
     kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
 }

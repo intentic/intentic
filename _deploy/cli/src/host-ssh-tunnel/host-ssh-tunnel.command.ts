@@ -21,7 +21,7 @@ export const hostSshTunnel = buildCommand<{ zone?: string }>({
     },
     async func(this: CommandContext, flags: { zone?: string }) {
         const config = loadConfig();
-        const { cloudflareApiToken: apiToken, connectToken, hostName } = config;
+        const { cloudflareApiToken: apiToken, connectToken, hostName, hostId } = config;
         if (apiToken === "") {
             throw new Error("set CLOUDFLARE_API_TOKEN");
         }
@@ -36,6 +36,8 @@ export const hostSshTunnel = buildCommand<{ zone?: string }>({
             apiToken,
             connectToken,
             hostName,
+            // HOST_ID (a server-connect code's answer) names the tunnel; without it, the digest of CONNECT_TOKEN does.
+            ...(hostId !== "" ? { id: hostId } : {}),
             ...(zone !== undefined && zone !== "" ? { zone } : {}),
             log: (message) => this.process.stderr.write(`${message}\n`),
         });

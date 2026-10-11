@@ -322,25 +322,37 @@ function Invoke-IntenticScript {
 # <<< end of generated kit.ps1
 
 # >>> generated from _site/site/scripts-kit/redeem.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# Invoke-IntenticRedeem <host> <code> <kind>: spend a single-use code at the sandbox that minted it, before anything is
-# downloaded, so a dead code fails in a second. The answer is `KEY=value` lines
-# (_sandbox/sandbox/src/peers/redeem-codes.ts), returned as a hashtable of the keys a run started from the environment
-# reads: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER, CONNECT_TOKEN, ZONE, HOST_NAME. Only those keys are taken, and
-# they never pass through $env:, so no token outlives the run in the person's shell.
+# Assert-IntenticCode <host> <code>: the command's own shape, checked before anything is downloaded, so a mangled one
+# fails in a second. The code itself is spent later (below), after the steps that need none of what it stands for.
+function Assert-IntenticCode {
+    param([string]$Server, [string]$Code)
+    if ($Server -notmatch '^[A-Za-z0-9.-]+$') { Stop-Intentic 'This command is not complete.' "$Server is not the address of a sandbox." 'get a new command from the card it came from.' }
+    if ($Code -notmatch '^[A-Za-z0-9-]+$') { Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.' }
+}
+
+# Invoke-IntenticRedeem <host> <code> <kind> [name]: spend a single-use code at the sandbox that minted it. A spent code
+# cannot be spent again, so a script redeems it AFTER the steps that need none of what it stands for (a download, a
+# question, a token check): one of those failing leaves the code valid, and "run the same command again" stays true. The
+# answer is `KEY=value` lines (_sandbox/sandbox/src/peers/redeem-codes.ts), returned as a hashtable of the keys a run
+# started from the environment reads: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER, CONNECT_TOKEN, ZONE, HOST_NAME,
+# HOST_ID. Only those keys are taken, and they never pass through $env:, so no token outlives the run in the person's
+# shell. -Name is the name a server will take if its code was minted without one, for the sandbox to answer that name's
+# HOST_ID (the id its tunnel and container are named for); only a settled name (a-z, 0-9, _) is sent.
 #
 # Invoke-WebRequest -UseBasicParsing works on 5.1 and 7 alike. A 404 or 429 throws on both, with the body read back
 # from the exception's response: 5.1 hands a WebResponse whose stream is still readable, 7 an HttpResponseMessage and
 # the body in ErrorDetails.
 function Invoke-IntenticRedeem {
-    param([string]$Server, [string]$Code, [string]$Kind)
-    if ($Server -notmatch '^[A-Za-z0-9.-]+$') { Stop-Intentic 'This command is not complete.' "$Server is not the address of a sandbox." 'get a new command from the card it came from.' }
-    if ($Code -notmatch '^[A-Za-z0-9-]+$') { Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.' }
+    param([string]$Server, [string]$Code, [string]$Kind, [string]$Name)
+    Assert-IntenticCode -Server $Server -Code $Code
     Write-IntenticStep '' "checking the code with $Server..." "Check the code for $Server"
+    $query = ''
+    if ($Name -cmatch '^[a-z0-9_]+$') { $query = "?name=$Name" }
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $status = 0
     $body = ''
     try {
-        $reply = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec 30 -Uri "https://$Server/system/redeem/$Code" -ErrorAction Stop
+        $reply = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec 30 -Uri "https://$Server/system/redeem/$Code$query" -ErrorAction Stop
         $status = [int]$reply.StatusCode
         $body = if ($reply.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($reply.Content) } else { [string]$reply.Content }
     } catch {
@@ -359,17 +371,20 @@ function Invoke-IntenticRedeem {
         }
     }
     if ($status -eq 404 -or $status -eq 429) {
-        # One sentence from the sandbox, "<what happened>: <what to do>".
-        $said = "$((($body -split "`n") | Select-Object -First 1))".Trim()
+        # The sandbox answers one sentence, "<what happened>: <what to do>". Anything else (a proxy's or a CDN's HTML
+        # page, several lines, a wall of text) is not something to print as a headline.
+        $said = "$body".Trim()
+        if ($said -match '[<\r\n]' -or $said.Length -gt 200) { $said = '' }
         $at = $said.IndexOf(': ')
         if ($at -gt 0) { Stop-Intentic ($said.Substring(0, $at) + '.') '' $said.Substring($at + 2) }
-        if (-not $said) { $said = 'This code is not valid any more.' }
-        Stop-Intentic $said '' 'get a new command from the card it came from.'
+        if ($said) { Stop-Intentic $said '' 'get a new command from the card it came from.' }
+        if ($status -eq 429) { Stop-Intentic 'The code could not be checked.' "$Server has had too many tries from this device in the last minute." 'wait a minute, then run the same command again.' }
+        Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.'
     }
     if ($status -eq 0) { Stop-Intentic 'The code could not be checked.' "$Server did not answer from this device." 'check the network, then run the same command again.' }
     if ($status -ne 200) { Stop-Intentic 'The code could not be checked.' "$Server answered with HTTP $status." 'run the same command again in a minute.' }
     $taken = @{}
-    $kept = @('KIND', 'SANDBOX_URL', 'PAIR_TOKEN', 'SYNC_DIR', 'TAKEOVER', 'CONNECT_TOKEN', 'ZONE', 'HOST_NAME')
+    $kept = @('KIND', 'SANDBOX_URL', 'PAIR_TOKEN', 'SYNC_DIR', 'TAKEOVER', 'CONNECT_TOKEN', 'ZONE', 'HOST_NAME', 'HOST_ID')
     foreach ($line in ($body -split "`r?`n")) {
         $at = $line.IndexOf('=')
         if ($at -gt 0 -and $kept -contains $line.Substring(0, $at)) { $taken[$line.Substring(0, $at)] = $line.Substring($at + 1) }
@@ -474,6 +489,9 @@ function Get-IntenticPublishedVersion {
 # A range the other end ignores is the hazard worth naming: the answer is then the WHOLE file with a 200, and
 # appending that to a partial produces a corrupt binary that no retry would ever fix. So the status is checked
 # rather than assumed, and anything but 206 starts the file again from zero.
+#
+# Returns $true when the other end says the partial already holds every byte (416 to a resumed request: a run that
+# finished the download and stopped before the swap), and $false after a transfer.
 function Copy-IntenticFile {
     param([string]$Uri, [string]$Path)
     $have = 0
@@ -483,7 +501,20 @@ function Copy-IntenticFile {
     $ask.Timeout = 30000
     $ask.ReadWriteTimeout = 120000
     if ($have -gt 0) { $ask.AddRange($have) }
-    $answer = $ask.GetResponse()
+    try {
+        $answer = $ask.GetResponse()
+    } catch {
+        # A .NET method's failure arrives wrapped (MethodInvocationException), so the WebException is looked for.
+        $failure = $_.Exception
+        while ($null -ne $failure -and -not ($failure -is [System.Net.WebException])) { $failure = $failure.InnerException }
+        $refused = $null
+        if ($null -ne $failure) { $refused = $failure.Response }
+        if ($have -gt 0 -and $null -ne $refused -and [int]$refused.StatusCode -eq 416) {
+            $refused.Close()
+            return $true
+        }
+        throw
+    }
     if ($have -gt 0 -and $answer.StatusCode -ne [System.Net.HttpStatusCode]::PartialContent) {
         $answer.Close()
         Remove-Item -Force -ErrorAction SilentlyContinue $Path
@@ -530,6 +561,7 @@ function Copy-IntenticFile {
         $answer.Close()
         if ($live -and $shown -ge 0) { Write-Host '' }
     }
+    return $false
 }
 
 # Put a first agent at $Dest. Everything past this - keeping it current, PATH, the launcher stub - is the
@@ -565,19 +597,31 @@ function Install-IntenticAgent {
         ForEach-Object { Remove-Item -Force -ErrorAction SilentlyContinue $_.FullName }
     $named = if ($published) { " $published" } else { '' }
     Write-IntenticStep '' "downloading intentic-machine$named..." "Download intentic-machine$named"
-    # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
-    Suspend-IntenticLine
-    $fetched = $true
-    $why = ''
-    try {
-        Copy-IntenticFile -Uri $url -Path $part
-    } catch {
-        $fetched = $false
-        $why = $_.Exception.Message
-    }
-    Resume-IntenticLine
-    if (-not $fetched) {
-        Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
+        Suspend-IntenticLine
+        $fetched = $true
+        $whole = $false
+        $why = ''
+        try {
+            $whole = Copy-IntenticFile -Uri $url -Path $part
+        } catch {
+            $fetched = $false
+            $why = $_.Exception.Message
+        }
+        Resume-IntenticLine
+        if (-not $fetched) {
+            Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+        }
+        # A partial the other end calls finished is used when the probe below passes it. One that does not pass is
+        # bytes no resume can mend (the 416 would come back on every run), so it is dropped and fetched again, once.
+        if ($whole -and $attempt -eq 1 -and -not (Get-IntenticAgentVersion -Path $part)) {
+            Remove-Item -Force -ErrorAction SilentlyContinue $part
+            continue
+        }
+        break
     }
     if (-not (Get-IntenticAgentVersion -Path $part)) {
         Remove-Item -Force -ErrorAction SilentlyContinue $part
@@ -634,15 +678,12 @@ Invoke-IntenticScript {
     $remoteDir = $env:SYNC_REMOTE_DIR
     $project = $env:SYNC_PROJECT
     $projectsHost = $env:SYNC_PROJECTS_HOST
-    # The code is spent first, so a dead one fails in a second, before anything is downloaded.
-    if ($Sandbox -or $Code) {
-        $granted = Invoke-IntenticRedeem -Server $Sandbox -Code $Code -Kind $route
-        $url = $granted['SANDBOX_URL']
-        $pair = $granted['PAIR_TOKEN']
-        if ($granted['SYNC_DIR']) { $dir = $granted['SYNC_DIR'] }
-        if ($granted['TAKEOVER']) { $takeover = $granted['TAKEOVER'] }
-    }
-    if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
+    # A mangled command, or an env-var one missing a value, fails before the download. The code itself is spent after
+    # it (below), so a download that breaks leaves it valid for the same command.
+    $redeeming = [bool]($Sandbox -or $Code)
+    if ($redeeming) {
+        Assert-IntenticCode -Server $Sandbox -Code $Code
+    } elseif ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
         Stop-Intentic 'Desktop sync could not be set up.' "the command is missing the sandbox's address or its pairing token." 'copy the command again from the Desktop sync card.'
     }
     # This device's own sandbox holds no folder: folders attach to it later, each as /work/<name>.
@@ -667,6 +708,17 @@ Invoke-IntenticScript {
             Stop-Intentic 'Desktop sync could not be set up.' "intentic-machine $version on this device cannot set up this device's own sandbox yet, so folders cannot attach to it." 'update the desktop app, or run this again once a newer agent is released.'
         }
         Stop-Intentic 'Desktop sync could not be set up.' "intentic-machine $version on this device does not understand $($speaks -join ' ') yet." 'update the desktop app, or run this again once a newer agent is released.'
+    }
+
+    if ($redeeming) {
+        $granted = Invoke-IntenticRedeem -Server $Sandbox -Code $Code -Kind $route
+        $url = $granted['SANDBOX_URL']
+        $pair = $granted['PAIR_TOKEN']
+        if ($granted['SYNC_DIR']) { $dir = $granted['SYNC_DIR'] }
+        if ($granted['TAKEOVER']) { $takeover = $granted['TAKEOVER'] }
+        if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
+            Stop-Intentic 'Desktop sync could not be set up.' "the sandbox's answer is missing its address or the pairing token." 'get a new command from the Desktop sync card.'
+        }
     }
 
     $syncArgs = @($route, 'setup', '--url', $url, '--pair', $pair)

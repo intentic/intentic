@@ -39,7 +39,8 @@ set -eu
 #   kit_stop <headline> [problem] [fix] [code]
 #                                            stop: the running step settles as failed, the stop block goes to stderr,
 #                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix>     run again through sudo when not root (see below)
+#   kit_need_root <why> <headline> <fix> [names]
+#                                            run again through sudo when not root, keeping the named settings (see below)
 #   kit_confirm <question> <consequence> <flag>
 #                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
 #                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
@@ -263,48 +264,99 @@ kit_confirm() {
     kit_stop "Nothing was changed." "nobody is at this terminal to answer: $1" "run it again with $3"
 }
 
-# kit_need_root <why> <headline> <fix>: elevation, asked for at the step that needs it and never baked into the command.
-# Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came from):
-# say why in one sentence and run the same script again through sudo. Plain `sudo sh`, not `sudo -E`, which many
-# sudoers refuse: the URL carries the arguments, and a token the person exported is asked for again on the terminal.
+# kit_need_root <why> <headline> <fix> [names]: elevation, asked for at the step that needs it and never baked into the
+# command. Root already: nothing to do. Served by the site's Worker (INTENTIC_SCRIPT_URL, the URL this very script came
+# from): say why in one sentence, fetch the same script again into a file, and run that through sudo. The copy carries
+# the arguments (the Worker writes them into it). Not `sudo -E`, which many sudoers refuse, and sudo's env_reset drops
+# everything else, so `sudo env` hands over by name the settings that are set: the kit's own and the script's [names]
+# (consent like INSTALL_DOCKER=1, which a headless fix tells the person to set). Tokens are not among them: a command
+# line is what ps and sudo's log show, so a token the person exported is asked for again on the terminal.
+# INTENTIC_ELEVATED=1 marks the copy sudo runs; a copy that is still not root stops instead of asking sudo again.
 # Otherwise there is no copy to run again, so stop with the fix. Called before anything is spent (a code, a download).
 kit_need_root() {
     [ "$(id -u)" != 0 ] || return 0
+    if [ "${INTENTIC_ELEVATED:-}" = 1 ]; then
+        kit_stop "$2" "sudo ran this script again, and it is still not root." "$3"
+    fi
     if [ -n "${INTENTIC_SCRIPT_URL:-}" ] && command -v sudo >/dev/null 2>&1; then
+        kit_root_headline="$2"
+        kit_root_names="INTENTIC_UI INTENTIC_PLAIN NO_COLOR FORCE_COLOR INTENTIC_NO_PROMPT IC_BIN IC_URL IC_VERSION INTENTIC_IC_PATH ${4:-}"
         kit_say "$1"
+        kit_root_copy="$(mktemp 2>/dev/null)" || kit_root_copy=""
+        # An empty answer is a failure too: `sudo sh` would read nothing, run nothing, and exit 0.
+        if [ -z "$kit_root_copy" ] || ! curl -fsSL "$INTENTIC_SCRIPT_URL" -o "$kit_root_copy" 2>/dev/null || [ ! -s "$kit_root_copy" ]; then
+            [ -z "$kit_root_copy" ] || rm -f "$kit_root_copy"
+            kit_root_host="${INTENTIC_SCRIPT_URL#*://}"
+            kit_stop "$kit_root_headline" "it needs administrator rights, and ${kit_root_host%%/*} did not answer when it was fetched again to run through sudo." "check the network, then run the same command again."
+        fi
+        set -- INTENTIC_ELEVATED=1
+        for kit_root_name in $kit_root_names; do
+            eval "[ -z \"\${$kit_root_name+x}\" ] || set -- \"\$@\" \"$kit_root_name=\${$kit_root_name}\""
+        done
         kit_suspend
-        exec sh -c 'curl -fsSL "$1" | sudo sh' sh "$INTENTIC_SCRIPT_URL"
+        # `|| …`, not `$?` on the next line: a script under `set -e` would end at a refused password with the copy left.
+        kit_root_code=0
+        sudo env "$@" sh "$kit_root_copy" || kit_root_code=$?
+        rm -f "$kit_root_copy"
+        exit "$kit_root_code"
     fi
     kit_stop "$2" "it needs administrator rights, and this run is not root." "$3"
 }
 # <<< end of generated kit.sh
 
 # >>> generated from _site/site/scripts-kit/redeem.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# kit_redeem <host> <code> <kind>: spend a single-use code at the sandbox that minted it, before anything is downloaded,
-# so a dead code fails in a second. The answer is `KEY=value` lines (_sandbox/sandbox/src/peers/redeem-codes.ts), read
-# into the very variables a run started from the environment uses: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER,
-# CONNECT_TOKEN, ZONE, HOST_NAME. Only those keys are taken, and nothing is evaluated.
-kit_redeem() {
+# kit_redeem_check <host> <code>: the command's own shape, checked before anything is downloaded, so a mangled one fails
+# in a second. The code itself is spent later (below), after the steps that need none of what it stands for.
+kit_redeem_check() {
     case "$1" in
         "" | *[!A-Za-z0-9.-]*) kit_stop "This command is not complete." "$1 is not the address of a sandbox." "get a new command from the card it came from." ;;
     esac
     case "$2" in
         "" | *[!A-Za-z0-9-]*) kit_stop "This code is not valid any more." "" "get a new command from the card it came from." ;;
     esac
+}
+
+# kit_redeem <host> <code> <kind> [name]: spend a single-use code at the sandbox that minted it. A spent code cannot be
+# spent again, so a script redeems it AFTER the steps that need none of what it stands for (a download, a question, a
+# token check): one of those failing leaves the code valid, and "run the same command again" stays true. The answer is
+# `KEY=value` lines (_sandbox/sandbox/src/peers/redeem-codes.ts), read into the very variables a run started from the
+# environment uses: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER, CONNECT_TOKEN, ZONE, HOST_NAME, HOST_ID. Only those
+# keys are taken, and nothing is evaluated. [name] is the name a server will take if its code was minted without one,
+# for the sandbox to answer that name's HOST_ID (the id its tunnel is named for); only a settled name (a-z, 0-9, _) is
+# sent.
+kit_redeem() {
+    kit_redeem_check "$1" "$2"
     kit_step "" "checking the code with $1…" "Check the code for $1"
-    kit_reply="$(curl -s -X POST --max-time 30 -w '\n%{http_code}' "https://$1/system/redeem/$2" 2>/dev/null || true)"
+    kit_query=""
+    case "${4:-}" in
+        "" | *[!a-z0-9_]*) ;;
+        *) kit_query="?name=$4" ;;
+    esac
+    kit_reply="$(curl -s -X POST --max-time 30 -w '\n%{http_code}' "https://$1/system/redeem/$2$kit_query" 2>/dev/null || true)"
     kit_status="$(printf '%s\n' "$kit_reply" | tail -n 1)"
-    kit_body="$(printf '%s\n' "$kit_reply" | sed '$d')"
+    # Carriage returns off: a CRLF answer would leave one on every value, and KIND would never match.
+    kit_body="$(printf '%s\n' "$kit_reply" | sed '$d' | tr -d '\r')"
     case "$kit_status" in
         200) ;;
         404 | 429)
-            # One sentence from the sandbox, "<what happened>: <what to do>".
-            kit_said="$(printf '%s\n' "$kit_body" | head -n 1)"
+            # The sandbox answers one sentence, "<what happened>: <what to do>". Anything else (a proxy's or a CDN's HTML
+            # page, several lines, a wall of text) is not something to print as a headline.
+            kit_said="$kit_body"
+            kit_nl='
+'
+            case "$kit_said" in
+                *"<"* | *"$kit_nl"*) kit_said="" ;;
+            esac
+            [ "${#kit_said}" -le 200 ] || kit_said=""
             case "$kit_said" in
                 *": "*) kit_stop "${kit_said%%: *}." "" "${kit_said#*: }" ;;
-                "") kit_stop "This code is not valid any more." "" "get a new command from the card it came from." ;;
+                "") ;;
                 *) kit_stop "$kit_said" "" "get a new command from the card it came from." ;;
             esac
+            if [ "$kit_status" = 429 ]; then
+                kit_stop "The code could not be checked." "$1 has had too many tries from this device in the last minute." "wait a minute, then run the same command again."
+            fi
+            kit_stop "This code is not valid any more." "" "get a new command from the card it came from."
             ;;
         000 | "") kit_stop "The code could not be checked." "$1 did not answer from this device." "check the network, then run the same command again." ;;
         *) kit_stop "The code could not be checked." "$1 answered with HTTP $kit_status." "run the same command again in a minute." ;;
@@ -321,6 +373,7 @@ kit_redeem() {
             CONNECT_TOKEN=*) CONNECT_TOKEN="$kit_value" ;;
             ZONE=*) ZONE="$kit_value" ;;
             HOST_NAME=*) HOST_NAME="$kit_value" ;;
+            HOST_ID=*) HOST_ID="$kit_value" ;;
         esac
     done <<KIT_ANSWER
 $kit_body
@@ -450,20 +503,31 @@ case "$arch" in
     *) kit_stop "This device could not be connected." "its processor is $arch, and the device agent is built for amd64 and arm64." ;;
 esac
 
-# The Worker's /device/<host>/<code> passes the pair as arguments: the code is spent first, so a dead one fails in a
-# second, and what it stood for lands in the variables an env-var run sets itself.
+# The Worker's /device/<host>/<code> passes the pair as arguments. A mangled command, or an env-var one missing a value,
+# fails before the download; the code itself is spent after it, so a download that breaks leaves it valid for the same
+# command. What it stood for lands in the variables an env-var run sets itself.
+if [ $# -ge 2 ]; then
+    kit_redeem_check "$1" "$2"
+elif [ -z "${SANDBOX_URL:-}" ] || [ -z "${PAIR_TOKEN:-}" ]; then
+    kit_stop "This device could not be connected." "the command is missing the sandbox's address or its pairing token." "copy the command again from the device's card in your sandbox."
+fi
+
+agent_fetch
+
 if [ $# -ge 2 ]; then
     kit_redeem "$1" "$2" "$ROUTE"
 fi
 URL="${SANDBOX_URL:-}"
 PAIR="${PAIR_TOKEN:-}"
 if [ -z "$URL" ] || [ -z "$PAIR" ]; then
-    kit_stop "This device could not be connected." "the command is missing the sandbox's address or its pairing token." "copy the command again from the device's card in your sandbox."
+    kit_stop "This device could not be connected." "the sandbox's answer is missing its address or the pairing token." "get a new command from the device's card in your sandbox."
 fi
-
-agent_fetch
 kit_suspend
 
-# BIN may be a multi-word AGENT_BIN dev command (intentional word-split); a real path runs directly.
-# shellcheck disable=SC2086
-exec $BIN "$ROUTE" setup --url "$URL" --pair "$PAIR"
+# AGENT_BIN is a dev command (`node /path/to/cli.js`), split into its words on purpose; the installed agent is one path,
+# quoted, so a home folder with a space in it still runs.
+if [ -n "${AGENT_BIN:-}" ]; then
+    # shellcheck disable=SC2086
+    exec $AGENT_BIN "$ROUTE" setup --url "$URL" --pair "$PAIR"
+fi
+exec "$BIN" "$ROUTE" setup --url "$URL" --pair "$PAIR"

@@ -133,6 +133,28 @@ describe("finding the project by its folder", () => {
             exitCode: 1,
         });
     });
+    it("keeps an acronym that opens a thrown reason as it was written", async () => {
+        // Lowering the first letter to run on from the headline turned a runtime's "JSON Parse error" into "jSON".
+        const file = join(machineDir, "sync.json");
+        const saved = await readFile(file, "utf8");
+        await writeFile(file, "{not json");
+        try {
+            const { stderr } = await cli("changes", "--dir", project);
+            expect(stderr).toStartWith("error: The sandbox's changes could not be listed.\n   problem: JSON Parse error");
+        } finally {
+            await writeFile(file, saved);
+        }
+    });
+});
+
+describe("sync restore", () => {
+    it("leaves the command a fix names as it is typed in the JSON sentence", async () => {
+        // Every part used to be capitalised, which made the fix read "Intentic-machine sync restore-points.".
+        expect(JSON.parse((await cli("restore", "--dir", project, "--json")).stdout)).toEqual({
+            ok: false,
+            error: "Nothing was restored. No restore point was named: pass --point with one of the ids the listing shows. intentic-machine sync restore-points.",
+        });
+    });
 });
 
 describe("sync restore-points", () => {

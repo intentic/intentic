@@ -367,13 +367,19 @@ test("sends a sync switch to the environment whose folder the pairing names", ()
     expect(doorRoute(DEVICE_COMMANDS["mirror-on"], facts(pc), asked("mirror-on"))).toEqual({});
 });
 
+// What follows every PowerShell install line the daemon runs on a device: the script's own exit code, or 1 for a failed
+// download, since `powershell -Command` ends 0 after a script piped into iex whatever happened inside it.
+const EXIT_TAIL = "; $ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $ok) { exit 1 }";
+
 // The same enrollment the card's copyable one-liner carries — `sync/<host>/<code>`, the code standing for the token, mode
 // and folder — spoken in the shell the device actually runs.
 test("enrolls a connected device with the sync one-liner, in its own shell's dialect", () => {
     const coded = { pairToken: "pair_abc", pairCode: "AB12CD34", mode: "sync" as const, localDir: "~/intentic/work" };
     expect(DEVICE_COMMANDS["sync-install"].line(facts(coded))).toBe("curl -fsSL https://intentic.dev/sync/work-abc.intentic.dev/AB12CD34 | sh");
+    // PowerShell's line carries its script's exit code out: under `-Command`, a script piped into iex never exits on
+    // its own, so a failed enrollment would otherwise come back as success.
     expect(DEVICE_COMMANDS["sync-install"].line(facts({ ...coded, platform: "windows" }))).toBe(
-        "irm https://intentic.dev/sync/work-abc.intentic.dev/AB12CD34 | iex",
+        `irm https://intentic.dev/sync/work-abc.intentic.dev/AB12CD34 | iex${EXIT_TAIL}`,
     );
 });
 
@@ -391,7 +397,7 @@ test("enrolls a connected device in its own shell's dialect without a code", () 
         facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" }),
     );
     expect(windows).toBe(
-        "$env:SANDBOX_URL='https://work-abc.intentic.dev'; $env:PAIR_TOKEN='pair_abc'; $env:SYNC_DIR=\"C:\\Users\\Ada\\work\"; irm https://intentic.dev/sync.ps1 | iex",
+        `$env:SANDBOX_URL='https://work-abc.intentic.dev'; $env:PAIR_TOKEN='pair_abc'; $env:SYNC_DIR="C:\\Users\\Ada\\work"; irm https://intentic.dev/sync.ps1 | iex${EXIT_TAIL}`,
     );
 });
 

@@ -1,6 +1,6 @@
 import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, type HostConnection, hostConnectionKey, userDistrosOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { agentInstallLine, codedInstallLine } from "./device-commands.js";
+import { agentInstallLine, codedInstallLine, exitingLine } from "./device-commands.js";
 import { callTool } from "./device-reports.js";
 import { hostConnectionOf } from "./host-connection.js";
 
@@ -41,9 +41,11 @@ const installLine = (target: string, url: string, token: string, code: string): 
     const native = target === HOST_NATIVE_ENVIRONMENT;
     const dialect = native ? "powershell" : "sh";
     return {
-        command:
+        command: exitingLine(
+            dialect,
             codedInstallLine(dialect, "device", url, code) ??
-            agentInstallLine(dialect, { powershell: "devicePs1", sh: "deviceSh" }, { SANDBOX_URL: `'${url}'`, PAIR_TOKEN: `'${token}'` }),
+                agentInstallLine(dialect, { powershell: "devicePs1", sh: "deviceSh" }, { SANDBOX_URL: `'${url}'`, PAIR_TOKEN: `'${token}'` }),
+        ),
         in: native ? "windows" : `wsl:${target.slice("wsl:".length)}`,
     };
 };

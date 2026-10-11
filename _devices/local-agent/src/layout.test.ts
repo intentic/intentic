@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 
+import { humanDuration } from "./ui.js";
 import {
     ASCII,
+    charWidth,
+    displayWidth,
     explain,
     fieldLines,
     footnoteLines,
     headingLines,
     itemLines,
+    liveLine,
     pickLines,
     plainFieldLines,
     plainItemLines,
@@ -21,6 +25,7 @@ import {
     sectionLines,
     settledLine,
     stopLines,
+    truncate,
     UNICODE,
     verdictLines,
     type Footnote,
@@ -39,7 +44,8 @@ const fixture = JSON.parse(
 ) as { readonly width: number; readonly cases: readonly Case[] };
 
 const draw = (shape: string, args: Record<string, unknown>): readonly string[] => {
-    const pen = { colour: false, glyphs: args["ascii"] === true ? ASCII : UNICODE, width: fixture.width };
+    // A case may draw at its own width (a narrow terminal's live line); the rest share the fixture's.
+    const pen = { colour: false, glyphs: args["ascii"] === true ? ASCII : UNICODE, width: (args["width"] as number | undefined) ?? fixture.width };
     const text = (key: string): string => (args[key] as string | undefined) ?? "";
     const tone = (): Tone => args["tone"] as Tone;
     switch (shape) {
@@ -79,6 +85,21 @@ const draw = (shape: string, args: Record<string, unknown>): readonly string[] =
             return stopLines(pen, text("message"));
         case "pick":
             return pickLines(pen, args["items"] as Footnote[]);
+        case "live":
+            return [liveLine(pen, (args["spinner"] as string | undefined) ?? pen.glyphs.spinner[0]!, args["ordinal"] as number | undefined, text("label"), text("detail"), text("took"))];
+        case "duration":
+            return [humanDuration(args["ms"] as number)];
+        case "width":
+            return [String(displayWidth(text("text")))];
+        case "widths":
+            return [
+                text("codepoints")
+                    .split(" ")
+                    .map((point) => String(charWidth(Number.parseInt(point, 16))))
+                    .join(""),
+            ];
+        case "truncate":
+            return [truncate(text("text"), args["limit"] as number)];
         default:
             throw new Error(`the fixture names a shape this renderer does not draw: ${shape}`);
     }
@@ -99,9 +120,9 @@ describe("the shared terminal layout", () => {
 
     it("keeps every timed line one column short of the edge", () => {
         // One character over and a terminal wraps it, after which a repaint lands a row late.
-        for (const entry of fixture.cases.filter((candidate) => candidate.shape === "settled" || candidate.shape === "verdict")) {
+        for (const entry of fixture.cases.filter((candidate) => ["settled", "verdict", "live"].includes(candidate.shape))) {
             for (const line of entry.lines.filter((candidate) => candidate !== "" && /\d(?:\.\d)?[sm]$/u.test(candidate))) {
-                expect([...line]).toHaveLength(fixture.width - 1);
+                expect(displayWidth(line)).toBe(((entry.args["width"] as number | undefined) ?? fixture.width) - 1);
             }
         }
     });

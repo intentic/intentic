@@ -16,7 +16,9 @@ export const SETUP_CODE_PATTERN = /^[A-Za-z0-9]{6,64}$/;
 // The leaf of the default sync folder, `~/intentic/<leaf>`: the folder itself never goes through the platform, only
 // its last segment rides the URL into the script on the person's own device.
 export const SYNC_LEAF_PATTERN = /^[a-z0-9][a-z0-9-]{0,80}$/;
-export const FIX_CODE_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+// Never a leading `-`: fix.sh hands an argument that starts with one to `ic sandbox fix` as a flag, so `/fix/--yes`
+// would run every fix without asking.
+export const FIX_CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
 export const IMAGE_HASH_PATTERN = /^[a-f0-9]{8,64}$/;
 // A sandbox-minted short code (Crockford base32, 8 characters, one optional hyphen in the middle).

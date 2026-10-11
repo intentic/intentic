@@ -37,6 +37,24 @@ export const parseVerbRoute = (pathname: string, userAgent: string | null): Verb
     return { verb, args, shell, forced: forced !== null };
 };
 
+/**
+ * A refused one-liner, said where the person will read it. `curl -fsSL … | sh` swallows a 400 (`-f` drops the body and
+ * an empty `sh` exits 0), and Windows PowerShell 5.1's `irm` shows only "(400) Bad Request", so a shell asking gets a
+ * script that prints the sentence and fails instead. Undefined for a browser, which reads the plain 400 as it is.
+ */
+export const refusalScript = (shell: OneLinerShell, error: string, userAgent: string | null): string | undefined => {
+    const fix = "copy the command again from intentic: this one was changed on the way.";
+    const quoted = (text: string): string => `'${text.replaceAll("'", shell === "ps1" ? "''" : `'\\''`)}'`;
+    if (shell === "ps1" && isPowerShell(userAgent)) {
+        // No `exit`: under `irm | iex` it would close the person's window. The code rides out as the kit's scripts do.
+        return `[Console]::Error.WriteLine(${quoted(`error: ${error}`)}); [Console]::Error.WriteLine(${quoted(`   fix:     ${fix}`)}); $global:LASTEXITCODE = 2\n`;
+    }
+    if (shell === "sh" && userAgent !== null && !userAgent.includes("Mozilla/")) {
+        return `#!/bin/sh\nprintf '%s\\n' ${quoted(`error: ${error}`)} ${quoted(`   fix:     ${fix}`)} >&2\nexit 2\n`;
+    }
+    return undefined;
+};
+
 /** The arguments checked against the verb table, or the one sentence the 400 says. */
 export const resolveVerbRequest = (request: VerbRequest): ResolvedOneLiner | { readonly error: string } => resolveOneLiner(request.verb, request.args);
 

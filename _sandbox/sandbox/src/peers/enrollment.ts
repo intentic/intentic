@@ -47,10 +47,20 @@ export interface Pairings<T> {
     // Arms a pre-agreed token from the container's env, immortal by definition, so refused once its digest is burned
     // (the ordinary case after the first boot). False means already spent, or empty, which isn't a pairing.
     readonly arm: (token: string, payload: T) => Promise<boolean>;
-    // What this pairing grants, without spending it (prunes on expiry); lets a caller with fallible work before
-    // consuming leave the token usable for a retry.
+    // What this pairing grants, without spending it (prunes on expiry). Deciding something from it is fine; holding it
+    // across an await and spending it after is not, since a second caller can peek the same token meanwhile: that is
+    // what `take` is for.
     readonly peek: (token: string) => T | undefined;
-    // Spends it: out of memory, and onto the burn list when it was replayable.
+    // Claims a pairing for work that may still fail, before anything is awaited: out of memory at once, so a second
+    // caller presenting the same token while the first is busy finds nothing. What it grants, or undefined when unknown,
+    // expired or already taken. The claim ends with `consume` (the work succeeded) or `restore` (it failed, and the
+    // token is left for a retry).
+    readonly take: (token: string) => T | undefined;
+    // Gives a taken pairing back, with the expiry it had.
+    readonly restore: (token: string) => void;
+    // Keeps a pairing until `ms` from now, never shortening it; one unknown or already expired stays that way.
+    readonly extend: (token: string, ms: number) => void;
+    // Spends it (live or taken): out of memory, and onto the burn list when it was replayable.
     readonly consume: (token: string) => Promise<void>;
     // peek + consume, for callers whose redemption can't half-fail.
     readonly redeem: (token: string) => Promise<T | undefined>;
@@ -67,6 +77,9 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
             ? undefined
             : openDocument(burns.document, burns.path, { fallback: () => ({ digests: [] }), mode: 0o600, onUnreadable: "refuse" });
     const live = new Map<string, { payload: T; expiresAt: number; replayable: boolean }>();
+    // Pairings a caller took and has not yet spent or given back. Never swept: each one ends in `consume` or `restore`,
+    // and a replayable one dropped here unspent would never reach the burn list.
+    const taken = new Map<string, { payload: T; expiresAt: number; replayable: boolean }>();
 
     const isBurned = async (token: string): Promise<boolean> => {
         if (burns === undefined || burned === undefined) {
@@ -97,8 +110,9 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
     };
 
     const consume = async (token: string): Promise<void> => {
-        const replayable = live.get(token)?.replayable === true;
+        const replayable = (live.get(token) ?? taken.get(token))?.replayable === true;
         live.delete(token);
+        taken.delete(token);
         if (replayable) {
             await burn(token);
         }
@@ -124,6 +138,28 @@ export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => 
             return true;
         },
         peek,
+        take: (token) => {
+            const pairing = peek(token) === undefined ? undefined : live.get(token);
+            if (pairing === undefined) {
+                return undefined;
+            }
+            live.delete(token);
+            taken.set(token, pairing);
+            return pairing.payload;
+        },
+        restore: (token) => {
+            const pairing = taken.get(token);
+            if (pairing !== undefined) {
+                taken.delete(token);
+                live.set(token, pairing);
+            }
+        },
+        extend: (token, ms) => {
+            const pairing = live.get(token) ?? taken.get(token);
+            if (pairing !== undefined && pairing.expiresAt >= Date.now()) {
+                pairing.expiresAt = Math.max(pairing.expiresAt, Date.now() + ms);
+            }
+        },
         consume,
         redeem: async (token) => {
             const pairing = peek(token) === undefined ? undefined : live.get(token);

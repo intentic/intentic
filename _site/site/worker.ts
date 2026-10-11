@@ -1,7 +1,7 @@
 import { INSTALL_SCRIPTS, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
-import { injectPs1, injectSh, parseVerbRoute, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
+import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
 
 // Vanity install-script paths, from @intentic/constants' table, which the app also writes into its one-liners.
 const SCRIPTS: Record<string, string> = Object.fromEntries(Object.values(INSTALL_SCRIPTS).map((script) => [script.path, script.file]));
@@ -286,9 +286,10 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
     const file = SCRIPTS[vanity];
     if (file === undefined) {
         // The one-liner routes (`/<verb>/<arg>`); the flat paths above keep answering exactly as before.
-        const verbRoute = parseVerbRoute(url.pathname, request.headers.get("user-agent"));
+        const userAgent = request.headers.get("user-agent");
+        const verbRoute = parseVerbRoute(url.pathname, userAgent);
         if (verbRoute !== undefined) {
-            return serveVerb(verbRoute, url, env);
+            return serveVerb(verbRoute, url, env, userAgent);
         }
         return permanentSlash(await env.ASSETS.fetch(request), url);
     }
@@ -299,10 +300,13 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
 // A one-liner's script, per verb and shell, never cached: the body differs by User-Agent and carries the argument.
 const VERB_HEADERS = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", vary: "user-agent" };
 
-async function serveVerb(verbRoute: VerbRequest, url: URL, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+async function serveVerb(verbRoute: VerbRequest, url: URL, env: { ASSETS: { fetch: typeof fetch } }, userAgent: string | null): Promise<Response> {
     const resolved = resolveVerbRequest(verbRoute);
     if ("error" in resolved) {
-        return new Response(`${resolved.error}\n`, { status: 400, headers: VERB_HEADERS });
+        const script = refusalScript(verbRoute.shell, resolved.error, userAgent);
+        return script === undefined
+            ? new Response(`${resolved.error}\n`, { status: 400, headers: VERB_HEADERS })
+            : new Response(script, { status: 200, headers: VERB_HEADERS });
     }
     const file = verbRoute.shell === "ps1" ? resolved.files.ps1 : resolved.files.sh;
     const asset = await env.ASSETS.fetch(new Request(new URL(`/scripts/${file}`, url)));

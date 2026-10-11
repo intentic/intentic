@@ -11,9 +11,9 @@
   authed by the connection token). It does NOT create or recreate a sandbox; that already exists from setup.
 
   The Infra screen hands out a single-use code (-Sandbox <host> -Code <code>): this script spends it at
-  https://<host>/system/redeem/ for the sandbox's address, the connection token, the zone and the server's name, none
-  of which pass through $env:. The Cloudflare token never rides the command: with no CF_TOKEN set, this script asks for
-  it, once, without echoing it, and does not store it. A tunnel minted elsewhere can be handed in instead, as
+  https://<host>/system/redeem/ for the sandbox's address, the connection token, the zone and the server's name and id,
+  none of which pass through $env:. The Cloudflare token never rides the command: with no CF_TOKEN set, this script
+  asks for it, once, without echoing it, and does not store it. A tunnel minted elsewhere can be handed in instead, as
   HOST_SSH_TUNNEL_TOKEN and HOST_SSH_HOSTNAME.
 
   Reboot survival is weaker than a Linux server (no systemd): the containers are --restart unless-stopped, so they come
@@ -334,25 +334,37 @@ function Invoke-IntenticScript {
 # <<< end of generated kit.ps1
 
 # >>> generated from _site/site/scripts-kit/redeem.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# Invoke-IntenticRedeem <host> <code> <kind>: spend a single-use code at the sandbox that minted it, before anything is
-# downloaded, so a dead code fails in a second. The answer is `KEY=value` lines
-# (_sandbox/sandbox/src/peers/redeem-codes.ts), returned as a hashtable of the keys a run started from the environment
-# reads: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER, CONNECT_TOKEN, ZONE, HOST_NAME. Only those keys are taken, and
-# they never pass through $env:, so no token outlives the run in the person's shell.
+# Assert-IntenticCode <host> <code>: the command's own shape, checked before anything is downloaded, so a mangled one
+# fails in a second. The code itself is spent later (below), after the steps that need none of what it stands for.
+function Assert-IntenticCode {
+    param([string]$Server, [string]$Code)
+    if ($Server -notmatch '^[A-Za-z0-9.-]+$') { Stop-Intentic 'This command is not complete.' "$Server is not the address of a sandbox." 'get a new command from the card it came from.' }
+    if ($Code -notmatch '^[A-Za-z0-9-]+$') { Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.' }
+}
+
+# Invoke-IntenticRedeem <host> <code> <kind> [name]: spend a single-use code at the sandbox that minted it. A spent code
+# cannot be spent again, so a script redeems it AFTER the steps that need none of what it stands for (a download, a
+# question, a token check): one of those failing leaves the code valid, and "run the same command again" stays true. The
+# answer is `KEY=value` lines (_sandbox/sandbox/src/peers/redeem-codes.ts), returned as a hashtable of the keys a run
+# started from the environment reads: SANDBOX_URL, PAIR_TOKEN, SYNC_DIR, TAKEOVER, CONNECT_TOKEN, ZONE, HOST_NAME,
+# HOST_ID. Only those keys are taken, and they never pass through $env:, so no token outlives the run in the person's
+# shell. -Name is the name a server will take if its code was minted without one, for the sandbox to answer that name's
+# HOST_ID (the id its tunnel and container are named for); only a settled name (a-z, 0-9, _) is sent.
 #
 # Invoke-WebRequest -UseBasicParsing works on 5.1 and 7 alike. A 404 or 429 throws on both, with the body read back
 # from the exception's response: 5.1 hands a WebResponse whose stream is still readable, 7 an HttpResponseMessage and
 # the body in ErrorDetails.
 function Invoke-IntenticRedeem {
-    param([string]$Server, [string]$Code, [string]$Kind)
-    if ($Server -notmatch '^[A-Za-z0-9.-]+$') { Stop-Intentic 'This command is not complete.' "$Server is not the address of a sandbox." 'get a new command from the card it came from.' }
-    if ($Code -notmatch '^[A-Za-z0-9-]+$') { Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.' }
+    param([string]$Server, [string]$Code, [string]$Kind, [string]$Name)
+    Assert-IntenticCode -Server $Server -Code $Code
     Write-IntenticStep '' "checking the code with $Server..." "Check the code for $Server"
+    $query = ''
+    if ($Name -cmatch '^[a-z0-9_]+$') { $query = "?name=$Name" }
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $status = 0
     $body = ''
     try {
-        $reply = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec 30 -Uri "https://$Server/system/redeem/$Code" -ErrorAction Stop
+        $reply = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec 30 -Uri "https://$Server/system/redeem/$Code$query" -ErrorAction Stop
         $status = [int]$reply.StatusCode
         $body = if ($reply.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($reply.Content) } else { [string]$reply.Content }
     } catch {
@@ -371,17 +383,20 @@ function Invoke-IntenticRedeem {
         }
     }
     if ($status -eq 404 -or $status -eq 429) {
-        # One sentence from the sandbox, "<what happened>: <what to do>".
-        $said = "$((($body -split "`n") | Select-Object -First 1))".Trim()
+        # The sandbox answers one sentence, "<what happened>: <what to do>". Anything else (a proxy's or a CDN's HTML
+        # page, several lines, a wall of text) is not something to print as a headline.
+        $said = "$body".Trim()
+        if ($said -match '[<\r\n]' -or $said.Length -gt 200) { $said = '' }
         $at = $said.IndexOf(': ')
         if ($at -gt 0) { Stop-Intentic ($said.Substring(0, $at) + '.') '' $said.Substring($at + 2) }
-        if (-not $said) { $said = 'This code is not valid any more.' }
-        Stop-Intentic $said '' 'get a new command from the card it came from.'
+        if ($said) { Stop-Intentic $said '' 'get a new command from the card it came from.' }
+        if ($status -eq 429) { Stop-Intentic 'The code could not be checked.' "$Server has had too many tries from this device in the last minute." 'wait a minute, then run the same command again.' }
+        Stop-Intentic 'This code is not valid any more.' '' 'get a new command from the card it came from.'
     }
     if ($status -eq 0) { Stop-Intentic 'The code could not be checked.' "$Server did not answer from this device." 'check the network, then run the same command again.' }
     if ($status -ne 200) { Stop-Intentic 'The code could not be checked.' "$Server answered with HTTP $status." 'run the same command again in a minute.' }
     $taken = @{}
-    $kept = @('KIND', 'SANDBOX_URL', 'PAIR_TOKEN', 'SYNC_DIR', 'TAKEOVER', 'CONNECT_TOKEN', 'ZONE', 'HOST_NAME')
+    $kept = @('KIND', 'SANDBOX_URL', 'PAIR_TOKEN', 'SYNC_DIR', 'TAKEOVER', 'CONNECT_TOKEN', 'ZONE', 'HOST_NAME', 'HOST_ID')
     foreach ($line in ($body -split "`r?`n")) {
         $at = $line.IndexOf('=')
         if ($at -gt 0 -and $kept -contains $line.Substring(0, $at)) { $taken[$line.Substring(0, $at)] = $line.Substring($at + 1) }
@@ -443,6 +458,15 @@ function Add-IntenticPath {
 # then-rename: overwriting a running executable fails, and a half-downloaded binary must never be what runs. A pinned
 # run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
 # release asked for.
+# Test-IntenticIc: the file starts and answers --version as ic does ('ic <version>'). A download that answered 200 can be
+# a captive portal's login page or an empty body; Windows refuses to start either, which lands in the catch.
+function Test-IntenticIc([string]$Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $said = ''
+    try { $said = (& $Path --version | Out-String).Trim() } catch { $said = '' }
+    return ($said -like 'ic *')
+}
+
 function Get-IntenticIc {
     $Ic = $env:IC_BIN
     if ($Ic) { return $Ic }
@@ -454,7 +478,10 @@ function Get-IntenticIc {
     # Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the tray for days
     # put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions, major.minor.patch
     # first, a pre-release below its own release; an installed ic whose answer is not a version is replaced.
-    $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
+    $IcHave = ''
+    if ($env:IC_VERSION -and (Test-Path $IcDest)) {
+        try { $IcHave = (& $IcDest --version | Out-String).Trim() } catch { $IcHave = '' }
+    }
     $IcCurrent = $false
     if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)$') {
         $IcHaveCore = [version]$Matches[1]
@@ -496,26 +523,34 @@ function Get-IntenticIc {
             # five-megabyte download take several seconds instead of a fraction of one.
             $ProgressPreference = 'SilentlyContinue'
             $IcFetched = $false
+            $IcWhy = "$(([uri]$IcBase).Host) did not answer from this device."
+            # Named .exe so it can be started for the probe below; only a probed download replaces the installed ic.
+            $IcNew = "$IcDir\ic.download.exe"
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp" -ErrorAction Stop
-                Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
-                $IcFetched = $true
+                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile $IcNew -ErrorAction Stop
+                if (Test-IntenticIc $IcNew) {
+                    Move-Item -Force $IcNew $IcDest -ErrorAction Stop
+                    $IcFetched = $true
+                } else {
+                    $IcWhy = 'what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture.'
+                }
             } catch {
-                Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+                $IcFetched = $false
             }
+            Remove-Item -Force $IcNew -ErrorAction SilentlyContinue
             if ($IcFetched) {
                 $Ic = $IcDest
                 Add-IntenticPath -Folder $IcDir -Command 'ic'
-            } elseif (Test-Path $IcDest) {
+            } elseif (Test-IntenticIc $IcDest) {
                 Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $IcDest runs instead."
                 $Ic = $IcDest
             } else {
                 $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
-                if ($IcInstalled) {
+                if ($IcInstalled -and (Test-IntenticIc $IcInstalled.Source)) {
                     Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $($IcInstalled.Source) runs instead."
                     $Ic = $IcInstalled.Source
                 } else {
-                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' "$(([uri]$IcBase).Host) did not answer from this device." 'check the network, then run the same command again.'
+                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' $IcWhy 'check the network, then run the same command again.'
                 }
             }
         }
@@ -594,14 +629,10 @@ Invoke-IntenticScript {
     if (-not $ConnectToken) { $ConnectToken = $env:CONNECT_TOKEN }
     if (-not $HostName) { $HostName = $env:HOST_NAME }
     $Zone = $env:ZONE
-    # The code is spent first, so a dead one fails in a second, before anything is downloaded.
-    if ($Sandbox -or $Code) {
-        $granted = Invoke-IntenticRedeem -Server $Sandbox -Code $Code -Kind 'server'
-        $SandboxUrl = $granted['SANDBOX_URL']
-        $ConnectToken = $granted['CONNECT_TOKEN']
-        if ($granted['ZONE']) { $Zone = $granted['ZONE'] }
-        if ($granted['HOST_NAME']) { $HostName = $granted['HOST_NAME'] }
-    }
+    # A mangled command fails at once. The code itself is spent after everything that needs none of what it stands for
+    # (the Cloudflare token, ic, Docker, the images), so a failure there leaves it valid for the same command.
+    $Redeeming = [bool]($Sandbox -or $Code)
+    if ($Redeeming) { Assert-IntenticCode -Server $Sandbox -Code $Code }
     # Pre-provisioned host tunnel: the platform minted the tunnel and DNS under its zone and the command carries the
     # connector token and hostname, so there is no Cloudflare token and no tunnel to create here.
     $HostSshTunnelToken = $env:HOST_SSH_TUNNEL_TOKEN
@@ -610,19 +641,24 @@ Invoke-IntenticScript {
     # The key is generated INSIDE the Docker-in-Docker container (root-owned), so the sandbox always logs in as root.
     $HostUser = 'root'
 
-    if (-not $SandboxUrl -or -not $ConnectToken) {
-        Stop-Intentic 'This device could not be connected as a server.' "the command is missing the sandbox's address or its connection token." 'copy the command again from the Infra screen.'
-    }
-    # The pre-provisioned path requires an explicit HOST_NAME: the minted tunnel id was salted with the name picked on
-    # the Infra screen, so a device-name default here would silently desync from it.
-    if ($HostName) { $HostName = Normalize-HostName $HostName }
-    if (-not $HostName) {
-        if ($ProvidedTunnel) {
-            Stop-Intentic 'This device could not be connected as a server.' "the command is missing the server's name, which a pre-provisioned tunnel needs." 'copy the command again from the Infra screen.'
+    # What the command has to carry, checked where it is complete: at once for the env-var form, after the redeem for a
+    # code. Dot-sourced, so the name it settles is this block's.
+    $CheckCommand = {
+        if (-not $SandboxUrl -or -not $ConnectToken) {
+            Stop-Intentic 'This device could not be connected as a server.' "the command is missing the sandbox's address or its connection token." 'copy the command again from the Infra screen.'
         }
-        $HostName = Normalize-HostName "$env:COMPUTERNAME"
-        if (-not $HostName) { $HostName = 'host' }
+        # The pre-provisioned path requires an explicit HOST_NAME: the minted tunnel id was salted with the name picked
+        # on the Infra screen, so a device-name default here would silently desync from it.
+        if ($HostName) { $HostName = Normalize-HostName $HostName }
+        if (-not $HostName) {
+            if ($ProvidedTunnel) {
+                Stop-Intentic 'This device could not be connected as a server.' "the command is missing the server's name, which a pre-provisioned tunnel needs." 'copy the command again from the Infra screen.'
+            }
+            $HostName = Normalize-HostName "$env:COMPUTERNAME"
+            if (-not $HostName) { $HostName = 'host' }
+        }
     }
+    if (-not $Redeeming) { . $CheckCommand }
 
     # THE CLOUDFLARE TOKEN, asked for and never carried: it creates this server's tunnel and DNS on your zone, and goes
     # to the sandbox with the registration, which is the only place it is kept.
@@ -666,17 +702,48 @@ Invoke-IntenticScript {
         Complete-IntenticStep
     }
 
+    Invoke-ImagePull $DindImage
+    if (-not $ProvidedTunnel) { Invoke-ImagePull $SandboxImage }
+
+    $HostId = ''
+    if ($Redeeming) {
+        # The name this server takes if its code was minted without one, settled as $CheckCommand settles it, for the
+        # sandbox to answer that name's HOST_ID (and hold the server to the name). None beside a pre-provisioned tunnel
+        # and no name, which $CheckCommand refuses rather than name the server after this device.
+        $AskedName = Normalize-HostName "$HostName"
+        if (-not $AskedName -and -not $ProvidedTunnel) {
+            $AskedName = Normalize-HostName "$env:COMPUTERNAME"
+            if (-not $AskedName) { $AskedName = 'host' }
+        }
+        $granted = Invoke-IntenticRedeem -Server $Sandbox -Code $Code -Kind 'server' -Name $AskedName
+        $SandboxUrl = $granted['SANDBOX_URL']
+        $ConnectToken = $granted['CONNECT_TOKEN']
+        if ($granted['ZONE']) { $Zone = $granted['ZONE'] }
+        if ($granted['HOST_NAME']) { $HostName = $granted['HOST_NAME'] }
+        # Taken only in its own shape (hostSshIdFromToken's 12 lowercase hex): it names containers, a volume and a DNS
+        # record below.
+        if ("$($granted['HOST_ID'])" -cmatch '^[0-9a-f]{12}$') { $HostId = $granted['HOST_ID'] }
+        . $CheckCommand
+    }
+    # Past the redeem the code is spent, so a stop below sends the person back for a new command rather than to this one.
+    $Again = 'run the same command again'
+    if ($Redeeming) { $Again = 'get a new command from the Infra screen and run that' }
+
     # Per-(sandbox, server) identity, so one device can host several servers and running the same command again reuses
-    # this one (same volume: deployed containers and state survive). The digest matches the tunnel-id scheme.
-    $slugInput = '{0}:{1}' -f $ConnectToken, $HostName
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $Slug = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($slugInput))) -replace '-', '').Substring(0, 12).ToLower()
+    # this one (same volume: deployed containers and state survive). The digest matches the tunnel-id scheme
+    # (hostSshIdFromToken). A code's answer carries it as HOST_ID, digested by the sandbox from its long-lived connect
+    # token: the code's CONNECT_TOKEN is single-use, new on every run, and a slug digested from it would be a new server
+    # each time. Without HOST_ID (the env-var form, or a sandbox from before it) it is digested here, as it always was.
+    if ($HostId) {
+        $Slug = $HostId
+    } else {
+        $slugInput = '{0}:{1}' -f $ConnectToken, $HostName
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $Slug = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($slugInput))) -replace '-', '').Substring(0, 12).ToLower()
+    }
     $DindContainer = "intentic-dind-host-$Slug"
     $DindVolume = "intentic-dind-docker-$Slug"
     $TunnelContainer = "intentic-host-ssh-tunnel-$Slug"
-
-    Invoke-ImagePull $DindImage
-    if (-not $ProvidedTunnel) { Invoke-ImagePull $SandboxImage }
 
     Write-IntenticStep '' 'starting the Docker-in-Docker server...' 'Start the server container'
     docker rm -f $DindContainer *> $null
@@ -686,14 +753,14 @@ Invoke-IntenticScript {
         --dns 1.1.1.1 --dns 1.0.0.1 `
         $DindImage | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Stop-Intentic 'This device could not be connected as a server.' 'docker could not start the server container; its output above says why.' 'run the same command again.'
+        Stop-Intentic 'This device could not be connected as a server.' 'docker could not start the server container; its output above says why.' "$Again."
     }
     # Wait until docker exec works, then generate a fresh ed25519 key inside the server and authorize it as its only key
     # (root-owned, 600: sshd rejects loose modes). The private half is read out for the sandbox.
     for ($i = 0; $i -lt 60; $i++) { docker exec $DindContainer true *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep -Seconds 1 }
     docker exec $DindContainer sh -c 'ssh-keygen -t ed25519 -N "" -C intentic-host -f /root/.ssh/intentic_ed25519 >/dev/null && cat /root/.ssh/intentic_ed25519.pub > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' *> $null
     if ($LASTEXITCODE -ne 0) {
-        Stop-Intentic 'This device could not be connected as a server.' 'the server container did not take its SSH key.' 'run the same command again.'
+        Stop-Intentic 'This device could not be connected as a server.' 'the server container did not take its SSH key.' "$Again."
     }
     $HostSshKey = (docker exec $DindContainer cat /root/.ssh/intentic_ed25519) -join "`n"
     Complete-IntenticStep
@@ -706,13 +773,15 @@ Invoke-IntenticScript {
         Suspend-IntenticLine
         $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken", '-e', "HOST_NAME=$HostName")
         if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
+        # The tunnel and its ssh-<id> record are named for the same id as the containers above.
+        if ($HostId) { $tunnelArgs += @('-e', "HOST_ID=$HostId") }
         $tunnelArgs += @($SandboxImage, 'tunnel', 'host')
         $hostSshOut = & docker $tunnelArgs
         Resume-IntenticLine
         $HostSshTunnelToken = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^HOST_SSH_TUNNEL_TOKEN=', ''
         $HostAddress = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_HOSTNAME=*' } | Select-Object -First 1) -replace '^HOST_SSH_HOSTNAME=', ''
         if (-not $HostSshTunnelToken -or -not $HostAddress) {
-            Stop-Intentic 'This device could not be connected as a server.' "the server's SSH tunnel could not be created; the output above says why." 'run the same command again.'
+            Stop-Intentic 'This device could not be connected as a server.' "the server's SSH tunnel could not be created; the output above says why." "$Again."
         }
         Complete-IntenticStep
     }
@@ -725,7 +794,7 @@ Invoke-IntenticScript {
     docker run -d --restart unless-stopped --name $TunnelContainer --network "container:$DindContainer" `
         $CloudflaredImage tunnel --no-autoupdate run --token $HostSshTunnelToken | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Stop-Intentic 'This device could not be connected as a server.' 'docker could not start the SSH tunnel connector; its output above says why.' 'run the same command again.'
+        Stop-Intentic 'This device could not be connected as a server.' 'docker could not start the SSH tunnel connector; its output above says why.' "$Again."
     }
     Complete-IntenticStep
 
@@ -753,7 +822,7 @@ Invoke-IntenticScript {
         $why = $_.Exception.Message
     }
     if (-not $enrolled) {
-        Stop-Intentic 'This device could not be connected as a server.' "the sandbox at $SandboxUrl did not accept the registration ($why); it may be unreachable, or its DevOps capability may be off." 'run the same command again once the sandbox answers.'
+        Stop-Intentic 'This device could not be connected as a server.' "the sandbox at $SandboxUrl did not accept the registration ($why); it may be unreachable, or its DevOps capability may be off." "$Again once the sandbox answers."
     }
 
     Write-IntenticFinished "This device is connected as server $HostName." "ssh://$HostAddress"

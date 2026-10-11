@@ -48,10 +48,14 @@ export const projectPairingFor = async (pairings: readonly Pairing[], dir: strin
     throw new Error(holder === undefined ? `no project on this device syncs ${dir}` : `${dir} is inside the project folder ${holder.pairing.localDir}: pass that folder`);
 };
 
-// A message as the sentence the app shows: capitalised, ending in a full stop.
+// A part that opens with a command a person types, which stays as it is typed: "Intentic-machine sync …" runs nothing.
+const COMMAND = /^(?:intentic-machine|intentic-sync|intentic|ic)(?:\s|$)/u;
+
+// A message as the sentence the app shows: capitalised, ending in a full stop. Not a command, which is copied as typed.
 const sentence = (message: string): string => {
     const text = message.trim();
-    return `${text.charAt(0).toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`;
+    const opening = COMMAND.test(text) ? text.charAt(0) : text.charAt(0).toUpperCase();
+    return `${opening}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`;
 };
 
 // A stop composed with explain, as the one sentence run a JSON reader shows: headline, why, and what to do.
@@ -70,13 +74,16 @@ export interface Answering {
     readonly failed: string;
 }
 
-// A thrown reason as a stop's `problem:`, or the whole stop when it was composed as one (explain) already.
+// A thrown reason as a stop's `problem:`, or the whole stop when it was composed as one (explain) already. Its first
+// letter is lowered to run on from the headline, unless it opens an acronym ("JSON Parse error"), which lowered reads
+// as "jSON".
 const asStop = (failed: string, message: string): string => {
     if (message.includes("\n   problem: ") || message.includes("\n   fix: ")) {
         return message;
     }
     const text = message.trim();
-    return explain(failed, `${text.charAt(0).toLowerCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`);
+    const acronym = /^\p{Lu}\p{Lu}/u.test(text);
+    return explain(failed, `${acronym ? text.charAt(0) : text.charAt(0).toLowerCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`);
 };
 
 // What every one of these commands prints, and the one exit code a failure has; `sync attach` and `sync detach` answer

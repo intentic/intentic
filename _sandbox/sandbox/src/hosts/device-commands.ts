@@ -134,6 +134,12 @@ const OWN_SESSION = "detach=$(command -v setsid 2>/dev/null || true);";
 // An agent's install one-liner in its target's own dialect, `device/<host>/<code>` or `sync/<host>/<code>` from the
 // shared table (@intentic/constants), so this side and the editor spell the URL one way. Undefined for a sandbox no
 // one-liner can reach (localhost, in local dev) or no code; the caller then falls back to `agentInstallLine`.
+// An install line as a device RUNS it, judged by its exit code. Under `powershell -Command`, a script piped into iex
+// reports through $LASTEXITCODE and never exits (that would close a person's window), so the process ends 0 whatever
+// happened; this tail hands the script's code on, and a failed download (no code set, last pipeline failed) as 1.
+export const exitingLine = (dialect: "powershell" | "sh", line: string): string =>
+    dialect === "powershell" ? `${line}; $ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $ok) { exit 1 }` : line;
+
 export const codedInstallLine = (dialect: "powershell" | "sh", verb: "device" | "sync", publicUrl: string, code: string | undefined): string | undefined => {
     const host = oneLinerHostOf(publicUrl);
     return host === undefined || code === undefined ? undefined : oneLinerCommand(verb, [host, code], dialect === "powershell" ? "ps1" : "sh");
@@ -164,15 +170,15 @@ const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}):
     // Mirror enrollments carry no folder at all: they forward ports and touch no files.
     const dir = facts.mode === "mirror" ? undefined : facts.localDir;
     const windowsTarget = route.environment === undefined ? facts.platform === "windows" : route.environment === HOST_NATIVE_ENVIRONMENT;
-    const coded = codedInstallLine(windowsTarget ? "powershell" : "sh", "sync", facts.publicUrl, facts.pairCode);
-    if (coded !== undefined) {
-        return coded;
-    }
-    return agentInstallLine(windowsTarget ? "powershell" : "sh", { powershell: "desktopPs1", sh: "desktopSh" }, {
-        SANDBOX_URL: `'${facts.publicUrl}'`,
-        PAIR_TOKEN: `'${facts.pairToken}'`,
-        ...(dir === undefined ? {} : { SYNC_DIR: shellDir(dir) }),
-    });
+    const dialect = windowsTarget ? "powershell" : "sh";
+    const line =
+        codedInstallLine(dialect, "sync", facts.publicUrl, facts.pairCode) ??
+        agentInstallLine(dialect, { powershell: "desktopPs1", sh: "desktopSh" }, {
+            SANDBOX_URL: `'${facts.publicUrl}'`,
+            PAIR_TOKEN: `'${facts.pairToken}'`,
+            ...(dir === undefined ? {} : { SYNC_DIR: shellDir(dir) }),
+        });
+    return exitingLine(dialect, line);
 };
 
 // EVERY SWITCH OVER AN EXISTING PAIRING GOES WHERE ITS FOLDER IS. One agent per OS install holds the mutagen session

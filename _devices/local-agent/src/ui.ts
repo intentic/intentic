@@ -13,6 +13,7 @@ import {
     GREEN,
     headingLines,
     itemLines,
+    liveLine,
     paint,
     planSummary,
     plainFieldLines,
@@ -35,7 +36,7 @@ import {
     type Tone,
 } from "./layout.js";
 
-export { explain, wrap, type Footnote, type Item, type Tone } from "./layout.js";
+export { displayWidth, explain, truncate, wrap, type Footnote, type Item, type Tone } from "./layout.js";
 
 /** How a run renders, chosen once from the environment (see createUi). */
 export type UiMode = "rich" | "plain" | "nested";
@@ -129,28 +130,51 @@ const ESTIMATE_FLOOR_SECONDS = 20;
 
 // Pure helpers, exported for their own tests.
 
-/** Clips to `limit`, marking the cut; used only on the repainted line, which must not wrap. */
-export const truncate = (text: string, limit: number): string => {
-    const characters = [...text];
-    if (characters.length <= limit) {
-        return text;
+/**
+ * A duration as a person would say it: precise while that's interesting, rounded once it isn't. Counted in whole tenths
+ * and minutes, half up, as ui.rs's human_duration counts them: floating point would round 150 ms one way here and the
+ * other way there.
+ */
+export const humanDuration = (milliseconds: number): string => {
+    const total = Math.max(0, Math.floor(milliseconds));
+    const tenths = Math.floor((total + 50) / 100);
+    if (tenths < 100) {
+        return `${Math.floor(tenths / 10)}.${tenths % 10}s`;
     }
-    if (limit <= 1) {
-        return "";
-    }
-    return `${characters.slice(0, limit - 1).join("")}…`;
+    // 9.95 s rounds up to ten, which is read in whole seconds.
+    const seconds = Math.max(10, Math.floor(total / 1000));
+    return seconds >= 90 ? `${Math.floor((seconds + 30) / 60)}m` : `${seconds}s`;
 };
 
-/** A duration as a person would say it: precise while that's interesting, rounded once it isn't. */
-export const humanDuration = (milliseconds: number): string => {
-    const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
-    if (seconds >= 90) {
-        return `${Math.round(seconds / 60)}m`;
+/** The narrowest line laid out: below it a budget would reach zero. The same floor and ceiling as ui.rs's width_from. */
+const MIN_WIDTH = 20;
+/** Past this a line is too long to read in one sweep, whatever the terminal could hold. */
+const MAX_WIDTH = 120;
+
+/**
+ * The width to draw at: what the terminal reports, else `COLUMNS`, else 80; never inflated, so a real 30-column terminal
+ * is drawn 30 wide and nothing wraps. The same rule as ui.rs's width_from.
+ */
+export const widthFrom = (reported: number | undefined, columns: string | undefined): number => {
+    const named = columns?.trim() ?? "";
+    const fallback = /^\d+$/u.test(named) && Number(named) > 0 ? Number(named) : 80;
+    const width = reported !== undefined && Number.isFinite(reported) && reported > 0 ? Math.floor(reported) : fallback;
+    return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
+};
+
+/**
+ * Whether the console can draw the Unicode glyphs, decided by the locale and the console as ui.rs decides it, never by
+ * colour (NO_COLOR asks for no colour, not for ASCII). The first of LC_ALL, LC_CTYPE and LANG that is set and not empty
+ * names the encoding, as POSIX reads them; none at all is not evidence of anything (sudo and `curl | sh` drop them). On
+ * Windows ui.rs asks whether the console took virtual-terminal processing; Node's console stream handles those sequences
+ * itself, so the answer here is always yes.
+ */
+export const unicodeSafe = (env: Record<string, string | undefined>, platform: string): boolean => {
+    if (platform === "win32") {
+        return true;
     }
-    if (seconds >= 10) {
-        return `${seconds}s`;
-    }
-    return `${(Math.max(0, milliseconds) / 1000).toFixed(1)}s`;
+    const locale = [env["LC_ALL"], env["LC_CTYPE"], env["LANG"]].find((value) => value !== undefined && value !== "");
+    return locale === undefined || /utf-?8/iu.test(locale);
 };
 
 /**
@@ -173,9 +197,11 @@ export const asLabel = (message: string): string => {
 };
 
 /** A label as plain narration: lower-cased unless its first word is an acronym or a name ("ic", "Docker" stay). */
+// The same names as ui.rs's as_narration, so the two tools narrate a shared step identically.
+const NAMES = new Set(["Docker", "Intentic", "WSL", "Windows"]);
 const asNarration = (label: string): string => {
     const first = label.split(" ")[0] ?? "";
-    const isWord = first.length > 1 && first.slice(1) === first.slice(1).toLowerCase() && first !== "Docker" && first !== "Intentic";
+    const isWord = [...first].length > 1 && first.slice(1) === first.slice(1).toLowerCase() && !NAMES.has(first);
     return isWord ? first[0]!.toLowerCase() + label.slice(1) : label;
 };
 
@@ -203,9 +229,8 @@ export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
     const mode = detectMode(process);
     const env = process.env ?? {};
     const colour = mode !== "plain" && (env["FORCE_COLOR"] !== undefined || env["NO_COLOR"] === undefined);
-    // A reported width is trusted (80 is the floor); too low shortens a line, too high corrupts the repaint.
-    const width = Math.min(120, Math.max(40, process.stdout.columns ?? 80));
-    const pen: Pen = { colour, glyphs: colour ? UNICODE : ASCII, width };
+    const width = widthFrom(process.stdout.columns, env["COLUMNS"]);
+    const pen: Pen = { colour, glyphs: unicodeSafe(env, globalThis.process.platform) ? UNICODE : ASCII, width };
 
     const out = (text: string): void => void process.stdout.write(text);
     const lines = (all: readonly string[]): void => {
@@ -253,8 +278,9 @@ export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
         if (!live) {
             return;
         }
-        // Spaces, not an erase-to-end escape: this must work on a console with no virtual-terminal processing.
-        out(`\r${" ".repeat(width)}\r`);
+        // Spaces, not an erase-to-end escape: this must work on a console with no virtual-terminal processing. One short
+        // of the width, as the live line is: a console that wraps on reaching the last column would push this a row down.
+        out(`\r${" ".repeat(width - 1)}\r`);
         live = false;
     };
 
@@ -266,18 +292,7 @@ export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
         const elapsed = humanDuration(Date.now() - stepStarted);
         const left = remaining();
         const right = left === undefined || Date.now() - stepStarted < 5000 ? elapsed : `${elapsed} · ~${left} left`;
-        const number = numbered ? `${String(ordinal).padStart(2)}  ` : "";
-        const head = `  ${spinner}  ${number}${label}`;
-        // The line must never reach the last column, or the terminal wraps it and the next carriage return lands wrong.
-        const budget = width - 1;
-        const fixed = [...head].length + [...right].length + 1;
-        const middle = detailText === "" ? "" : truncate(`  ·  ${detailText}`, Math.max(0, budget - fixed));
-        const pad = " ".repeat(Math.max(0, budget - fixed - [...middle].length));
-        const shownNumber = numbered ? `${paint(pen, String(ordinal).padStart(2), DIM)}  ` : "";
-        const text = colour
-            ? `  ${paint(pen, spinner, CYAN)}  ${shownNumber}${label}${paint(pen, middle, DIM)}${pad} ${paint(pen, right, DIM)}`
-            : `${head}${middle}${pad} ${right}`;
-        out(`\r${text}`);
+        out(`\r${liveLine(pen, spinner, numbered ? ordinal : undefined, label, detailText, right)}`);
         live = true;
     };
 
@@ -604,9 +619,27 @@ export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
                 return;
             }
             if (mode === "nested") {
+                // Folded under the parent's step, but whole: the headline alone would leave the person with no why and
+                // nothing to do, since the parent only reports that this child failed.
                 erase();
-                for (const [at, part] of wrap(message.split("\n")[0] ?? "", width - 10).entries()) {
+                const [headline = "", ...rest] = message.split("\n");
+                for (const [at, part] of wrap(headline, width - 10).entries()) {
                     process.stderr.write(`${at === 0 ? `     ${paint(pen, pen.glyphs.fail, RED)}  ` : "        "}${paint(pen, part, RED)}\n`);
+                }
+                for (const raw of rest) {
+                    const body = raw.trim();
+                    const split = body.indexOf(": ");
+                    const label = split > 0 ? body.slice(0, split) : "";
+                    if (label === "problem" || label === "fix") {
+                        const padded = `${label}:`.padEnd(9);
+                        for (const [at, part] of wrap(body.slice(split + 2), width - 9 - padded.length).entries()) {
+                            process.stderr.write(`${at === 0 ? `        ${paint(pen, padded, DIM)}` : " ".repeat(8 + padded.length)}${part}\n`);
+                        }
+                    } else if (body !== "") {
+                        for (const part of wrap(body, width - 9)) {
+                            process.stderr.write(`        ${part}\n`);
+                        }
+                    }
                 }
                 return;
             }

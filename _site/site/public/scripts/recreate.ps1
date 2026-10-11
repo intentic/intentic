@@ -415,6 +415,15 @@ function Add-IntenticPath {
 # then-rename: overwriting a running executable fails, and a half-downloaded binary must never be what runs. A pinned
 # run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
 # release asked for.
+# Test-IntenticIc: the file starts and answers --version as ic does ('ic <version>'). A download that answered 200 can be
+# a captive portal's login page or an empty body; Windows refuses to start either, which lands in the catch.
+function Test-IntenticIc([string]$Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $said = ''
+    try { $said = (& $Path --version | Out-String).Trim() } catch { $said = '' }
+    return ($said -like 'ic *')
+}
+
 function Get-IntenticIc {
     $Ic = $env:IC_BIN
     if ($Ic) { return $Ic }
@@ -426,7 +435,10 @@ function Get-IntenticIc {
     # Never "exactly that release": the machine agent moves ic up by itself, so a desktop app left in the tray for days
     # put an older ic back on every Start, Stop or Restart it ran (2026-10-05). Compared as versions, major.minor.patch
     # first, a pre-release below its own release; an installed ic whose answer is not a version is replaced.
-    $IcHave = if ($env:IC_VERSION -and (Test-Path $IcDest)) { (& $IcDest --version | Out-String).Trim() } else { '' }
+    $IcHave = ''
+    if ($env:IC_VERSION -and (Test-Path $IcDest)) {
+        try { $IcHave = (& $IcDest --version | Out-String).Trim() } catch { $IcHave = '' }
+    }
     $IcCurrent = $false
     if ($IcHave -match '^ic v?(\d+\.\d+\.\d+)(\S*)$') {
         $IcHaveCore = [version]$Matches[1]
@@ -468,26 +480,34 @@ function Get-IntenticIc {
             # five-megabyte download take several seconds instead of a fraction of one.
             $ProgressPreference = 'SilentlyContinue'
             $IcFetched = $false
+            $IcWhy = "$(([uri]$IcBase).Host) did not answer from this device."
+            # Named .exe so it can be started for the probe below; only a probed download replaces the installed ic.
+            $IcNew = "$IcDir\ic.download.exe"
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp" -ErrorAction Stop
-                Move-Item -Force "$IcDest.tmp" $IcDest -ErrorAction Stop
-                $IcFetched = $true
+                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile $IcNew -ErrorAction Stop
+                if (Test-IntenticIc $IcNew) {
+                    Move-Item -Force $IcNew $IcDest -ErrorAction Stop
+                    $IcFetched = $true
+                } else {
+                    $IcWhy = 'what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture.'
+                }
             } catch {
-                Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+                $IcFetched = $false
             }
+            Remove-Item -Force $IcNew -ErrorAction SilentlyContinue
             if ($IcFetched) {
                 $Ic = $IcDest
                 Add-IntenticPath -Folder $IcDir -Command 'ic'
-            } elseif (Test-Path $IcDest) {
+            } elseif (Test-IntenticIc $IcDest) {
                 Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $IcDest runs instead."
                 $Ic = $IcDest
             } else {
                 $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
-                if ($IcInstalled) {
+                if ($IcInstalled -and (Test-IntenticIc $IcInstalled.Source)) {
                     Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $($IcInstalled.Source) runs instead."
                     $Ic = $IcInstalled.Source
                 } else {
-                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' "$(([uri]$IcBase).Host) did not answer from this device." 'check the network, then run the same command again.'
+                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' $IcWhy 'check the network, then run the same command again.'
                 }
             }
         }

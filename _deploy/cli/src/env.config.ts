@@ -24,6 +24,9 @@ const configSchema = z.object({
     zone: z.string().default(""),
     // Inventory name of the host being enrolled (connect-host.sh); salts its per-host SSH tunnel id.
     hostName: z.string().default(""),
+    // That id itself, as the sandbox answers it for a server-connect code (HOST_ID): the code's CONNECT_TOKEN is a
+    // single-use one, new each run, so an id digested from it would be too. Empty: digest it from CONNECT_TOKEN.
+    hostId: z.string().default(""),
     // demo dev-harness inputs: its zone, extra NODE_OPTIONS (the DoH hook), and local Forgejo/Komodo/SSH ports.
     cloudflareZone: z.string().default("intentic.dev"),
     nodeOptions: z.string().default(""),

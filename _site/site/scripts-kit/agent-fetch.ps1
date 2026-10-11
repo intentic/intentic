@@ -88,6 +88,9 @@ function Get-IntenticPublishedVersion {
 # A range the other end ignores is the hazard worth naming: the answer is then the WHOLE file with a 200, and
 # appending that to a partial produces a corrupt binary that no retry would ever fix. So the status is checked
 # rather than assumed, and anything but 206 starts the file again from zero.
+#
+# Returns $true when the other end says the partial already holds every byte (416 to a resumed request: a run that
+# finished the download and stopped before the swap), and $false after a transfer.
 function Copy-IntenticFile {
     param([string]$Uri, [string]$Path)
     $have = 0
@@ -97,7 +100,20 @@ function Copy-IntenticFile {
     $ask.Timeout = 30000
     $ask.ReadWriteTimeout = 120000
     if ($have -gt 0) { $ask.AddRange($have) }
-    $answer = $ask.GetResponse()
+    try {
+        $answer = $ask.GetResponse()
+    } catch {
+        # A .NET method's failure arrives wrapped (MethodInvocationException), so the WebException is looked for.
+        $failure = $_.Exception
+        while ($null -ne $failure -and -not ($failure -is [System.Net.WebException])) { $failure = $failure.InnerException }
+        $refused = $null
+        if ($null -ne $failure) { $refused = $failure.Response }
+        if ($have -gt 0 -and $null -ne $refused -and [int]$refused.StatusCode -eq 416) {
+            $refused.Close()
+            return $true
+        }
+        throw
+    }
     if ($have -gt 0 -and $answer.StatusCode -ne [System.Net.HttpStatusCode]::PartialContent) {
         $answer.Close()
         Remove-Item -Force -ErrorAction SilentlyContinue $Path
@@ -144,6 +160,7 @@ function Copy-IntenticFile {
         $answer.Close()
         if ($live -and $shown -ge 0) { Write-Host '' }
     }
+    return $false
 }
 
 # Put a first agent at $Dest. Everything past this - keeping it current, PATH, the launcher stub - is the
@@ -179,19 +196,31 @@ function Install-IntenticAgent {
         ForEach-Object { Remove-Item -Force -ErrorAction SilentlyContinue $_.FullName }
     $named = if ($published) { " $published" } else { '' }
     Write-IntenticStep '' "downloading intentic-machine$named..." "Download intentic-machine$named"
-    # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
-    Suspend-IntenticLine
-    $fetched = $true
-    $why = ''
-    try {
-        Copy-IntenticFile -Uri $url -Path $part
-    } catch {
-        $fetched = $false
-        $why = $_.Exception.Message
-    }
-    Resume-IntenticLine
-    if (-not $fetched) {
-        Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
+        Suspend-IntenticLine
+        $fetched = $true
+        $whole = $false
+        $why = ''
+        try {
+            $whole = Copy-IntenticFile -Uri $url -Path $part
+        } catch {
+            $fetched = $false
+            $why = $_.Exception.Message
+        }
+        Resume-IntenticLine
+        if (-not $fetched) {
+            Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($why); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+        }
+        # A partial the other end calls finished is used when the probe below passes it. One that does not pass is
+        # bytes no resume can mend (the 416 would come back on every run), so it is dropped and fetched again, once.
+        if ($whole -and $attempt -eq 1 -and -not (Get-IntenticAgentVersion -Path $part)) {
+            Remove-Item -Force -ErrorAction SilentlyContinue $part
+            continue
+        }
+        break
     }
     if (-not (Get-IntenticAgentVersion -Path $part)) {
         Remove-Item -Force -ErrorAction SilentlyContinue $part

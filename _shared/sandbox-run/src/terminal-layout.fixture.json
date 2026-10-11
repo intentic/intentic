@@ -408,6 +408,564 @@
                 "   2  sandbox-1ea6479e2362   stopped",
                 "   3  x"
             ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "label": "Pulling the image",
+                "detail": "layer 3 of 7",
+                "took": "4.2s"
+            },
+            "lines": [
+                "  ⠋  Pulling the image  ·  layer 3 of 7                            4.2s"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "ordinal": 3,
+                "label": "Starting the sandbox",
+                "detail": "waiting for the daemon to answer",
+                "took": "12s · ~3m left"
+            },
+            "lines": [
+                "  ⠋   3  Starting the sandbox  ·  waiting for the daemo… 12s · ~3m left"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "label": "Disconnecting this device from https://swift-otter-4821.sandboxes.intentic.dev and its sync folder",
+                "detail": "asking the sandbox",
+                "took": "0.4s"
+            },
+            "lines": [
+                "  ⠋  Disconnecting this device from https://swift-otter-4821.sand… 0.4s"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "width": 40,
+                "label": "同步文件夹到沙箱",
+                "detail": "正在复制项目文件夹中的所有文件和目录",
+                "took": "1.2s"
+            },
+            "lines": [
+                "  ⠋  同步文件夹到沙箱  ·  正在复…  1.2s"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "width": 40,
+                "label": "Syncing\tthe folder",
+                "detail": "line one\nline two\r",
+                "took": "0.1s"
+            },
+            "lines": [
+                "  ⠋  Syncing the folder  ·  line … 0.1s"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "width": 30,
+                "label": "Stopping",
+                "detail": "sandbox-40ebeea77f90",
+                "took": "2.0s"
+            },
+            "lines": [
+                "  ⠋  Stopping  ·  sandb… 2.0s"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "width": 20,
+                "label": "Waiting for Docker",
+                "took": "12s · ~3m left"
+            },
+            "lines": [
+                "  ⠋  Waiting for D…"
+            ]
+        },
+        {
+            "shape": "live",
+            "args": {
+                "ascii": true,
+                "label": "Checking 😀 emoji",
+                "detail": "é and é and ｆｕｌｌ",
+                "took": "0.0s"
+            },
+            "lines": [
+                "  |  Checking 😀 emoji  ·  é and é and ｆｕｌｌ                    0.0s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 0
+            },
+            "lines": [
+                "0.0s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 49
+            },
+            "lines": [
+                "0.0s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 50
+            },
+            "lines": [
+                "0.1s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 149
+            },
+            "lines": [
+                "0.1s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 150
+            },
+            "lines": [
+                "0.2s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 250
+            },
+            "lines": [
+                "0.3s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 350
+            },
+            "lines": [
+                "0.4s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 950
+            },
+            "lines": [
+                "1.0s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 1049
+            },
+            "lines": [
+                "1.0s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 1050
+            },
+            "lines": [
+                "1.1s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 9949
+            },
+            "lines": [
+                "9.9s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 9950
+            },
+            "lines": [
+                "10s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 10000
+            },
+            "lines": [
+                "10s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 89999
+            },
+            "lines": [
+                "89s"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 90000
+            },
+            "lines": [
+                "2m"
+            ]
+        },
+        {
+            "shape": "duration",
+            "args": {
+                "ms": 291000
+            },
+            "lines": [
+                "5m"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "plain"
+            },
+            "lines": [
+                "5"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "下载镜像"
+            },
+            "lines": [
+                "8"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "é"
+            },
+            "lines": [
+                "1"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "😀"
+            },
+            "lines": [
+                "2"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "\u001b[31mred\u001b[0m"
+            },
+            "lines": [
+                "3"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "a‍b"
+            },
+            "lines": [
+                "2"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "ｈｅｌｌｏ"
+            },
+            "lines": [
+                "10"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "한국어"
+            },
+            "lines": [
+                "6"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "กิ"
+            },
+            "lines": [
+                "1"
+            ]
+        },
+        {
+            "shape": "width",
+            "args": {
+                "text": "tab\there"
+            },
+            "lines": [
+                "7"
+            ]
+        },
+        {
+            "shape": "widths",
+            "args": {
+                "codepoints": "2ff 300 36f 370 482 483 489 48a 590 591 5bd 5be 5bf 5c0 5c1 5c2 5c3 5c4 5c5 5c6 5c7 5c8 60f 610 61a 61b 61c 61d 64a 64b 65f 660 66f 670 671 6d5 6d6 6dc 6dd 6de 6df 6e4 6e5 6e6 6e7 6e8 6e9 6ea 6ed 6ee 710 711 712 72f 730 74a 74b 7a5 7a6 7b0 7b1 7ea 7eb 7f3 7f4 7fc 7fd 7fe 815 816 819 81a 81b 823 824 825 827 828 829 82d 82e 858 859 85b 85c 88f 890 89f 8a0 8c9 8ca 8e1 8e2 8e3 8ff 900 e30 e31 e32 e33 e34 e3a e3b e46 e47 e4e e4f 10ff 1100 115f 1160 11ff 1200 1aaf 1ab0 1ace 1acf 1dbf 1dc0 1dff 1e00 200a 200b 200f 2010 2029 202a 202e 202f 205f 2060 206f 2070 20cf 20d0 20f0 20f1 2319 231a 231b 231c 2328 2329 232a 232b 23e8 23e9 23ec 23ed 23ef 23f0 23f1 23f2 23f3 23f4 25fc 25fd 25fe 25ff 2613 2614 2615 2616 2647 2648 2653 2654 267e 267f 2680 2692 2693 2694 26a0 26a1 26a2 26a9 26aa 26ab 26ac 26bc 26bd 26be 26bf 26c3 26c4 26c5 26c6 26cd 26ce 26cf 26d3 26d4 26d5 26e9 26ea 26eb 26f1 26f2 26f3 26f4 26f5 26f6 26f9 26fa 26fb 26fc 26fd 26fe 2704 2705 2706 2709 270a 270b 270c 2727 2728 2729 274b 274c 274d 274e 274f 2752 2753 2755 2756 2757 2758 2794 2795 2797 2798 27af 27b0 27b1 27be 27bf 27c0 2b1a 2b1b 2b1c 2b1d 2b4f 2b50 2b51 2b54 2b55 2b56 2e7f 2e80 3029 302a 302d 302e 303e 303f 3040 3041 3096 3097 3098 3099 309a 309b 3247 3248 324f 3250 4dbf 4dc0 4dff 4e00 a4c6 a4c7 a95f a960 a97c a97d abff ac00 d7a3 d7a4 f8ff f900 faff fb00 fdff fe00 fe0f fe10 fe19 fe1a fe1f fe20 fe2f fe30 fe6b fe6c fefe feff ff00 ff01 ff60 ff61 ffdf ffe0 ffe6 ffe7 16fdf 16fe0 16fe3 16fe4 16fef 16ff0 1b2fb 1b2fc 1f003 1f004 1f005 1f0ce 1f0cf 1f0d0 1f18d 1f18e 1f18f 1f190 1f191 1f19a 1f19b 1f1ff 1f200 1f320 1f321 1f32c 1f32d 1f335 1f336 1f337 1f37c 1f37d 1f37e 1f393 1f394 1f39f 1f3a0 1f3ca 1f3cb 1f3ce 1f3cf 1f3d3 1f3d4 1f3df 1f3e0 1f3f0 1f3f1 1f3f3 1f3f4 1f3f5 1f3f7 1f3f8 1f43e 1f43f 1f440 1f441 1f442 1f4fc 1f4fd 1f4fe 1f4ff 1f53d 1f53e 1f54a 1f54b 1f54e 1f54f 1f550 1f567 1f568 1f579 1f57a 1f57b 1f594 1f595 1f596 1f597 1f5a3 1f5a4 1f5a5 1f5fa 1f5fb 1f64f 1f650 1f67f 1f680 1f6c5 1f6c6 1f6cb 1f6cc 1f6cd 1f6cf 1f6d0 1f6d2 1f6d3 1f6d4 1f6d5 1f6df 1f6e0 1f6ea 1f6eb 1f6ec 1f6ed 1f6f3 1f6f4 1f6fc 1f6fd 1f7df 1f7e0 1f7f0 1f7f1 1f90b 1f90c 1f93a 1f93b 1f93c 1f945 1f946 1f947 1f9ff 1fa00 1fa6f 1fa70 1faf8 1faf9 1ffff 20000 3fffd 3fffe e0000 e0001 e01ef e01f0"
+            },
+            "lines": [
+                "10011001100101001001011001011001101100110011001001101100110011001101100100100100110011001100100110110011001122001100110011001100110011001122112211221121121122112211221121121121122112211221121121121122121121121121122112112121122121122112112112211211211220022112211002211221122112211221122110022110022110122112211221122112112112112211221122122122112211221122112112212122112211221221121122112112211221121122112211221122112211221221221122112211001"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "hello",
+                "limit": 5
+            },
+            "lines": [
+                "hello"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "hello",
+                "limit": 4
+            },
+            "lines": [
+                "hel…"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "hello",
+                "limit": 1
+            },
+            "lines": [
+                ""
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "\u001b[2mhello world\u001b[0m",
+                "limit": 6
+            },
+            "lines": [
+                "\u001b[2mhello…\u001b[0m"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "下载镜像文件",
+                "limit": 6
+            },
+            "lines": [
+                "下载…"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "下载镜像文件",
+                "limit": 5
+            },
+            "lines": [
+                "下载…"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "😀😀😀",
+                "limit": 4
+            },
+            "lines": [
+                "😀…"
+            ]
+        },
+        {
+            "shape": "truncate",
+            "args": {
+                "text": "ééé",
+                "limit": 2
+            },
+            "lines": [
+                "é…"
+            ]
+        },
+        {
+            "shape": "stop",
+            "args": {
+                "message": "Nothing was removed.\n"
+            },
+            "lines": [
+                "",
+                "  ✗  Nothing was removed.",
+                ""
+            ]
+        },
+        {
+            "shape": "stop",
+            "args": {
+                "message": "Nothing was removed.\r\n   problem: the sandbox is running.\n   fix: stop it first.\n"
+            },
+            "lines": [
+                "",
+                "  ✗  Nothing was removed.",
+                "     problem: the sandbox is running.",
+                "     fix:     stop it first.",
+                ""
+            ]
+        },
+        {
+            "shape": "question",
+            "args": {
+                "question": "Remove sandbox-40ebeea77f90?",
+                "consequence": "Its files are kept for 7 days.\n"
+            },
+            "lines": [
+                "  ?  Remove sandbox-40ebeea77f90?",
+                "     Its files are kept for 7 days."
+            ]
+        },
+        {
+            "shape": "items",
+            "args": {
+                "items": [
+                    {
+                        "tone": "ok",
+                        "name": "😀😀",
+                        "meta": "emoji"
+                    },
+                    {
+                        "tone": "ok",
+                        "name": "下载",
+                        "meta": "wide"
+                    },
+                    {
+                        "tone": "warn",
+                        "name": "abcd",
+                        "meta": "ascii"
+                    },
+                    {
+                        "tone": "ok",
+                        "name": "𝒳𝒴",
+                        "meta": "astral"
+                    }
+                ]
+            },
+            "lines": [
+                "  ✓  😀😀   emoji",
+                "  ✓  下载   wide",
+                "  !  abcd   ascii",
+                "  ✓  𝒳𝒴     astral"
+            ]
+        },
+        {
+            "shape": "pick",
+            "args": {
+                "items": [
+                    [
+                        "😀😀",
+                        "emoji"
+                    ],
+                    [
+                        "abcd",
+                        "ascii"
+                    ],
+                    [
+                        "𝒳𝒴",
+                        "astral"
+                    ]
+                ]
+            },
+            "lines": [
+                "   1  😀😀   emoji",
+                "   2  abcd   ascii",
+                "   3  𝒳𝒴     astral"
+            ]
+        },
+        {
+            "shape": "footnotes",
+            "args": {
+                "footnotes": [
+                    [
+                        "下载镜像",
+                        "intentic-machine pull"
+                    ],
+                    [
+                        "abcd",
+                        "ic sandbox stop"
+                    ]
+                ]
+            },
+            "lines": [
+                "     later  下载镜像   intentic-machine pull",
+                "            abcd       ic sandbox stop"
+            ]
+        },
+        {
+            "shape": "fields",
+            "args": {
+                "fields": [
+                    [
+                        "名前",
+                        "wide key"
+                    ],
+                    [
+                        "key",
+                        "ascii key"
+                    ]
+                ]
+            },
+            "lines": [
+                "     名前   wide key",
+                "     key    ascii key"
+            ]
+        },
+        {
+            "shape": "settled",
+            "args": {
+                "tone": "ok",
+                "ordinal": 2,
+                "label": "下载镜像文件",
+                "took": "1.2s"
+            },
+            "lines": [
+                "  ✓   2  下载镜像文件                                              1.2s"
+            ]
         }
     ]
 }

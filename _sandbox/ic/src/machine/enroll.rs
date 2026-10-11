@@ -70,6 +70,8 @@ pub fn run() -> Result<()> {
     let mut zone = env("ZONE").unwrap_or_default();
     let host_tunnel_token = env("HOST_SSH_TUNNEL_TOKEN").unwrap_or_default();
     let host_hostname = env("HOST_SSH_HOSTNAME").unwrap_or_default();
+    // The id the tunnel is named for, when a server-connect code's answer gave one (connect-host.sh exports it).
+    let host_id = env("HOST_ID");
     let host_user = env("HOST_USER").unwrap_or_else(|| "intentic".to_string());
     let sandbox_image =
         env("SANDBOX_IMAGE").unwrap_or_else(|| "ghcr.io/intentic/sandbox:stable".to_string());
@@ -216,23 +218,14 @@ pub fn run() -> Result<()> {
         host_address = host_hostname;
     } else {
         ui::step("create-tunnel", "creating this server's SSH tunnel…");
-        let mut args: Vec<String> = vec![
-            "run".into(),
-            "--rm".into(),
-            "--entrypoint".into(),
-            "intentic".into(),
-            "-e".into(),
-            format!("CLOUDFLARE_API_TOKEN={cf_token}"),
-            "-e".into(),
-            format!("CONNECT_TOKEN={connect_token}"),
-            "-e".into(),
-            format!("HOST_NAME={host_name}"),
-        ];
-        if !zone.is_empty() {
-            args.push("-e".into());
-            args.push(format!("ZONE={zone}"));
-        }
-        args.extend([sandbox_image.clone(), "tunnel".into(), "host".into()]);
+        let args = tunnel_args(
+            &cf_token,
+            &connect_token,
+            &host_name,
+            &zone,
+            host_id.as_deref(),
+            &sandbox_image,
+        );
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let out = docker::capture(&arg_refs).map_err(|err| {
             crate::util::Fail(format!(
@@ -297,6 +290,41 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
+/// The `docker run` that creates this server's tunnel with the CLI in the sandbox image (`intentic tunnel host`).
+/// HOST_ID, when a server-connect code's answer gave one, names the tunnel and its ssh-<id> record: that code's
+/// CONNECT_TOKEN is single-use, so the id the CLI would otherwise digest from it is new on every run.
+fn tunnel_args(
+    cf_token: &str,
+    connect_token: &str,
+    host_name: &str,
+    zone: &str,
+    host_id: Option<&str>,
+    sandbox_image: &str,
+) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "run".into(),
+        "--rm".into(),
+        "--entrypoint".into(),
+        "intentic".into(),
+        "-e".into(),
+        format!("CLOUDFLARE_API_TOKEN={cf_token}"),
+        "-e".into(),
+        format!("CONNECT_TOKEN={connect_token}"),
+        "-e".into(),
+        format!("HOST_NAME={host_name}"),
+    ];
+    if !zone.is_empty() {
+        args.push("-e".into());
+        args.push(format!("ZONE={zone}"));
+    }
+    if let Some(host_id) = host_id {
+        args.push("-e".into());
+        args.push(format!("HOST_ID={host_id}"));
+    }
+    args.extend([sandbox_image.into(), "tunnel".into(), "host".into()]);
+    args
+}
+
 fn default_host_name() -> String {
     let hostname = std::process::Command::new("hostname")
         .output()
@@ -314,6 +342,30 @@ fn default_host_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tunnel_is_named_for_the_host_id_a_code_gave_and_otherwise_as_before() {
+        let with_id = tunnel_args(
+            "cf",
+            "once",
+            "web_1",
+            "example.dev",
+            Some("0123456789ab"),
+            "i",
+        );
+        assert_eq!(
+            with_id.join(" "),
+            "run --rm --entrypoint intentic -e CLOUDFLARE_API_TOKEN=cf -e CONNECT_TOKEN=once \
+             -e HOST_NAME=web_1 -e ZONE=example.dev -e HOST_ID=0123456789ab i tunnel host"
+        );
+        // No HOST_ID (the env-var form, a sandbox from before it): exactly the arguments it always had.
+        let without = tunnel_args("cf", "ct", "web_1", "", None, "i");
+        assert_eq!(
+            without.join(" "),
+            "run --rm --entrypoint intentic -e CLOUDFLARE_API_TOKEN=cf -e CONNECT_TOKEN=ct \
+             -e HOST_NAME=web_1 i tunnel host"
+        );
+    }
 
     #[test]
     fn nobody_to_paste_the_token_is_a_stop_that_names_the_variable() {

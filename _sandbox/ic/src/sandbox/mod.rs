@@ -96,6 +96,33 @@ pub(crate) fn slugs_of(names: &[String]) -> Vec<String> {
     slugs
 }
 
+/// Whether a name can be a sandbox's slug: the shapes ic makes (`sandbox-<12 hex>`, a token's 12 hex, a hostname's
+/// first label, `runner-<name>`) and anything else docker takes after a container name's prefix — letters, digits,
+/// `-`, `_` and `.`, starting with a letter or a digit. Never a path: a slug becomes a file name under ~/.intentic
+/// (the sandbox's lock, its record), and `ic sandbox stop ../../x` made a lock file outside it (2026-10-11). Pure.
+pub fn is_slug(slug: &str) -> bool {
+    let mut chars = slug.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_alphanumeric()
+        && slug.len() <= 128
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && !slug.contains("..")
+}
+
+/// The names a command gave, each once, in the order given: `ic sandbox remove a a` is one removal (its second pass
+/// found the first one's work in the trash, and cleared it), and one purge, typed by the name rather than "2". Pure.
+pub fn each_once(slugs: Vec<String>) -> Vec<String> {
+    let mut once: Vec<String> = Vec::with_capacity(slugs.len());
+    for slug in slugs {
+        if !once.contains(&slug) {
+            once.push(slug);
+        }
+    }
+    once
+}
+
 /// The stop for a sandbox this device does not have, with the one command that says which it does have.
 pub fn missing(slug: &str) -> String {
     crate::ui::explain(
@@ -110,6 +137,10 @@ pub fn missing(slug: &str) -> String {
 /// update").
 pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     if let Some(slug) = given {
+        // A name no sandbox can have is one this device does not have, said before anything is made in its name.
+        if !is_slug(&slug) {
+            bail!("{}", missing(&slug));
+        }
         return Ok(slug_named(slug));
     }
     let slugs = list_slugs();
@@ -307,6 +338,44 @@ mod tests {
 
     fn names(list: &[&str]) -> Vec<String> {
         list.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn a_slug_is_a_name_never_a_path() {
+        for slug in [
+            "sandbox-2e8d89d75865",
+            "2e8d89d75865",
+            "runner-a1b2c3",
+            "workspace-2",
+            "work",
+            "My_box.1",
+        ] {
+            assert!(is_slug(slug), "{slug}");
+        }
+        for slug in [
+            "",
+            "../../x",
+            "..",
+            "a/b",
+            "a\\b",
+            "a..b",
+            "-dash-first",
+            ".hidden",
+            "white space",
+            "ünï",
+        ] {
+            assert!(!is_slug(slug), "{slug}");
+        }
+        assert!(!is_slug(&"a".repeat(129)));
+    }
+
+    #[test]
+    fn a_name_given_twice_is_one_name_in_the_order_given() {
+        assert_eq!(
+            each_once(names(&["b", "a", "b", "a", "c"])),
+            names(&["b", "a", "c"])
+        );
+        assert!(each_once(Vec::new()).is_empty());
     }
 
     #[test]

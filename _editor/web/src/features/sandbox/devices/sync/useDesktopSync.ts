@@ -39,10 +39,14 @@ export interface SyncPairAsk {
 // Mints a pairing on the active sandbox: this card's Enable, and the setup page's hand-off of a hosted project's folder
 // to the desktop app.
 export const mintSyncPairing = async (mode: SyncMode, ask: SyncPairAsk = {}): Promise<SyncPairing> => {
+    // A blank folder is no choice at all, and means the device's default folder, as it did before the folder rode with
+    // the mint. The sandbox refuses an empty one, so a cleared field is left out rather than sent.
+    const { syncDir, ...rest } = ask;
+    const sent: SyncPairAsk = syncDir === undefined || syncDir.trim() === `` ? rest : { ...rest, syncDir };
     const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, {
         method: `POST`,
         headers: { "content-type": `application/json` },
-        body: JSON.stringify(mode === `mirror` ? {} : ask),
+        body: JSON.stringify(mode === `mirror` ? {} : sent),
     });
     if (!response.ok) {
         throw new Error(t(`sandbox.useDesktopSync.startFailed`, { status: String(response.status) }));
