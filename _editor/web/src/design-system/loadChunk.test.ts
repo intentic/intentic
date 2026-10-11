@@ -1,7 +1,7 @@
 // jsdom: the kit's one stale-chunk recovery. Every lazy chunk in the editor goes through `loadChunk` (views, the
 // shell, extension views, Monaco, mermaid, the highlighter), so these are the rules all of them follow.
 import "@intentic/testing/dom";
-import { installChunkRecovery, loadChunk } from "@intentic/ui/chunk";
+import { installChunkRecovery, isStaleChunkError, loadChunk } from "@intentic/ui/chunk";
 
 // window.location is unforgeable in jsdom; the reload is observed through a replaced global, read at call time.
 const assign = jest.fn();
@@ -72,4 +72,29 @@ it(`catches the preload Vite failed for an import nobody wrapped, and cancels it
     target.dispatchEvent(second);
     expect(second.defaultPrevented).toBe(false);
     expect(assign.mock.calls).toEqual([[`/files?path=a`]]);
+});
+
+// The stack the editor reported from a popped-out chat left open across two re-bundles: the file viewer, first imported
+// after the second one, rendered its slot with one Vue while the window ran on another.
+const mixedStack = (first: string, second: string): TypeError => {
+    const error = new TypeError(`Cannot read properties of null (reading 'ce')`);
+    error.stack = [
+        `TypeError: Cannot read properties of null (reading 'ce')`,
+        `    at renderSlot (https://localhost:47145/node_modules/.vite/deps/vue.runtime.esm-bundler-OvXPuxnP.js?v=${first}:4016:31)`,
+        `    at Proxy._sfc_render (https://localhost:47145/src/features/workspace/explorer/FileBreadcrumb.vue:63:4)`,
+        `    at renderComponentRoot (https://localhost:47145/node_modules/.vite/deps/vue.runtime.esm-bundler-OvXPuxnP.js?v=${second}:4881:35)`,
+    ].join(`\n`);
+    return error;
+};
+
+it(`reads a stack running one dependency under two bundle generations as a stale page, however the error is worded`, () => {
+    expect(isStaleChunkError(mixedStack(`4267b4fc`, `72918e0c`))).toBe(true);
+});
+
+it(`does not read the same error from one generation as stale: that is a bug in the code, and reloading it would loop`, () => {
+    expect(isStaleChunkError(mixedStack(`72918e0c`, `72918e0c`))).toBe(false);
+    // Two different dependencies on two hashes is not two copies of anything.
+    const error = new TypeError(`boom`);
+    error.stack = `TypeError: boom\n    at a (/node_modules/.vite/deps/vue.js?v=aaaa1111:1:1)\n    at b (/node_modules/.vite/deps/shiki.js?v=bbbb2222:1:1)`;
+    expect(isStaleChunkError(error)).toBe(false);
 });

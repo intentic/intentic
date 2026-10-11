@@ -1,6 +1,7 @@
 // The one answer to a lazy chunk that will not load. A dead chunk means a redeploy (or Vite re-optimizing deps under a
 // live tab) happened: this window's asset names are gone, and the fix is the reload the reader would do by hand.
-// Matched on message wording across runtimes, not error class, since a coding bug also throws TypeError. A flag per
+// Matched on message wording across runtimes, not error class, since a coding bug also throws TypeError, or on a stack
+// that shows the page running two generations of the dev server's dependency bundle (below). A flag per
 // destination caps a genuinely missing chunk to one reload, and any chunk that loads clears it: this window's assets
 // evidently exist again, so the next redeploy earns its own reload.
 
@@ -8,7 +9,32 @@ const CHUNK_RELOADED_KEY = `intentic.chunkReloaded`;
 const STALE_CHUNK_MESSAGE =
     /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
 
-export const isStaleChunkError = (error: unknown): boolean => STALE_CHUNK_MESSAGE.test(String(error));
+// One pre-bundled dependency as the dev server names it: its file under `.vite/deps` and the optimizer generation it
+// belongs to.
+const DEP_GENERATION = /\/\.vite\/deps\/([^?\s:)]+)\?v=([0-9a-f]+)/g;
+
+// The same failure that did not fail to load. Vite re-bundling its dependencies under a live dev tab moves them to a new
+// `?v=` hash; a module this tab first imports afterwards loads fine, against the NEW bundle, while everything already
+// running holds the old one. The page then runs two copies of a dependency (two Vues: a component from one rendered by
+// the other finds no current instance and throws on its first slot), and the error's stack is the only place both show:
+// one file under two hashes. Never true in a production build, whose chunks carry no `?v=`.
+const mixesDepGenerations = (stack: string): boolean => {
+    const seen = new Map<string, string>();
+    for (const [, file, generation] of stack.matchAll(DEP_GENERATION)) {
+        if (file === undefined || generation === undefined) {
+            continue;
+        }
+        const known = seen.get(file);
+        if (known !== undefined && known !== generation) {
+            return true;
+        }
+        seen.set(file, generation);
+    }
+    return false;
+};
+
+export const isStaleChunkError = (error: unknown): boolean =>
+    STALE_CHUNK_MESSAGE.test(String(error)) || (error instanceof Error && error.stack !== undefined && mixesDepGenerations(error.stack));
 
 const here = (): string => `${location.pathname}${location.search}`;
 

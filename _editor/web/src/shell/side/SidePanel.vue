@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import { ContextMenu, ResizeSeam, ui } from "@intentic/ui";
+import { loadChunk } from "@intentic/ui/chunk";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
@@ -125,7 +126,10 @@ const domIdOf = (id: string): string => {
     return minted;
 };
 
-// One async component per side view, kept for the panel's life, so switching tabs never reloads a body.
+// One async component per side view, kept for the panel's life, so switching tabs never reloads a body. Loaded through
+// `loadChunk` like every other lazy surface: a body whose chunk went stale under a long-lived window reloads the window
+// once, rather than leaving its tab drawn over nothing. (A failed load is not kept: the async component retries it the
+// next time the body mounts.)
 const bodies = new WeakMap<SideViewEntry, Component>();
 const bodyOf = (tab: SideTab): Component => {
     const entry = sideViewOf(tab.view);
@@ -136,7 +140,7 @@ const bodyOf = (tab: SideTab): Component => {
     if (known !== undefined) {
         return known;
     }
-    const body = defineAsyncComponent(entry.component);
+    const body = defineAsyncComponent(() => loadChunk(entry.component));
     bodies.set(entry, body);
     return body;
 };

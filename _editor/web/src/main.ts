@@ -1,7 +1,7 @@
 // In production every lazy view's CSS is extracted into the initial stylesheet; this virtual module gives dev the same
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
-import { installChunkRecovery, installUi } from "@intentic/ui";
+import { installChunkRecovery, installUi, isStaleChunkError, recoverStaleChunk } from "@intentic/ui";
 import { setDeveloperBuild } from "@intentic/ui/motion";
 import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -104,6 +104,13 @@ app.config.errorHandler = (err, _instance, info) => {
     // Durable record for whoever actually hit it, not just whoever's watching; `info` carries the diagnosis.
     const { message, fields } = describeError(err);
     reportClient(`vue.${info.replace(/\s+/g, `-`)}`, message, { fields });
+    // A render that threw because this tab now runs two builds at once (a view loaded after the dev server re-bundled
+    // its dependencies, against the new bundle) left that view blank, and nothing in the view can repair it: the one
+    // reload onto this page that a dead chunk gets (loadChunk) is the fix here too.
+    // Once per page, as there: a second one on the same page is left to the paths below.
+    if (isStaleChunkError(err) && recoverStaleChunk()) {
+        return;
+    }
     reportStartupError(err);
 };
 // Dev-only and idle until armed from the console; `import.meta.env.DEV` is compile-time, so the hook and the module
