@@ -21,7 +21,7 @@
     },
     "scripts": {
         "build": "vite build",
-        "typecheck": "tsgo --noEmit",
+        "typecheck": "bun check",
         "watch": "vite build --watch",
         "test": "suites",
         "test:watch": "suites --watch"
@@ -31,7 +31,6 @@
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
-        "@typescript/native-preview": "catalog:",
         "vite": "catalog:"
     }
 }

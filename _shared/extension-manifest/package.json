@@ -44,7 +44,7 @@
     },
     "scripts": {
         "build": "tsgo",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "schema": "tsgo && node scripts/write-schema.mjs",
         "test": "suites",

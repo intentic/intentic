@@ -262,7 +262,7 @@
     },
     "scripts": {
         "build": "tsgo",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "test": "suites",
         "test:watch": "suites --watch"

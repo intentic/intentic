@@ -47,7 +47,7 @@ export const failedTasks = (summary) =>
 
 const DIAGNOSTIC = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 
-// tsgo / vue-tsc errors in their non-TTY form, `file(line,col): error TScode: message`, first line of each only.
+// bun check / tsgo / vue-tsc errors in their non-TTY form, `file(line,col): error TScode: message`, first line of each only.
 export const typeDiagnostics = (log) =>
     log.split("\n").flatMap((line) => {
         const found = DIAGNOSTIC.exec(line.trim());

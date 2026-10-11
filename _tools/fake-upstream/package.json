@@ -21,14 +21,13 @@
         }
     },
     "scripts": {
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:"
+        "@types/node": "catalog:"
     }
 }

@@ -391,8 +391,8 @@ catalogs:
       specifier: 1.7.7
       version: 1.7.7
     bun:
-      specifier: 1.4.2
-      version: 1.4.2
+      specifier: 1.4.3
+      version: 1.4.3
     chokidar:
       specifier: 5.0.0
       version: 5.0.0
@@ -657,6 +657,9 @@ importers:
       '@typescript/native-preview':
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
+      bun:
+        specifier: 'catalog:'
+        version: 1.4.3
       knip:
         specifier: 'catalog:'
         version: 6.39.0
@@ -1108,9 +1111,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _devices/machine:
     dependencies:
@@ -1197,9 +1197,6 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.2
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -2330,12 +2327,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
       bun:
         specifier: 'catalog:'
-        version: 1.4.2
+        version: 1.4.3
       testcontainers:
         specifier: 'catalog:'
         version: 12.2.0(supports-color@10.2.2)
@@ -2571,9 +2565,6 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.2
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
       vite:
         specifier: 'catalog:'
         version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -2626,9 +2617,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _sandbox/sandbox:
     dependencies:
@@ -2910,9 +2898,6 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.2
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
       vite:
         specifier: 'catalog:'
         version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -3528,9 +3513,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _site/demo:
     dependencies:
@@ -3660,9 +3642,6 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _tools/agent-cli:
     dependencies:
@@ -3860,9 +3839,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _tools/fake-upstream:
     devDependencies:
@@ -3878,9 +3854,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
 
   _tools/localhost-https: {}
 
@@ -3991,9 +3964,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
-      '@typescript/native-preview':
-        specifier: 'catalog:'
-        version: 7.0.0-dev.20260707.2
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1(@noble/hashes@2.4.0)
@@ -6101,67 +6071,67 @@ packages:
   '@oslojs/encoding@1.1.0':
     resolution: {integrity: sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ==}
 
-  '@oven/bun-darwin-aarch64@1.4.2':
-    resolution: {integrity: sha512-MXdZkP1featqxZ+/VTXWG1BVjM4OGBehVY2Q88EeUj/7L0UMeCGItmyPYTN+wxvlGJ6F66JEtzsw+GvQWewnag==}
+  '@oven/bun-darwin-aarch64@1.4.3':
+    resolution: {integrity: sha512-u2wAM9RzqyF4baO5oFVhcFUVWO1CCMLG6yC5/aPWCYGZPfL5ULMbeHt+0/3I0h3yaPx1m+PKSANO/61jPtDZcQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@oven/bun-darwin-x64@1.4.2':
-    resolution: {integrity: sha512-gZTxZuLjkUhAWjTETu3tw0WhsEdNkJ64daj60ybhPf835a2yollV3yTkK9JozvzKPx4TRFzLSl8C+U525pxVbw==}
+  '@oven/bun-darwin-x64@1.4.3':
+    resolution: {integrity: sha512-wRGeciWOyKyG/BfTHq4CAyqoOfuzj5UJkKA8FlJETW2yhtDh+Ba3EgPnsVclFyzIw7E0HJxpsonoj17g3HPK/Q==}
     cpu: [x64]
     os: [darwin]
 
-  '@oven/bun-freebsd-aarch64@1.4.2':
-    resolution: {integrity: sha512-SMNItMw1Z8QeeQVKnw8jA7xQNkeXdP+OPgin4Wi/QTx/B8RHHLnuZfqmFy7NtVeT2NF0kKYppW4WWd2CCYZjhQ==}
+  '@oven/bun-freebsd-aarch64@1.4.3':
+    resolution: {integrity: sha512-z4LiDRPTJMKA8JvtP+Z+I5m1syJr8HGYFainIJoCAdkWaHMyQMaEEYr0N+FzTK4pECUHUmscCTNfC9XJwTe4dQ==}
     cpu: [arm64]
     os: [freebsd]
 
-  '@oven/bun-freebsd-x64@1.4.2':
-    resolution: {integrity: sha512-THbPKXhO54N0DpFRKZNDZpQ7dpbX0bWASuARckAUS9wRtFIHsiY+uULXJvxJGo2YD1YewvXQ4G8Fj7XT5oBCiw==}
+  '@oven/bun-freebsd-x64@1.4.3':
+    resolution: {integrity: sha512-YpwGnfvtSMRMnnViJI5wCGmS5HpCBAl0wLhBflJfmZYkgOHfplzeKUkUVDW2bNOZyrym3YN+EDaLWooaJpX8Eg==}
     cpu: [x64]
     os: [freebsd]
 
-  '@oven/bun-linux-aarch64-android@1.4.2':
-    resolution: {integrity: sha512-3mZKO2rhsNgbAUtAHC1UKUlF2zTxFraDZT/Elv8wzyH0fJL9h+Iv3TgB9lO63w89PRn3eFe+NRA1bhVgikKNPQ==}
+  '@oven/bun-linux-aarch64-android@1.4.3':
+    resolution: {integrity: sha512-KCsYD+HHawd6xht4BOffTnLZXNf+xzq8l52MsIF2yRtIfUvGTCumdnJPXxuo969iXukb7cWtz+WMkpYlKMG+sg==}
     cpu: [arm64]
     os: [android]
 
-  '@oven/bun-linux-aarch64-musl@1.4.2':
-    resolution: {integrity: sha512-+Sm6y+lSiSFBOtXmnekp5Q6n1tUKlyv71FCPWBc61Cgb14T5eBs8SN/nh4MUCOKzONkI3O+as3MGUgikS4aCBQ==}
+  '@oven/bun-linux-aarch64-musl@1.4.3':
+    resolution: {integrity: sha512-5OJIbcVspZxIN/zQtrFYwLuJgaOlciGcynmwCtwKyg0rmXHJoNG0QyspiiLnDUDoVTSGY/nrn0QEbWKhu0QbEQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@oven/bun-linux-aarch64@1.4.2':
-    resolution: {integrity: sha512-3BBP9ovJ2RGHFH6Ae1CAtxNtG1+YY6GD6rmYbsUosoAk9+OEl6zeDQ/k4fBkc6dYOJCtWnx8hUxzNzQATSmvYQ==}
+  '@oven/bun-linux-aarch64@1.4.3':
+    resolution: {integrity: sha512-ylogDFxDD+aRKO0TJauwDzCWM+rULvc85gRNZQ9CnY6rm2BU4GC2XUDi20bh67CIuB4Wt/0PL1xpsJ2hqplMww==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@oven/bun-linux-x64-android@1.4.2':
-    resolution: {integrity: sha512-6HC5tzcC79113n2IHCTJMWv+HsQImv4ZFEK2XpYLxY6HbT8tM4cUM2Zv1bHZBQsS3jv/zYBamDJ1UX7If0d5tw==}
+  '@oven/bun-linux-x64-android@1.4.3':
+    resolution: {integrity: sha512-5CdcvAc+iTqf/p6S0VkoGF8harKMjTfEkMOXJHslwBzl5GcY5alth1mkhD3T7SqLA5aUal95vzfiNjoAZXkPOw==}
     cpu: [x64]
     os: [android]
 
-  '@oven/bun-linux-x64-musl@1.4.2':
-    resolution: {integrity: sha512-vVTKUg1bnPhRP/Hp73jIVoFh2vPFNYEqYX0ERKfZBOQEEHitNAeukZzzuUDZS0SoDCIpuWUGSpd/CDMbjdR+Uw==}
+  '@oven/bun-linux-x64-musl@1.4.3':
+    resolution: {integrity: sha512-L0gTTjTncLqv7VsV/2iLz7Zk4vd969xqRgbtGnskmV3MvL+IJgzTyQr5zm8GGGWSm/SO/ab2vnn4GXgPomoGbg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@oven/bun-linux-x64@1.4.2':
-    resolution: {integrity: sha512-9/E/UXOTpSo3YsV5g+FhtTd/qTpiWoKuxS12cqtuYA1ssu9fRAoPQnipFgGyck3tWO63iUdxBiygq+kELFawng==}
+  '@oven/bun-linux-x64@1.4.3':
+    resolution: {integrity: sha512-RArgnpjeXjaGzjp5h7Rs89cUYJutO8IyqR3itE8OBaBzEt8KNm2jp/YozxBHq4eFovwrQLryeSwTAcmiT+zcoA==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@oven/bun-windows-aarch64@1.4.2':
-    resolution: {integrity: sha512-8EJ1ST7339WJE3poPW5nBgVW/lWf9HBz4W27ZUNhburKmcBLOByPyE6DP9fHD8FQGm5c+ilUN2hX1mrW0jxq9Q==}
+  '@oven/bun-windows-aarch64@1.4.3':
+    resolution: {integrity: sha512-a3Vyu9KI0J9vfIS+/LJMmjWI/qsBpph8u0R7d6Tm+YaSOqZeN2LRULfVqz13dgQRTvqg6aWBxOv9jE4Rl0lAAQ==}
     cpu: [arm64]
     os: [win32]
 
-  '@oven/bun-windows-x64@1.4.2':
-    resolution: {integrity: sha512-+bN6OuVld/9diT/RLSXSW7JE6CvNE3gL9XsAEjULi1nUsXd6DNO6GuA9jNdNb3r8PdJFnYHr5aypNV1Oj3Rd9g==}
+  '@oven/bun-windows-x64@1.4.3':
+    resolution: {integrity: sha512-9pV16qXHTFvZDH61S8hpdpVBbWmvEqekczLF54zTnQHKP28D6yRCNLrD/7jVbXYR61fQYAx4FSBgzCxGCKb3rQ==}
     cpu: [x64]
     os: [win32]
 
@@ -8421,8 +8391,8 @@ packages:
   bun-types@1.4.2:
     resolution: {integrity: sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w==}
 
-  bun@1.4.2:
-    resolution: {integrity: sha512-TrSXo6HJfIEaczpb3kjX82I2pL47vK1QUNmHRCUdz9IzaOwa9lzOXSWwu2l18YHE3sNfGRapVLd4nNm+22vVVA==}
+  bun@1.4.3:
+    resolution: {integrity: sha512-EvQQ2dUJlixjKgJjeXZvdsHUWIKnVfYufrQNDHa++0YM4XksQ4GtGofEdRnQSiyNp/yUWiX6SlqS8zugZCo+2A==}
     cpu: [arm64, x64]
     os: [darwin, linux, android, freebsd, win32]
     hasBin: true
@@ -15040,40 +15010,40 @@ snapshots:
 
   '@oslojs/encoding@1.1.0': {}
 
-  '@oven/bun-darwin-aarch64@1.4.2':
+  '@oven/bun-darwin-aarch64@1.4.3':
     optional: true
 
-  '@oven/bun-darwin-x64@1.4.2':
+  '@oven/bun-darwin-x64@1.4.3':
     optional: true
 
-  '@oven/bun-freebsd-aarch64@1.4.2':
+  '@oven/bun-freebsd-aarch64@1.4.3':
     optional: true
 
-  '@oven/bun-freebsd-x64@1.4.2':
+  '@oven/bun-freebsd-x64@1.4.3':
     optional: true
 
-  '@oven/bun-linux-aarch64-android@1.4.2':
+  '@oven/bun-linux-aarch64-android@1.4.3':
     optional: true
 
-  '@oven/bun-linux-aarch64-musl@1.4.2':
+  '@oven/bun-linux-aarch64-musl@1.4.3':
     optional: true
 
-  '@oven/bun-linux-aarch64@1.4.2':
+  '@oven/bun-linux-aarch64@1.4.3':
     optional: true
 
-  '@oven/bun-linux-x64-android@1.4.2':
+  '@oven/bun-linux-x64-android@1.4.3':
     optional: true
 
-  '@oven/bun-linux-x64-musl@1.4.2':
+  '@oven/bun-linux-x64-musl@1.4.3':
     optional: true
 
-  '@oven/bun-linux-x64@1.4.2':
+  '@oven/bun-linux-x64@1.4.3':
     optional: true
 
-  '@oven/bun-windows-aarch64@1.4.2':
+  '@oven/bun-windows-aarch64@1.4.3':
     optional: true
 
-  '@oven/bun-windows-x64@1.4.2':
+  '@oven/bun-windows-x64@1.4.3':
     optional: true
 
   '@oxc-parser/binding-android-arm-eabi@0.150.0':
@@ -17253,20 +17223,20 @@ snapshots:
     dependencies:
       '@types/node': 24.19.1
 
-  bun@1.4.2:
+  bun@1.4.3:
     optionalDependencies:
-      '@oven/bun-darwin-aarch64': 1.4.2
-      '@oven/bun-darwin-x64': 1.4.2
-      '@oven/bun-freebsd-aarch64': 1.4.2
-      '@oven/bun-freebsd-x64': 1.4.2
-      '@oven/bun-linux-aarch64': 1.4.2
-      '@oven/bun-linux-aarch64-android': 1.4.2
-      '@oven/bun-linux-aarch64-musl': 1.4.2
-      '@oven/bun-linux-x64': 1.4.2
-      '@oven/bun-linux-x64-android': 1.4.2
-      '@oven/bun-linux-x64-musl': 1.4.2
-      '@oven/bun-windows-aarch64': 1.4.2
-      '@oven/bun-windows-x64': 1.4.2
+      '@oven/bun-darwin-aarch64': 1.4.3
+      '@oven/bun-darwin-x64': 1.4.3
+      '@oven/bun-freebsd-aarch64': 1.4.3
+      '@oven/bun-freebsd-x64': 1.4.3
+      '@oven/bun-linux-aarch64': 1.4.3
+      '@oven/bun-linux-aarch64-android': 1.4.3
+      '@oven/bun-linux-aarch64-musl': 1.4.3
+      '@oven/bun-linux-x64': 1.4.3
+      '@oven/bun-linux-x64-android': 1.4.3
+      '@oven/bun-linux-x64-musl': 1.4.3
+      '@oven/bun-windows-aarch64': 1.4.3
+      '@oven/bun-windows-x64': 1.4.3
 
   byline@5.0.0: {}
 

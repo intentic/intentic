@@ -6,7 +6,7 @@
     "description": "The Windows counterpart of @intentic/desktop-smoke, installs the shipped NSIS installer on a real Windows machine, runs the setup it ships, and drives one /agents session",
     "scripts": {
         "build": "tsgo",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",
         "doctor": "node dist/main.js doctor",

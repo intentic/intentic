@@ -13,7 +13,7 @@
     "scripts": {
         "build": "tsgo && tsgo -p tsconfig.bench.json",
         "pretypecheck": "node scripts/conversion-checks-fresh.mjs || node --import tsx src/store/shapes/write-state-shapes.ts --checks",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",
         "test": "suites --worker-gib=2",

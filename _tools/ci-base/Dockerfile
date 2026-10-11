@@ -78,9 +78,9 @@ RUN git config --system --add safe.directory '*'
 # version is digest-pinned and this layer needs no network. -slim is Debian, and an older one than this image's
 # trixie, so the binary is linked against a glibc this one already satisfies.
 # ponytail: keep in lockstep with _platform/api/Dockerfile and the `bun` catalog entry in pnpm-workspace.yaml —
-# both images ship bun 1.4.2 from the same digest-pinned stable 1.4.2-slim (canary-slim only stood in while no
+# both images ship bun 1.4.3 from the same digest-pinned stable 1.4.3-slim (canary-slim only stood in while no
 # stable -slim tag of the catalog's bun existed).
-COPY --from=oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 /usr/local/bin/bun /usr/local/bin/bun
 
 # ruff and pyright, the two binaries the daemon's python check runs on every `.py` edit
 # (_sandbox/sandbox/src/agent/verification/python/python-diagnostics.ts). Its integration suite spawns the real ones,

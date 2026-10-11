@@ -40,7 +40,7 @@
     },
     "scripts": {
         "build": "tsgo --noEmit && node build.mjs",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",
         "test:mod": "node test-mod.mjs",

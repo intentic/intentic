@@ -177,6 +177,19 @@ minimumReleaseAgeExclude:
   - posthog-js@1.436.1
   - "@openai/codex-sdk@0.162.0"
   - "@openai/codex@0.162.0-darwin-arm64 || 0.162.0-darwin-x64 || 0.162.0-linux-arm64 || 0.162.0-linux-x64 || 0.162.0-win32-arm64 || 0.162.0-win32-x64 || 0.162.0"
+  - "@oven/bun-darwin-aarch64@1.4.3"
+  - "@oven/bun-darwin-x64@1.4.3"
+  - "@oven/bun-freebsd-aarch64@1.4.3"
+  - "@oven/bun-freebsd-x64@1.4.3"
+  - "@oven/bun-linux-aarch64-android@1.4.3"
+  - "@oven/bun-linux-aarch64-musl@1.4.3"
+  - "@oven/bun-linux-aarch64@1.4.3"
+  - "@oven/bun-linux-x64-android@1.4.3"
+  - "@oven/bun-linux-x64-musl@1.4.3"
+  - "@oven/bun-linux-x64@1.4.3"
+  - "@oven/bun-windows-aarch64@1.4.3"
+  - "@oven/bun-windows-x64@1.4.3"
+  - bun@1.4.3
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -315,7 +328,7 @@ catalog:
   baileys: 7.0.0-rc14
   bcryptjs: 3.0.3
   better-auth: 1.7.7
-  bun: 1.4.2
+  bun: 1.4.3
   chokidar: 5.0.0
   croner: 10.0.1
   discord.js: 14.27.0

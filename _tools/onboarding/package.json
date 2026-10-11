@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "typecheck": "tsc --noEmit",
+        "typecheck": "bun check",
         "e2e:onboarding": "INTENTIC_E2E_ONBOARDING=1 playwright test"
     },
     "dependencies": {

@@ -26,7 +26,7 @@
     },
     "scripts": {
         "bench": "node bench/cleaner-bench.mjs",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch"
     },
@@ -34,7 +34,6 @@
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:"
+        "@types/node": "catalog:"
     }
 }

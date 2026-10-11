@@ -7,15 +7,13 @@
         "./*": "./src/*.ts"
     },
     "scripts": {
-        "typecheck": "tsgo --noEmit",
-        "check": "tsgo --noEmit"
+        "typecheck": "bun check"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*"
     },
     "devDependencies": {
-        "@intentic/tsconfig": "workspace:*",
-        "@typescript/native-preview": "catalog:"
+        "@intentic/tsconfig": "workspace:*"
     }
 }

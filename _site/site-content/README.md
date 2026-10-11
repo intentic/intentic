@@ -29,5 +29,5 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm --filter @intentic/site-content check
+pnpm --filter @intentic/site-content typecheck
 ```

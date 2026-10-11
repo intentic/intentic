@@ -12,7 +12,7 @@
     },
     "scripts": {
         "build": "tsgo && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.mjs --log-level=warning",
-        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "typecheck": "bun check -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "test": "suites",
         "test:watch": "suites --watch"
