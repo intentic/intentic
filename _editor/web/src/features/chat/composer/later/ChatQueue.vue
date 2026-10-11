@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { QueuedMessage } from "@intentic/sandbox-contract";
-import { Button, Icon, ui } from "@intentic/ui";
+import { Button, Icon, type SwipeAction, SwipeRow, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
@@ -55,6 +55,14 @@ const picturesOf = (message: QueuedMessage) =>
 const filesOf = (message: QueuedMessage): string[] =>
     (message.attachments ?? []).filter((path) => attachmentPreview(path) === undefined).map((path) => basename(path));
 
+// On a touch screen a waiting message is swiped aside to take it back: its ✕ was the one way, a 20px target a thumb kept
+// missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four seconds). The ✕
+// stays, now with a thumb's target, for whoever reaches for it. Not while it is being reworded: that row holds a field.
+const { coarse } = useDevice();
+const takeBack = computed<SwipeAction | undefined>(() =>
+    coarse.value ? { label: t(`chat.chatQueue.takeBack`), icon: `times`, tone: `danger` } : undefined,
+);
+
 const save = async (message: QueuedMessage): Promise<void> => {
     const text = rewording.value?.text.trim() ?? ``;
     if (text.length === 0 || (await reword(message, text))) {
@@ -66,62 +74,67 @@ const save = async (message: QueuedMessage): Promise<void> => {
 <template>
     <!-- Outside the transcript until the agent receives them; every window shows the same list. -->
     <div v-if="waiting.length > 0 && queuePaused === undefined" class="flex flex-col gap-1">
-        <div
+        <SwipeRow
             v-for="message in waiting"
             :key="message.id"
-            class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2"
+            :action="rewording?.id === message.id ? undefined : takeBack"
+            class="rounded-xl"
+            @commit="unqueue(message)"
         >
-            <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-            <form v-if="rewording?.id === message.id" class="flex min-w-0 flex-1 flex-col gap-1" @submit.prevent="save(message)">
-                <textarea
-                    v-model="rewording.text"
-                    rows="2"
-                    :class="ui.input({ size: `sm` }, 'w-full resize-y')"
+            <div class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2">
+                <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                <form v-if="rewording?.id === message.id" class="flex min-w-0 flex-1 flex-col gap-1" @submit.prevent="save(message)">
+                    <textarea
+                        v-model="rewording.text"
+                        rows="2"
+                        :class="ui.input({ size: `sm` }, 'w-full resize-y')"
+                        :aria-label="t(`chat.chatQueue.rewordLabel`)"
+                        @keydown.esc.prevent="rewording = undefined"
+                    />
+                    <div class="flex justify-end gap-1">
+                        <Button size="small" tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
+                        <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
+                    </div>
+                </form>
+                <div v-else class="flex min-w-0 flex-1 items-start gap-2">
+                    <ChatImageThumb
+                        v-for="picture in picturesOf(message)"
+                        :key="picture.path"
+                        :src="picture.previewUrl"
+                        :alt="picture.name"
+                        size="h-8 w-8"
+                    />
+                    <div class="min-w-0 flex-1">
+                        <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
+                        <p v-if="filesOf(message).length > 0" class="truncate text-2xs text-subtle">
+                            <Icon name="file" class="text-2xs" />
+                            {{ filesOf(message).join(`, `) }}
+                        </p>
+                        <p v-if="fromLine(message) !== undefined" class="text-2xs text-subtle">{{ fromLine(message) }}</p>
+                    </div>
+                </div>
+                <button
+                    v-if="message.voice === `person` && rewording?.id !== message.id"
+                    type="button"
+                    class="composer-ghost touch-target h-5 w-5 shrink-0"
+                    v-tooltip.top="t(`chat.chatQueue.reword`)"
                     :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                    @keydown.esc.prevent="rewording = undefined"
-                />
-                <div class="flex justify-end gap-1">
-                    <Button size="small" tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
-                    <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
-                </div>
-            </form>
-            <div v-else class="flex min-w-0 flex-1 items-start gap-2">
-                <ChatImageThumb
-                    v-for="picture in picturesOf(message)"
-                    :key="picture.path"
-                    :src="picture.previewUrl"
-                    :alt="picture.name"
-                    size="h-8 w-8"
-                />
-                <div class="min-w-0 flex-1">
-                    <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
-                    <p v-if="filesOf(message).length > 0" class="truncate text-2xs text-subtle">
-                        <Icon name="file" class="text-2xs" />
-                        {{ filesOf(message).join(`, `) }}
-                    </p>
-                    <p v-if="fromLine(message) !== undefined" class="text-2xs text-subtle">{{ fromLine(message) }}</p>
-                </div>
+                    @click="rewording = { id: message.id, text: message.text }"
+                >
+                    <Icon name="pencil" class="text-2xs" />
+                </button>
+                <!-- Set apart on a touch screen, so its 44px target and the pencil's barely meet: a near miss on reword is not a take-back. -->
+                <button
+                    type="button"
+                    class="composer-ghost touch-target h-5 w-5 shrink-0 pointer-coarse:ml-3"
+                    v-tooltip.top="t(`chat.chatQueue.takeBack`)"
+                    :aria-label="t(`chat.chatQueue.removeLabel`)"
+                    @click="unqueue(message)"
+                >
+                    <Icon name="times" class="text-2xs" />
+                </button>
             </div>
-            <button
-                v-if="message.voice === `person` && rewording?.id !== message.id"
-                type="button"
-                class="composer-ghost h-5 w-5 shrink-0"
-                v-tooltip.top="t(`chat.chatQueue.reword`)"
-                :aria-label="t(`chat.chatQueue.rewordLabel`)"
-                @click="rewording = { id: message.id, text: message.text }"
-            >
-                <Icon name="pencil" class="text-2xs" />
-            </button>
-            <button
-                type="button"
-                class="composer-ghost h-5 w-5 shrink-0"
-                v-tooltip.top="t(`chat.chatQueue.takeBack`)"
-                :aria-label="t(`chat.chatQueue.removeLabel`)"
-                @click="unqueue(message)"
-            >
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
+        </SwipeRow>
         <p class="flex items-center gap-2 px-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. Not words a

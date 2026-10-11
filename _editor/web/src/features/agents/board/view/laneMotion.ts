@@ -76,9 +76,10 @@ const flyCard = (el: HTMLElement, dx: number, dy: number): void => {
 
 // A card and the tray riding under it move as one unit (AgentsView's `data-fold-unit` wrapper, the card first in it), so
 // a card closing ranks carries its children rather than leaving them to jump; a child's row, registered here too
-// (setRowEl), rides inside its card's unit.
+// (setRowEl), rides inside its card's unit. The card heads its unit from inside whatever holds it there (the SwipeRow a
+// touch screen swipes it aside with), so it is the unit's first child or inside it; a row is in the tray after it.
 const unitOf = (el: HTMLElement): HTMLElement | undefined => el.closest<HTMLElement>(`[data-fold-unit]`) ?? undefined;
-const heads = (el: HTMLElement, unit: HTMLElement | undefined): unit is HTMLElement => unit?.firstElementChild === el;
+const heads = (el: HTMLElement, unit: HTMLElement | undefined): unit is HTMLElement => unit?.firstElementChild?.contains(el) === true;
 
 export interface MotionHost {
     // The board's lanes, where each card is about to stand.

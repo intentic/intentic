@@ -8,6 +8,7 @@ import {
     ProjectChip,
     SearchBar,
     SegmentedControl,
+    SwipeRow,
     timeAgo,
     toneWash,
     ui,
@@ -43,6 +44,7 @@ import { chatStrip } from "../../chat/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
+import { cardSwipeAction, cardSwipeOf } from "./cards/cardSwipe";
 import ExampleAgentCard from "./cards/ExampleAgentCard.vue";
 import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
 import { tourVisible } from "../../tour/tourState";
@@ -163,6 +165,25 @@ const foundAnnouncement = computed(() =>
 const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
 const familyArchive = useFamilyArchive({ archive, familyIds, agentById: agents.agentById, coarse });
 const { pending: pendingFamilyArchive } = familyArchive;
+// A card a thumb swipes aside on a touch screen runs its own filing press (cardSwipe.ts): an archive asks first when it
+// takes children along, and leaves the same receipt with Undo a touch screen gets for one card.
+const swipeOf = (agent: FleetAgent) => {
+    const swipe = coarse.value ? cardSwipeOf(agent) : undefined;
+    return swipe === undefined ? undefined : cardSwipeAction(swipe);
+};
+const swipeCard = (agent: FleetAgent): void => {
+    switch (cardSwipeOf(agent)) {
+        case `archive`:
+            void familyArchive.request(agent);
+            return;
+        case `restore`:
+            void restore(familyIds(agent));
+            return;
+        case `close`:
+            closeAgent(agent);
+            return;
+    }
+};
 const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
     mobile,
     peeked,
@@ -503,6 +524,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 needle,
                                 matchCase,
                                 isMovingLane(agent.id),
+                                coarse,
                             ]"
                             :name="isMovingLane(agent.id) ? undefined : 'lane'"
                             :css="!isMovingLane(agent.id)"
@@ -510,35 +532,43 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         >
                             <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave, space and slide as one (laneMotion). -->
                             <div class="flex flex-col" data-fold-unit data-reveal>
-                                <AgentCard
-                                    :ref="(el) => setCardEl(agent.id, el)"
-                                    :agent="agent"
-                                    :dense="narrow"
-                                    :dragging="draggedId === agent.id && dragging"
-                                    :pending="pendingFor(agent)"
-                                    :selected="ringed(agent.id)"
-                                    :peek="peeked(agent.id)"
-                                    :match="snippetOf(agent)"
-                                    :id-match="idMatchOf(agent)"
-                                    :query="needle"
-                                    :match-case="matchCase"
-                                    :family="familyOf(agent).length"
-                                    :placed="lane.key"
-                                    :call="callOf(agent)"
-                                    @open="(event) => focusAgent(agent, event)"
-                                    @keep="keepAgent(agent)"
-                                    @review="drillIn(agent)"
-                                    @resolve="resolveNow(agent.id, agent.sandboxId)"
-                                    @land="pressLand(agent, `land`, mobile)"
-                                    @reland="pressLand(agent, `reland`, mobile)"
-                                    @unwatch="unwatchNow(agent.id, agent.sandboxId)"
-                                    @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
-                                    @archive="familyArchive.request(agent)"
-                                    @restore="restore(familyIds(agent))"
-                                    @close="closeAgent(agent)"
-                                    @grab="(event, card) => grabCard(event, agent, card)"
-                                    @contextmenu.prevent.stop="openCardMenu(agent, $event)"
-                                />
+                                <!-- Swiped aside on a touch screen, the card files itself (cardSwipe.ts); its ⋯ keeps the same press. -->
+                                <SwipeRow
+                                    :action="swipeOf(agent)"
+                                    :disabled="pendingFor(agent) !== undefined"
+                                    class="rounded-[20px]"
+                                    @commit="swipeCard(agent)"
+                                >
+                                    <AgentCard
+                                        :ref="(el) => setCardEl(agent.id, el)"
+                                        :agent="agent"
+                                        :dense="narrow"
+                                        :dragging="draggedId === agent.id && dragging"
+                                        :pending="pendingFor(agent)"
+                                        :selected="ringed(agent.id)"
+                                        :peek="peeked(agent.id)"
+                                        :match="snippetOf(agent)"
+                                        :id-match="idMatchOf(agent)"
+                                        :query="needle"
+                                        :match-case="matchCase"
+                                        :family="familyOf(agent).length"
+                                        :placed="lane.key"
+                                        :call="callOf(agent)"
+                                        @open="(event) => focusAgent(agent, event)"
+                                        @keep="keepAgent(agent)"
+                                        @review="drillIn(agent)"
+                                        @resolve="resolveNow(agent.id, agent.sandboxId)"
+                                        @land="pressLand(agent, `land`, mobile)"
+                                        @reland="pressLand(agent, `reland`, mobile)"
+                                        @unwatch="unwatchNow(agent.id, agent.sandboxId)"
+                                        @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
+                                        @archive="familyArchive.request(agent)"
+                                        @restore="restore(familyIds(agent))"
+                                        @close="closeAgent(agent)"
+                                        @grab="(event, card) => grabCard(event, agent, card)"
+                                        @contextmenu.prevent.stop="openCardMenu(agent, $event)"
+                                    />
+                                </SwipeRow>
                                 <ChildRows
                                     :agent="agent"
                                     :focused="ringed(agent.id)"

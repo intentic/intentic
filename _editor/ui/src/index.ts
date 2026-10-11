@@ -271,6 +271,8 @@ export { default as RowGroup } from "./components/rows/RowGroup.vue";
 // Non-record lines on a group's surface (empty state, explanatory sentence, add-one prompt), drawn at the
 // group's own tier.
 export { default as RowNote } from "./components/rows/RowNote.vue";
+// A row a thumb swipes aside to take its one action (archive, take back); the action keeps a press of its own elsewhere.
+export { type SwipeAction, default as SwipeRow } from "./components/rows/SwipeRow.vue";
 export { default as SearchBar } from "./components/forms/SearchBar.vue";
 export { default as SegmentedControl } from "./components/forms/SegmentedControl.vue";
 // ProgressRing's countable sibling: one arc per item, for progress through a list rather than a fraction.

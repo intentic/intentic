@@ -7,6 +7,8 @@
 // - fold.ts — a tray folding out from under its card, and a column sliding its units to make room (FLIP).
 // - reveal.ts — rows arriving in reading order when a list of sessions shows, and leaving in it when a press clears them.
 // - flash.ts — the ring a press draws round what it points at, when it lands on something already on screen.
+// - swipe.ts — what a finger meant: axis lock, release speed, the stretch past an end, commit or spring back.
+// - spring.ts — a release's speed carried into a spring the compositor plays (`linear()` easing), so nothing steps per frame.
 //
 // Its stylesheet is ../styles/motion.css: the duration and curve tokens, the switch that stills every transition, and
 // the few CSS recipes the views use (a chart growing from its baseline, the workspace arriving).
@@ -24,6 +26,20 @@ export {
 export { setDeveloperBuild, useCompositedLoops, useReducedMotion, useTouchMotion } from "./loops.js";
 export { canAnimate, FOLD_EASE, FOLD_MS, slideFrom, stopSlide, trayFold, useFoldFlip } from "./fold.js";
 export { FLASH_MS, flashElement } from "./flash.js";
+export {
+    ARRIVE,
+    FLING,
+    SETTLE,
+    type Spring,
+    springAt,
+    springPoints,
+    springReaches,
+    springSettles,
+    type SpringTiming,
+    springTiming,
+    travelsPerSecond,
+} from "./spring.js";
+export { type Axis, AXIS_SLOP_PX, commits, lockAxis, type Release, rubberBand, tick, velocityTracker, type VelocityTracker } from "./swipe.js";
 export {
     DISMISS_MS,
     DISMISS_STEP_MS,

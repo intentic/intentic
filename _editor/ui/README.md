@@ -24,7 +24,10 @@ flowchart LR
 - **Phones.** Components that hold a menu or a row of buttons pick their phone layout themselves, from `useDevice`,
   so callers don't have to. `ResponsiveOverlay` is an anchored panel on a desktop and a `BottomSheet` on a phone.
   `OverflowActions` is a row of icon buttons on a desktop and one ⋯ on a phone, opening an `ActionSheet` (the touch
-  equivalent of `ContextMenu`). `FloatingAction` is a phone screen's one create button. When the title and the
+  equivalent of `ContextMenu`). A `BottomSheet` goes by a drag down from its handle, or from its content once that
+  is scrolled to the top, or by a flick. `SwipeRow` lets a thumb swipe a row aside to take its one action (a board
+  card's archive, a queued message's take-back). That action always has a press of its own as well.
+  `FloatingAction` is a phone screen's one create button. When the title and the
   actions don't fit on one line, `PageHeader` and `Row` put the actions on a line of their own. They never cut the
   title short or let the actions run off the edge.
 - **Styling.** `src/styles/index.css` is the one stylesheet import. `theme.ts` points PrimeVue's `--p-*` tokens at
@@ -52,6 +55,10 @@ flowchart LR
   the same order, quicker, before a press removes them (the chat rail's Clear). Looping glyphs take their pace from
   `loops.ts`. The CSS recipes are `ui-grow-x`, `ui-grow-y` and `ui-grow-wipe` (a figure growing from its
   baseline; `Meter`, `BarChart` and the hours meter opt in with `grow`) and `ui-enter` (the workspace arriving).
+  Gestures share `swipe.ts`: which way a touch is going, how fast it was going when it let go, how far a drag past an
+  end stretches, and whether a release commits. What a release does next is a spring from `spring.ts`, solved once and
+  played by the compositor as a `linear()` easing, so the release's speed carries into the motion with no per-frame
+  script.
   Motion is for the few views where it shows something: the board and the chat's lanes, the usage charts, the
   sandbox's disk breakdown and the hours on Billing, the workspace.
 - **Icons.** Every glyph is a native SVG drawing in `src/icons/`. The [patches](patches) route PrimeVue, Mermaid and
@@ -153,7 +160,7 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 | --- | --- |
 | `components/` | Components by role: primitives, layout, forms, rows, overlays, feedback, charts, markdown, brand, sandbox |
 | `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation, preferences, the shared clock, polling |
-| `motion/` | Whether the interface moves, looping glyphs, folds, rows arriving and leaving |
+| `motion/` | Whether the interface moves, looping glyphs, folds, rows arriving and leaving, swipes and springs |
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
 | `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |
 | `icons/` | Native SVG glyph sets and file-type icons |

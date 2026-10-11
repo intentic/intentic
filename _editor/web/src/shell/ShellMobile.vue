@@ -2,13 +2,14 @@
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import MobileTabBar from "./MobileTabBar.vue";
 import { useTabRoots } from "./mobileTabs";
 import { onTabRoot } from "../lib/routes/tabRoots";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
+import { useEdgeBack } from "./edgeBack";
 
 // Mobile chrome: full-screen views over a bottom tab bar. h-dvh tracks the browser's UI chrome; the
 // bar yields to the on-screen keyboard. No rail, chat column, or docked terminal: chat and terminal are
@@ -41,6 +42,21 @@ const back = computed<PageBack | undefined>(() => {
     };
 });
 providePageBack(back);
+
+// The same way back, from the page's left edge (edgeBack.ts): the shell's back where it draws one, and on an agent's
+// screen the board, where that screen's own arrow goes (AgentDetail's link to /agents, which it pushes, so this does too).
+const surface = ref<HTMLElement>();
+const page = ref<HTMLElement>();
+const scrim = ref<HTMLElement>();
+const chip = ref<HTMLElement>();
+useEdgeBack({
+    surface,
+    page,
+    scrim,
+    chip,
+    back: () => back.value?.go ?? (route.path.startsWith(`/agents/`) ? () => router.push(`/agents`) : undefined),
+    route: () => route.fullPath,
+});
 // The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
 const wallpapered = useWallpaperedRoute();
 // The getting-started checklist, started with the shell so every mark in every feature has an answer to read
@@ -50,13 +66,39 @@ useGettingStarted();
 
 <template>
     <div class="flex h-dvh flex-col overflow-hidden bg-canvas text-content" style="overscroll-behavior: none">
-        <main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
-                    <RouterView />
-                </div>
-            </SandboxGate>
+        <main ref="surface" class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <!-- What an edge swipe uncovers (edgeBack.ts): the place a release goes back to, darker while the page still
+                 covers most of it, and the arrow that fills once letting go would go there. Hidden unless a swipe is on. -->
+            <div aria-hidden="true" class="pointer-events-none invisible absolute inset-0 bg-canvas">
+                <div ref="scrim" class="absolute inset-0 bg-black/25" />
+                <span ref="chip" class="edge-chip absolute left-3 top-1/2 -mt-5 flex h-10 w-10 items-center justify-center rounded-full opacity-0">
+                    <Icon name="arrow-left" class="text-base" />
+                </span>
+            </div>
+            <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
+                <SandboxGate>
+                    <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
+                        <RouterView />
+                    </div>
+                </SandboxGate>
+            </div>
         </main>
         <MobileTabBar v-show="!keyboardOpen" />
     </div>
 </template>
+
+<style scoped>
+/* The back swipe's arrow: a quiet disc while the release would still spring back, the accent fill once it would go. */
+.edge-chip {
+    color: var(--color-content);
+    background-color: var(--color-card);
+    box-shadow: 0 4px 14px -4px rgb(0 0 0 / 0.35);
+    transition:
+        background-color 140ms var(--ease-smooth),
+        color 140ms var(--ease-smooth);
+}
+.edge-chip[data-armed] {
+    color: var(--color-fill-content);
+    background-color: var(--color-primary-fill);
+}
+</style>

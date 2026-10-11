@@ -20,6 +20,7 @@ import { useSandbox } from "../client/sandbox/useSandbox";
 import { useRole } from "../client/sandbox/useRole";
 import { restartRunning } from "../features/sandbox/live/sandboxRestart";
 import { useT } from "@intentic/ui/i18n";
+import { lessMotion } from "@intentic/ui/motion";
 
 const t = useT();
 const { isGuest } = useRole();
@@ -158,6 +159,25 @@ const isNavActive = (tab: Tab): boolean => {
     const showing = route.query[`panel`];
     return (typeof showing === `string` ? showing : `files`) === tab.panel;
 };
+
+// THE TAB ALREADY IN FRONT, TAPPED AGAIN, goes back to the top of its screen, as every phone's tab bar does: on the board
+// a long Finished lane left a reader tapping Agents again and again with nothing happening (PostHog rage taps,
+// 2026-10). Its own screen only, since a drill-down under the tab is left by the tap's navigation instead; and never
+// Chat, whose top is the conversation's oldest message, not where anyone is going. Every scroller under the middle of
+// the screen goes, so a lane scrolling inside the page goes along with the page.
+const scrollersAt = (x: number, y: number): HTMLElement[] =>
+    document
+        .elementsFromPoint(x, y)
+        .filter((el): el is HTMLElement => el instanceof HTMLElement && el.scrollTop > 0 && /auto|scroll/.test(getComputedStyle(el).overflowY));
+const retap = (tab: Tab): void => {
+    if (tab.id === `chat` || !isNavActive(tab) || route.path !== (tab.to.split(`?`)[0] ?? tab.to)) {
+        return;
+    }
+    const behavior: ScrollBehavior = lessMotion() ? `instant` : `smooth`;
+    for (const el of scrollersAt(window.innerWidth / 2, window.innerHeight / 2)) {
+        el.scrollTo({ top: 0, behavior });
+    }
+};
 </script>
 
 <template>
@@ -169,6 +189,7 @@ const isNavActive = (tab: Tab): boolean => {
             class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors active:bg-overlay active:text-content"
             :class="{ 'text-link': isNavActive(tab) }"
             :aria-label="tabLabel(tab)"
+            @click="retap(tab)"
         >
             <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
             <!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
