@@ -2,7 +2,7 @@ import {
     type AccountState,
     gatingWindows,
     type ModelRef,
-    type ProviderRefusal,
+    type RefusalsOnFile,
     type ServiceFacts,
     serviceStates,
     SPENT_UTILIZATION,
@@ -70,9 +70,9 @@ const judge = (reading: FleetReading, state: AccountState, model: ModelRef | und
     }
 };
 
-/** The fleet's verdict for one model; `refusal` is the provider's last refusal, which stands until something answers it. */
-export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusal?: ProviderRefusal): TurnLimit => {
-    const states = serviceStates(readings, refusal, model);
+/** The fleet's verdict for one model; `refusals` are the provider's refusals on file, each standing until something answers it. */
+export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile): TurnLimit => {
+    const states = serviceStates(readings, refusals, model);
     const verdicts = readings.map((reading) => judge(reading, states.get(reading.account) ?? { kind: "unknown" }, model));
     const room = verdicts.flatMap((verdict) => (verdict.kind === "room" ? [verdict.measuredAt] : []));
     const exhausted = verdicts.flatMap((verdict) => (verdict.kind === "spent" ? verdict.exhausted : []));

@@ -189,6 +189,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
         },
         providerRefusals: {
             read: async () => (refusal === undefined ? {} : { claude: refusal }),
+            onFile: async () => (refusal === undefined ? {} : { claude: [refusal] }),
             record: async () => {},
             clear: async () => {},
             onChange: () => () => {},

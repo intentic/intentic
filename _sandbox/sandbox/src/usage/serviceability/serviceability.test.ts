@@ -16,12 +16,21 @@ const deps = (params: {
     readonly usage?: Record<string, AccountUsage>;
     readonly seats?: Record<string, SeatRefusal>;
     readonly refusals?: Record<string, ProviderRefusal>;
+    // Each account's own last limit refusal, kept on file beside the provider's last one.
+    readonly held?: readonly ProviderRefusal[];
     readonly routed?: Partial<TranslatorAccounts>;
 }): ServiceabilityDeps => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...(params.accounts ?? [])] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => params.refusals ?? {} }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
+        read: async () => params.refusals ?? {},
+        onFile: async () => ({
+            ...Object.fromEntries(Object.entries(params.refusals ?? {}).map(([provider, refusal]) => [provider, [refusal]])),
+            // Every account refusal held here is a Claude account's.
+            claude: [...(params.refusals?.[`claude`] === undefined ? [] : [params.refusals[`claude`]]), ...(params.held ?? [])],
+        }),
+    }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
         accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [], ...params.routed }),
     }),
@@ -82,6 +91,29 @@ test("a standing limit refusal reads its account as spent, until a reading with 
     expect(await pick(deps({ accounts, usage: stale, refusals }))).toBe("other");
     const since = { ...stale, refused: reading(window({ utilization: 10 })) };
     expect(await pick(deps({ accounts, usage: since, refusals }))).toBe("refused");
+});
+
+// The provider's last refusal moves on to whichever account says no next. An account read at 100 by a provider that rounds
+// is only proven spent by its own refusal, so that refusal must outlive one on another account.
+test("an account's own limit refusal holds it spent after another account is refused", async () => {
+    const reopensAt = Math.floor(Date.now() / 1000) + 86_400;
+    const atTheLine = { ...reading(window({ kind: "seven_day", utilization: 100, rounded: true, resetsAt: reopensAt })), measuredAt: Date.now() };
+    const accounts = [account("spent", { usage: atTheLine }), account("roomy", { usage: reading(window({ utilization: 30 })) })];
+    const own = { at: Date.now() - 60_000, kind: "limit" as const, message: "Claude usage limit reached.", account: "spent", model: "claude-opus-5-5", resetsAt: reopensAt };
+    const services = deps({
+        accounts,
+        usage: { spent: atTheLine, roomy: reading(window({ utilization: 30 })) },
+        // The provider's last refusal now names another account: a revoked token, which says nothing about this pool.
+        refusals: { claude: { at: Date.now(), kind: "auth", message: "OAuth token revoked.", account: "elsewhere" } },
+        held: [own],
+    });
+
+    const [row] = await withAccountStates(services, "claude", accounts);
+    expect(row?.state).toEqual({ kind: "spent", reopensAt });
+    expect(await serviceability(services, "claude", "spent")).toEqual({ kind: "spent", reopensAt });
+    expect(await pick(services)).toBe("roomy");
+    // Without its own refusal on file, the same reading is at the line: no room, but not proven spent.
+    expect(await serviceability(deps({ accounts, usage: { spent: atTheLine } }), "claude", "spent")).toEqual({ kind: "ready", room: 0 });
 });
 
 test("a routed provider is judged from the translator's credentials, its bench included", async () => {

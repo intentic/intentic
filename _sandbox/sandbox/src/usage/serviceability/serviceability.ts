@@ -13,9 +13,9 @@ import type { Services } from "../../composition.js";
 
 // "Can this account serve a turn?", answered in one place. The rule itself is the contract's (`serviceState` in
 // models/plan-pools.ts); this module feeds it every fact the daemon holds: revoke marks and seat refusals, the plan-limit
-// reading (its `unread` mark included, the reading stays a floor), the provider's last refusal, and the translator's
-// bench. The unnamed-turn pick, the limit move and keep-warm's reserve read nothing else, and the account lists publish
-// the same verdict as `state`.
+// reading (its `unread` mark included, the reading stays a floor), the refusals on file (the provider's last, and each
+// account's own last limit refusal), and the translator's bench. The unnamed-turn pick, the limit move and keep-warm's
+// reserve read nothing else, and the account lists publish the same verdict as `state`.
 
 export type ServiceabilityDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "cliProxy" | "providerRefusals">;
 
@@ -48,7 +48,7 @@ export const serviceabilities = async (
     provider: AgentProvider,
     model?: ModelRef,
 ): Promise<readonly { readonly id: string; readonly state: AccountState }[]> => {
-    const [facts, refusals] = await Promise.all([accountFactsOf(deps, provider), deps.providerRefusals.read()]);
+    const [facts, refusals] = await Promise.all([accountFactsOf(deps, provider), deps.providerRefusals.onFile()]);
     const states = serviceStates(facts, refusals[provider], model);
     return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
 };
@@ -62,13 +62,13 @@ export const serviceability = async (deps: ServiceabilityDeps, provider: AgentPr
 
 /** A provider's own account rows, each with its `state`. */
 export const withAccountStates = async (deps: Pick<Services, "providerRefusals">, provider: AgentProvider, accounts: readonly OauthAccount[]): Promise<OauthAccount[]> => {
-    const states = serviceStates(accounts.map(nativeFacts), (await deps.providerRefusals.read())[provider]);
+    const states = serviceStates(accounts.map(nativeFacts), (await deps.providerRefusals.onFile())[provider]);
     return accounts.map((account) => ({ ...account, ...stateOf(states, account.id) }));
 };
 
 /** Every routed provider's credentials, each with its `state`. */
 export const withRoutedStates = async (deps: Pick<Services, "providerRefusals">, accounts: TranslatorAccounts): Promise<TranslatorAccounts> => {
-    const refusals = await deps.providerRefusals.read();
+    const refusals = await deps.providerRefusals.onFile();
     return Object.fromEntries(
         Object.entries(accounts).map(([provider, rows]) => {
             const states = serviceStates(rows.map(routedFacts), refusals[provider]);

@@ -283,19 +283,28 @@ export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, mod
     return refusal?.kind === "limit" ? refusedPool(facts.usage, refusal, model) : headroomState(facts.usage, model);
 };
 
-/** Every account of one provider, judged together, since a refusal naming no account is answered by any of them. */
+/** The refusals a provider's accounts are judged against: its last one, or every one on file (each account's own beside it). */
+export type RefusalsOnFile = ProviderRefusal | readonly ProviderRefusal[] | undefined;
+
+const refusalList = (refusals: RefusalsOnFile): readonly ProviderRefusal[] =>
+    refusals === undefined ? [] : "kind" in refusals ? [refusals] : refusals;
+
+/**
+ * Every account of one provider, judged together, since a refusal naming no account is answered by any of them. Each
+ * account answers to the newest refusal that still stands over it: the provider's last one moves on to whichever account
+ * said no next, and an account's own refusal on file stays true of it until something answers it.
+ */
 export const serviceStates = (
     accounts: readonly ServiceFacts[],
-    refusal: ProviderRefusal | undefined,
+    refusals: RefusalsOnFile,
     model?: ModelRef,
     now: number = Date.now(),
 ): ReadonlyMap<string, AccountState> => {
-    const standing = refusal !== undefined && refusalVerdict(refusal, accounts, now) === "standing" ? refusal : undefined;
+    const standing = refusalList(refusals)
+        .filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing")
+        .toSorted((left, right) => right.at - left.at);
     return new Map(
-        accounts.map((facts) => [
-            facts.account,
-            serviceState(facts, standing !== undefined && (standing.account ?? facts.account) === facts.account ? standing : undefined, model, now),
-        ]),
+        accounts.map((facts) => [facts.account, serviceState(facts, standing.find((refusal) => (refusal.account ?? facts.account) === facts.account), model, now)]),
     );
 };
 

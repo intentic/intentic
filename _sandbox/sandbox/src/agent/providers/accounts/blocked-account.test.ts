@@ -29,6 +29,7 @@ const deps = (params: {
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
     providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
         read: async () => (params.refusal === undefined ? {} : { claude: params.refusal }),
+        onFile: async () => (params.refusal === undefined ? {} : { claude: [params.refusal] }),
     }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
 });

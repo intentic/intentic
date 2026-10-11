@@ -279,6 +279,7 @@ export const recordingTurnStores = (
             usage: { record: async (turn) => void writes.usage.push(turn) },
             providerRefusals: {
                 read: async () => ({}),
+                onFile: async () => ({}),
                 record: async (provider, refusal) => void writes.providerRefusals.push({ provider, refusal }),
                 clear: async (provider, account) => void writes.refusalsCleared.push({ provider, account }),
                 onChange: () => () => {},

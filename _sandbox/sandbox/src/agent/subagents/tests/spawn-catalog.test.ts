@@ -117,7 +117,7 @@ describe("a provider's refusal, read in the very next listing", () => {
             // SAFETY: an empty list satisfies every account row type the store's `list` could be typed to return.
             claudeStore: { list: async () => [] as never },
             config: withTranslator,
-            providerRefusals: unstubbed<ProviderRefusalStore>("providerRefusals", { read: async () => (refusal === undefined ? {} : { codex: refusal }) }),
+            providerRefusals: unstubbed<ProviderRefusalStore>("providerRefusals", { onFile: async () => (refusal === undefined ? {} : { codex: [refusal] }) }),
             cliProxy: {
                 ...codexConnectedProxy,
                 accounts: async () => ({

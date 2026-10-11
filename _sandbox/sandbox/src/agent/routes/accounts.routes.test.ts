@@ -18,7 +18,7 @@ const fakeDoor = (over: Partial<AccountDoor> = {}): AccountDoor => ({
     ...over,
 });
 
-const refusals = { providerRefusals: { read: async () => ({}) } } as unknown as Services;
+const refusals = { providerRefusals: { read: async () => ({}), onFile: async () => ({}) } } as unknown as Services;
 const client = (doors: Parameters<typeof createAccountsRoutes>[1]) => routesClient(accountsContract, createAccountsRoutes(refusals, doors));
 
 test("a provider without a door is not found, whatever the verb", async () => {

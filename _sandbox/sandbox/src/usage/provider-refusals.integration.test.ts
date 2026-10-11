@@ -76,3 +76,52 @@ test("forgets a refusal old enough to describe a window that has since reopened"
     await store.record("codex", refusal({ at: Date.now() - 6 * DAY }));
     expect(Object.keys(await store.read())).toEqual(["codex"]);
 });
+
+// The provider's last refusal moves on to whichever account says no next; a spent allowance is a fact about the account
+// that hit it, and must still be on file when another account is refused after it.
+test("keeps each account's own limit refusal on file after another account is refused", async () => {
+    const { store, path } = tempStore();
+    const spent = refusal({ at: Date.now() - 1_000, account: "claude-1", model: "claude-opus-5-5", resetsAt: 1_900_000_000 });
+    const later = refusal({ account: "claude-2" });
+    const revoked = refusal({ kind: "auth", message: "OAuth token revoked", account: "claude-2" });
+    await store.record("claude", spent);
+    await store.record("claude", later);
+    await store.record("claude", revoked);
+
+    // The wire still carries one refusal per provider, the last.
+    expect(await store.read()).toEqual({ claude: revoked });
+    const onFile = await fileProviderRefusalStore(path).onFile();
+    expect(onFile[`claude`]).toHaveLength(3);
+    expect(onFile[`claude`]).toEqual(expect.arrayContaining([revoked, spent, later]));
+});
+
+// A turn that runs on the account proves it serves again; one on another account proves nothing about it. Forgetting the
+// account (a disconnect) runs the same clear, so its copy goes with it.
+test("settles an account's own limit refusal only when that account serves", async () => {
+    const { store } = tempStore();
+    const spent = refusal({ account: "claude-1" });
+    await store.record("claude", spent);
+    await store.record("codex", refusal({ message: "all credentials cooling down" }));
+
+    await store.clear("claude", "claude-2");
+    await store.clear("claude", undefined);
+    expect((await store.onFile())[`claude`]).toEqual([spent, spent]);
+
+    await store.clear("claude", "claude-1");
+    expect(await store.onFile()).toEqual({ codex: [expect.objectContaining({ message: "all credentials cooling down" })] });
+});
+
+// Sign-in and seat refusals leave marks of their own on the account; only a spent allowance needs a copy, and a refusal
+// naming no account has nothing to file it under.
+test("keeps no account copy of a sign-in refusal or of one that names no account", async () => {
+    const { store } = tempStore();
+    await store.record("claude", refusal({ kind: "auth", message: "token revoked", account: "claude-1" }));
+    await store.record("codex", refusal({ message: "all credentials cooling down" }));
+    expect(Object.values(await store.onFile()).map((refusals) => refusals.length)).toEqual([1, 1]);
+});
+
+test("forgets an account's own refusal after a week, as it does the provider's", async () => {
+    const { store } = tempStore();
+    await store.record("claude", refusal({ at: Date.now() - 8 * DAY, account: "claude-1" }));
+    expect(await store.onFile()).toEqual({});
+});

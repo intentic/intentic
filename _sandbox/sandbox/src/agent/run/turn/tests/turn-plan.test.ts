@@ -571,7 +571,7 @@ describe("a conversation whose account can no longer serve it", () => {
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
                 read: async () => (ready ? { seatless: { ...roomy, windows: [] }, spare: roomy } : { seatless: { ...roomy, windows: [] } }),
             }),
-            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
         });
 
     const marked = () => ({

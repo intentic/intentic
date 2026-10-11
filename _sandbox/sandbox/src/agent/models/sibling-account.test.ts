@@ -20,7 +20,7 @@ const fakeServices = (params: {
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
         entry: () =>

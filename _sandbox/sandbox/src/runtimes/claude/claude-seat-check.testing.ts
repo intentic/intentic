@@ -21,6 +21,7 @@ export const memorySeats = (seats: Record<string, SeatRefusal>): ClaudeSeatStore
 /** A refusal store over a record the test holds, keyed by provider as the file is. */
 export const memoryRefusals = (refusals: Record<string, ProviderRefusal> = {}): ProviderRefusalStore => ({
     read: async () => ({ ...refusals }),
+    onFile: async () => Object.fromEntries(Object.entries(refusals).map(([provider, refusal]) => [provider, [refusal]])),
     record: async (provider, refusal) => {
         refusals[provider] = refusal;
     },

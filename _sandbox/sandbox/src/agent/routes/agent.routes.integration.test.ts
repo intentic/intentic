@@ -1081,6 +1081,7 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
                 },
                 providerRefusals: {
                     read: async () => ({}),
+                    onFile: async () => ({}),
                     record: async (_provider, refusal) => void filed.push({ kind: refusal.kind, message: refusal.message }),
                     clear: async () => {},
                     onChange: () => () => {},

@@ -248,6 +248,31 @@ test("a provider's accounts are judged together: a standing refusal lands only o
     expect(answered.get("a")).toEqual({ kind: "ready", room: 60 });
 });
 
+// The provider's last refusal moves on to whichever account says no next; an account's own refusal on file stays true of
+// it. A pool Anthropic reads at a rounded 100 is only proven empty by that refusal.
+test("each account answers to the newest refusal on file that still stands over it", () => {
+    const line = at(5_000, window({ kind: "seven_day", utilization: 100, rounded: true, resetsAt: 20 }));
+    // Read before its sign-in was refused, so nothing has answered that refusal yet.
+    const room = at(2_000, window({ kind: "seven_day", utilization: 30 }));
+    const own = refusal({ kind: "limit", account: "a", resetsAt: 20, at: 1_000 });
+    const elsewhere = refusal({ kind: "auth", account: "b", at: 3_000 });
+    const accounts = [
+        { account: "a", usage: line },
+        { account: "b", usage: room },
+    ];
+    expect(Object.fromEntries(serviceStates(accounts, [elsewhere, own], undefined, 9_999))).toEqual({
+        a: { kind: "spent", reopensAt: 20 },
+        b: { kind: "blocked", fix: "reconnect", reason: "no." },
+    });
+    // Only the provider's last one: the first account is back at the line, no room but not proven spent.
+    expect(serviceStates(accounts, elsewhere, undefined, 9_999).get("a")).toEqual({ kind: "ready", room: 0 });
+    // Past the instant the provider named, its refusal is over and the reading speaks alone.
+    expect(serviceStates(accounts, [elsewhere, own], undefined, 20_000).get("a")).toEqual({ kind: "ready", room: 0 });
+    // A newer refusal on the same account outranks the older one.
+    const revoked = refusal({ kind: "auth", account: "a", at: 6_000 });
+    expect(serviceStates(accounts, [own, revoked], undefined, 9_999).get("a")).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
+});
+
 test("an unnamed turn takes the most room, then an unmeasured account, then a spent one, and a blocked one only when that is all", () => {
     const entry = (id: string, state: AccountState) => ({ id, state });
     const blocked: AccountState = { kind: "blocked", fix: "admin", reason: "no seat" };

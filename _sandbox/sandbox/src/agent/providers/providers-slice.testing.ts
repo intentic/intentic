@@ -83,7 +83,13 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
         headroom: idleHeadroom(),
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
-        providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
+        providerRefusals: {
+            read: async () => ({}),
+            onFile: async () => ({}),
+            record: async () => {},
+            clear: async () => {},
+            onChange: () => () => {},
+        },
         // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
         modelCooldowns: { cooling: async () => new Map(), record: async () => {}, clear: async () => {} },
         cliProxy: emptyCliProxy(cliProxy),

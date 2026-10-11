@@ -6,6 +6,7 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     type ProviderRefusal,
+    type RefusalsOnFile,
     PROVIDERS,
     serviceStates,
 } from "@intentic/sandbox-contract";
@@ -77,8 +78,8 @@ const roomiest = (rows: readonly Roomy[]): Roomy | undefined =>
 // Most room any one account the rule calls ready has left for this model, judged with the provider's standing refusal;
 // undefined if none has proven room. A reading that can still be re-read wins over one that cannot, whatever it says:
 // a stale figure is quoted only when it is all there is, and then marked stale.
-const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusal: ProviderRefusal | undefined): ModelHeadroom | undefined => {
-    const states = serviceStates(readings, refusal, model);
+const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusals: RefusalsOnFile): ModelHeadroom | undefined => {
+    const states = serviceStates(readings, refusals, model);
     const ready = readings.flatMap((reading) => {
         const state = states.get(reading.account);
         return state?.kind === "ready" ? [{ reading, room: state.room }] : [];
@@ -108,23 +109,18 @@ const exhausted = (limit: TurnLimit): boolean => limit.spent > 0 && limit.withHe
 const soonest = (instants: readonly (number | undefined)[]): number | undefined =>
     instants.reduce<number | undefined>((best, at) => (at !== undefined && (best === undefined || at < best) ? at : best), undefined);
 
-// `refusal` is the provider's last refusal, read beside the readings: a plan that just said no ("usage limit, try again at
-// 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports.
-const spendable = (
-    provider: NativeProvider,
-    catalog: { models: Model[] },
-    readings: readonly FleetReading[],
-    refusal: ProviderRefusal | undefined,
-): SpawnableProvider => {
+// `refusals` are the provider's refusals on file, read beside the readings: a plan that just said no ("usage limit, try
+// again at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports.
+const spendable = (provider: NativeProvider, catalog: { models: Model[] }, readings: readonly FleetReading[], refusals: RefusalsOnFile): SpawnableProvider => {
     const judged = catalog.models.map((model) => {
         const ref: ModelRef = { id: model.id, label: model.label };
-        return { model, ref, limit: fleetLimit(readings, ref, refusal) };
+        return { model, ref, limit: fleetLimit(readings, ref, refusals) };
     });
     const out = judged.filter((row) => exhausted(row.limit));
     const rows = judged
         .filter((row) => !exhausted(row.limit))
         .map((row) => {
-            const headroom = bestHeadroom(readings, row.ref, refusal);
+            const headroom = bestHeadroom(readings, row.ref, refusals);
             return { id: row.model.id, label: row.model.label, ...(headroom === undefined ? {} : { headroom }) };
         });
     const reopensAt = soonest(out.map((row) => row.limit.reopensAt));
@@ -141,8 +137,12 @@ const spendable = (
 // model-catalog read reports that provider with no models rather than dropping the whole listing.
 export const spawnableProviders = async (services: Services): Promise<readonly SpawnableProvider[]> => {
     // An unreadable refusal file leaves the readings to speak alone, as they did before one was ever written.
-    const refusalsRead = async (): Promise<Record<string, ProviderRefusal>> => services.providerRefusals.read();
-    const [ready, readings, refusals] = await Promise.all([services.providerReadiness(), fleetReadings(services), refusalsRead().catch((): Record<string, ProviderRefusal> => ({}))]);
+    const refusalsRead = async (): Promise<Record<string, readonly ProviderRefusal[]>> => services.providerRefusals.onFile();
+    const [ready, readings, refusals] = await Promise.all([
+        services.providerReadiness(),
+        fleetReadings(services),
+        refusalsRead().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
+    ]);
     const rows = await Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
             const catalog = await services.providerCatalogs[provider].models().catch(() => ({ models: [] }));
