@@ -3,10 +3,11 @@
 import "@intentic/testing/dom";
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick, reactive } from "vue";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
-import { OTHER_LABEL, writeQuestionDraft } from "../../drafts/questionDraft";
+import { forgetQuestionFiles, OTHER_LABEL, questionFiles, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
+import type { PendingAttachment } from "../../drafts/useChatAttachments";
 import ChatQuestionCard from "./ChatQuestionCard.vue";
 
 const CARD: ChatMessage = {
@@ -57,6 +58,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
     sent.length = 0;
     localStorage.clear();
+    forgetQuestionFiles(`q-dismiss`);
 });
 
 const labels = (element: HTMLElement): string[] => [...element.querySelectorAll(`button`)].map((button) => button.textContent?.trim() ?? ``);
@@ -128,4 +130,28 @@ it(`shows the files that went with a decided answer`, async () => {
 
     expect(card.textContent).toContain(`like this`);
     expect(card.textContent).toContain(`shot.png`);
+});
+
+// An upload outlives the card that started it (the pane closed, the transcript re-drawn) and lands on disk regardless:
+// the card drawn again shows it still going, holds Submit for it, and puts it in the draft once it lands.
+it(`picks up an upload a previous drawing of the card started, and drafts it once it lands`, async () => {
+    const upload = reactive<PendingAttachment>({ id: `u1`, name: `shot.png`, path: SHOT, status: `uploading`, progress: 0.4 });
+    questionFiles(`q-dismiss`, 0).value = [upload];
+    writeQuestionDraft(`q-dismiss`, { selections: { 0: [OTHER_LABEL] }, otherTexts: {} });
+    const card = mount();
+    await nextTick();
+
+    expect(card.textContent).toContain(`shot.png`);
+    await press(card, `Submit`);
+    expect(sent).toEqual([]);
+
+    upload.status = `done`;
+    upload.progress = 1;
+    await nextTick();
+
+    expect(readQuestionDraft(`q-dismiss`, CARD.question!.questions).otherFiles).toEqual({ 0: [{ name: `shot.png`, path: SHOT }] });
+    await press(card, `Submit`);
+    expect(sent).toEqual([
+        { kind: `question`, answers: { "Which licence?": [`(see the attached file)`] }, attachments: { "Which licence?": [SHOT] } },
+    ]);
 });

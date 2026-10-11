@@ -20,6 +20,7 @@ jest.mock("../../../../workbench/browsers/browsersSurface", () => ({ openPreview
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
 
 const { default: ChatLeftRunning } = await import("./ChatLeftRunning.vue");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 let app: App | undefined;
 
@@ -54,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    forgetOperations();
     document.body.innerHTML = ``;
     jest.useRealTimers();
 });
@@ -122,5 +124,30 @@ describe(`ChatLeftRunning`, () => {
         await Promise.resolve();
         await nextTick();
         expect(element.querySelector(`[role="alert"]`)?.textContent).toContain(`sandbox unreachable`);
+    });
+
+    // The card goes whenever the pane does; the stop it pressed goes on, and a refusal leaves the job running.
+    it(`holds a stop still out when the card is drawn again, and says a refusal that came while it was gone`, async () => {
+        roster.jobs = [job({ id: `web`, handed: true, ports: [5173] })];
+        let refuse: (error: Error) => void = () => undefined;
+        stopJob.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+        labelled(mount(), `Stop`)?.click();
+        await nextTick();
+        app?.unmount();
+        document.body.innerHTML = ``;
+
+        const again = mount();
+        expect(labelled(again, `Stop`)?.disabled).toBe(true);
+        app?.unmount();
+        document.body.innerHTML = ``;
+
+        refuse(new Error(`sandbox unreachable`));
+        await Promise.resolve();
+        await Promise.resolve();
+        const back = mount();
+        await nextTick();
+        expect(labelled(back, `Stop`)?.disabled).toBe(false);
+        expect(back.querySelector(`[role="alert"]`)?.textContent).toContain(`sandbox unreachable`);
+        expect(stopJob).toHaveBeenCalledTimes(1);
     });
 });

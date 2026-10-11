@@ -17,6 +17,10 @@ jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: LocalModelLane } = await import("./LocalModelLane.vue");
+const { forgetOperations } = await import("../../../workbench/operations/operations");
+
+// The add is kept in the operations ledger, which is module state: a run left there would follow one test into the next.
+afterEach(() => forgetOperations());
 
 const option = (model: string, label: string, tier: `instant` | `work`) => ({
     model,

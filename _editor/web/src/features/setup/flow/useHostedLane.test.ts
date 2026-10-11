@@ -4,7 +4,8 @@ import { unstubbed } from "@intentic/testing";
 import { type EffectScope, effectScope, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { MAX_WAKES } from "./machinePower";
-import { type HostedLaneHost, useHostedLane } from "./useHostedLane";
+import { forgetOperations } from "../../../workbench/operations/operations";
+import { forgetHostedWaits, type HostedLaneHost, useHostedLane } from "./useHostedLane";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 
 // Pins the hosted lane headlessly: a provision lands only on the lane, rung and row it was asked for; stepping off the
@@ -59,6 +60,8 @@ afterEach(() => {
     for (const scope of scopes.splice(0)) {
         scope.stop();
     }
+    forgetOperations();
+    forgetHostedWaits();
     jest.setSystemTime();
 });
 
@@ -298,5 +301,49 @@ describe(`leaving the page`, () => {
         provisioning.resolve(hostedRow());
         expect(await started).toBe(false);
         expect(row.created.value).toEqual(draft);
+    });
+});
+
+describe(`coming back to the row`, () => {
+    it(`goes on counting a wait the reader left mid-boot, and forgets one that ended in a check-in`, () => {
+        jest.setSystemTime(new Date(`2026-09-23T10:00:00Z`));
+        const first = stage();
+        first.row.created.value = hostedRow();
+        first.hosted.resumeHosted();
+        first.scope.stop();
+
+        jest.setSystemTime(new Date(`2026-09-23T10:04:00Z`));
+        const again = stage();
+        again.row.created.value = hostedRow();
+        again.hosted.resumeHosted();
+        expect(again.hosted.hostedSince.value).toBe(Date.parse(`2026-09-23T10:00:00Z`));
+        again.row.announced.value = true;
+        again.scope.stop();
+
+        const later = stage();
+        later.row.created.value = hostedRow();
+        later.hosted.resumeHosted();
+        expect(later.hosted.hostedSince.value).toBe(Date.parse(`2026-09-23T10:04:00Z`));
+    });
+
+    it(`finds a start-over still out busy, and its failure once it lands`, async () => {
+        const first = stage();
+        const restarting = Promise.withResolvers<{ ok: true }>();
+        first.platform.hostedRestart.mockReturnValueOnce(restarting.promise);
+        first.row.created.value = hostedRow();
+        first.hosted.machine.value = `hosted`;
+        const asked = first.hosted.restartHosted();
+        first.scope.stop();
+
+        const again = stage();
+        again.row.created.value = hostedRow();
+        expect(again.hosted.hostedBusy.value).toBe(true);
+        await again.hosted.restartHosted();
+        expect(again.platform.hostedRestart).not.toHaveBeenCalled();
+
+        restarting.reject(new Error(`machine gone`));
+        await asked;
+        expect(again.hosted.hostedBusy.value).toBe(false);
+        expect(again.hosted.hostedError.value).toEqual({ tone: `danger`, title: `Couldn't start it over. Try again in a moment.`, detail: `machine gone` });
     });
 });

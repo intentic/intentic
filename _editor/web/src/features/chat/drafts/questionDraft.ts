@@ -1,4 +1,7 @@
+import { sandboxValue } from "@intentic/extension-api";
+import { type Ref, ref } from "vue";
 import { z } from "zod";
+import type { PendingAttachment } from "./useChatAttachments";
 
 // Picks for an AskUserQuestion card, kept outside its component so they survive a reload while the run (daemon-side)
 // stays parked. Keyed by requestId, matching the replayed frame, so a draft finds its own card and no other. Dropped
@@ -146,3 +149,32 @@ export const answerStarted = (draft: QuestionDraft): boolean =>
     Object.values(draft.selections).some((picks) => picks.length > 0) ||
     Object.values(draft.otherTexts).some((text) => text.trim().length > 0) ||
     Object.values(draft.otherFiles ?? {}).some((files) => files.length > 0);
+
+// Each Other row's files as they stand on this page, uploads still going included, kept outside the card like its
+// picks: an upload runs on after the card that started it is drawn away (the pane closed, the transcript re-drawn) and
+// lands on disk regardless, so the card drawn again shows it still going and then landed, where a list of the card's
+// own lost it. The stored draft above holds only landed files, for a reload; this holds the rest for the page's life.
+// One sandbox's cards: a switch lets go of the old one's.
+const liveFiles = sandboxValue(() => new Map<string, Ref<PendingAttachment[]>>());
+const SEPARATOR = `\u0000`;
+
+/** The files of question `index`'s Other row on card `requestId`, the same list for every drawing of the card. */
+export const questionFiles = (requestId: string, index: number): Ref<PendingAttachment[]> => {
+    const at = `${requestId}${SEPARATOR}${index}`;
+    const known = liveFiles.value.get(at);
+    if (known !== undefined) {
+        return known;
+    }
+    const files = ref<PendingAttachment[]>([]);
+    liveFiles.value.set(at, files);
+    return files;
+};
+
+/** Lets go of a settled card's files: answered, dismissed or cancelled, they are part of no answer any more. */
+export const forgetQuestionFiles = (requestId: string): void => {
+    for (const at of [...liveFiles.value.keys()]) {
+        if (at.startsWith(`${requestId}${SEPARATOR}`)) {
+            liveFiles.value.delete(at);
+        }
+    }
+};

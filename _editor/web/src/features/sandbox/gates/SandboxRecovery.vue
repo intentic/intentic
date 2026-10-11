@@ -10,6 +10,7 @@ import { deviceRoute } from "../devices/deviceLinks";
 import { useServingSlug } from "../environment/servingSlug";
 import { devicesAcross, subscribeDevicesAcross } from "../live/devicesAcross";
 import { expectRestart } from "../live/sandboxRestart";
+import { useOperation } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import DiagnosisChain from "../diagnosis/DiagnosisChain.vue";
 import FixCommand from "../diagnosis/FixCommand.vue";
@@ -48,28 +49,38 @@ const { cmdOs } = useOsPreference();
 const commands = computed(() => recoveryCommands(slug.value, cmdOs.value));
 
 const rollingBack = ref(false);
-const restartFailed = ref(false);
+// The ask is the sandbox's, in the operations ledger: the gate and the notification lane both draw this, and either
+// one opened while the platform is still answering holds the button rather than asking twice.
+const restart = useOperation(`gates/recovery/restart`);
+const restartFailed = computed(() => restart.failure.value !== undefined);
 // A restart the reader asked for is what the next silence is: armed before the ask, since the platform can take the
 // machine down before the promise settles.
 const restartHosted = async (): Promise<void> => {
     const sandbox = active.value?.id;
-    if (sandbox === undefined) {
+    if (sandbox === undefined || restart.busy.value) {
         return;
     }
-    restartFailed.value = false;
-    const settled = expectRestart({
-        sandbox,
-        id: `recovery`,
+    await restart.run({
         what: t(`sandbox.diagnosis.restartingWhat`),
-        quiet: { title: t(`sandbox.diagnosis.restartQuietTitle`), detail: t(`sandbox.diagnosis.restartQuietDetail`) },
-        untilAnswered: true,
+        failed: t(`sandbox.diagnosis.restartFailed`),
+        // Its end is the sandbox answering again, which says so by itself.
+        quiet: true,
+        task: async () => {
+            const settled = expectRestart({
+                sandbox,
+                id: `recovery`,
+                what: t(`sandbox.diagnosis.restartingWhat`),
+                quiet: { title: t(`sandbox.diagnosis.restartQuietTitle`), detail: t(`sandbox.diagnosis.restartQuietDetail`) },
+                untilAnswered: true,
+            });
+            try {
+                await apiClient.sandbox.hostedRestart({ sandboxId: sandbox });
+            } catch (error) {
+                settled();
+                throw error;
+            }
+        },
     });
-    try {
-        await apiClient.sandbox.hostedRestart({ sandboxId: sandbox });
-    } catch {
-        settled();
-        restartFailed.value = true;
-    }
 };
 
 const primary = computed(() => notice.value?.action);
@@ -106,7 +117,7 @@ const askRepair = (): void => {
         </ul>
         <div v-if="primary === `restart-hosted`" class="flex flex-col gap-1">
             <div>
-                <Button size="small" :label="t(`sandbox.diagnosis.restartIt`)" @click="restartHosted">
+                <Button size="small" :label="t(`sandbox.diagnosis.restartIt`)" :loading="restart.busy.value" @click="restartHosted">
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
             </div>

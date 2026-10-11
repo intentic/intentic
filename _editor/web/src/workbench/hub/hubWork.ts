@@ -68,6 +68,9 @@ const HUB_SECTION: InjectionKey<Ref<string>> = Symbol(`hub-section`);
 
 export const provideHubSection = (key: Ref<string>): void => provide(HUB_SECTION, key);
 
+/** The hub section a view is mounted in, read at setup; undefined outside a hub. Read its value when work starts. */
+export const injectHubSection = (): Ref<string> | undefined => inject(HUB_SECTION, undefined);
+
 export interface HubWork {
     /** Marks this section until the returned end is called, for work whose end is not a promise settling. */
     readonly begin: (what: string) => () => void;

@@ -44,7 +44,7 @@ const TOKENS = `/system/control/tokens`;
 
 const { daemonUrl, active } = useSandbox();
 // Unfiltered by scope: hiding tokens minted elsewhere would let a leaked one stay live unnoticed.
-const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
+const { tokens, minted, minting, notice, mint, forgetMinted, revoke } = useMintedTokens({
     list: async () => (await sandboxJson<{ tokens?: ControlToken[] }>(TOKENS)).tokens ?? [],
     mint: async ({ label, scope, expiresAt }: MintRequest) => {
         const named = label.trim();
@@ -59,6 +59,7 @@ const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
         return undefined;
     },
     owner: () => active.value?.id,
+    key: `access/control-tokens/mint`,
 });
 
 // Maintainer and up, the floor of all three token routes (the daemon's operating gate, `ownerDenied`), which is not the
@@ -262,7 +263,13 @@ const describe = (token: ControlToken): string =>
                 </form>
 
                 <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-                    <p class="text-2xs text-subtle">{{ t(`sandbox.controlTokensSection.shownOnceCopyNow`) }}</p>
+                    <!-- Kept until put away: it is never shown again, so only the reader knows it is safely stored. -->
+                    <div class="flex items-start gap-2">
+                        <p class="flex-1 text-2xs text-subtle">{{ t(`sandbox.controlTokensSection.shownOnceCopyNow`) }}</p>
+                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="forgetMinted">
+                            {{ t(`ui.action.done`) }}
+                        </button>
+                    </div>
                     <div class="flex items-center gap-2">
                         <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
                         <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />

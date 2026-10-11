@@ -14,6 +14,7 @@ const refresh = jest.fn(async (): Promise<SandboxSummary[]> => []);
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ refresh }) }));
 
 const { forgetRestarts, restartExpected } = await import("../../live/sandboxRestart");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 const { default: HostedRollbackDialog } = await import("./HostedRollbackDialog.vue");
 
 const hosted = sandboxSummary({ id: `sb1`, name: `acme-shop`, hosted: { region: `ams`, warm: true, canRollBack: true } });
@@ -44,6 +45,7 @@ const confirm = async (): Promise<void> => {
 
 afterEach(() => {
     forgetRestarts();
+    forgetOperations();
     hostedRollback.mockClear();
     refresh.mockClear();
     document.body.innerHTML = ``;

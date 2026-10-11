@@ -2,11 +2,11 @@
 <script setup lang="ts">
 import type { Need, ReleaseNeed } from "@intentic/sandbox-contract";
 import { Notice } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
 import { useSandboxSession } from "../../client/session/sandboxSession";
+import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "./useNeeds";
 
 const t = useT();
@@ -22,16 +22,15 @@ const mayAnswer = computed(() => {
 });
 // The names are on the line above, so the hover only says why the buttons are off.
 const onlyThem = computed(() => t(`needs.release.approversOnly`));
-const { busy, notice, run } = useAsyncAction();
+// The need's answer, wherever it is drawn (needAnswer.ts). Its no is its approvers' alone, so it is this card's too.
+const { busy, notice, answer } = useNeedAnswer(() => props.need);
 const release = async (): Promise<void> => {
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `release` } });
-    }, t(`needs.card.couldNotAnswer`));
+    const id = props.need.id;
+    await answer({ tag: `release`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `release` } }) });
 };
 const decline = async (): Promise<void> => {
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `decline` } });
-    }, t(`needs.card.couldNotAnswer`));
+    const id = props.need.id;
+    await answer({ tag: `decline`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `decline` } }) });
 };
 </script>
 

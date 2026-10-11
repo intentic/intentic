@@ -27,7 +27,7 @@ interface Answering {
 }
 const answering: Answering = { version: `1.316.0` };
 jest.mock(`./swapLanding`, () => ({ appliedHash: async () => answering.hash, runningVersion: async () => answering.version }));
-const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string): Promise<string | undefined> => undefined);
+const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string, _payload?: unknown): Promise<string | undefined> => undefined);
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
 // The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
 const hostRunning = ref<string | undefined>(`host-1`);
@@ -42,6 +42,8 @@ const cancelIdle = jest.fn(async (): Promise<void> => undefined);
 jest.mock(`./useRebuildWhenIdle`, () => ({ useRebuildWhenIdle: () => ({ wait: idleWait, supported: waitsForAgents, ask: askIdle, cancel: cancelIdle }) }));
 
 const { forgetRestarts, restartExpected } = await import("../../../sandbox/live/sandboxRestart");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
+const { forgetSwapFollows } = await import("./swapFollow");
 const { default: HostRecreate } = await import("./HostRecreate.vue");
 
 let app: App | undefined;
@@ -121,6 +123,8 @@ afterEach(() => {
     askIdle.mockClear();
     cancelIdle.mockClear();
     forgetRestarts();
+    forgetSwapFollows();
+    forgetOperations();
     document.body.innerHTML = ``;
 });
 
@@ -250,6 +254,9 @@ it(`asks the sandbox to pick the stopped agents up again once it is back, unless
     app?.unmount();
     document.body.innerHTML = ``;
     swapServingSandbox.mockClear();
+    // The first swap is still waiting for the sandbox to come back, and holds every button on it until it does.
+    forgetSwapFollows();
+    forgetOperations();
 
     await press({
         beforeConfirm: async () => {
@@ -337,14 +344,52 @@ it(`stops watching a rebuild the sandbox started once it fails without the sandb
     expect(shown()).not.toContain(`Rebuilding now that no agent is working.`);
 });
 
-// Walking away mid-swap doesn't stop the container being replaced: the restart stays named until the sandbox answers.
-it(`keeps the restart named when the page is left mid-swap`, async () => {
+// Walking away mid-swap doesn't stop the container being replaced: the swap runs on, holding its restart, until the
+// sandbox answers on what it was swapped onto.
+it(`keeps the restart named when the page is left mid-swap, and ends it once the swap lands`, async () => {
     neverEnds();
     await press();
     app?.unmount();
     app = undefined;
     await settle();
-    expect(restartExpected(`sb1`)?.untilAnswered).toBe(true);
+    expect(restartExpected(`sb1`)?.id).toBe(`recreate`);
+
+    answering.version = `1.317.0`;
+    await cutover();
+    expect(restartExpected(`sb1`)).toBeUndefined();
+});
+
+// Three cards carry this button over the one sandbox serving the page: a swap pressed on one is the swap on all of
+// them, and a card opened mid-build comes back to its log rather than to a button offered again.
+it(`shows a swap still running to a card opened after it was pressed, and refuses a second one`, async () => {
+    neverEnds();
+    await press({ hash: `approved` });
+    const heard = swapServingSandbox.mock.calls[0]?.[3] as { onLine: (line: string) => void } | undefined;
+    heard?.onLine(`building layer 3/7`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    mount();
+    await nextTick();
+    expect(shown()).toContain(`Rebuild running…`);
+    expect(shown()).toContain(`building layer 3/7`);
+    buttonNamed(`Rebuild running…`)?.click();
+    await nextTick();
+    expect(buttonNamed(`Update now`)).toBeUndefined();
+    expect(swapServingSandbox).toHaveBeenCalledTimes(1);
+});
+
+// The reader who left before the swap gave up comes back to the words for not knowing, not to a fresh button.
+it(`keeps how a swap ended for the card that comes back to it`, async () => {
+    jest.useFakeTimers();
+    await press({ flush: settleFaked });
+    app?.unmount();
+    document.body.innerHTML = ``;
+    await advanceTimersByTimeAsync(60_000);
+
+    mount();
+    await nextTick();
+    expect(shown()).toContain(`Lost contact with that device before this sandbox restarted.`);
 });
 
 it(`says a rebuild that waited did not go through, until dismissed`, async () => {

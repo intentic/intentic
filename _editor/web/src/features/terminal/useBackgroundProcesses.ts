@@ -1,6 +1,9 @@
-import { computed, type ComputedRef, ref, type Ref } from "vue";
+import type { NoticeModel } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
+import { computed, type ComputedRef } from "vue";
 import { useExtensions } from "../extensions/useExtensions";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { useOperations } from "../../workbench/operations/operations";
 import { KINDS } from "./terminalMeta";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";
@@ -22,6 +25,10 @@ export interface BackgroundProcessRow {
     readonly running: boolean;
 }
 
+// Where the operations ledger keeps a row's start, restart or stop: the sandbox's process, not the popover that pressed
+// it, so a second surface (the popover, the Capabilities page) shows the same press held, and its refusal is kept.
+export const PROCESS_PRESSES = `terminal/processes`;
+
 // Delayed relist after an action, to catch a service that reports running then crashes instantly.
 const SETTLE_MS = 1500;
 // Only a declared row addresses the extensions routes; a session-only row has no process to name.
@@ -42,14 +49,21 @@ export const viewProcessLogs = (row: BackgroundProcessRow): void => {
 
 export function useBackgroundProcesses(): {
     rows: ComputedRef<BackgroundProcessRow[]>;
-    // Row an action is in flight for; its buttons disable while set to block a double-click restart.
-    busy: Ref<string | undefined>;
+    // The row an action was last started for while it runs; its buttons disable to block a double-click restart. One
+    // row, for a caller that compares it with each (Capabilities); `pressing` answers for any row.
+    busy: ComputedRef<string | undefined>;
+    pressing: (row: BackgroundProcessRow) => boolean;
+    // Why a row's last press failed, until that row is pressed again or the failure is put away.
+    failure: (row: BackgroundProcessRow) => NoticeModel | undefined;
+    dismiss: (row: BackgroundProcessRow) => void;
     start: (row: BackgroundProcessRow) => Promise<void>;
     stop: (row: BackgroundProcessRow) => Promise<void>;
 } {
     const { extensions } = useExtensions();
     const { sessions, refetch } = useTerminalsQuery();
-    const busy = ref<string | undefined>(undefined);
+    const presses = useOperations(PROCESS_PRESSES);
+    const busy = computed(() => presses.all.value.findLast((press) => press.state === `running`)?.tag);
+    const pressing = (row: BackgroundProcessRow): boolean => presses.at(row.id)?.state === `running`;
 
     const rows = computed<BackgroundProcessRow[]>(() => {
         const live = sessions.value.filter((session) => KINDS[session.kind].logs);
@@ -79,35 +93,61 @@ export function useBackgroundProcesses(): {
         window.setTimeout(() => void refetch(), SETTLE_MS);
     };
 
-    // Holds `busy` for the row across one action, so callers don't have to manage it themselves.
-    const act = async (row: BackgroundProcessRow, run: () => Promise<void>): Promise<void> => {
-        busy.value = row.id;
-        try {
-            await run();
-            await relist();
-        } finally {
-            busy.value = undefined;
+    // Holds the row across one action, so callers don't have to manage it themselves, and keeps its refusal: it used
+    // to be thrown at a click handler, and so said nowhere. The relist is part of the press: the row reads its outcome.
+    const act = async (row: BackgroundProcessRow, what: string, failed: string, run: () => Promise<void>): Promise<void> => {
+        if (pressing(row)) {
+            return;
         }
+        await presses.run(row.id, {
+            what,
+            tag: row.id,
+            failed,
+            task: async () => {
+                await run();
+                await relist();
+            },
+        });
     };
 
     // Always stop then start, both idempotent: a plain start no-ops on a tracked (even backoff-retrying) key, so this
     // covers fresh, crashed, and running alike with one call.
     const start = (row: BackgroundProcessRow): Promise<void> =>
-        act(row, async () => {
-            await sandboxRpc.extensions.processStop(processOf(row));
-            await sandboxRpc.extensions.processStart(processOf(row));
-        });
+        act(
+            row,
+            row.running
+                ? t(`terminal.backgroundProcesses.restarting`, { name: row.name })
+                : t(`terminal.backgroundProcesses.starting`, { name: row.name }),
+            t(`terminal.backgroundProcesses.couldntStart`, { name: row.name }),
+            async () => {
+                await sandboxRpc.extensions.processStop(processOf(row));
+                await sandboxRpc.extensions.processStart(processOf(row));
+            },
+        );
 
     const stop = (row: BackgroundProcessRow): Promise<void> =>
-        act(row, async () => {
-            if (row.extensionId !== undefined) {
-                await sandboxRpc.extensions.processStop(processOf(row));
-                return;
-            }
-            if (row.session !== undefined) {
-                await sandboxRpc.system.killTerminal({ name: row.session });
-            }
-        });
+        act(
+            row,
+            t(`terminal.backgroundProcesses.stopping`, { name: row.name }),
+            t(`terminal.backgroundProcesses.couldntStop`, { name: row.name }),
+            async () => {
+                if (row.extensionId !== undefined) {
+                    await sandboxRpc.extensions.processStop(processOf(row));
+                    return;
+                }
+                if (row.session !== undefined) {
+                    await sandboxRpc.system.killTerminal({ name: row.session });
+                }
+            },
+        );
 
-    return { rows, busy, start, stop };
+    return {
+        rows,
+        busy,
+        pressing,
+        failure: (row) => presses.at(row.id)?.failure,
+        dismiss: (row) => presses.dismiss(row.id),
+        start,
+        stop,
+    };
 }

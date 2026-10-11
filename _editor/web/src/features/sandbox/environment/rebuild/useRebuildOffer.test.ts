@@ -20,6 +20,7 @@ const fleet = ref<{ status: string }[]>([]);
 jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 
 const { useRebuildOffer } = await import("./useRebuildOffer");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 afterEach(() => {
     active.value = { id: `sb1`, role: `owner`, hosted: { region: `iad`, warm: true } };
@@ -28,6 +29,7 @@ afterEach(() => {
     build.value = undefined;
     fleet.value = [];
     rebuild.mockClear();
+    forgetOperations();
 });
 
 it(`offers the hosted owner's rebuild, and sends the recipe the card would`, async () => {

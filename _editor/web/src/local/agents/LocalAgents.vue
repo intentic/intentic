@@ -8,6 +8,7 @@ import { useRoute, useRouter } from "vue-router";
 import type { LocalCheckRow, LocalFirstTask, LocalOnboardingHost } from "../../app/environments/localHost";
 import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
+import { useOperation } from "../../workbench/operations/operations";
 import AgentsFirstTaskComposer from "./AgentsFirstTaskComposer.vue";
 
 const props = defineProps<{
@@ -27,7 +28,10 @@ const { user } = useAccount();
 const showDetails = ref(false);
 const draftFolder = ref(``);
 const draftText = ref(``);
-const busy = ref<string | undefined>(undefined);
+// One ask of the app at a time (check again, set up, restart, sign in, the first task again), tagged with which, in the
+// ledger (operations.ts): an ask still out when the folder switches, or one that failed meanwhile, is there on return.
+const asking = useOperation(`local/agents/ask`);
+const busy = computed(() => (asking.busy.value ? (asking.operation.value?.tag ?? ``) : undefined));
 
 watch(
     () => onboarding.value?.firstTask.value,
@@ -247,12 +251,14 @@ const restartAtTime = computed((): string => {
 });
 
 const run = async (key: string, work: () => Promise<void>): Promise<void> => {
-    busy.value = key;
-    try {
-        await work();
-    } finally {
-        busy.value = undefined;
-    }
+    await asking.run({
+        what: t(`local.agents.asking`),
+        tag: key,
+        failed: t(`local.agents.askFailed`),
+        // The app answers through the setup state this page draws.
+        quiet: true,
+        task: work,
+    });
 };
 
 const rowHint = (row: LocalCheckRow): string => {
@@ -616,6 +622,7 @@ const goRepair = (): void => {
             </div>
         </section>
 
+        <Notice v-if="asking.failure.value" :of="asking.failure.value" />
         <p v-if="onboarding === undefined" class="text-sm text-muted">{{ t(`local.agents.noHost`) }}</p>
     </div>
 </template>

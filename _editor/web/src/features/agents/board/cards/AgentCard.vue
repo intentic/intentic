@@ -16,8 +16,9 @@ import {
 } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { messageOr } from "@intentic/ui/async";
-import { computed, ref, useTemplateRef } from "vue";
-import { requestLandAgent } from "../../fleet/agentActions";
+import { computed, onScopeDispose, ref, useTemplateRef } from "vue";
+import { landRequestWork, requestLandAgent } from "../../fleet/agentActions";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAudience } from "../../../../app/useAudience";
@@ -305,19 +306,30 @@ const { canReview, canShip } = useRole();
 const words = useVocabulary();
 const { maker } = useAudience();
 const { refresh: refreshAgents, notice: agentsNotice, rename } = useAgents();
-const requesting = ref(false);
+// The ask is the card's, in the ledger, shared with its review page's press: either surface holds the other's. A
+// refusal goes on the board's notice strip, and to a reader who already left, as a receipt.
+const landRequest = useOperation(() => landRequestWork(props.agent.id, props.agent.sandboxId));
+const requesting = landRequest.busy;
+let present = true;
+onScopeDispose(() => {
+    present = false;
+});
 const requestLand = async (): Promise<void> => {
-    if (requesting.value) {
-        return;
-    }
-    requesting.value = true;
-    try {
-        await requestLandAgent(props.agent.id, props.agent.sandboxId);
-        await (props.agent.sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
-    } catch (caught) {
-        agentsNotice.value = messageOr(caught, t(`agents.agentCard.couldntSendLandRequest`));
-    } finally {
-        requesting.value = false;
+    const { id, sandboxId } = props.agent;
+    const name = displayTitle.value;
+    const outcome = await landRequest.run({
+        what: t(`agents.agentDetail.requestingLand`, { name }),
+        done: () => t(`agents.agentDetail.landRequestSent`, { name }),
+        failed: t(`agents.agentCard.couldntSendLandRequest`),
+        task: async () => {
+            await requestLandAgent(id, sandboxId);
+            await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
+        },
+    });
+    // A card gone from the screen meanwhile left it to the receipt.
+    if (present && outcome?.state === `failed`) {
+        agentsNotice.value = outcome.failure?.detail ?? outcome.failure?.title;
+        landRequest.dismiss();
     }
 };
 // The standing ask, worn for everyone: a collaborator sees it took, a maintainer reads it as the cue to land.

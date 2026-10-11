@@ -2,8 +2,9 @@
 <script setup lang="ts">
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -13,25 +14,33 @@ const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (eve
 
 const name = ref(``);
 const detail = ref<ShareDetail>(`messages`);
-const busy = ref(false);
-const error = ref<string>();
-const result = ref<SharedConversation>();
 
-// Opening seeds the field with the chat's own name and clears whatever the last share left behind: the
-// dialog is reused across conversations, and a link from the previous one still on screen would be read as
-// this one's.
+// Publishing a long chat takes seconds, and this dialog is gone the moment it closes. So the share is the
+// conversation's rather than the dialog's: closed mid-way and opened again, the press is still held (a second one
+// would publish a second link), and the link once made waits here until Done puts it away, since it is a link to pass
+// on and the reader may have looked away to paste it somewhere.
+const sharing = useOperation<SharedConversation>(() => `chat/${props.conversationId}/share`);
+const { busy, value: result, failure } = sharing;
+
+// Opening seeds the field with the chat's own name. What an earlier share left behind is filed under its own
+// conversation, so another chat's link is never read as this one's.
 watch(
     () => props.visible,
     (visible) => {
         if (visible) {
             name.value = props.title;
             detail.value = `messages`;
-            error.value = undefined;
-            result.value = undefined;
         }
     },
     { immediate: true },
 );
+
+// A failure read here goes with the dialog, as it always did; only the link is worth keeping past it.
+onBeforeUnmount(() => {
+    if (sharing.operation.value?.state === `failed`) {
+        sharing.dismiss();
+    }
+});
 
 // What each answer actually publishes, said where the answer is made.
 const DETAILS = computed((): readonly { readonly value: ShareDetail; readonly label: string; readonly note: string }[] => [
@@ -44,21 +53,25 @@ const DETAILS = computed((): readonly { readonly value: ShareDetail; readonly la
 ]);
 
 const share = async (): Promise<void> => {
-    // A share already in the air owns this dialog. The button holds itself once pressed, but Enter in the name
-    // field submits the form directly, and a second Enter used to publish the conversation twice.
-    if (busy.value) {
-        return;
-    }
-    busy.value = true;
-    error.value = undefined;
-    try {
-        result.value = await sandboxRpc.share.create({ conversationId: props.conversationId, title: name.value.trim(), detail: detail.value });
+    // Enter in the name field submits the form directly, past the held button; a share already in the air refuses a
+    // second start, where a second Enter used to publish the conversation twice.
+    const conversationId = props.conversationId;
+    const title = name.value.trim();
+    const include = detail.value;
+    const ended = await sharing.run({
+        what: t(`chat.chatShareDialog.sharing`, { title }),
+        failed: t(`chat.chatShareDialog.couldNotShare`),
+        keep: true,
+        task: () => sandboxRpc.share.create({ conversationId, title, detail: include }),
+    });
+    if (ended?.state === `done`) {
         emit(`shared`);
-    } catch (caught) {
-        error.value = caught instanceof Error ? caught.message : t(`chat.chatShareDialog.couldNotShare`);
-    } finally {
-        busy.value = false;
     }
+};
+
+const done = (): void => {
+    sharing.dismiss();
+    emit(`update:visible`, false);
 };
 </script>
 
@@ -89,7 +102,7 @@ const share = async (): Promise<void> => {
 
         <!-- Before: the two decisions. -->
         <form v-else class="flex flex-col gap-4" @submit.prevent="name.trim() && share()">
-            <Notice v-if="error" tone="danger">{{ error }}</Notice>
+            <Notice v-if="failure" :of="failure" />
 
             <label class="ui-field">
                 <span class="ui-field-label">{{ t(`chat.chatShareDialog.title`) }}</span>
@@ -129,7 +142,7 @@ const share = async (): Promise<void> => {
         </form>
 
         <template #footer>
-            <Button v-if="result" :label="t(`ui.action.done`)" size="small" @click="emit(`update:visible`, false)" />
+            <Button v-if="result" :label="t(`ui.action.done`)" size="small" @click="done" />
             <template v-else>
                 <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="emit(`update:visible`, false)" />
                 <Button :label="t(`chat.chatShareDialog.share`)" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />

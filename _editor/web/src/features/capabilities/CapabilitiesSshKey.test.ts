@@ -56,6 +56,10 @@ jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponen
 jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
+const { forgetOperations } = await import("../../workbench/operations/operations");
+
+// A key made for a form is kept in the operations ledger until the connection is saved with it.
+afterEach(() => forgetOperations());
 
 const PUBLIC = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOTvguxSytEi7TywcezOzMNcrdb4VPOz4TuDP/ezdzI8 intentic-box`;
 const AUTHORIZE = `mkdir -p ~/.ssh && echo '${PUBLIC}' >> ~/.ssh/authorized_keys`;
@@ -177,7 +181,9 @@ it(`still signs in with a password`, async () => {
 });
 
 // Both answer the same key: a marker left behind would show up in the paste box as text, and would be sent as a key.
-it(`switching to a pasted key after generating one leaves the box empty, and coming back asks for a fresh key`, async () => {
+// The key made is the form's, though: its public half may already be on the server, so coming back shows it again
+// rather than a button whose press would make one the server has never seen.
+it(`switching to a pasted key after generating one leaves the box empty, and coming back shows the same key`, async () => {
     const el = start();
     await fillMachine(el);
     buttonNamed(el, `Generate a key`)!.click();
@@ -187,8 +193,11 @@ it(`switching to a pasted key after generating one leaves the box empty, and com
     expect(el.querySelector(`textarea`)?.value).toBe(``);
 
     await pickAuth(el, `Generate a key for me`);
-    expect(el.textContent).not.toContain(PUBLIC);
-    expect(buttonNamed(el, `Generate a key`)).toBeInstanceOf(HTMLButtonElement);
+    expect(el.textContent).toContain(AUTHORIZE);
+    expect(generateSshKey).toHaveBeenCalledTimes(1);
+
+    const input = await submitted(el);
+    expect(input?.config[`privateKey`]).toBe(stashedMarker(TOKEN));
 });
 
 it(`editing a generated connection shows its public key again, and saving keeps the key it holds`, async () => {

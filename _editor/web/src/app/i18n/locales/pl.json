@@ -89,12 +89,15 @@
             "handOverConnected": "Połączeni teraz",
             "handOverFailed": "Nie udało się przekazać.",
             "handOverHeader": "Przekaż tę sesję",
+            "handingOver": "Przekazywanie {name} do {to}",
             "needsMaintainer": "Wymaga opiekuna",
             "noBranchToReview": "Ten agent nie ma gałęzi do przejrzenia.",
             "notAnsweredYet": "{name} jeszcze nie odpowiedział, więc nie ma nic do pokazania dla tego agenta.",
             "nothingFinalArrivesUncommitted": "Nic nie jest ostateczne: to przychodzi jako niezacommitowane zmiany do Twojego przeglądu, a reszta tury ląduje na tym, gdy agent skończy.",
             "openingAgentsReview": "Otwieranie przeglądu tego agenta…",
             "pages": "Czat i zmiany",
+            "landRequestSent": "Poproszono opiekuna o scalenie: {name}",
+            "requestingLand": "Prośba do opiekuna o scalenie: {name}",
             "session": "Sesja",
             "sessionActions": "Akcje sesji",
             "stillWriting": "Wciąż pisze",
@@ -612,7 +615,12 @@
             "refreshes": "Odświeżeń: {refreshes}",
             "cappedNote": "Skrócono tam, gdzie wykroczyłoby poza północ, gdy zmienia się data w prompcie, lub poza punkt, w którym odświeżanie kosztuje więcej niż ponowny odczyt.",
             "stopsWhen": "Zatrzymuje się samo, gdy zaczyna się tura, gdy konto przekroczy {reserve}% limitu albo gdy prompt następnej tury przestałby pasować.",
-            "stop": "Przestań utrzymywać ciepłą"
+            "stop": "Przestań utrzymywać ciepłą",
+            "arming": "Utrzymywanie pamięci podręcznej czatu w cieple",
+            "stopping": "Wygaszanie pamięci podręcznej czatu",
+            "stopped": "Przestano utrzymywać pamięć podręczną czatu w cieple",
+            "couldntKeep": "Nie udało się utrzymać pamięci podręcznej tego czatu w cieple.",
+            "couldntStop": "Nie udało się przestać utrzymywać pamięci podręcznej tego czatu w cieple."
         },
         "statusBar": {
             "label": "Pasek stanu",
@@ -690,6 +698,16 @@
             "includeScratchFailed": "Nie udało się dodać tego do pracy.",
             "deleteScratchFailed": "Nie udało się tego usunąć.",
             "archiveFailed": "Nie udało się zarchiwizować.",
+            "landing": "Scalanie: {name}",
+            "landed": "Scalono {name} do przestrzeni roboczej",
+            "landBlocked": "Nie udało się scalić {name}: otwórz przegląd, żeby zobaczyć, co to zablokowało",
+            "changingAutoLand": "Zmiana, kiedy {name} scala swoją pracę",
+            "askingResolve": "Prośba do {name} o rozwiązanie konfliktu",
+            "discarding": "Odrzucanie pracy: {name}",
+            "discarded": "Odrzucono pracę: {name}",
+            "includingScratch": "Dodawanie plików do pracy: {name}",
+            "deletingScratch": "Usuwanie plików z kopii: {name}",
+            "archiving": "Archiwizowanie: {name}",
             "otherStaged": "Masz {count} inną zmianę przygotowaną do commita, a zapisanie tych ustawień zacommitowałoby ją razem z nimi. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
         },
         "agentsTile": {
@@ -719,7 +737,8 @@
             "unwatchNeedsOwnSandbox": "Zakończenie obserwacji wymaga własnego sandboxa agenta"
         },
         "archiveDoor": {
-            "deleted": "Usunięto {count} zarchiwizowanego agenta | Usunięto {count} zarchiwizowane agenty | Usunięto {count} zarchiwizowanych agentów"
+            "deleted": "Usunięto {count} zarchiwizowanego agenta | Usunięto {count} zarchiwizowane agenty | Usunięto {count} zarchiwizowanych agentów",
+            "deleting": "Usuwanie zarchiwizowanych agentów"
         },
         "useAgentDrag": {
             "didntWork": "To nie zadziałało.",
@@ -734,7 +753,8 @@
         "boardPresses": {
             "couldntArchiveRun": "Nie udało się zarchiwizować tego przebiegu.",
             "couldntRestoreRun": "Nie udało się przywrócić tego przebiegu.",
-            "couldntStopRun": "Nie udało się zatrzymać tego przebiegu."
+            "couldntStopRun": "Nie udało się zatrzymać tego przebiegu.",
+            "stoppingRun": "Zatrzymywanie przebiegu {name}"
         },
         "cardMenu": {
             "openIn": "Otwórz w {name}",
@@ -922,7 +942,8 @@
             "agentCarriesOn": "Agent kontynuuje",
             "fixStepHandBack": "Napraw ten krok na stronie, potem oddaj sterowanie.",
             "starting": "Uruchamianie Twojej przeglądarki…",
-            "startCaption": "Twoja przeglądarka działa w tym sandboksie: strony ładują się przez jego sieć, a to, do czego się zalogujesz, pozostaje zalogowane."
+            "startCaption": "Twoja przeglądarka działa w tym sandboksie: strony ładują się przez jego sieć, a to, do czego się zalogujesz, pozostaje zalogowane.",
+            "replyFailed": "Nie udało się przekazać agentowi Twojej odpowiedzi. Spróbuj ponownie."
         },
         "area": {
             "inOwnWindow": "Przeglądarki są w osobnym oknie",
@@ -960,6 +981,9 @@
             "agentActHereSession": "a agent będzie tu działał jako Ty. Twoja sesja zostaje w Twoim sandboxie.",
             "browser": "{label}, Twoja przeglądarka",
             "couldntStartBrowser": "Nie udało się uruchomić przeglądarki.",
+            "couldntSave": "Nie udało się zapisać sesji przeglądarki.",
+            "saving": "Zapisywanie sesji {label}",
+            "saved": "Sesja {label} zapisana",
             "droppedWhileSaving": "Połączenie zerwało się podczas zapisywania. Otwórz przeglądarkę ponownie i sprawdź, czy nadal jesteś zalogowany.",
             "imDone": "Skończyłem",
             "logInTo": "Zaloguj się do {label}",
@@ -1077,6 +1101,8 @@
             "renamedTo": "Zmieniono nazwę na"
         },
         "capabilitySubmit": {
+            "adding": "Dodawanie {name}",
+            "saving": "Zapisywanie {name}",
             "couldNotAdd": "Nie udało się dodać możliwości.",
             "couldNotSave": "Nie udało się zapisać tego połączenia.",
             "walletCapsNotSaved": "Kafelek został zapisany, ale platforma nie przyjęła jego limitów wydatków, więc usługa podpisująca nadal stosuje poprzednie limity. Zapisz kafelek ponownie, aby spróbować jeszcze raz.",
@@ -1206,6 +1232,7 @@
             "rebuildingNowIdle": "Przebudowa trwa, bo żaden agent już nie pracuje. Ta strona sama się połączy, gdy sandbox wróci.",
             "idleRebuildFailed": "Przebudowa, która czekała na agentów, nie udała się na tym urządzeniu.",
             "waitDidntGoThrough": "Nie udało się zmienić, kiedy ruszy przebudowa.",
+            "changingWhen": "Zmiana terminu przebudowy",
             "didntGoThrough": "Na tamtym urządzeniu nie udało się wykonać operacji: {action}.",
             "costRollBack": "Restartuje Twój sandbox na wersji, na której działał wcześniej, co zajmuje jakieś pół minuty.",
             "costRestartOnlyShort": "Jest już pobrana, więc zostaje tylko restart: jakieś pół minuty.",
@@ -1331,6 +1358,7 @@
         "secretField": {
             "as": "jako",
             "couldNotSave": "Nie udało się zapisać sekretu.",
+            "saving": "Zapisywanie {secretKey}",
             "pasteValue": "Wklej wartość dla {secretKey}",
             "showValue": "Pokaż wartość",
             "storedInSandboxs": "Przechowywane w"
@@ -1339,6 +1367,7 @@
             "authorizeAs": "Autoryzuj go: uruchom to na serwerze, zalogowany jako {user}",
             "authorizeAsUserAbove": "Autoryzuj go: uruchom to na serwerze, zalogowany jako użytkownik podany wyżej",
             "couldntGenerate": "Nie udało się wygenerować klucza.",
+            "generating": "Generowanie klucza SSH",
             "generateFirst": "Przed zapisaniem wygeneruj klucz i autoryzuj go na serwerze.",
             "generateKey": "Wygeneruj klucz",
             "generateNewKey": "Wygeneruj nowy klucz",
@@ -1994,12 +2023,16 @@
             "signInCouldNotStart": "Nie udało się rozpocząć logowania."
         },
         "capabilityProbe": {
-            "couldNotTest": "Nie udało się przetestować tego połączenia."
+            "couldNotTest": "Nie udało się przetestować tego połączenia.",
+            "testing": "Testowanie {name}"
         },
         "connectionActions": {
             "couldNotDisconnect": "Nie udało się odłączyć tej maszyny.",
             "couldNotRemove": "Nie udało się usunąć możliwości.",
-            "couldNotRename": "Nie udało się zmienić nazwy tego połączenia."
+            "couldNotRename": "Nie udało się zmienić nazwy tego połączenia.",
+            "disconnecting": "Odłączanie {machine}",
+            "removing": "Usuwanie {name}",
+            "renaming": "Zmiana nazwy {name} na {to}"
         },
         "form": {
             "activate": "Aktywuj",
@@ -2368,6 +2401,8 @@
             "askDifferently": "Zapytaj inaczej: zastępuje tę wiadomość i wszystko poniżej",
             "clickAgainDrops": "Kliknij ponownie: usuwa {count} wiadomość | Kliknij ponownie: usuwa {count} wiadomości | Kliknij ponownie: usuwa {count} wiadomości",
             "rewindChat": "Cofnij ten czat",
+            "rewindFailed": "Nie udało się wrócić do tej wiadomości.",
+            "rewinding": "Cofanie czatu",
             "waitForTurn": "Poczekaj, aż tura się skończy",
             "goBackHere": "Wróć tutaj i usuń to, co nastąpiło potem",
             "untitledFork": "Rozgałęzienie bez tytułu"
@@ -2558,7 +2593,9 @@
             "running": "Działa · {elapsed}",
             "servedOn": "Zostawione dla ciebie na {ports} · {elapsed}",
             "stopFailed": "Nie udało się zatrzymać.",
+            "stoppedRow": "Zatrzymano: {label}",
             "stopping": "Zatrzymywanie…",
+            "stoppingRow": "Zatrzymywanie: {label}",
             "stuckAtPrompt": "Polecenie czeka na odpowiedź, której nic w sandboksie nie udzieli. Zatrzymaj je albo odpowiedz w jego terminalu.",
             "title": "Wciąż działa po zakończeniu tury",
             "wakes": "Ten czat obudzi się sam, gdy to się zakończy.",
@@ -2877,6 +2914,7 @@
             "promptsAgentsWrittenAnswers": "Twoje prompty i pisane odpowiedzi agenta.",
             "share": "Udostępnij",
             "shareConversation": "Udostępnij tę rozmowę",
+            "sharing": "Udostępnianie: {title}",
             "shownAtTopPage": "Pokazywane u góry strony i używane do nazwania linku.",
             "title": "Tytuł",
             "updateStopSharingAny": "Możesz to w każdej chwili zaktualizować albo przestać udostępniać w Sandbox ▸ Publiczne.",
@@ -3192,6 +3230,8 @@
             "failed": "Nie udało się teraz zresetować — spróbuj ponownie za chwilę.",
             "ineligible": "Anthropic nie przyznał temu kontu resetu. Obecny limit nadal obowiązuje.",
             "notLimited": "Okno już się ponownie otworzyło — po prostu kontynuuj.",
+            "resetDone": "Limit pięciogodzinny zresetowany",
+            "resetting": "Resetowanie limitu pięciogodzinnego",
             "sandboxDidntAnswer": "Twój sandbox nie odpowiedział."
         },
         "localHandoff": {
@@ -3238,6 +3278,8 @@
             "everyAccount": "Wszystkie konta",
             "filterSubscriptionAccounts": "Filtruj konta subskrypcyjne",
             "measurePlanLimits": "Zmierz limity planu",
+            "measureFailed": "Nie udało się zmierzyć limitów planu.",
+            "measuringPlanLimits": "Mierzenie limitów planu",
             "noAccountsMatch": "Żadne konto nie pasuje.",
             "outdatedMissing": "Do czasu aktualizacji konta poniżej nie pokażą, czy mogą przyjąć turę (utracone logowanie lub miejsce, wyczerpana lub wstrzymana pula), a wybór konta zadziała dopiero od następnej wiadomości.",
             "remeasureLimits": "Zmierz limity ponownie",
@@ -3364,15 +3406,21 @@
             "loopNotStarted": "Nie udało się uruchomić pętli.",
             "loopNotStopped": "Nie udało się zatrzymać pętli.",
             "loopOrWorkflow": "Pętla lub przepływ",
+            "loopStarted": "Pętla {name} uruchomiona",
+            "loopStopped": "Pętla zatrzyma się po bieżącej rundzie",
             "messageIsRequest": "Wiadomość to zlecenie",
             "repeatsUntilMet": "Powtarza aż do celu",
             "roundFinishesFirst": "Runda najpierw się skończy",
             "runMessageThrough": "Przepuść tę wiadomość przez pętlę albo przepływ pracy",
             "runThrough": "Przepuść przez",
+            "startingLoop": "Uruchamianie pętli {name}",
+            "startingWorkflow": "Uruchamianie przepływu pracy {name}",
             "stopLooping": "Zatrzymaj pętlę",
+            "stoppingLoop": "Zatrzymywanie pętli",
             "workflow": "Przepływ pracy",
             "workflowNamed": "Przepływ pracy: {name}",
-            "workflowNotStarted": "Nie udało się uruchomić przepływu pracy."
+            "workflowNotStarted": "Nie udało się uruchomić przepływu pracy.",
+            "workflowStarted": "Przepływ pracy {name} uruchomiony"
         },
         "composerVoice": {
             "failed": "Nie udało się tego rozpoznać, spróbuj ponownie.",
@@ -3603,9 +3651,6 @@
         "chatPlanCard": {
             "proposedPlan": "Proponowany plan"
         },
-        "memoryRaise": {
-            "didntWork": "To nie zadziałało na tym urządzeniu."
-        },
         "noticeWatchStop": {
             "couldNotStop": "Nie udało się zatrzymać obserwacji."
         },
@@ -3691,6 +3736,7 @@
             "publishedCopied": "Opublikowano, link skopiowany",
             "publishedNoAddress": "W skrzynce nadawczej jako {path}; ten sandbox nie ma jeszcze publicznego adresu",
             "publishFailed": "Nie udało się opublikować",
+            "publishing": "Publikowanie: {title}",
             "alreadyAnswered": "Na tę stronę już odpowiedziano.",
             "answering": "Twoja odpowiedź jest w drodze.",
             "askHint": "Odpowiedz na samej stronie; to, co wyśle, wraca do agenta.",
@@ -3741,6 +3787,8 @@
             "you": "Ty:"
         },
         "netdiskMounts": {
+            "mounting": "Montowanie {name}",
+            "unmounting": "Odmontowywanie {name}",
             "actionFailed": "Akcja na dysku nie powiodła się.",
             "agentCanWriteCaption": "dysk podłączony do zapisu przyjmuje zapisy agenta prosto na Twoim serwerze",
             "couldntReadWhatDisks": "Nie udało się odczytać, co robią Twoje dyski.",
@@ -3773,6 +3821,8 @@
             "resets": "reset {resetsAt}"
         },
         "vpnConnections": {
+            "connecting": "Łączenie {name}",
+            "disconnecting": "Rozłączanie {name}",
             "actionFailed": "Akcja VPN nie powiodła się.",
             "connectCode": "Połącz kodem",
             "connectsAutomaticallyAfterSandbox": "Łączy się automatycznie po restarcie sandboxa.",
@@ -3797,7 +3847,8 @@
         "useMintedTokens": {
             "couldntLoad": "Nie udało się wczytać tokenów.",
             "couldntRevoke": "Nie udało się unieważnić tego tokenu.",
-            "mintingFailed": "Nie udało się utworzyć tokenu."
+            "mintingFailed": "Nie udało się utworzyć tokenu.",
+            "minting": "Tworzenie tokenu"
         },
         "imageDataUrl": {
             "noCanvas": "Canvas jest niedostępny w tej przeglądarce."
@@ -3813,6 +3864,7 @@
         "connect": {
             "connecting": "Podłączanie: {provider}",
             "foundKeyAdded": "Dodano",
+            "foundKeyAdding": "Dodawanie klucza API {provider}",
             "foundKeyFailed": "Nie udało się dodać tego klucza.",
             "foundKeyFrom": "Z {source}, kończy się na {hint}. Dodanie kopiuje klucz do tego sandboxa.",
             "foundKeyTitle": "Klucz API {provider}",
@@ -3832,12 +3884,14 @@
         "localModelLane": {
             "bestHere": "Najlepszy wybór",
             "bestPitch": "Największy model, który działa tu sprawnie. Nadaje się do czatu i tur agenta.",
+            "couldntStart": "Nie udało się uruchomić {label}.",
             "factDownload": "{size} do pobrania",
             "factDownloaded": "Pobrany",
             "factMemory": "zajmuje ok. {total} podczas pracy",
             "factWindow": "kontekst {window}k",
             "gettingReady": "Przygotowywanie — {received} z {total}",
             "gettingReadyPlain": "Przygotowywanie…",
+            "loading": "{label} dodany, trwa wczytywanie",
             "measuring": "Sprawdzanie, co ta maszyna może uruchomić…",
             "memoryCapped": "{memory} pamięci dla tej piaskownicy",
             "memoryMachine": "{memory} pamięci",
@@ -3852,6 +3906,7 @@
             "runIt": "Uruchom",
             "sizedForMemory": "Propozycje mieszczą się w {free} wolnej teraz pamięci.",
             "startNow": "Uruchom teraz",
+            "starting": "Uruchamianie {label}",
             "statusFailed": "Nie uruchomił się",
             "stop": "Zatrzymaj",
             "useForQuickJobs": "Wybierz go do opisów commitów i tytułów",
@@ -3899,6 +3954,8 @@
             "noModels": "Działa, nie ma jeszcze pobranych modeli",
             "modelsAndMore": "{models} i {count} więcej",
             "use": "Użyj",
+            "adding": "Dodawanie {server} jako punktu końcowego modelu",
+            "couldntAdd": "Nie udało się dodać {server}.",
             "noneFound": "Do GPU uruchom Ollamę albo LM Studio na komputerze, na którym działa ten sandbox, a pojawi się tutaj. Na Linuksie uruchom Ollamę z OLLAMA_HOST=0.0.0.0; w LM Studio włącz serwowanie w sieci lokalnej."
         }
     },
@@ -4080,6 +4137,10 @@
             "actionFailed": "Ta akcja się nie powiodła.",
             "noPublicAddress": "Ten sandbox nie ma publicznego adresu podglądu, więc jego portów nie da się podejrzeć w przeglądarce.",
             "forwardFailed": "Nie udało się przekierować portu {port}.",
+            "forwarding": "Przekierowywanie portu {port}",
+            "starting": "Uruchamianie: {name}",
+            "stopping": "Zatrzymywanie: {name}",
+            "restarting": "Ponowne uruchamianie: {name}",
             "repoDevServer": "własny serwer deweloperski repozytorium {repo} (jego panel operator/ albo skrypt dev)",
             "appDevServer": "serwer deweloperski aplikacji {app}",
             "startCostInstalled": "Zależności są już zainstalowane, więc wystartuje w kilka sekund.",
@@ -4212,6 +4273,7 @@
             "ownPromptAgentRuns": "Twój własny prompt: agent działa wyłącznie na tym tekście.",
             "promptReachAdds": "Dokładany do",
             "promptReachReplaces": "Zastępuje",
+            "readingBuiltinPrompt": "Odczytywanie wbudowanego promptu systemowego",
             "readingSandbox": "Odczytywanie go z Twojego sandboxa…",
             "replace": "Zastąp",
             "replaceYourText": "Zastąpić twój tekst?",
@@ -4649,6 +4711,7 @@
             "couldntReadFile": "Nie udało się odczytać tego pliku.",
             "couldntReadSetupFromDevice": "Nie udało się odczytać instalacji z tego urządzenia.",
             "didntLand": "Nie dotarło",
+            "discardingPlan": "Odrzucanie planu",
             "environmentBundle": "paczka środowiska",
             "finishArrival": "Zakończ przybycie",
             "foundSetupOn": "Znaleziono instalację {kind} na {host}",
@@ -4659,6 +4722,7 @@
             "nowCalledWithLogoFromBundle": "Teraz nazywa się „{name}”, nazwa i logo wzięte z paczki.",
             "openclaw": "OpenClaw",
             "pack": "Paczka z",
+            "readingWhatWouldLand": "Odczytywanie tego, co by przybyło",
             "refused": "Odrzucono: {count}.",
             "runOn": "Uruchom na {label}:",
             "staysBehind": "{count} rzecz zostaje celowo | {count} rzeczy zostają celowo | {count} rzeczy zostaje celowo",
@@ -4790,6 +4854,7 @@
             "reconnectSandbox": "Połącz ponownie",
             "reconnecting": "Ponowne łączenie…",
             "reconnectingSandbox": "Ponowne łączenie tego sandboxa",
+            "couldntReconnect": "Nie udało się ponownie połączyć tego sandboxa.",
             "confirmReconnect": "Tworzy jego kontener na {host} od nowa z jego konfiguracji. Logowania, pliki, historia i Docker zostają.",
             "sandboxReplacedPageReconnects": "Jeśli został wymieniony, ta strona połączy się sama, gdy wróci.",
             "missingEnv": "Brakuje w jego kontenerze:",
@@ -5018,6 +5083,7 @@
             "batchWorkingUpdate": "Aktualizowanie {count} sandboxa | Aktualizowanie {count} sandboxów | Aktualizowanie {count} sandboxów",
             "cameOff": "Co jednak zeszło: {list}.",
             "couldntRevokeAccess": "Nie udało się cofnąć dostępu temu urządzeniu.",
+            "workingRevoke": "Cofanie dostępu: {label}",
             "deviceDidntReportSandboxs": "Tamto urządzenie nie zgłosiło przydziału dla tego sandboxa.",
             "didntSayWhy": "tamto urządzenie nie podało powodu",
             "didntWorkOnDevice": "To nie zadziałało na tym urządzeniu.",
@@ -5308,7 +5374,9 @@
             "removeApproved": "{name} zostaje zainstalowane do najbliższej przebudowy tego sandboxa, a po niej znika. Jeśli agent znów będzie tego potrzebować, będzie musiał poprosić o to ponownie.",
             "removeRequest": "Prośba o dodanie {name} zostaje odrzucona. Nic nie jest instalowane ani przebudowywane.",
             "removeUnbuilt": "{name} nie jest jeszcze zainstalowane, a najbliższa przebudowa to pominie. Jeśli agent będzie tego potrzebować, będzie musiał poprosić o to ponownie.",
-            "couldNotUpdate": "Nie udało się zaktualizować środowiska."
+            "couldNotUpdate": "Nie udało się zaktualizować środowiska.",
+            "updating": "Aktualizowanie środowiska sandboxa",
+            "updated": "Środowisko sandboxa zaktualizowane"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "pojawi się po przebudowie",
@@ -5421,8 +5489,11 @@
             "listed": "wystawione {at}",
             "listedNoHumanReview": "wystawione, bez przeglądu przez człowieka",
             "newPowersVersionAsks": "Nowe uprawnienia, o które prosi ta wersja:",
+            "reverted": "{id} znów działa w poprzedniej wersji",
+            "reverting": "Cofanie {id}",
             "revertTo": "Wróć do {ref}",
             "reviewUpdate": "Przejrzyj aktualizację",
+            "reviewing": "Odczytywanie aktualizacji {id}",
             "samePowersInstalledVersion": "Te same uprawnienia co zainstalowana wersja: nie ma nic nowego do zatwierdzenia.",
             "securityUpdateAvailable": "Dostępna aktualizacja bezpieczeństwa",
             "stillRunningBecauseAdvisory": "Wciąż działa, bo jego polityka ostrzeżeń jest ustawiona na „powiadom”: przełącznik powyżej to wyjście.",
@@ -5434,6 +5505,7 @@
             "updateExtendsSandboxImage": "Ta aktualizacja rozszerza obraz sandboxa: potrzebna jest jednorazowa przebudowa. Otwórz kartę Środowisko na stronie Sandbox, żeby zobaczyć polecenie.",
             "updateIsntHealthy": "Ta aktualizacja nie jest zdrowa",
             "updateTo": "Zaktualizuj do {version}",
+            "updated": "Zaktualizowano {id}",
             "updating": "Aktualizowanie {id}",
             "verified": "zweryfikowane"
         },
@@ -5448,6 +5520,7 @@
             "policyNotify": "Nowe wydania oznaczają ten wiersz plakietką i czekają na Ciebie.",
             "previousVersionKept": "Poprzednia wersja zostaje zachowana",
             "revertTo": "Wróć do {ref}",
+            "saving": "Zapisywanie polityki aktualizacji {id}",
             "switchOffAutomaticallyRegistry": "Wyłącz je automatycznie, jeśli jego rejestr oznaczy je jako złośliwe albo zepsute",
             "updates": "Aktualizacje"
         },
@@ -5480,6 +5553,7 @@
         "extensionsInstalled": {
             "approve": "Zatwierdź",
             "approvedNow": "Zatwierdzono {manifest}.",
+            "approving": "Zatwierdzanie {manifest}",
             "asksForNothing": "Nie prosi o żadne uprawnienia.",
             "backToPinned": "{manifest} znów działa w przypiętej wersji",
             "connectionsWent": "Połączenie {names} zniknęło razem z nim. | Połączenia {names} zniknęły razem z nim. | Połączenia {names} zniknęły razem z nim.",
@@ -5489,9 +5563,12 @@
             "couldntApprove": "Nie udało się zatwierdzić {manifest}.",
             "couldntLeaveDev": "Nie udało się przywrócić przypiętej wersji {manifest}.",
             "couldntListSandboxsExtensions": "Nie udało się wypisać rozszerzeń tego sandboxa.",
+            "disabling": "Wyłączanie {manifest}",
             "discoverWhatPeoplePublished": "Odkryj, co opublikowali inni →",
+            "enabling": "Włączanie {manifest}",
             "imageStillHas": "To, co dodało do obrazu sandboxa, zostaje tam do następnej przebudowy środowiska.",
             "invalid": "nieprawidłowe",
+            "leavingDev": "Przywracanie przypiętej wersji {manifest}",
             "newPowersSinceApproved": "Nowe uprawnienia od twojego zatwierdzenia:",
             "notLoadable": "Nie da się wczytać",
             "nothingElse": "Nic więcej do pokazania: zobacz grupę powyżej.",
@@ -5501,6 +5578,7 @@
             "publishedMatches": "{count} opublikowane rozszerzenie pasuje do „{query}” → | {count} opublikowane rozszerzenia pasują do „{query}” → | {count} opublikowanych rozszerzeń pasuje do „{query}” →",
             "readingSandboxsExtensions": "Odczytywanie rozszerzeń tego sandboxa…",
             "removed": "Usunięto {manifest}.",
+            "removing": "Usuwanie {manifest}",
             "runningNotListed": "Działa, ale nie jest wypisane",
             "waitingCaption": "Napisane w tej przestrzeni roboczej. Żaden jego kod nie działa, dopóki nie zatwierdzisz tego, o co prosi.",
             "waitingForApproval": "Czeka na twoje zatwierdzenie",
@@ -5525,7 +5603,9 @@
             "builtSandboxRestartingOnto": "Zbudowane. Twój sandbox restartuje na nowym obrazie; ten panel zaktualizuje się, gdy wróci.",
             "couldNotStart": "Nie udało się uruchomić budowania.",
             "rebuildAgain": "Przebuduj ponownie",
+            "started": "Budowanie środowiska ruszyło",
             "startedAgo": "Rozpoczęto {ago}.",
+            "starting": "Uruchamianie budowania środowiska",
             "tryBuildAgain": "Spróbuj zbudować jeszcze raz"
         },
         "importCard": {
@@ -5649,11 +5729,14 @@
             "couldntDeriveDefinition": "Nie udało się wyprowadzić definicji tego sandboxa.",
             "couldntStartExport": "Nie udało się rozpocząć eksportu.",
             "couldntStartDownload": "Nie udało się rozpocząć pobierania.",
-            "couldntCompareDefinition": "Nie udało się porównać z tą definicją."
+            "couldntCompareDefinition": "Nie udało się porównać z tą definicją.",
+            "publishingWorkspace": "Publikowanie przestrzeni roboczej"
         },
         "newExtensionDialog": {
             "couldNotCreate": "Nie udało się utworzyć rozszerzenia.",
             "createStart": "Utwórz i uruchom",
+            "created": "Utworzono {id}",
+            "creating": "Tworzenie {id}",
             "listed": "Zostanie wypisane jako",
             "lowerCaseDigitsHyphens": "Małe litery, cyfry i myślniki.",
             "optionalSayInOwn": "Opcjonalne. Powiedz to własnymi słowami: agent weźmie się za to w czacie, który możesz oglądać i z którym możesz się spierać. Zostaw puste, żeby dostać działający szkielet do samodzielnej edycji.",
@@ -5665,6 +5748,7 @@
         },
         "passkeysSection": {
             "addedOn": "dodany {date}",
+            "addingPasskey": "Dodawanie klucza dostępu",
             "browserCantCreatePasskeys": "Ta przeglądarka nie potrafi tworzyć kluczy dostępu; dodaj jeden z przeglądarki, która potrafi.",
             "couldntAddPasskey": "Nie udało się dodać klucza dostępu.",
             "couldntChangeRule": "Nie udało się zmienić reguły kluczy dostępu.",
@@ -5939,6 +6023,10 @@
             "recordingRoleFailed": "Sandbox przyjął nową rolę, ale zapisanie jej się nie udało.",
             "couldntRevokeAccess": "Nie udało się odebrać dostępu na sandboxie: czy jest online?",
             "clearingRecordFailed": "Dostęp na sandboxie został odebrany, ale usunięcie wpisu się nie udało.",
+            "invitingWhom": "Zapraszanie {email}",
+            "changingRoleOf": "Zmiana roli {email}",
+            "revokingWhom": "Odbieranie dostępu {email}",
+            "signingOthersOut": "Wylogowywanie innych przeglądarek",
             "youFallback": "Ty"
         },
         "sandboxAgent": {
@@ -6029,6 +6117,7 @@
             "wholesaleNote": "Dotyczy to prawie każdej części aplikacji, więc nie wymieniamy ich po kolei.",
             "restartBecomesButton": "restart stanie się tutaj przyciskiem.",
             "restartingTheSandbox": "Restart sandboxa",
+            "couldntRestart": "Nie udało się tam zrestartować sandboxa.",
             "restartCommand": "Polecenie restartu"
         },
         "recentlyDeleted": {
@@ -6036,6 +6125,7 @@
             "comesBackWithMachine": "Wraca razem z maszyną i plikami",
             "couldntRead": "Nie udało się odczytać usuniętych sandboxów",
             "couldntRestore": "Nie udało się przywrócić tego sandboxa",
+            "restoring": "Przywracanie sandboxa",
             "daysLeftToRestore": "został {count} dzień | zostało {count} dni",
             "nothingToRestore": "Nic do przywrócenia",
             "reading": "Odczytywanie usuniętych sandboxów",
@@ -6051,6 +6141,7 @@
         "sandboxExtensions": {
             "checkNow": "Sprawdź teraz",
             "checking": "Sprawdzanie…",
+            "checkingUpdates": "Sprawdzanie aktualizacji rozszerzeń w rejestrze",
             "couldNotCheckUpdates": "Nie udało się sprawdzić aktualizacji w rejestrze.",
             "couldNotReload": "Nie udało się przeładować hosta rozszerzeń.",
             "filterInstalledExtensions": "Filtruj zainstalowane rozszerzenia",
@@ -6066,6 +6157,7 @@
             "reloadExtensions": "Przeładuj rozszerzenia",
             "reloadNow": "Przeładuj teraz",
             "reloadToFinishUpdating": "Przeładuj, żeby dokończyć aktualizację.",
+            "reloading": "Przeładowywanie hosta rozszerzeń",
             "searchPublishedExtensions": "Szukaj opublikowanych rozszerzeń",
             "updatable": "Do aktualizacji",
             "updatedBrowserStillRunning": "{names} {plural} zaktualizowane, ta przeglądarka wciąż działa na poprzednim kodzie, dopóki rozszerzenia się nie przeładują.",
@@ -6105,7 +6197,6 @@
             "changeRemoveLogo": "Zmień albo usuń logo",
             "couldntReadImage": "Nie udało się odczytać tego pliku jako obrazu.",
             "couldntSaveLogo": "Nie udało się zapisać logo.",
-            "didntWorkOnDevice": "Na tym urządzeniu to się nie udało.",
             "gettingWorkspaceReady": "Przygotowywanie przestrzeni roboczej…",
             "installedVersion": "zainstalowana wersja",
             "installedVersion2": "Zainstalowana wersja",
@@ -6172,6 +6263,8 @@
             "neverShown": "Nigdy niepokazywany",
             "nothingGeneratedYetAppear": "Nic jeszcze nie wygenerowano: te pojawią się po Twoim pierwszym wdrożeniu.",
             "pushToCi": "Wypchnij do CI",
+            "pushedToCi": "Sekrety wypchnięte do CI",
+            "pushingToCi": "Wypychanie sekretów do CI",
             "readingSandboxsSecrets": "Odczytywanie sekretów Twojego sandboxa…",
             "requiredByIntent": "Wymagane przez Twoją intencję",
             "secrets": "Twoje sekrety",
@@ -6216,6 +6309,7 @@
         },
         "sandboxSwitcher": {
             "alsoDelete": "Usuń go także z",
+            "couldntDeleteThere": "Nie udało się go usunąć z {machine}.",
             "cleanupCommand": "Polecenie usunięcia",
             "containerFilesHistoryGone": "— tamtejszy kontener zostanie zatrzymany, a jego pliki i historia będą przechowywane przez tydzień, zanim zostaną usunięte.",
             "inProgress": "W toku",
@@ -6645,7 +6739,8 @@
         },
         "useSandboxStorage": {
             "couldntClean": "Nie udało się wyczyścić: {category}",
-            "couldntMeasure": "Nie udało się zmierzyć dysku"
+            "couldntMeasure": "Nie udało się zmierzyć dysku",
+            "cleaning": "Czyszczenie: {category}"
         },
         "words": {
             "addModelToEnable": "Dodaj model, by włączyć",
@@ -7257,7 +7352,9 @@
             "tooOldToSave": "Agent tej maszyny jest za stary, żeby zapisać zmianę na następny restart. Najpierw zaktualizuj jej agenta."
         },
         "useDesktopSync": {
-            "startFailed": "Nie udało się uruchomić synchronizacji z pulpitem ({status})."
+            "startFailed": "Nie udało się uruchomić synchronizacji z pulpitem ({status}).",
+            "pairing": "Parowanie urządzenia",
+            "couldntPair": "Nie udało się sparować urządzenia."
         },
         "useLiveLinks": {
             "diskFailed": "Dysku nie udało się zamontować.",
@@ -7272,7 +7369,8 @@
             "startFailed": "Nie udało się rozpocząć połączenia ({status})."
         },
         "useSelfResources": {
-            "notConnected": "Maszyna tego sandboxa nie jest podłączona, więc nie da się stąd zmienić jego przydziału."
+            "notConnected": "Maszyna tego sandboxa nie jest podłączona, więc nie da się stąd zmienić jego przydziału.",
+            "didntWork": "To nie zadziałało na tym urządzeniu."
         },
         "promptReach": {
             "listAnd": "{head} i {last}"
@@ -7614,7 +7712,12 @@
             "previousPlanEnded": "Twój poprzedni plan się zakończył.",
             "previousPlanEndedDetail": "Ponowna subskrypcja zaczyna nowy miesiąc. Nic nie przeszło z poprzedniego planu i nie ma żadnych zaległości.",
             "slotsUsed": "{used} z {count} miejsca | {used} z {count} miejsc | {used} z {count} miejsc",
-            "pricePerMonth": "${price}/mies."
+            "pricePerMonth": "${price}/mies.",
+            "planChangedOnStripe": "Twój plan zmienił się w Stripe",
+            "stoppedWaitingForStripe": "Ze Stripe nic nie wróciło, więc Rozliczenia przestały czekać",
+            "changingSlots": "Zmiana miejsc w Twoim planie",
+            "movingToRung": "Przenoszenie sandboxa na {name}",
+            "movedToRung": "Sandbox przeniesiony na {name}"
         },
         "settingsData": {
             "dataPrivacy": "Dane i prywatność",
@@ -7628,7 +7731,10 @@
             "deleteFromWorkspace": "Trwale usuwa Twoje konto, udostępnione dostępy i każdy plan hostowany. Robi się to w przestrzeni roboczej, która najpierw odbiera Ci dostęp do każdego sandboxa.",
             "workspaceNotOpened": "Nie udało się otworzyć przestrzeni roboczej.",
             "gatheringData": "Zbieramy Twoje dane",
-            "accountDeletionFailed": "Usunięcie konta nie powiodło się."
+            "accountDeletionFailed": "Usunięcie konta nie powiodło się.",
+            "exportFailed": "Nie udało się wyeksportować Twoich danych.",
+            "exportDownloaded": "Eksport Twoich danych został pobrany",
+            "deletingAccount": "Usuwanie Twojego konta"
         },
         "settingsKeybindings": {
             "alsoOn": "Także w",
@@ -7980,11 +8086,17 @@
             "startFailed": "Nie udało się teraz uruchomić dla ciebie maszyny.",
             "outOfMachines": "Właśnie skończyły nam się maszyny, więc w tej chwili nie zbudujemy ci kolejnej.",
             "restartFailed": "Nie udało się uruchomić jej od nowa. Spróbuj ponownie za chwilę.",
-            "removeFailed": "Nie udało się usunąć uruchomionej przez nas maszyny. Spróbuj ponownie za chwilę."
+            "removeFailed": "Nie udało się usunąć uruchomionej przez nas maszyny. Spróbuj ponownie za chwilę.",
+            "starting": "Uruchamianie maszyny dla twojego sandboxa",
+            "restarting": "Uruchamianie maszyny twojego sandboxa od nowa",
+            "restarted": "Maszyna twojego sandboxa uruchomiła się od nowa",
+            "removing": "Usuwanie uruchomionej przez nas maszyny",
+            "removed": "Uruchomiona przez nas maszyna została usunięta"
         },
         "useAttachLane": {
             "signInFirst": "Zaloguj się przez Google, aby połączyć się z sandboxem.",
-            "connectFailed": "Nie udało się połączyć twojego sandboxa."
+            "connectFailed": "Nie udało się połączyć twojego sandboxa.",
+            "connecting": "Łączenie z {host}"
         },
         "commandHandoff": {
             "addressless": "Ta platforma nie przydziela adresów, więc nie ma polecenia instalacyjnego do uruchomienia. Zamiast tego podłącz sandbox, który już uruchomiłeś.",
@@ -8301,6 +8413,10 @@
         "hubWork": {
             "running": "w toku: {count}"
         },
+        "operations": {
+            "finished": "{what} — gotowe",
+            "show": "Pokaż"
+        },
         "statusBar": {
             "portsPublic": "Port {port} publiczny | {count} porty publiczne | {count} portów publicznych",
             "vpn": "VPN"
@@ -8309,7 +8425,12 @@
     "terminal": {
         "backgroundProcesses": {
             "backgroundProcesses": "Procesy w tle",
-            "readOnly": "Tylko do odczytu"
+            "couldntStart": "Nie udało się uruchomić {name}.",
+            "couldntStop": "Nie udało się zatrzymać {name}.",
+            "readOnly": "Tylko do odczytu",
+            "restarting": "Ponowne uruchamianie: {name}",
+            "starting": "Uruchamianie: {name}",
+            "stopping": "Zatrzymywanie: {name}"
         },
         "terminalPanel": {
             "changeColor": "Zmień kolor…",
@@ -8911,6 +9032,7 @@
             "readingAgain": "Czytamy ponownie… {waited}",
             "readingFileWritingText": "Czytanie tego pliku i zapisywanie jego tekstu…",
             "renderFailed": "Nie udało się odczytać tego pliku jako tekstu.",
+            "rendering": "Odczytywanie {name} jako tekstu",
             "renderText": "Pokaż jako tekst",
             "rereadFile": "Wczytaj plik ponownie",
             "stillGoingNothingFailed": "Wciąż trwa — nic nie zawiodło. Tekst trafia na dysk, gdy będzie gotowy, więc możesz opuścić ten plik albo do niego wrócić i będzie tutaj.",
@@ -8959,6 +9081,7 @@
             "agentTooOld": "Agent na {device} jest za stary, by uruchamiać programy. Zaktualizuj go tam.",
             "computer": "Komputer",
             "connectOne": "Podłącz komputer",
+            "couldntRun": "Nie udało się uruchomić {target} na {device}.",
             "declaresNothing": "To repozytorium nie deklaruje niczego do uruchomienia na Twoich komputerach. Umieść plik w",
             "editFile": "Edytuj {file}",
             "isolated": "Windows Sandbox",
@@ -9490,7 +9613,6 @@
             "cloneRepository": "Sklonuj repozytorium",
             "cloning": "Klonowanie…",
             "codeSomewhereElsePrivate": "Dla kodu gdzie indziej: prywatny host, serwer, archiwum.",
-            "couldntCloneRepository": "Nie udało się sklonować tego repozytorium.",
             "dragAnywhereOntoPanel": "Albo przeciągnij je w dowolne miejsce tego panelu.",
             "filesStayOnSandbox": "Pliki zostają na maszynie Twojego sandboxa — nigdzie indziej",
             "getCodeIn": "Wnieś swój kod",
@@ -9706,6 +9828,8 @@
         },
         "useAddRepo": {
             "cloneFailed": "Nie udało się sklonować tego repozytorium.",
+            "cloned": "Sklonowano {name} do przestrzeni roboczej",
+            "cloning": "Klonowanie {name}",
             "notAnAddress": "To nie wygląda na adres repozytorium."
         },
         "uploadQueue": {
@@ -9790,6 +9914,8 @@
             "wakePayload": "Co ją wywołało",
             "wakeStart": "Uruchom",
             "wakeDrop": "Porzuć",
+            "wakeStarting": "Uruchamianie {automation}",
+            "wakeDropping": "Porzucanie {automation}",
             "wakeCouldNot": "Nie udało się odpowiedzieć wstrzymanej automatyzacji.",
             "parkPlan": "Napisał plan i czeka na Twoją zgodę, zanim zacznie.",
             "parkQuestion": "Zadał Ci pytanie i czeka na odpowiedź.",
@@ -9835,9 +9961,13 @@
             "notNow": "Nie teraz",
             "declineNote": "Coś, co agent powinien wiedzieć (opcjonalnie)",
             "declineSend": "Odmów",
-            "couldNotAnswer": "Nie udało się zapisać Twojej odpowiedzi."
+            "couldNotAnswer": "Nie udało się zapisać Twojej odpowiedzi.",
+            "answering": "Odpowiadanie: „{title}”",
+            "declining": "Odmawianie: „{title}”"
         },
         "capability": {
+            "connecting": "Łączenie {name}",
+            "applying": "Stosowanie zmiany w {id}",
             "name": "Nazwa",
             "howToGet": "Jak to zdobyć",
             "createToken": "Utwórz token",
@@ -9895,6 +10025,7 @@
             "releasedBy": "przez {who}, {when}",
             "allowedBy": "zezwolenie od {who}, {when}",
             "takeBack": "Odbierz",
+            "takingBack": "Odbieranie: {what}",
             "couldNotTakeBack": "Nie udało się tego odebrać."
         },
         "environment": {
@@ -10168,6 +10299,8 @@
             "heading": "Agenci na tym komputerze",
             "checking": "Sprawdzamy ten komputer…",
             "noHost": "Otwórz ten widok w aplikacji Intentic na komputerze, aby uruchomić tu agentów.",
+            "asking": "Pytamy aplikację",
+            "askFailed": "Aplikacja tego nie przyjęła. Spróbuj ponownie.",
             "cost": {
                 "minutes": "Około {count} min",
                 "restart": "jeden restart",

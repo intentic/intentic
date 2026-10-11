@@ -1,5 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
+import { useOperation } from "../../../../workbench/operations/operations";
 import type { BoardView, ViewEvent } from "./boardView";
 
 // The archive's door and what the board says about it. Archiving is lossless, so it asks nothing and says little: the
@@ -18,6 +19,9 @@ export interface DoorHost {
     };
 }
 
+// Where the ledger keeps the purge: the sandbox's archive, not this board's.
+export const PURGE_ARCHIVE = `agents/archive/purge`;
+
 // Long enough to catch the eye following a card out of its lane, short enough to read as a move, not a new state (ms).
 const PULSE_MS = 1_100;
 
@@ -27,7 +31,10 @@ export const useArchiveDoor = (host: DoorHost) => {
     const announcement = ref(``);
     // The confirm dialog is open. Bulk only, never per card, where it would sit a pixel from Restore on the same hover row.
     const pendingPurge = ref(false);
-    const purging = ref(false);
+    // Kept in the operations ledger, not this board: a board left and opened again while the daemon deletes still
+    // holds Delete all. What it went on to say (its receipt, or a refusal on the notice strip) is purgeArchived's own.
+    const purge = useOperation(PURGE_ARCHIVE);
+    const purging = purge.busy;
     const pulsing = ref(false);
     let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -40,17 +47,20 @@ export const useArchiveDoor = (host: DoorHost) => {
     };
     const confirmPurge = async (): Promise<void> => {
         pendingPurge.value = false;
-        purging.value = true;
         const aimedAt = agents.archived.value.length;
-        try {
-            await agents.purgeArchived();
-            host.move({ kind: `purged` });
-            // The one report here nothing on screen can re-derive, since what it is about is gone.
-            const deleted = aimedAt - agents.archived.value.length;
-            announcement.value = t(`agents.archiveDoor.deleted`, { count: deleted }, deleted);
-        } finally {
-            purging.value = false;
+        const outcome = await purge.run({
+            what: t(`agents.archiveDoor.deleting`),
+            failed: t(`agents.useAgentsArchive.couldntDeleteArchive`),
+            quiet: true,
+            task: () => agents.purgeArchived(),
+        });
+        if (outcome?.state !== `done`) {
+            return;
         }
+        host.move({ kind: `purged` });
+        // The one report here nothing on screen can re-derive, since what it is about is gone.
+        const deleted = aimedAt - agents.archived.value.length;
+        announcement.value = t(`agents.archiveDoor.deleted`, { count: deleted }, deleted);
     };
     // One archive, one reaction: the counter's pulse and the screen reader's line are the same event said twice.
     watch(agents.archivedFlash, () => {

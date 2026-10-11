@@ -10,17 +10,18 @@ import {
     type NoticeModel,
     type CommandOs,
 } from "@intentic/ui";
-import { noticeFrom, usePoll } from "@intentic/ui/async";
+import { noticeFrom } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
-import { computed, onBeforeUnmount, ref, type VNode, watch } from "vue";
+import { computed, onBeforeUnmount, ref, shallowRef, type VNode, watch } from "vue";
 import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
-import { useHubWork } from "../../../../workbench/hub/hubWork";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { appliedHash, runningVersion } from "./swapLanding";
+import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapFollow";
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
@@ -90,7 +91,8 @@ const OP: Record<Action, DeviceSandboxOp> = { Update: `update`, Rebuild: `rebuil
 // The action as a reader sees it. `Action` is the enum this component switches on and the script it runs, so its
 // members are not the words on screen: every label takes this instead.
 const VERBS: Record<Action, string> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
-const verb = computed(() => t(`capabilities.hostRecreate.${VERBS[props.action]}Verb` as `capabilities.hostRecreate.updateVerb`));
+const verbOf = (action: Action): string => t(`capabilities.hostRecreate.${VERBS[action]}Verb` as `capabilities.hostRecreate.updateVerb`);
+const verb = computed(() => verbOf(props.action));
 
 // The loud tier in the house gold (primeng.css); gold stands for moving up a version, so it goes on nothing else.
 // The glyph says where the press goes: up a version, or the older swap's bolt.
@@ -115,14 +117,46 @@ const cost = computed(() => {
     return props.keepsSaid === true ? t(`capabilities.hostRecreate.costBuildThenRestartShort`) : t(`capabilities.hostRecreate.costBuildThenRestart`);
 });
 
-// What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
-// Overview's update tile, and each reports where it was pressed.
+// What the hub row and the receipt say while the machine works: the same button sits on Environment and on Overview's
+// update tile, and each reports where it was pressed.
 const workingWords = (): Record<Action, string> => ({
     Update: t(`capabilities.hostRecreate.workingUpdate`),
     Rebuild: t(`capabilities.hostRecreate.workingRebuild`),
     "Roll back": t(`capabilities.hostRecreate.workingRollBack`),
 });
-const hubWork = useHubWork();
+const isAction = (tag: string | undefined): tag is Action => tag !== undefined && Object.hasOwn(OP, tag);
+
+// THE SWAP IS THE SANDBOX'S, NOT THIS BUTTON'S. Environment's Rebuild, the update card's Update and the version panel's
+// Roll back all replace the one container serving this page, so they share one run: pressed on any of them, it is read
+// on all three and holds all three buttons. Its log, where it stands (still building, or waiting out the cutover) and
+// how it ended live in the operations ledger, so a reader who leaves mid-build comes back to it still running, and one
+// who comes back after it ended finds how it went.
+const swap = useOperation<SwapEnd, NoticeModel, SwapProgress>(() => `sandbox/${props.slug}/swap`);
+const busy = swap.busy;
+// Which of the three is running, by the run's own word: an update pressed on Overview reads as an update here too.
+const runningAction = computed<Action>(() => {
+    const tag = swap.operation.value?.tag;
+    return busy.value && isAction(tag) ? tag : props.action;
+});
+// The device's stream is still being read: the download and build before the cutover, which the button names.
+const streaming = computed(() => busy.value && swap.progress.value?.streaming === true);
+// The device answered in words: nothing was swapped out from under this page, or it says why not.
+const done = computed(() => {
+    const end = swap.value.value;
+    return end !== undefined && `said` in end ? end.said : undefined;
+});
+// Landed: the log described a container that is gone, and how the swap went is the answering sandbox's to say.
+const landed = computed(() => {
+    const end = swap.value.value;
+    return end !== undefined && `landed` in end;
+});
+const lines = computed(() => (landed.value ? [] : swap.lines.value));
+// The sandbox answered on what a swap aimed at while this card is open: the caller's moment to say how it went.
+watch(landed, (now) => {
+    if (now) {
+        emit(`back`);
+    }
+});
 
 // WHO THE RESTART STOPS, counted when the owner is asked, as DevRebuild and the update card's rollback do: the download
 // and the build interrupt nothing, the cutover every turn in flight. A turn a restart killed is recorded rather than
@@ -152,38 +186,37 @@ const interruption = computed(() => {
 // Only a rebuild of an approved overlay waits: an update or a rollback is timed by the owner, on its own card.
 const offerWait = computed(() => props.action === `Rebuild` && props.hash !== undefined && activeAgents.value.length > 0 && idle.supported.value);
 const idleWait = computed(() => (props.action === `Rebuild` ? idle.wait.value : undefined));
+// Asking the sandbox to hold a rebuild, or withdrawing it. The wait itself is the sandbox's and reads back off
+// /environment; a refusal is kept beside the swap's own, so the card that comes back still says it.
+const whenIdle = useOperation(() => `sandbox/${props.slug}/swap-when-idle`);
+const changeWhen = (task: () => Promise<void>): Promise<unknown> =>
+    whenIdle.run({
+        what: t(`capabilities.hostRecreate.changingWhen`),
+        failed: t(`capabilities.hostRecreate.waitDidntGoThrough`),
+        // The wait line under the button says how it went.
+        quiet: true,
+        task,
+    });
 const waitForIdle = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
-    if (id === undefined || props.hash === undefined) {
+    const hash = props.hash;
+    if (id === undefined || hash === undefined) {
         return;
     }
-    failure.value = undefined;
-    done.value = undefined;
-    try {
-        await idle.ask(id, props.hash);
-    } catch (error) {
-        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.waitDidntGoThrough`));
-    }
+    swap.dismiss();
+    idleFailure.value = undefined;
+    await changeWhen(() => idle.ask(id, hash));
 };
 const stopWaiting = async (): Promise<void> => {
-    try {
-        await idle.cancel();
-    } catch (error) {
-        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.waitDidntGoThrough`));
-    }
+    await changeWhen(() => idle.cancel());
 };
-
-const running = ref(false);
-const lines = ref<string[]>([]);
-const failure = ref<NoticeModel | undefined>(undefined);
-const done = ref<string | undefined>(undefined);
 
 // Recreating always drops this page's connection, confirmed in-app (not the browser's confirm()) before it starts.
 const confirming = ref(false);
 
 const runOnMachine = (): void => {
-    if (hostId.value === undefined || running.value) {
+    if (hostId.value === undefined || busy.value) {
         return;
     }
     confirming.value = true;
@@ -223,251 +256,177 @@ const QUIET = computed((): Record<Action, RestartQuiet> => ({
     },
 }));
 
-// FROM THE PRESS UNTIL THE SANDBOX ANSWERS ON WHAT IT WAS SWAPPED ONTO. Every swap run from here is relayed by the
-// daemon it replaces, so its stream should die at the cutover; but a relayed stream can stay half-open (one did for
-// twelve minutes in WebKitGTK, with "Rebuilding" on screen all along), so its end is not what this waits for. The watch
-// is armed at the press and ends at whichever comes first: the device answering in words, the sandbox answering on the
-// approved overlay (a rebuild) or on another version (an update, a rollback), or a deadline below, which ends it with
-// the words for not knowing.
-// A stream that died while the sandbox never went quiet was not the cutover: lost contact, once this runs out.
-const CUTOVER_GRACE_MS = 60_000;
-// How long the sandbox may stay out of reach once it went quiet; a swap's restart takes about half a minute.
-const DOWN_PATIENCE_MS = 3 * 60_000;
-// How long it may answer again with the swap not landed and the stream silent. A stream still printing is a swap still
-// running (the page's own connection blinked mid-download); a silent one past this will never end.
-const BACK_PATIENCE_MS = 3 * 60_000;
-// How often an answering sandbox is asked what it runs while the swap has not landed.
-const LANDED_POLL_MS = 5_000;
+// Whether what answers now is what the swap aimed at: a rebuild by its overlay, an update or a rollback by moving off
+// the version it was pressed on. With that version unread, answering again after going quiet is the only sign there is.
+const landedOn = async (hash: string | undefined, from: string | undefined, now: SwapProgress): Promise<boolean> => {
+    if (hash !== undefined) {
+        return (await appliedHash()) === hash;
+    }
+    return from === undefined ? now.wentDown : (await runningVersion()) !== from;
+};
 
-const watching = ref(false);
-const severed = ref(false);
-const wentDown = ref(false);
+// A REBUILD THE SANDBOX STARTED BY ITSELF once its agents were idle. Nobody pressed anything here and the sandbox reports
+// it (`rebuilding` on /environment, read again on every mount), so it is followed for as long as this card is open,
+// exactly as a press's swap is, with its restart handed to the sandbox's own return so every other surface reads the
+// silence to come by it.
+const idleFollow = shallowRef<SwapProgress>();
+const idleFailure = ref<NoticeModel>();
+let stopIdleFollow: (() => void) | undefined;
+// The record that follow holds; untilAnswered, so the sandbox coming back ends it wherever the reader is by then.
+let idleClaim: (() => void) | undefined;
+const letIdleGo = (): void => {
+    stopIdleFollow?.();
+    stopIdleFollow = undefined;
+    idleFollow.value = undefined;
+};
+onBeforeUnmount(letIdleGo);
+
 // The spinner line is the cutover's, not the build's before it: once the stream has ended or the sandbox gone quiet.
-const awaiting = computed(() => watching.value && (severed.value || wentDown.value));
-// The version the press was made on, so an update or a rollback is seen landing as another one.
-let fromVersion: string | undefined;
-let deadline: ReturnType<typeof setTimeout> | undefined;
-// Asks an answering sandbox what it runs until the swap has landed; checkLanded ends the watch, and the poll with it.
-const poll = usePoll({ everyMs: LANDED_POLL_MS, check: () => checkLanded(), immediate: false });
-let settleWatch: (() => void) | undefined;
-let asking = false;
-// Hands a press's restart to the sandbox's own return (sandboxRestart.ts `untilAnswered`), once: at the press's end while
-// the watch still runs, or when the page is left mid-swap.
-let handOff: (() => void) | undefined;
-
-// Ends the watch however it ended. The swap's own promise races the watch's, so a stream that never ends lets go here.
-const stopWatching = (): void => {
-    watching.value = false;
-    clearTimeout(deadline);
-    poll.stop();
-    settleWatch?.();
-    settleWatch = undefined;
-};
-
-type GiveUp = `capabilities.hostRecreate.lostBeforeRestart` | `capabilities.hostRecreate.returnTimedOut`;
-// One deadline at a time, each saying what not knowing means at that point.
-const giveUpIn = (ms: number, said: GiveUp): void => {
-    clearTimeout(deadline);
-    deadline = setTimeout(() => {
-        if (watching.value) {
-            failure.value = { tone: `warning`, title: t(said) };
-            stopWatching();
-        }
-    }, ms);
-};
-
-// Whether what answers now is what the swap aimed at. With the starting version unknown, answering again after going
-// quiet is the only sign there is.
-const hasLanded = async (): Promise<boolean> => {
-    if (props.hash !== undefined) {
-        return (await appliedHash()) === props.hash;
-    }
-    return fromVersion === undefined ? wentDown.value : (await runningVersion()) !== fromVersion;
-};
-
-const checkLanded = async (): Promise<void> => {
-    if (!watching.value || !reachable.value || asking) {
-        return;
-    }
-    asking = true;
-    // allow(silent-catch): a sandbox still coming up refuses its reads; that is "not landed yet", and the next poll asks again
-    const landed = await hasLanded().catch(() => false);
-    asking = false;
-    if (!landed || !watching.value) {
-        return;
-    }
-    stopWatching();
-    // The log described a container that is gone; how the swap went is the answering sandbox's to say.
-    lines.value = [];
-    emit(`back`);
-    // The open page kept drawing the turns the restart stopped as running: the fleet as the new daemon has it.
-    void agents.refresh();
-};
-
-const armWatch = (): Promise<undefined> => {
-    stopWatching();
-    watching.value = true;
-    severed.value = false;
-    wentDown.value = !reachable.value;
-    if (wentDown.value) {
-        giveUpIn(DOWN_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
-    }
-    poll.start();
-    return new Promise((resolve) => {
-        settleWatch = () => resolve(undefined);
-    });
-};
-
-watch(reachable, (up) => {
-    if (!watching.value) {
-        return;
-    }
-    if (!up) {
-        wentDown.value = true;
-        giveUpIn(DOWN_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
-        return;
-    }
-    // Back: landed, or only this page's connection blinked while the swap runs on, which its next line says (heard).
-    giveUpIn(BACK_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
-    void checkLanded();
+const awaiting = computed(() => {
+    const now = busy.value ? swap.progress.value : idleFollow.value;
+    return now !== undefined && (now.severed || now.wentDown);
 });
-// Leaving mid-swap is not the swap ending: the container is replaced all the same, so the restart is handed to the
-// sandbox's own return before the watch lets go, or every other surface would read the cutover's silence as an outage.
-onBeforeUnmount(() => {
-    if (watching.value) {
-        handOff?.();
-        handOff = undefined;
-    }
-    stopWatching();
-});
-
-// A line from the device is the swap still running, so the patience for a sandbox that is back but not landed restarts.
-const heard = (line: string): void => {
-    lines.value.push(line);
-    if (watching.value && wentDown.value && reachable.value) {
-        giveUpIn(BACK_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
-    }
-};
-
-// The version this press is made on, read before the swap can move it; a rebuild is told by its hash instead.
-const noteStartingVersion = (): void => {
-    fromVersion = undefined;
-    if (props.hash !== undefined) {
-        return;
-    }
-    void runningVersion()
-        .then((version) => {
-            fromVersion = version;
-        })
-        // allow(silent-catch): unread, the landing is told by the sandbox answering again after going quiet (hasLanded)
-        .catch(() => undefined);
-};
-
-// The stream died with no answer, which may be the cutover: the watch armed at the press waits it out.
-const streamDied = (): void => {
-    if (!watching.value) {
-        void armWatch();
-    }
-    severed.value = true;
-    if (!wentDown.value) {
-        giveUpIn(CUTOVER_GRACE_MS, `capabilities.hostRecreate.lostBeforeRestart`);
-    }
-};
+const failure = computed(() => swap.failure.value ?? whenIdle.failure.value ?? idleFailure.value);
 
 // What the lines under a waiting button say: the restart this is, and that the page picks it up by itself.
-const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[props.action].title }));
-
-// The press's restart as the sandbox's own return holds it, for when it outlives the press; nothing to hand where no
-// sandbox is active.
-const handOffTo = (sandbox: string | undefined, quiet: RestartQuiet): (() => void) | undefined => {
-    if (sandbox === undefined) {
-        return undefined;
-    }
-    const what = workingWords()[props.action];
-    return () => {
-        expectRestart({ sandbox, id: `recreate`, what, quiet, untilAnswered: true });
-    };
-};
+const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[runningAction.value].title }));
 
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
-    if (id === undefined || running.value) {
+    if (id === undefined || busy.value) {
         return;
     }
-    running.value = true;
-    failure.value = undefined;
-    done.value = undefined;
-    lines.value = [];
-    noteStartingVersion();
-    // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in, and
-    // an expectation costs nothing while the sandbox is still answering.
-    const quiet = QUIET.value[props.action];
+    // Read at the press: the run outlives this card, and its props with it.
+    const { action, hash, slug } = props;
     const sandbox = activeSandboxId.value;
-    const working = sandbox === undefined ? undefined : expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet });
-    handOff = handOffTo(sandbox, quiet);
+    const what = workingWords()[action];
+    const quiet = QUIET.value[action];
+    const didnt = t(`capabilities.hostRecreate.didntGoThrough`, { action: verbOf(action) });
+    const resumeTurns = offerResume.value && resumeAfter.value;
     // Now, not later: a rebuild the sandbox was holding for idle agents is withdrawn first, or it would run again.
-    if (idleWait.value !== undefined && idleWait.value.phase !== `rebuilding`) {
-        // allow(silent-catch): a wait that could not be withdrawn is one this rebuild replaces anyway; its restart ends it
-        await idle.cancel().catch(() => undefined);
-    }
-    const payload: DeviceSandboxPayload = { ...(props.hash === undefined ? {} : { hash: props.hash }), onLine: heard };
-    if (offerResume.value && resumeAfter.value) {
-        payload.resumeTurns = true;
-    }
-    const watched = armWatch();
-    const endWork = hubWork.begin(workingWords()[props.action]);
-    try {
-        const said = await Promise.race([swapServingSandbox(id, props.slug, OP[props.action], payload), watched]);
-        if (said !== undefined) {
-            // The device answered in words: nothing was swapped out from under this page, or it says why not.
-            done.value = said;
-            stopWatching();
-        } else if (watching.value) {
-            streamDied();
-        }
-    } catch (error) {
-        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.didntGoThrough`, { action: verb.value }));
-        stopWatching();
-    } finally {
-        running.value = false;
-        endWork();
-        working?.();
-        // Handed to the sandbox's own return: this page cannot see the container come up, and the ledger's record is
-        // what every other surface reads the silence by until it does.
-        if (watching.value) {
-            handOff?.();
-        }
-        handOff = undefined;
-    }
+    const withdraw = idleWait.value !== undefined && idleWait.value.phase !== `rebuilding`;
+    // A rebuild the sandbox started by itself is this press's to follow from here.
+    letIdleGo();
+    idleClaim?.();
+    idleClaim = undefined;
+    idleFailure.value = undefined;
+    whenIdle.dismiss();
+    await swap.run({
+        what,
+        tag: action,
+        progress: { streaming: true, severed: false, wentDown: false },
+        failed: (error) => (error instanceof SwapGaveUp ? { tone: `warning`, title: error.message } : noticeFrom(error, didnt)),
+        // The device's own words when it answered; a swap that landed is said in the hub row's words.
+        done: (end) => (`said` in end ? end.said : undefined),
+        task: async (report) => {
+            // The version this press is made on, read before the swap can move it; a rebuild is told by its hash instead.
+            let from: string | undefined;
+            if (hash === undefined) {
+                void runningVersion()
+                    .then((version) => {
+                        from = version;
+                    })
+                    // allow(silent-catch): unread, the landing is told by the sandbox answering again after going quiet (landedOn)
+                    .catch(() => undefined);
+            }
+            const follow = followSwap({
+                reachable: () => reachable.value,
+                here: () => activeSandboxId.value === sandbox,
+                landed: (now) => landedOn(hash, from, now),
+                streaming: true,
+                progress: report.progress,
+            });
+            // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in,
+            // and an expectation costs nothing while the sandbox is still answering.
+            const working = sandbox === undefined ? undefined : expectRestart({ sandbox, id: `recreate`, what, quiet });
+            try {
+                if (withdraw) {
+                    // allow(silent-catch): a wait that could not be withdrawn is one this rebuild replaces anyway; its restart ends it
+                    await idle.cancel().catch(() => undefined);
+                }
+                const payload: DeviceSandboxPayload = {
+                    ...(hash === undefined ? {} : { hash }),
+                    onLine: (line) => {
+                        report.line(line);
+                        follow.heard();
+                    },
+                };
+                if (resumeTurns) {
+                    payload.resumeTurns = true;
+                }
+                // The swap's own promise races the follow's, so a stream that never ends lets go once the swap has landed.
+                const first = await Promise.race([
+                    swapServingSandbox(id, slug, OP[action], payload).then((said): SwapEnd | undefined => (said === undefined ? undefined : { said })),
+                    follow.landed.then((): SwapEnd => ({ landed: true })),
+                ]);
+                if (first !== undefined && `said` in first) {
+                    return first;
+                }
+                if (first === undefined) {
+                    // The stream died with no answer, which may be the cutover. Handed to the sandbox's own return: nothing
+                    // here sees the container come up, and that record is what every other surface reads the silence by
+                    // until it does.
+                    working?.();
+                    if (sandbox !== undefined) {
+                        expectRestart({ sandbox, id: `recreate`, what, quiet, untilAnswered: true });
+                    }
+                    follow.streamDied();
+                    await follow.landed;
+                }
+                // The open page kept drawing the turns the restart stopped as running: the fleet as the new daemon has it.
+                void agents.refresh();
+                return { landed: true };
+            } finally {
+                follow.stop();
+                working?.();
+            }
+        },
+    });
 };
 
-// The record a rebuild the sandbox started by itself holds, for as long as this page watches it.
-let idleClaim: (() => void) | undefined;
-
-// The sandbox started the rebuild it was holding: this page watches for it to land exactly as it does for its own
-// press, and every other surface reads the silence to come as that restart.
+// The sandbox started the rebuild it was holding: followed here exactly as a press's swap is.
 watch(
     () => idleWait.value?.phase,
     (phase) => {
         if (phase !== `rebuilding`) {
             // Over without this page seeing the sandbox go quiet: the device refused it, failed, or answered in words.
-            // Nothing restarted, so the watch and its record end here rather than polling on and naming a restart
-            // everywhere until the next reconnect. A restart that did happen goes quiet first, which the watch sees.
-            if (idleClaim !== undefined && watching.value && !running.value && !wentDown.value) {
+            // Nothing restarted, so the follow and its record end here rather than polling on and naming a restart
+            // everywhere until the next reconnect. A restart that did happen goes quiet first, which the follow sees.
+            if (idleClaim !== undefined && idleFollow.value !== undefined && !idleFollow.value.wentDown) {
                 idleClaim();
                 idleClaim = undefined;
-                stopWatching();
+                letIdleGo();
             }
             return;
         }
         const sandbox = activeSandboxId.value;
-        const quiet = QUIET.value.Rebuild;
-        if (watching.value || running.value || sandbox === undefined) {
+        if (idleFollow.value !== undefined || busy.value || sandbox === undefined) {
             return;
         }
-        void armWatch();
-        idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords().Rebuild, quiet, untilAnswered: true });
+        const hash = props.hash;
+        const follow = followSwap({
+            reachable: () => reachable.value,
+            here: () => activeSandboxId.value === sandbox,
+            landed: (now) => landedOn(hash, undefined, now),
+            streaming: false,
+            progress: (now) => {
+                idleFollow.value = now;
+            },
+        });
+        stopIdleFollow = follow.stop;
+        follow.landed.then(
+            () => {
+                letIdleGo();
+                emit(`back`);
+                void agents.refresh();
+            },
+            (error: unknown) => {
+                letIdleGo();
+                idleFailure.value = { tone: `warning`, title: error instanceof Error ? error.message : String(error) };
+            },
+        );
+        idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords().Rebuild, quiet: QUIET.value.Rebuild, untilAnswered: true });
     },
     { immediate: true },
 );
@@ -498,11 +457,15 @@ const command = (os: CommandOs): string => {
         <template v-if="hostId">
             <div :class="row">
                 <Button
-                    :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))"
+                    :label="
+                        streaming
+                            ? t(`capabilities.hostRecreate.running`, { action: verbOf(runningAction) })
+                            : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))
+                    "
                     :size="gilded ? undefined : `small`"
                     :tier="gilded ? `loud` : text ? `quiet` : `accent`"
                     :gilded="gilded"
-                    :loading="running || awaiting || idleWait?.phase === `rebuilding`"
+                    :loading="busy || awaiting || idleWait?.phase === `rebuilding`"
                     @click="runOnMachine"
                 >
                     <template v-if="!text" #icon><Icon :name="icon" /></template>
@@ -511,9 +474,9 @@ const command = (os: CommandOs): string => {
             </div>
             <p v-if="!bare && !gilded" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
             <DeviceRunLog
-                v-if="running || lines.length > 0"
+                v-if="streaming || lines.length > 0"
                 :lines="lines"
-                :running="running"
+                :running="streaming"
                 :empty="t(`capabilities.hostRecreate.startingOnDevice`)"
                 :note="t(`capabilities.hostRecreate.runningOnDeviceKeeps`)"
             />

@@ -5579,7 +5579,6 @@
             "cloneRepository": "Ein Repository klonen",
             "cloning": "Wird geklont…",
             "codeSomewhereElsePrivate": "Für Code woanders: ein privater Host, ein Server, ein Archiv.",
-            "couldntCloneRepository": "Dieses Repository ließ sich nicht klonen.",
             "dragAnywhereOntoPanel": "Oder ziehen Sie sie irgendwohin auf dieses Panel.",
             "filesStayOnSandbox": "Dateien bleiben auf Ihrer Sandbox-Maschine — sonst nirgends",
             "getCodeIn": "Bringen Sie Ihren Code herein",

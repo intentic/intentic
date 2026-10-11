@@ -29,8 +29,9 @@ jest.mock(`../devices/useSelfResources`, () => ({
         reshapable: computed(() => selfRow.value?.resources !== undefined),
         canSave: computed(() => false),
         applying: ref(false),
-        apply: () => Promise.resolve(``),
-        save: () => Promise.resolve(``),
+        failure: ref(undefined),
+        apply: () => Promise.resolve(),
+        save: () => Promise.resolve(),
     }),
 }));
 const versionInfo = ref<{ image: string } | undefined>(undefined);

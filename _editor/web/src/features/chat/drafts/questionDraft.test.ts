@@ -3,7 +3,16 @@
 import "@intentic/testing/dom";
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { freshImport } from "@intentic/testing/bun";
-import { answerStarted, clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
+import {
+    answerStarted,
+    clearQuestionDraft,
+    type DraftQuestionShape,
+    forgetQuestionFiles,
+    OTHER_LABEL,
+    questionFiles,
+    readQuestionDraft,
+    writeQuestionDraft,
+} from "./questionDraft";
 
 beforeEach(() => {
     localStorage.clear();
@@ -92,3 +101,17 @@ it("starts a card empty when its stored draft is not the shape this build writes
     expect(answerStarted(draft)).toBe(false);
 });
 
+it("hands every drawing of a card the same row's files, and lets them go once the card is settled", () => {
+    const files = questionFiles(`req-a`, 0);
+    files.value = [{ id: `u1`, name: `shot.png`, path: `${ATTACHMENTS_DIR}/a/shot.png`, status: `uploading`, progress: 0 }];
+
+    expect(questionFiles(`req-a`, 0)).toBe(files);
+    expect(questionFiles(`req-a`, 1).value).toEqual([]);
+    expect(questionFiles(`req-b`, 0).value).toEqual([]);
+
+    forgetQuestionFiles(`req-a`);
+    expect(questionFiles(`req-a`, 0)).not.toBe(files);
+    expect(questionFiles(`req-a`, 0).value).toEqual([]);
+    forgetQuestionFiles(`req-a`);
+    forgetQuestionFiles(`req-b`);
+});

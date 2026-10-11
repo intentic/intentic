@@ -25,6 +25,7 @@ import { readIntenticLines } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
+import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
 
@@ -162,27 +163,29 @@ const generateOne = async (): Promise<void> => {
     }
 };
 
-// CI sync: a stale entry gets the "Push to CI" action, which streams `intentic deploy secrets push`.
+// CI sync: a stale entry gets the "Push to CI" action, which streams `intentic deploy secrets push`. Kept in the
+// operations ledger, not here: the push runs on in the sandbox for seconds to tens of seconds whether or not this page
+// stays open, and coming back mid-push has to show it running, not offer it again over the first.
 const ciStale = computed(() => inventory.value.some((entry) => entry.ci !== undefined && !entry.ci.synced));
 const ciKnown = computed(() => inventory.value.some((entry) => entry.ci !== undefined));
-const pushing = ref(false);
-const pushError = ref<NoticeModel | undefined>(undefined);
+const push = useOperation(`secrets/ci/push`);
+const pushing = push.busy;
+const pushError = push.failure;
 const pushToCi = async (): Promise<void> => {
-    pushing.value = true;
-    pushError.value = undefined;
-    try {
-        const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `secrets`, `push`] });
-        for await (const line of readIntenticLines(lines)) {
-            if (line[`kind`] === `error` && typeof line[`message`] === `string`) {
-                throw new Error(line[`message`]);
+    await push.run({
+        what: t(`sandbox.sandboxSecrets.pushingToCi`),
+        done: () => t(`sandbox.sandboxSecrets.pushedToCi`),
+        failed: t(`sandbox.sandboxSecrets.couldntPushToCi`),
+        task: async () => {
+            const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `secrets`, `push`] });
+            for await (const line of readIntenticLines(lines)) {
+                if (line[`kind`] === `error` && typeof line[`message`] === `string`) {
+                    throw new Error(line[`message`]);
+                }
             }
-        }
-        refreshInventory();
-    } catch (err) {
-        pushError.value = noticeFrom(err, t(`sandbox.sandboxSecrets.couldntPushToCi`));
-    } finally {
-        pushing.value = false;
-    }
+            refreshInventory();
+        },
+    });
 };
 </script>
 
@@ -226,7 +229,7 @@ const pushToCi = async (): Promise<void> => {
                     :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
                     size="small"
                     :tier="ciStale ? `accent` : `boring`"
-                    :disabled="!ciStale"
+                    :disabled="!ciStale || pushing"
                     :loading="pushing"
                     @click="pushToCi"
                 >

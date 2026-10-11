@@ -2,10 +2,10 @@
      is the same control it has wherever else it is drawn (the need's card, the board's permission, the view's presses). -->
 <script setup lang="ts">
 import { BrandMark, Code, Notice, timeAgo, toneWash, useNow } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { useOperations } from "../../../workbench/operations/operations";
 import { useAgents } from "../../agents/fleet/useAgents";
 import ChatDecisionButton from "../../chat/transcript/cards/ChatDecisionButton.vue";
 import NeedAnswer from "../NeedAnswer.vue";
@@ -47,8 +47,23 @@ const why = computed(() => (props.item.source === `need` ? props.item.need.why :
 
 // A held wake's two answers, through the board's own release so the row leaves on the press.
 const { releaseHeld } = useAgents();
-const { busy, notice, run } = useAsyncAction();
-const release = (id: string, verb: `approve` | `reject`): Promise<void> => run(() => releaseHeld(id, verb), t(`needs.inbox.wakeCouldNot`));
+// The answer is the held wake's, in the operations ledger: one in flight holds its two presses wherever it is opened
+// again, and a refusal is still said there.
+const wakes = useOperations(`needs/wakes`);
+const wakeId = computed(() => (props.item.source === `wake` ? props.item.wake.id : undefined));
+const busy = computed(() => wakeId.value !== undefined && wakes.at(wakeId.value)?.state === `running`);
+const notice = computed(() => (wakeId.value === undefined ? undefined : wakes.at(wakeId.value)?.failure));
+const release = async (id: string, verb: `approve` | `reject`): Promise<void> => {
+    const automation = props.item.source === `wake` ? props.item.wake.automationId : id;
+    await wakes.run(id, {
+        what: verb === `approve` ? t(`needs.inbox.wakeStarting`, { automation }) : t(`needs.inbox.wakeDropping`, { automation }),
+        tag: verb,
+        failed: t(`needs.inbox.wakeCouldNot`),
+        // The row leaving the inbox says it was answered.
+        quiet: true,
+        task: () => releaseHeld(id, verb),
+    });
+};
 
 const TONE_INK = { danger: `text-danger`, blocking: `text-warning`, waiting: `text-muted` } as const;
 const ink = computed(() => TONE_INK[props.item.broken === true ? `danger` : props.item.group]);

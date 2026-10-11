@@ -29,11 +29,16 @@ jest.mock(`../../devices/useDevices`, () => ({
     useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: jest.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {
         severingCalls.push(`${id}:${command}`);
-        return Promise.resolve(undefined);
+        return heldRestart ?? Promise.resolve(undefined);
     },
 }));
+// A restart the test leaves running, so the card can be closed and opened again mid-restart.
+let heldRestart: Promise<undefined> | undefined;
 
 const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
+const { forgetRestarts, restartExpected } = await import("../../live/sandboxRestart");
+const { activeSandboxId } = await import("../../../../lib/activeSandbox");
 
 // Baseline daemon level, plus the two ways it can diverge: a missing route, or one with a different shape.
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
@@ -74,12 +79,15 @@ beforeEach(() => {
     hostId.value = undefined;
     fleet.value = [];
     severingCalls.length = 0;
+    heldRestart = undefined;
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.replaceChildren();
+    forgetOperations();
+    forgetRestarts();
 });
 
 it(`says nothing at all while the two builds agree`, () => {
@@ -358,4 +366,35 @@ it(`offers to connect the machine already syncing this sandbox`, () => {
 it(`says nothing about connecting when no machine syncs this sandbox`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     expect(mount().textContent ?? ``).not.toContain(`not connected as a device`);
+});
+
+// The restart takes the sandbox down for about a minute, and the reader may open another section meanwhile. Coming back
+// must find it still going, with no second press on offer, and the silence it causes must be said to be the restart.
+it(`keeps a restart going across the card closing and opening again`, async () => {
+    const before = activeSandboxId.value;
+    activeSandboxId.value = `sbx-dev`;
+    let finish: () => void = () => {};
+    heldRestart = new Promise<undefined>((resolve) => (finish = () => resolve(undefined)));
+    hostId.value = `ada-laptop`;
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    let el = mount();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Restart sandbox`)?.click();
+    expect(restartExpected(`sbx-dev`)?.what).toBe(`Restarting the sandbox`);
+    app?.unmount();
+    document.body.replaceChildren();
+
+    el = mount();
+    await nextTick();
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Restart sandbox`)).toBe(false);
+    expect(el.textContent ?? ``).toContain(`Rebuilding on ada-laptop`);
+
+    finish();
+    await heldRestart;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Done on ada-laptop`);
+    // Handed to the sandbox's own return, which nothing in this test brings.
+    expect(restartExpected(`sbx-dev`)?.untilAnswered).toBe(true);
+    expect(severingCalls).toEqual([`ada-laptop:dev-restart`]);
+    activeSandboxId.value = before;
 });

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
+import { Button, ui, Modal, Notice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
+import { useOperation } from "../../../workbench/operations/operations";
+import { startAgent } from "../../agents/fleet/agentActions";
+import { extensionBrief } from "./extensionBrief";
+import { SECTION } from "./extensionWork";
 
 // Creates a running extension, not a project: the dialog only asks for a name, and further decisions are made by
 // editing the two files it writes. Publisher defaults to `workspace`, a placeholder to replace before publishing
@@ -11,8 +14,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const open = defineModel<boolean>({ required: true });
-// `wish` is the author's own words, untouched: the tab turns it into the agent's brief.
-const emit = defineEmits<{ created: [{ id: string; dir: string; wish: string }] }>();
+const emit = defineEmits<{ created: [{ id: string; dir: string }] }>();
 const { create } = defineProps<{ create: (publisher: string, name: string) => Promise<{ id: string; dir: string }> }>();
 
 // Mirrors the manifest schema's slug rule: `name` becomes a directory, so a rejected value can't be written.
@@ -21,15 +23,19 @@ const SLUG = /^[a-z0-9][a-z0-9-]*$/u;
 const publisher = ref(`workspace`);
 const name = ref(``);
 const wish = ref(``);
-const busy = ref(false);
-const failure = ref<NoticeModel>();
+// Kept in the operations ledger, not here: the creation writes a directory and hands the wish to an agent, and both
+// must happen whether or not this dialog, or the section behind it, is still open when the write lands.
+const creation = useOperation<{ id: string; dir: string }>(`${SECTION}/create`);
+const busy = creation.busy;
+const failure = creation.failure;
 
-// Resets name, wish and any previous failure so a second extension doesn't inherit the first one's state.
+// Resets name, wish and any previous failure so a second extension doesn't inherit the first one's state. A failure read
+// here goes when the dialog does; one still running when it closes ends in the section's notice region instead.
 watch(open, (shown) => {
+    creation.dismiss();
     if (shown) {
         name.value = ``;
         wish.value = ``;
-        failure.value = undefined;
     }
 });
 
@@ -44,21 +50,31 @@ const slugProblem = (value: string): string | undefined =>
 const publisherProblem = computed(() => slugProblem(cleanPublisher.value));
 const nameProblem = computed(() => slugProblem(cleanSlug.value));
 
+// A wish hands off to an ordinary agent chat, not an isolated run, since a first draft benefits from the author's
+// corrections; `wish` is the author's own words, untouched, which extensionBrief turns into the agent's brief.
 const submit = async (): Promise<void> => {
     // Re-entry drops: the keyboard path reaches this directly, and each call writes a directory.
     if (busy.value || !ready.value) {
         return;
     }
-    busy.value = true;
-    failure.value = undefined;
-    try {
-        const created = await create(cleanPublisher.value, cleanSlug.value);
+    const [publisherName, slug, said] = [cleanPublisher.value, cleanSlug.value, wish.value.trim()];
+    const id = `${publisherName}.${slug}`;
+    const ended = await creation.run({
+        what: t(`sandbox.newExtensionDialog.creating`, { id }),
+        done: () => t(`sandbox.newExtensionDialog.created`, { id }),
+        failed: t(`sandbox.newExtensionDialog.couldNotCreate`),
+        task: async () => {
+            const made = await create(publisherName, slug);
+            if (said !== ``) {
+                startAgent(extensionBrief({ ...made, wish: said }));
+            }
+            return made;
+        },
+    });
+    if (ended?.state === `done` && ended.value !== undefined) {
+        creation.dismiss();
         open.value = false;
-        emit(`created`, { ...created, wish: wish.value.trim() });
-    } catch (error) {
-        failure.value = noticeFrom(error, t(`sandbox.newExtensionDialog.couldNotCreate`));
-    } finally {
-        busy.value = false;
+        emit(`created`, ended.value);
     }
 };
 </script>

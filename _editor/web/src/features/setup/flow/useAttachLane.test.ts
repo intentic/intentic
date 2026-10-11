@@ -4,6 +4,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { type EffectScope, effectScope, ref } from "vue";
 import type { AttachOutcome } from "../setupAttach";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
+import { forgetOperations } from "../../../workbench/operations/operations";
 import { type AttachLaneHost, useAttachLane } from "./useAttachLane";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 
@@ -41,13 +42,14 @@ const stage = (over: { minted?: string; idToken?: string | undefined; outcome?: 
         });
         return { row: setupRow, lane: attachLane };
     })!;
-    return { rows, enter, attach, reopen, probe, getIdToken, row, lane };
+    return { rows, enter, attach, reopen, probe, getIdToken, row, lane, scope };
 };
 
 afterEach(() => {
     for (const scope of scopes.splice(0)) {
         scope.stop();
     }
+    forgetOperations();
 });
 
 describe(`what may be probed`, () => {
@@ -100,7 +102,7 @@ describe(`what may be probed`, () => {
         const { probe, row, lane } = stage({ idToken: undefined });
         lane.domain.value = `sandbox.example.com`;
         await lane.connectDomain();
-        expect(row.error.value).toEqual({ tone: `danger`, title: `Sign in with Google to reach your sandbox.` });
+        expect(lane.attachNotice.value).toEqual({ tone: `danger`, title: `Sign in with Google to reach your sandbox.` });
         expect(probe).not.toHaveBeenCalled();
     });
 });
@@ -165,19 +167,42 @@ describe(`the probe's answer`, () => {
     });
 
     it(`says why the connection failed`, async () => {
-        const { attach, row, lane } = stage();
+        const { attach, lane } = stage();
         attach.mockRejectedValueOnce(new Error(`already attached elsewhere`));
         lane.domain.value = `sandbox.example.com`;
         await lane.connectDomain();
-        expect(row.error.value).toEqual({ tone: `danger`, title: `Could not connect your sandbox.`, detail: `already attached elsewhere` });
+        expect(lane.attachNotice.value).toEqual({ tone: `danger`, title: `Could not connect your sandbox.`, detail: `already attached elsewhere` });
     });
 
-    it(`forgets a half-finished attach`, () => {
-        const { lane } = stage();
-        const left = () => ({ outcome: lane.attachOutcome.value, token: lane.attachToken.value });
-        lane.attachOutcome.value = { kind: `timeout` };
+    it(`forgets a half-finished attach`, async () => {
+        const { lane } = stage({ outcome: { kind: `timeout` } });
+        const left = () => ({ outcome: lane.attachOutcome.value, token: lane.attachToken.value, pending: lane.attachPending.value });
+        lane.domain.value = `sandbox.example.com`;
+        await lane.connectDomain();
         lane.attachToken.value = `pasted`;
         lane.resetAttach();
-        expect(left()).toEqual({ outcome: undefined, token: `` });
+        expect(left()).toEqual({ outcome: undefined, token: ``, pending: false });
+    });
+});
+
+describe(`coming back to the page`, () => {
+    it(`finds a press still probing, with its address, and the refusal it lands with`, async () => {
+        const probing = Promise.withResolvers<AttachOutcome>();
+        const first = stage();
+        first.probe.mockReturnValueOnce(probing.promise);
+        first.lane.domain.value = `sandbox.example.com`;
+        const pressed = first.lane.connectDomain();
+        await Promise.resolve();
+        first.scope.stop();
+
+        const again = stage();
+        expect({ busy: again.lane.attaching.value, domain: again.lane.domain.value, pending: again.lane.attachPending.value }).toEqual({
+            busy: true,
+            domain: `https://sandbox.example.com`,
+            pending: true,
+        });
+        probing.resolve({ kind: `unreachable` });
+        await pressed;
+        expect(again.lane.attachOutcome.value).toEqual({ kind: `unreachable` });
     });
 });

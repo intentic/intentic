@@ -13,10 +13,11 @@ import {
     type StatusVariant,
     ui,
 } from "@intentic/ui";
-import { messageOr } from "@intentic/ui/async";
+import { messageOr, noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, reactive, ref } from "vue";
+import { computed, ref } from "vue";
+import { useOperations } from "../../workbench/operations/operations";
 import { type LinkKind, type LinkOf, useLiveLinks } from "../sandbox/devices/useLiveLinks";
 
 // Rows come from the capability list, not the live read, which can lag or fail on its own: a row exists before its link.
@@ -39,6 +40,9 @@ interface KindSpec<L> {
     readonly failed: () => string;
     readonly open: () => string;
     readonly close: () => string;
+    // Present tense, for the hub row while the link moves and the receipt if it ends with nobody on this card.
+    readonly opening: (name: string) => string;
+    readonly closing: (name: string) => string;
     readonly autoNote: () => string;
     // Whether the link is up or on its way, which offers close rather than open.
     readonly up: (link: L) => boolean;
@@ -76,6 +80,8 @@ const SPECS: { readonly [P in LinkKind]: KindSpec<LinkOf[P]> } = {
         failed: () => t(`common.vpnConnections.actionFailed`),
         open: () => t(`ui.action.connect`),
         close: () => t(`ui.action.disconnect`),
+        opening: (name) => t(`common.vpnConnections.connecting`, { name }),
+        closing: (name) => t(`common.vpnConnections.disconnecting`, { name }),
         autoNote: () => t(`common.vpnConnections.connectsAutomaticallyAfterSandbox`),
         up: (link) => link.state === `connected` || link.state === `connecting`,
         auto: (link) => link.autoConnect,
@@ -111,6 +117,8 @@ const SPECS: { readonly [P in LinkKind]: KindSpec<LinkOf[P]> } = {
         failed: () => t(`common.netdiskMounts.actionFailed`),
         open: () => t(`common.netdiskMounts.mount`),
         close: () => t(`common.netdiskMounts.unmount`),
+        opening: (name) => t(`common.netdiskMounts.mounting`, { name }),
+        closing: (name) => t(`common.netdiskMounts.unmounting`, { name }),
         autoNote: () => t(`common.netdiskMounts.mountsAutomaticallyAfterSandbox`),
         up: (link) => link.state === `mounted`,
         auto: (link) => link.autoMount,
@@ -139,10 +147,26 @@ const listNotice = computed<NoticeModel | undefined>(() =>
     listError.value === undefined ? undefined : { tone: `danger`, title: spec.value.listFailed(), detail: listError.value },
 );
 
-// Per-link local state, keyed by id, so one failing link never blanks another's row.
-const busy = reactive(new Set<string>());
-const progress = reactive<Record<string, string>>({});
-const failures = reactive<Record<string, string>>({});
+// THE DIAL IS THE LINK'S, NOT THIS CARD'S. A tunnel can take tens of seconds to come up, and its refusal is where the
+// gateway asks for a one-time code, so each link's run, its last progress line and the client's own failure text live in
+// the operations ledger under its id: a reader who leaves mid-dial comes back to it still dialling, or to the refusal
+// with the code field one press away. One failing link never blanks another's row.
+const ops = useOperations<void, LinkFailure>(() => `capabilities/${props.kind}/links`);
+
+// The client's text verbatim for the row, and the app's sentence over it for a receipt raised elsewhere.
+interface LinkFailure {
+    readonly notice: NoticeModel;
+    readonly said: string;
+}
+// Worded at the press: the run outlives this card.
+const refusal = (failed: string) => (caught: unknown): LinkFailure => ({ notice: noticeFrom(caught, failed), said: messageOr(caught, failed) });
+const busy = (id: string): boolean => ops.at(id)?.state === `running`;
+// The line the client is on, while it is on one.
+const progressOf = (id: string): string | undefined => {
+    const operation = ops.at(id);
+    return operation?.state === `running` ? operation.progress : undefined;
+};
+const failureOf = (id: string): string | undefined => ops.at(id)?.failure?.said;
 // Which tunnel's code field is open, and its value; never stored, it goes straight into the dial.
 const otpFor = ref<string>();
 const otp = ref(``);
@@ -178,40 +202,38 @@ const rows = computed<LinkRow[]>(() =>
     }),
 );
 
-// Per link, not globally: opening one while another is mid-open is fine, opening the same one twice is not.
-const run = async (id: string, action: () => Promise<void>): Promise<void> => {
-    if (busy.has(id)) {
-        return;
-    }
-    busy.add(id);
-    delete failures[id];
-    try {
-        await action();
-    } catch (caught) {
-        failures[id] = messageOr(caught, spec.value.failed());
-    } finally {
-        busy.delete(id);
-        delete progress[id];
-    }
+// Per link, not globally: opening one while another is mid-open is fine, opening the same one twice is not (the ledger
+// refuses a second run under a key still running).
+const onClose = async (id: string): Promise<void> => {
+    ops.dismiss(id);
+    await ops.run(id, {
+        what: spec.value.closing(id),
+        failed: refusal(spec.value.failed()),
+        // The row's own state says how it went.
+        quiet: true,
+        task: () => close(id),
+    });
 };
 
 const onOpen = async (id: string): Promise<void> => {
+    if (busy(id)) {
+        return;
+    }
     const code = otpFor.value === id ? otp.value.trim() : ``;
-    await run(id, () =>
-        open(
-            id,
-            (message) => {
-                progress[id] = message;
-            },
-            code === `` ? undefined : code,
-        ),
-    );
-    otpFor.value = undefined;
-    otp.value = ``;
+    ops.dismiss(id);
+    await ops.run(id, {
+        what: spec.value.opening(id),
+        failed: refusal(spec.value.failed()),
+        task: (report) => open(id, report.progress, code === `` ? undefined : code),
+    });
+    if (otpFor.value === id) {
+        otpFor.value = undefined;
+        otp.value = ``;
+    }
 };
 
 // A gateway that wants a token says so in the failure; the code field opens right where the user just failed.
-const wantsCode = (id: string): boolean => spec.value.otp && /one-time code|2FA|token/i.test(failures[id] ?? ``);
+const wantsCode = (id: string): boolean => spec.value.otp && /one-time code|2FA|token/i.test(failureOf(id) ?? ``);
 
 // One shared ContextMenu for the list, opened over whichever row was pressed, with CapabilityInstanceRow's three verbs.
 const menu = ref<{ show: (event: Event) => void } | undefined>();
@@ -270,8 +292,8 @@ const items = computed<MenuItem[]>(() => {
                         :label="spec.close()"
                         size="small"
                         tier="quiet" tone="accent"
-                        :loading="busy.has(row.id)"
-                        @click="run(row.id, () => close(row.id))"
+                        :loading="busy(row.id)"
+                        @click="onClose(row.id)"
                     />
                     <Button
                         v-else-if="row.link"
@@ -279,7 +301,7 @@ const items = computed<MenuItem[]>(() => {
                         size="small"
                         tier="quiet" tone="accent"
                         :disabled="row.link.state === 'unavailable'"
-                        :loading="busy.has(row.id)"
+                        :loading="busy(row.id)"
                         @click="onOpen(row.id)"
                     />
                     <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.moreActions`)" @click="openMenu(row.id, $event)">
@@ -287,12 +309,12 @@ const items = computed<MenuItem[]>(() => {
                     </button>
                 </div>
             </template>
-            <template v-if="progress[row.id] || failures[row.id] || otpFor === row.id" #below>
+            <template v-if="progressOf(row.id) || failureOf(row.id) || otpFor === row.id" #below>
                 <div class="mt-2 flex flex-col gap-2">
-                    <p v-if="progress[row.id]" class="font-mono text-2xs text-subtle">{{ progress[row.id] }}</p>
+                    <p v-if="progressOf(row.id)" class="font-mono text-2xs text-subtle">{{ progressOf(row.id) }}</p>
                     <!-- The client's own text (a --servercert digest, mount.cifs's advice); preserved verbatim and wrapped, not truncated. -->
-                    <Notice v-if="failures[row.id]" tone="danger">
-                        <pre class="max-h-32 overflow-auto whitespace-pre-wrap font-mono text-2xs">{{ failures[row.id] }}</pre>
+                    <Notice v-if="failureOf(row.id)" tone="danger">
+                        <pre class="max-h-32 overflow-auto whitespace-pre-wrap font-mono text-2xs">{{ failureOf(row.id) }}</pre>
                     </Notice>
                     <div v-if="otpFor === row.id" class="flex items-center gap-2">
                         <!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
@@ -304,7 +326,7 @@ const items = computed<MenuItem[]>(() => {
                             autocomplete="one-time-code"
                             @keydown.enter.prevent="onOpen(row.id)"
                         />
-                        <Button :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy.has(row.id)" @click="onOpen(row.id)" />
+                        <Button :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy(row.id)" @click="onOpen(row.id)" />
                         <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="otpFor = undefined" />
                     </div>
                     <button

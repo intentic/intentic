@@ -2,17 +2,21 @@
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
 import { hostedShapeLine } from "@intentic/constants";
 import { Button, formatElapsed, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
-import { messageOr, usePoll } from "@intentic/ui/async";
+import { messageOr, type NoticeModel, usePoll } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { useQueryClient } from "@tanstack/vue-query";
 import HostedHoursMeter from "./hosted-plan/HostedHoursMeter.vue";
 import HostedPlanOffer from "./hosted-plan/HostedPlanOffer.vue";
 import { formatDay, hoursMeter, machineHours, RECOVERABLE } from "./hosted-plan/hostedHours";
+import { dropStripeErrand, planMark, POLL_EVERY_MS, RETURN_WAIT_MS, waitForStripe } from "./hosted-plan/stripeErrand";
 import { hasReturned, subscribeLabel, useHostedPlan } from "./hosted-plan/useHostedPlan";
+import { HOSTED_PLAN } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import { desktopVersion } from "../../app/environments/desktop";
-import type { HostedPlanState } from "@intentic/api-contract";
+import { dismissOperation, useOperation, useOperations } from "../../workbench/operations/operations";
+import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 
 // The one page about money: what plan this account is on and the one action to take, the hosted sandboxes and the hours
@@ -26,10 +30,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { state: plan, error, refetch, setSlots, slotsWorking, changeTier, moving, tiers } = useHostedPlan();
-
-const working = ref(false);
-const actionError = ref<string | undefined>(undefined);
+const { state: plan, error, refetch, setSlots, changeTier, tiers } = useHostedPlan();
 
 const loadError = computed(() => (error.value === null ? undefined : messageOr(error.value, t(`settings.settingsBilling.couldntLoadPlan`))));
 
@@ -42,69 +43,74 @@ const outline = useLoadingReveal(
 // instead of asking for a reload, and gives up after a bounded wait.
 const route = useRoute();
 const justJoined = computed(() => route.query[`plan`] === `welcome`);
-
-// The app has no browser of its own: a navigation to Stripe is intercepted and handed to the reader's real browser
-// (desktop-app `windows.rs`), so this window stays on this page. Nothing else would ever clear the press or re-read
-// the plan, which is why the errand is tracked here rather than ending in a redirect.
-const inApp = desktopVersion() !== undefined;
-// The door standing open in the reader's browser, while it is.
-const away = ref<`checkout` | `portal` | undefined>(undefined);
-
-const POLL_EVERY_MS = 3_000;
-// The webhook's few seconds, once Stripe has already sent the browser back here.
-const RETURN_WAIT_MS = 40_000;
-// Someone typing a card into another window, which is a different order of time.
-const BROWSER_WAIT_MS = 10 * 60_000;
-
-// The plan half of the answer, which is all an errand on Stripe can change. The hosted half moves on its own — a
-// machine waking, a minute spent — and comparing it would report a change nobody made.
-const planMark = (state: HostedPlanState | undefined): string =>
-    state === undefined
-        ? ``
-        : `${state.onPlan}:${state.status ?? ``}:${state.renewsAt ?? ``}:${state.cancelAtPeriodEnd === true}:${state.comped === true}:${state.hosted?.slots ?? 0}`;
-
-// What the plan said when the errand left for the browser; the errand is over when the answer differs.
-let leftWith = ``;
-
-// A redirect back is answered by the plan going live; an errand still out in the browser, by the answer changing at
-// all — a cancellation and a new card are the same round trip as a payment, and neither turns `onPlan` on.
-const landed = (): boolean => (away.value === undefined ? plan.value?.onPlan === true : planMark(plan.value) !== leftWith);
-
-// Re-reads the plan until it has moved or the wait runs out; a later errand only moves the deadline out.
-const {
-    polling: waiting,
-    start: waitForPlan,
-    stop: stopWaiting,
-} = usePoll({
+const { polling: waiting, start: waitForPlan } = usePoll({
     everyMs: POLL_EVERY_MS,
     check: async () => {
         await refetch();
-        if (!landed()) {
-            return false;
-        }
-        away.value = undefined;
-        return true;
+        return plan.value?.onPlan === true;
     },
 });
-
-// Coming back to this window is the only thing the app hears about an errand it handed to the browser, so the return
-// re-reads the plan and keeps re-reading for the webhook's few seconds.
-const onFocus = (): void => {
-    if (away.value !== undefined) {
-        waitForPlan(RETURN_WAIT_MS);
-    }
-};
-
-onUnmounted(() => {
-    window.removeEventListener(`focus`, onFocus);
-});
-
 onMounted(() => {
-    window.addEventListener(`focus`, onFocus);
     if (justJoined.value && plan.value?.onPlan !== true) {
         waitForPlan(RETURN_WAIT_MS);
     }
 });
+
+// The app has no browser of its own: a navigation to Stripe is intercepted and handed to the reader's real browser
+// (desktop-app `windows.rs`), so this window stays on this page. Nothing else would ever clear the press or re-read
+// the plan, which is why the errand is waited out here (stripeErrand.ts) rather than ending in a redirect.
+const inApp = desktopVersion() !== undefined;
+
+type Door = `checkout` | `portal`;
+// Every press of a door to Stripe, one run each, its progress naming the door once that stands open in the reader's
+// browser: in the ledger, so a reader who looks elsewhere while paying comes back to the same wait. A press while one
+// waits is a new errand that ends the old, hence a run per press rather than one refused while another waits.
+const errands = useOperations<boolean, NoticeModel, Door>(`account/billing/stripe`);
+const errand = computed(() => errands.all.value.at(-1));
+const errandRunning = computed(() => errand.value?.state === `running`);
+// The door standing open in the reader's browser, while it is.
+const away = computed(() => (errandRunning.value ? errand.value?.progress : undefined));
+// Asking Stripe for the page, before anything stands open.
+const working = computed(() => errandRunning.value && errand.value?.progress === undefined);
+const errandFailure = computed(() => errand.value?.failure);
+
+// The plan read for the errand's wait straight from the platform, since the wait outlives this page's own query, and
+// put in the cache every page draws from.
+const client = useQueryClient();
+const readPlan = async (): Promise<HostedPlanState> => {
+    const state = await apiClient.hostedPlan.state();
+    client.setQueryData(HOSTED_PLAN.every, state);
+    return state;
+};
+
+const open = async (door: Door): Promise<void> => {
+    if (working.value) {
+        return;
+    }
+    for (const ended of errands.all.value.filter((run) => run.state !== `running`)) {
+        dismissOperation(ended.key);
+    }
+    await errands.run(String(Date.now()), {
+        what: door === `checkout` ? t(`settings.settingsBilling.checkoutOpenInBrowser`) : t(`settings.settingsBilling.stripeOpenInBrowser`),
+        failed: t(`settings.settingsBilling.couldntOpenPayment`),
+        // A browser leaves this page for Stripe's, so there is nobody left to tell.
+        quiet: !inApp,
+        done: (landed) => (landed ? t(`settings.settingsBilling.planChangedOnStripe`) : t(`settings.settingsBilling.stoppedWaitingForStripe`)),
+        task: async (report) => {
+            // Checkout buys the cheapest rung on sale; the ladder below is where another one is added.
+            const { url } = await (door === `checkout` ? apiClient.hostedPlan.checkout({}) : apiClient.hostedPlan.portal());
+            const left = planMark(plan.value);
+            window.location.href = url;
+            // A browser has left this page by now; in the app the line above became a browser window somewhere else, and
+            // this one is still standing here, waiting for the answer to move.
+            if (!inApp) {
+                return false;
+            }
+            report.progress(door);
+            return waitForStripe(left, readPlan);
+        },
+    });
+};
 
 const periodEnd = computed(() => (plan.value?.renewsAt === undefined ? undefined : formatDay(plan.value.renewsAt)));
 
@@ -124,36 +130,9 @@ const dateWord = computed(() => (cancelling.value ? t(`settings.settingsBilling.
 
 const buyLabel = computed(() => subscribeLabel(plan.value, returning.value));
 
-const open = async (door: `checkout` | `portal`): Promise<void> => {
-    if (working.value) {
-        return;
-    }
-    working.value = true;
-    actionError.value = undefined;
-    try {
-        // Checkout buys the cheapest rung on sale; the ladder below is where another one is added.
-        const { url } = await (door === `checkout` ? apiClient.hostedPlan.checkout({}) : apiClient.hostedPlan.portal());
-        window.location.href = url;
-        // A browser has left this page by now; in the app the line above became a browser window somewhere else, and
-        // this one is still standing here holding a pressed button.
-        if (inApp) {
-            working.value = false;
-            leftWith = planMark(plan.value);
-            away.value = door;
-            waitForPlan(BROWSER_WAIT_MS);
-        }
-    } catch (err) {
-        actionError.value = messageOr(err, t(`settings.settingsBilling.couldntOpenPayment`));
-        working.value = false;
-    }
-};
-
 // The reader saying the errand is over when it produced nothing: closed the tab, changed their mind. Nothing to
-// undo — no session was ever charged — so this only stops the page waiting for it.
-const dropAway = (): void => {
-    away.value = undefined;
-    stopWaiting();
-};
+// undo — no session was ever charged — so this only stops the wait for it.
+const dropAway = (): void => dropStripeErrand();
 
 // The hosted lane as it applies to this account; present only where the platform runs machines.
 const hosted = computed(() => plan.value?.hosted);
@@ -187,7 +166,10 @@ const machineState = (wokeAt: string | null): string => wokeAt === null ? t(`set
 
 // Slots are a subscriber's only (not comped); bounded up by the plan's cap, down by machines still standing.
 const paying = computed(() => plan.value?.onPlan === true && !comped.value);
-const slotsError = ref<string | undefined>(undefined);
+// A slot bought or given back, one at a time so racing presses can't overwrite each other, kept past this page.
+const slotChange = useOperation(`account/billing/slots`);
+const slotsWorking = slotChange.busy;
+const slotsError = computed(() => slotChange.failure.value?.detail ?? slotChange.failure.value?.title);
 
 /* THE LADDER AS THIS PAGE SHOWS IT: every rung, what it is, what it costs, how many slots are held at it and how
  * many of those a machine already stands on. Free is on the list because it is a rung like the others; it just is
@@ -209,29 +191,39 @@ const ladder = computed(() =>
 );
 
 const changeSlots = async (tier: string, quantity: number): Promise<void> => {
-    slotsError.value = undefined;
-    try {
-        await setSlots(tier, quantity);
-    } catch (err) {
-        slotsError.value = messageOr(err, t(`settings.settingsBilling.couldntChangePlan`));
-    }
+    await slotChange.run({
+        what: t(`settings.settingsBilling.changingSlots`),
+        failed: t(`settings.settingsBilling.couldntChangePlan`),
+        task: () => setSlots(tier, quantity),
+    });
 };
+
+// One move at a time, on any machine: the request answers only once the platform has snapshotted, moved and checked it
+// (minutes), so it is the ledger's to keep, tagged with the sandbox it moves. A move that ended anywhere but `done`
+// fails here, saying whether the machine was put back.
+const move = useOperation<HostedMigration>(`account/billing/tier`);
+const moving = computed(() => (move.busy.value ? move.operation.value?.tag : undefined));
+const moveError = computed(() => move.failure.value?.detail ?? move.failure.value?.title);
 
 // Whether this machine could move to that rung right now: a slot there, not already there, nothing in flight.
 const canMoveTo = (machine: { sandboxId: string; tier: string }, rung: { id: string; held: number; standing: number }): boolean =>
-    machine.tier !== rung.id && moving.value === undefined && rung.standing < (rung.id === hosted.value?.freeTier.id ? slots.value : rung.held);
+    machine.tier !== rung.id && !move.busy.value && rung.standing < (rung.id === hosted.value?.freeTier.id ? slots.value : rung.held);
 
-const moveError = ref<string | undefined>(undefined);
 const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
-    moveError.value = undefined;
-    try {
-        const migration = await changeTier(sandboxId, tier);
-        if (migration.state !== `done`) {
-            moveError.value = migration.error ?? t(`settings.settingsBilling.machinePutBack`);
-        }
-    } catch (err) {
-        moveError.value = messageOr(err, t(`settings.settingsBilling.couldntMoveSandbox`));
-    }
+    const name = tiers.find((rung) => rung.id === tier)?.name ?? tier;
+    await move.run({
+        what: t(`settings.settingsBilling.movingToRung`, { name }),
+        tag: sandboxId,
+        failed: t(`settings.settingsBilling.couldntMoveSandbox`),
+        done: () => t(`settings.settingsBilling.movedToRung`, { name }),
+        task: async () => {
+            const migration = await changeTier(sandboxId, tier);
+            if (migration.state !== `done`) {
+                throw new Error(migration.error ?? t(`settings.settingsBilling.machinePutBack`));
+            }
+            return migration;
+        },
+    });
 };
 
 // A plan with nothing under it: the one state in which cancelling is the advice rather than the door.
@@ -349,7 +341,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <!-- Says the page is watching, rather than offering a press that would only start the read
                                  already running. Coming back to this window re-arms it either way. -->
-                            <p v-if="waiting" class="flex items-center gap-2 text-xs text-muted">
+                            <p class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
                                 {{ t(`settings.settingsBilling.waitingForStripe`) }}
                             </p>
@@ -548,6 +540,6 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             </RowGroup>
         </SkeletonSnapshot>
 
-        <Notice v-if="actionError" :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntOpenPayment`), detail: actionError }" />
+        <Notice v-if="errandFailure" :of="errandFailure" />
     </div>
 </template>

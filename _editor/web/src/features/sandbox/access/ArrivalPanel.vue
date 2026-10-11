@@ -9,13 +9,12 @@ import {
     type AssistantSource,
 } from "@intentic/sandbox-contract";
 import { Button, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useHubWork } from "../../../workbench/hub/hubWork";
+import { useOperation } from "../../../workbench/operations/operations";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 import { useT } from "@intentic/ui/i18n";
 
@@ -29,12 +28,43 @@ const t = useT();
 const sandbox = useSandbox();
 const hosts = ref<ArrivalHost[]>([]);
 const picked = ref<AssistantSource | undefined>(undefined);
-const plan = ref<ArrivalPlan | undefined>(undefined);
+
+// THE PLAN AND THE REPORT ARE THE ARRIVAL'S, NOT THIS PANEL'S. Reading a bundle uploads it whole and can take minutes,
+// and bringing it in longer; the daemon holds the plan by token but offers no way to read it back, so the checklist
+// lives in the operations ledger and stays until it is applied or discarded. The report stays until it is put away,
+// since what failed and what still needs doing is not said anywhere else. Leaving mid-read or mid-apply and coming
+// back finds either still going, with its button held.
+interface Arrived {
+    readonly report: ArrivalReport;
+    /** What became of the bundle's name and logo, in a line; undefined when it carried neither. */
+    readonly adopted: string | undefined;
+}
+const planOp = useOperation<ArrivalPlan>(`access/arrival/plan`);
+const applyOp = useOperation<Arrived>(`access/arrival/apply`);
+// Discarding is its own run, so a refused discard leaves the plan it was asked to drop on screen.
+const discardOp = useOperation(`access/arrival/discard`);
+const plan = planOp.value;
+const planning = computed(() => planOp.busy.value || discardOp.busy.value);
+const applying = applyOp.busy;
+const report = computed(() => applyOp.value.value?.report);
+const adopted = computed(() => applyOp.value.value?.adopted);
+const planError = computed(() => planOp.failure.value ?? discardOp.failure.value);
+const applyError = applyOp.failure;
+
+// Which rows to bring and whether secrets ride along are the reader's answers, so they stay here; a plan found again on
+// coming back starts from the adapter's own recommendation, as it did when it was first read.
 const ticked = ref<Record<string, boolean>>({});
 const withSecrets = ref(false);
-const report = ref<ArrivalReport | undefined>(undefined);
-const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
-const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
+watch(
+    () => plan.value?.token,
+    () => {
+        const parsed = plan.value;
+        // Starts ticked at the adapter's own recommendation; a row advising against itself says so.
+        ticked.value = parsed === undefined ? {} : Object.fromEntries(parsed.items.filter((item) => item.applicable).map((item) => [item.id, item.recommended]));
+        withSecrets.value = false;
+    },
+    { immediate: true },
+);
 
 // Probed on mount and on demand, never polled: enrolling happens elsewhere, but waking a sleeping laptop happens right
 // here, so an offline row carries its own recheck instead of a page reload.
@@ -67,70 +97,74 @@ const sourceLabel = (source: ArrivalPlan["source"]): string =>
         openclaw: `openclaw`,
     })[source];
 
-const adopt = (parsed: ArrivalPlan): void => {
-    plan.value = parsed;
-    // Starts ticked at the adapter's own recommendation; a row advising against itself says so.
-    ticked.value = Object.fromEntries(parsed.items.filter((item) => item.applicable).map((item) => [item.id, item.recommended]));
-    withSecrets.value = false;
-    report.value = undefined;
+// A new plan starts a new arrival, so the last one's report is put away with it. Kept until applied or discarded.
+const readPlan = async (failed: string, read: () => Promise<unknown>): Promise<void> => {
+    applyOp.dismiss();
+    discardOp.dismiss();
+    await planOp.run({
+        what: t(`sandbox.arrivalPanel.readingWhatWouldLand`),
+        failed,
+        keep: true,
+        task: async () => ArrivalPlanSchema.parse(await read()),
+    });
 };
 
 // The zero-packing path: the daemon walks the machine's own folder over the socket it already holds.
 const readFromHost = (host: ArrivalHost): Promise<void> =>
-    runPlan(async () => {
-        adopt(
-            ArrivalPlanSchema.parse(
-                await sandboxJson(`/arrivals/scan`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ host: host.id }),
-                }),
-            ),
-        );
-    }, t(`sandbox.arrivalPanel.couldntReadSetupFromDevice`));
+    readPlan(t(`sandbox.arrivalPanel.couldntReadSetupFromDevice`), () =>
+        sandboxJson(`/arrivals/scan`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ host: host.id }),
+        }),
+    );
 
 const chooseFile = ref<HTMLInputElement>();
-const readFile = (event: Event): Promise<void> =>
-    runPlan(async () => {
-        const input = event.target as HTMLInputElement;
-        const file = input.files?.[0];
-        input.value = ``;
-        if (file === undefined) {
-            return;
-        }
-        report.value = undefined;
-        // Streamed as one body, like the folder-drop route; a huge bundle never passes through this tab's memory.
-        adopt(ArrivalPlanSchema.parse(await sandboxJson(`/arrivals/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit)));
-    }, t(`sandbox.arrivalPanel.couldntReadFile`));
+const readFile = async (event: Event): Promise<void> => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ``;
+    if (file === undefined || planning.value) {
+        return;
+    }
+    // Streamed as one body, like the folder-drop route; a huge bundle never passes through this tab's memory.
+    await readPlan(t(`sandbox.arrivalPanel.couldntReadFile`), () =>
+        sandboxJson(`/arrivals/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit),
+    );
+};
 
 const tickedCount = computed(() => Object.values(ticked.value).filter(Boolean).length);
 
-// Unpacking somebody's whole sandbox into this one runs for as long as the bundle is big, and the row it was
-// started from says so until it is done.
-const hubWork = useHubWork();
-
-const apply = (): Promise<void> =>
-    runApply(
-        () =>
-            hubWork.track(t(`sandbox.arrivalPanel.bringingSandboxIn`), async () => {
-                const held = plan.value;
-                if (held === undefined) {
-                    return;
-                }
-                const items = held.items.filter((item) => ticked.value[item.id] === true).map((item) => item.id);
-                report.value = ArrivalReportSchema.parse(
-                    await sandboxJson(`/arrivals/apply`, {
-                        method: `POST`,
-                        headers: { "content-type": `application/json` },
-                        body: JSON.stringify({ token: held.token, items, includeSecrets: withSecrets.value }),
-                    }),
-                );
-                plan.value = undefined;
-                picked.value = undefined;
-                await adoptPresentation(report.value.presentation);
-            }),
-        t(`sandbox.arrivalPanel.couldntBringIn`),
-    );
+// Unpacking somebody's whole sandbox into this one runs for as long as the bundle is big; the ledger marks the row it
+// was started from until it is done.
+const apply = async (): Promise<void> => {
+    const held = plan.value;
+    if (held === undefined || applying.value) {
+        return;
+    }
+    const items = held.items.filter((item) => ticked.value[item.id] === true).map((item) => item.id);
+    const includeSecrets = withSecrets.value;
+    const outcome = await applyOp.run({
+        what: t(`sandbox.arrivalPanel.bringingSandboxIn`),
+        failed: t(`sandbox.arrivalPanel.couldntBringIn`),
+        keep: true,
+        task: async () => {
+            const arrived = ArrivalReportSchema.parse(
+                await sandboxJson(`/arrivals/apply`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    body: JSON.stringify({ token: held.token, items, includeSecrets }),
+                }),
+            );
+            // The plan is spent: its token was the daemon's, and the arrival it described has happened.
+            planOp.dismiss();
+            return { report: arrived, adopted: await adoptPresentation(arrived.presentation) };
+        },
+    });
+    if (outcome?.state === `done`) {
+        picked.value = undefined;
+    }
+};
 
 // The one part of an arrival the daemon cannot finish. A sandbox's name and switcher logo are platform rows, so the
 // bundle carries them and this — the side holding the owner's session — writes them. Without it a migrated sandbox
@@ -138,37 +172,43 @@ const apply = (): Promise<void> =>
 // as "W" instead of the workspace it actually was.
 //
 // Never fails the arrival: every byte is already on disk by the time this runs, and a rename that did not take is
-// worth a line of prose, not an error over a successful import.
-const adopted = ref<string | undefined>(undefined);
-const adoptPresentation = async (presentation: ArrivalReport["presentation"]): Promise<void> => {
-    adopted.value = undefined;
+// worth a line of prose, not an error over a successful import. Answers that line.
+const adoptPresentation = async (presentation: ArrivalReport["presentation"]): Promise<string | undefined> => {
     const id = sandbox.active.value?.id;
     if (presentation === undefined || id === undefined) {
-        return;
+        return undefined;
     }
     try {
         await sandbox.update(id, {
             ...(presentation.name === undefined ? {} : { name: presentation.name }),
             ...(presentation.image === undefined ? {} : { image: presentation.image }),
         });
-        adopted.value =
-            presentation.name === undefined
-                ? t(`sandbox.arrivalPanel.tookLogoFromBundle`)
-                : presentation.image === undefined
-                  ? t(`sandbox.arrivalPanel.nowCalledFromBundle`, { name: presentation.name })
-                  : t(`sandbox.arrivalPanel.nowCalledWithLogoFromBundle`, { name: presentation.name });
+        return presentation.name === undefined
+            ? t(`sandbox.arrivalPanel.tookLogoFromBundle`)
+            : presentation.image === undefined
+              ? t(`sandbox.arrivalPanel.nowCalledFromBundle`, { name: presentation.name })
+              : t(`sandbox.arrivalPanel.nowCalledWithLogoFromBundle`, { name: presentation.name });
     } catch {
-        adopted.value = t(`sandbox.arrivalPanel.keptOwnNameAndLogo`);
+        return t(`sandbox.arrivalPanel.keptOwnNameAndLogo`);
     }
 };
 
-const cancel = (): Promise<void> =>
-    runPlan(async () => {
-        await sandboxJson(`/arrivals`, { method: `DELETE` });
-        plan.value = undefined;
+// Quick and quiet: its end is the checklist going away, right where the reader pressed.
+const cancel = async (): Promise<void> => {
+    const outcome = await discardOp.run({
+        what: t(`sandbox.arrivalPanel.discardingPlan`),
+        failed: t(`sandbox.arrivalPanel.couldntDiscardPlan`),
+        quiet: true,
+        task: async () => {
+            await sandboxJson(`/arrivals`, { method: `DELETE` });
+            planOp.dismiss();
+            applyOp.dismiss();
+        },
+    });
+    if (outcome?.state === `done`) {
         picked.value = undefined;
-        report.value = undefined;
-    }, t(`sandbox.arrivalPanel.couldntDiscardPlan`));
+    }
+};
 </script>
 
 <template>
@@ -347,6 +387,10 @@ const cancel = (): Promise<void> =>
                 <p class="text-2xs text-subtle">
                     {{ t(`sandbox.arrivalPanel.itemsApplied`, { count: report.applied.length }, report.applied.length) }}
                 </p>
+                <!-- Kept until put away: what did not land and what is left to do is said nowhere else. -->
+                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `ml-auto`)" @click="applyOp.dismiss()">
+                    {{ t(`ui.action.dismiss`) }}
+                </button>
             </div>
             <!-- Taking the source's name and logo renames what the owner is looking at, so it is said, never silent. -->
             <p v-if="adopted" class="text-2xs text-subtle">{{ adopted }}</p>

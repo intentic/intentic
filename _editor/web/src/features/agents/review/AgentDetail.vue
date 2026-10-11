@@ -15,8 +15,8 @@ import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch }
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
-import { assignAgent, requestLandAgent, startAgent } from "../fleet/agentActions";
-import { messageOr } from "@intentic/ui/async";
+import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent } from "../fleet/agentActions";
+import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
 import { mobileChatPath } from "../../../lib/routes/tabRoots";
@@ -240,7 +240,7 @@ const changes = useAgentChanges(
 const streaming = computed(() => !remote.value && conversation.value?.turn.streaming.value === true);
 
 // Land only reads the checkout, so it's live whenever anything is pending, unlike Discard (worktree-gated,
-// refused mid-turn). `writing` (fleet status, not `streaming`) decides which press it is, since a parked turn
+// refused mid-turn). `actionBusy` is the ledger's, so a land still running when this page is opened again holds it. `writing` (fleet status, not `streaming`) decides which press it is, since a parked turn
 // still streams.
 const writing = computed(() => fleetAgent.value !== undefined && writingNow(fleetAgent.value));
 const canLand = computed(() => !changes.actionBusy.value && changes.pending.value.length > 0);
@@ -293,18 +293,23 @@ const fixPress = computed(() =>
 // running, failed, conflict are things no button here says.
 const statusShown = computed(() => status.value !== undefined && !(landOffered.value && fleetAgent.value?.status === `ready`));
 const words = useVocabulary();
-const requestingLand = ref(false);
+// Kept in the ledger under the card, shared with the card's own press: its refusal is said under this header (or as a
+// receipt to a reader who already left), where it used to be thrown at nobody.
+const landAsk = useOperation(() => landRequestWork(agentId.value, remoteBox.value));
+const requestingLand = landAsk.busy;
 const requestLand = async (): Promise<void> => {
-    if (requestingLand.value) {
-        return;
-    }
-    requestingLand.value = true;
-    try {
-        await requestLandAgent(agentId.value, remoteBox.value);
-        await (remote.value ? Promise.resolve(refreshAcross()) : refresh());
-    } finally {
-        requestingLand.value = false;
-    }
+    const id = agentId.value;
+    const box = remoteBox.value;
+    const name = title.value;
+    await landAsk.run({
+        what: t(`agents.agentDetail.requestingLand`, { name }),
+        done: () => t(`agents.agentDetail.landRequestSent`, { name }),
+        failed: t(`agents.agentCard.couldntSendLandRequest`),
+        task: async () => {
+            await requestLandAgent(id, box);
+            await (box === undefined ? refresh() : Promise.resolve(refreshAcross()));
+        },
+    });
 };
 
 // What a remote review can't offer, gated in one place: rename/archive/auto-land address the fleet store (this
@@ -417,14 +422,16 @@ const confirmDiscard = async (): Promise<void> => {
     await changes.discard();
 };
 // Hand-over: a member from the presence roster, or an address typed for somebody not connected. The daemon decides
-// whether the caller may and whether the address is a member's; a refusal is shown in its own words.
+// whether the caller may and whether the address is a member's; a refusal is shown in its own words. The press is
+// the card's, in the ledger: a dialog closed or a page left mid-press finds it still held, and its refusal kept.
 const pendingHandOver = ref(false);
 const handOverTo = ref(``);
-const handOverError = ref<string | undefined>(undefined);
-const handOverBusy = ref(false);
+const handOver = useOperation(() => `${agentWork(agentId.value, remoteBox.value)}/hand-over`);
+const handOverBusy = handOver.busy;
+const handOverError = computed(() => handOver.failure.value?.detail ?? handOver.failure.value?.title);
 const openHandOver = (): void => {
     handOverTo.value = ``;
-    handOverError.value = undefined;
+    handOver.dismiss();
     pendingHandOver.value = true;
 };
 const confirmHandOver = async (): Promise<void> => {
@@ -432,15 +439,19 @@ const confirmHandOver = async (): Promise<void> => {
     if (to === `` || handOverBusy.value) {
         return;
     }
-    handOverBusy.value = true;
-    handOverError.value = undefined;
-    try {
-        await assignAgent(agentId.value, to, remoteBox.value);
+    const id = agentId.value;
+    const box = remoteBox.value;
+    const outcome = await handOver.run({
+        what: t(`agents.agentDetail.handingOver`, { name: title.value, to }),
+        failed: t(`agents.agentDetail.handOverFailed`),
+        // The card's owner moves on the board; nothing else to say.
+        quiet: true,
+        task: async () => {
+            await assignAgent(id, to, box);
+        },
+    });
+    if (outcome?.state === `done` && id === agentId.value) {
         pendingHandOver.value = false;
-    } catch (error) {
-        handOverError.value = messageOr(error, t(`agents.agentDetail.handOverFailed`));
-    } finally {
-        handOverBusy.value = false;
     }
 };
 </script>
@@ -586,6 +597,13 @@ const confirmHandOver = async (): Promise<void> => {
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
              the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->
         <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
+        <Notice
+            v-else-if="landAsk.failure.value"
+            :of="landAsk.failure.value"
+            :dismiss-label="t(`ui.action.dismiss`)"
+            class="mx-2 mt-2 shrink-0"
+            @dismiss="landAsk.dismiss()"
+        />
         <!-- A phone's chat and changes, as pages a finger turns. Local-only: a remote conversation lives elsewhere, so a
              phone gets the full review below instead. -->
         <SwipePages

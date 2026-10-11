@@ -3,17 +3,21 @@
 <script setup lang="ts">
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { type SshKey, stashedMarker, stashedToken } from "@intentic/sandbox-contract";
-import { Button, Code, ui } from "@intentic/ui";
-import { messageOr } from "@intentic/ui/async";
+import { Button, Code, type NoticeModel, ui } from "@intentic/ui";
+import { messageOr, noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { authorizeCommand } from "../model/sshKey";
+import { computed, onBeforeUnmount, onMounted } from "vue";
+import { useOperation } from "../../../workbench/operations/operations";
+import { authorizeCommand, sshKeyScope } from "../model/sshKey";
 import { generateSshKey } from "./generateSshKey";
 
 const t = useT();
 
-const { field, values, stored = false, alarm } = defineProps<{
+const { field, values, stored = false, alarm, entry, connection = `new` } = defineProps<{
     field: CapabilityField;
+    /** The tile, and the connection being edited (`new` while adding one): whose form a key made here belongs to. */
+    entry: string;
+    connection?: string | undefined;
     /** The form's live answers: this row writes its own key (the marker), and reads `user` and the echoed `publicKey`. */
     values: Record<string, string>;
     /** The connection being edited already holds a key, which a blank answer keeps. */
@@ -24,9 +28,16 @@ const { field, values, stored = false, alarm } = defineProps<{
 
 const emit = defineEmits<{ left: [] }>();
 
-const made = ref<SshKey>();
-const generating = ref(false);
-const failure = ref<string>();
+// THE KEY IS THE FORM'S, NOT THIS ROW'S. The owner copies its public half onto a server, so a key made here is kept in
+// the operations ledger until the connection is saved with it (capabilitySubmit puts it away then): the row drawn again
+// (Paste my own key and back, another view and back, a key that arrived after the reader left) shows the same key,
+// rather than a Generate button whose press would make one the server has never seen.
+// Failures are the client's sentence, as the row says it: the app's own words when the sandbox gave none.
+const keyOp = useOperation<SshKey, { readonly notice: NoticeModel; readonly said: string }>(() => `${sshKeyScope(entry, connection)}/${field.key}`);
+const made = keyOp.value;
+const generating = keyOp.busy;
+const failure = computed(() => keyOp.failure.value?.said);
+let showing = true;
 
 // A key made here counts only while the form still holds its marker: a form re-seeded for another connection has let it go.
 const fresh = computed(() => (made.value !== undefined && values[field.key] === stashedMarker(made.value.token) ? made.value : undefined));
@@ -39,25 +50,31 @@ const authorizeLabel = computed(() => {
 });
 
 const generate = async (): Promise<void> => {
-    generating.value = true;
-    failure.value = undefined;
-    try {
-        const key = await generateSshKey();
-        made.value = key;
-        values[field.key] = stashedMarker(key.token);
+    if (generating.value) {
+        return;
+    }
+    const failed = t(`capabilities.sshKeyField.couldntGenerate`);
+    const ended = await keyOp.run({
+        what: t(`capabilities.sshKeyField.generating`),
+        failed: (error) => ({ notice: noticeFrom(error, failed), said: messageOr(error, failed) }),
+        // The row shows the key wherever it is drawn next; nothing to say elsewhere.
+        quiet: true,
+        keep: true,
+        task: () => generateSshKey(),
+    });
+    if (ended?.state === `done` && ended.value !== undefined && showing) {
+        values[field.key] = stashedMarker(ended.value.token);
         emit(`left`);
-    } catch (error) {
-        failure.value = messageOr(error, t(`capabilities.sshKeyField.couldntGenerate`));
-    } finally {
-        generating.value = false;
     }
 };
 
 // "Paste my own key" answers the same key: what it held is not a key made here, and a marker is not text to show there.
+// A key this form already made is its answer again.
 onMounted(() => {
-    values[field.key] = ``;
+    values[field.key] = made.value === undefined ? `` : stashedMarker(made.value.token);
 });
 onBeforeUnmount(() => {
+    showing = false;
     if (stashedToken(values[field.key]) !== undefined) {
         values[field.key] = ``;
     }

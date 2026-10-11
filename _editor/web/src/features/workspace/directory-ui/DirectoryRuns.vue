@@ -5,7 +5,7 @@ import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { useRunTargets } from "./useRunTargets";
+import { useRunPresses, useRunTargets } from "./useRunTargets";
 
 const t = useT();
 
@@ -15,7 +15,8 @@ const t = useT();
 
 const dir = defineModel<string | undefined>({ required: true });
 
-const { repos, devices, pending, failure, run } = useRunTargets();
+const { repos, devices } = useRunTargets();
+const { pending, failure, run } = useRunPresses();
 const { openFile } = useWorkspaceTabs();
 
 const visible = computed({
@@ -67,10 +68,7 @@ const chosen = computed(() => sorted.value.find((device) => device.id === (picke
 const chosenBlocked = computed(() => (chosen.value === undefined ? undefined : blocked(chosen.value)));
 
 const isPending = (target: string): boolean =>
-    pending.value !== undefined &&
-    pending.value.repo === entry.value?.repo &&
-    pending.value.target === target &&
-    pending.value.device === chosen.value?.id;
+    entry.value !== undefined && chosen.value !== undefined && pending(entry.value.repo, target, chosen.value.id);
 
 const editFile = (path: string): void => {
     dir.value = undefined;

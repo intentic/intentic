@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Button, Code, Notice, timeAgo } from "@intentic/ui";
-import { useAsyncAction, useNow } from "@intentic/ui/async";
+import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useHostedBuild } from "../../secrets/useHostedBuild";
 import { hostedBuildPhase } from "./hostedBuildPhase";
+import { useHostedRebuildStart } from "./hostedRebuildStart";
 import { useT } from "@intentic/ui/i18n";
 
 // Rebuilds a hosted sandbox's environment, the counterpart of HostRecreate for the lane with no host device: the
@@ -24,16 +25,13 @@ const props = defineProps<{
 }>();
 
 const { build, applied, rebuild } = useHostedBuild(() => props.sandboxId);
-const { busy, notice, run } = useAsyncAction();
+const { busy, notice, run } = useHostedRebuildStart(rebuild);
 
 // Ticks once a minute: what it moves is "started 12 minutes ago" and the end of the swap's window.
 const now = useNow(true, 60_000);
 const phase = computed(() => hostedBuildPhase(build.value, applied.value, props.hash, now.value));
 
-const start = (): Promise<void> =>
-    run(async () => {
-        await rebuild(props.hash, props.content);
-    }, t(`sandbox.hostedRebuild.couldNotStart`));
+const start = (): Promise<void> => run(props.hash, props.content);
 </script>
 
 <template>

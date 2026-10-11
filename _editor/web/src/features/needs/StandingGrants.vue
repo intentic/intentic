@@ -3,10 +3,10 @@
 <script setup lang="ts">
 import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract";
 import { Notice, timeAgo, ui } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { useOperations } from "../../workbench/operations/operations";
 import { useStandingGrants } from "./useStandingGrants";
 
 const t = useT();
@@ -54,11 +54,23 @@ const rows = computed(() =>
     })),
 );
 
-const { busy, notice, run } = useAsyncAction();
-const takeBack = async (grant: GrantRevoke): Promise<void> => {
-    await run(async () => {
-        await revoke.mutateAsync(grant);
-    }, t(`needs.grants.couldNotTakeBack`));
+// Each taking-back is the grant's, in the operations ledger: one in flight holds its own row's press wherever the list
+// is drawn again, and a refusal is still said there. The newest refusal is the one under the list.
+const ops = useOperations(`needs/grants`);
+const keyOf = (grant: GrantRevoke): string => `${grant.conversationId}/${grant.kind}/${grant.what}`;
+const busyOn = (grant: GrantRevoke): boolean => ops.at(keyOf(grant))?.state === `running`;
+const notice = computed(() => ops.all.value.filter((operation) => operation.state === `failed`).at(-1)?.failure);
+const takeBack = async (grant: GrantRevoke, label: string): Promise<void> => {
+    ops.dismiss(keyOf(grant));
+    await ops.run(keyOf(grant), {
+        what: t(`needs.grants.takingBack`, { what: label }),
+        failed: t(`needs.grants.couldNotTakeBack`),
+        // The row leaving the list says it was taken.
+        quiet: true,
+        task: async () => {
+            await revoke.mutateAsync(grant);
+        },
+    });
 };
 
 const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: conversationId } });
@@ -82,7 +94,7 @@ const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: 
                         {{ item.label }}
                         <span v-if="item.note" class="text-2xs text-subtle">· {{ item.note }}</span>
                     </span>
-                    <button type="button" class="shrink-0 text-2xs text-link hover:underline disabled:cursor-default disabled:text-[var(--ui-button-off-content)] disabled:hover:no-underline" :disabled="busy" @click="takeBack(item.grant)">
+                    <button type="button" class="shrink-0 text-2xs text-link hover:underline disabled:cursor-default disabled:text-[var(--ui-button-off-content)] disabled:hover:no-underline" :disabled="busyOn(item.grant)" @click="takeBack(item.grant, item.label)">
                         {{ t(`needs.grants.takeBack`) }}
                     </button>
                 </li>

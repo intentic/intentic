@@ -77,23 +77,20 @@ const selfResources = useSelfResources();
 const { canShip } = useRole();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
-const resizeFailed = ref<string | undefined>();
+// The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the machine
+// actually sent has anything to say, and it is the composable's, so the chat's memory notice shows the same one.
+const resizeFailed = computed(() => {
+    const failure = selfResources.failure.value;
+    return failure === undefined ? undefined : (failure.detail ?? failure.title);
+});
 const applyResize = async (shape: ResourcesForm): Promise<void> => {
     resizing.value = false;
-    resizeFailed.value = undefined;
-    // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
-    // machine actually sent has anything to say.
-    await selfResources.apply(shape).catch((error: unknown) => {
-        resizeFailed.value = messageOr(error, t(`sandbox.sandboxOverview.didntWorkOnDevice`));
-    });
+    await selfResources.apply(shape);
 };
 // Saving leaves the sandbox running, so unlike Apply this one answers: the share line picks up "changes on restart".
 const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
     resizing.value = false;
-    resizeFailed.value = undefined;
-    await selfResources.save(shape).catch((error: unknown) => {
-        resizeFailed.value = messageOr(error, t(`sandbox.sandboxOverview.didntWorkOnDevice`));
-    });
+    await selfResources.save(shape);
 };
 
 // The name renames itself in place (<InlineRename>, owner only). The logo is separate and live at all times;

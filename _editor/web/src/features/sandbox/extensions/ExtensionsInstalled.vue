@@ -2,15 +2,16 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract";
 import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnapshot, StatusBadge, vSkeletonSource } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";
 import { hostStateWord } from "../../extensions/extensionState";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
+import { dismissOperation, useOperations } from "../../../workbench/operations/operations";
 import ExtensionRemoveDialog from "./ExtensionRemoveDialog.vue";
 import ExtensionRow from "./ExtensionRow.vue";
+import { extensionBusy, ROWS } from "./extensionWork";
 import { useT } from "@intentic/ui/i18n";
 
 // Every extension this sandbox has (first-party, baked, git-installed, workspace), the half of the Extensions section
@@ -30,7 +31,7 @@ const { query, mode, focus, publishedMatches } = defineProps<{
     publishedMatches: number;
 }>();
 const emit = defineEmits<{
-    /** This half's own failures, raised so the section keeps one notice region above the instrument. */
+    /** The list's own read failing, raised so the section keeps one notice region above the instrument. */
     notice: [NoticeModel | undefined];
     /** How many rows the section's query left, drawn on the search field. */
     matched: [number];
@@ -57,7 +58,6 @@ watch(
 
 // One row open at a time: the list must not grow unpredictably under the pointer while scanned.
 const opened = ref<string | undefined>(undefined);
-const pending = ref<string | undefined>(undefined);
 
 // A row the section asked for: a freshly created extension, naming the directory its files are in, or one just
 // installed from Browse.
@@ -133,98 +133,117 @@ const emptyNote = computed<string | undefined>(() => {
     return t(`sandbox.extensionsInstalled.nothingMatches`);
 });
 
+// The row verbs, kept in the operations ledger under the extension's id (extensionWork.ts) rather than here: switching to
+// Browse unmounts this list while the daemon stops, starts or removes what the press asked, and the section's notice
+// region (SandboxExtensions) reads how each ended from the ledger. Each answers its own sentence, which is also its
+// receipt when it ends with the section closed, or nothing where the row says it by itself (the switch, which then
+// raises none). A press puts the earlier answers away, as the one notice region it speaks in always did.
+const rows = useOperations<NoticeModel | undefined>(ROWS);
+const verb = async (id: string, what: string, failed: string, task: () => Promise<NoticeModel | undefined>, quiet = false) => {
+    for (const operation of rows.all.value) {
+        dismissOperation(operation.key);
+    }
+    return rows.run(id, { what, failed, task, done: (said) => said?.title, quiet });
+};
+
 // The daemon has already stopped or started the processes; reloadExtensions activates or retires the row here, without
 // a page reload.
 const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<void> => {
-    pending.value = extension.id;
-    emit(`notice`, undefined);
-    try {
-        await setEnabled(extension.id, enabled);
-        await reloadExtensions();
-    } catch (failure) {
-        emit(
-            `notice`,
-            noticeFrom(
-                failure,
-                enabled
-                    ? t(`sandbox.extensionsInstalled.couldNotEnable`, { manifest: extensionIdOf(extension.manifest) })
-                    : t(`sandbox.extensionsInstalled.couldNotDisable`, { manifest: extensionIdOf(extension.manifest) }),
-            ),
-        );
-    } finally {
-        pending.value = undefined;
+    if (extensionBusy(extension.id, extensionIdOf(extension.manifest))) {
+        return;
     }
+    const manifest = extensionIdOf(extension.manifest);
+    await verb(
+        extension.id,
+        enabled ? t(`sandbox.extensionsInstalled.enabling`, { manifest }) : t(`sandbox.extensionsInstalled.disabling`, { manifest }),
+        enabled ? t(`sandbox.extensionsInstalled.couldNotEnable`, { manifest }) : t(`sandbox.extensionsInstalled.couldNotDisable`, { manifest }),
+        async () => {
+            await setEnabled(extension.id, enabled);
+            await reloadExtensions();
+            return undefined;
+        },
+        true,
+    );
 };
 
 // Back from a source checkout to the pinned copy: the daemon moves its processes and backend, the reload swaps the bundle
 // this browser runs. Said afterwards, since the row's dev line simply disappears.
 const leaveDev = async (extension: ExtensionSummary): Promise<void> => {
-    pending.value = extension.id;
-    emit(`notice`, undefined);
-    const manifest = extensionIdOf(extension.manifest);
-    try {
-        await clearDev(extension.id);
-        await reloadExtensions();
-        emit(`notice`, { tone: `info`, title: t(`sandbox.extensionsInstalled.backToPinned`, { manifest }) });
-    } catch (failure) {
-        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldntLeaveDev`, { manifest })));
-    } finally {
-        pending.value = undefined;
+    if (extensionBusy(extension.id, extensionIdOf(extension.manifest))) {
+        return;
     }
+    const manifest = extensionIdOf(extension.manifest);
+    await verb(
+        extension.id,
+        t(`sandbox.extensionsInstalled.leavingDev`, { manifest }),
+        t(`sandbox.extensionsInstalled.couldntLeaveDev`, { manifest }),
+        async () => {
+            await clearDev(extension.id);
+            await reloadExtensions();
+            return { tone: `info`, title: t(`sandbox.extensionsInstalled.backToPinned`, { manifest }) };
+        },
+    );
 };
 
 // The yes a workspace extension waits for, given for the powers on screen; the daemon starts what it runs, and the reload
-// loads its UI here. Returned as a promise so the button holds its own spinner.
+// loads its UI here. The button spins on the ledger, so a list drawn again mid-approval still shows it under way.
 const approveExtension = async (extension: PendingWorkspaceExtension): Promise<void> => {
-    emit(`notice`, undefined);
-    try {
-        await approve(extension.id, extension.digest);
-        await reloadExtensions();
-        emit(`notice`, { tone: `info`, title: t(`sandbox.extensionsInstalled.approvedNow`, { manifest: extension.id }) });
-    } catch (failure) {
-        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldntApprove`, { manifest: extension.id })));
-    }
-};
-
-// Removal lives here rather than on the row: the row is torn down by the refetch that removal causes, so a component
-// that unmounts mid-call is the wrong place to hold the call's outcome.
-const removing = ref<ExtensionSummary | undefined>(undefined);
-const removingNow = ref(false);
-const confirmRemove = async (): Promise<void> => {
-    const extension = removing.value;
-    if (extension === undefined || removingNow.value) {
+    if (extensionBusy(extension.id)) {
         return;
     }
-    removingNow.value = true;
-    emit(`notice`, undefined);
-    try {
-        const removed = await remove(extension.id);
+    await verb(
+        extension.id,
+        t(`sandbox.extensionsInstalled.approving`, { manifest: extension.id }),
+        t(`sandbox.extensionsInstalled.couldntApprove`, { manifest: extension.id }),
+        async () => {
+            await approve(extension.id, extension.digest);
+            await reloadExtensions();
+            return { tone: `info`, title: t(`sandbox.extensionsInstalled.approvedNow`, { manifest: extension.id }) };
+        },
+    );
+};
+
+// Removal lives in the ledger rather than on the row: the row is torn down by the refetch that removal causes, so a
+// component that unmounts mid-call is the wrong place to hold the call's outcome. The dialog stays up until it lands.
+const removing = ref<ExtensionSummary | undefined>(undefined);
+const removingNow = computed(() => removing.value !== undefined && rows.at(removing.value.id)?.state === `running`);
+const confirmRemove = async (): Promise<void> => {
+    const extension = removing.value;
+    if (extension === undefined || extensionBusy(extension.id, extensionIdOf(extension.manifest))) {
+        return;
+    }
+    const manifest = extensionIdOf(extension.manifest);
+    const ended = await verb(
+        extension.id,
+        t(`sandbox.extensionsInstalled.removing`, { manifest }),
+        t(`sandbox.extensionsInstalled.couldNotRemove`, { manifest }),
+        async () => {
+            const removed = await remove(extension.id);
+            // Retires its views and commands in this browser without a page reload, the same reconcile the switch performs.
+            await reloadExtensions();
+            // Said plainly and afterwards: the dialog stated the plan, this states what the plan turned out to be. A
+            // pending rebuild is a warning rather than a note, since until it runs the image still carries what it baked.
+            const said = [
+                ...(removed.connections.length === 0
+                    ? []
+                    : [
+                          t(
+                              `sandbox.extensionsInstalled.connectionsWent`,
+                              { count: removed.connections.length, names: removed.connections.join(`, `) },
+                              removed.connections.length,
+                          ),
+                      ]),
+                ...(removed.rebuildNeeded === true ? [t(`sandbox.extensionsInstalled.imageStillHas`)] : []),
+            ];
+            return {
+                tone: removed.rebuildNeeded === true ? `warning` : `info`,
+                title: t(`sandbox.extensionsInstalled.removed`, { manifest }),
+                ...(said.length === 0 ? {} : { detail: said.join(` `) }),
+            };
+        },
+    );
+    if (ended?.state === `done` && removing.value?.id === extension.id) {
         removing.value = undefined;
-        // Retires its views and commands in this browser without a page reload, the same reconcile the switch performs.
-        await reloadExtensions();
-        // Said plainly and afterwards: the dialog stated the plan, this states what the plan turned out to be. A
-        // pending rebuild is a warning rather than a note, since until it runs the image still carries what it baked.
-        const said = [
-            ...(removed.connections.length === 0
-                ? []
-                : [
-                      t(
-                          `sandbox.extensionsInstalled.connectionsWent`,
-                          { count: removed.connections.length, names: removed.connections.join(`, `) },
-                          removed.connections.length,
-                      ),
-                  ]),
-            ...(removed.rebuildNeeded === true ? [t(`sandbox.extensionsInstalled.imageStillHas`)] : []),
-        ];
-        emit(`notice`, {
-            tone: removed.rebuildNeeded === true ? `warning` : `info`,
-            title: t(`sandbox.extensionsInstalled.removed`, { manifest: extensionIdOf(extension.manifest) }),
-            ...(said.length === 0 ? {} : { detail: said.join(` `) }),
-        });
-    } catch (failure) {
-        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldNotRemove`, { manifest: extensionIdOf(extension.manifest) })));
-    } finally {
-        removingNow.value = false;
     }
 };
 </script>
@@ -246,7 +265,12 @@ const confirmRemove = async (): Promise<void> => {
                 </template>
                 <template #meta><StatusBadge variant="warning" :label="t(`sandbox.extensionsInstalled.pendingBadge`)" size="xs" /></template>
                 <template #control>
-                    <Button size="small" :label="t(`sandbox.extensionsInstalled.approve`)" @click="approveExtension(extension)" />
+                    <Button
+                        size="small"
+                        :label="t(`sandbox.extensionsInstalled.approve`)"
+                        :loading="extensionBusy(extension.id)"
+                        @click="approveExtension(extension)"
+                    />
                 </template>
                 <!-- The same vocabulary and marks the update card reads out: what a yes allows, and what it no longer asks for. -->
                 <template #below>
@@ -296,7 +320,7 @@ const confirmRemove = async (): Promise<void> => {
                     :data-extension="entry.extension.id"
                     :entry="entry"
                     :expanded="opened === entry.extension.id"
-                    :pending="pending === entry.extension.id"
+                    :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
                     @toggle="(enabled) => toggle(entry.extension, enabled)"
                     @remove="removing = entry.extension"
                     @dev-clear="leaveDev(entry.extension)"

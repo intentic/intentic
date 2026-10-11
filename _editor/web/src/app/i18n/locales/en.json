@@ -89,12 +89,15 @@
             "handOverConnected": "Connected now",
             "handOverFailed": "Could not hand it over.",
             "handOverHeader": "Hand over this session",
+            "handingOver": "Handing {name} over to {to}",
             "needsMaintainer": "Needs maintainer",
             "noBranchToReview": "This agent has no branch to review.",
             "notAnsweredYet": "{name} hasn't answered yet, so there's nothing to show for this agent.",
             "nothingFinalArrivesUncommitted": "Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent finishes.",
             "openingAgentsReview": "Opening this agent's review…",
             "pages": "Chat and changes",
+            "landRequestSent": "Asked a maintainer to land {name}",
+            "requestingLand": "Asking a maintainer to land {name}",
             "session": "Session",
             "sessionActions": "Session actions",
             "stillWriting": "Still writing",
@@ -612,7 +615,12 @@
             "refreshes": "Refreshes: {refreshes}",
             "cappedNote": "Shortened where it would run past midnight, when the date in the prompt changes, or past the point where refreshing costs more than re-reading.",
             "stopsWhen": "Stops by itself when a turn starts, when the account passes {reserve}% of a limit, or when the next turn's prompt would no longer match.",
-            "stop": "Stop keeping warm"
+            "stop": "Stop keeping warm",
+            "arming": "Keeping a chat's cache warm",
+            "stopping": "Letting a chat's cache go cold",
+            "stopped": "Stopped keeping the chat's cache warm",
+            "couldntKeep": "Couldn't keep this chat's cache warm.",
+            "couldntStop": "Couldn't stop keeping this chat's cache warm."
         },
         "statusBar": {
             "label": "Status bar",
@@ -690,6 +698,16 @@
             "includeScratchFailed": "Couldn't add it to the work.",
             "deleteScratchFailed": "Couldn't delete it.",
             "archiveFailed": "Archive failed.",
+            "landing": "Landing {name}",
+            "landed": "Landed {name} in your workspace",
+            "landBlocked": "{name} couldn't land: open its review to see what blocked it",
+            "changingAutoLand": "Changing when {name} lands",
+            "askingResolve": "Asking {name} to resolve its conflict",
+            "discarding": "Discarding {name}'s work",
+            "discarded": "Discarded {name}'s work",
+            "includingScratch": "Adding files to {name}'s work",
+            "deletingScratch": "Deleting files from {name}'s copy",
+            "archiving": "Archiving {name}",
             "otherStaged": "You have {count} other change staged, and saving these settings would commit it too. Commit or unstage it in Changes first, then try again. | You have {count} other changes staged, and saving these settings would commit them too. Commit or unstage them in Changes first, then try again."
         },
         "agentsTile": {
@@ -719,7 +737,8 @@
             "unwatchNeedsOwnSandbox": "Ending a watch needs the agent's own sandbox"
         },
         "archiveDoor": {
-            "deleted": "{count} archived agent deleted | {count} archived agents deleted"
+            "deleted": "{count} archived agent deleted | {count} archived agents deleted",
+            "deleting": "Deleting the archived agents"
         },
         "useAgentDrag": {
             "didntWork": "That didn't work.",
@@ -734,7 +753,8 @@
         "boardPresses": {
             "couldntArchiveRun": "Couldn't archive that run.",
             "couldntRestoreRun": "Couldn't restore that run.",
-            "couldntStopRun": "Couldn't stop that run."
+            "couldntStopRun": "Couldn't stop that run.",
+            "stoppingRun": "Stopping the {name} run"
         },
         "cardMenu": {
             "openIn": "Open in {name}",
@@ -922,7 +942,8 @@
             "agentCarriesOn": "The agent carries on",
             "fixStepHandBack": "Fix that step in the page, then hand back.",
             "starting": "Starting your browser…",
-            "startCaption": "Your browser runs in this sandbox: pages load over its network, and what you sign into stays signed in."
+            "startCaption": "Your browser runs in this sandbox: pages load over its network, and what you sign into stays signed in.",
+            "replyFailed": "Couldn't reach the agent with your answer. Try again."
         },
         "area": {
             "inOwnWindow": "Browsers is in its own window",
@@ -960,6 +981,9 @@
             "agentActHereSession": "and the agent will act as you here. Your session stays inside your sandbox.",
             "browser": "{label}, your browser",
             "couldntStartBrowser": "Couldn't start the browser.",
+            "couldntSave": "Couldn't save the browser's session.",
+            "saving": "Saving the {label} session",
+            "saved": "{label} session saved",
             "droppedWhileSaving": "The connection dropped while saving. Open the browser again to check you're still signed in.",
             "imDone": "I'm done",
             "logInTo": "Log in to {label}",
@@ -1077,6 +1101,8 @@
             "renamedTo": "Renamed to"
         },
         "capabilitySubmit": {
+            "adding": "Adding {name}",
+            "saving": "Saving {name}",
             "couldNotAdd": "Could not add the capability.",
             "couldNotSave": "Could not save that connection.",
             "walletCapsNotSaved": "The tile was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the tile again to retry.",
@@ -1209,6 +1235,7 @@
             "rebuildingNowIdle": "Rebuilding now that no agent is working. This page picks it up again by itself once it's back.",
             "idleRebuildFailed": "The rebuild that waited for the agents didn't go through on that device.",
             "waitDidntGoThrough": "Couldn't change when the rebuild runs.",
+            "changingWhen": "Changing when the rebuild runs",
             "didntGoThrough": "{action} didn't go through on that device.",
             "costRollBack": "It restarts your sandbox onto the version it ran before, which takes about half a minute.",
             "costRestartOnlyShort": "It is already downloaded, so this is just the restart: about half a minute.",
@@ -1334,6 +1361,7 @@
         "secretField": {
             "as": "as",
             "couldNotSave": "Could not save the secret.",
+            "saving": "Saving {secretKey}",
             "pasteValue": "Paste the value for {secretKey}",
             "showValue": "Show value",
             "storedInSandboxs": "Stored in your sandbox's"
@@ -1384,6 +1412,7 @@
             "authorizeAs": "Authorize it: run this on the server, signed in as {user}",
             "authorizeAsUserAbove": "Authorize it: run this on the server, signed in as the user above",
             "couldntGenerate": "Couldn't generate a key.",
+            "generating": "Generating an SSH key",
             "generateFirst": "Generate a key, and authorize it on the server, before saving.",
             "generateKey": "Generate a key",
             "generateNewKey": "Generate a new key",
@@ -1994,12 +2023,16 @@
             "signInCouldNotStart": "Sign-in could not start."
         },
         "capabilityProbe": {
-            "couldNotTest": "Could not test that connection."
+            "couldNotTest": "Could not test that connection.",
+            "testing": "Testing {name}"
         },
         "connectionActions": {
             "couldNotDisconnect": "Could not disconnect that machine.",
             "couldNotRemove": "Could not remove the capability.",
-            "couldNotRename": "Could not rename that connection."
+            "couldNotRename": "Could not rename that connection.",
+            "disconnecting": "Disconnecting {machine}",
+            "removing": "Removing {name}",
+            "renaming": "Renaming {name} to {to}"
         },
         "form": {
             "activate": "Activate",
@@ -2368,6 +2401,8 @@
             "askDifferently": "Ask it differently, replaces this and everything below",
             "clickAgainDrops": "Click again, drops {count} message | Click again, drops {count} messages",
             "rewindChat": "Rewind this chat",
+            "rewindFailed": "Couldn't go back to that message.",
+            "rewinding": "Rewinding the chat",
             "waitForTurn": "Wait for the turn to finish",
             "goBackHere": "Go back here and drop what follows",
             "untitledFork": "Untitled fork"
@@ -2558,7 +2593,9 @@
             "running": "Running · {elapsed}",
             "servedOn": "Left running for you on {ports} · {elapsed}",
             "stopFailed": "That didn't stop.",
+            "stoppedRow": "{label} stopped",
             "stopping": "Stopping…",
+            "stoppingRow": "Stopping {label}",
             "stuckAtPrompt": "A command here waits for input nobody in the sandbox will give. Stop it, or answer it in its terminal.",
             "title": "Still running after the turn",
             "wakes": "This chat wakes by itself when these finish.",
@@ -2877,6 +2914,7 @@
             "promptsAgentsWrittenAnswers": "Your prompts and the agent's written answers.",
             "share": "Share",
             "shareConversation": "Share this conversation",
+            "sharing": "Sharing {title}",
             "shownAtTopPage": "Shown at the top of the page, and used to name the link.",
             "title": "Title",
             "updateStopSharingAny": "You can update or stop sharing it any time from Sandbox ▸ Public.",
@@ -3192,6 +3230,8 @@
             "failed": "Couldn't reset it right now — try again in a moment.",
             "ineligible": "Anthropic didn't grant this account a reset. Its current limit still applies.",
             "notLimited": "The window had already reopened — just continue.",
+            "resetDone": "Five-hour limit reset",
+            "resetting": "Resetting the five-hour limit",
             "sandboxDidntAnswer": "Your sandbox didn't answer."
         },
         "localHandoff": {
@@ -3238,6 +3278,8 @@
             "everyAccount": "Every account",
             "filterSubscriptionAccounts": "Filter subscription accounts",
             "measurePlanLimits": "Measure plan limits",
+            "measureFailed": "Couldn't measure plan limits.",
+            "measuringPlanLimits": "Measuring plan limits",
             "noAccountsMatch": "No accounts match.",
             "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",
             "remeasureLimits": "Re-measure limits",
@@ -3411,15 +3453,21 @@
             "loopNotStarted": "The loop could not be started.",
             "loopNotStopped": "The loop could not be stopped.",
             "loopOrWorkflow": "Loop or workflow",
+            "loopStarted": "Loop {name} started",
+            "loopStopped": "The loop stops after its current round",
             "messageIsRequest": "Message is the request",
             "repeatsUntilMet": "Repeats until goal met",
             "roundFinishesFirst": "Round finishes first",
             "runMessageThrough": "Run this message through a loop or a workflow",
             "runThrough": "Run through",
+            "startingLoop": "Starting loop {name}",
+            "startingWorkflow": "Starting workflow {name}",
             "stopLooping": "Stop looping",
+            "stoppingLoop": "Stopping the loop",
             "workflow": "Workflow",
             "workflowNamed": "Workflow: {name}",
-            "workflowNotStarted": "The workflow could not be started."
+            "workflowNotStarted": "The workflow could not be started.",
+            "workflowStarted": "Workflow {name} started"
         },
         "composerVoice": {
             "failed": "Couldn't transcribe that, try again.",
@@ -3603,9 +3651,6 @@
         "chatPlanCard": {
             "proposedPlan": "Proposed plan"
         },
-        "memoryRaise": {
-            "didntWork": "That didn't work on this device."
-        },
         "noticeWatchStop": {
             "couldNotStop": "The watch could not be stopped."
         },
@@ -3691,6 +3736,7 @@
             "publishedCopied": "Published, link copied",
             "publishedNoAddress": "In the outbox as {path}; this sandbox has no public address yet",
             "publishFailed": "Could not publish",
+            "publishing": "Publishing {title}",
             "alreadyAnswered": "This page has already been answered.",
             "answering": "Your answer is on its way.",
             "askHint": "Answer on the page itself; what it sends goes back to the agent.",
@@ -3741,6 +3787,8 @@
             "you": "You:"
         },
         "netdiskMounts": {
+            "mounting": "Mounting {name}",
+            "unmounting": "Unmounting {name}",
             "actionFailed": "The disk action failed.",
             "agentCanWriteCaption": "a disk mounted read-write takes the agent's writes straight onto your server",
             "couldntReadWhatDisks": "Couldn't read what your disks are doing.",
@@ -3773,6 +3821,8 @@
             "resets": "resets {resetsAt}"
         },
         "vpnConnections": {
+            "connecting": "Connecting {name}",
+            "disconnecting": "Disconnecting {name}",
             "actionFailed": "The VPN action failed.",
             "connectCode": "Connect with code",
             "connectsAutomaticallyAfterSandbox": "Connects automatically after a sandbox restart.",
@@ -3797,7 +3847,8 @@
         "useMintedTokens": {
             "couldntLoad": "Couldn't load the tokens.",
             "couldntRevoke": "Couldn't revoke that token.",
-            "mintingFailed": "Minting failed."
+            "mintingFailed": "Minting failed.",
+            "minting": "Minting a token"
         },
         "imageDataUrl": {
             "noCanvas": "Canvas is unavailable in this browser."
@@ -3813,6 +3864,7 @@
         "connect": {
             "connecting": "Connecting {provider}",
             "foundKeyAdded": "Added",
+            "foundKeyAdding": "Adding the {provider} API key",
             "foundKeyFailed": "Could not add that key.",
             "foundKeyFrom": "From {source}, ending in {hint}. Adding it copies the key into this sandbox.",
             "foundKeyTitle": "{provider} API key",
@@ -3832,12 +3884,14 @@
         "localModelLane": {
             "bestHere": "Best fit",
             "bestPitch": "The largest model that runs well here. Handles chat and agent turns.",
+            "couldntStart": "Couldn't start {label}.",
             "factDownload": "{size} download",
             "factDownloaded": "Downloaded",
             "factMemory": "uses about {total} while running",
             "factWindow": "{window}k context",
             "gettingReady": "Getting it ready — {received} of {total}",
             "gettingReadyPlain": "Getting it ready…",
+            "loading": "{label} is added and loading",
             "measuring": "Reading what this machine can run…",
             "memoryCapped": "{memory} memory for this sandbox",
             "memoryMachine": "{memory} memory",
@@ -3852,6 +3906,7 @@
             "runIt": "Run it",
             "sizedForMemory": "Picks below fit in the {free} of memory free now.",
             "startNow": "Start now",
+            "starting": "Starting {label}",
             "statusFailed": "Didn't start",
             "stop": "Stop",
             "useForQuickJobs": "Choose it for commit messages and titles",
@@ -3899,6 +3954,8 @@
             "noModels": "Running, with no models pulled yet",
             "modelsAndMore": "{models} and {count} more",
             "use": "Use it",
+            "adding": "Adding {server} as a model endpoint",
+            "couldntAdd": "Couldn't add {server}.",
             "noneFound": "For a GPU, run Ollama or LM Studio on the computer that hosts this sandbox and it shows up here. On Linux, start Ollama with OLLAMA_HOST=0.0.0.0; in LM Studio, turn on serving on the local network."
         }
     },
@@ -4238,6 +4295,8 @@
             "heading": "Agents on this PC",
             "checking": "Checking this PC…",
             "noHost": "Open this view in the desktop app to set up agents on this computer.",
+            "asking": "Asking the app",
+            "askFailed": "The app didn't take that. Try again.",
             "cost": {
                 "minutes": "About {count} minutes",
                 "restart": "one restart",
@@ -4409,6 +4468,8 @@
             "wakePayload": "What set it off",
             "wakeStart": "Start it",
             "wakeDrop": "Drop it",
+            "wakeStarting": "Starting {automation}",
+            "wakeDropping": "Dropping {automation}",
             "wakeCouldNot": "Could not answer the held automation.",
             "parkPlan": "It wrote a plan and waits for your yes before it starts on it.",
             "parkQuestion": "It asked you a question and waits for the answer.",
@@ -4454,9 +4515,13 @@
             "notNow": "Not now",
             "declineNote": "Anything the agent should know (optional)",
             "declineSend": "Decline",
-            "couldNotAnswer": "Could not record your answer."
+            "couldNotAnswer": "Could not record your answer.",
+            "answering": "Answering “{title}”",
+            "declining": "Declining “{title}”"
         },
         "capability": {
+            "connecting": "Connecting {name}",
+            "applying": "Applying the change to {id}",
             "name": "Name",
             "howToGet": "How to get it",
             "createToken": "Create a token",
@@ -4514,6 +4579,7 @@
             "releasedBy": "by {who}, {when}",
             "allowedBy": "allowed by {who}, {when}",
             "takeBack": "Take back",
+            "takingBack": "Taking back: {what}",
             "couldNotTakeBack": "Could not take it back."
         },
         "environment": {
@@ -4629,6 +4695,10 @@
             "actionFailed": "The action failed.",
             "noPublicAddress": "This sandbox has no public preview address, so its ports can't be previewed from a browser.",
             "forwardFailed": "Forwarding port {port} failed.",
+            "forwarding": "Forwarding port {port}",
+            "starting": "Starting {name}",
+            "stopping": "Stopping {name}",
+            "restarting": "Restarting {name}",
             "repoDevServer": "{repo}'s own dev server (its operator/ panel, or its dev script)",
             "appDevServer": "the {app} app's dev server",
             "startCostInstalled": "Its dependencies are installed, so it's up in a few seconds.",
@@ -4761,6 +4831,7 @@
             "ownPromptAgentRuns": "Your own prompt: the agent runs on this text alone.",
             "promptReachAdds": "Added to",
             "promptReachReplaces": "Replaces",
+            "readingBuiltinPrompt": "Reading a built-in system prompt",
             "readingSandbox": "Reading it from your sandbox…",
             "replace": "Replace",
             "replaceYourText": "Replace your text?",
@@ -5198,6 +5269,7 @@
             "couldntReadFile": "Could not read that file.",
             "couldntReadSetupFromDevice": "Could not read the setup from that device.",
             "didntLand": "Didn't land",
+            "discardingPlan": "Discarding the plan",
             "environmentBundle": "environment bundle",
             "finishArrival": "Finish the arrival",
             "foundSetupOn": "Found a {kind} setup on {host}",
@@ -5208,6 +5280,7 @@
             "nowCalledWithLogoFromBundle": "Now called \"{name}\", with its logo, taken from the bundle.",
             "openclaw": "OpenClaw",
             "pack": "Pack from",
+            "readingWhatWouldLand": "Reading what would arrive",
             "refused": "{count} refused.",
             "runOn": "Run on {label}:",
             "staysBehind": "{count} thing stays behind on purpose | {count} things stay behind on purpose",
@@ -5339,6 +5412,7 @@
             "reconnectSandbox": "Reconnect",
             "reconnecting": "Reconnecting…",
             "reconnectingSandbox": "Reconnecting this sandbox",
+            "couldntReconnect": "Couldn't reconnect this sandbox.",
             "confirmReconnect": "Recreates its container on {host} from its setup. Logins, files, history and Docker are kept.",
             "sandboxReplacedPageReconnects": "If it was replaced, this page reconnects once it's back.",
             "missingEnv": "Missing from its container:",
@@ -5545,6 +5619,7 @@
             "batchWorkingUpdate": "Updating {count} sandbox | Updating {count} sandboxes",
             "cameOff": "What did come off: {list}.",
             "couldntRevokeAccess": "Couldn't revoke that device's access.",
+            "workingRevoke": "Revoking {label}'s access",
             "deviceDidntReportSandboxs": "That device didn't report this sandbox's share of it.",
             "didntSayWhy": "that device didn't say why",
             "didntWorkOnDevice": "That didn't work on this device.",
@@ -5835,7 +5910,9 @@
             "removeApproved": "{name} stays installed until this sandbox is next rebuilt, and is gone after that. If an agent needs it again, it will have to ask for it again.",
             "removeRequest": "The request to add {name} is dropped. Nothing is installed or rebuilt.",
             "removeUnbuilt": "{name} is not installed yet, and the next rebuild leaves it out. If an agent needs it, it will have to ask for it again.",
-            "couldNotUpdate": "Could not update the environment."
+            "couldNotUpdate": "Could not update the environment.",
+            "updating": "Updating the sandbox's environment",
+            "updated": "The sandbox's environment is updated"
         },
         "environmentContents": {
             "arrivesAfterRebuild": "arrives after rebuild",
@@ -5948,8 +6025,11 @@
             "listed": "listed {at}",
             "listedNoHumanReview": "listed, no human review",
             "newPowersVersionAsks": "New powers this version asks for:",
+            "reverted": "{id} is back on its previous version",
+            "reverting": "Reverting {id}",
             "revertTo": "Revert to {ref}",
             "reviewUpdate": "Review update",
+            "reviewing": "Reading the update to {id}",
             "samePowersInstalledVersion": "Same powers as the installed version: nothing new to approve.",
             "securityUpdateAvailable": "Security update available",
             "stillRunningBecauseAdvisory": "It is still running because its advisory policy is set to notify: the switch above is the way out.",
@@ -5961,6 +6041,7 @@
             "updateExtendsSandboxImage": "This update extends the sandbox image: a one-time rebuild is needed. Open Environment on the Sandbox page for the command.",
             "updateIsntHealthy": "This update isn't healthy",
             "updateTo": "Update to {version}",
+            "updated": "{id} updated",
             "updating": "Updating {id}",
             "verified": "verified"
         },
@@ -5975,6 +6056,7 @@
             "policyNotify": "New releases badge this row and wait for you.",
             "previousVersionKept": "The previous version is kept",
             "revertTo": "Revert to {ref}",
+            "saving": "Saving the update policy of {id}",
             "switchOffAutomaticallyRegistry": "Switch it off automatically if its registry marks it malicious or broken",
             "updates": "Updates"
         },
@@ -6007,6 +6089,7 @@
         "extensionsInstalled": {
             "approve": "Approve",
             "approvedNow": "Approved {manifest}.",
+            "approving": "Approving {manifest}",
             "asksForNothing": "It asks for no powers.",
             "backToPinned": "{manifest} runs its pinned version again",
             "connectionsWent": "Connection {names} went with it. | Connections {names} went with it.",
@@ -6016,9 +6099,12 @@
             "couldntApprove": "Could not approve {manifest}.",
             "couldntLeaveDev": "Could not take {manifest} back to its pinned version.",
             "couldntListSandboxsExtensions": "Couldn't list this sandbox's extensions.",
+            "disabling": "Switching {manifest} off",
             "discoverWhatPeoplePublished": "Discover what people have published →",
+            "enabling": "Switching {manifest} on",
             "imageStillHas": "What it added to the sandbox image is still there until the next environment rebuild.",
             "invalid": "invalid",
+            "leavingDev": "Taking {manifest} back to its pinned version",
             "newPowersSinceApproved": "New powers since you approved it:",
             "notLoadable": "Not loadable",
             "nothingElse": "Nothing else to show: see the group above.",
@@ -6028,6 +6114,7 @@
             "publishedMatches": "{count} published extension matches “{query}” → | {count} published extensions match “{query}” →",
             "readingSandboxsExtensions": "Reading this sandbox's extensions…",
             "removed": "Removed {manifest}.",
+            "removing": "Removing {manifest}",
             "runningNotListed": "Running but not listed",
             "waitingCaption": "Written in this workspace. None of its code runs until you approve what it asks for.",
             "waitingForApproval": "Waiting for your approval",
@@ -6052,7 +6139,9 @@
             "builtSandboxRestartingOnto": "Built. Your sandbox is restarting onto the new image; this panel updates when it is back.",
             "couldNotStart": "Could not start the build.",
             "rebuildAgain": "Rebuild again",
+            "started": "The environment build has started",
             "startedAgo": "Started {ago}.",
+            "starting": "Starting the environment build",
             "tryBuildAgain": "Try the build again"
         },
         "importCard": {
@@ -6176,11 +6265,14 @@
             "couldntDeriveDefinition": "Could not derive this sandbox's definition.",
             "couldntStartExport": "Could not start the export.",
             "couldntStartDownload": "Could not start the download.",
-            "couldntCompareDefinition": "Could not compare against that definition."
+            "couldntCompareDefinition": "Could not compare against that definition.",
+            "publishingWorkspace": "Publishing the workspace"
         },
         "newExtensionDialog": {
             "couldNotCreate": "The extension could not be created.",
             "createStart": "Create and start",
+            "created": "Created {id}",
+            "creating": "Creating {id}",
             "listed": "It will be listed as",
             "lowerCaseDigitsHyphens": "Lower case, digits and hyphens.",
             "optionalSayInOwn": "Optional. Say it in your own words: an agent starts on it in a chat you can watch and argue with. Leave it empty for a working stub to edit yourself.",
@@ -6192,6 +6284,7 @@
         },
         "passkeysSection": {
             "addedOn": "added {date}",
+            "addingPasskey": "Adding a passkey",
             "browserCantCreatePasskeys": "This browser can't create passkeys; add one from a browser that can.",
             "couldntAddPasskey": "Couldn't add the passkey.",
             "couldntChangeRule": "Couldn't change the passkey rule.",
@@ -6482,6 +6575,10 @@
             "recordingRoleFailed": "The sandbox took the new role, but recording it failed.",
             "couldntRevokeAccess": "Couldn't take access away on the sandbox: is it online?",
             "clearingRecordFailed": "Access is gone on the sandbox, but clearing the record failed.",
+            "invitingWhom": "Inviting {email}",
+            "changingRoleOf": "Changing the role of {email}",
+            "revokingWhom": "Taking access away from {email}",
+            "signingOthersOut": "Signing other browsers out",
             "youFallback": "You"
         },
         "sandboxAgent": {
@@ -6546,6 +6643,7 @@
             "wholesaleNote": "Nearly every part of the app is affected, so they aren't listed one by one.",
             "restartBecomesButton": "this becomes a button.",
             "restartingTheSandbox": "Restarting the sandbox",
+            "couldntRestart": "Couldn't restart the sandbox there.",
             "restartCommand": "Restart command"
         },
         "recentlyDeleted": {
@@ -6553,6 +6651,7 @@
             "comesBackWithMachine": "Comes back with its machine and files",
             "couldntRead": "Couldn't read deleted sandboxes",
             "couldntRestore": "Couldn't restore that sandbox",
+            "restoring": "Restoring a sandbox",
             "daysLeftToRestore": "{count} day left | {count} days left",
             "nothingToRestore": "Nothing to restore",
             "reading": "Reading deleted sandboxes",
@@ -6568,6 +6667,7 @@
         "sandboxExtensions": {
             "checkNow": "Check now",
             "checking": "Checking…",
+            "checkingUpdates": "Checking the registry for extension updates",
             "couldNotCheckUpdates": "Could not check the registry for updates.",
             "couldNotReload": "Could not reload the extension host.",
             "filterInstalledExtensions": "Filter installed extensions",
@@ -6583,6 +6683,7 @@
             "reloadExtensions": "Reload extensions",
             "reloadNow": "Reload now",
             "reloadToFinishUpdating": "Reload to finish updating.",
+            "reloading": "Reloading the extension host",
             "searchPublishedExtensions": "Search published extensions",
             "updatable": "Updatable",
             "updatedBrowserStillRunning": "{names} {plural} updated, this browser is still running the previous code until the extensions reload.",
@@ -6622,7 +6723,6 @@
             "changeRemoveLogo": "Change or remove the logo",
             "couldntReadImage": "Couldn't read that file as an image.",
             "couldntSaveLogo": "Couldn't save the logo.",
-            "didntWorkOnDevice": "That didn't work on this device.",
             "gettingWorkspaceReady": "Getting the workspace ready…",
             "installedVersion": "installed version",
             "installedVersion2": "Installed version",
@@ -6682,6 +6782,8 @@
             "neverShown": "Never shown",
             "nothingGeneratedYetAppear": "Nothing generated yet: these appear after your first deploy.",
             "pushToCi": "Push to CI",
+            "pushedToCi": "Secrets pushed to CI",
+            "pushingToCi": "Pushing secrets to CI",
             "readingSandboxsSecrets": "Reading your sandbox's secrets…",
             "requiredByIntent": "Required by your intent",
             "secrets": "Your secrets",
@@ -6696,6 +6798,7 @@
         },
         "sandboxSwitcher": {
             "alsoDelete": "Also delete it from",
+            "couldntDeleteThere": "Couldn't delete it from {machine}.",
             "cleanupCommand": "Remove command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",
             "inProgress": "In progress",
@@ -7048,7 +7151,8 @@
         },
         "useSandboxStorage": {
             "couldntMeasure": "Couldn't measure the disk",
-            "couldntClean": "Couldn't clean {category}"
+            "couldntClean": "Couldn't clean {category}",
+            "cleaning": "Cleaning {category}"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Changed today or in use",
@@ -7806,7 +7910,9 @@
             "tooOldToSave": "This machine's agent is too old to save a change for the next restart. Update its agent first."
         },
         "useDesktopSync": {
-            "startFailed": "Couldn't start desktop sync ({status})."
+            "startFailed": "Couldn't start desktop sync ({status}).",
+            "pairing": "Pairing a device",
+            "couldntPair": "Couldn't pair a device."
         },
         "useLiveLinks": {
             "diskFailed": "The disk could not be mounted.",
@@ -7821,7 +7927,8 @@
             "startFailed": "Couldn't start the connection ({status})."
         },
         "useSelfResources": {
-            "notConnected": "This sandbox's machine is not connected, so its share can't be changed from here."
+            "notConnected": "This sandbox's machine is not connected, so its share can't be changed from here.",
+            "didntWork": "That didn't work on this device."
         },
         "promptReach": {
             "listAnd": "{head} and {last}"
@@ -8163,7 +8270,12 @@
             "previousPlanEnded": "Your previous plan has ended.",
             "previousPlanEndedDetail": "Subscribing again starts a fresh month. Nothing was carried over, and nothing is owed.",
             "slotsUsed": "{used} of {count} slot | {used} of {count} slots",
-            "pricePerMonth": "${price}/month"
+            "pricePerMonth": "${price}/month",
+            "planChangedOnStripe": "Your plan changed on Stripe",
+            "stoppedWaitingForStripe": "Nothing came back from Stripe, so Billing stopped waiting for it",
+            "changingSlots": "Changing the slots on your plan",
+            "movingToRung": "Moving a sandbox to {name}",
+            "movedToRung": "Sandbox moved to {name}"
         },
         "settingsData": {
             "dataPrivacy": "Data & privacy",
@@ -8177,7 +8289,10 @@
             "deleteFromWorkspace": "Permanently removes your account, shared access, and any hosted plan. It's done from the workspace, which takes your access off every sandbox first.",
             "workspaceNotOpened": "The workspace could not be opened.",
             "gatheringData": "Gathering your data",
-            "accountDeletionFailed": "Account deletion failed."
+            "accountDeletionFailed": "Account deletion failed.",
+            "exportFailed": "Couldn't export your data.",
+            "exportDownloaded": "Your data export downloaded",
+            "deletingAccount": "Deleting your account"
         },
         "settingsKeybindings": {
             "alsoOn": "Also on",
@@ -8529,11 +8644,17 @@
             "startFailed": "Couldn't start a machine for you right now.",
             "outOfMachines": "We're out of machines right now, so we can't build you another one this minute.",
             "restartFailed": "Couldn't start it over. Try again in a moment.",
-            "removeFailed": "Couldn't remove the machine we started. Try again in a moment."
+            "removeFailed": "Couldn't remove the machine we started. Try again in a moment.",
+            "starting": "Starting a machine for your sandbox",
+            "restarting": "Starting your sandbox's machine over",
+            "restarted": "Your sandbox's machine started over",
+            "removing": "Removing the machine we started",
+            "removed": "The machine we started was removed"
         },
         "useAttachLane": {
             "signInFirst": "Sign in with Google to reach your sandbox.",
-            "connectFailed": "Could not connect your sandbox."
+            "connectFailed": "Could not connect your sandbox.",
+            "connecting": "Connecting {host}"
         },
         "commandHandoff": {
             "addressless": "This platform doesn't hand out addresses, so there's no install command to run. Connect a sandbox you're already running instead.",
@@ -8671,6 +8792,10 @@
         },
         "hubWork": {
             "running": "{count} running"
+        },
+        "operations": {
+            "finished": "{what} — done",
+            "show": "Show"
         },
         "mobileMenu": {
             "away": " · away",
@@ -8858,7 +8983,12 @@
     "terminal": {
         "backgroundProcesses": {
             "backgroundProcesses": "Background processes",
-            "readOnly": "Read-only"
+            "couldntStart": "Couldn't start {name}.",
+            "couldntStop": "Couldn't stop {name}.",
+            "readOnly": "Read-only",
+            "restarting": "Restarting {name}",
+            "starting": "Starting {name}",
+            "stopping": "Stopping {name}"
         },
         "terminalPanel": {
             "changeColor": "Change color…",
@@ -9460,6 +9590,7 @@
             "readingAgain": "Reading it again… {waited}",
             "readingFileWritingText": "Reading this file and writing its text…",
             "renderFailed": "Could not render this file as text.",
+            "rendering": "Rendering {name} as text",
             "renderText": "Render as text",
             "rereadFile": "Re-read file",
             "stillGoingNothingFailed": "Still going — nothing has failed. The text is written to disk when it lands, so you can leave this file or come back to it and it will be here.",
@@ -9577,6 +9708,7 @@
             "agentTooOld": "The agent on {device} is too old to run programs. Update it there.",
             "computer": "Computer",
             "connectOne": "Connect one",
+            "couldntRun": "Couldn't run {target} on {device}.",
             "declaresNothing": "This repository declares nothing to run on your computers. Put a file at",
             "editFile": "Edit {file}",
             "isolated": "Windows Sandbox",
@@ -10054,7 +10186,6 @@
             "cloneRepository": "Clone a repository",
             "cloning": "Cloning…",
             "codeSomewhereElsePrivate": "For code somewhere else: a private host, a server, an archive.",
-            "couldntCloneRepository": "Couldn't clone that repository.",
             "dragAnywhereOntoPanel": "Or drag them anywhere onto this panel.",
             "filesStayOnSandbox": "Files stay on your sandbox machine: nowhere else",
             "getCodeIn": "Get your code in",
@@ -10255,6 +10386,8 @@
         },
         "useAddRepo": {
             "cloneFailed": "Couldn't clone that repository.",
+            "cloned": "Cloned {name} into the workspace",
+            "cloning": "Cloning {name}",
             "notAnAddress": "That doesn't look like a repository address."
         },
         "uploadQueue": {

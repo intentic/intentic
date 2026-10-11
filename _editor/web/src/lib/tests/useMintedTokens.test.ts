@@ -1,5 +1,10 @@
 import { effectScope, type EffectScope } from "vue";
 import { type TokenSource, useMintedTokens } from "../useMintedTokens";
+import { forgetOperations } from "../../workbench/operations/operations";
+
+afterEach(() => {
+    forgetOperations();
+});
 
 const settled = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -48,5 +53,38 @@ describe(`useMintedTokens`, () => {
             key: undefined,
         });
         scope.stop();
+    });
+
+    // The raw value is shown once and never again: a reader who leaves to paste it somewhere and comes back must still
+    // find it, until they put it away.
+    it(`keeps a minted value across the view going away, until it is put away`, async () => {
+        let answer: (value: string) => void = () => {};
+        const source: TokenSource<string, string, string> = {
+            list: () => Promise.resolve([]),
+            mint: () => new Promise<string>((resolve) => (answer = resolve)),
+            revoke: () => Promise.resolve(undefined),
+            key: `tests/tokens`,
+        };
+        const first = effectScope();
+        const view = first.run(() => useMintedTokens(source));
+        const minting = view?.mint(`ci`);
+        first.stop();
+
+        const again = effectScope();
+        const back = again.run(() => useMintedTokens(source));
+        expect(back?.minting.value).toBe(true);
+        answer(`ict_secret`);
+        await minting;
+        await settled();
+        expect(back?.minted.value).toBe(`ict_secret`);
+        again.stop();
+
+        // Read once and left: still there, since it is kept rather than seen-and-gone.
+        const third = effectScope();
+        const kept = third.run(() => useMintedTokens(source));
+        expect(kept?.minted.value).toBe(`ict_secret`);
+        kept?.forgetMinted();
+        expect(kept?.minted.value).toBeUndefined();
+        third.stop();
     });
 });

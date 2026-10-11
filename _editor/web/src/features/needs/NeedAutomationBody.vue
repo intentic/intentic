@@ -2,13 +2,13 @@
 <script setup lang="ts">
 import type { Automation, AutomationNeed, Need, Trigger, WatchSource } from "@intentic/sandbox-contract";
 import { Code, Icon, Notice, ui } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { formatDateTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAgents } from "../agents/fleet/useAgents";
 import { modelLabelFor } from "../chat/accounts/providerCatalog";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "./useNeeds";
 
 const t = useT();
@@ -163,11 +163,11 @@ const promptOpen = ref(false);
 const firstCheck = computed(() => props.subject.firstCheck);
 const firesAtOnce = computed(() => firstCheck.value?.pass === true && automation.value.fireOn !== `change`);
 
-const { busy, notice, run } = useAsyncAction();
+// The need's answer, wherever it is drawn (needAnswer.ts).
+const { busy, notice, answer } = useNeedAnswer(() => props.need);
 const approve = async (): Promise<void> => {
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `approve` } });
-    }, t(`needs.card.couldNotAnswer`));
+    const id = props.need.id;
+    await answer({ failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `approve` } }) });
 };
 </script>
 

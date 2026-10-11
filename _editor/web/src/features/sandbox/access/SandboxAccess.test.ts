@@ -53,6 +53,7 @@ const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00
 jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
+const { forgetOperations } = await import("../../../workbench/operations/operations");
 
 let app: App | undefined;
 const mount = (): void => {
@@ -78,16 +79,20 @@ const inviteEmail = async (address: string): Promise<void> => {
     await nextTick();
     await nextTick();
     await nextTick();
+    await settle();
 };
 
 const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
 
-// Both rosters land on their own promise, so a row exists a few ticks after mount, not on the next one.
+// Both rosters land on their own promise, so a row exists a few ticks after mount, not on the next one; a write runs
+// through the operations ledger, which lands its answer a task later.
 const settle = async (): Promise<void> => {
     for (let tick = 0; tick < 5; tick += 1) {
         await nextTick();
     }
+    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
 };
 
 // Opens a <Picker> by its accessible name and clicks the row whose label starts with `option`. The panel measures
@@ -118,6 +123,7 @@ afterEach(() => {
     sessionExpiresAt.value = Date.parse(`2026-09-24T12:00:00.000Z`);
     app?.unmount();
     app = undefined;
+    forgetOperations();
     document.body.innerHTML = ``;
 });
 
@@ -157,6 +163,24 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     copy?.click();
     await nextTick();
     expect(writeText).toHaveBeenCalledWith(`https://localhost:47145/invite/tok`);
+});
+
+// The link is the invite when mail did not carry it, and it can be read nowhere else: leaving the tab to open a chat
+// app and coming back must still find it.
+it(`keeps the link to carry across the tab closing and opening again`, async () => {
+    create.mockResolvedValue({
+        members: [{ email: `guest@example.com`, role: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
+        link: `https://localhost:47145/invite/tok`,
+        delivery: `local-link`,
+    });
+    mount();
+    await inviteEmail(`guest@example.com`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    mount();
+    await settle();
+    expect(shown()).toContain(`https://localhost:47145/invite/tok`);
 });
 
 it(`shows what the mail provider said when it refused`, async () => {
@@ -220,8 +244,7 @@ it(`revokes only on the confirming click, then reports it`, async () => {
     // Two buttons share this label once armed; the confirm's is last.
     const confirm = [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Sign out all browsers`);
     confirm?.click();
-    await nextTick();
-    await nextTick();
+    await settle();
 
     expect(sandboxJson).toHaveBeenCalledWith(`/system/sessions/revoke`, { method: `POST` });
     expect(shown()).toContain(`Every browser has been signed out`);

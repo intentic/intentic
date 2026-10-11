@@ -1,8 +1,8 @@
 import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
 import { HOSTED_TIERS } from "@intentic/constants";
-import { useQuery } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { t } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { HOSTED_PLAN } from "../../../lib/queryKeys";
 import { apiClient } from "../../../lib/useApi";
 import { planBadge } from "./hostedHours";
@@ -22,33 +22,23 @@ export function useHostedPlan() {
 
     const state = computed<HostedPlanState | undefined>(() => query.data.value);
 
-    // Writes to Stripe then refetches; one in-flight call at a time so racing presses can't overwrite each other.
-    const slotsWorking = ref(false);
+    // The plan re-read through the cache rather than this caller's observer: the writes below are awaited by Billing's
+    // operations (operations.ts), which outlive the page that started them.
+    const client = useQueryClient();
+    const reread = (): Promise<void> => client.invalidateQueries({ queryKey: HOSTED_PLAN.every });
+
+    // Writes to Stripe then re-reads; one at a time is the caller's to keep, so racing presses can't overwrite each other.
     const setSlots = async (tier: string, quantity: number): Promise<void> => {
-        if (slotsWorking.value) {
-            return;
-        }
-        slotsWorking.value = true;
-        try {
-            await apiClient.hostedPlan.setSlots({ tier, quantity });
-            await query.refetch();
-        } finally {
-            slotsWorking.value = false;
-        }
+        await apiClient.hostedPlan.setSlots({ tier, quantity });
+        await reread();
     };
 
     /* MOVES ONE SANDBOX ONTO A SLOT AT ANOTHER RUNG, which is a different act from buying the slot: the machine is
-     * restarted on the new shape (or rebuilt beside itself and swapped), and the page watches the answer. */
-    const moving = ref<string | undefined>(undefined);
+     * restarted on the new shape (or rebuilt beside itself and swapped), and one request answers once that is over. */
     const changeTier = async (sandboxId: string, tier: string): Promise<HostedMigration> => {
-        moving.value = sandboxId;
-        try {
-            const migration = await apiClient.hostedPlan.changeTier({ sandboxId, tier });
-            await query.refetch();
-            return migration;
-        } finally {
-            moving.value = undefined;
-        }
+        const migration = await apiClient.hostedPlan.changeTier({ sandboxId, tier });
+        await reread();
+        return migration;
     };
 
     return {
@@ -59,9 +49,7 @@ export function useHostedPlan() {
         hosted: computed(() => state.value?.hosted),
         planBadge: computed(() => planBadge(state.value)),
         setSlots,
-        slotsWorking,
         changeTier,
-        moving,
         // Every rung there is, so the page can price the ladder without a second read.
         tiers: HOSTED_TIERS,
         isLoading: query.isLoading,

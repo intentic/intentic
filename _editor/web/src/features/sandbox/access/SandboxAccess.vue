@@ -22,7 +22,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
@@ -43,6 +43,7 @@ import PasskeysSection from "./PasskeysSection.vue";
 import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
 import AccessMemberBadges from "./AccessMemberBadges.vue";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 // Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxRaw throws on non-2xx), then the
@@ -65,9 +66,9 @@ const { canShip } = useRole();
 const members = ref<InviteRecord[]>([]);
 // A grant or revoke changes the roster for more than this page: the board's Everyone/Mine row reads the same list
 // through SANDBOX_MEMBERS. A cached read is re-run when something says it changed, never because a view mounted
-// again, so saying so here is what keeps the two surfaces telling the same story.
-const rosterChanged = (next: InviteRecord[]): void => {
-    members.value = next;
+// again, so saying so here (part of the write, whether or not this tab is still up) keeps the two surfaces telling
+// the same story.
+const invalidateRoster = (): void => {
     void queryClient.invalidateQueries({ queryKey: SANDBOX_MEMBERS.of() });
 };
 const email = ref(``);
@@ -157,12 +158,71 @@ const guestLine = (member: InviteRecord): string | undefined => {
 };
 // Whether a grant at this tier, fenced this way, is one the daemon will take.
 const sendable = (role: GrantedRole, areas: readonly string[] | undefined): boolean => grantSendable(role, areas, namesOf(areas).length);
-const busy = ref(false);
-// The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
-const notice = ref<NoticeModel>();
 
+// THE ROSTER WRITES ARE THE SANDBOX'S, NOT THIS TAB'S. An invite, a resend, a re-grade and a revoke are each two writes
+// (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger: the
+// tab opened again mid-write holds its buttons, and the accept link of an invite mail could not deliver is kept until
+// the owner moves on to the next write, since it can only be read here.
+// What a write answers: the platform's roster, the daemon's (whole, so every fence is known again), and for an invite
+// or a resend, how it went out.
+interface RosterWrite {
+    readonly members?: InviteRecord[];
+    readonly grants?: AccessGrant[];
+    readonly delivery?: { readonly link: string; readonly delivery: InviteDelivery; readonly reason?: string };
+}
+// A refusal, and whether the roster on screen may no longer be true: the daemon granted, then the platform refused.
+interface RosterRefusal {
+    readonly notice: NoticeModel;
+    readonly reload: boolean;
+}
+// The daemon's refusal, the first of the two writes: nothing changed, and it carries its own sentence.
+class DaemonRefused extends Error {
+    constructor(
+        readonly sentence: string,
+        readonly reason: unknown,
+    ) {
+        super(sentence);
+    }
+}
+const refusedAs =
+    (recording: string) =>
+    (error: unknown): RosterRefusal =>
+        error instanceof DaemonRefused
+            ? { notice: noticeFrom(error.reason, error.sentence), reload: false }
+            : { notice: noticeFrom(error, recording), reload: true };
+const writes = useOperation<RosterWrite, RosterRefusal>(`access/members/write`);
+const busy = writes.busy;
+// The sign-out is the sandbox's too: opened again mid-request, the tab holds the button and then says it was done.
+const sessions = useOperation(`access/sessions/revoke`);
+
+// What this tab decided by itself (a roster it couldn't read, a re-grade it won't send), beside the writes' own words.
+const localNotice = ref<NoticeModel>();
+// The delivery an invite or resend reported, when mail did not carry it.
+const undelivered = computed(() => {
+    const delivered = writes.operation.value?.state === `done` ? writes.value.value?.delivery : undefined;
+    return delivered === undefined || delivered.delivery === `sent` ? undefined : delivered;
+});
+const deliveryNotice = computed((): NoticeModel | undefined => {
+    const result = undelivered.value;
+    return result === undefined || result.delivery === `sent`
+        ? undefined
+        : {
+              tone: `warning`,
+              title: deliveryNote(result.delivery),
+              detail: result.reason,
+              action: {
+                  label: t(`ui.action.copyLink`),
+                  // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
+                  run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
+              },
+          };
+});
+// The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
+const notice = computed(
+    () => localNotice.value ?? writes.failure.value?.notice ?? sessions.failure.value ?? deliveryNotice.value,
+);
 // Accept link the owner carries when mail didn't; beside `notice`, not inside it, since a link is markup.
-const handover = ref<string>();
+const handover = computed(() => (notice.value !== undefined && notice.value === deliveryNotice.value ? undelivered.value?.link : undefined));
 
 // Other doors, counted, not managed here; answers what else can reach the sandbox without a person.
 const { inventory, loading: inventoryLoading } = useAccessInventory();
@@ -188,10 +248,12 @@ const ciLine = computed(() => {
     return t(`sandbox.sandboxAccess.ciLine`, { count: repos.total, hooked: repos.hooked }, repos.total);
 });
 
-// Clears both together; a link with no sentence, or vice versa, is worse than neither.
+// Clears what this tab has to say before the next write: the link went with the notice, and a link with no sentence,
+// or vice versa, is worse than neither.
 const clearNotice = (): void => {
-    notice.value = undefined;
-    handover.value = undefined;
+    localNotice.value = undefined;
+    writes.dismiss();
+    sessions.dismiss();
 };
 
 const emailTouched = ref(false);
@@ -216,7 +278,8 @@ const load = async (): Promise<void> => {
         listing.value = false;
         return;
     }
-    clearNotice();
+    // Only this tab's own words: an invite's link kept in the ledger outlives the tab being opened again.
+    localNotice.value = undefined;
     try {
         // Both rosters, since only the daemon's says which cards a guest holds; a daemon that isn't answering leaves the
         // list up and says the fences are unknown, rather than drawing every row as unfenced.
@@ -239,11 +302,36 @@ const load = async (): Promise<void> => {
             grantsUnread.value = undefined;
         }
     } catch (err) {
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntLoadAccessList`));
+        localNotice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntLoadAccessList`));
     } finally {
         listing.value = false;
     }
 };
+
+// A write's answer is the roster as it now stands, put on screen by whichever mount of this tab is up when it lands; a
+// write refused after the daemon granted leaves the screen unsure, so the roster is read again.
+watch(
+    () => writes.operation.value,
+    (now, before) => {
+        if (before?.state !== `running` || now === undefined || now.order !== before.order || now.state === `running`) {
+            return;
+        }
+        if (now.state === `failed`) {
+            if (now.failure?.reload === true) {
+                void load();
+            }
+            return;
+        }
+        if (now.value?.members !== undefined) {
+            members.value = now.value.members;
+        }
+        if (now.value?.grants !== undefined) {
+            grants.value = now.value.grants;
+            // The answer is the whole roster, so every fence is known again.
+            grantsUnread.value = undefined;
+        }
+    },
+);
 
 // Placeholder rows while the roster loads, so the tab doesn't open claiming nobody's invited.
 const outline = useSandboxOutline(listing);
@@ -267,54 +355,40 @@ const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
         refused: t(`sandbox.sandboxAccess.deliveryRefused`),
     })[delivery];
 
-const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?: string }): void => {
-    handover.value = result.delivery === `sent` ? undefined : result.link;
-    notice.value =
-        result.delivery === `sent`
-            ? undefined
-            : {
-                  tone: `warning`,
-                  title: deliveryNote(result.delivery),
-                  detail: result.reason,
-                  action: {
-                      label: t(`ui.action.copyLink`),
-                      // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
-                      run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
-                  },
-              };
+// Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent. Its
+// answer is the daemon's whole roster.
+const grantOnDaemon = async (target: string, role: GrantedRole, areas: readonly string[] | undefined, refused: string): Promise<AccessGrant[]> => {
+    try {
+        return (await sandboxRaw(`POST /members`, { input: grantBody(target, role, areas) })).members;
+    } catch (err) {
+        throw new DaemonRefused(refused, err);
+    }
 };
 
 const invite = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     const value = email.value.trim().toLowerCase();
-    if (id === undefined || busy.value || !validEmail(value) || !sendable(inviteRole.value, inviteAreas.value)) {
+    const role = inviteRole.value;
+    const areas = inviteAreas.value;
+    if (id === undefined || busy.value || !validEmail(value) || !sendable(role, areas)) {
         return;
     }
-    busy.value = true;
     clearNotice();
-    try {
-        // Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent.
-        try {
-            grants.value = (
-                await sandboxRaw(`POST /members`, { input: grantBody(value, inviteRole.value, inviteAreas.value) })
-            ).members;
-            // The answer is the whole roster, so every fence is known again.
-            grantsUnread.value = undefined;
-        } catch (err) {
-            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntGrantAccess`));
-            return;
-        }
-        const result = await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value });
-        rosterChanged(result.members);
+    const outcome = await writes.run({
+        what: t(`sandbox.sandboxAccess.invitingWhom`, { email: value }),
+        failed: refusedAs(t(`sandbox.sandboxAccess.recordingInviteFailed`)),
+        // The link mail could not carry is read here or nowhere.
+        keep: true,
+        task: async () => {
+            const granted = await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`));
+            const result = await apiClient.invite.create({ sandboxId: id, email: value, role });
+            invalidateRoster();
+            return { members: result.members, grants: granted, delivery: result };
+        },
+    });
+    if (outcome?.state === `done`) {
         email.value = ``;
         emailTouched.value = false;
-        showDelivery(result);
-    } catch (err) {
-        // Platform refused after the daemon granted; resync so the roster shows what's actually true.
-        void load();
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.recordingInviteFailed`));
-    } finally {
-        busy.value = false;
     }
 };
 
@@ -323,25 +397,29 @@ const resend = async (target: string): Promise<void> => {
     if (id === undefined || busy.value) {
         return;
     }
-    busy.value = true;
     clearNotice();
-    try {
-        const result = await apiClient.invite.resend({ sandboxId: id, email: target });
-        members.value = result.members;
-        showDelivery(result);
-    } catch (err) {
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntResendInvite`));
-    } finally {
-        busy.value = false;
-    }
+    await writes.run({
+        what: t(`sandbox.sandboxAccess.invitingWhom`, { email: target }),
+        // Nothing was granted first, so a refusal leaves the roster as it is.
+        failed: (error) => ({ notice: noticeFrom(error, t(`sandbox.sandboxAccess.couldntResendInvite`)), reload: false }),
+        keep: true,
+        task: async () => {
+            const result = await apiClient.invite.resend({ sandboxId: id, email: target });
+            return { members: result.members, delivery: result };
+        },
+    });
 };
 
 // No device roster can exist: a session is a signed claim the daemon verifies, not stored. The group says what's true:
 // this browser, why the rest are unlistable, and the switch's consequence.
-const revokingSessions = ref(false);
-const sessionsRevoked = ref(false);
+const revokingSessions = sessions.busy;
+const sessionsRevoked = computed(() => sessions.operation.value?.state === `done`);
 // Armed before firing: irreversible, signs out everyone, and can't be aimed at one device.
 const confirmingRevoke = ref(false);
+const armRevoke = (): void => {
+    sessions.dismiss();
+    confirmingRevoke.value = true;
+};
 
 // A date, not a countdown: the expiry slides forward on renewal, so it reads as neglect risk, not a deadline.
 const thisBrowser = computed<string>(() => {
@@ -356,17 +434,19 @@ const revokeSessions = async (): Promise<void> => {
     if (revokingSessions.value) {
         return;
     }
-    revokingSessions.value = true;
-    clearNotice();
-    sessionsRevoked.value = false;
-    try {
-        await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
-        sessionsRevoked.value = true;
+    localNotice.value = undefined;
+    writes.dismiss();
+    const outcome = await sessions.run({
+        what: t(`sandbox.sandboxAccess.signingOthersOut`),
+        failed: t(`sandbox.sandboxAccess.couldntSignOthersOut`),
+        // The line under the button says it, where the press was.
+        quiet: true,
+        task: async () => {
+            await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
+        },
+    });
+    if (outcome?.state === `done`) {
         confirmingRevoke.value = false;
-    } catch (err) {
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntSignOthersOut`));
-    } finally {
-        revokingSessions.value = false;
     }
 };
 
@@ -377,29 +457,25 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
     if (id === undefined || busy.value || !sendable(role, areas)) {
         return false;
     }
-    if (grantsUnread.value !== undefined) {
-        notice.value = grantsUnread.value;
-        return false;
-    }
-    busy.value = true;
     clearNotice();
-    try {
-        // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
-        try {
-            grants.value = (await sandboxRaw(`POST /members`, { input: grantBody(target, role, areas) })).members;
-        } catch (err) {
-            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntChangeRole`));
-            return false;
-        }
-        rosterChanged((await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members);
-        return true;
-    } catch (err) {
-        void load();
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.recordingRoleFailed`));
+    if (grantsUnread.value !== undefined) {
+        localNotice.value = grantsUnread.value;
         return false;
-    } finally {
-        busy.value = false;
     }
+    // Quiet: the row's own badge is the answer.
+    const outcome = await writes.run({
+        what: t(`sandbox.sandboxAccess.changingRoleOf`, { email: target }),
+        failed: refusedAs(t(`sandbox.sandboxAccess.recordingRoleFailed`)),
+        quiet: true,
+        task: async () => {
+            // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
+            const granted = await grantOnDaemon(target, role, areas, t(`sandbox.sandboxAccess.couldntChangeRole`));
+            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role });
+            invalidateRoster();
+            return { members: result.members, grants: granted };
+        },
+    });
+    return outcome?.state === `done`;
 };
 
 // Picking a tier the daemon would refuse at this row's current fence stages it instead of writing it — a writer
@@ -442,27 +518,28 @@ const revoke = async (target: string): Promise<void> => {
     if (id === undefined || busy.value) {
         return;
     }
-    busy.value = true;
     clearNotice();
     // A staged tier on a row that is about to stop existing.
     if (draft.value?.email === target) {
         draft.value = undefined;
     }
-    try {
-        // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
-        try {
-            await sandboxRaw(`DELETE /members`, { input: { email: target } });
-        } catch (err) {
-            notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntRevokeAccess`));
-            return;
-        }
-        rosterChanged((await apiClient.invite.revoke({ sandboxId: id, email: target })).members);
-    } catch (err) {
-        void load();
-        notice.value = noticeFrom(err, t(`sandbox.sandboxAccess.clearingRecordFailed`));
-    } finally {
-        busy.value = false;
-    }
+    // Quiet: the row going away is the answer.
+    await writes.run({
+        what: t(`sandbox.sandboxAccess.revokingWhom`, { email: target }),
+        failed: refusedAs(t(`sandbox.sandboxAccess.clearingRecordFailed`)),
+        quiet: true,
+        task: async () => {
+            // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
+            try {
+                await sandboxRaw(`DELETE /members`, { input: { email: target } });
+            } catch (err) {
+                throw new DaemonRefused(t(`sandbox.sandboxAccess.couldntRevokeAccess`), err);
+            }
+            const result = await apiClient.invite.revoke({ sandboxId: id, email: target });
+            invalidateRoster();
+            return { members: result.members };
+        },
+    });
 };
 </script>
 
@@ -663,10 +740,7 @@ const revoke = async (target: string): Promise<void> => {
                         tone="danger"
                         size="small"
                         :disabled="revokingSessions"
-                        @click="
-                            sessionsRevoked = false;
-                            confirmingRevoke = true;
-                        "
+                        @click="armRevoke"
                     >
                         <template #icon><Icon name="sign-out" /></template>
                     </Button>

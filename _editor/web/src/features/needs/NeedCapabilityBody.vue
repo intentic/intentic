@@ -3,7 +3,6 @@
 import { type CapabilityCatalogEntry, capabilityEffects, type CapabilityEffect } from "@intentic/capability-catalog";
 import type { CapabilityNeed, Need } from "@intentic/sandbox-contract";
 import { Notice, ui } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
 import CapabilityFieldRow from "../capabilities/connect/CapabilityFieldRow.vue";
@@ -11,11 +10,13 @@ import { guideParts, guideTokenUrl } from "../capabilities/connect/credentialGui
 import SecretField from "../capabilities/connect/secrets/SecretField.vue";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { buildConfig, cleanName, fieldError, formComplete, inlineField, nameError, seedValues, shownFields } from "../capabilities/model/form";
-import { generatesKey } from "../capabilities/model/sshKey";
+import { generatesKey, sshKeyScope } from "../capabilities/model/sshKey";
 import SshKeyField from "../capabilities/ssh/SshKeyField.vue";
 import { catalogEntries, suggestName } from "../capabilities/model/tiles";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
 import { useExtensions } from "../extensions/useExtensions";
+import { dismissOperation, operationsUnder } from "../../workbench/operations/operations";
+import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "./useNeeds";
 
 const t = useT();
@@ -71,7 +72,20 @@ const consequences = computed<string[]>(() => {
     });
 });
 
-const { busy, notice, run } = useAsyncAction();
+// The answer is the need's, not this card's (needAnswer.ts): an install can take minutes, and after the accept the need
+// reads `working` on the daemon, so a refused add has to outlive the card or the need stays working with nobody told
+// why; and a change pressed again over one still applying is refused by the daemon.
+const { busy, notice, lines, answer } = useNeedAnswer(() => props.need);
+// The install's own words while it runs, as the Capabilities page shows them in its terminal.
+const heard =
+    (report: { line: (text: string) => void }) =>
+    (frame: Record<string, unknown>): void => {
+        const message = frame[`message`];
+        if (typeof message === `string` && frame[`kind`] !== `error`) {
+            report.line(message);
+        }
+    };
+const lastLine = computed(() => lines.value.at(-1));
 
 // Saved through the same route as the Capabilities page; the need is met when the daemon sees it come live.
 const connect = async (): Promise<void> => {
@@ -79,10 +93,22 @@ const connect = async (): Promise<void> => {
     if (tile === undefined || !complete.value) {
         return;
     }
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `accept` } });
-        await add({ id: name.value, kind: tile.kind, config: buildConfig(tile, values) });
-    }, t(`needs.capability.couldNotConnect`));
+    // Taken at the press: the card may be gone by the time the accept lands.
+    const id = props.need.id;
+    const input = { id: name.value, kind: tile.kind, config: buildConfig(tile, values) };
+    await answer({
+        what: t(`needs.capability.connecting`, { name: props.subject.name }),
+        tag: `connect`,
+        failed: t(`needs.capability.couldNotConnect`),
+        task: async (report) => {
+            await needs.answer.mutateAsync({ id, answer: { kind: `accept` } });
+            await add(input, heard(report));
+            // A key made on this card (the same one the full form would show) is spent once the connection holds it.
+            for (const made of operationsUnder(sshKeyScope(tile.id))) {
+                dismissOperation(made.key);
+            }
+        },
+    });
 };
 
 // A change applied the way an edit is: every stored credential kept by its marker, only the named settings moved.
@@ -92,22 +118,32 @@ const change = async (): Promise<void> => {
     if (tile === undefined || connection === undefined) {
         return;
     }
-    await run(async () => {
-        const answers = seedValues(tile, connection.config, props.subject.changes ?? {});
-        await add({ id: connection.id, kind: tile.kind, config: buildConfig(tile, answers, new Set(connection.secrets)) });
-        // Settled now, not on the daemon's next poll: the card closes with this press instead of offering it again.
-        // The poll may have closed it first, which is the same outcome.
-        if (needs.byId(props.need.id)?.status !== `met`) {
-            await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `apply` } });
-        }
-    }, t(`needs.capability.couldNotApply`));
+    const id = props.need.id;
+    const answers = seedValues(tile, connection.config, props.subject.changes ?? {});
+    const input = { id: connection.id, kind: tile.kind, config: buildConfig(tile, answers, new Set(connection.secrets)) };
+    await answer({
+        what: t(`needs.capability.applying`, { id: connection.id }),
+        tag: `change`,
+        failed: t(`needs.capability.couldNotApply`),
+        task: async (report) => {
+            await add(input, heard(report));
+            // Settled now, not on the daemon's next poll: the card closes with this press instead of offering it again.
+            // The poll may have closed it first, which is the same outcome.
+            if (needs.byId(id)?.status !== `met`) {
+                await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
+            }
+        },
+    });
 };
 
 // The person's word that the new credential is in; the daemon checks the connection answers before it takes it.
 const fixed = async (): Promise<void> => {
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `apply` } });
-    }, t(`needs.capability.notWorkingYet`));
+    const id = props.need.id;
+    await answer({
+        tag: `fixed`,
+        failed: t(`needs.capability.notWorkingYet`),
+        task: () => needs.answer.mutateAsync({ id, answer: { kind: `apply` } }),
+    });
 };
 
 const setupAt = computed(() => ({ path: `/capabilities/${props.subject.entry}`, query: { need: props.need.id } }));
@@ -148,7 +184,7 @@ const settingOf = (key: string): string => entry.value?.fields.find((field) => f
             </label>
             <template v-for="field in fields" :key="field.key">
                 <!-- A key the sandbox makes: only its public half and the line that authorizes it, never a box to paste into. -->
-                <SshKeyField v-if="generatesKey(entry, field, values)" :field="field" :values="values" />
+                <SshKeyField v-if="generatesKey(entry, field, values)" :field="field" :values="values" :entry="entry.id" />
                 <SecretField v-else-if="field.secret" v-model="values[field.key]" :secret-key="field.label" :multiline="field.multiline === true" collect no-hint />
                 <CapabilityFieldRow v-else :field="field" :values="values" :inline="inlineField(field)" :alarm="values[field.key] ? fieldError(field, values[field.key]) : undefined" />
             </template>
@@ -195,6 +231,7 @@ const settingOf = (key: string): string => entry.value?.fields.find((field) => f
             </div>
         </div>
 
+        <p v-if="busy && lastLine" class="truncate font-mono text-2xs text-subtle" v-tooltip.top.overflow="lastLine">{{ lastLine }}</p>
         <Notice v-if="notice" :of="notice" />
     </div>
 </template>

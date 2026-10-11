@@ -1,6 +1,7 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import { ARCHIVE_PAGE, type BoardView, stepView, VIEW_START, type ViewEvent } from "../boardView";
+import { forgetOperations } from "../../../../../workbench/operations/operations";
 import { useArchiveDoor } from "../archiveDoor";
 
 // Pins the archive's door and what the board says about it: each opening re-reads the pile at one page, emptying it
@@ -13,6 +14,7 @@ afterEach(() => {
         effects.stop();
     }
     jest.useRealTimers();
+    forgetOperations();
 });
 
 const doorOf = () => {
@@ -37,7 +39,7 @@ const doorOf = () => {
     const effects = effectScope();
     running.push(effects);
     const door = effects.run(() => useArchiveDoor({ view, move, agents }))!;
-    return { view, agents, door, deletes };
+    return { view, agents, door, deletes, effects };
 };
 
 describe(`the archive's door`, () => {
@@ -73,15 +75,28 @@ describe(`emptying the archive`, () => {
         expect(door.announcement.value).toBe(`2 archived agents deleted`);
     });
 
-    it(`lets a failure through, marking nothing emptied and saying nothing`, async () => {
+    it(`marks nothing emptied and says nothing when it fails`, async () => {
         const { view, door, deletes } = doorOf();
         view.value = { ...VIEW_START, archive: true };
 
         const purge = door.confirmPurge();
         deletes[0]!.refuse(new Error(`the daemon went away`));
 
-        await expect(purge).rejects.toThrow(`the daemon went away`);
+        await purge;
         expect([door.purging.value, view.value.purged, door.announcement.value]).toEqual([false, false, ``]);
+    });
+
+    // The deletes are the sandbox's, not the board's: one opened again before the daemon answers still holds the press.
+    it(`holds Delete all on a board opened again while the daemon deletes`, async () => {
+        const first = doorOf();
+        const purge = first.door.confirmPurge();
+        first.effects.stop();
+
+        const back = doorOf();
+        expect(back.door.purging.value).toBe(true);
+        first.deletes[0]!.settle();
+        await purge;
+        expect(back.door.purging.value).toBe(false);
     });
 });
 

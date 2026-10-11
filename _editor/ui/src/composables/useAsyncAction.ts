@@ -2,7 +2,9 @@ import type { NoticeModel, NoticeTone } from "../components/feedback/notice.js";
 import { computed, ref } from "vue";
 
 // The one shape every user-facing mutation reports through: a busy flag plus a surfaced notice. Errors
-// are surfaced, not thrown; re-entry while busy is a no-op.
+// are surfaced, not thrown; re-entry while busy is a no-op. Both live with the caller: called in a component, they
+// die when it unmounts while the work runs on, so the editor keeps work a person starts in its operations ledger
+// (web/src/workbench/operations) and calls these only where the caller outlives every view.
 
 // The thrown thing's message, or `fallback` when it has none, for places that need a string rather than something to
 // show a user. Anything a person reads goes through `noticeFrom` instead.

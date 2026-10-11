@@ -32,6 +32,7 @@ jest.mock("../../../sandbox/devices/useSelfResources", () => ({
         engine: computed(() => ({ memoryBytes: 64 * 1024 ** 3, cpus: 8 })),
         reshapable: computed(() => true),
         applying: ref(false),
+        failure: ref(undefined),
         apply: async () => undefined,
     }),
 }));

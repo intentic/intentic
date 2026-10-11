@@ -4,7 +4,7 @@
      verbs (start, stop, its terminal) go into the Browsers toolbar while it is in front; the address bar, reload and the
      phone frame are the toolbar's, steering this tab through what it exposes. -->
 <script setup lang="ts">
-import { Button, EmptyState, Notice, noticeOf, probePreview, probePreviewOnce, type PreviewProbe, type Tip, ui } from "@intentic/ui";
+import { Button, EmptyState, Notice, type NoticeModel, probePreview, probePreviewOnce, type PreviewProbe, type Tip, ui } from "@intentic/ui";
 import { useNow, usePoll } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
@@ -15,6 +15,7 @@ import type { PhoneModel } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useOperations } from "../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 export interface PreviewActions {
@@ -55,43 +56,62 @@ const t = useT();
 const terminal = useTerminalPanel();
 
 // Start / stop
-const busy = ref(false);
-const actionError = ref<string | undefined>(undefined);
-const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<void> => {
+// The presses on this app are kept in the operations ledger under its id, not in this tab: a start or stop (a restart
+// is both) outlives the Browsers view being left, so coming back finds the press still held and its refusal still
+// said, where a second press used to go in under the first. `process` is the server's one press at a time; `forward`
+// carries the port it is forwarding. The newest press speaks for the tab's one error line.
+const work = useOperations<string | undefined, NoticeModel, number>(() => `preview/${target?.id ?? ``}`);
+const busy = computed(() => work.at(`process`)?.state === `running`);
+const actionError = computed(() => work.all.value.at(-1)?.failure);
+// What the hub row and a receipt call each press.
+const PRESSES = {
+    starting: (name: string) => t(`preview.previewPanel.starting`, { name }),
+    stopping: (name: string) => t(`preview.previewPanel.stopping`, { name }),
+    restarting: (name: string) => t(`preview.previewPanel.restarting`, { name }),
+};
+const act = async (verb: keyof typeof PRESSES, action: (entry: PreviewTarget) => Promise<void>): Promise<void> => {
     const entry = target;
-    if (entry === undefined) {
+    if (entry === undefined || busy.value) {
         return;
     }
-    actionError.value = undefined;
-    busy.value = true;
-    try {
-        await action(entry);
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : t(`preview.previewPanel.actionFailed`);
-    } finally {
-        busy.value = false;
-    }
+    await work.run(`process`, {
+        what: PRESSES[verb](entry.label),
+        failed: t(`preview.previewPanel.actionFailed`),
+        task: async () => {
+            await action(entry);
+            return undefined;
+        },
+    });
 };
 const start = (entry: PreviewTarget): Promise<void> => actions.start(entry);
 const stop = (entry: PreviewTarget): Promise<void> => actions.stop(entry);
 
 // Forwards one server of a fanned-out repo and opens the target it becomes. Forwarding publishes the port; the Ports
 // view is where it's taken back.
-const forwarding = ref<number | undefined>(undefined);
+const forwarding = computed(() => {
+    const forward = work.at(`forward`);
+    return forward?.state === `running` ? forward.progress : undefined;
+});
 const previewServer = async (port: number): Promise<void> => {
-    actionError.value = undefined;
-    forwarding.value = port;
-    try {
-        const id = await actions.forward(port);
-        if (id === undefined) {
-            actionError.value = t(`preview.previewPanel.noPublicAddress`);
-            return;
-        }
-        emit(`open`, id);
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : t(`preview.previewPanel.forwardFailed`, { port });
-    } finally {
-        forwarding.value = undefined;
+    if (forwarding.value !== undefined) {
+        return;
+    }
+    const outcome = await work.run(`forward`, {
+        what: t(`preview.previewPanel.forwarding`, { port }),
+        failed: t(`preview.previewPanel.forwardFailed`, { port }),
+        progress: port,
+        // What it becomes opens as a tab of its own, which says it; one forwarded while away is in the switcher.
+        quiet: true,
+        task: async () => {
+            const id = await actions.forward(port);
+            if (id === undefined) {
+                throw new Error(t(`preview.previewPanel.noPublicAddress`));
+            }
+            return id;
+        },
+    });
+    if (outcome?.state === `done` && outcome.value !== undefined) {
+        emit(`open`, outcome.value);
     }
 };
 
@@ -165,7 +185,12 @@ const visited = ref<string | undefined>(undefined);
 watch(
     () => [target?.id, target?.url] as const,
     (now, was) => {
-        actionError.value = undefined;
+        // What a press left is about the app as it stood: a new address says it moved on. Not on mount, which is when a
+        // press that ended while the tab was gone is read.
+        if (was !== undefined) {
+            work.dismiss(`process`);
+            work.dismiss(`forward`);
+        }
         // `was` is absent on the immediate first run, which is also a fresh mount: a fresh key either way.
         if (was === undefined || now[0] !== was[0] || (now[1] !== undefined && was[1] === undefined)) {
             previewEpoch.value += 1;
@@ -313,7 +338,7 @@ const launchHint = computed<string | undefined>(() => {
 
 /* THE WAY OUT OF A STUCK START: end the pane and start it again, which is what a person does in the terminal once they have looked. */
 const restart = (): Promise<void> =>
-    act(async (entry) => {
+    act(`restarting`, async (entry) => {
         await stop(entry);
         await start(entry);
     });
@@ -352,7 +377,7 @@ watch(
             size="small"
             :disabled="busy"
             v-tooltip.bottom="startTip"
-            @click="act(start)"
+            @click="act(`starting`, start)"
         >
             <template #icon><Icon name="play" /></template>
         </Button>
@@ -363,7 +388,7 @@ watch(
             size="small"
             tier="boring"
             :disabled="busy"
-            @click="act(stop)"
+            @click="act(`stopping`, stop)"
         >
             <template #icon><Icon name="stop" /></template>
         </Button>
@@ -381,7 +406,7 @@ watch(
 
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
         <!-- Errors stay beside the app whose controls caused them. -->
-        <Notice v-if="actionError" :of="noticeOf(actionError)" class="mx-3 mt-3" />
+        <Notice v-if="actionError" :of="actionError" class="mx-3 mt-3" />
 
         <div v-if="!target && !settled" class="flex flex-1 items-center justify-center" role="status" aria-busy="true">
             <span class="sr-only">{{ t(`preview.previewPanel.readingWhatPreviewed`) }}</span>
@@ -479,7 +504,7 @@ watch(
                     :disabled="forwarding !== undefined"
                     @click="previewServer(target.job.port)"
                 />
-                <Button :label="t(`ui.action.stop`)" size="small" tier="boring" :disabled="busy" @click="act(stop)" />
+                <Button :label="t(`ui.action.stop`)" size="small" tier="boring" :disabled="busy" @click="act(`stopping`, stop)" />
             </template>
         </EmptyState>
 
@@ -537,7 +562,7 @@ watch(
                 </i18n-t>
             </template>
             <template v-if="target.startable" #actions>
-                <Button :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(start)">
+                <Button :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
             </template>

@@ -17,7 +17,7 @@ const t = useT();
 
 const { user } = useAuth();
 const { active } = useSandbox();
-const { list, unread, codes, busy, notice, supported, add, remove, setRequired, regenerateCodes } = usePasskeys();
+const { list, unread, codes, forgetCodes, busy, notice, supported, add, remove, setRequired, regenerateCodes } = usePasskeys();
 
 const isOwner = computed(() => active.value?.role === `owner`);
 const label = ref(``);
@@ -132,6 +132,10 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                     <div class="flex flex-col gap-2">
                         <span class="text-2xs text-subtle">{{ t(`sandbox.passkeysSection.saveNowTheyShown`) }}</span>
                         <Code :code="codesText" :label="t(`sandbox.passkeysSection.recoveryCodes`)" />
+                        <!-- Kept until put away: they are never shown again, so only the owner knows they are saved. -->
+                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `self-end`)" @click="forgetCodes">
+                            {{ t(`ui.action.done`) }}
+                        </button>
                     </div>
                 </template>
             </Row>

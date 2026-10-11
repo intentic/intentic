@@ -149,7 +149,7 @@ const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, va
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
 const { applyHostPreset, applyRegistryPick, pickForticlient, auditable, updateFrom, submitLabel, keptSecrets } = form;
-const { probing, canProbe, runProbe } = useCapabilityProbe({ selected, form, error });
+const { probing, canProbe, runProbe, failure: probeFailure } = useCapabilityProbe({ selected, form });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
 
@@ -158,7 +158,7 @@ const { profileVisible, profileCapability, profileLabel, profileMode, openBrowse
 const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
 const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, onPhoneConnected } = pairing;
-const { submit, submitting } = useCapabilitySubmit({
+const { submit, submitting, failure: saveFailure } = useCapabilitySubmit({
     selected,
     editing,
     capabilities,
@@ -171,13 +171,16 @@ const { submit, submitting } = useCapabilitySubmit({
     ownsSandbox: useRole().isOwner,
 });
 
-const actions = useConnectionActions({ remove, rename, refetchFleet, error });
+const actions = useConnectionActions({ remove, rename, refetchFleet });
 const { confirmRemoveId, confirmRemove, renameId, renameError, askRename, confirmRename, disconnecting, disconnectingDevice } = actions;
-const { confirmDisconnectDevice } = actions;
+const { confirmDisconnectDevice, removing, renaming } = actions;
 
 const topError = computed<NoticeModel | undefined>(() => {
-    if (error.value !== null) {
-        return error.value;
+    // What this page refused itself first, then the tile's save and test, then a connection's removal: each kept in the
+    // operations ledger, so a reader who left while one ran comes back to how it went.
+    const refused = error.value ?? saveFailure.value ?? probeFailure.value ?? actions.failure.value;
+    if (refused !== null && refused !== undefined) {
+        return refused;
     }
     if (listError.value === undefined) {
         return undefined;
@@ -504,6 +507,8 @@ onBeforeUnmount(() => {
                                     v-else-if="generatesKey(selected, field, values)"
                                     :field="field"
                                     :values="values"
+                                    :entry="selected.id"
+                                    :connection="editing?.id"
                                     :stored="keptSecrets.has(field.key)"
                                     :alarm="fieldAlarm(field)"
                                     @left="finishField(field)"
@@ -752,7 +757,7 @@ onBeforeUnmount(() => {
                 :header="t(`capabilities.capabilities.removeCapability`)"
                 :confirm-label="t(`ui.action.remove`)"
                 confirm-icon="trash"
-                :loading="remove.isPending.value"
+                :loading="removing"
                 @cancel="confirmRemoveId = undefined"
                 @confirm="confirmRemove"
             >
@@ -782,7 +787,7 @@ onBeforeUnmount(() => {
             <CapabilityRenameDialog
                 :visible="renameId !== undefined"
                 :id="renameId ?? ''"
-                :busy="rename.isPending.value"
+                :busy="renaming"
                 :error="renameError"
                 @update:visible="renameId = undefined"
                 @rename="confirmRename"

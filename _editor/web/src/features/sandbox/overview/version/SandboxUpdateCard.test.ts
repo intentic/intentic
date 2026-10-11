@@ -56,7 +56,19 @@ jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet:
 type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
 const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
-jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
+// The platform's restart, held back by a test that leaves it running while the card closes and opens again.
+let hostedAnswer: Promise<undefined> | undefined;
+const hostedRestarts: string[] = [];
+jest.mock(`../../../../lib/useApi`, () => ({
+    apiClient: {
+        sandbox: {
+            hostedRestart: ({ sandboxId }: { sandboxId: string }) => {
+                hostedRestarts.push(sandboxId);
+                return hostedAnswer ?? Promise.resolve(undefined);
+            },
+        },
+    },
+}));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own. It
 // draws what the card lays in its row (`beside`), and a press on its own fold stands in for the command it would open.
 jest.mock(`../../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
@@ -91,6 +103,8 @@ jest.mock(`./HostedRollbackDialog.vue`, () => ({
 }));
 
 const { default: SandboxUpdateCard } = await import("./SandboxUpdateCard.vue");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
+const { forgetRestarts } = await import("../../live/sandboxRestart");
 
 const HOUR = 60 * 60_000;
 const outcome = (over: Partial<UpdateOutcome> & Pick<UpdateOutcome, `result`>): UpdateOutcome => ({
@@ -139,6 +153,10 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    hostedAnswer = undefined;
+    hostedRestarts.length = 0;
+    forgetOperations();
+    forgetRestarts();
 });
 
 it(`offers the published update on a sandbox that follows the registry, in gold, with nothing beside it to download first`, () => {
@@ -240,6 +258,26 @@ it(`offers an update before developer notes, and names and folds those notes rat
     expect(el.textContent).not.toContain(`changes how things work`);
     expect(el.querySelector(`.text-danger`)).toBeNull();
     expect([...el.querySelectorAll(`button`)].map((button) => button.textContent).join(` `)).not.toContain(`I've read what changes`);
+});
+
+// The half minute the sandbox is down is also when the reader wanders: the card opened again then holds its button,
+// so a second press can't ask the platform twice.
+it(`holds the hosted restart across the card closing and opening again`, async () => {
+    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    let finish: () => void = () => {};
+    hostedAnswer = new Promise<undefined>((resolve) => (finish = () => resolve(undefined)));
+    let el = mount();
+    await press(el, `Restart and update`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    el = mount();
+    await nextTick();
+    const button = [...el.querySelectorAll(`button`)].find((node) => node.textContent?.trim() === `Restart and update`);
+    expect(button?.getAttribute(`data-p-disabled`)).toBe(`true`);
+    button?.click();
+    expect(hostedRestarts).toEqual([`sb1`]);
+    finish();
 });
 
 it(`offers a hosted sandbox its update as the platform's restart, in the same gold`, async () => {

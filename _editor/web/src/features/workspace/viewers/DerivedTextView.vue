@@ -5,6 +5,7 @@ import { computed, ref, watch } from "vue";
 import { changeEpochOf, derivedEpochOf } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
+import { useOperation } from "../../../workbench/operations/operations";
 import ConversionNotes from "./ConversionNotes.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -18,9 +19,17 @@ const emit = defineEmits<{ download: [] }>();
 
 const shadow = ref<WorkspaceDerived | undefined>(undefined);
 const loading = ref(false);
-// Split from `loading`: one is the file opening, the other is work this reader asked for and is waiting on.
-const deriving = ref(false);
-const error = ref<string | null>(null);
+// Split from `loading`: one is the file opening, the other is work this reader asked for and is waiting on. Kept in
+// the operations ledger under the file, not this pane: a rendering runs in a child process for as long as it takes,
+// and a pane closed and opened again over it finds it still under way, or the reason it failed, where that reason
+// used to go with the pane (the file's next open asks only once per version, so it was never said again).
+const rendering = useOperation<WorkspaceDerived>(() => `workspace/derived/${path}`);
+const deriving = rendering.busy;
+const readError = ref<string | null>(null);
+const error = computed(() => {
+    const failed = rendering.failure.value;
+    return readError.value ?? (failed === undefined ? null : (failed.detail ?? failed.title));
+});
 
 /* HOW LONG THIS HAS BEEN GOING. A derivation runs in a child process this pane cannot see into, so there is no
    progress to report — only elapsed time, which is the one thing that distinguishes working from hung. */
@@ -42,6 +51,20 @@ const stopClock = (): void => {
     }
 };
 
+// A rendering is timed from when it was asked for, which may be before this pane opened over it.
+watch(
+    deriving,
+    (on) => {
+        if (on) {
+            busySince.value = rendering.operation.value?.startedAt ?? Date.now();
+            ticking.value = true;
+        } else {
+            stopClock();
+        }
+    },
+    { immediate: true },
+);
+
 // Never below zero: the shared clock may not have ticked since this wait began.
 const waitedMs = computed(() => (busySince.value === 0 ? 0 : Math.max(0, now.value - busySince.value)));
 const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(waitedMs.value / 1000)));
@@ -58,28 +81,24 @@ const settle = (isLatest: () => boolean, result: WorkspaceDerived): void => {
         return;
     }
     shadow.value = result;
-    error.value = null;
+    readError.value = null;
 };
 
 const derive = (target: string): void => {
     const isLatest = latest();
-    deriving.value = true;
-    startClock();
-    deriveText(target).then(
-        (result) => {
-            settle(isLatest, result);
-            deriving.value = false;
-            stopClock();
-        },
-        (err: unknown) => {
-            if (!isLatest()) {
-                return;
+    void rendering
+        .run({
+            what: t(`workspace.derivedTextView.rendering`, { name: target.split(`/`).at(-1) ?? target }),
+            failed: t(`workspace.derivedTextView.renderFailed`),
+            // Asked for by opening the file, so its end is the pane's to show: the text, or why there is none.
+            quiet: true,
+            task: () => deriveText(target),
+        })
+        .then((outcome) => {
+            if (outcome?.state === `done` && outcome.value !== undefined) {
+                settle(isLatest, outcome.value);
             }
-            deriving.value = false;
-            stopClock();
-            error.value = messageOr(err, t(`workspace.derivedTextView.renderFailed`));
-        },
-    );
+        });
 };
 
 // A reader looking at this pane has already asked for this file's text; a button asking them to confirm it is a step,
@@ -117,7 +136,7 @@ const load = (target: string): void => {
             }
             loading.value = false;
             stopClock();
-            error.value = messageOr(err, t(`workspace.derivedTextView.readFailed`));
+            readError.value = messageOr(err, t(`workspace.derivedTextView.readFailed`));
         },
     );
 };

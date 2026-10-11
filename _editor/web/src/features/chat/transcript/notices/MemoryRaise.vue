@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { SandboxResourcesDialog } from "@intentic/ui";
-import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { engineMemoryGib, type ResourcesForm } from "@intentic/ui/sandbox-resources";
 import { computed, ref } from "vue";
@@ -23,16 +22,15 @@ const suggestedGib = computed(() => {
 const offered = computed(() => selfResources.reshapable.value && suggestedGib.value !== undefined);
 
 const resizing = ref(false);
-const failed = ref<string | undefined>();
 // The sandbox recreates under this page, so the reconnect is the answer; only a refusal the machine sent is a sentence.
+// The reshape is one run for this sandbox whichever surface started it, so the Overview's refusal is said here too.
+const failed = computed(() => {
+    const failure = selfResources.failure.value;
+    return failure === undefined ? undefined : (failure.detail ?? failure.title);
+});
 const apply = async (resources: ResourcesForm): Promise<void> => {
     resizing.value = false;
-    failed.value = undefined;
-    try {
-        await selfResources.apply(resources);
-    } catch (refusal) {
-        failed.value = messageOr(refusal, t(`chat.memoryRaise.didntWork`));
-    }
+    await selfResources.apply(resources);
 };
 </script>
 

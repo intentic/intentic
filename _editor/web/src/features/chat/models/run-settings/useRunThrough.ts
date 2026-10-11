@@ -1,6 +1,6 @@
 import type { IconName, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { messageOr } from "@intentic/ui/async";
+import type { NoticeModel } from "@intentic/ui/async";
 import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -8,6 +8,7 @@ import { useAgents } from "../../../agents/fleet/useAgents";
 import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
 import { startLoop, stopLoop } from "../../../agents/fleet/useLoops";
 import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
+import { useOperations } from "../../../../workbench/operations/operations";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import type { Conversation } from "../../session/conversation";
 import { openRunInChat } from "../../run/openRun";
@@ -68,8 +69,8 @@ export interface RunThrough {
     readonly loop: ComputedRef<LoopDesign | undefined>;
     /** The live loop behind a running badge, its round count. */
     readonly running: ComputedRef<{ readonly iteration: number; readonly maxIterations: number } | undefined>;
-    readonly workflowFailure: Ref<string | undefined>;
-    readonly loopFailure: Ref<string | undefined>;
+    readonly workflowFailure: ComputedRef<string | undefined>;
+    readonly loopFailure: ComputedRef<string | undefined>;
     readonly pickLoop: (design: LoopDesign | undefined) => void;
     readonly pickWorkflow: (workflow: Workflow | undefined) => void;
     /** The way out to the page that owns saved loops and saved workflows. */
@@ -99,8 +100,28 @@ export const useRunThrough = (
     const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
 
     const open = ref(false);
-    const workflowFailure = ref<string>();
-    const loopFailure = ref<string>();
+    // Starting a workflow, starting a loop and stopping one, kept with the conversation rather than this pane: a stop
+    // the daemon refused leaves a loop spending money unattended, which closing the pane must not silence, and a start
+    // still in the air must not be pressed into a second run by the pane drawn after it.
+    const work = useOperations(() => `chat/${conversation.value.conversationId}/run-through`);
+    // The cause in its own words where it gave some, else the app's sentence: the line under the box has room for one.
+    const said = (failure: NoticeModel | undefined): string | undefined => failure && (failure.detail ?? failure.title);
+    const workflowFailure = computed(() => said(work.at(`workflow`)?.failure));
+    // A loop's start and its stop answer on the same line; whichever ended last is the one still true.
+    const loopFailure = computed(() =>
+        said(
+            [`loop`, `stop`]
+                .flatMap((act) => work.at(act) ?? [])
+                .toSorted((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))[0]?.failure,
+        ),
+    );
+    const clearFailures = (...acts: readonly string[]): void => {
+        for (const act of acts) {
+            if (work.at(act)?.state === `failed`) {
+                work.dismiss(act);
+            }
+        }
+    };
 
     // Read off the fleet entry rather than asked separately: whether this agent is isolated (a loop can't change that
     // mid-flight), and whether a loop is already running (the daemon refuses a second).
@@ -126,30 +147,39 @@ export const useRunThrough = (
     // Sends the draft as the run's request; cleared on success, kept on failure so the message isn't lost. The started
     // run takes the screen (openRunInChat), same as the board's card.
     const sendThroughWorkflow = async (design: Workflow): Promise<void> => {
-        workflowFailure.value = undefined;
+        clearFailures(`workflow`);
+        const chat = conversation.value;
         const request = composer.draft.value.trim();
-        try {
-            const run = await startWorkflow.mutateAsync({ id: design.id, ...(request === `` ? {} : { request }) });
-            composer.draft.value = ``;
-            conversation.value.workflowId.value = undefined;
-            await openRunInChat(run);
-        } catch (error) {
-            workflowFailure.value = error instanceof Error ? error.message : t(`chat.runThrough.workflowNotStarted`);
-        }
+        await work.run(`workflow`, {
+            what: t(`chat.runThrough.startingWorkflow`, { name: design.name }),
+            failed: t(`chat.runThrough.workflowNotStarted`),
+            done: () => t(`chat.runThrough.workflowStarted`, { name: design.name }),
+            task: async () => {
+                const run = await startWorkflow.mutateAsync({ id: design.id, ...(request === `` ? {} : { request }) });
+                chat.draft.value = ``;
+                chat.workflowId.value = undefined;
+                await openRunInChat(run);
+            },
+        });
     };
 
     // Starts the armed loop with the draft as its goal, clearing the badge too: a loop spends money every round
     // unattended, so a badge that survived its own start would silently loop the next message too.
     const sendThroughLoop = async (design: LoopDesign): Promise<void> => {
-        loopFailure.value = undefined;
+        clearFailures(`loop`, `stop`);
+        const chat = conversation.value;
         const goal = composer.draft.value.trim();
-        try {
-            await startLoop(loopFromDesign(design, { conversationId: conversation.value.conversationId, goal, isolated: isolated.value }));
-            composer.draft.value = ``;
-            conversation.value.loopId.value = undefined;
-        } catch (error) {
-            loopFailure.value = error instanceof Error ? error.message : t(`chat.runThrough.loopNotStarted`);
-        }
+        const loopOf = loopFromDesign(design, { conversationId: chat.conversationId, goal, isolated: isolated.value });
+        await work.run(`loop`, {
+            what: t(`chat.runThrough.startingLoop`, { name: design.name }),
+            failed: t(`chat.runThrough.loopNotStarted`),
+            done: () => t(`chat.runThrough.loopStarted`, { name: design.name }),
+            task: async () => {
+                await startLoop(loopOf);
+                chat.draft.value = ``;
+                chat.loopId.value = undefined;
+            },
+        });
     };
 
     return {
@@ -167,7 +197,7 @@ export const useRunThrough = (
         // A pick replaces a pick, in both directions: holding both ids at once is never a reachable state.
         pickLoop: (design: LoopDesign | undefined): void => {
             open.value = false;
-            loopFailure.value = undefined;
+            clearFailures(`loop`, `stop`);
             conversation.value.loopId.value = design?.id;
             if (design !== undefined) {
                 conversation.value.workflowId.value = undefined;
@@ -175,7 +205,7 @@ export const useRunThrough = (
         },
         pickWorkflow: (design: Workflow | undefined): void => {
             open.value = false;
-            workflowFailure.value = undefined;
+            clearFailures(`workflow`);
             conversation.value.workflowId.value = design?.id;
             if (design !== undefined) {
                 conversation.value.loopId.value = undefined;
@@ -192,20 +222,22 @@ export const useRunThrough = (
                 return;
             }
             // Stops the loop, not the turn: the running iteration finishes and lands before it stops. A refused stop leaves
-            // it spending unattended, so it is said under the box rather than dropped.
-            loopFailure.value = undefined;
-            await stopLoop(conversation.value.conversationId).catch((error: unknown) => {
-                loopFailure.value = messageOr(error, t(`chat.runThrough.loopNotStopped`));
+            // it spending unattended, so it is said under the box rather than dropped, and raised wherever the reader is
+            // when the pane was closed before the answer came.
+            clearFailures(`loop`, `stop`);
+            const conversationId = conversation.value.conversationId;
+            await work.run(`stop`, {
+                what: t(`chat.runThrough.stoppingLoop`),
+                failed: t(`chat.runThrough.loopNotStopped`),
+                done: () => t(`chat.runThrough.loopStopped`),
+                task: () => stopLoop(conversationId),
             });
         },
         clear: (): void => {
             conversation.value.workflowId.value = undefined;
             conversation.value.loopId.value = undefined;
         },
-        clearFailures: (): void => {
-            workflowFailure.value = undefined;
-            loopFailure.value = undefined;
-        },
+        clearFailures: (): void => clearFailures(`workflow`, `loop`, `stop`),
         // Intercepts send ahead of the composer's own gates, since the message goes elsewhere (a workflow graph, a
         // loop).
         // A loop needs `composer.staged` as its goal; checked after the workflow since the two are never armed

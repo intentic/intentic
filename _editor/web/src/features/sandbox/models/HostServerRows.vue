@@ -2,9 +2,10 @@
 import type { HostModelServer } from "@intentic/sandbox-contract";
 import { Button, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 
@@ -21,8 +22,17 @@ const { capabilities, add } = useCapabilities();
 const offered = computed(() => (query.data.value?.servers ?? []).filter((server) => server.capability === undefined));
 const answered = computed(() => query.data.value !== undefined);
 
-const busy = ref<string | undefined>(undefined);
-const failure = ref<{ server: string; message: string } | undefined>(undefined);
+// Kept in the operations ledger rather than here: this list sits in a panel the reader can leave while the endpoint is
+// written and checked, and coming back has to show it under way, or why it failed, under the server it was for. One at a
+// time, tagged with the server's address.
+const using = useOperation(`models/host-server/use`);
+const busy = computed(() => (using.busy.value ? using.operation.value?.tag : undefined));
+const failure = computed(() => {
+    const operation = using.operation.value;
+    return operation?.failure === undefined || operation.tag === undefined
+        ? undefined
+        : { server: operation.tag, message: operation.failure.detail ?? operation.failure.title };
+});
 
 // The connection's name: the program's, numbered only when taken (a second Ollama elsewhere, say).
 const nameFor = (server: HostModelServer): string => {
@@ -44,17 +54,21 @@ const modelsLine = (server: HostModelServer): string => {
     return more > 0 ? t(`connect.hostServers.modelsAndMore`, { models: shown, count: more }) : shown;
 };
 
+// The row leaves the list once added (it is listed above as a connection), so the end shows itself: no receipt.
 const use = async (server: HostModelServer): Promise<void> => {
-    busy.value = server.baseUrl;
-    failure.value = undefined;
-    try {
-        await add({ id: nameFor(server), kind: `endpoint`, config: { baseUrl: server.baseUrl, protocol: `openai` } });
-        await query.refetch();
-    } catch (error) {
-        failure.value = { server: server.baseUrl, message: error instanceof Error ? error.message : String(error) };
-    } finally {
-        busy.value = undefined;
+    if (busy.value !== undefined) {
+        return;
     }
+    await using.run({
+        what: t(`connect.hostServers.adding`, { server: server.label }),
+        tag: server.baseUrl,
+        quiet: true,
+        failed: t(`connect.hostServers.couldntAdd`, { server: server.label }),
+        task: async () => {
+            await add({ id: nameFor(server), kind: `endpoint`, config: { baseUrl: server.baseUrl, protocol: `openai` } });
+            await query.refetch();
+        },
+    });
 };
 </script>
 

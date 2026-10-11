@@ -54,6 +54,16 @@ flowchart LR
   edge serves one (`features/terminal/channel/`). Each of them, and a connected account's browser window, rides one
   live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
   ladder that starts over when the sandbox answers again.
+- **Work a person starts outlives the view that started it.** Adding a runner on a laptop, cloning a repo, landing an
+  agent or moving a hosted plan keeps running on the server whatever the reader opens next. So its state (running or
+  not, the lines it streamed, the answer, the refusal) is kept in the operations ledger
+  (`workbench/operations/operations.ts`), keyed by what the work is about and stamped with the sandbox it began on
+  (a key under `account/`, such as a plan change, is filed once for every sandbox), never in the component. Any view naming the same key reads the same run, so the page the reader comes back to still
+  shows the build going and keeps its button held. An outcome read where it ended goes when that view closes, as it
+  always did. One that ended while nobody watched raises a receipt with a way back, and waits in its view until it has
+  been seen. A view inside a hub also marks that hub's row while the work runs. `useAsyncAction()` and
+  `useConcurrentActions()` keep their state per caller, so `viewWork.guard.test.ts` refuses them anywhere they would
+  die with a view. Questions (a confirm dialog, a form's inputs) stay the view's own.
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
   bounded probes of the sandbox's address (netd's own `/system/vitals`, which answers whatever state Node is in,
   plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
@@ -265,7 +275,7 @@ registers or hands it in at startup (`main.ts`).
 | `design-system/` | Suites for `@intentic/ui` components and composables, run in this app |
 | `client/` | The editor's clients of what it talks to: the platform account (`auth/`), and the sandbox daemon's session, endpoint, typed RPC and queries (`session/`, `endpoint/`, `sandbox/`), and the device's remembered sandboxes (`directory/`) |
 | `components/` | App-specific components not shared through [ui](../ui) that know no feature |
-| `workbench/` | The services and registries features are written against, one unit per directory: window layout, commands and keybindings, notifications, presence, the hub, the side panel's tabs, the browser tab's chimes, web and native push, workspace events, and the view, viewer and document registries (`views/`) |
+| `workbench/` | The services and registries features are written against, one unit per directory: window layout, commands and keybindings, notifications, the operations ledger, presence, the hub, the side panel's tabs, the browser tab's chimes, web and native push, workspace events, and the view, viewer and document registries (`views/`) |
 | `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup ([setup](src/features/setup/README.md)), settings |
 | `shell/` | Workspace chrome that composes the features: desktop rail, mobile tab bar, the command palette and the commands that name features, the floating and popped-out panels, notification sources, the side panel |
 | `core-views/` | Rail views that stay in-app, and the frames that host an extension's view |

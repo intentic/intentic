@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, ui, Notice } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, getCurrentInstance, onBeforeUnmount, ref } from "vue";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { devFillGet } from "../../../setup/devFill";
 import { useCapabilitySecret } from "../useCapabilities";
 import { useSecrets } from "./useSecrets";
@@ -47,22 +47,39 @@ if (value.value === ``) {
 const { set } = useSecrets();
 const setCapabilitySecret = useCapabilitySecret();
 const show = ref(false);
-const { busy: saving, notice, run } = useAsyncAction();
+// The write is the secret's, in the operations ledger: a field drawn again mid-write finds its Save still held, and one
+// drawn after a refusal still says why. The value itself stays in this field and goes nowhere else.
+const write = useOperation(() => `secrets/${props.capabilityId ?? `env`}/${props.secretKey}`);
+const saving = write.busy;
+const notice = write.failure;
 const canSave = computed(() => !props.disabled && value.value.trim().length > 0);
+let showing = getCurrentInstance() !== null;
+onBeforeUnmount(() => {
+    showing = false;
+});
 
 const save = async (): Promise<void> => {
-    if (!canSave.value || props.collect) {
+    if (!canSave.value || props.collect || saving.value) {
         return;
     }
-    await run(async () => {
-        if (props.capabilityId !== undefined) {
-            await setCapabilitySecret.mutateAsync({ id: props.capabilityId, value: value.value.trim() });
-        } else {
-            await set.mutateAsync({ key: props.secretKey, value: value.value.trim() });
-        }
+    const given = value.value.trim();
+    const { capabilityId, secretKey } = props;
+    write.dismiss();
+    const ended = await write.run({
+        what: t(`capabilities.secretField.saving`, { secretKey }),
+        failed: t(`capabilities.secretField.couldNotSave`),
+        task: async () => {
+            if (capabilityId !== undefined) {
+                await setCapabilitySecret.mutateAsync({ id: capabilityId, value: given });
+            } else {
+                await set.mutateAsync({ key: secretKey, value: given });
+            }
+        },
+    });
+    if (ended?.state === `done` && showing) {
         value.value = ``;
         emit(`saved`);
-    }, t(`capabilities.secretField.couldNotSave`));
+    }
 };
 
 // In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.

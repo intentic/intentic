@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract";
 import { formatElapsed, type IconName, ui } from "@intentic/ui";
-import { messageOr, useNow } from "@intentic/ui/async";
+import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { portTargetId } from "../../../preview/previewModel";
 import { openPreviewBeside } from "../../../../workbench/browsers/browsersSurface";
+import { useOperations } from "../../../../workbench/operations/operations";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
@@ -94,29 +95,34 @@ const rows = computed((): readonly Row[] => [
     })),
 ]);
 
-// One press at a time per row; a refusal is said under the card, since the row it came from may be gone by then.
-const pressing = ref<string>();
-const refused = ref<string>();
-const press = async (key: string, act: () => Promise<void>): Promise<void> => {
-    pressing.value = key;
-    refused.value = undefined;
-    try {
-        await act();
-    } catch (error) {
-        refused.value = messageOr(error, t(`chat.chatLeftRunning.stopFailed`));
-    } finally {
-        pressing.value = undefined;
-    }
+// One press at a time per row, kept with the conversation rather than this card, which goes whenever a turn starts or
+// the pane closes: a stop still out is still held when the card is drawn again, and a refusal (which leaves the thing
+// running) is still said. Said under the card, since the row it came from may be gone by then; only the latest press
+// speaks there, as a fresh press used to clear the last one's refusal. A watch's row in the transcript (NoticeWatchStop)
+// files its stop under the same key, so the two surfaces hold one press between them.
+const stops = useOperations(() => `chat/${conversation.value.conversationId}/stops`);
+const pressing = (key: string): boolean => stops.at(key)?.state === `running`;
+const refused = computed(() => {
+    const last = stops.all.value.toSorted((a, b) => b.order - a.order)[0];
+    return last?.state === `failed` && last.failure !== undefined ? (last.failure.detail ?? last.failure.title) : undefined;
+});
+const press = (row: Row, act: () => Promise<void>): void => {
+    void stops.run(row.key, {
+        what: t(`chat.chatLeftRunning.stoppingRow`, { label: row.label }),
+        failed: t(`chat.chatLeftRunning.stopFailed`),
+        done: () => t(`chat.chatLeftRunning.stoppedRow`, { label: row.label }),
+        task: act,
+    });
 };
 
-const id = (): string => conversation.value.conversationId;
 const stop = (row: Row): void => {
+    const id = conversation.value.conversationId;
     if (row.job !== undefined) {
         const jobId = row.job.id;
-        void press(row.key, () => stopJob(id(), jobId));
+        press(row, () => stopJob(id, jobId));
     } else if (row.watch !== undefined) {
         const watchId = row.watch.id;
-        void press(row.key, () => stopWatching(id(), watchId));
+        press(row, () => stopWatching(id, watchId));
     }
 };
 
@@ -171,7 +177,7 @@ const preview = (job: AgentJob): void => {
                     v-if="row.job?.stoppedBy === undefined"
                     type="button"
                     :class="ui.textButton({ tone: `quiet`, size: `xs` })"
-                    :disabled="!reachable || pressing === row.key"
+                    :disabled="!reachable || pressing(row.key)"
                     v-tooltip.top="{
                         title: row.watch !== undefined ? t(`chat.chatLeftRunning.disarm`) : t(`chat.chatLeftRunning.endNow`),
                         note: t(`chat.chatLeftRunning.chatWontWake`),

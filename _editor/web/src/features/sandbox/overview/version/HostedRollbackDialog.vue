@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
 import { ConfirmDialog, Notice } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { rollBackHosted } from "./hostedRollback";
+import { useOperation } from "../../../../workbench/operations/operations";
 
 // The one question before a hosted sandbox goes back to the version it ran before its last update, asked wherever that
 // is offered: the update card, the sandbox switcher and the panel shown while the sandbox is down. Open while
@@ -16,19 +16,33 @@ const { sandbox } = defineProps<{ sandbox: SandboxSummary | undefined }>();
 const emit = defineEmits<{ close: [] }>();
 
 const { refresh } = useSandbox();
-const { busy, notice, run } = useAsyncAction();
+// Per sandbox gone back, since the switcher offers it for any of them: the dialog opened again on the same one while
+// the ask is out holds its button, and a refusal is still there to read.
+const rollback = useOperation(() => `sandbox/hosted-rollback/${sandbox?.id ?? `none`}`);
+const busy = rollback.busy;
+const notice = rollback.failure;
 
-const confirm = (): Promise<void> =>
-    run(async () => {
-        const target = sandbox;
-        if (target === undefined) {
-            return;
-        }
-        await rollBackHosted(target.id);
+const confirm = async (): Promise<void> => {
+    const target = sandbox;
+    if (target === undefined || busy.value) {
+        return;
+    }
+    const outcome = await rollback.run({
+        what: t(`capabilities.hostRecreate.rollingSandboxBack`),
+        failed: t(`sandbox.hostedRollback.couldntRollBack`),
+        // Its end is the sandbox restarting onto the older image, which says so by itself.
+        quiet: true,
+        task: async () => {
+            await rollBackHosted(target.id);
+            // The row says whether there is anything left to go back to; read it again rather than guess. Not waited
+            // on, and its own failure is not the rollback's: the dialog closes on the platform's yes.
+            void refresh().catch(() => undefined);
+        },
+    });
+    if (outcome?.state === `done`) {
         emit(`close`);
-        // The row says whether there is anything left to go back to; read it again rather than guess.
-        await refresh();
-    }, t(`sandbox.hostedRollback.couldntRollBack`));
+    }
+};
 </script>
 
 <template>

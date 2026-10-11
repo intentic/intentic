@@ -7,7 +7,7 @@ import {
     type ModelRef,
     reportsPlanLimits,
 } from "@intentic/sandbox-contract";
-import { computed, type Ref, ref } from "vue";
+import { computed, type Ref } from "vue";
 import { providerDisplayLabel } from "./providerCatalog";
 import { providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
@@ -27,6 +27,7 @@ import {
     routedAccountFacts,
 } from "../session/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
+import { useOperation } from "../../../workbench/operations/operations";
 import { t } from "@intentic/ui/i18n";
 import { timeAgo } from "@intentic/ui/format";
 
@@ -95,6 +96,23 @@ export const matchAccounts = <T extends { readonly label: string; readonly subti
 ): readonly T[] => {
     const needle = query.trim().toLowerCase();
     return needle === `` ? rows : rows.filter((row) => `${row.label} ${row.subtitle ?? ``}`.toLowerCase().includes(needle));
+};
+
+// The forced re-read a person presses, in the picker's header or on the capacity rail: past the daemon's minute-long
+// cache, over every connection rather than one provider's. Held across both and across their closing, since the read
+// goes on with the popover that pressed it shut, and its numbers land in the shared readings whoever is open then.
+export const useRemeasure = () => {
+    const measure = useOperation(() => `chat/accounts/remeasure`);
+    const remeasure = async (): Promise<void> => {
+        await measure.run({
+            what: t(`chat.pickerAccounts.measuringPlanLimits`),
+            failed: t(`chat.pickerAccounts.measureFailed`),
+            // A read: what it finds shows on every ring, and a reading it could not take is said on its own row.
+            quiet: true,
+            task: () => refreshConnections(true),
+        });
+    };
+    return { measuring: measure.busy, remeasure };
 };
 
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
@@ -202,23 +220,13 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         oldestMovableReading([...accountRows.value, ...routedRows.value].flatMap((row) => (row.headroom === undefined ? [] : [row.headroom]))),
     );
 
-    // Forced, so it bypasses the daemon's minute-long cache; covers every connection, not just this
-    // provider's.
-    const measuring = ref(false);
+    const { measuring, remeasure } = useRemeasure();
     // Carries the age too, so a screen-reader user gets the same "worth pressing" signal as the visible label.
     const remeasureLabel = computed(() =>
         measuredAt.value === undefined
             ? t(`chat.pickerAccounts.measurePlanLimits`)
             : t(`chat.pickerAccounts.remeasurePlanLimits`, { age: formatAge(measuredAt.value) }),
     );
-    const remeasure = async (): Promise<void> => {
-        measuring.value = true;
-        try {
-            await refreshConnections(true);
-        } finally {
-            measuring.value = false;
-        }
-    };
 
     // Whether this block draws at all; a single account isn't a list, but a refusal earns it alone.
     const hasContent = computed(

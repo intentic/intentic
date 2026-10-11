@@ -1,9 +1,9 @@
 // Pins what a row confirms before it acts: a removal and a disconnect close their dialog whether or not the daemon took
 // them (the refusal goes to the page's notice), a rename stays open on its own refusal, and a disconnect re-reads the
-// device list either way.
+// device list either way. Each act is the connection's, in the operations ledger, so a page opened again mid-act finds
+// it still running.
 import "@intentic/testing/dom";
-import type { NoticeModel } from "@intentic/ui";
-import { effectScope, type EffectScope, ref } from "vue";
+import { effectScope, type EffectScope } from "vue";
 import * as actualUseDevices from "../sandbox/devices/useDevices";
 import type { DeviceConnection } from "./model/deviceConnections";
 
@@ -14,6 +14,7 @@ const realUseDevices = { ...actualUseDevices };
 jest.mock(`../sandbox/devices/useDevices`, () => ({ ...realUseDevices, revokeSyncDevice }));
 
 const { useConnectionActions } = await import("./connectionActions");
+const { forgetOperations } = await import("../../workbench/operations/operations");
 
 const ROG: DeviceConnection = {
     id: `device:rog`,
@@ -33,6 +34,7 @@ afterEach(() => {
         scope.stop();
     }
     revokeSyncDevice.mockReset();
+    forgetOperations();
 });
 
 const actionsOn = () => {
@@ -40,11 +42,10 @@ const actionsOn = () => {
         remove: { mutateAsync: jest.fn<(id: string) => Promise<unknown>>(async () => undefined) },
         rename: { mutateAsync: jest.fn<(input: { id: string; to: string }) => Promise<unknown>>(async () => undefined) },
         refetchFleet: jest.fn(),
-        error: ref<NoticeModel | null>({ tone: `danger`, title: `an older failure` }),
     };
     const scope = effectScope();
     scopes.push(scope);
-    return { state, actions: scope.run(() => useConnectionActions(state))! };
+    return { state, scope, actions: scope.run(() => useConnectionActions(state))! };
 };
 
 describe(`removing a connection`, () => {
@@ -62,7 +63,7 @@ describe(`removing a connection`, () => {
         await actions.confirmRemove();
         expect(state.remove.mutateAsync.mock.calls).toEqual([[`office`]]);
         expect(actions.confirmRemoveId.value).toBeUndefined();
-        expect(state.error.value).toBeNull();
+        expect(actions.failure.value).toBeUndefined();
     });
 
     it(`closes on a refusal too, saying why on the page`, async () => {
@@ -72,19 +73,42 @@ describe(`removing a connection`, () => {
 
         await actions.confirmRemove();
         expect(actions.confirmRemoveId.value).toBeUndefined();
-        expect(state.error.value).toEqual({ tone: `danger`, title: `Could not remove the capability.`, detail: `in use by a running turn` });
+        expect(actions.failure.value).toEqual({ tone: `danger`, title: `Could not remove the capability.`, detail: `in use by a running turn` });
+    });
+
+    it(`is still removing on a page opened again mid-removal, and refuses to send it twice`, async () => {
+        const first = actionsOn();
+        let done: () => void = () => undefined;
+        first.state.remove.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => (done = () => resolve(undefined))));
+        first.actions.confirmRemoveId.value = `office`;
+        const pending = first.actions.confirmRemove();
+        first.scope.stop();
+
+        const again = actionsOn();
+        again.actions.confirmRemoveId.value = `office`;
+        expect(again.actions.removing.value).toBe(true);
+        await again.actions.confirmRemove();
+        expect(again.state.remove.mutateAsync.mock.calls).toEqual([]);
+        done();
+        await pending;
+        expect(again.actions.removing.value).toBe(false);
     });
 });
 
 describe(`renaming a connection`, () => {
     it(`opens on a clean slate, renames, and closes`, async () => {
         const { state, actions } = actionsOn();
-        actions.renameError.value = { tone: `danger`, title: `Could not rename that connection.` };
+        state.rename.mutateAsync.mockRejectedValueOnce(new Error(`hq is taken`));
+        actions.askRename(`office`);
+        await actions.confirmRename(`hq`);
+        actions.renameId.value = undefined;
 
         actions.askRename(`office`);
-        expect([actions.renameId.value, actions.renameError.value]).toEqual([`office`, undefined]);
+        // Widened: the assignment above narrows the ref's value for the compiler, which cannot see askRename write it.
+        expect(actions.renameId.value as string | undefined).toBe(`office`);
+        expect(actions.renameError.value).toBeUndefined();
         await actions.confirmRename(`hq`);
-        expect([state.rename.mutateAsync.mock.calls, actions.renameId.value]).toEqual([[[{ id: `office`, to: `hq` }]], undefined]);
+        expect([state.rename.mutateAsync.mock.calls.at(-1), actions.renameId.value]).toEqual([[{ id: `office`, to: `hq` }], undefined]);
     });
 
     it(`stays open with the refusal beside the name still in the field`, async () => {
@@ -95,6 +119,8 @@ describe(`renaming a connection`, () => {
         await actions.confirmRename(`hq`);
         expect(actions.renameId.value).toBe(`office`);
         expect(actions.renameError.value).toEqual({ tone: `danger`, title: `Could not rename that connection.`, detail: `hq is taken` });
+        // The dialog's own refusal, not the page's.
+        expect(actions.failure.value).toBeUndefined();
     });
 
     it(`does nothing with no connection being renamed`, async () => {
@@ -113,7 +139,7 @@ describe(`disconnecting a machine that only syncs`, () => {
         actions.disconnecting.value = ROG;
 
         const pending = actions.confirmDisconnectDevice();
-        expect([actions.disconnectingDevice.value, state.error.value, revokeSyncDevice.mock.calls]).toEqual([true, null, [[`rog`]]]);
+        expect([actions.disconnectingDevice.value, revokeSyncDevice.mock.calls]).toEqual([true, [[`rog`]]]);
         done();
         await pending;
 
@@ -127,7 +153,7 @@ describe(`disconnecting a machine that only syncs`, () => {
         actions.disconnecting.value = ROG;
 
         await actions.confirmDisconnectDevice();
-        expect(state.error.value).toEqual({ tone: `danger`, title: `Could not disconnect that machine.`, detail: `owner only` });
+        expect(actions.failure.value).toEqual({ tone: `danger`, title: `Could not disconnect that machine.`, detail: `owner only` });
         expect([actions.disconnectingDevice.value, state.refetchFleet.mock.calls.length]).toEqual([false, 1]);
         expect(actions.disconnecting.value).toBeUndefined();
     });

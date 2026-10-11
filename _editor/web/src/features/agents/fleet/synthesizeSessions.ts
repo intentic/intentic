@@ -1,7 +1,6 @@
-import { sandboxScopeGuard } from "@intentic/extension-api";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { ref } from "vue";
 import { track } from "../../../app/analytics";
 import type { TabFacts } from "../../chat/tabs/tabFacts";
 import { summonChat } from "../../chat/run/summon";
@@ -132,8 +131,9 @@ export const synthesisPrompt = (sources: readonly SourceRef[]): string =>
     ].join(`\n\n`);
 
 // The synthesis being prepared right now; the button's busy state and the reentrancy guard against a double press.
-// allow(module-state): the reentrancy guard of one press, cleared by that press's own finally
-export const synthesizing = ref(false);
+// The sandbox's, since its panes are: a switch mid-press ends that press (`here` below) and must not leave the button
+// of the box switched to held, which a plain module ref did.
+export const synthesizing = sandboxRef(() => false);
 
 // Whether the preparation went, and if not, the one sentence to say so.
 export type SynthesisAsk = { readonly started: true } | { readonly started: false; readonly why: string };
@@ -233,6 +233,9 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         track(`sessions_synthesized`, { sources: settled.length });
         return { started: true };
     } finally {
-        synthesizing.value = false;
+        // Past a switch the flag is the next box's, which this press never set.
+        if (here()) {
+            synthesizing.value = false;
+        }
     }
 };

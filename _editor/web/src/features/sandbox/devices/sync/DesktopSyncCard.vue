@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ui, Notice } from "@intentic/ui";
+import { Button, ui, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { runDeviceCommand, useDevices } from "../useDevices";
+import { useOperations } from "../../../../workbench/operations/operations";
 import { useDesktopSync } from "./useDesktopSync";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
@@ -15,8 +17,23 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { canOperate, available, folder, pairToken, pairMode, pairExpiresAt, minting, takeover, command, desktopLink, enable, start, stop } =
-    useDesktopSync();
+const {
+    canOperate,
+    available,
+    folder,
+    pairToken,
+    pairMode,
+    pairExpiresAt,
+    minting,
+    mintFailure,
+    takeover,
+    command,
+    desktopLink,
+    enable,
+    forget,
+    start,
+    stop,
+} = useDesktopSync();
 
 // Whether a device holds file sync, read off the already-fetched devices list (same query, no extra poll).
 const { devices, refetch } = useDevices({ poll: false });
@@ -29,43 +46,59 @@ const candidates = computed(() =>
     devices.value.filter((device) => device.hostId !== undefined && device.online === true && device.sync === undefined),
 );
 
-const installing = ref<string | undefined>(undefined);
-const installed = ref<string | undefined>(undefined);
-const installError = ref<string | undefined>(undefined);
+// Installing the sync agent out there is a download and a first pass over the folder, minutes rather than a switch
+// being flipped, so the run is the ledger's, a row per device: closing Add device mid-install and opening it again
+// finds the install still going (every Set up button held) and then what the device said, instead of a fresh offer.
+// One at a time across the card, as before: `busy` is any of them.
+const installs = useOperations<string>(`devices/desktop-sync/install`);
+const installing = computed(() => installs.all.value.find((run) => run.state === `running`)?.tag);
+// The newest install's end speaks for the card, as the one line under the buttons did.
+const lastInstall = computed(() => installs.all.value.at(-1));
+const installed = computed(() => (lastInstall.value?.state === `done` ? lastInstall.value.value : undefined));
+const installError = computed(() => (lastInstall.value?.state === `failed` ? lastInstall.value.failure : undefined));
+
+// Thrown by the task for a device that answered no, so the ledger keeps its words as the failure.
+class InstallRefused extends Error {}
 
 // The daemon mints the pairing and builds the line in that device's own shell dialect (hosts/device-commands.ts);
 // this only says which device, which half, and which folder out there.
 const installOn = async (device: Device): Promise<void> => {
     const id = device.hostId;
-    if (id === undefined || installing.value !== undefined) {
+    if (id === undefined || installs.busy.value) {
         return;
     }
-    installing.value = id;
-    installed.value = undefined;
-    installError.value = undefined;
-    // Installing the sync agent out there is a download and a first pass over the folder, not a switch being
-    // flipped, so the machine's card and the Devices tile carry it while the reader looks elsewhere.
-    const endMark = beginDeviceWork({
-        machine: machineKeyOf(devices.value, device),
-        doing: t(`sandbox.deviceOps.workingInstall`),
-        what: t(`sandbox.deviceOps.doingOn`, { doing: t(`sandbox.deviceOps.workingInstall`), machine: device.label }),
-    });
-    try {
-        const result = await runDeviceCommand(id, `sync-install`, {
-            mode: portsOnly.value ? `mirror` : `sync`,
-            ...(portsOnly.value ? {} : { localDir: folder.value }),
-        });
-        // The device's own words either way: a refusal names the switch to flip rather than throwing.
-        installed.value = result.ok ? result.message : undefined;
-        installError.value = result.ok ? undefined : result.message;
-    } catch (error) {
-        installError.value = error instanceof Error ? error.message : String(error);
-    } finally {
-        installing.value = undefined;
-        endMark();
-        // The device's row is what confirms an enrollment, so ask for a fresh reading either way.
-        refetch();
+    const mode = portsOnly.value ? `mirror` : `sync`;
+    const localDir = folder.value;
+    const what = t(`sandbox.deviceOps.doingOn`, { doing: t(`sandbox.deviceOps.workingInstall`), machine: device.label });
+    // A new press is the card's one answer line again, so an earlier device's outcome is put away first.
+    for (const run of installs.all.value) {
+        installs.dismiss(run.tag);
     }
+    await installs.run(id, {
+        what,
+        // Which device, so the button under way is the one that spins.
+        tag: id,
+        // The device's own words either way: a refusal names the switch to flip rather than throwing.
+        failed: (error): NoticeModel =>
+            error instanceof InstallRefused
+                ? { tone: `warning`, title: t(`sandbox.deviceOps.refusedInstall`), detail: error.message }
+                : noticeFrom(error, t(`sandbox.deviceOps.unreachedInstall`), { tone: `warning` }),
+        task: async () => {
+            // The machine's card and the Devices tile carry it while the reader looks elsewhere.
+            const endMark = beginDeviceWork({ machine: machineKeyOf(devices.value, device), doing: t(`sandbox.deviceOps.workingInstall`), what });
+            try {
+                const result = await runDeviceCommand(id, `sync-install`, { mode, ...(mode === `mirror` ? {} : { localDir }) });
+                if (!result.ok) {
+                    throw new InstallRefused(result.message);
+                }
+                return result.message;
+            } finally {
+                endMark();
+                // The device's row is what confirms an enrollment, so ask for a fresh reading either way.
+                refetch();
+            }
+        },
+    });
 };
 
 // An operator's opt-in to ports-only (skip file sync, or mirror while another holds sync); forced on below maintainer,
@@ -126,7 +159,7 @@ onUnmounted(stop);
                                 size="small"
                                 :label="t(`sandbox.desktopSyncCard.setUpOn`, { label: device.label })"
                                 :loading="installing === device.hostId"
-                                :disabled="installing !== undefined"
+                                :disabled="installs.busy.value"
                                 @click="void installOn(device)"
                             >
                                 <template #icon><Icon name="desktop" /></template>
@@ -139,7 +172,7 @@ onUnmounted(stop);
                                 <b>{{ t(`sandbox.desktopSyncCard.that`) }}</b> {{ t(`sandbox.desktopSyncCard.device`) }}
                             </template>
                         </p>
-                        <Notice v-if="installError" tone="warning" class="text-2xs">{{ installError }}</Notice>
+                        <Notice v-if="installError" :of="installError" class="text-2xs" />
                         <p v-else-if="installed" class="text-2xs text-muted">{{ installed }}</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
@@ -236,10 +269,12 @@ onUnmounted(stop);
                         :renewing="minting"
                         @renew="enable(pairMode ?? 'sync')"
                     />
-                    <p class="text-2xs text-subtle">
+                    <!-- The command is kept until put away, since closing the dialog is not the same as having pasted it. -->
+                    <p class="flex flex-wrap items-center gap-3 text-2xs text-subtle">
                         <button type="button" class="text-link hover:underline" @click="showFootprint = !showFootprint">
                             {{ t(`sandbox.desktopSyncCard.whatStaysOnDevice`) }}
                         </button>
+                        <button type="button" class="text-link hover:underline" @click="forget">{{ t(`ui.action.done`) }}</button>
                     </p>
                     <ul v-if="showFootprint" class="flex list-disc flex-col gap-1 rounded-lg bg-canvas py-2.5 pl-7 pr-3 text-2xs text-subtle">
                         <li>{{ t(`sandbox.desktopSyncCard.agentMutagenCloudflaredUnder`) }} <span class="font-mono">~/.intentic/machine</span>.</li>
@@ -254,6 +289,7 @@ onUnmounted(stop);
                         </li>
                     </ul>
                 </template>
+                <Notice v-if="mintFailure" :of="mintFailure" class="text-2xs" />
             </template>
 
             <!-- Asked and not yet answered: neither the offer nor the refusal, which used to show first and then be contradicted. -->

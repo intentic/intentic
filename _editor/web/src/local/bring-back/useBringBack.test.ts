@@ -2,7 +2,8 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp } from "vue";
 import { BRING_BACK_CAP, type SandboxChange } from "./bringBack";
-import { useBringBack } from "./useBringBack";
+import { activeSandboxId } from "../../lib/activeSandbox";
+import { forgetBringBack, useBringBack } from "./useBringBack";
 
 // Pins the link a bring-back sends: the changes the review showed and the reader chose, by name, and nothing at all when
 // there is nothing to name or more than one link carries.
@@ -36,6 +37,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     unstubAllGlobals();
+    forgetBringBack();
 });
 
 const mountBringBack = (): ReturnType<typeof useBringBack> => {
@@ -78,4 +80,38 @@ test("nothing chosen, or more than one link names, sends nothing and leaves the 
     bringBack(many, new Set(many.slice(1).map((change) => change.path)));
     const links = handed();
     expect([refused, links.length, sent(links[0])?.length]).toEqual([[[], { at: `idle` }], 1, BRING_BACK_CAP]);
+});
+
+// The app's answer, as it dispatches one into the window.
+const answer = (detail: unknown): void => {
+    window.dispatchEvent(new CustomEvent(`intentic:project`, { detail }));
+};
+
+test("an answer that lands while the section is off screen is there when it comes back, Undo's restore point with it", () => {
+    const first = mountBringBack();
+    first.bringBack(CHANGES, new Set(CHANGES.map((change) => change.path)));
+    handed();
+    app?.unmount();
+    app = undefined;
+
+    answer({ kind: `brought-back`, result: { ok: true, point: `p-1`, applied: [{ path: `api/server.ts`, kind: `modified` }] } });
+
+    const again = mountBringBack();
+    expect(again.state.value.step).toEqual({ at: `brought`, point: `p-1`, count: 1, skipped: [] });
+    again.undo();
+    const links = handed();
+    expect(new URL(links.at(-1) ?? ``).searchParams.get(`point`)).toBe(`p-1`);
+});
+
+test("an answer belongs to the folder that asked, even once the window has moved to another", () => {
+    activeSandboxId.value = `folder-a`;
+    const section = mountBringBack();
+    section.check();
+    handed();
+    activeSandboxId.value = `folder-b`;
+    answer({ kind: `changes`, result: { ok: true, direction: `to-sandbox`, changes: CHANGES } });
+    const onB = section.state.value.step;
+    activeSandboxId.value = `folder-a`;
+    expect([onB, section.state.value.step.at]).toEqual([{ at: `idle` }, `checked`]);
+    activeSandboxId.value = undefined;
 });

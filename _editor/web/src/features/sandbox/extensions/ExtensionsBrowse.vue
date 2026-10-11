@@ -3,7 +3,6 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { Button, SkeletonSnapshot, ui, type NoticeModel, vSkeletonSource } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -13,14 +12,14 @@ import { useRegistry } from "../../extensions/useRegistry";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
-import { useHubWork } from "../../../workbench/hub/hubWork";
-import { extensionStatuses } from "../../../extension-host/loader";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
+import { useOperations } from "../../../workbench/operations/operations";
 import { auditBrief, updateBrief } from "./extensionBrief";
 import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
-import { type DiscoverListing, type InstallOutcome, listingSections, toListing } from "./discoverListing";
-import { beginInstall, installsInFlight } from "./installsInFlight";
+import { type DiscoverListing, listingSections, toListing } from "./discoverListing";
+import { extensionBusy } from "./extensionWork";
+import { INSTALLS, type InstallVerb, installedSentence, installOutcome, installsInFlight } from "./installsInFlight";
 import { useT } from "@intentic/ui/i18n";
 
 // Browse: what other people have published, the other half of the Extensions section; search, pills and registry line
@@ -36,7 +35,7 @@ const { query, trust } = defineProps<{
     trust: `all` | `verified`;
 }>();
 const emit = defineEmits<{
-    /** This half's own failures, raised so the section keeps one notice region above the instrument. */
+    /** The registry's read failing, raised so the section keeps one notice region above the instrument. */
     notice: [NoticeModel | undefined];
     /** How many listings the section's query left, drawn on the search field. */
     matched: [number];
@@ -53,11 +52,9 @@ const { entries, registryName, url, token, isOfficial, isLoading, error, refetch
 const outline = useSandboxOutline(isLoading);
 const { extensions, applyUpdate } = useExtensions();
 const { add } = useCapabilities();
-const hubWork = useHubWork();
-
-const failure = ref<NoticeModel | undefined>(undefined);
-// What the last install or update from the open dialog came to; the dialog turns into its receipt.
-const outcome = ref<(InstallOutcome & { readonly name: string }) | undefined>(undefined);
+// Installs and updates, one per listing, kept in the ledger (installsInFlight.ts). The open listing's dialog says how
+// its own ended, turning into its receipt; the section's notice region says the rest (SandboxExtensions).
+const installs = useOperations<InstallVerb>(INSTALLS);
 
 const listings = computed<readonly DiscoverListing[]>(() => entries.value.map((entry) => toListing(entry, extensions.value)));
 // What a listing is installed as here, found by identity: a hand-installed copy may carry another id than the listing
@@ -109,9 +106,28 @@ const detailOpen = computed({
     },
 });
 const openListing = (listing: DiscoverListing): void => {
-    failure.value = undefined;
-    outcome.value = undefined;
     void router.replace({ query: { ...route.query, ext: listing.entry.name } });
+};
+
+// The open listing's install, running or ended: its failure and what it came to are the dialog's to say.
+const openedRun = computed(() => (opened.value === undefined ? undefined : installs.at(opened.value.entry.name)));
+const failure = computed(() => openedRun.value?.failure);
+const outcome = computed(() =>
+    openedRun.value?.state === `done` && opened.value !== undefined
+        ? installOutcome(opened.value.entry.name, openedRun.value.value ?? `install`, extensions.value)
+        : undefined,
+);
+// Read in the dialog, it goes when the dialog does, rather than turning up again in the section's notice region.
+const putAway = (name: string | undefined): void => {
+    if (name !== undefined && installs.at(name)?.state !== `running`) {
+        installs.dismiss(name);
+    }
+};
+watch(openName, (_, before) => putAway(before));
+const revealOpened = (): void => {
+    const listing = opened.value;
+    putAway(listing?.entry.name);
+    emit(`reveal`, listing === undefined ? undefined : installedAs(listing)?.id);
 };
 
 // Clears a dead `ext` param once the registry has actually loaded, not before, since an empty list would eat every deep
@@ -154,89 +170,39 @@ const addFromListing = async (listing: DiscoverListing, pointer: NonNullable<Dis
     );
 };
 
-// What an install came to once the host has reconciled, read off the refreshed list and this browser's load record: a
-// switch left off survives an update, and a bundle that threw in activate() is installed all the same.
-const NOT_STARTED = new Set([`error`, `incompatible`, `missing`]);
-const outcomeOf = (listing: DiscoverListing, verb: InstallOutcome["verb"]): InstallOutcome => {
-    const here = installedAs(listing);
-    const status = here === undefined ? undefined : extensionStatuses.value.find((loaded) => loaded.id === here.id);
-    return {
-        verb,
-        id: here?.id,
-        problem: status !== undefined && NOT_STARTED.has(status.state) ? (status.detail ?? status.state) : undefined,
-        off: here?.enabled === false,
-        settings: (here?.manifest.contributes?.settings ?? []).length > 0,
-    };
-};
-
-// Said where the reader is: the dialog they pressed Install in, or, when they closed it while the clone ran, the
-// section's notice region, since a receipt nobody can see is how a finished install reads as a stuck one.
-const report = (listing: DiscoverListing, verb: InstallOutcome["verb"]): void => {
-    const done = outcomeOf(listing, verb);
-    if (openName.value === listing.entry.name) {
-        outcome.value = { ...done, name: listing.entry.name };
-        return;
-    }
-    const name = listing.entry.name;
-    const action = { label: t(`sandbox.discoverDetail.showInInstalled`), run: () => emit(`reveal`, done.id) };
-    if (done.problem === undefined) {
-        const title =
-            verb === `install` ? t(`sandbox.extensionsBrowse.installedName`, { name }) : t(`sandbox.extensionsBrowse.updatedName`, { name });
-        emit(`notice`, { tone: `info`, title, action });
-        return;
-    }
-    const title =
-        verb === `install`
-            ? t(`sandbox.extensionsBrowse.installedNotStartedName`, { name })
-            : t(`sandbox.extensionsBrowse.updatedNotStartedName`, { name });
-    emit(`notice`, { tone: `warning`, title, detail: done.problem, action });
-};
-
 // An update is the Installed tab's update verb, on the id the extension is installed under: it keeps that install's
 // token and registry, sets the old checkout aside for revert, and clears the recorded offer. The pinned sha names the
 // code, so the install's own repo serves it.
 const install = async (listing: DiscoverListing): Promise<void> => {
     const pointer = listing.entry.install;
+    const name = listing.entry.name;
+    const pinned = pointer?.ref;
+    const updateOf = listing.state.kind === `update` && pinned !== undefined ? listing.state.installedId : undefined;
     // One at a time per listing: the daemon takes one add per id anyway, and a second press would only queue a clone
-    // of what is already arriving.
-    if (pointer === undefined || listing.state.action === undefined || installsInFlight.value.has(listing.entry.name)) {
+    // of what is already arriving. An update also waits on anything the installed row or its drawer has under way.
+    if (
+        pointer === undefined ||
+        listing.state.action === undefined ||
+        installsInFlight.value.has(name) ||
+        (updateOf !== undefined && extensionBusy(updateOf, name))
+    ) {
         return;
     }
-    const endInstall = beginInstall(listing.entry.name);
-    failure.value = undefined;
-    outcome.value = undefined;
-    const { ref: pinned } = pointer;
-    const updateOf = listing.state.kind === `update` && pinned !== undefined ? listing.state.installedId : undefined;
-    const verb = updateOf === undefined ? `install` : `update`;
+    const verb: InstallVerb = updateOf === undefined ? `install` : `update`;
     // A clone and an install out in the sandbox: minutes on a big extension, and the terminal it streams to is
-    // somewhere else entirely, so the row it was started from carries it.
-    const endMark = hubWork.begin(
-        updateOf === undefined
-            ? t(`sandbox.extensionsBrowse.installing`, { name: listing.entry.name })
-            : t(`sandbox.extensionsBrowse.updating`, { name: listing.entry.name }),
-    );
-    try {
-        // Both refresh the extension list on the way out, so the card and the Installed pill already say so.
-        await (updateOf !== undefined && pinned !== undefined ? applyUpdate(updateOf, pinned) : addFromListing(listing, pointer));
-        // Installed but not yet running until the host reconciles; done here so it works without a page reload.
-        await reloadExtensions();
-        report(listing, verb);
-    } catch (err) {
-        const said = noticeFrom(
-            err,
-            verb === `install`
-                ? t(`sandbox.extensionsBrowse.couldNotInstall`, { name: listing.entry.name })
-                : t(`sandbox.extensionsBrowse.couldNotUpdate`, { name: listing.entry.name }),
-        );
-        if (openName.value === listing.entry.name) {
-            failure.value = said;
-        } else {
-            emit(`notice`, said);
-        }
-    } finally {
-        endInstall();
-        endMark();
-    }
+    // somewhere else entirely, so the ledger marks the hub row it was started from while it runs.
+    await installs.run(name, {
+        what: verb === `install` ? t(`sandbox.extensionsBrowse.installing`, { name }) : t(`sandbox.extensionsBrowse.updating`, { name }),
+        done: () => installedSentence(name, verb),
+        failed: verb === `install` ? t(`sandbox.extensionsBrowse.couldNotInstall`, { name }) : t(`sandbox.extensionsBrowse.couldNotUpdate`, { name }),
+        task: async () => {
+            // Both refresh the extension list on the way out, so the card and the Installed pill already say so.
+            await (updateOf !== undefined && pinned !== undefined ? applyUpdate(updateOf, pinned) : addFromListing(listing, pointer));
+            // Installed but not yet running until the host reconciles; done here so it works without a page reload.
+            await reloadExtensions();
+            return verb;
+        },
+    });
 };
 
 // An ordinary, interruptible chat, since the reader is deciding right now. An update gets the diff between commits
@@ -404,10 +370,10 @@ const emptyNote = computed<string | undefined>(() => {
             :can-install="canOperate"
             :installing="installsInFlight.has(opened.entry.name)"
             :failure="failure"
-            :outcome="outcome?.name === opened.entry.name ? outcome : undefined"
+            :outcome="outcome"
             @install="install(opened)"
             @audit="audit(opened)"
-            @reveal="emit(`reveal`, installedAs(opened)?.id)"
+            @reveal="revealOpened"
         />
     </div>
 </template>

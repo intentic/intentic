@@ -1,7 +1,9 @@
-import type { Page } from "@intentic/sandbox-contract";
+import type { Page, PublishResult } from "@intentic/sandbox-contract";
 import { writeClipboard } from "@intentic/ui/clipboard";
-import { ref } from "vue";
+import { t } from "@intentic/ui/i18n";
+import { computed } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { usePaneView } from "../../panel/useChat-view";
 import { focusComposer } from "../../tabs/useChat-tabs";
 import { useChatSurface } from "../../tools/chatToolSurface";
@@ -27,25 +29,36 @@ export const usePageActions = (page: () => Page) => {
         surface.openFile?.(page().path);
     };
 
-    const publishing = ref(false);
-    const published = ref<{ readonly url?: string; readonly path: string }>();
-    const publishFailed = ref<string>();
+    // The page's, not this drawing of it: a transcript re-drawn while the copy is out (the pane closed, the chat
+    // reopened) still holds the button, and its answer is still said beside it.
+    const publishing = useOperation<PublishResult>(
+        () => `chat/${conversation.value.conversationId}/pages/${page().id}/publish`,
+    );
     // Copies the stored page into the outbox; its address goes on the clipboard where there is one.
     const publish = async (): Promise<void> => {
-        publishing.value = true;
-        publishFailed.value = undefined;
-        try {
-            const result = await sandboxRpc.public.publish({ path: page().path });
-            published.value = result;
-            if (result.url !== undefined) {
-                await writeClipboard(result.url);
-            }
-        } catch (error) {
-            publishFailed.value = error instanceof Error ? error.message : String(error);
-        } finally {
-            publishing.value = false;
-        }
+        const { path, title } = page();
+        await publishing.run({
+            what: t(`chat.chatPages.publishing`, { title }),
+            failed: t(`chat.chatPages.publishFailed`),
+            done: (result) => (result.url === undefined ? t(`chat.chatPages.publishedNoAddress`, { path: result.path }) : t(`chat.chatPages.publishedCopied`)),
+            task: async () => {
+                const result = await sandboxRpc.public.publish({ path });
+                if (result.url !== undefined) {
+                    await writeClipboard(result.url);
+                }
+                return result;
+            },
+        });
     };
 
-    return { message, expand, canExpand: surface.openFile !== undefined, publish, publishing, published, publishFailed };
+    return {
+        message,
+        expand,
+        canExpand: surface.openFile !== undefined,
+        publish,
+        publishing: publishing.busy,
+        published: publishing.value,
+        // The cause, for the hover on the line that says it failed.
+        publishFailed: computed(() => publishing.failure.value && (publishing.failure.value.detail ?? publishing.failure.value.title)),
+    };
 };

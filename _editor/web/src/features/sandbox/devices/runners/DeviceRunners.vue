@@ -2,16 +2,17 @@
 import { computed, ref } from "vue";
 import { Button, ConfirmDialog, DeviceRunLog, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { useOperation, useOperations } from "../../../../workbench/operations/operations";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 import { lastRun, sentTo } from "./runnerWork";
+import { beginDeviceWork } from "./deviceWork";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
-import { useHubWork } from "../../../../workbench/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 // This sandbox's runners on one MACHINE: containers it keeps there to run agents,
@@ -53,9 +54,6 @@ const builtOn = (host: string | undefined): string | undefined => {
     return machine.environments.length > 1 && row !== undefined ? environmentTitle(row) : undefined;
 };
 
-// Building or updating a container on somebody's laptop, so the Devices row carries it while the reader is
-// elsewhere in the hub.
-const hubWork = useHubWork();
 const working = (op: RunnerOp, name: string): string =>
     op === `create`
         ? t(`sandbox.deviceRunners.adding`, { name })
@@ -63,12 +61,19 @@ const working = (op: RunnerOp, name: string): string =>
           ? t(`sandbox.deviceRunners.removing`, { name })
           : t(`sandbox.deviceRunners.updating`, { name });
 
-// One flow at a time on one machine, same rule the sandbox rows above follow.
-const busy = ref<string | undefined>();
-const lines = ref<string[]>([]);
-// The notice, and the line that does the same thing on the machine itself when this route to it is shut.
-const failure = ref<RunnerFailure | undefined>();
-const done = ref<string | undefined>();
+// One flow at a time on one machine, same rule the sandbox rows above follow. Building a container on somebody's
+// laptop takes minutes, so the flow is the machine's rather than this view's: leaving the page and coming back finds
+// its log still growing, the buttons still held, and its end (the device's answer, or the notice and the line that
+// does the same thing on the machine itself) waiting to be read. The machine's card on the board carries it while the
+// reader is elsewhere, and a receipt says how it ended if nobody was here to see.
+const flow = useOperation<string, RunnerFailure>(() => `devices/${machine.key}/runners`);
+const busy = flow.busy;
+const lines = flow.lines;
+const done = flow.value;
+// A settings push has no log, only an end; its failure is said where the flow's would be.
+const syncs = useOperations<void, RunnerFailure>(() => `devices/${machine.key}/runner-sync`);
+const syncing = (id: string): boolean => syncs.at(id)?.state === `running`;
+const failure = computed(() => flow.failure.value ?? mine.value.map((runner) => syncs.at(runner.id)?.failure).find((found) => found !== undefined));
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
     if (!runner.online) {
@@ -96,22 +101,23 @@ const driftDetail = (runner: { drift?: { subject: string; detail: string }[] }):
 const syncable = (runner: { online: boolean; drift?: { subject: string }[] }): boolean =>
     runner.online && (runner.drift ?? []).some((line) => line.subject.startsWith(`Setting `));
 
-const syncing = ref<string | undefined>();
 const sync = async (id: string): Promise<void> => {
-    if (syncing.value !== undefined) {
+    if (syncs.busy.value) {
         return;
     }
-    syncing.value = id;
-    failure.value = undefined;
-    try {
-        await syncRunnerSettings(id);
-    } catch (error) {
+    flow.dismiss();
+    await syncs.run(id, {
+        what: t(`sandbox.deviceRunners.syncing`),
         // No line of its own: a runner's settings are pushed over this door and have no CLI verb behind them.
-        failure.value = { notice: noticeFrom(error, t(`sandbox.deviceRunners.settingsFailed`)) };
-    } finally {
-        syncing.value = undefined;
-        refetch();
-    }
+        failed: (error) => ({ notice: noticeFrom(error, t(`sandbox.deviceRunners.settingsFailed`)) }),
+        task: async () => {
+            try {
+                await syncRunnerSettings(id);
+            } finally {
+                refetch();
+            }
+        },
+    });
 };
 
 // Asked for rather than generated, since it's what the placement picker shows: lowercase letters, digits and
@@ -121,7 +127,7 @@ const confirmingRemove = ref<string | undefined>();
 const removeHeader = computed(() => t(`sandbox.deviceRunners.removeHeader`, { name: confirmingRemove.value ?? `` }));
 
 const run = async (op: RunnerOp, name: string): Promise<void> => {
-    if (door.value?.device.hostId === undefined || busy.value !== undefined) {
+    if (door.value?.device.hostId === undefined || busy.value) {
         return;
     }
     if (op === "remove") {
@@ -141,25 +147,30 @@ const removeConfirmed = async (): Promise<void> => {
 
 const execute = async (op: RunnerOp, name: string): Promise<void> => {
     const host = door.value?.device.hostId;
-    if (host === undefined || busy.value !== undefined) {
+    if (host === undefined || busy.value) {
         return;
     }
-    busy.value = name;
-    failure.value = undefined;
-    done.value = undefined;
-    lines.value = [];
-    const endMark = hubWork.begin(working(op, name));
-    try {
-        const onLine = (line: string): void => void (lines.value = [...lines.value, line]);
-        const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
-        done.value = await flow(host, name, onLine);
-    } catch (error) {
-        failure.value = runnerFailure(op, name, machine.label, error, lines.value);
-    } finally {
-        busy.value = undefined;
-        endMark();
-        refetch();
+    const label = machine.label;
+    const key = machine.key;
+    for (const runner of mine.value) {
+        syncs.dismiss(runner.id);
     }
+    const doing = working(op, name);
+    await flow.run({
+        what: t(`sandbox.deviceOps.doingOn`, { doing, machine: label }),
+        failed: (error, heard) => runnerFailure(op, name, label, error, heard),
+        task: async (report) => {
+            // The board's card for this machine turns too, as it does for every other thing done to it.
+            const endMark = beginDeviceWork({ machine: key, doing, what: t(`sandbox.deviceOps.doingOn`, { doing, machine: label }) });
+            try {
+                return await { create: createRunner, remove: removeRunner, update: updateRunner }[op](host, name, report.line);
+            } finally {
+                endMark();
+                // The list is the sandbox's, not this view's: it is read again whether or not anybody is here to see it.
+                refetch();
+            }
+        },
+    });
 };
 
 const asked = ref("");
@@ -186,7 +197,7 @@ const add = async (): Promise<void> => {
                 size="small"
                 tier="quiet"
                 :label="t(`sandbox.deviceRunners.addRunner`)"
-                :disabled="busy !== undefined || door.device.online !== true"
+                :disabled="busy || door.device.online !== true"
                 @click="adding = true"
             >
                 <template #icon><Icon name="plus" /></template>
@@ -237,22 +248,22 @@ const add = async (): Promise<void> => {
                         size="small"
                         tier="boring"
                         :label="t(`ui.action.update`)"
-                        :disabled="busy !== undefined || door.device.online !== true"
+                        :disabled="busy || door.device.online !== true"
                         @click="run(`update`, runner.id)"
                     />
                     <Button
                         v-if="syncable(runner)"
                         size="small"
                         tier="quiet"
-                        :label="syncing === runner.id ? t(`sandbox.deviceRunners.syncing`) : t(`sandbox.deviceRunners.syncSettings`)"
-                        :disabled="syncing !== undefined || busy !== undefined"
+                        :label="syncing(runner.id) ? t(`sandbox.deviceRunners.syncing`) : t(`sandbox.deviceRunners.syncSettings`)"
+                        :disabled="syncs.busy.value || busy"
                         @click="sync(runner.id)"
                     />
                     <Button
                         size="small"
                         tier="quiet"
                         :label="t(`ui.action.remove`)"
-                        :disabled="busy !== undefined || door.device.online !== true"
+                        :disabled="busy || door.device.online !== true"
                         @click="run(`remove`, runner.id)"
                     />
                 </span>
@@ -265,11 +276,13 @@ const add = async (): Promise<void> => {
         }}</RowNote>
 
         <!-- The machine's own output while `ic` works, kept after a failure as the record of how far it got. -->
-        <RowNote v-if="busy !== undefined || failure || done" variant="block" class="flex flex-col gap-1">
+        <RowNote v-if="busy || failure || done" variant="block" class="flex flex-col gap-1">
+            <!-- Named, since the view may be new to it: a reader back from elsewhere sees which runner the log is about. -->
+            <p v-if="busy && flow.operation.value" class="text-xs text-content">{{ flow.operation.value.what }}</p>
             <DeviceRunLog
-                v-if="busy !== undefined || (failure !== undefined && lines.length > 0)"
+                v-if="busy || (failure !== undefined && lines.length > 0)"
                 :lines="lines"
-                :running="busy !== undefined"
+                :running="busy"
                 :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
                 :note="t(`sandbox.words.runningOnDeviceKeeps`)"
             />

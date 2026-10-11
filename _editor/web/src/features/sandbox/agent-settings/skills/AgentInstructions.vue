@@ -13,11 +13,11 @@ import {
     SegmentedControl,
     type Tip,
 } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { promptReach, spokenList } from "./promptReach";
 import { useT } from "@intentic/ui/i18n";
 
@@ -43,12 +43,24 @@ const setPromptMode = (mode: string): void => patch({ systemPromptMode: mode as 
 
 const builtinPrompts = ref<Partial<Record<string, BuiltinPromptText>>>({});
 const viewingBase = ref<`intentic` | `claude` | undefined>(undefined);
-const { busy: builtinBusy, notice: builtinError, run: runBuiltin } = useAsyncAction();
+// The read behind the dialog and the fork, kept in the operations ledger so its spinner and its failure are the same
+// wherever it is asked from; a read whose answer is drawn right here, so it raises no receipt.
+const builtinRead = useOperation<BuiltinPromptText>(`agent-settings/builtin-prompt`);
+const builtinBusy = builtinRead.busy;
+const builtinError = builtinRead.failure;
 const loadBuiltin = async (base: `intentic` | `claude`): Promise<BuiltinPromptText | undefined> => {
-    if (builtinPrompts.value[base] === undefined) {
-        await runBuiltin(async () => {
-            builtinPrompts.value = { ...builtinPrompts.value, [base]: await sandboxRpc.settings.builtinPrompt({ base }) };
-        }, t(`sandbox.agentInstructions.couldntReadBuiltinPrompt`));
+    if (builtinPrompts.value[base] === undefined && !builtinBusy.value) {
+        const ended = await builtinRead.run({
+            what: t(`sandbox.agentInstructions.readingBuiltinPrompt`),
+            tag: base,
+            quiet: true,
+            failed: t(`sandbox.agentInstructions.couldntReadBuiltinPrompt`),
+            task: () => sandboxRpc.settings.builtinPrompt({ base }),
+        });
+        if (ended?.state === `done` && ended.value !== undefined) {
+            builtinPrompts.value = { ...builtinPrompts.value, [base]: ended.value };
+            builtinRead.dismiss();
+        }
     }
     return builtinPrompts.value[base];
 };

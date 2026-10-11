@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
 import { type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract";
-import { Button, Icon, type IconName, Row, RowNote, SkeletonSnapshot, StatusBadge, type StatusVariant, ui, vSkeletonSource } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
+import { Button, Icon, type IconName, type NoticeModel, Row, RowNote, SkeletonSnapshot, StatusBadge, type StatusVariant, ui, vSkeletonSource } from "@intentic/ui";
+import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { suggestName } from "../../capabilities/model/tiles";
 import { useT } from "@intentic/ui/i18n";
@@ -33,10 +34,15 @@ const card = CAPABILITY_CATALOG.find((entry) => entry.id === `localmodel`)!;
 const installed = computed(() => (capabilities.value ?? []).filter((entry) => entry.kind === `localmodel`));
 
 // Adding is a stream of log frames; the last one is what the lane shows, since it is the line that says what happens
-// next ("downloading in the background", "starting llama-server").
-const busy = ref<string | undefined>(undefined);
-const note = ref<string | undefined>(undefined);
-const failure = ref<string | undefined>(undefined);
+// next ("downloading in the background", "starting llama-server"). Kept in the operations ledger rather than here: the
+// add writes the entry and starts the server whether or not this panel stays open, and coming back mid-add has to show
+// it under way rather than offer a rung whose second press would write a second entry. One at a time, since the machine
+// holds one server slot; the run's tag is the model it adds, and its value that model once the add returned.
+const adding = useOperation<string, NoticeModel, string>(`models/local/add`);
+const busy = computed(() => (adding.busy.value ? adding.operation.value?.tag : undefined));
+const note = computed(() => adding.progress.value);
+// The daemon's own words, as the lane has always said them; the receipt raised when it ends unwatched leads with ours.
+const failure = computed(() => adding.failure.value?.detail ?? adding.failure.value?.title);
 
 const gb = (bytes: number) => localModelGb(bytes);
 
@@ -71,9 +77,10 @@ const factsOf = (model: string, context: string, taken: boolean): string[] => {
 // picker does not offer it for one, so this lane never hands it on as the model to chat with.
 const quickJobsOnly = (model: string): boolean => optionOf(model)?.tier === `instant`;
 
-// The model this lane just started, watched until the daemon says it serves. Held here rather than announced on the
-// add's return because the add returns while llama-server is still loading its weights, and a chat opened then fails.
-const starting = ref<string | undefined>(undefined);
+// The model this lane just started, watched until the daemon says it serves. Not announced on the add's return because
+// the add returns while llama-server is still loading its weights, and a chat opened then fails. Read off the ledger, so
+// an add that returned while the reader was elsewhere is still watched for once they are back.
+const starting = computed(() => adding.value.value);
 watch(
     () => (starting.value === undefined ? undefined : installedFor(starting.value)),
     (entry) => {
@@ -81,13 +88,13 @@ watch(
             return;
         }
         const model = starting.value;
-        starting.value = undefined;
         // The apply's last log line was about the wait; the rung's own status has taken that over by now.
-        note.value = undefined;
+        adding.dismiss();
         if (entry.status.state === `active` && model !== undefined && !quickJobsOnly(model)) {
             emit(`ready`, `endpoint/${entry.id}`);
         }
     },
+    { immediate: true },
 );
 
 // A taken rung's state as a short word in a pill; the daemon's own sentence, where it has one worth reading, goes under
@@ -124,22 +131,22 @@ const addModel = async (model: string, context: string): Promise<void> => {
     if (busy.value !== undefined || installedFor(model) !== undefined) {
         return;
     }
-    busy.value = model;
-    failure.value = undefined;
-    note.value = undefined;
+    const label = optionOf(model)?.label ?? model;
     const id = suggestName(card, installed.value, optionOf(model)?.label);
-    try {
-        await add({ id, kind: `localmodel`, config: { model, context } }, (line) => {
-            if (typeof line[`message`] === `string`) {
-                note.value = line[`message`] as string;
-            }
-        });
-        starting.value = model;
-    } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
-    } finally {
-        busy.value = undefined;
-    }
+    await adding.run({
+        what: t(`connect.localModelLane.starting`, { label }),
+        tag: model,
+        done: () => t(`connect.localModelLane.loading`, { label }),
+        failed: t(`connect.localModelLane.couldntStart`, { label }),
+        task: async (report) => {
+            await add({ id, kind: `localmodel`, config: { model, context } }, (line) => {
+                if (typeof line[`message`] === `string`) {
+                    report.progress(line[`message`] as string);
+                }
+            });
+            return model;
+        },
+    });
 };
 
 // What the machine has, as a fact with a glyph rather than a paragraph.

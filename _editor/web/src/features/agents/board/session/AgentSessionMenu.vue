@@ -8,7 +8,8 @@ import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { assignAgent } from "../../fleet/agentActions";
+import { agentWork, assignAgent } from "../../fleet/agentActions";
+import { startOperation } from "../../../../workbench/operations/operations";
 import { mayAssign, ownedBy } from "../ownership";
 import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
@@ -123,9 +124,17 @@ const warmable = computed(() => {
     return agent !== undefined && warmOffer(agent, Date.now());
 });
 const warmHours = computed(() => sandboxSettings.value?.keepWarm.hours ?? 4);
+// The menu closes on the press, so the hold goes through the ledger under the card (the same press KeepWarmPanel
+// makes): a refusal is said as a receipt rather than swallowed, and the panel opened meanwhile shows it held.
 const toggleWarm = async (): Promise<void> => {
     emit(`selected`);
-    await setKeepWarm(agentId, warmHold.value === undefined ? Date.now() + warmHours.value * 3_600_000 : null).catch(() => undefined);
+    const until = warmHold.value === undefined ? Date.now() + warmHours.value * 3_600_000 : null;
+    await startOperation(`${agentWork(agentId)}/keep-warm`, {
+        what: until === null ? t(`agents.keepWarm.stopping`) : t(`agents.keepWarm.arming`),
+        done: () => (until === null ? t(`agents.keepWarm.stopped`) : undefined),
+        failed: until === null ? t(`agents.keepWarm.couldntStop`) : t(`agents.keepWarm.couldntKeep`),
+        task: () => setKeepWarm(agentId, until),
+    });
 };
 
 // Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.

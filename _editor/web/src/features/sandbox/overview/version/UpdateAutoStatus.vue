@@ -4,11 +4,12 @@
      the switch below the card's facts already says so. -->
 <script setup lang="ts">
 import { Notice, ui } from "@intentic/ui";
-import { useAsyncAction, useNow } from "@intentic/ui/async";
+import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { type AutoUpdateAnswer, autoUpdateStatus } from "./autoUpdate";
 import { useAutoUpdate } from "./useAutoUpdate";
+import { useOperation } from "../../../../workbench/operations/operations";
 
 const t = useT();
 
@@ -23,7 +24,11 @@ const counting = computed(() => auto.value?.phase === `countdown`);
 const clock = useNow(counting);
 const status = computed(() => autoUpdateStatus({ auto: auto.value, downloading, me: me.value, now: counting.value ? clock.value : Date.now() }));
 
-const { busy, notice, run } = useAsyncAction();
+// The owner's answer is written in a moment and shows in the line itself; in the ledger so a refusal outlives the card
+// closing, and the answer still being written holds the button wherever the line is drawn next.
+const answering = useOperation(`sandbox/update/auto-answer`);
+const busy = answering.busy;
+const notice = answering.failure;
 const ANSWERS = computed(
     (): Record<AutoUpdateAnswer, { label: string; act: () => Promise<void> }> => ({
         "not-today": { label: t(`sandbox.autoUpdate.notToday`), act: notToday },
@@ -35,7 +40,7 @@ const answer = computed(() => (status.value?.answer === undefined || !canSteer.v
 const press = (): void => {
     const chosen = answer.value;
     if (chosen !== undefined) {
-        void run(chosen.act, t(`sandbox.autoUpdate.couldntChange`));
+        void answering.run({ what: chosen.label, failed: t(`sandbox.autoUpdate.couldntChange`), quiet: true, task: chosen.act });
     }
 };
 

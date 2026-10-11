@@ -855,7 +855,7 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     const restart = [...el.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.includes(`Start it over`));
     restart!.click();
     await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
-    expect(hostedProvision).toHaveBeenCalledWith(`h1`, `tok`);
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`h1`, `tok`));
     expect(hostedRestart).not.toHaveBeenCalled();
 });
 

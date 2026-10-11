@@ -171,7 +171,11 @@ const wait = useCommandWait({ command, row, step, reader, desktopReport });
 const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } =
     wait;
 const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon, reopen: (id) => reopenListed(id) });
-const { domain, attachToken, attaching, attachOutcome, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
+const { domain, attachToken, attaching, attachOutcome, attachNotice, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
+// A press on the attach lane still out, or its refusal still to be read (useAttachLane.ts), reopens that lane.
+if (attach.attachPending.value) {
+    lane.value = `attach`;
+}
 const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.mintedFor });
 // The app's install under way: "Set it up now" waits for it to end rather than starting a second one (desktopSetup.ts).
 // Ticks only while a claim with no word from the app is what holds the button, so that hold can run out.
@@ -343,11 +347,12 @@ const reopenListed = async (id: string): Promise<void> => {
 // Forgets the row on screen for a new one, and everything derived from it; the old row is discarded as leaving would.
 const startFresh = (): void => {
     void row.discardDraft(committed.value);
+    // An abandoned hosted sandbox keeps existing, and its wait is over; read while the row is still the old one, since
+    // the wait is kept by row (useHostedLane.ts). The fresh one starts on the own-computer rung.
+    hosted.hostedSince.value = undefined;
     row.forget();
     command.forget();
     forgetArrival();
-    // An abandoned hosted sandbox keeps existing; the fresh one starts on the own-computer rung.
-    hosted.hostedSince.value = undefined;
     machine.value = `mine`;
     subdomain.value = ``;
     derivedPrefix.value = ``;
@@ -612,7 +617,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             :of="{ tone: `danger`, title: t(`setup.setup.sandboxRefusedConnection`), detail: attachOutcome.message }"
                         />
 
-                        <Notice v-if="error" :of="error" />
+                        <Notice v-if="attachNotice" :of="attachNotice" />
                         <!-- Label says whether going back continues an existing row or starts fresh; hidden with nothing to go back to. -->
                         <button
                             v-if="provisionOffered"

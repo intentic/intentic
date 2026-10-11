@@ -5,6 +5,8 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const stub = {
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
     said: [] as string[],
+    // Receipts for work that ended with nobody watching.
+    reported: [] as string[],
     // The shared sentence both land presses take, held here so a test proves this one passes it through rather than
     // inventing its own wording.
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
@@ -14,17 +16,11 @@ const stub = {
     staged: new Array<string>(),
 };
 
-jest.mock("@intentic/ui/async", () => ({
-    useAsyncAction: () => ({
-        busy: { value: false },
-        notice: { value: undefined },
-        // Runs the task rather than swallowing it, as the real one does: what `land` makes of the daemon's answer is
-        // the whole question below.
-        run: (task: () => Promise<void>) => task(),
-    }),
-}));
 jest.mock("../../../workbench/notifications/notifications", () => ({
-    useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
+    useNotifications: () => ({
+        say: (message: string) => stub.said.push(message),
+        report: (receipt: { readonly title: string }) => stub.reported.push(receipt.title),
+    }),
 }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: jest.fn() }, UNPERSISTED: `unpersisted` }));
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({
@@ -58,6 +54,7 @@ jest.mock("../../../client/sandbox/useSandboxQuery", () => ({
     }),
 }));
 jest.mock("../fleet/agentActions", () => ({
+    agentWork: (id: string) => `agents/${id}`,
     askAgentToResolve: jest.fn(),
     discardAgent: jest.fn(),
     invalidateAgentAction: jest.fn(async () => undefined),
@@ -70,7 +67,8 @@ jest.mock("../fleet/useAgents", () => ({
     useAgents: () => ({ archive: jest.fn(), setAutoLand: jest.fn(), agentById: (id: string) => cards.value.get(id) }),
 }));
 
-import { nextTick, ref, shallowRef } from "vue";
+import { effectScope, nextTick, ref, shallowRef } from "vue";
+import { forgetOperations } from "../../../workbench/operations/operations";
 import { askAgentToResolve, landAgent, type ResolveAsk } from "../fleet/agentActions";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { useAgentChanges } from "./useAgentChanges";
@@ -79,7 +77,9 @@ const cards = shallowRef<ReadonlyMap<string, Pick<FleetAgent, "status" | "attent
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
 afterEach(() => {
+    forgetOperations();
     stub.said.length = 0;
+    stub.reported.length = 0;
     stub.commits.length = 0;
     stub.staged.length = 0;
     cards.value = new Map();
@@ -152,7 +152,8 @@ it("refuses to save the settings files while other work is staged, and lands not
     mocked(landAgent).mockClear();
     stub.staged.push(`${STATE_DIR}/config/personas.json`, `src/app.ts`);
 
-    await expect(changes.land(`check`, undefined, false, [`.intentic/config/personas.json`])).rejects.toThrow(`1 other change staged`);
+    await changes.land(`check`, undefined, false, [`.intentic/config/personas.json`]);
+    expect(changes.actionError.value?.detail).toContain(`1 other change staged`);
     expect(stub.commits).toEqual([]);
     expect(mocked(landAgent)).not.toHaveBeenCalled();
 });
@@ -182,7 +183,8 @@ it("marks the ask on the press and keeps it for the turn it started, then lets i
 it("drops the ask the moment the press turns out to have started no turn", async () => {
     const refused = useAgentChanges(ref(`asked-2`));
     mocked(askAgentToResolve).mockResolvedValue({ kind: `refused`, why: `A rebase can't reach this.` });
-    await expect(refused.askResolve()).rejects.toThrow(`A rebase can't reach this.`);
+    await refused.askResolve();
+    expect(refused.actionError.value).toMatchObject({ title: `Couldn't ask the agent to resolve it.`, detail: `A rebase can't reach this.` });
     expect(refused.asked.value).toBe(false);
 
     // Good news is not an ask either, and takes the floating receipt rather than the panel's error line.
@@ -240,4 +242,43 @@ it("asks at once when no turn is running", async () => {
     await changes.fixConflicts();
     expect(changes.fixQueued.value).toBe(false);
     expect(askAgentToResolve).toHaveBeenCalledTimes(1);
+});
+
+// A land runs to the end of the daemon's apply, minutes on a large branch, and the review that pressed it is a page the
+// reader leaves. The press is the card's, not the page's: the review opened again finds it still landing and refuses a
+// second press, and a land that ended while nobody watched leaves the files it marked for the review to show.
+it("keeps a land through the review that pressed it closing, and refuses a second press meanwhile", async () => {
+    mocked(landAgent).mockClear();
+    let answer: (result: { landed: boolean; changed: boolean; resolving?: { repo: string; paths: string[] }[] }) => void = () => undefined;
+    mocked(landAgent).mockImplementation(() => new Promise((settle) => (answer = settle)));
+
+    const first = effectScope();
+    const pressed = first.run(() => useAgentChanges(ref(`long`)))!.land(`merge`);
+    first.stop();
+
+    const back = effectScope();
+    const changes = back.run(() => useAgentChanges(ref(`long`)))!;
+    expect(changes.actionBusy.value).toBe(true);
+    await changes.land();
+    expect(mocked(landAgent)).toHaveBeenCalledTimes(1);
+    back.stop();
+
+    answer({ landed: true, changed: true, resolving: [{ repo: `root`, paths: [`src/app.ts`] }] });
+    await pressed;
+    expect(stub.reported).toEqual([`Landed Untitled agent in your workspace`]);
+    const later = effectScope();
+    const review = later.run(() => useAgentChanges(ref(`long`)))!;
+    expect(review.actionBusy.value).toBe(false);
+    expect(review.resolving.value).toEqual([{ repo: `root`, paths: [`src/app.ts`] }]);
+    later.stop();
+});
+
+// The board's provisional claim draws a land pressed anywhere (the board, another window) as `landing` on the card;
+// the review holds its presses on that too.
+it("holds the review's presses while the card reads landing", async () => {
+    mocked(landAgent).mockClear();
+    const changes = useAgentChanges(ref(`elsewhere`), undefined, ref({ landedPresence: undefined, status: `landing` }));
+    expect(changes.actionBusy.value).toBe(true);
+    await changes.land();
+    expect(mocked(landAgent)).not.toHaveBeenCalled();
 });

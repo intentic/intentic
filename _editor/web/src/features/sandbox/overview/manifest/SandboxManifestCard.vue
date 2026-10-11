@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button, DisclosureRow, Notice, RowGroup, StatusBadge } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useManifestProblems } from "../../extensions/useManifestProblems";
 import { openWorkspaceRef } from "../../../workspace/files/refs/openFileRef";
 import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 // Reports problems in the sandbox's own state files (a value it couldn't read, an unknown key), unlike
@@ -23,18 +23,27 @@ const toggle = (path: string, open: boolean): void => {
     opened.value = { ...opened.value, [path]: open };
 };
 
-// One busy flag and one notice for the whole card: no per-row state, and useAsyncAction ignores re-entry while busy.
-const { busy, notice: repairNotice, run } = useAsyncAction();
-// Path of the last press, so a refusal renders under that row instead of at the bottom of the list.
-const acting = ref<string | undefined>(undefined);
-const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> => {
-    acting.value = path;
-    return run(
-        () => repair({ path, key: action.key, ...(action.to === undefined ? {} : { to: action.to }) }),
-        action.to === undefined
-            ? t(`sandbox.sandboxManifestCard.couldntRemoveKey`, { key: action.key })
-            : t(`sandbox.sandboxManifestCard.couldntRenameKey`, { key: action.key }),
-    );
+// One run for the whole card, in the operations ledger: no per-row state, a press while one is out is ignored, and a
+// refusal is still under its row when the card is opened again. Quiet: a repair that took makes its row disappear.
+const repairing = useOperation(`sandbox/manifest/repair`);
+const busy = repairing.busy;
+const repairNotice = repairing.failure;
+// Path of the last press, carried as the run's tag, so a refusal renders under that row instead of at the bottom.
+const acting = computed(() => repairing.operation.value?.tag);
+const applyRepair = async (path: string, action: ManifestRepairAction): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await repairing.run({
+        what: action.spoken,
+        tag: path,
+        failed:
+            action.to === undefined
+                ? t(`sandbox.sandboxManifestCard.couldntRemoveKey`, { key: action.key })
+                : t(`sandbox.sandboxManifestCard.couldntRenameKey`, { key: action.key }),
+        quiet: true,
+        task: () => repair({ path, key: action.key, ...(action.to === undefined ? {} : { to: action.to }) }),
+    });
 };
 </script>
 

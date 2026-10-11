@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
 import { computed, nextTick, ref } from "vue";
-import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
+import { Button, Notice, vAction } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
 import AudienceAsk from "./AudienceAsk.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -15,18 +15,15 @@ const t = useT();
 
 const emit = defineEmits<{ pick: [] }>();
 
-const { addRepo, cloning, error } = useAddRepo();
+const { addRepo, cloning, failure: cloneNotice, url: cloningUrl } = useAddRepo();
 // Asked here, where a new arrival first stands, until answered once in this browser.
 const { chosen: audienceChosen } = useAudience();
-// Clone form opens inline instead of on its own route.
-const cloneOpen = ref(false);
-const cloneUrl = ref(``);
+// Clone form opens inline instead of on its own route. A pane that comes back over a clone still running, or one that
+// failed while it was away, opens on it with the address it was given.
+const cloneOpen = ref(cloning.value || cloneNotice.value !== undefined);
+const cloneUrl = ref(cloningUrl.value ?? ``);
 const cloneField = ref<HTMLInputElement | undefined>(undefined);
 const canClone = computed(() => cloneUrl.value.trim().length > 0 && !cloning.value);
-// Notice built from the daemon's error: title names the failure, detail is the daemon's message.
-const cloneNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceEmptyState.couldntCloneRepository`), detail: error.value },
-);
 
 const openClone = async (): Promise<void> => {
     cloneOpen.value = true;

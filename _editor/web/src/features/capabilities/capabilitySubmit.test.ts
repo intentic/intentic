@@ -1,6 +1,7 @@
 // Pins the form's submit: what a saved form does next (hand over a pending step, stay on an edit, leave an add), that a
 // second press while a write is in flight does nothing, the install's own terminal, and the wallet's second write to
-// the platform, whose refusal is said rather than swallowed.
+// the platform, whose refusal is said rather than swallowed. The write is the tile's, in the operations ledger, so a page
+// opened again mid-install finds it still busy rather than offering a second write the daemon would refuse.
 import "@intentic/testing/dom";
 import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
 import { type AddCapabilityInput, CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
@@ -17,6 +18,7 @@ jest.mock(`./model/walletPolicy`, () => ({ ...realWalletPolicy, pushWalletPolicy
 
 const { useCapabilityForm } = await import("./capabilityForm");
 const { submitOutcome, useCapabilitySubmit } = await import("./capabilitySubmit");
+const { forgetOperations } = await import("../../workbench/operations/operations");
 
 const catalogEntry = (id: string): CapabilityCatalogEntry => CAPABILITY_CATALOG.find((entry) => entry.id === id)!;
 const SSH = catalogEntry(`ssh`);
@@ -54,6 +56,7 @@ afterEach(() => {
         scope.stop();
     }
     pushWalletPolicy.mockClear();
+    forgetOperations();
 });
 
 // The submit over a real form, with the daemon's streamed apply as `add`: it lists the connection with `status`.
@@ -85,8 +88,8 @@ const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editi
     scopes.push(scope);
     return scope.run(() => {
         const form = useCapabilityForm(state);
-        const { submit, submitting } = useCapabilitySubmit({ ...state, form, add, ...hands, ownsSandbox: ref(ownsSandbox) });
-        return { state, form, add, submit, submitting, ...hands };
+        const { submit, submitting, failure } = useCapabilitySubmit({ ...state, form, add, ...hands, ownsSandbox: ref(ownsSandbox) });
+        return { state, form, add, submit, submitting, failure, scope, ...hands };
     })!;
 };
 
@@ -112,6 +115,26 @@ describe(`a press of submit`, () => {
         land();
         await first;
         expect(submitting.value).toBe(false);
+    });
+
+    it(`is still writing on a page opened again mid-install, and the page that pressed does nothing more once it is gone`, async () => {
+        const first = submitOn(SSH, { state: `active` });
+        Object.assign(first.form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+        let land: () => void = () => undefined;
+        first.add.mockImplementationOnce(() => new Promise<void>((resolve) => (land = resolve)));
+        const pressed = first.submit();
+        first.scope.stop();
+
+        const again = submitOn(SSH, { state: `active` });
+        Object.assign(again.form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
+        expect(again.submitting.value).toBe(true);
+        await again.submit();
+        expect(again.add.mock.calls).toEqual([]);
+
+        land();
+        await pressed;
+        expect(again.submitting.value).toBe(false);
+        expect(first.walk.leaveTile.mock.calls).toEqual([]);
     });
 });
 
@@ -145,13 +168,13 @@ describe(`an add`, () => {
     });
 
     it(`says the add failed, in the daemon's words, and stays where it was`, async () => {
-        const { form, add, submit, walk, state } = submitOn(SSH, { state: `active` });
+        const { form, add, submit, walk, failure } = submitOn(SSH, { state: `active` });
         Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
         add.mockRejectedValueOnce(new Error(`host key verification failed`));
 
         await submit();
 
-        expect(state.error.value).toEqual({ tone: `danger`, title: `Could not add the capability.`, detail: `host key verification failed` });
+        expect(failure.value).toEqual({ tone: `danger`, title: `Could not add the capability.`, detail: `host key verification failed` });
         expect(walk.leaveTile.mock.calls).toEqual([]);
     });
 });
@@ -177,12 +200,12 @@ describe(`an edit`, () => {
     });
 
     it(`says the save failed in an edit's words`, async () => {
-        const { add, submit, state } = submitOn(SSH, { state: `active` }, { ...ops, secrets: [`privateKey`] });
+        const { add, submit, failure } = submitOn(SSH, { state: `active` }, { ...ops, secrets: [`privateKey`] });
         add.mockRejectedValueOnce(new Error(`refused`));
 
         await submit();
 
-        expect(state.error.value).toEqual({ tone: `danger`, title: `Could not save that connection.`, detail: `refused` });
+        expect(failure.value).toEqual({ tone: `danger`, title: `Could not save that connection.`, detail: `refused` });
     });
 });
 
@@ -199,12 +222,12 @@ describe(`the wallet`, () => {
     });
 
     it(`says the signer still enforces the old caps when the platform refuses them, and stays`, async () => {
-        const { submit, walk, state } = submitOn(WALLET, { state: `active` });
+        const { submit, walk, failure } = submitOn(WALLET, { state: `active` });
         pushWalletPolicy.mockRejectedValueOnce(new Error(`policy service unavailable`));
 
         await submit();
 
-        expect(state.error.value).toEqual({
+        expect(failure.value).toEqual({
             tone: `danger`,
             title: `The tile was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the tile again to retry.`,
             detail: `policy service unavailable`,
@@ -229,11 +252,11 @@ describe(`the wallet`, () => {
     });
 
     it(`leaves a member's save of any other tile alone`, async () => {
-        const { submit, add, form, state } = submitOn(SSH, { state: `active` }, undefined, false);
+        const { submit, add, form, state, failure } = submitOn(SSH, { state: `active` }, undefined, false);
         Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
 
         await submit();
 
-        expect([add.mock.calls.length, state.error.value]).toEqual([1, null]);
+        expect([add.mock.calls.length, state.error.value, failure.value]).toEqual([1, null, undefined]);
     });
 });

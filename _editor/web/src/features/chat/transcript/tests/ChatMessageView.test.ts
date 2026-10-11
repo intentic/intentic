@@ -279,6 +279,7 @@ jest.mock("../../../sandbox/devices/useSelfResources", () => ({
         engine: computed(() => selfEngine.value),
         reshapable: computed(() => true),
         applying: ref(false),
+        failure: ref(undefined),
         apply: jest.fn(async () => undefined),
     }),
 }));

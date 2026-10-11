@@ -22,11 +22,13 @@ jest.mock(`./useDesktopSync`, () => ({
         pairToken,
         pairMode,
         minting: ref(false),
+        mintFailure: ref(undefined),
         takeover,
         pairExpiresAt: ref(undefined),
         command: ref((os: string) => (os === `windows` ? `irm … | iex` : `curl … | sh`)),
         desktopLink: ref(undefined),
         enable,
+        forget: () => {},
         start: () => {},
         stop: () => {},
     }),
@@ -38,16 +40,21 @@ const devices = ref<Device[]>([]);
 // Enrolling a machine we can already reach: recorded rather than performed, since the subject is what the card
 // sends — a device, a half, and a folder on THAT machine. The pairing and the command line are the daemon's.
 const installCalls: { hostId: string; command: string; ask?: { mode?: string; localDir?: string } }[] = [];
+// An answer the test holds back, for an install still running when the card closes.
+let pending: Promise<{ ok: boolean; message: string }> | undefined;
 jest.mock(`../useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
     runDeviceCommand: (hostId: string, command: string, ask?: { mode?: string; localDir?: string }) => {
         installCalls.push({ hostId, command, ask });
-        return Promise.resolve({ ok: true, message: `That device is enrolled.` });
+        const answer = pending ?? Promise.resolve({ ok: true, message: `That device is enrolled.` });
+        pending = undefined;
+        return answer;
     },
 }));
 jest.mock(`../../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: DesktopSyncCard } = await import("./DesktopSyncCard.vue");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 const holder = (label: string): Device => ({ key: label, label, sync: { machine: label, mode: `sync`, seenAt: Date.now() } });
 
@@ -82,6 +89,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    forgetOperations();
 });
 
 // The card's one job: a token nobody can paste is a token that did nothing.
@@ -203,4 +211,27 @@ it(`says sync is impossible only once the sandbox answered no`, () => {
     mount();
     expect(shown()).toContain(`Desktop sync needs an SSH way into this sandbox`);
     expect(shown()).not.toContain(`Checking whether`);
+});
+
+// Setting a device up takes minutes; closing Add device must not forget it. The run is the ledger's, so the card
+// opened again holds every Set up button and then says what the device answered.
+it(`keeps an install going and its answer across closing and reopening the card`, async () => {
+    let answer: (value: { ok: boolean; message: string }) => void = () => {};
+    const slow = new Promise<{ ok: boolean; message: string }>((resolve) => (answer = resolve));
+    devices.value = [{ key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true }];
+    pending = slow;
+    mount();
+    await clickButton(`Set up on ada-laptop`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+    mount();
+    await nextTick();
+    const button = [...document.body.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(`Set up on ada-laptop`));
+    expect(button?.disabled).toBe(true);
+    answer({ ok: true, message: `That device is enrolled.` });
+    await slow;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    expect(shown()).toContain(`That device is enrolled.`);
+    expect(installCalls).toHaveLength(1);
 });

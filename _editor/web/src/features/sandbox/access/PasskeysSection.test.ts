@@ -71,6 +71,7 @@ const role = ref<`owner` | `viewer`>(`owner`);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
 
 const { default: PasskeysSection } = await import("./PasskeysSection.vue");
+const { forgetOperations } = await import("../../../workbench/operations/operations");
 
 let app: App | undefined;
 const mount = async (): Promise<void> => {
@@ -103,6 +104,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    forgetOperations();
 });
 
 it(`lists every passkey the daemon returned, naming another member's, and removes one on request`, async () => {
@@ -173,6 +175,16 @@ it(`the owner's require switch needs a passkey of their own, then hands out the 
     expect(shown()).toContain(`Save these now.`);
     expect(shown()).toContain(`8 unused`);
     expect(buttonLabelled(`Stop requiring`)?.disabled).toBe(false);
+
+    // Shown once and never again, so stepping away to a password manager must not lose them: the section opened
+    // again still has them, until the owner says they are saved.
+    app?.unmount();
+    document.body.innerHTML = ``;
+    await mount();
+    expect(shown()).toContain(`abcde-fghjk-mnpqr-stuvw`);
+    buttonLabelled(`Done`)?.click();
+    await settle();
+    expect(shown()).not.toContain(`abcde-fghjk-mnpqr-stuvw`);
 });
 
 it(`a member sees their own passkeys and no switch`, async () => {

@@ -2,11 +2,11 @@
      when there is no offer. On by default at the daemon; only a maintainer can flip it, everyone else reads it. -->
 <script setup lang="ts">
 import { Notice, Row } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useId } from "vue";
 import { useAutoUpdate } from "./useAutoUpdate";
+import { useOperation } from "../../../../workbench/operations/operations";
 
 const t = useT();
 
@@ -16,9 +16,13 @@ const { row = false } = defineProps<{
 }>();
 
 const { auto, served, canSteer, setEnabled } = useAutoUpdate();
-const { busy, notice, run } = useAsyncAction();
+// A setting written in a moment, whose end is the switch itself; in the ledger so a refusal outlives the card closing
+// and a flip still being written holds the switch wherever it is drawn next.
+const steer = useOperation(`sandbox/update/auto-switch`);
+const busy = steer.busy;
+const notice = steer.failure;
 const flip = (on: boolean): void => {
-    void run(() => setEnabled(on), t(`sandbox.autoUpdate.couldntChange`));
+    void steer.run({ what: t(`sandbox.autoUpdate.switchTitle`), failed: t(`sandbox.autoUpdate.couldntChange`), quiet: true, task: () => setEnabled(on) });
 };
 const id = useId();
 </script>

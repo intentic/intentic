@@ -3,9 +3,9 @@
 <script setup lang="ts">
 import type { ViewAsk, ViewAskAction, ViewRegistration } from "@intentic/extension-api";
 import { Markdown, Notice } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { isIconName } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
+import { useOperation } from "../../../workbench/operations/operations";
 import ChatDecisionButton from "../../chat/transcript/cards/ChatDecisionButton.vue";
 
 const t = useT();
@@ -16,8 +16,20 @@ const props = defineProps<{ view: ViewRegistration; ask: ViewAsk }>();
 const presses = (): readonly ViewAskAction[] => (props.ask.actions ?? []).slice(0, 3);
 const glyph = (action: ViewAskAction) => (action.icon !== undefined && isIconName(action.icon) ? action.icon : undefined);
 
-const { busy, notice, run } = useAsyncAction();
-const press = (action: ViewAskAction): Promise<void> => run(() => action.run(), t(`needs.inbox.askCouldNot`));
+// The press is the ask's, in the operations ledger: an extension's action runs for as long as it runs (a post going out,
+// hooks starting), so leaving the inbox mid-press keeps it held where it is drawn again, and its refusal is still said
+// there, or raised wherever the reader is if it ends with nobody on it.
+const pressing = useOperation(() => `needs/asks/${props.view.id}/${props.ask.id}`);
+const busy = pressing.busy;
+const notice = pressing.failure;
+const press = async (action: ViewAskAction): Promise<void> => {
+    await pressing.run({
+        what: `${action.label}: ${props.ask.title}`,
+        tag: action.label,
+        failed: t(`needs.inbox.askCouldNot`),
+        task: () => action.run(),
+    });
+};
 </script>
 
 <template>

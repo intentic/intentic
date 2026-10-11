@@ -15,6 +15,7 @@ import {
 import { accountsLoaded } from "../../accounts/providerAccounts";
 import { formatAge, formatRemaining, formatReset } from "../../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../../accounts/useChat-accounts";
+import { useRemeasure } from "../../accounts/pickerAccounts";
 import ProviderLogo from "../../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -80,16 +81,9 @@ const countDetail = (entry: CapacityProvider): string =>
     ].join(` · `);
 
 // One control for age and re-measure: the age itself is the pressable label, so watching it reset is the
-// confirmation. Forced past the daemon's one-minute cache, since pressing this means asking about right now.
-const measuring = ref(false);
-const remeasure = async (): Promise<void> => {
-    measuring.value = true;
-    try {
-        await refreshConnections(true);
-    } finally {
-        measuring.value = false;
-    }
-};
+// confirmation. Forced past the daemon's one-minute cache, since pressing this means asking about right now; the same
+// press as the picker's, so a read either started is still turning here.
+const { measuring, remeasure } = useRemeasure();
 const remeasureLabel = computed(() =>
     capacity.value.measuredAt === undefined
         ? t(`chat.pickerAccounts.measurePlanLimits`)

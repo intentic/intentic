@@ -16,10 +16,12 @@ const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived; hold?: boole
 };
 const derived = jest.fn();
 let release: ((value: WorkspaceDerived) => void) | undefined;
+let refuse: ((error: Error) => void) | undefined;
 const answer = (value: WorkspaceDerived): Promise<WorkspaceDerived> =>
     answers.hold === true
-        ? new Promise<WorkspaceDerived>((resolve) => {
+        ? new Promise<WorkspaceDerived>((resolve, reject) => {
               release = resolve;
+              refuse = reject;
           })
         : Promise.resolve(value);
 jest.mock("../../files/derivedText", () => ({
@@ -42,6 +44,7 @@ const { default: DerivedTextView } = await import("../DerivedTextView.vue");
 // The real cache, not a stand-in: seeding it is how a test says "this tab has read that file before", and its
 // once-per-version rule is what stops a pane that re-reads from deriving the same file again.
 const { rememberDerived } = await import("../../files/derivedCache");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 const shadow = (over: Partial<Extract<WorkspaceDerived, { present: true }>> = {}): WorkspaceDerived => ({
     present: true,
@@ -91,7 +94,9 @@ beforeEach(() => {
     answers.derive = undefined;
     answers.hold = false;
     release = undefined;
+    refuse = undefined;
     resetSandboxScope();
+    forgetOperations();
 });
 afterEach(() => {
     app?.unmount();
@@ -220,6 +225,28 @@ describe(`DerivedTextView`, () => {
         expect(element.textContent).toContain(`unsupported`);
         // There is no switch to point at: a file has text once someone opens it.
         expect(element.textContent).not.toContain(`Settings → Agent`);
+    });
+
+    // The rendering is the file's, not the pane's, and a version is asked for once: a reason that went with the pane
+    // that asked was never said again. The pane opened again finds it still under way, then why it failed.
+    it(`keeps a rendering, and why it failed, for the pane opened again over the file`, async () => {
+        answers.read = nothing({ path: `scans/deed.pdf` });
+        mount({ path: `scans/deed.pdf` });
+        // The open's read answers at once; the rendering it asks for next is held.
+        answers.hold = true;
+        await settle();
+        expect(derived).toHaveBeenCalledTimes(1);
+        app?.unmount();
+        document.body.innerHTML = ``;
+
+        answers.hold = false;
+        const element = mount({ path: `scans/deed.pdf` });
+        await settle();
+        expect(element.textContent).toContain(`Reading this file and writing its text`);
+        refuse?.(new Error(`The OCR worker ran out of memory.`));
+        await settle();
+        expect(derived).toHaveBeenCalledTimes(1);
+        expect(element.textContent).toContain(`The OCR worker ran out of memory.`);
     });
 
     it(`blames the sandbox, not the file, when the renderer is missing, and offers nothing that would fail`, async () => {

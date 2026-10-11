@@ -1,12 +1,13 @@
 import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } from "@intentic/sandbox-contract";
-import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { jsonBody } from "../../../client/sandbox/jsonBody";
 import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../../../client/session/passkeySignIn";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useOperation } from "../../../workbench/operations/operations";
 
 // The passkeys registered with the active sandbox, as the Access tab manages them: one's own (everyone's, for the
 // owner), the owner's require switch, and the recovery codes that switch hands out. Adding one rides the ordinary
@@ -18,9 +19,17 @@ export function usePasskeys() {
     const { active } = useSandbox();
     const { adoptSession } = useSandboxSession();
     const list = ref<PasskeysList>(EMPTY);
-    // The last set of recovery codes minted here; shown once, cleared on navigation or sandbox switch, never refetchable.
-    const codes = ref<readonly string[] | undefined>(undefined);
-    const { busy, notice, run } = useAsyncAction();
+    // Adding a passkey, and the two writes that mint recovery codes, are the sandbox's in the operations ledger: the
+    // section opened again mid-write holds its buttons. The codes are shown once and never refetchable, so the run
+    // that minted them is kept until the owner says they are saved (`forgetCodes`), per sandbox.
+    const adding = useOperation(`access/passkeys/add`);
+    const minting = useOperation<readonly string[] | undefined>(`access/passkeys/codes`);
+    const codes = computed(() => (minting.operation.value?.state === `done` ? minting.value.value : undefined));
+    const forgetCodes = (): void => minting.dismiss();
+    const busy = computed(() => adding.busy.value || minting.busy.value);
+    // A remove refused, said here: quick, and the list read again after it is the answer either way.
+    const removeNotice = ref<NoticeModel | undefined>(undefined);
+    const notice = computed(() => removeNotice.value ?? adding.failure.value ?? minting.failure.value);
     const supported = browserSupportsPasskeys();
 
     // Why the list could not be read; the rule's state is then unknown, so the section must not draw it as off.
@@ -44,51 +53,86 @@ export function usePasskeys() {
     watch(
         () => active.value?.id,
         () => {
-            codes.value = undefined;
-            notice.value = undefined;
+            removeNotice.value = undefined;
             void refresh();
         },
         { immediate: true },
     );
 
-    const add = (label: string): Promise<void> =>
-        run(async () => {
-            const options = await sandboxJson<RegistrationOptionsJSON>(`/system/passkeys/register/options`, jsonBody(`POST`, {}));
-            const response = await createPasskey(options);
-            const trimmed = label.trim();
-            const registered = await sandboxJson<PasskeyRegistered>(
-                `/system/passkeys/register`,
-                jsonBody(`POST`, { response, ...(trimmed === `` ? {} : { label: trimmed }) }),
-            );
-            // The upgraded session is kept, so switching the rule on right after does not ask for the passkey again.
-            if (registered.session !== undefined && active.value !== undefined) {
-                adoptSession(active.value.id, registered.session);
-            }
-            await refresh();
-        }, t(`sandbox.passkeysSection.couldntAddPasskey`));
+    // Quiet: the new row in the list is the answer, and the browser's own passkey prompt was the wait.
+    const add = async (label: string): Promise<void> => {
+        if (busy.value) {
+            return;
+        }
+        removeNotice.value = undefined;
+        await adding.run({
+            what: t(`sandbox.passkeysSection.addingPasskey`),
+            failed: t(`sandbox.passkeysSection.couldntAddPasskey`),
+            quiet: true,
+            task: async () => {
+                const options = await sandboxJson<RegistrationOptionsJSON>(`/system/passkeys/register/options`, jsonBody(`POST`, {}));
+                const response = await createPasskey(options);
+                const trimmed = label.trim();
+                const registered = await sandboxJson<PasskeyRegistered>(
+                    `/system/passkeys/register`,
+                    jsonBody(`POST`, { response, ...(trimmed === `` ? {} : { label: trimmed }) }),
+                );
+                // The upgraded session is kept, so switching the rule on right after does not ask for the passkey again.
+                const sandboxId = active.value?.id;
+                if (registered.session !== undefined && sandboxId !== undefined) {
+                    adoptSession(sandboxId, registered.session);
+                }
+                await refresh();
+            },
+        });
+    };
 
-    // Not routed through `run`: removing must not flash the add button's busy state.
+    // Not a ledger run: removing must not flash the add button's busy state, and the list read again is its answer.
     const remove = async (id: string): Promise<void> => {
+        removeNotice.value = undefined;
         try {
             await sandboxJson(`/system/passkeys/${encodeURIComponent(id)}`, { method: `DELETE` });
         } catch (caught) {
-            notice.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntRemovePasskey`));
+            removeNotice.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntRemovePasskey`));
         }
         await refresh();
     };
 
-    const setRequired = (required: boolean): Promise<void> =>
-        run(async () => {
-            const result = await sandboxJson<{ required: boolean; codes?: string[] }>(`/system/passkeys/policy`, jsonBody(`POST`, { required }));
-            codes.value = result.codes;
-            await refresh();
-        }, t(`sandbox.passkeysSection.couldntChangeRule`));
+    // Switching the rule on answers with the recovery codes; off answers with none, which puts any on screen away.
+    const setRequired = async (required: boolean): Promise<void> => {
+        if (busy.value) {
+            return;
+        }
+        removeNotice.value = undefined;
+        await minting.run({
+            what: required ? t(`sandbox.passkeysSection.requirePasskey`) : t(`sandbox.passkeysSection.stopRequiring`),
+            failed: t(`sandbox.passkeysSection.couldntChangeRule`),
+            keep: required,
+            quiet: !required,
+            task: async () => {
+                const result = await sandboxJson<{ required: boolean; codes?: string[] }>(`/system/passkeys/policy`, jsonBody(`POST`, { required }));
+                await refresh();
+                return result.codes;
+            },
+        });
+    };
 
-    const regenerateCodes = (): Promise<void> =>
-        run(async () => {
-            codes.value = (await sandboxJson<{ codes: string[] }>(`/system/passkeys/recovery`, jsonBody(`POST`, {}))).codes;
-            await refresh();
-        }, t(`sandbox.passkeysSection.couldntMintCodes`));
+    const regenerateCodes = async (): Promise<void> => {
+        if (busy.value) {
+            return;
+        }
+        removeNotice.value = undefined;
+        await minting.run({
+            what: t(`sandbox.passkeysSection.newCodes`),
+            failed: t(`sandbox.passkeysSection.couldntMintCodes`),
+            keep: true,
+            task: async () => {
+                const minted = (await sandboxJson<{ codes: string[] }>(`/system/passkeys/recovery`, jsonBody(`POST`, {}))).codes;
+                await refresh();
+                return minted;
+            },
+        });
+    };
 
-    return { list, unread, codes, busy, notice, supported, add, remove, setRequired, regenerateCodes, refresh };
+    return { list, unread, codes, forgetCodes, busy, notice, supported, add, remove, setRequired, regenerateCodes, refresh };
 }

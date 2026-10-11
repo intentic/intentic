@@ -5610,7 +5610,6 @@
             "cloneRepository": "Clonar un repositorio",
             "cloning": "Clonando…",
             "codeSomewhereElsePrivate": "Para código en otro sitio: un host privado, un servidor, un archivo comprimido.",
-            "couldntCloneRepository": "No se pudo clonar ese repositorio.",
             "dragAnywhereOntoPanel": "O arrástralos a cualquier parte de este panel.",
             "filesStayOnSandbox": "Los archivos se quedan en la máquina de tu sandbox: en ningún otro sitio",
             "getCodeIn": "Trae tu código",

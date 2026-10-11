@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BrowserPage, BrowserSession, DesktopWindow } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/base/errors";
+import { noticeOf } from "@intentic/ui/async";
 import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, shallowRef, watch } from "vue";
 import { activePageOf } from "../../features/browsers/activePage";
@@ -19,6 +20,7 @@ import { useBrowserView } from "../../features/browsers/useBrowserView";
 import { agentTitle, agentTurnRunning } from "../../features/browsers/agentTurns";
 import BrowserSelectMenu from "../../features/capabilities/connect/BrowserSelectMenu.vue";
 import { postTurnControl } from "../../features/chat/run/turnStream";
+import { useOperation, useOperations } from "../../workbench/operations/operations";
 import { loopbackPreviewTarget, pickTarget, type PreviewTarget } from "../../features/preview/previewModel";
 import { usePreviewTargets } from "../../features/preview/usePreviewTargets";
 import PreviewTab from "../../features/preview/PreviewTab.vue";
@@ -543,10 +545,13 @@ const focusAddress = (): void => omnibox.value?.focus();
 
 // Opening in the person's own window: the window starts on the first call, and every call answers which tab it opened,
 // which goes in front once the list carries it. A blank tab hands the keyboard to the address bar, as a new tab does.
-const opening = ref(false);
-const openError = ref<string | undefined>();
+// The ledger's (operations.ts), tagged with the address asked for: a window takes seconds to start, and one asked for
+// from a view left meanwhile is still starting, or failed, when the view comes back.
+const opener = useOperation<Awaited<ReturnType<typeof openBrowser>>>(`browsers/open`);
+const opening = opener.busy;
+const openError = computed(() => opener.failure.value?.title);
 // What the last open asked for, so Try again asks for it again whichever field it came from.
-let lastOpen: string | undefined;
+const lastOpen = computed(() => opener.operation.value?.tag);
 // A tab to put in front once its window is the one streaming and the list carries it, and where the keyboard goes then:
 // the address bar of a blank tab, the page of one opened at an address, either for a tab picked on the strip.
 interface PendingTab {
@@ -572,33 +577,35 @@ const openOwn = async (url?: string): Promise<void> => {
     if (opening.value) {
         return;
     }
-    lastOpen = url;
-    opening.value = true;
-    openError.value = undefined;
     if (url === undefined) {
         typed.release();
     } else {
         typed.hold(url, undefined);
     }
     showTab({ kind: `web`, session: current.value?.own === true ? current.value.name : namedWindow.value });
-    try {
-        const opened = await openBrowser(url);
-        awaitTab(
-            opened.pageId === undefined ? undefined : { name: opened.name, pageId: opened.pageId, focus: url === undefined ? `address` : `stage` },
-        );
-        if (opened.pageId === undefined) {
-            // No tab to say it of: the held address has nowhere to stand.
-            typed.release();
-        } else {
-            typed.settle(opened.pageId);
-        }
-        showWindow(opened.name);
-    } catch (error) {
+    const ran = await opener.run({
+        what: t(`browsers.browsers.starting`),
+        tag: url,
+        failed: (error) => noticeOf(errorMessage(error)),
+        // The window coming up is the answer.
+        quiet: true,
+        task: () => openBrowser(url),
+    });
+    const opened = ran?.state === `done` ? ran.value : undefined;
+    if (opened === undefined) {
         typed.release();
-        openError.value = errorMessage(error);
-    } finally {
-        opening.value = false;
+        return;
     }
+    // Read here, it is no news the next time this view comes back.
+    opener.dismiss();
+    awaitTab(opened.pageId === undefined ? undefined : { name: opened.name, pageId: opened.pageId, focus: url === undefined ? `address` : `stage` });
+    if (opened.pageId === undefined) {
+        // No tab to say it of: the held address has nowhere to stand.
+        typed.release();
+    } else {
+        typed.settle(opened.pageId);
+    }
+    showWindow(opened.name);
 };
 const takePendingTab = (): void => {
     const pending = pendingTab.value;
@@ -884,27 +891,42 @@ watch(selected, () => {
     queueOpen.value = false;
 });
 
-const replying = ref(false);
+// One reply per ask, by its request id, in the ledger: the ask is cleared by the daemon, not locally, so until the reply
+// lands `help` still reads as open, here and in this view drawn again.
+const replies = useOperations(`browsers/help`);
+const replying = computed(() => {
+    const help = current.value?.help;
+    return help !== undefined && replies.at(help.requestId)?.state === `running`;
+});
+const replyError = computed(() => {
+    const help = current.value?.help;
+    return help === undefined ? undefined : replies.at(help.requestId)?.failure;
+});
 const resolveHelp = async (helped: boolean): Promise<void> => {
     const help = current.value?.help;
-    // The ask is cleared by the daemon, not locally, so until the reply lands `help` still reads as open.
     if (help === undefined || replying.value) {
         return;
     }
-    replying.value = true;
     const note = helpNote.value.trim();
-    // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
-    // active sandbox's (see postTurnControl).
-    try {
-        await postTurnControl(undefined, `reply`, {
-            kind: `browser_help`,
-            requestId: help.requestId,
-            helped,
-            ...(note === `` ? {} : { note }),
-        });
+    const ran = await replies.run(help.requestId, {
+        what: helped ? t(`chat.words.doneHandBack`) : t(`chat.words.cantHelpNow`),
+        failed: t(`browsers.browsers.replyFailed`),
+        // The ask going away is the answer.
+        quiet: true,
+        // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
+        // active sandbox's (see postTurnControl).
+        task: async () => {
+            await postTurnControl(undefined, `reply`, {
+                kind: `browser_help`,
+                requestId: help.requestId,
+                helped,
+                ...(note === `` ? {} : { note }),
+            });
+        },
+    });
+    if (ran?.state === `done`) {
         helpNote.value = ``;
-    } finally {
-        replying.value = false;
+        replies.dismiss(help.requestId);
     }
 };
 
@@ -1431,7 +1453,7 @@ const { floats } = useBrowsersFloating();
                         </template>
                         <template v-else>
                             <span class="text-danger">{{ openError }}</span>
-                            <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.dismiss`)" @click="openError = undefined">
+                            <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.dismiss`)" @click="opener.dismiss()">
                                 <Icon name="times" class="text-3xs" />
                             </button>
                         </template>
@@ -1535,13 +1557,16 @@ const { floats } = useBrowsersFloating();
                                     class="ui-field-box ui-field-sm min-w-40 flex-1"
                                     @keydown.enter="resolveHelp(true)"
                                 />
-                                <Button size="small" class="shrink-0" @click="() => resolveHelp(true)">
+                                <Button size="small" class="shrink-0" :loading="replying" @click="() => resolveHelp(true)">
                                     {{ t(`chat.words.doneHandBack`) }}
                                 </Button>
-                                <Button size="small" tier="boring" class="shrink-0" @click="() => resolveHelp(false)">
+                                <Button size="small" tier="boring" class="shrink-0" :disabled="replying" @click="() => resolveHelp(false)">
                                     {{ t(`chat.words.cantHelpNow`) }}
                                 </Button>
                             </div>
+                            <p v-if="replyError" class="text-2xs text-danger">
+                                {{ replyError.title }}<template v-if="replyError.detail"> {{ replyError.detail }}</template>
+                            </p>
                         </div>
                     </template>
 

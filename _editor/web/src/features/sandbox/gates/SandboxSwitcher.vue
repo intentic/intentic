@@ -34,7 +34,9 @@ import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
-import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
+import { manageDeviceSandbox, useDevices, useHostRunning } from "../devices/useDevices";
+import { beginDeviceWork, machineKeyOf } from "../devices/runners/deviceWork";
+import { useOperation } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { oneLiner } from "../../../app/environments/scriptCommand";
 import RunCommand from "../../../components/RunCommand.vue";
@@ -322,16 +324,27 @@ const cleanupCommand = computed(() => {
 // The machine running this sandbox, when it is one of the owner's connected devices: then deleting the container
 // out there is a checkbox here, and the cleanup command above is only for a machine nothing can reach.
 const cleanupHost = useHostRunning(() => cleanupSlug.value);
+const { devices } = useDevices({ poll: false });
 const alsoDeleteThere = ref(false);
-const deletingThere = ref(false);
-const thereFailed = ref<string | undefined>(undefined);
+// Deleting the container out there takes tens of seconds and then drops the account row, so it is the removal's own
+// run, per sandbox removed: closing the dialog mid-delete does not stop it, and the dialog opened again on the same
+// sandbox holds its button and keeps a refusal the device sent.
+const removal = useOperation(() => `gates/remove/${pending.value?.id ?? `none`}`);
+const deletingThere = removal.busy;
+// The device's own sentence, as the dialog has always said it.
+const thereFailed = computed(() => {
+    const failure = removal.failure.value;
+    return failure === undefined ? undefined : (failure.detail ?? failure.title);
+});
 
 const askRemove = (option: SandboxSummary): void => {
     open.value = false;
     // Never carried over from the last dialog: this box destroys files, so it starts unticked every time.
     alsoDeleteThere.value = false;
-    thereFailed.value = undefined;
     pending.value = option;
+    if (!removal.busy.value) {
+        removal.dismiss();
+    }
 };
 
 // The hosted sandbox whose rollback is being asked about; the platform does it, so any row's can be, down or not.
@@ -341,36 +354,55 @@ const askRollBack = (option: SandboxSummary): void => {
     rollingBack.value = option;
 };
 
-const confirmRemove = async (): Promise<void> => {
-    const target = pending.value;
-    if (target === undefined) {
-        return;
-    }
-    const slug = cleanupSlug.value;
-    const hostId = cleanupHost.value;
-    // The device first, and the dialog stays open while it runs: a failure out there leaves the account row in place
-    // to retry from, rather than dropping the only handle on a container nobody deleted.
-    if (alsoDeleteThere.value && hostId !== undefined && slug !== undefined) {
-        deletingThere.value = true;
-        thereFailed.value = undefined;
-        try {
-            // Deleting the box serving this page kills the daemon relaying the call, so the stream dies instead of
-            // answering; that is the removal landing, and only a refusal the device sent still counts as a failure.
-            await manageDeviceSandbox(hostId, slug, `remove`, { severing: target.id === sandbox.activeSandboxId.value });
-        } catch (error) {
-            thereFailed.value = error instanceof Error ? error.message : String(error);
-            return;
-        } finally {
-            deletingThere.value = false;
-        }
-    }
-    pending.value = undefined;
-    const removal = sandbox.remove(target.id);
+// Drops the account row; with none left, the setup is where the reader goes next.
+const removeRow = async (target: SandboxSummary): Promise<void> => {
+    const dropped = sandbox.remove(target.id);
     // remove() drops the row synchronously before its first await, so the empty check is valid here.
     if (sandbox.sandboxes.value.length === 0) {
         void router.push(`/setup`);
     }
-    await removal;
+    await dropped;
+};
+
+const confirmRemove = async (): Promise<void> => {
+    const target = pending.value;
+    if (target === undefined || removal.busy.value) {
+        return;
+    }
+    const slug = cleanupSlug.value;
+    const hostId = cleanupHost.value;
+    if (!alsoDeleteThere.value || hostId === undefined || slug === undefined) {
+        pending.value = undefined;
+        await removeRow(target);
+        return;
+    }
+    // The device first, and the dialog stays open while it runs: a failure out there leaves the account row in place
+    // to retry from, rather than dropping the only handle on a container nobody deleted.
+    const device = devices.value.find((candidate) => candidate.hostId === hostId);
+    const machine = device === undefined ? hostId : machineKeyOf(devices.value, device);
+    const label = device?.label ?? hostId;
+    const doing = t(`sandbox.deviceOps.workingRemove`, { name: target.name });
+    const what = t(`sandbox.deviceOps.doingOn`, { doing, machine: label });
+    const outcome = await removal.run({
+        what,
+        failed: t(`sandbox.sandboxSwitcher.couldntDeleteThere`, { machine: label }),
+        task: async () => {
+            // The machine's card and the Devices tile carry it while the reader looks elsewhere.
+            const endMark = beginDeviceWork({ machine, sandboxes: [target.id], doing, what });
+            try {
+                // Deleting the box serving this page kills the daemon relaying the call, so the stream dies instead of
+                // answering; that is the removal landing, and only a refusal the device sent still counts as a failure.
+                await manageDeviceSandbox(hostId, slug, `remove`, { severing: target.id === sandbox.activeSandboxId.value });
+            } finally {
+                endMark();
+            }
+            // Part of the removal, not of the dialog: the row goes once the container has, dialog open or not.
+            await removeRow(target);
+        },
+    });
+    if (outcome?.state === `done` && pending.value?.id === target.id) {
+        pending.value = undefined;
+    }
 };
 </script>
 

@@ -17,6 +17,7 @@ import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as limitResetOriginal from "../session/limitReset";
+import { forgetOperations } from "../../../workbench/operations/operations";
 import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 import * as useSandboxSettingsOriginal from "../../sandbox/overview/useSandboxSettings";
@@ -204,6 +205,8 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     providerAccounts.value = { ...providerAccounts.value, claude: [] };
+    // A reset claim's answer is the account's, kept on the operations ledger beyond the strip that pressed it.
+    forgetOperations();
 });
 
 it(`offers the stopped turn a way on, and carries it on when pressed, saying nothing`, async () => {

@@ -9,6 +9,7 @@ import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
+import { useOperation } from "../../../workbench/operations/operations";
 import { forksAt } from "./forksIndex";
 import { useT } from "@intentic/ui/i18n";
 
@@ -50,7 +51,15 @@ const menu = ref<{ show: (event: Event) => void; hide: () => void } | undefined>
 // The menu exists from its first opening on: one per turn, each a PrimeVue ContextMenu teleported to the body and its
 // rows computed with it, for a press most turns never get.
 const menuMounted = ref(false);
-const rewinding = ref(false);
+// Going back restores the files, which takes seconds, and is the conversation's rather than this mark's: every cut of
+// the chat holds off while one runs, and a cut drawn again mid-way (the pane closed and reopened) still knows. Tagged
+// with the message it went back to, so the spinner stays on the mark that was pressed.
+const rewindWork = useOperation(() => `chat/${conversation.value.conversationId}/rewind`);
+const rewinding = computed(() => rewindWork.busy.value);
+const spinning = computed(() => {
+    const tag = rewindWork.operation.value?.tag;
+    return rewinding.value && tag !== undefined && tag === below.value?.messageId;
+});
 const armed = ref(false);
 let armedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -87,14 +96,24 @@ const rewind = async (): Promise<void> => {
         return;
     }
     disarm();
-    rewinding.value = true;
-    try {
-        // The workspace views are reading the tree this just rewrote.
-        if (await conversation.value.transcript.rewindTo(target)) {
-            await invalidateWorkspace(queryClient);
-        }
-    } finally {
-        rewinding.value = false;
+    const chat = conversation.value;
+    const ended = await rewindWork.run({
+        what: t(`chat.chatForkCut.rewinding`),
+        tag: target.messageId,
+        failed: t(`chat.chatForkCut.rewindFailed`),
+        // Its end shows in the chat itself: the transcript cut back with a line saying so, or the chat's own error.
+        quiet: true,
+        task: async () => {
+            // The workspace views are reading the tree this just rewrote.
+            if (await chat.transcript.rewindTo(target)) {
+                await invalidateWorkspace(queryClient);
+            }
+        },
+    });
+    // A refusal is already the chat's error (rewindTo); one that never got an answer is said in the same place.
+    if (ended?.state === `failed` && ended.failure !== undefined) {
+        chat.error.value = ended.failure.detail === undefined ? ended.failure.title : `${ended.failure.title} ${ended.failure.detail}`;
+        rewindWork.dismiss();
     }
 };
 
@@ -258,7 +277,7 @@ const open = (event: Event): void => {
             :aria-label="label"
             @click.stop="open"
         >
-            <Icon :name="rewinding ? `spinner` : `fork`" :spin="rewinding" class="text-2xs" />
+            <Icon :name="spinning ? `spinner` : `fork`" :spin="spinning" class="text-2xs" />
         </button>
         <ContextMenu v-if="menuMounted" ref="menu" :model="items" :min-width="17" />
     </div>

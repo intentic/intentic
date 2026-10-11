@@ -3,7 +3,16 @@
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
 import type { AskQuestion } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, inject, nextTick, reactive, ref, type Ref, watch } from "vue";
-import { answerStarted, clearQuestionDraft, type DraftFile, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
+import {
+    answerStarted,
+    clearQuestionDraft,
+    type DraftFile,
+    forgetQuestionFiles,
+    OTHER_LABEL,
+    questionFiles,
+    readQuestionDraft,
+    writeQuestionDraft,
+} from "../../drafts/questionDraft";
 import { claimDrop, type PendingAttachment, useChatAttachments } from "../../drafts/useChatAttachments";
 import ChatAttachmentStrip from "../../composer/ChatAttachmentStrip.vue";
 import { PANE_VIEW } from "../../panel/useChat-view";
@@ -45,7 +54,8 @@ const setOtherInput = (index: number, el: Element | ComponentPublicInstance | nu
 
 // Files for each Other row (a screenshot of what was meant), uploaded the moment they arrive like the composer's, and
 // to the same place: this conversation's own box. Without a pane around the card there is nowhere to upload them, so
-// the row offers no attaching at all.
+// the row offers no attaching at all. The lists are the card's request's rather than this drawing's (questionFiles), as
+// the composer's are its conversation's: an upload outlives the card that started it.
 const pane = inject(PANE_VIEW, undefined);
 const { reachable } = useSandbox();
 const paneConnected = computed(() => pane?.connected.value === true);
@@ -55,19 +65,24 @@ interface RowFiles {
     readonly files: Ref<PendingAttachment[]>;
     readonly staging: ReturnType<typeof useChatAttachments>;
 }
-const rows = new Map<number, RowFiles>();
+const rows = new Map<string, RowFiles>();
 const rowFiles = (index: number): RowFiles => {
-    const known = rows.get(index);
+    const requestId = card.value.requestId;
+    const at = `${requestId}:${index}`;
+    const known = rows.get(at);
     if (known !== undefined) {
         return known;
     }
-    const files = ref<PendingAttachment[]>([]);
+    // A settled card takes no files; one drawn in the history files nothing a page must keep.
+    const files = card.value.status === `pending` ? questionFiles(requestId, index) : ref<PendingAttachment[]>([]);
     const row = { files, staging: useChatAttachments({ attachments: files, reachable, connected: paneConnected, at: box }) };
-    rows.set(index, row);
+    rows.set(at, row);
     return row;
 };
-// One per question up front: a card's questions are fixed, and the draft watch below reads every row's list.
-card.value.questions.forEach((_, index) => rowFiles(index));
+// Every row of the card's questions, which are fixed; the draft watch below reads each one's list.
+const cardRows = (): [number, RowFiles][] => card.value.questions.map((_, index) => [index, rowFiles(index)]);
+// Made up front, so the draft watch below reads lists that already exist rather than making them as it reads.
+cardRows();
 const filesOf = (index: number): PendingAttachment[] => rowFiles(index).files.value;
 // The pickers behind each row's paperclip.
 const filePickers = ref<Record<number, HTMLInputElement | undefined>>({});
@@ -92,23 +107,29 @@ const removeFile = (index: number, file: PendingAttachment): void => rowFiles(in
 // What the draft keeps: only files that finished uploading, since an upload does not outlive the page that started it.
 const draftFiles = (): Record<number, DraftFile[]> =>
     Object.fromEntries(
-        [...rows.entries()]
+        cardRows()
             .map(
                 ([index, row]) =>
                     [index, row.files.value.filter((file) => file.status === `done`).map(({ name, path }) => ({ name, path }))] as const,
             )
             .filter(([, files]) => files.length > 0),
     );
-// Restored from a draft: already on disk, so drawn by path, removable like any other.
+// Restored from a draft: already on disk, so drawn by path, removable like any other. Joined to what the row already
+// holds rather than replacing it: a card drawn again finds its uploads still going, or landed while it was away.
 const restoreFiles = (stored: Record<number, readonly DraftFile[]>): void => {
     for (const [index, files] of Object.entries(stored)) {
-        rowFiles(Number(index)).files.value = files.map(({ name, path }) =>
-            reactive<PendingAttachment>({ id: uuid(), name, path, status: `done`, progress: 1 }),
-        );
+        const row = rowFiles(Number(index)).files;
+        const held = new Set(row.value.map((file) => file.path));
+        const restored = files
+            .filter(({ path }) => !held.has(path))
+            .map(({ name, path }) => reactive<PendingAttachment>({ id: uuid(), name, path, status: `done`, progress: 1 }));
+        if (restored.length > 0) {
+            row.value = [...row.value, ...restored];
+        }
     }
 };
 // Every row's file list as one value, so a finished upload or a removal reaches the draft like a keystroke does.
-const fileState = computed(() => [...rows.values()].map((row) => row.files.value.map((file) => `${file.path}:${file.status}`).join(`|`)).join(`#`));
+const fileState = computed(() => cardRows().map(([, row]) => row.files.value.map((file) => `${file.path}:${file.status}`).join(`|`)).join(`#`));
 
 // Loads the draft when a pending card appears; clears it once the card settles (answered, dismissed, cancelled).
 watch(
@@ -116,6 +137,7 @@ watch(
     ([requestId, status]) => {
         if (status !== `pending`) {
             clearQuestionDraft(requestId);
+            forgetQuestionFiles(requestId);
             return;
         }
         // Normalizes the stored draft to picks the current card accepts (questionDraft.normalize).

@@ -4,6 +4,7 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
 import type { Strip } from "../../../../chat/tabs/tabFacts";
+import { forgetOperations } from "../../../../../workbench/operations/operations";
 import { useBoardPresses } from "../boardPresses";
 
 // Pins the presses that land on no agent card: a run's stop stays marked until the ledger says it stopped, a refused
@@ -18,10 +19,10 @@ afterEach(() => {
     for (const effects of running.splice(0)) {
         effects.stop();
     }
+    forgetOperations();
 });
 
-const pressesOf = () => {
-    const runs = shallowRef<readonly WorkflowRun[]>([run(`r1`, `running`)]);
+const pressesOf = (runs = shallowRef<readonly WorkflowRun[]>([run(`r1`, `running`)])) => {
     const write = () => ({ mutateAsync: jest.fn(async (_runId: string): Promise<unknown> => undefined) });
     const workflows = { runs, stop: write(), archive: write(), unarchive: write() };
     const push = jest.fn(async (_to: RouteLocationRaw) => undefined);
@@ -41,7 +42,7 @@ const pressesOf = () => {
     const effects = effectScope();
     running.push(effects);
     const presses = effects.run(() => useBoardPresses({ workflows, agents, router: unstubbed<Router>(`router`, { push }), chat }))!;
-    return { runs, workflows, agents, push, presses, chat };
+    return { runs, workflows, agents, push, presses, chat, effects };
 };
 
 // A run with two steps whose sessions are `wf-<state>-a` and `wf-<state>-b`, each in the run's own state.
@@ -65,6 +66,23 @@ describe(`a workflow run's row`, () => {
         runs.value = [run(`r1`, `stopped`)];
         await nextTick();
         expect([...presses.stoppingRuns.value]).toEqual([]);
+    });
+
+    // The daemon has no `stopping`: a run reads `running` until it winds down, so a board that forgot its own ask
+    // offered Stop again to whoever left and came back.
+    it(`stays stopping on a board opened again, and takes no second press, until the ledger says the run stopped`, async () => {
+        const first = pressesOf();
+        await first.presses.stopRun(run(`r1`, `running`));
+        first.effects.stop();
+
+        const back = pressesOf(first.runs);
+        expect([...back.presses.stoppingRuns.value]).toEqual([`r1`]);
+        await back.presses.stopRun(run(`r1`, `running`));
+        expect(back.workflows.stop.mutateAsync).not.toHaveBeenCalled();
+
+        first.runs.value = [run(`r1`, `stopped`)];
+        await nextTick();
+        expect([...back.presses.stoppingRuns.value]).toEqual([]);
     });
 
     it(`lets a stop the daemon refused go at once, rather than leave the row stuck, and says why on the strip`, async () => {

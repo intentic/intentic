@@ -65,7 +65,7 @@ const newChat = () => {
     return conversation;
 };
 
-const { renderTranscript, synthesisPrompt, synthesizeSessions } = await import("../synthesizeSessions");
+const { renderTranscript, synthesisPrompt, synthesizeSessions, synthesizing } = await import("../synthesizeSessions");
 const { chatStrip } = await import("../../../chat/panel/useChat-strip");
 const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
 const { receiveChatNote } = await import("../../../chat/run/chatChannel");
@@ -238,14 +238,21 @@ describe(`synthesizeSessions`, () => {
     });
 
     // The panes are the old box's conversations: nothing of them may be written into, or opened in, the box switched to.
+    // Nor is the press the next box's: its Synthesize is free from the switch on, and stays free when the old press ends.
     it(`stops before anything lands when the sandbox switches while the sources are read`, async () => {
         openTwoPanes();
+        let switchedHeld: boolean | undefined;
         transcript.mockImplementation(async () => {
             resetSandboxScope();
+            switchedHeld = synthesizing.value;
+            synthesizing.value = true;
             return { messages: [{ role: `user`, text: `try approach one` }], from: 0, more: false };
         });
 
         const result = await synthesizeSessions();
+        expect(switchedHeld).toBe(false);
+        // The flag set after the switch stands for a press of the next box's, which the old one's end leaves alone.
+        expect(synthesizing.value).toBe(true);
 
         expect(result).toEqual({
             started: false,

@@ -2,9 +2,9 @@
 <script setup lang="ts">
 import type { EnvironmentNeed, Need } from "@intentic/sandbox-contract";
 import { Code, Notice } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "./useNeeds";
 
 const t = useT();
@@ -12,11 +12,11 @@ const t = useT();
 const props = defineProps<{ need: Need; subject: EnvironmentNeed }>();
 
 const needs = useNeeds();
-const { busy, notice, run } = useAsyncAction();
+// The need's answer, wherever it is drawn (needAnswer.ts).
+const { busy, notice, answer } = useNeedAnswer(() => props.need);
 const approve = async (): Promise<void> => {
-    await run(async () => {
-        await needs.answer.mutateAsync({ id: props.need.id, answer: { kind: `approve` } });
-    }, t(`needs.card.couldNotAnswer`));
+    const id = props.need.id;
+    await answer({ failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `approve` } }) });
 };
 </script>
 

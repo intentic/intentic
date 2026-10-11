@@ -12,3 +12,8 @@ export const generatesKey = (entry: CapabilityCatalogEntry, field: CapabilityFie
 // escaped and reopened, the one way a POSIX shell allows.
 export const authorizeCommand = (publicKey: string): string =>
     `mkdir -p ~/.ssh && echo '${publicKey.trim().replaceAll(`'`, `'\\''`)}' >> ~/.ssh/authorized_keys`;
+
+// Where a key made for one form is kept in the operations ledger: by tile and by the connection being edited (`new` for
+// one being added), so a key made for one is never offered to another. Without a connection, every key made on the tile.
+export const sshKeyScope = (entry: string, connection?: string): string =>
+    connection === undefined ? `capabilities/${entry}/ssh-key` : `capabilities/${entry}/ssh-key/${connection}`;

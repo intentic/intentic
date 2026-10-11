@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract";
 import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
+import { useOperation } from "../../../workbench/operations/operations";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
@@ -30,7 +30,13 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const queryClient = useQueryClient();
-const { busy, notice, run } = useAsyncAction();
+// The card's decisions (approve, reject, a runtime install's answer, taking a tool out), kept in the operations ledger
+// rather than here: the write lands whether or not this card is still open, and its refusal must still be there to read
+// beside the button it was pressed at. One at a time, so two decisions never race each other's write; the run's tag is
+// where it was pressed.
+const decision = useOperation<void>(`environment/decide`);
+const busy = decision.busy;
+const notice = decision.failure;
 /* A role-gate refusal is not a fault, so it is not reported as one. */
 const actionNotice = computed<NoticeModel | undefined>(() =>
     notice.value?.detail === `not a sandbox maintainer`
@@ -117,12 +123,22 @@ const awaiting = computed(() => recurring.value.filter((entry) => entry.declined
 // Where the last decision was pressed, so a refusal is said beside that button: the proposal's decision is on the
 // card's first row, a runtime install's at the foot of its own list, and one spot for both is far from one of them.
 // One action between them, still, so the two never race each other's write.
-const decidedAt = ref<`step` | `installs` | `contents`>(`step`);
-const decide = (at: `step` | `installs` | `contents`, write: () => Promise<Environment>): Promise<void> => {
-    decidedAt.value = at;
-    return run(async () => {
-        queryClient.setQueryData(ENVIRONMENT_KEY, await write());
-    }, t(`sandbox.environmentCard.couldNotUpdate`));
+type DecidedAt = `step` | `installs` | `contents`;
+const decidedAt = computed(() => (decision.operation.value?.tag ?? `step`) as DecidedAt);
+// The card's own state says how it went, so a decision raises a receipt only when it ends with the card closed.
+const decide = async (at: DecidedAt, write: () => Promise<Environment>): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await decision.run({
+        what: t(`sandbox.environmentCard.updating`),
+        tag: at,
+        done: () => t(`sandbox.environmentCard.updated`),
+        failed: t(`sandbox.environmentCard.couldNotUpdate`),
+        task: async () => {
+            queryClient.setQueryData(ENVIRONMENT_KEY, await write());
+        },
+    });
 };
 const approve = (): Promise<void> => {
     const hash = proposal.value?.hash;

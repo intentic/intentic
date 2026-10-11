@@ -2,11 +2,12 @@ import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-co
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, onScopeDispose, type Ref, ref } from "vue";
+import { computed, onScopeDispose, type Ref, ref, shallowReactive } from "vue";
 import { track } from "../../../app/analytics";
 import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
 import type { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useOperations } from "../../../workbench/operations/operations";
 import { hostedWaitView, machineStartable } from "../hostedWait";
 import type { OfferRead } from "../setupLanes";
 import { HOSTED_IDLE, type HostedEvent, type HostedLane, laneBusy, owesHandBack, stepHosted } from "./hostedLane";
@@ -68,6 +69,20 @@ const provisionFor = ({ platform, sandbox, project }: HostedLaneHost, sandboxId:
         ? sandbox.hostedProvision(sandboxId, token)
         : platform.hostedProvision({ sandboxId, token, project, profile: arrivingProfile() });
 
+// Why a machine call failed, and whether it was for want of room, which the card answers with another rung instead.
+interface HostedFailure {
+    readonly notice: NoticeModel;
+    readonly full: boolean;
+}
+
+// When somebody began waiting on each row's machine, by its sandbox id. The wait card escalates on it, and a reader who
+// left setup mid-wait and came back (the arrival resumes the row from the platform) is still in the same wait.
+// allow(module-state): one wait per setup row, keyed by the row's own sandbox id, for as long as the window lives
+const waitingSince = shallowReactive(new Map<string, number>());
+
+/** Test seam: the waits are module state, and one left in them would follow one test into the next. */
+export const forgetHostedWaits = (): void => waitingSince.clear();
+
 export const useHostedLane = (host: HostedLaneHost) => {
     const { platform, sandbox, row } = host;
     const { created } = row;
@@ -79,18 +94,47 @@ export const useHostedLane = (host: HostedLaneHost) => {
     const hostedRead = ref<OfferRead<{ enabled: boolean; remaining: number }>>({ kind: `unreachable` });
     // Null until answered; a platform without the route reads as disabled.
     const hostedOffer = ref<HostedOffer | null>(null);
+    // The platform calls on this row's machine, in the ledger (operations.ts) by the row's sandbox: a start, a start-over
+    // and a hand-back each take seconds to minutes, and the reader may leave and come back to the row meanwhile. One
+    // `machine` call at a time (a start or a start-over) and one `release`; their answers still land on this lane only
+    // under the action they were asked with, and what the ledger keeps is that they run and why they failed.
+    const rowId = (): string => created.value?.id ?? ``;
+    const work = useOperations<SandboxSummary | null, HostedFailure>(() => `setup/${rowId()}/hosted`);
+    const machineCall = computed(() => work.at(`machine`));
+    const releaseCall = computed(() => work.at(`release`));
     // Why the hosted lane failed, shown on the step where it was pressed; kept apart from the arrival's notice.
-    const hostedError = ref<NoticeModel | undefined>(undefined);
+    const hostedFailure = computed(() =>
+        [machineCall.value, releaseCall.value]
+            .filter((call) => call?.state === `failed`)
+            .toSorted((a, b) => (b?.order ?? 0) - (a?.order ?? 0))[0]?.failure,
+    );
+    const hostedError = computed(() => hostedFailure.value?.notice);
+    const clearHostedError = (): void => {
+        work.dismiss(`machine`);
+        work.dismiss(`release`);
+    };
     // A refusal for room met by this browser, harder than a later count; cleared only by `recheckCapacity`.
-    const hostedRefusedForRoom = ref(false);
+    const refusedForRoom = ref(false);
+    const hostedRefusedForRoom = computed(() => refusedForRoom.value || hostedFailure.value?.full === true);
     // When the hosted wait began (ms): it only escalates a wait already progressing, never decides what the card says.
-    const hostedSince = ref<number | undefined>(undefined);
+    const hostedSince = computed<number | undefined>({
+        get: () => waitingSince.get(rowId()),
+        set: (at) => {
+            if (at === undefined) {
+                waitingSince.delete(rowId());
+            } else {
+                waitingSince.set(rowId(), at);
+            }
+        },
+    });
     // Asked before a hand-back that has something to lose: the row keeps its name, address and sharing, so the
     // workspace looks recoverable afterwards, but the disk under it does not come back.
     const handBackAsked = ref(false);
     // Armed only while somebody waits on the machine.
     const now = useNow(() => hostedSince.value !== undefined);
     let polls = 0;
+    // The page went: an answer landing now is the next visit's to read, not this lane's.
+    let left = false;
 
     const step = (event: HostedEvent): void => {
         lane.value = stepHosted(lane.value, event);
@@ -117,8 +161,9 @@ export const useHostedLane = (host: HostedLaneHost) => {
     const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
     // The daemon's announced host once it exists: the address line for a lane that never mints a code.
     const hostedHost = computed(() => hostOf(created.value?.daemonUrl));
-    const hostedBusy = computed(() => laneBusy(lane.value));
-    const releasingHosted = computed(() => lane.value.kind === `releasing`);
+    // A call this page made, or one a page before it made on this row that is still out.
+    const hostedBusy = computed(() => laneBusy(lane.value) || machineCall.value?.state === `running`);
+    const releasingHosted = computed(() => lane.value.kind === `releasing` || releaseCall.value?.state === `running`);
     const hostedWait = computed(() =>
         hostedWaitView({
             machine: power.value.reading,
@@ -151,8 +196,8 @@ export const useHostedLane = (host: HostedLaneHost) => {
 
     // Retries the capacity read, not a provision: drops the held refusal and asks again; nothing is spent either way.
     const recheckCapacity = async (): Promise<void> => {
-        hostedRefusedForRoom.value = false;
-        hostedError.value = undefined;
+        refusedForRoom.value = false;
+        clearHostedError();
         await refreshHostedOffer();
     };
 
@@ -164,15 +209,39 @@ export const useHostedLane = (host: HostedLaneHost) => {
     // leaves the sandbox untouched. False when it did not happen.
     const provisionHosted = async (): Promise<boolean> => {
         const target = created.value;
-        if (target === null || target.token === null || lane.value.kind !== `idle`) {
+        const token = target?.token ?? null;
+        if (target === null || token === null || lane.value.kind !== `idle`) {
             return false;
+        }
+        // A start a page before this one made is still out: it is happening, and its machine reaches the row through
+        // the platform, where the arrival reads it.
+        if (machineCall.value?.state === `running`) {
+            return true;
         }
         step({ kind: `provision` });
         const { action } = lane.value;
-        hostedError.value = undefined;
+        clearHostedError();
         try {
-            const updated = await provisionFor(host, target.id, target.token);
-            if (!provisionLands(action, target.id)) {
+            const ran = await work.run(`machine`, {
+                what: t(`setup.useHostedLane.starting`),
+                tag: `provision`,
+                failed: (err) => ({ notice: noticeFrom(err, t(`setup.useHostedLane.startFailed`)), full: isAtCapacity(err) }),
+                // A start abandoned with its draft is no news, and one that lands is the card's own to say.
+                quiet: true,
+                task: () => provisionFor(host, target.id, token),
+            });
+            if (ran?.state === `failed`) {
+                if (action === lane.value.action) {
+                    // No machines left isn't a failure notice: the card replaces itself with what to do instead.
+                    refusedForRoom.value = ran.failure?.full === true;
+                } else if (!left) {
+                    // Asked of a lane this page has moved on from (a hand-back): nobody waits on its failure. One that
+                    // lands after the page went is kept, for the next visit to the row.
+                    work.dismiss(`machine`);
+                }
+            }
+            const updated = ran?.state === `done` ? ran.value : undefined;
+            if (updated === undefined || updated === null || !provisionLands(action, target.id)) {
                 return false;
             }
             created.value = updated;
@@ -180,13 +249,6 @@ export const useHostedLane = (host: HostedLaneHost) => {
             // Zero-command milestone: `sandbox_connected` completes it once this machine checks in.
             track(`sandbox_hosted_created`, {});
             return true;
-        } catch (err) {
-            if (action === lane.value.action) {
-                // No machines left isn't a failure notice: the card replaces itself with what to do instead.
-                hostedRefusedForRoom.value = isAtCapacity(err);
-                hostedError.value = noticeFrom(err, t(`setup.useHostedLane.startFailed`));
-            }
-            return false;
         } finally {
             if (action === lane.value.action) {
                 step({ kind: `settled`, action });
@@ -195,51 +257,62 @@ export const useHostedLane = (host: HostedLaneHost) => {
         }
     };
 
-    // `remake` discards the machine and has the lane build another (a bad address baked in), true once released;
-    // otherwise restarts what exists, files kept.
-    const startOver = async (target: SandboxSummary, remake: boolean, action: number): Promise<boolean> => {
+    // `remake` discards the machine and has the lane build another (a bad address baked in), answering the row released;
+    // otherwise restarts what exists, files kept, answering nothing.
+    const startOver = async (target: SandboxSummary, remake: boolean): Promise<SandboxSummary | null> => {
         if (!remake) {
             await platform.hostedRestart({ sandboxId: target.id });
-            return false;
+            return null;
         }
-        const updated = await sandbox.hostedRelease(target.id);
-        if (action !== lane.value.action) {
-            return false;
-        }
-        created.value = updated;
-        row.baseline.value = null;
-        return true;
+        return sandbox.hostedRelease(target.id);
     };
 
     // A rebuild needs a new machine, so it can meet a full fleet like any provision, worded the same way.
-    const refuseRestart = (err: unknown): void => {
-        hostedRefusedForRoom.value = isAtCapacity(err);
-        hostedError.value = hostedRefusedForRoom.value
-            ? noticeOf(t(`setup.useHostedLane.outOfMachines`), { tone: `warning` })
-            : noticeFrom(err, t(`setup.useHostedLane.restartFailed`));
-    };
+    const restartRefusal = (err: unknown): HostedFailure =>
+        isAtCapacity(err)
+            ? { notice: noticeOf(t(`setup.useHostedLane.outOfMachines`), { tone: `warning` }), full: true }
+            : { notice: noticeFrom(err, t(`setup.useHostedLane.restartFailed`)), full: false };
 
     // The wait's one recovery, as the failure it answers says: rebuild or restart. The clock restarts with the machine.
     const restartHosted = async (): Promise<void> => {
         const target = created.value;
-        if (target === null || lane.value.kind !== `idle`) {
+        if (target === null || lane.value.kind !== `idle` || machineCall.value?.state === `running`) {
             return;
         }
         // Read before the readings it depends on are cleared below.
         const remake = hostedWait.value.failure?.action === `remake`;
         step({ kind: `restart` });
         const { action } = lane.value;
-        hostedError.value = undefined;
+        clearHostedError();
         // Cleared before the call, not after it: what the old machine said must not narrate the one replacing it.
         row.forgetBoot();
         note({ kind: `restarted` });
         hostedSince.value = Date.now();
         let released = false;
         try {
-            released = await startOver(target, remake, action);
-        } catch (err) {
-            if (action === lane.value.action) {
-                refuseRestart(err);
+            const ran = await work.run(`machine`, {
+                what: t(`setup.useHostedLane.restarting`),
+                tag: `restart`,
+                failed: restartRefusal,
+                done: () => t(`setup.useHostedLane.restarted`),
+                task: () => startOver(target, remake),
+            });
+            if (action !== lane.value.action) {
+                // The lane moved on (a hand-back): nobody waits on this answer, failure included. One that lands after the
+                // page went is kept, for the next visit to the row.
+                if (ran?.state === `failed` && !left) {
+                    work.dismiss(`machine`);
+                }
+            } else {
+                if (ran?.state === `failed`) {
+                    refusedForRoom.value = ran.failure?.full === true;
+                }
+                const updated = ran?.state === `done` ? ran.value : null;
+                if (updated !== null && updated !== undefined) {
+                    created.value = updated;
+                    row.baseline.value = null;
+                    released = true;
+                }
             }
         } finally {
             step({ kind: `settled`, action });
@@ -260,7 +333,18 @@ export const useHostedLane = (host: HostedLaneHost) => {
         }
         step({ kind: `release` });
         try {
-            created.value = await sandbox.hostedRelease(target.id);
+            const ran = await work.run(`release`, {
+                what: t(`setup.useHostedLane.removing`),
+                failed: (err) => ({ notice: noticeFrom(err, t(`setup.useHostedLane.removeFailed`)), full: false }),
+                done: () => t(`setup.useHostedLane.removed`),
+                task: () => sandbox.hostedRelease(target.id),
+            });
+            // A hand-back a page before this one asked for is still out: the machine is not gone yet.
+            if (ran?.state !== `done` || ran.value === null || ran.value === undefined) {
+                step({ kind: `refused` });
+                return false;
+            }
+            created.value = ran.value;
             step({ kind: `released` });
             hostedSince.value = undefined;
             row.baseline.value = null;
@@ -269,10 +353,6 @@ export const useHostedLane = (host: HostedLaneHost) => {
             row.claimedAt.value = null;
             row.report.value = null;
             return true;
-        } catch (err) {
-            hostedError.value = noticeFrom(err, t(`setup.useHostedLane.removeFailed`));
-            step({ kind: `refused` });
-            return false;
         } finally {
             void refreshHostedOffer();
         }
@@ -288,7 +368,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
         if (!choosable(next)) {
             return;
         }
-        hostedError.value = undefined;
+        clearHostedError();
         // Choosing hosted starts nothing; the card below carries the button, so a pick has no side effect.
         if (next === `hosted`) {
             machine.value = next;
@@ -317,9 +397,10 @@ export const useHostedLane = (host: HostedLaneHost) => {
 
     // Picks up a machine already on the row: its story continues on the wait card, and a machine booting or asleep is
     // the wake reflex's to handle.
+    // A wait this window already began on the row goes on counting from when it began.
     const resumeHosted = (): void => {
         machine.value = `hosted`;
-        hostedSince.value = Date.now();
+        hostedSince.value ??= Date.now();
     };
 
     // One start for a machine the provider says is down, guarded like every hosted call: an answer landing after the
@@ -366,8 +447,15 @@ export const useHostedLane = (host: HostedLaneHost) => {
         }
     };
 
-    // Answers still in flight when the page goes describe a machine nobody is waiting on.
-    onScopeDispose(() => step({ kind: `left` }));
+    // Answers still in flight when the page goes describe a machine nobody is waiting on. A wait that already ended in
+    // a check-in is over: a later visit to the row waits afresh.
+    onScopeDispose(() => {
+        left = true;
+        step({ kind: `left` });
+        if (row.announced.value) {
+            hostedSince.value = undefined;
+        }
+    });
 
     return {
         machine,

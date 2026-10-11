@@ -16,6 +16,7 @@ const opened = jest.fn();
 jest.mock(`../../../workspace/files/refs/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
+const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 const SETTINGS = `${STATE_DIR}/config/settings.json`;
 const SKEW: ManifestProblemReport[`problems`] = [
@@ -47,6 +48,7 @@ afterEach(() => {
     repair.mockClear();
     reports.value = [];
     document.body.replaceChildren();
+    forgetOperations();
 });
 
 // Opens the row via its chevron; the diagnosis and buttons only exist once it's open.

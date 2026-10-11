@@ -2,12 +2,13 @@
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useOperation } from "../../../workbench/operations/operations";
 import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
 import { selectionCopy } from "../../browsers/selectionCopy";
 import { videoSink } from "../../browsers/videoSink";
-import { useLiveSocket, webSocketChannel } from "../../../client/session/liveSocket";
+import { liveSocket, webSocketChannel } from "../../../client/session/liveSocket";
 import { socketUrl as wsSocketUrl } from "../../sandbox/session/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
@@ -15,6 +16,12 @@ import { useT } from "@intentic/ui/i18n";
 // replayed via XTEST and CDP). `capability` picks which connection's browser to open, since a site may be connected
 // more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same signed-in profile. The
 // socket is a live one (liveSocket.ts): pinged, and redialled after a drop, which reopens the same profile.
+//
+// SAVING IS THE PROFILE'S, NOT THE WINDOW'S. "I'm done" asks the daemon to flush the profile and waits for its `saved`;
+// closing the window or leaving the page in that wait used to cut the socket first, so nobody learnt whether the sign-in
+// was kept. The save runs in the operations ledger under the account, and holds the socket until its answer: the window
+// can go, and the answer is kept (a receipt if nobody is on it), and a window opened again on the same account waits for
+// it rather than opening the profile over a save still writing it.
 
 const t = useT();
 
@@ -83,9 +90,26 @@ watch(surface, (element) => {
     observer.observe(element);
 });
 
+// The daemon's refusal of a save, in its own words.
+class SaveRefused extends Error {
+    constructor(readonly notice: NoticeModel) {
+        super(notice.title);
+    }
+}
+// The save in flight, answered by the daemon's `saved` or `error`, or by the socket dropping under it.
+let answer: { readonly saved: () => void; readonly refused: (notice: NoticeModel) => void } | undefined;
+// This window's content is gone: what still arrives on a socket a save holds only answers the save.
+let gone = false;
+const save = useOperation(() => `capabilities/${props.capability}/browser-profile`);
+// What went wrong in this window, or why the last save of this profile did not go through, whichever window ran it.
+const shownError = computed(() => errorMsg.value ?? save.failure.value);
+
+// Lets the window go, and its socket with it, unless a save still holds it: that one closes it on its answer.
 const close = (): void => {
     copy.cancel();
-    live.close();
+    if (answer === undefined) {
+        live.close();
+    }
 };
 
 // Sets the picture's size and configures the decoder. Codec is read out of the stream by the daemon rather than
@@ -105,9 +129,7 @@ const onReady = (message: { width?: number; height?: number; scale?: number; cod
 };
 
 const onSaved = (): void => {
-    emit("done");
-    close();
-    emit("update:visible", false);
+    answer?.saved();
 };
 
 // Everything on this socket that isn't a picture frame, kept as its own dispatch rather than inline branches.
@@ -122,6 +144,9 @@ const handleJson = (raw: string): void => {
         text?: string;
         cursor?: string;
     };
+    if (gone && message.type !== "saved" && message.type !== "error" && message.type !== "pong") {
+        return;
+    }
     switch (message.type) {
         case "ready":
             onReady(message);
@@ -149,6 +174,9 @@ const handleJson = (raw: string): void => {
 // A picture: one tag byte, then video (keyframe or delta, quiet or not) into the decoder, or a sharp still of the
 // settled page over it.
 const takePicture = (data: ArrayBuffer): void => {
+    if (gone) {
+        return;
+    }
     const bytes = new Uint8Array(data);
     const coded = videoTag(bytes[0]);
     if (coded !== undefined) {
@@ -166,6 +194,10 @@ const restart = (): void => {
 };
 const fail = (notice: NoticeModel): void => {
     live.end();
+    if (answer !== undefined) {
+        answer.refused(notice);
+        return;
+    }
     status.value = "error";
     errorMsg.value = notice;
 };
@@ -174,7 +206,8 @@ const fail = (notice: NoticeModel): void => {
 // elsewhere); asking again would get the same answer.
 const CLOSE_REFUSED = 1008;
 
-const live = useLiveSocket<string>({
+// Disposed by hand rather than with this component: a save in flight outlives the window (see above).
+const live = liveSocket<string>({
     mint: () => wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode }),
     open: webSocketChannel({ text: handleJson, binary: takePicture }),
     // A daemon from before this route answered pings says nothing back, and a still sign-in page sends no frames.
@@ -189,7 +222,7 @@ const live = useLiveSocket<string>({
         errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
     },
     onDrop: (code) => {
-        if (status.value === "saving") {
+        if (answer !== undefined) {
             // The profile may or may not have been saved; a fresh window would hide which.
             fail(noticeOf(t(`capabilities.browserProfileDialog.droppedWhileSaving`)));
         } else if (code === CLOSE_REFUSED || status.value === "error") {
@@ -204,6 +237,12 @@ const live = useLiveSocket<string>({
 const connect = (): void => {
     restart();
     errorMsg.value = undefined;
+    // A save another window left still writing this profile: waited for (below) rather than opened over.
+    if (save.busy.value) {
+        status.value = "saving";
+        return;
+    }
+    save.dismiss();
     live.connect();
 };
 
@@ -214,8 +253,24 @@ watch(
     (open) => (open ? connect() : close()),
     { immediate: true },
 );
+// The save this window waited for, run from one before it: its end is this window's too.
+watch(save.busy, (busy) => {
+    if (busy || answer !== undefined || !props.visible || status.value !== "saving") {
+        return;
+    }
+    if (save.operation.value?.state === "done") {
+        emit("done");
+        emit("update:visible", false);
+        return;
+    }
+    status.value = "error";
+});
 onBeforeUnmount(() => {
+    gone = true;
     close();
+    if (answer === undefined) {
+        live.dispose();
+    }
     observer?.disconnect();
     window.clearTimeout(resizeTimer);
     // A decoder holds buffers from its stream; close it or a dialog opened/closed repeatedly leaks them.
@@ -307,13 +362,44 @@ const cancel = (): void => {
     emit("update:visible", false);
 };
 // Hand the window back: the daemon flushes the profile and answers `saved`; a socket that never opened just cancels.
-const finish = (): void => {
+const finish = async (): Promise<void> => {
+    if (answer !== undefined || save.busy.value) {
+        return;
+    }
     if (!live.isOpen()) {
         cancel();
         return;
     }
     status.value = "saving";
-    sendMsg({ type: "done" });
+    const ended = await save.run({
+        what: t(`capabilities.browserProfileDialog.saving`, { label: props.label }),
+        failed: (error) => (error instanceof SaveRefused ? error.notice : noticeFrom(error, t(`capabilities.browserProfileDialog.couldntSave`))),
+        done: () => t(`capabilities.browserProfileDialog.saved`, { label: props.label }),
+        task: async () => {
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    answer = { saved: resolve, refused: (notice) => reject(new SaveRefused(notice)) };
+                    sendMsg({ type: "done" });
+                });
+            } finally {
+                answer = undefined;
+                // The socket was the save's to hold; with its answer in, nothing needs it.
+                live.close();
+                if (gone) {
+                    live.dispose();
+                }
+            }
+        },
+    });
+    if (gone) {
+        return;
+    }
+    if (ended?.state === "done") {
+        emit("done");
+        emit("update:visible", false);
+        return;
+    }
+    status.value = "error";
 };
 </script>
 
@@ -333,7 +419,7 @@ const finish = (): void => {
             </template>
         </p>
 
-        <Notice v-if="errorMsg" :of="errorMsg" class="mb-3" />
+        <Notice v-if="shownError" :of="shownError" class="mb-3" />
 
         <!-- The page's viewport, sized to this box: the daemon fits the browser window to it, so the picture is the page at 1:1. -->
         <div

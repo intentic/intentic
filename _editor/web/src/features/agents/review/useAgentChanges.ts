@@ -1,4 +1,3 @@
-import { useAsyncAction } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import {
     isTestPath,
@@ -14,13 +13,16 @@ import {
     type FileDiff,
 } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
-import { computed, ref, watch, type Ref } from "vue";
+import type { NoticeModel } from "@intentic/ui/async";
+import { computed, onScopeDispose, watch, type Ref } from "vue";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { type Operation, type RunOptions, useOperations } from "../../../workbench/operations/operations";
 import {
+    agentWork,
     askAgentToResolve,
     deleteAgentScratch,
     discardAgent,
@@ -37,7 +39,8 @@ import { useNotifications } from "../../../workbench/notifications/notifications
 
 // Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
 // staged/unstaged split. `landed` is read off the tree; committed files drop into `absorbed`. Land/discard replace
-// commit/discard; this composable also tracks busy/error state, the last land's conflicts, and viewed progress.
+// commit/discard; this composable also reads the presses' busy/error state from the ledger, the last land's conflicts,
+// and viewed progress.
 
 // One row of the review, flattened from per-repo groups so selection, keyboard nav, and viewed-state can address a
 // file by a single key. Key is JSON, not a delimiter, since repo id and path could collide on any separator.
@@ -140,12 +143,38 @@ const without = (set: Ref<ReadonlySet<string>>, id: string): void => {
 };
 const forgetAsk = (id: string): void => without(askedByAgent, id);
 
+// Hands a land conflict back to the agent, marked asked on the press and unmarked once the press turns out to start no
+// turn; a refusal (e.g. a stale report) is thrown, for the press to keep as its failure like any other.
+const askToResolve = async (id: string): Promise<void> => {
+    askedByAgent.value = new Set(askedByAgent.value).add(id);
+    let ask: ResolveAsk = { kind: `dropped` };
+    try {
+        ask = await askAgentToResolve(id);
+    } finally {
+        if (ask.kind !== `sent`) {
+            forgetAsk(id);
+        }
+    }
+    // A press that found nothing left and put the card right is not a declined mutation: it takes the same
+    // floating receipt the board gives it, rather than this panel's error line.
+    if (ask.kind === `settled`) {
+        useNotifications().say(ask.why);
+    }
+    if (ask.kind === `refused`) {
+        throw new Error(ask.why);
+    }
+};
+
 // Empty agentId means no review yet (draft agent, or one the roster hasn't resolved); the query below stays
 // disabled until it does.
 // `at` is this agent's sandbox (undefined = active). Reads, land and discard cross sandboxes by id;
 // askResolve/setAutoLand/archive use the local fleet store, active sandbox only. `agent` is the caller's resolved
-// roster entry, used by `land`.
-export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefined>, agent?: Ref<Pick<AgentSummary, `landedPresence`> | undefined>) {
+// roster entry: `land` measures its rung from it, the presses name it, and its `landing` holds them.
+export function useAgentChanges(
+    agentId: Ref<string>,
+    at?: Ref<string | undefined>,
+    agent?: Ref<(Pick<AgentSummary, `landedPresence`> & { readonly title?: string; readonly status?: string }) | undefined>,
+) {
     const reach = computed(() => at?.value);
     const { query, error } = useSandboxQuery(
         {
@@ -228,10 +257,38 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         viewedByAgent.value = byAgent;
     };
 
-    const { busy: actionBusy, notice: actionError, run } = useAsyncAction();
+    // The presses on this agent's work, kept in the ledger under the card rather than in this view: a land runs to
+    // the end of the daemon's apply (minutes on a large branch) with no deadline, and the reader who opens another
+    // agent meanwhile must come back to it still landing, the press still held, and its end. One at a time, as the
+    // daemon allows; the card's own `landing` holds them too, which is a land started from the board or another window
+    // (the board's provisional claim draws it from the press).
+    const work = useOperations<LandResult | undefined>(() => `${agentWork(agentId.value, reach.value)}/review`);
+    const actionBusy = computed(() => work.busy.value || agent?.value?.status === `landing`);
+    // Whether this review is still on screen, for what only its reader is told.
+    let present = true;
+    onScopeDispose(() => {
+        present = false;
+    });
+    // The newest press speaks for the panel's one error line: a later press clears an earlier one's failure.
+    const actionError = computed(() => work.all.value.at(-1)?.failure);
+    const name = (): string => agent?.value?.title ?? t(`agents.agentStatus.untitledAgent`);
+    // `tag` names the act, which `resolving` reads; quiet unless said otherwise, since most ends show on the review.
+    const act = async (
+        tag: string,
+        options: Omit<RunOptions<LandResult | undefined, NoticeModel>, `tag` | `task`> & { readonly task: () => Promise<LandResult | void> },
+    ): Promise<Operation<LandResult | undefined> | undefined> => {
+        if (actionBusy.value) {
+            return undefined;
+        }
+        return work.run(tag, { quiet: true, ...options, tag, task: async () => (await options.task()) ?? undefined });
+    };
 
-    // Paths a `merge` land left with conflict markers, for the panel to hand back to the user to finish.
-    const resolving = ref<LandResult[`resolving`]>(undefined);
+    // Paths a `merge` land left with conflict markers, for the panel to hand back to the user to finish: carried by
+    // that land's answer, which nothing can ask for again, until a later land or a discard says otherwise.
+    const resolving = computed<LandResult[`resolving`]>(() => {
+        const last = work.all.value.findLast((operation) => operation.tag === `land` || operation.tag === `discard`);
+        return last?.tag === `land` && last.state === `done` ? last.value?.resolving : undefined;
+    });
 
     // Whether the user asked the agent to resolve: exactly as long as the turn it started (drawn from the press), however
     // often the report is re-read while the agent rebases.
@@ -253,49 +310,60 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const missing = computed(() => agent?.value !== undefined && landedAway(agent.value)?.offerReland === true);
     // `force` answers the mid-write warning prompt; a parked turn needs none. `settings`: root-repo files a Sandbox page
     // wrote that refused the last land, committed first in the same press (commitSettings).
-    const land = (mode: LandMode = `check`, span?: AgentSpan, force = false, settings: readonly string[] = []): Promise<void> =>
-        run(async () => {
-            await commitSettings(settings, reach.value);
-            const rung: AgentSpan = span ?? (missing.value ? `cumulative` : `outstanding`);
-            const result = await landAgent(agentId.value, mode, rung, force, reach.value);
-            resolving.value = result.resolving;
-            await invalidateAgentAction(agentId.value, reach.value);
-            // A land that carried nothing is an outcome, not a declined mutation: it takes the same floating receipt
-            // askResolve gives a press that found nothing left, rather than this panel's error line. Said out loud
-            // because the rows below are read off the branch and don't move, so silence here reads as "it worked".
-            if (result.landed && !result.changed) {
-                useNotifications().say(nothingLanded());
-            }
-        }, t(`agents.useAgentChanges.landFailed`));
+    // Not quiet: its end is the one a reader who left wants to hear about wherever they are.
+    const land = async (mode: LandMode = `check`, span?: AgentSpan, force = false, settings: readonly string[] = []): Promise<void> => {
+        const id = agentId.value;
+        const box = reach.value;
+        const called = name();
+        const rung: AgentSpan = span ?? (missing.value ? `cumulative` : `outstanding`);
+        const outcome = await act(`land`, {
+            what: t(`agents.useAgentChanges.landing`, { name: called }),
+            failed: t(`agents.useAgentChanges.landFailed`),
+            quiet: false,
+            done: (result) =>
+                result === undefined || result.held === true
+                    ? undefined
+                    : !result.landed
+                      ? t(`agents.useAgentChanges.landBlocked`, { name: called })
+                      : result.changed
+                        ? t(`agents.useAgentChanges.landed`, { name: called })
+                        : nothingLanded(),
+            task: async () => {
+                await commitSettings(settings, box);
+                const result = await landAgent(id, mode, rung, force, box);
+                await invalidateAgentAction(id, box);
+                return result;
+            },
+        });
+        // A land that carried nothing is an outcome, not a declined mutation: it takes the same floating receipt
+        // askResolve gives a press that found nothing left, rather than this panel's error line. Said out loud because
+        // the rows below are read off the branch and don't move, so silence here reads as "it worked". A reader who
+        // left this review meanwhile has heard it already, as the land's receipt (`done` above).
+        if (present && agentId.value === id && outcome?.value?.landed === true && !outcome.value.changed) {
+            useNotifications().say(nothingLanded());
+        }
+    };
 
-    // This agent's auto-land override (null = inherit the sandbox setting); routed through `run` so a refusal surfaces
-    // in the panel's error line.
-    const setAutoLand = (autoLand: boolean | null): Promise<void> =>
-        run(() => useAgents().setAutoLand(agentId.value, autoLand), t(`agents.useAgentChanges.autoLandFailed`));
+    // This agent's auto-land override (null = inherit the sandbox setting); a press like the others, so a refusal
+    // surfaces in the panel's error line.
+    const setAutoLand = async (autoLand: boolean | null): Promise<void> => {
+        const id = agentId.value;
+        await act(`auto-land`, {
+            what: t(`agents.useAgentChanges.changingAutoLand`, { name: name() }),
+            failed: t(`agents.useAgentChanges.autoLandFailed`),
+            task: () => useAgents().setAutoLand(id, autoLand),
+        });
+    };
 
-    // Hands the conflict to the agent, marked asked on the press and unmarked once the press turns out to start no turn;
-    // a refusal (e.g. a stale report) surfaces through actionError like any other declined mutation.
-    const askResolve = (): Promise<void> =>
-        run(async () => {
-            const id = agentId.value;
-            askedByAgent.value = new Set(askedByAgent.value).add(id);
-            let ask: ResolveAsk = { kind: `dropped` };
-            try {
-                ask = await askAgentToResolve(id);
-            } finally {
-                if (ask.kind !== `sent`) {
-                    forgetAsk(id);
-                }
-            }
-            // A press that found nothing left and put the card right is not a declined mutation: it takes the same
-            // floating receipt the board gives it, rather than this panel's error line.
-            if (ask.kind === `settled`) {
-                useNotifications().say(ask.why);
-            }
-            if (ask.kind === `refused`) {
-                throw new Error(ask.why);
-            }
-        }, t(`agents.useAgentChanges.askResolveFailed`));
+    // Hands the conflict to the agent (askToResolve); a refusal surfaces through actionError like any other.
+    const askResolve = async (): Promise<void> => {
+        const id = agentId.value;
+        await act(`resolve`, {
+            what: t(`agents.useAgentChanges.askingResolve`, { name: name() }),
+            failed: t(`agents.useAgentChanges.askResolveFailed`),
+            task: () => askToResolve(id),
+        });
+    };
 
     // The header's fix press: asks now, or, while a turn runs, once it has ended.
     const fixConflicts = (): Promise<void> => {
@@ -319,28 +387,59 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         { immediate: true },
     );
 
-    const discard = (): Promise<void> =>
-        run(async () => {
-            await discardAgent(agentId.value, reach.value);
-            resolving.value = undefined;
-            await invalidateAgentAction(agentId.value, reach.value);
-        }, t(`agents.useAgentChanges.discardFailed`));
+    // Not quiet, like a land: the branch and worktree go, and a reader who left should hear that they did.
+    const discard = async (): Promise<void> => {
+        const id = agentId.value;
+        const box = reach.value;
+        const called = name();
+        await act(`discard`, {
+            what: t(`agents.useAgentChanges.discarding`, { name: called }),
+            done: () => t(`agents.useAgentChanges.discarded`, { name: called }),
+            failed: t(`agents.useAgentChanges.discardFailed`),
+            quiet: false,
+            task: async () => {
+                await discardAgent(id, box);
+                await invalidateAgentAction(id, box);
+            },
+        });
+    };
 
     // Scratch the review named: carried with the work from the next land on, or deleted from the copy.
-    const includeScratch = (repo: string, paths: readonly string[]): Promise<void> =>
-        run(async () => {
-            await includeAgentScratch(agentId.value, repo, paths, reach.value);
-            await invalidateAgentAction(agentId.value, reach.value);
-        }, t(`agents.useAgentChanges.includeScratchFailed`));
-    const deleteScratch = (repo: string, paths: readonly string[]): Promise<void> =>
-        run(async () => {
-            await deleteAgentScratch(agentId.value, repo, paths, reach.value);
-            await invalidateAgentAction(agentId.value, reach.value);
-        }, t(`agents.useAgentChanges.deleteScratchFailed`));
+    const includeScratch = async (repo: string, paths: readonly string[]): Promise<void> => {
+        const id = agentId.value;
+        const box = reach.value;
+        await act(`scratch`, {
+            what: t(`agents.useAgentChanges.includingScratch`, { name: name() }),
+            failed: t(`agents.useAgentChanges.includeScratchFailed`),
+            task: async () => {
+                await includeAgentScratch(id, repo, paths, box);
+                await invalidateAgentAction(id, box);
+            },
+        });
+    };
+    const deleteScratch = async (repo: string, paths: readonly string[]): Promise<void> => {
+        const id = agentId.value;
+        const box = reach.value;
+        await act(`scratch`, {
+            what: t(`agents.useAgentChanges.deletingScratch`, { name: name() }),
+            failed: t(`agents.useAgentChanges.deleteScratchFailed`),
+            task: async () => {
+                await deleteAgentScratch(id, repo, paths, box);
+                await invalidateAgentAction(id, box);
+            },
+        });
+    };
 
     // Finishing with an agent rather than its work, the panel's counterpart to the board's archive action; the diff
     // still renders after archiving (re-read from the branch).
-    const archive = (): Promise<void> => run(() => useAgents().archive([agentId.value]), t(`agents.useAgentChanges.archiveFailed`));
+    const archive = async (): Promise<void> => {
+        const id = agentId.value;
+        await act(`archive`, {
+            what: t(`agents.useAgentChanges.archiving`, { name: name() }),
+            failed: t(`agents.useAgentChanges.archiveFailed`),
+            task: () => useAgents().archive([id]),
+        });
+    };
 
     return {
         repos,

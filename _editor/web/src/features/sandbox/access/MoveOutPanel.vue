@@ -13,14 +13,15 @@ import {
     ui,
     vAction,
 } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
-import { computed, onMounted, ref } from "vue";
+import { noticeFrom } from "@intentic/ui/async";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { bundleDownloadUrl, useBundleExports } from "./useBundleExports";
 import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
 import { PUBLISH_ANCHOR } from "./publishAnchor";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
@@ -32,46 +33,84 @@ const t = useT();
 
 const workspace = ref<WorkspaceRemote | undefined>(undefined);
 const confirmingPublish = ref(false);
-const { notice: workspaceError, run: runWorkspace } = useAsyncAction();
-const { busy: publishing, notice: publishError, run: runPublish } = useAsyncAction();
+// Why the repo could not be read: a read on opening, not something the reader started, so it stays with the panel.
+const workspaceError = ref<NoticeModel | undefined>(undefined);
+// Publishing creates a repository and pushes the whole workspace, so it is the sandbox's run, not the panel's: the
+// panel opened again mid-push holds the button, and then shows where it went.
+const publishOp = useOperation<WorkspaceRemote>(`access/move-out/publish`);
+const publishing = publishOp.busy;
+const publishError = publishOp.failure;
 
 // Read up front, not behind a button: publish status decides if a downloaded definition carries real content.
 const published = computed(() => (workspace.value?.remote === undefined ? undefined : workspaceRepoOf(workspace.value.remote)));
 const host = computed(() => workspace.value?.hosts[0]);
 
-const loadWorkspace = (): Promise<void> =>
-    runWorkspace(async () => {
+const loadWorkspace = async (): Promise<void> => {
+    workspaceError.value = undefined;
+    try {
         workspace.value = await sandboxRaw(`GET /definition/workspace`);
-    }, t(`sandbox.moveOutPanel.couldntReadWorkspaceRepo`));
+    } catch (error) {
+        workspaceError.value = noticeFrom(error, t(`sandbox.moveOutPanel.couldntReadWorkspaceRepo`));
+    }
+};
 
 onMounted(() => {
     void loadWorkspace();
 });
 
+// A publish that lands is the repo as it now stands, whichever mount of the panel is up when it does.
+watch(
+    () => publishOp.value.value,
+    (result) => {
+        if (result !== undefined) {
+            workspace.value = { remote: result.remote, branch: result.branch, hosts: workspace.value?.hosts ?? [] };
+        }
+    },
+    { immediate: true },
+);
+
 // Confirmed, not one-click: publishing creates a repository on someone's account and pushes to it.
-const publish = (): Promise<void> =>
-    runPublish(async () => {
-        const result = await sandboxRaw(`POST /definition/workspace/publish`, { input: {} });
-        workspace.value = { remote: result.remote, branch: result.branch, hosts: workspace.value?.hosts ?? [] };
+const publish = async (): Promise<void> => {
+    if (publishing.value) {
+        return;
+    }
+    const hosts = workspace.value?.hosts ?? [];
+    const outcome = await publishOp.run({
+        what: t(`sandbox.moveOutPanel.publishingWorkspace`),
+        failed: t(`sandbox.moveOutPanel.couldntPublishWorkspace`),
+        task: async () => {
+            const result = await sandboxRaw(`POST /definition/workspace/publish`, { input: {} });
+            return { remote: result.remote, branch: result.branch, hosts };
+        },
+    });
+    if (outcome?.state === `done`) {
         confirmingPublish.value = false;
-    }, t(`sandbox.moveOutPanel.couldntPublishWorkspace`));
+    }
+};
 
-// The document
-const derived = ref<DefinitionExport | undefined>(undefined);
-const { busy: deriving, notice: deriveError, run: runDerive } = useAsyncAction();
-
-// The document is small text, so unlike a bundle it downloads through an object URL rather than a ticket.
-const downloadDefinition = (): Promise<void> =>
-    runDerive(async () => {
-        const answer = await sandboxRaw(`GET /definition`);
-        derived.value = answer;
-        const url = URL.createObjectURL(new Blob([answer.toml], { type: `application/toml` }));
-        const anchor = document.createElement(`a`);
-        anchor.href = url;
-        anchor.download = `sandbox.toml`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-    }, t(`sandbox.moveOutPanel.couldntDeriveDefinition`));
+// The document. Small text, so unlike a bundle it downloads through an object URL rather than a ticket; the run hands
+// the download to the browser whether or not the panel is still open, and what it left out is shown beside it.
+const deriveOp = useOperation<DefinitionExport>(`access/move-out/definition`);
+const deriving = deriveOp.busy;
+const deriveError = deriveOp.failure;
+const derived = deriveOp.value;
+const downloadDefinition = async (): Promise<void> => {
+    await deriveOp.run({
+        what: t(`sandbox.moveOutPanel.downloadSandboxToml`),
+        failed: t(`sandbox.moveOutPanel.couldntDeriveDefinition`),
+        quiet: true,
+        task: async () => {
+            const answer = await sandboxRaw(`GET /definition`);
+            const url = URL.createObjectURL(new Blob([answer.toml], { type: `application/toml` }));
+            const anchor = document.createElement(`a`);
+            anchor.href = url;
+            anchor.download = `sandbox.toml`;
+            anchor.click();
+            URL.revokeObjectURL(url);
+            return answer;
+        },
+    });
+};
 
 // The bundle
 // Export state derives from the export directory (useBundleExports), surviving a refresh or view switch.
@@ -82,38 +121,61 @@ const listNotice = computed<NoticeModel | undefined>(() =>
         : { tone: `danger`, title: t(`sandbox.moveOutPanel.couldntListSandboxsBundles`), detail: listError.value },
 );
 
-const { busy: starting, notice: startError, run: runStart } = useAsyncAction();
+// Starting an export, and asking for a download ticket, are each a quick ask whose end shows in the list the export
+// directory backs (useBundleExports); one run between them, as before, so a refusal is kept for the panel opened again.
+const startOp = useOperation(`access/move-out/export`);
+const starting = startOp.busy;
+const startError = startOp.failure;
 
-// Panel holds only whether the dialog is open; the answer belongs to <ExportBundleDialog>. Closed inside the task, so a
-// failed start leaves the dialog up with the notice, not a reset button.
+// Panel holds only whether the dialog is open; the answer belongs to <ExportBundleDialog>. Closed on the start landing,
+// so a failed start leaves the dialog up with the notice, not a reset button.
 const exporting = ref(false);
-const startExport = (secrets: boolean): Promise<void> =>
-    runStart(async () => {
-        await start(secrets);
+const startExport = async (secrets: boolean): Promise<void> => {
+    const outcome = await startOp.run({
+        what: t(`sandbox.moveOutPanel.exportRunning`),
+        failed: t(`sandbox.moveOutPanel.couldntStartExport`),
+        quiet: true,
+        task: () => start(secrets),
+    });
+    if (outcome?.state === `done`) {
         exporting.value = false;
-    }, t(`sandbox.moveOutPanel.couldntStartExport`));
+    }
+};
 
 // Navigates to the URL so the browser's own download manager takes over; a multi-GB bundle never passes through this
 // tab's memory, and closing the tab doesn't cancel it.
-const download = (entry: BundleExport): Promise<void> =>
-    runStart(async () => {
-        window.location.href = await bundleDownloadUrl(entry.name);
-    }, t(`sandbox.moveOutPanel.couldntStartDownload`));
+const download = async (entry: BundleExport): Promise<void> => {
+    await startOp.run({
+        what: t(`sandbox.moveOutPanel.downloadExport`),
+        failed: t(`sandbox.moveOutPanel.couldntStartDownload`),
+        quiet: true,
+        task: async () => {
+            window.location.href = await bundleDownloadUrl(entry.name);
+        },
+    });
+};
 
-// The read
-const diff = ref<DefinitionDiff | undefined>(undefined);
-const { busy: comparing, notice: diffError, run: runDiff } = useAsyncAction();
+// The read. The comparison is of a file the reader picked, which nothing can read back, so the answer is the run's:
+// the panel opened again mid-compare finds it still going and then its differences.
+const compareOp = useOperation<DefinitionDiff>(`access/move-out/compare`);
+const comparing = compareOp.busy;
+const diffError = compareOp.failure;
+const diff = compareOp.value;
 const chooseCompare = ref<HTMLInputElement>();
-const compare = (event: Event): Promise<void> =>
-    runDiff(async () => {
-        const input = event.target as HTMLInputElement;
-        const file = input.files?.[0];
-        input.value = ``;
-        if (file === undefined) {
-            return;
-        }
-        diff.value = await sandboxRaw(`POST /definition/diff`, { input: await file.text() });
-    }, t(`sandbox.moveOutPanel.couldntCompareDefinition`));
+const compare = async (event: Event): Promise<void> => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ``;
+    if (file === undefined || comparing.value) {
+        return;
+    }
+    await compareOp.run({
+        what: t(`sandbox.moveOutPanel.compareSandboxToml`),
+        failed: t(`sandbox.moveOutPanel.couldntCompareDefinition`),
+        quiet: true,
+        task: async () => await sandboxRaw(`POST /definition/diff`, { input: await file.text() }),
+    });
+};
 </script>
 
 <template>

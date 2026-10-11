@@ -4,12 +4,13 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { desktopSyncLink } from "../../../../app/environments/desktop";
-import type { CommandOs } from "@intentic/ui";
+import type { CommandOs, NoticeModel } from "@intentic/ui";
 import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../../../app/environments/scriptCommand";
 import { onRuntimeChanged } from "../../live/runtimeEvents";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { sandboxRequest } from "../../../../client/sandbox/sandboxClient";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { useOperation } from "../../../../workbench/operations/operations";
 
 // Mints a device pairing and renders the one-liner that spends it (single-use, redeemed once to enroll an SSH
 // key). Mode reflects what the daemon granted, never what was requested. Everything else about an existing
@@ -65,6 +66,18 @@ export const mintSyncPairing = async (mode: SyncMode, ask: SyncPairAsk = {}): Pr
 const toShellPath = (path: string): string => path.replace(/^~(?=\/|$)/, `$HOME`);
 const toWindowsPath = (path: string): string => path.replace(/^~(?=[\\/]|$)/, `$HOME`).replace(/\//g, `\\`);
 
+// A pairing as it was minted: the token, and the folder and takeover it was asked for, since a short code is bound to
+// both and the command on screen has to keep saying what the code will do.
+interface HeldPairing extends SyncPairing {
+    readonly folder: string;
+    readonly takeover: boolean;
+}
+
+// The command the person still has to paste outlives the dialog that showed it: it sits in the operations ledger
+// (kept until they put it away, per sandbox), so closing Add device and opening it again finds the same one-liner
+// rather than a fresh Enable that would mint, and strand, a second pairing.
+const PAIRING = `devices/desktop-sync/pairing`;
+
 export function useDesktopSync() {
     const { active, daemonUrl } = useSandbox();
 
@@ -74,42 +87,46 @@ export function useDesktopSync() {
     // daemon that can't answer shouldn't offer sync. Unknown until it answers: starting at "no" put the sentence that
     // sync is impossible here on screen first, then offered sync a moment later.
     const available = ref<boolean | undefined>(undefined);
-    // The one-time pairing token from the last Enable click; undefined until minted or spent.
-    const pairToken = ref<string | undefined>(undefined);
+    // The pairing from the last Enable click, with the one it replaces carried as progress while a renewal is minted,
+    // so the command stays on screen through Renew instead of blinking back to Enable.
+    const pairing = useOperation<HeldPairing, NoticeModel, HeldPairing | undefined>(PAIRING);
+    const held = computed(() => pairing.value.value ?? pairing.progress.value);
+    // The one-time pairing token; undefined until minted or put away.
+    const pairToken = computed(() => held.value?.token);
     // The mode the daemon granted for that token; what the one-liner will actually enroll.
-    const pairMode = ref<SyncMode | undefined>(undefined);
+    const pairMode = computed(() => held.value?.mode);
     // The short code minted with it, and when both lapse.
-    const pairCode = ref<string | undefined>(undefined);
-    const pairExpiresAt = ref<number | undefined>(undefined);
-    const minting = ref(false);
+    const pairCode = computed(() => held.value?.code);
+    const pairExpiresAt = computed(() => held.value?.expiresAt);
+    const minting = pairing.busy;
     // TAKEOVER=1 in the one-liner moves sync here, revoking the other machine's key; only offered when another
     // machine already holds sync.
-    const takeover = ref(false);
+    const takeover = ref(held.value?.takeover ?? false);
 
     const defaultFolder = computed(() => syncFolder(active.value?.name ?? `sandbox`, daemonUrl.value));
-    const folder = ref(defaultFolder.value);
-    // Re-seeds the folder and drops any stale token when the active sandbox changes.
+    // A pairing still held brings back the folder it was minted for: the command it carries was bound to that one.
+    const folder = ref(held.value?.folder ?? defaultFolder.value);
+    // Re-seeds the folder when the active sandbox changes. That sandbox's own pairing, if it holds one, is its own
+    // ledger slot, so nothing is put away here.
     watch(
         () => active.value?.id,
         () => {
-            folder.value = defaultFolder.value;
-            forget();
-            takeover.value = false;
+            folder.value = held.value?.folder ?? defaultFolder.value;
+            takeover.value = held.value?.takeover ?? false;
         },
     );
     // The folder and takeover were sent with the mint and are bound to its code, so changing either retires the command
     // on screen: Enable mints one that carries the new choice.
-    watch([folder, takeover], () => {
-        if (pairCode.value !== undefined) {
+    watch([folder, takeover], ([dir, over]) => {
+        const current = held.value;
+        if (current?.code !== undefined && (current.folder !== dir || current.takeover !== over)) {
             forget();
         }
     });
 
+    // Puts the command away: pasted, or no longer wanted. A mint still running is left to finish.
     function forget(): void {
-        pairToken.value = undefined;
-        pairMode.value = undefined;
-        pairCode.value = undefined;
-        pairExpiresAt.value = undefined;
+        pairing.dismiss();
     }
 
     const url = computed(() => daemonUrl.value ?? ``);
@@ -166,18 +183,18 @@ export function useDesktopSync() {
               }),
     );
 
-    // Mints (or re-mints) a pairing token.
+    // Mints (or re-mints) a pairing token. Quiet: a mint takes a moment, and what it hands back waits in the card.
     const enable = async (mode: SyncMode): Promise<void> => {
-        minting.value = true;
-        try {
-            const pairing = await mintSyncPairing(mode, { syncDir: folder.value, takeover: takeover.value });
-            pairMode.value = pairing.mode;
-            pairToken.value = pairing.token;
-            pairCode.value = pairing.code;
-            pairExpiresAt.value = pairing.expiresAt;
-        } finally {
-            minting.value = false;
-        }
+        const dir = folder.value;
+        const over = takeover.value;
+        await pairing.run({
+            what: t(`sandbox.useDesktopSync.pairing`),
+            failed: t(`sandbox.useDesktopSync.couldntPair`),
+            quiet: true,
+            keep: true,
+            progress: held.value,
+            task: async () => ({ ...(await mintSyncPairing(mode, { syncDir: dir, takeover: over })), folder: dir, takeover: over }),
+        });
     };
 
     const client = useQueryClient();
@@ -201,12 +218,17 @@ export function useDesktopSync() {
     };
     // Subscribes only while a one-liner is live, since that's the one window an enrollment can appear out-of-band.
     // Refreshes the Devices list, not this card: the card has nothing left to re-read once it has minted.
-    watch(pairToken, (token) => {
-        stop();
-        if (token !== undefined) {
-            unsubscribe = onRuntimeChanged([`hosts`], () => void invalidatePushedQueries(client, { queryKey: rpcKey(`system.devices`) }));
-        }
-    });
+    // Immediate, since a card opened onto a pairing still held is in that window from its first moment.
+    watch(
+        pairToken,
+        (token) => {
+            stop();
+            if (token !== undefined) {
+                unsubscribe = onRuntimeChanged([`hosts`], () => void invalidatePushedQueries(client, { queryKey: rpcKey(`system.devices`) }));
+            }
+        },
+        { immediate: true },
+    );
     // One-shot read of whether sync is available; the Devices list above handles steady polling.
     const start = (): void => {
         void refresh();
@@ -221,10 +243,12 @@ export function useDesktopSync() {
         pairMode,
         pairExpiresAt,
         minting,
+        mintFailure: pairing.failure,
         takeover,
         command,
         desktopLink,
         enable,
+        forget,
         start,
         stop,
     };

@@ -31,6 +31,13 @@ import { t } from "@intentic/ui/i18n";
 // message through the chat singleton and so never will.
 export type AgentReach = string | undefined;
 
+// Where the operations ledger (workbench/operations) files work a person started on one card, so a view that comes back
+// to the card finds it still running, or its end. Qualified by box like the board's claims: agent ids are minted per
+// daemon, so the same id in another box is another agent.
+export const agentWork = (id: string, at: AgentReach = undefined): string => (at === undefined ? `agents/${id}` : `agents/${id}@${at}`);
+// A collaborator's ask to land, one press per card however many surfaces offer it (the card, its review page).
+export const landRequestWork = (id: string, at: AgentReach = undefined): string => `${agentWork(id, at)}/request-land`;
+
 // `run` is the model a surface's run button stands at (useAgentRunPick: a job's list, or the reader's pick for this run
 // alone). Without it the draft opens on whatever the composer last held, which is the reader's chat model and says
 // nothing about the job the press starts.

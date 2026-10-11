@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type HandoffMode, isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { type HandoffMode, isTurnBreak, type LimitResetClaim, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -16,6 +16,7 @@ import TurnBreakQuestion from "./TurnBreakQuestion.vue";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 // One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
@@ -183,26 +184,31 @@ const resetOffer = computed(() => (limitAccount.value === undefined ? undefined 
 
 // The one control that spends something scarce: a successful claim continues immediately rather than making the
 // user press Continue too. Whether the button survives its own failure is limitReset.ts's call — an answer about
-// the account retires it, a failed request leaves it to retry.
-const resetting = ref(false);
-const resetNote = ref<string>();
+// the account retires it, a failed request leaves it to retry. The claim is the account's, kept beyond this strip, so
+// a strip drawn again while it is out (the pane closed and reopened, another chat on the same account) cannot press a
+// second one, and the answer is still there to read.
+const reset = useOperation<LimitResetClaim>(() => `chat/limit-reset/${limitAccount.value ?? ``}`);
+const resetting = reset.busy;
+const resetNote = computed(() => {
+    const claim = reset.value.value;
+    return claim === undefined || claim.result === `reset` ? undefined : limitResetNote(claim);
+});
 const canReset = computed(() => resetOffer.value?.available === true);
 const useLimitReset = async (): Promise<void> => {
     const id = limitAccount.value;
-    if (id === undefined || !reachable.value || resetting.value) {
+    if (id === undefined || !reachable.value) {
         return;
     }
-    resetting.value = true;
-    resetNote.value = undefined;
-    try {
-        const claim = await claimLimitReset(id, conversation.value.box.value);
-        if (claim.result === `reset`) {
-            emit(`continue`);
-            return;
-        }
-        resetNote.value = limitResetNote(claim);
-    } finally {
-        resetting.value = false;
+    const at = conversation.value.box.value;
+    const ended = await reset.run({
+        what: t(`chat.limitReset.resetting`),
+        // A claim answers rather than throws (limitReset.ts); a refusal is its own line, said on the receipt too.
+        failed: t(`chat.limitReset.failed`),
+        done: (claim) => (claim.result === `reset` ? t(`chat.limitReset.resetDone`) : limitResetNote(claim)),
+        task: () => claimLimitReset(id, at),
+    });
+    if (ended?.state === `done` && ended.value?.result === `reset`) {
+        emit(`continue`);
     }
 };
 

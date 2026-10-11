@@ -4,12 +4,14 @@ import { Button, Icon, toneTint, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { containerNotices, offersReconnect, reconnectDoor } from "../../overview/containerHealth";
 import { manageDeviceSandbox, useDevices } from "../useDevices";
 import { deviceNotListing } from "../deviceRows";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
+import { expectRestart } from "../../live/sandboxRestart";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -39,12 +41,14 @@ const canRepair = computed(() => isOwner.value && host.value !== undefined && ow
 const unlisted = computed(() => (host.value === undefined ? deviceNotListing(devices.value) : undefined));
 
 // The repair runs out on the machine and ends by replacing this container, so the machine's card and the Devices tile
-// say so for as long as it lasts. Asked first, inline: the press says what is replaced and what is kept.
+// say so for as long as it lasts. Asked first, inline: the press says what is replaced and what is kept. The run, its
+// narration and its end are the ledger's, keyed by the machine and this sandbox, so leaving the page mid-reconnect and
+// coming back finds it still going (and the button still held) instead of offering it again.
 const confirming = ref(false);
-const busy = ref(false);
-const failure = ref<string | undefined>(undefined);
-const done = ref<string | undefined>(undefined);
-const lines = ref<string[]>([]);
+const machine = computed(() => (host.value === undefined ? undefined : machineKeyOf(devices.value, host.value)));
+const reconnect = useOperation<string>(() => `devices/${machine.value ?? `unknown`}/reconnect/${ownSlug.value ?? ``}`);
+const { busy, lines, failure } = reconnect;
+const done = reconnect.value;
 
 // The missing env names are evidence for a bug report or a `docker inspect`, not something to act on, so they open
 // on asking. One open at a time: in practice there is only ever one drift notice.
@@ -57,38 +61,54 @@ const repair = async (): Promise<void> => {
     const deviceId = host.value?.hostId;
     const slug = ownSlug.value;
     const sandboxId = active.value?.id;
+    const on = machine.value;
     if (busy.value || deviceId === undefined || slug === undefined || sandboxId === undefined) {
         return;
     }
-    busy.value = true;
-    failure.value = undefined;
-    done.value = undefined;
-    lines.value = [];
-    const machine = host.value === undefined ? undefined : machineKeyOf(devices.value, host.value);
-    const endMark =
-        machine === undefined
-            ? (): void => {}
-            : beginDeviceWork({
-                  machine,
-                  sandboxes: [sandboxId],
-                  doing: t(`sandbox.containerHealthCard.reconnectingSandbox`),
-                  what: t(`sandbox.containerHealthCard.reconnectingSandbox`),
-              });
-    try {
-        // Minted fresh per call so the code is always current; never cached or reused.
-        const { code } = await apiClient.sandbox.setupCode({ sandboxId });
-        done.value = await manageDeviceSandbox(deviceId, slug, `reconnect`, {
-            setupCode: code,
-            onLine: (line) => (lines.value = [...lines.value, line]),
-        });
-    } catch (error) {
-        // The stream dying mid-flight is the success case: the daemon goes down with the container.
-        failure.value = error instanceof Error ? error.message : String(error);
-    } finally {
-        busy.value = false;
-        confirming.value = false;
-        endMark();
-    }
+    await reconnect.run({
+        what: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+        failed: t(`sandbox.containerHealthCard.couldntReconnect`),
+        task: async (report) => {
+            const endMark =
+                on === undefined
+                    ? (): void => {}
+                    : beginDeviceWork({
+                          machine: on,
+                          sandboxes: [sandboxId],
+                          doing: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+                          what: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+                      });
+            // This replaces the container serving this page, so the silence it causes is said to be the reconnect, by
+            // every surface, rather than read as a fault. Armed for the whole run: the machine says nothing about
+            // which minute the swap falls in.
+            const restart = {
+                sandbox: sandboxId,
+                id: `recreate`,
+                what: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+                quiet: {
+                    title: t(`sandbox.containerHealthCard.reconnectingSandbox`),
+                    detail: t(`sandbox.containerHealthCard.sandboxReplacedPageReconnects`),
+                },
+            } as const;
+            const settle = expectRestart(restart);
+            try {
+                // Minted fresh per call so the code is always current; never cached or reused.
+                const { code } = await apiClient.sandbox.setupCode({ sandboxId });
+                try {
+                    return await manageDeviceSandbox(deviceId, slug, `reconnect`, { setupCode: code, onLine: report.line });
+                } catch (error) {
+                    // The stream dying mid-flight is the success case: the daemon goes down with the container. Which
+                    // one this was is only known once the sandbox answers again, so that is what ends the restart.
+                    expectRestart({ ...restart, untilAnswered: true });
+                    throw error;
+                }
+            } finally {
+                settle();
+                endMark();
+            }
+        },
+    });
+    confirming.value = false;
 };
 </script>
 
@@ -107,7 +127,7 @@ const repair = async (): Promise<void> => {
                 <div v-if="offersReconnect(notice)" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <!-- Named for what it does to the container, not for the fault: "Repair" hides that this replaces it. -->
                     <Button
-                        v-if="canRepair && !confirming"
+                        v-if="canRepair && !confirming && !busy"
                         size="small"
                         tier="boring"
                         :label="t(`sandbox.containerHealthCard.reconnectSandbox`)"
@@ -141,7 +161,7 @@ const repair = async (): Promise<void> => {
                     <!-- Shown at the confirm moment, not as standing prose: what is replaced, and what is kept. -->
                     <p class="min-w-0 grow basis-48 text-2xs text-subtle">
                         <template v-if="canRepair">
-                            <template v-if="confirming">
+                            <template v-if="confirming || busy">
                                 {{ t(`sandbox.containerHealthCard.confirmReconnect`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
                             </template>
                         </template>
@@ -184,7 +204,8 @@ const repair = async (): Promise<void> => {
         }}</pre>
         <p v-if="done" class="ml-7 text-xs text-content">{{ done }}</p>
         <p v-if="failure" class="ml-7 text-xs text-danger">
-            {{ failure }}
+            <!-- The cause alone, as the machine said it: the stream dying is also how a replaced container sounds. -->
+            {{ failure.detail ?? failure.title }}
             <!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
             <span class="text-muted">{{ t(`sandbox.containerHealthCard.sandboxReplacedPageReconnects`) }}</span>
         </p>

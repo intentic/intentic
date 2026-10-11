@@ -21,6 +21,8 @@ const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
         return { token: created.token, label: created.label };
     },
     revoke: async (tokenId) => (await apiClient.token.revoke({ tokenId })).tokens,
+    // The account's, so a token minted from one sandbox's settings is still there from another's.
+    key: `account/tokens/minted`,
 });
 
 const label = ref(``);

@@ -183,9 +183,11 @@ jest.mock(`@intentic/sandbox-contract`, () => ({
 const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
     [],
 );
+// How adding a runner goes on the machine, swapped by a test that has to leave one running.
+let createRunnerFlow: (onLine?: (line: string) => void) => Promise<string> = () => Promise.resolve(`made`);
 jest.mock(`./runners/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
-    createRunner: () => Promise.resolve(`made`),
+    createRunner: (_host: string, _name: string, onLine?: (line: string) => void) => createRunnerFlow(onLine),
     removeRunner: () => Promise.resolve(`removed`),
     forgetRunner: () => Promise.resolve(),
     // <DeviceRunners> names both; bun links an ESM import against exactly what this factory returns.
@@ -195,6 +197,7 @@ jest.mock(`./runners/useRunners`, () => ({
 
 const { boardRoute, deviceRoute } = await import("./deviceLinks");
 const { devicesWorking, forgetDeviceWork, settleAgentRuns } = await import("./runners/deviceWork");
+const { forgetOperations } = await import("../../../workbench/operations/operations");
 const { default: SandboxDevices } = await import("./SandboxDevices.vue");
 
 let app: App | undefined;
@@ -253,6 +256,7 @@ afterEach(() => {
     route.query = {};
     latest.value = `1.183.0`;
     runnersList.value = [];
+    createRunnerFlow = () => Promise.resolve(`made`);
     devicesLoading.value = false;
     capabilities.value = [];
     role.value = `owner`;
@@ -274,6 +278,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
     // Work in flight on a machine outlives the page by design, so it would outlive the test too.
     forgetDeviceWork();
+    forgetOperations();
     // The app's clock is a module singleton; a test that faked time would hand the next one a frozen one.
     jest.useRealTimers();
 });
@@ -1218,6 +1223,47 @@ it(`marks a runner whose build has drifted from this sandbox, and offers the upd
     expect(labels(line)).toContain(`Update`);
 });
 
+// THE CASE THIS LEDGER EXISTS FOR. Building a runner on somebody's laptop takes minutes, and the reader goes back to
+// the board meanwhile: the page they return to must still be reading the build, hold its buttons, and then say how it
+// ended, rather than offering "Add runner" again over a container still being made.
+it(`keeps a runner being added, its log and then its answer, through leaving the machine's page and coming back`, async () => {
+    let finish: ((said: string) => void) | undefined;
+    createRunnerFlow = (onLine) => {
+        onLine?.(`pulling the runner image`);
+        return new Promise((resolve) => {
+            finish = resolve;
+        });
+    };
+    const el = mount([managed(true)]);
+    await nextTick();
+    rowButton(el, `Add runner`)?.click();
+    await nextTick();
+    const name = el.querySelector(`input[type="text"]`) as HTMLInputElement;
+    name.value = `omen`;
+    name.dispatchEvent(new Event(`input`));
+    await nextTick();
+    rowButton(el, `Create`)?.click();
+    await settle();
+    expect(el.textContent ?? ``).toContain(`pulling the runner image`);
+
+    await showBoard();
+    expect(el.textContent ?? ``).not.toContain(`pulling the runner image`);
+    await select(`host-1`);
+    await nextTick();
+    const back = el.textContent ?? ``;
+    expect(back).toContain(`Adding runner omen`);
+    expect(back).toContain(`pulling the runner image`);
+    expect(rowButton(el, `Add runner`)?.disabled).toBe(true);
+
+    await showBoard();
+    finish?.(`runner omen is up`);
+    await settle();
+    await select(`host-1`);
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`runner omen is up`);
+    expect(rowButton(el, `Add runner`)?.disabled).toBe(false);
+});
+
 it(`says nothing about the build of a runner that matches`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `current` }];
     const el = mount([managed(true)]);
@@ -1278,8 +1324,7 @@ it(`shows the machine's own answer under the row that was pressed`, async () => 
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`))?.click();
-    await nextTick();
-    await nextTick();
+    await settle();
     expect(el.textContent ?? ``).toContain(`Port mirroring OFF for: work-abc`);
 });
 
@@ -1289,8 +1334,7 @@ it(`keeps the machine's words when it declines to do it`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`))?.click();
-    await nextTick();
-    await nextTick();
+    await settle();
     expect(el.textContent ?? ``).toContain(`Turn on "Run commands" for this device.`);
 });
 

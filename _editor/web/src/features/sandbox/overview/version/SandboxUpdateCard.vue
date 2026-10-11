@@ -12,7 +12,7 @@ import {
     ui,
     useOsPreference,
 } from "@intentic/ui";
-import { useAsyncAction, useNow } from "@intentic/ui/async";
+import { useNow } from "@intentic/ui/async";
 import { computed, ref, watchEffect } from "vue";
 import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
 import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
@@ -35,7 +35,7 @@ import { updateCardPlan } from "./updateOutcome";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { UPDATE_ACTION_ANCHOR } from "./updateAnchor";
 import { apiClient } from "../../../../lib/useApi";
-import { useHubWork } from "../../../../workbench/hub/hubWork";
+import { useOperation } from "../../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see
@@ -86,42 +86,46 @@ const hosted = computed(() => (active.value?.hosted ? active.value.id : undefine
 // (sandbox.routes.ts `ownedHostedMachine`): a maintainer pressing either was answered "sandbox not found". They are told
 // whose press it is instead. A sandbox on somebody's own machine updates through that machine, which a maintainer reaches.
 const { isOwner } = useRole();
-const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
-const hubWork = useHubWork();
+// The restart is this sandbox's, not this card's: in the operations ledger, so the card opened again during the half
+// minute the sandbox is down holds its button and keeps any refusal, and the ledger marks the hub row meanwhile.
+const restartOp = useOperation(`sandbox/update/hosted-restart`);
+const restarting = restartOp.busy;
+const restartNotice = restartOp.failure;
 // What the sandbox going quiet means, for every surface that isn't this card.
 const RESTART_QUIET = computed((): RestartQuiet => ({
     title: t(`sandbox.sandboxUpdateCard.restartingOntoNewImage`),
     detail: t(`sandbox.sandboxUpdateCard.updateAppliedReplacesSandboxs`),
 }));
 
-const restartHosted = (): Promise<void> =>
-    runRestart(
-        () =>
-            // The row keeps the mark through the half minute the sandbox is down, which is also the half minute
-            // this page spends reconnecting.
-            hubWork.track(t(`sandbox.sandboxUpdateCard.restartingSandbox`), async () => {
-                const sandbox = hosted.value;
-                if (sandbox === undefined) {
-                    return;
-                }
-                // Armed before the ask: the platform can take the sandbox down before this promise settles, and
-                // nothing here is told when. A refused ask ends it; otherwise the sandbox's own return does.
-                const settled = expectRestart({
-                    sandbox,
-                    id: `update`,
-                    what: t(`sandbox.sandboxUpdateCard.restartingSandbox`),
-                    quiet: RESTART_QUIET.value,
-                    untilAnswered: true,
-                });
-                try {
-                    await apiClient.sandbox.hostedRestart({ sandboxId: sandbox });
-                } catch (error) {
-                    settled();
-                    throw error;
-                }
-            }),
-        t(`sandbox.sandboxUpdateCard.couldntRestart`),
-    );
+const restartHosted = async (): Promise<void> => {
+    const sandbox = hosted.value;
+    if (sandbox === undefined || restarting.value) {
+        return;
+    }
+    await restartOp.run({
+        what: t(`sandbox.sandboxUpdateCard.restartingSandbox`),
+        failed: t(`sandbox.sandboxUpdateCard.couldntRestart`),
+        // Its end is this page reconnecting onto the new image, which says so by itself.
+        quiet: true,
+        task: async () => {
+            // Armed before the ask: the platform can take the sandbox down before this promise settles, and nothing
+            // here is told when. A refused ask ends it; otherwise the sandbox's own return does.
+            const settled = expectRestart({
+                sandbox,
+                id: `update`,
+                what: t(`sandbox.sandboxUpdateCard.restartingSandbox`),
+                quiet: RESTART_QUIET.value,
+                untilAnswered: true,
+            });
+            try {
+                await apiClient.sandbox.hostedRestart({ sandboxId: sandbox });
+            } catch (error) {
+                settled();
+                throw error;
+            }
+        },
+    });
+};
 
 // Offered on every OS: recreate.ps1 takes -Rollback exactly as recreate.sh takes --rollback, and HostRecreate prints
 // whichever the reader's OS spells.
@@ -176,13 +180,18 @@ const rollbackLead = computed(() =>
     plan.value.rollbackWhy ? undefined : [t(`sandbox.sandboxUpdateCard.troubleLead`), plan.value.news?.ready].filter(Boolean).join(` `),
 );
 
-// The owner's "not this one", and taking it back.
-const { notice: skipNotice, run: runSkip } = useAsyncAction();
-const skip = (version: string | null): Promise<void> =>
-    runSkip(
-        () => skipVersion(version),
-        version === null ? t(`sandbox.sandboxUpdateCard.couldntShowAgain`) : t(`sandbox.sandboxUpdateCard.couldntSkip`),
-    );
+// The owner's "not this one", and taking it back. A setting written in a moment, whose end shows in the card itself;
+// in the ledger so a refusal is still there when the card is opened again, and a second press waits for the first.
+const skipOp = useOperation(`sandbox/update/skip`);
+const skipNotice = skipOp.failure;
+const skip = async (version: string | null): Promise<void> => {
+    await skipOp.run({
+        what: version === null ? t(`sandbox.sandboxUpdateCard.showItAgain`) : t(`sandbox.sandboxUpdateCard.skipThisVersion`),
+        failed: version === null ? t(`sandbox.sandboxUpdateCard.couldntShowAgain`) : t(`sandbox.sandboxUpdateCard.couldntSkip`),
+        quiet: true,
+        task: () => skipVersion(version),
+    });
+};
 
 const withdrawnNotice = computed<NoticeModel | undefined>(() => {
     const said = plan.value.withdrawn;

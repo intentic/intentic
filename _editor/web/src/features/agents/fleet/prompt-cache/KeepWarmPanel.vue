@@ -3,8 +3,10 @@ import { Button } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatTokens } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
+import { useOperation } from "../../../../workbench/operations/operations";
+import { agentWork } from "../agentActions";
 import { turnInFlight } from "../agentStatus";
 import { type CacheStanding, endedLine, keptWarm, refreshMinutes, warmChoices, warmOffer } from "./promptCache";
 import { useAgents } from "../useAgents";
@@ -54,19 +56,23 @@ const unavailable = computed((): string | undefined => {
     return t(`agents.keepWarm.alreadyCold`);
 });
 
-const busy = ref(false);
-const refusal = ref<string>();
+// The press is the card's, in the ledger, not this popover's: one shut before the daemon answers leaves its refusal
+// for the popover opened again, or says it as a receipt, where it used to go with the popover.
+const hold = useOperation(() => `${agentWork(props.agent.id)}/keep-warm`);
+const busy = hold.busy;
+// The daemon's own sentence: it names the one thing that stood in the way.
+const refusal = computed(() => hold.failure.value?.detail ?? hold.failure.value?.title);
 const choose = async (until: number | null): Promise<void> => {
-    busy.value = true;
-    refusal.value = undefined;
-    try {
-        await setKeepWarm(props.agent.id, until);
+    const id = props.agent.id;
+    const outcome = await hold.run({
+        what: until === null ? t(`agents.keepWarm.stopping`) : t(`agents.keepWarm.arming`),
+        // Not the time asked for: the daemon shortens it to what it can keep, and the card wears the real one.
+        done: () => (until === null ? t(`agents.keepWarm.stopped`) : undefined),
+        failed: until === null ? t(`agents.keepWarm.couldntStop`) : t(`agents.keepWarm.couldntKeep`),
+        task: () => setKeepWarm(id, until),
+    });
+    if (outcome?.state === `done`) {
         emit(`done`);
-    } catch (error) {
-        // The daemon's own sentence: it names the one thing that stood in the way.
-        refusal.value = error instanceof Error ? error.message : String(error);
-    } finally {
-        busy.value = false;
     }
 };
 </script>

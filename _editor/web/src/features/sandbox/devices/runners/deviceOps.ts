@@ -4,6 +4,7 @@ import { runningShape } from "@intentic/ui/sandbox-resources";
 import { rollbackToPrompt, sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
+import { type Operation, useOperations } from "../../../../workbench/operations/operations";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
 import { type DeviceUpdateRun, foldUpdateLine, isStagedVerb, settleUpdateRun, startUpdateRun } from "./deviceUpdateStages";
@@ -32,7 +33,10 @@ import { setupSaid } from "../sync/syncSetup";
 // whichever door is open, and the ops that belong to one environment's agent or enrollment name it.
 // Everything that runs is entered in the device-work ledger (deviceWork.ts) for as long as it runs, which is what the
 // board's cards, the hub's Devices row and the rail's tile turn for, and what holds the lock across a remount: the page
-// is gone the moment the reader goes back to the board, and the work is not.
+// is gone the moment the reader goes back to the board, and the work is not. What the run says (its log, its stage
+// card, how far a batch got, its answer or its refusal) is the machine's too, kept in the operations ledger under the
+// machine's key, so the page the reader comes back to is still reading it. Only the questions (the dialogs) are the
+// page's own.
 
 // Which machine op each verb sends; only `resources` differs from its verb name (the kit's word for the
 // form vs. the machine's word for what Apply does).
@@ -187,6 +191,19 @@ const batchRefused = (verb: Exclude<BatchVerb, `remove`>, count: number, machine
 /** The device's own sentence, whatever shape it arrived in. */
 const refusalText = (error: unknown): string => (error instanceof Error ? error.message : t(`sandbox.deviceOps.didntSayWhy`));
 
+/** A run that ended in an answer the page files as a failure (a refusal the machine sent, a batch that half worked). */
+class RunRefused extends Error {
+    constructor(readonly failure: OpFailure) {
+        super(failure.notice.title);
+    }
+}
+
+/** A run's failure under `key`: its own refusal when it shaped one, the app's sentence over whatever was thrown otherwise. */
+const refusedAs =
+    (key: string, wrote: string, command?: string) =>
+    (error: unknown): OpFailure =>
+        error instanceof RunRefused ? error.failure : { key, notice: noticeFrom(error, wrote), ...(command === undefined ? {} : { command }) };
+
 // What agreeing to a removal does, counted over the rows it was asked for. One line per half, because they are
 // unlike: the first ends a sandbox, the second only stops this machine keeping a copy of one.
 const removalEffects = (label: string, containers: number, pairings: number): string[] => [
@@ -286,8 +303,8 @@ export interface DeviceOps {
     // single key would print one op's answer under another's controls. The agent's answer is its run's (agentRun).
     readonly switchKey: (environment: DeviceRow) => string;
     readonly accessKey: (environment: DeviceRow) => string;
-    readonly failure: Ref<OpFailure | undefined>;
-    readonly outcome: Ref<{ key: string; message: string } | undefined>;
+    readonly failure: ComputedRef<OpFailure | undefined>;
+    readonly outcome: ComputedRef<{ key: string; message: string } | undefined>;
 
     // Container verbs, through whichever door is open. `choice` names one of the older versions the machine kept for a
     // rollback to go to, rather than the one before (rollbackChoices.ts).
@@ -312,7 +329,7 @@ export interface DeviceOps {
     readonly confirmingRemoval: Ref<readonly DeviceSandboxGroup[] | undefined>;
     readonly removalPrompt: ComputedRef<RemovalPrompt | undefined>;
     readonly confirmRemoval: () => void;
-    readonly removing: Ref<boolean>;
+    readonly removing: ComputedRef<boolean>;
 
     // One verb over every ticked row that can take it (deviceRows.ts `batchActions`), one row at a time, with one
     // answer for the whole list under `listKey` — the rows it was about may be the ones that just left.
@@ -320,7 +337,7 @@ export interface DeviceOps {
     readonly confirmingBatch: Ref<BatchAction | undefined>;
     readonly batchPrompt: ComputedRef<BatchPrompt | undefined>;
     readonly confirmBatch: () => void;
-    readonly batchProgress: Ref<BatchProgress | undefined>;
+    readonly batchProgress: ComputedRef<BatchProgress | undefined>;
     readonly listKey: string;
     /** The sandbox a run is working on right now, so its row can say so while it happens. */
     readonly workingIds: ComputedRef<readonly string[]>;
@@ -353,9 +370,19 @@ export interface DeviceOps {
 
     // Cutting one environment's enrollment off entirely.
     readonly confirmingRevoke: Ref<DeviceRow | undefined>;
-    readonly revoking: Ref<boolean>;
+    readonly revoking: ComputedRef<boolean>;
     readonly runRevoke: () => Promise<void>;
 }
+
+/** Where a run is: a container verb's stage card, a batch's count and the row it reached, the port a switch is about. */
+interface DeviceProgress {
+    readonly staged?: DeviceUpdateRun;
+    readonly batch?: BatchProgress;
+    readonly row?: string;
+    readonly port?: number;
+}
+
+type DeviceOperation = Operation<{ key: string; message: string } | undefined, OpFailure, DeviceProgress>;
 
 export function useDeviceOps(machine: () => MachineRow, refetch: () => void): DeviceOps {
     // The sandbox serving this page, by its container slug on the machine: the daemon's own hostname, same
@@ -371,64 +398,68 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // about beforehand, and what makes a dead stream the answer rather than a failure afterwards.
     const severs = (group: DeviceSandboxGroup, verb: SandboxVerb): boolean => selfGroup(group) && SEVERING.has(OP[verb]);
 
-    // `${rowKey}:${verb}`, so one string says both which row is working and at what.
-    const busy = ref<string | undefined>();
-    // Kept out of `busy`, which also drives which container-verb button spins; keyed by row and command,
-    // since three buttons on a row must not spin together. The port joins the key for the two per-port switches,
-    // whose buttons all sit on one row under one key.
-    const syncBusy = ref<{ key: string; command: SyncCommand; port: number | undefined } | undefined>();
-    const revoking = ref(false);
-    const removing = ref(false);
-    // A batch between its first row and its last; `busy` alone goes quiet between two rows.
-    const batchProgress = ref<BatchProgress | undefined>();
-    // The row a removal is on, which `busy` does not carry: a removal is two halves, only one of them a container verb.
-    const removingRow = ref<string | undefined>();
-    // The ledger's word too, which is the only one that survives a remount: work started before the reader went back
-    // to the board is still running on the machine, and a second press through the same door would race it.
-    const working = computed(
-        () =>
-            busy.value !== undefined ||
-            syncBusy.value !== undefined ||
-            revoking.value ||
-            removing.value ||
-            batchProgress.value !== undefined ||
-            machineCalling(machine().key),
-    );
+    // Every run on this machine, under one scope per sandbox so another sandbox's page never reads it: a container
+    // verb under its row, a removal or a batch under the list, a switch under the control that was pressed, a revoke
+    // under the environment's access. The newest run is the page's one answer line, as a single slot always was.
+    const scope = (): string => `devices/${machine().key}/ops`;
+    const ops = useOperations<{ key: string; message: string } | undefined, OpFailure, DeviceProgress>(scope);
+    const ROW = (group: DeviceSandboxGroup): string => `row/${group.sandboxId}`;
+    const LIST = `list`;
+    const SYNC = (key: string): string => `sync/${key}`;
+    const ACCESS = (key: string): string => `access/${key}`;
+    const subOf = (operation: DeviceOperation): string => operation.key.slice(scope().length + 1);
+    const latest = computed<DeviceOperation | undefined>(() => ops.all.value.at(-1));
+    const running = computed<DeviceOperation | undefined>(() => {
+        const newest = latest.value;
+        return newest?.state === `running` ? newest : undefined;
+    });
+    const runningAt = (sub: string): DeviceOperation | undefined => (running.value !== undefined && subOf(running.value) === sub ? running.value : undefined);
 
-    const failure = ref<OpFailure | undefined>();
-    const outcome = ref<{ key: string; message: string } | undefined>();
-    // Keyed by row, so leaving one row's log on screen while reading another's is fine.
-    const runLines = ref<Record<string, string[]>>({});
-    // Which row's pane survives once nothing is running: `logs` is read after the op ends, unlike every
-    // other op whose lines were only progress.
-    const openLog = ref<string | undefined>();
+    const revoking = computed(() => running.value !== undefined && subOf(running.value).startsWith(`access/`));
+    const removing = computed(() => runningAt(LIST)?.tag === `remove`);
+    // A batch between its first row and its last.
+    const batchProgress = computed<BatchProgress | undefined>(() => runningAt(LIST)?.progress?.batch);
+    // The ledger's word too: an agent run pressed before the reader went back to the board is still out on the
+    // machine, and a second press through the same door would race it.
+    const working = computed(() => ops.busy.value || machineCalling(machine().key));
 
-    const verbRunning = (group: DeviceSandboxGroup): boolean => busy.value?.startsWith(`${rowKey(group)}:`) === true;
-    const logShown = (group: DeviceSandboxGroup): boolean => openLog.value === rowKey(group);
-    const lines = (group: DeviceSandboxGroup): readonly string[] => runLines.value[rowKey(group)] ?? [];
+    // The answer line: the newest run's, once it has one. Older runs' answers were replaced by the press that followed.
+    const failure = computed<OpFailure | undefined>(() => (latest.value?.state === `failed` ? latest.value.failure : undefined));
+    const outcome = computed<{ key: string; message: string } | undefined>(() => (latest.value?.state === `done` ? latest.value.value : undefined));
+
+    // The row's own verb while it runs: its own run, or the batch that has reached it (a removal says so by row instead).
+    const runningVerb = (group: DeviceSandboxGroup): SandboxVerb | undefined => {
+        const own = runningAt(ROW(group));
+        if (own !== undefined) {
+            return own.tag as SandboxVerb;
+        }
+        const batch = runningAt(LIST);
+        return batch !== undefined && batch.tag !== `remove` && batch.progress?.row === group.sandboxId ? (batch.tag as SandboxVerb) : undefined;
+    };
+    const verbRunning = (group: DeviceSandboxGroup): boolean => runningVerb(group) !== undefined;
+    // A log tail is read after its op ends, unlike every other op whose lines were only progress, so its pane stays
+    // until it is closed or another press replaces it.
+    const logShown = (group: DeviceSandboxGroup): boolean => {
+        const newest = latest.value;
+        return newest !== undefined && subOf(newest) === ROW(group) && newest.tag === `logs` && newest.state !== `failed`;
+    };
+    const lines = (group: DeviceSandboxGroup): readonly string[] => ops.at(ROW(group))?.lines ?? [];
 
     // The verbs that recreate a sandbox onto another image take minutes, and their stream is `ic` narrating three
     // steps (deviceUpdateStages.ts), so the row draws those steps — the same card a checkout rebuild draws — and keeps
     // the lines behind a toggle. Kept once it ends, so its verdict stays under the row until the reader puts it away.
-    const stagedRuns = ref<Record<string, DeviceUpdateRun>>({});
-    const stagedRun = (group: DeviceSandboxGroup): DeviceUpdateRun | undefined => stagedRuns.value[rowKey(group)];
-    const setStaged = (key: string, run: DeviceUpdateRun | undefined): void => {
-        const { [key]: _gone, ...rest } = stagedRuns.value;
-        stagedRuns.value = run === undefined ? rest : { ...rest, [key]: run };
-    };
-    const dismissStaged = (group: DeviceSandboxGroup): void => {
-        const key = rowKey(group);
-        setStaged(key, undefined);
-        // The verdict was drawn inside the card, so it goes with it.
-        if (outcome.value?.key === key) {
-            outcome.value = undefined;
-        }
-    };
+    const stagedRun = (group: DeviceSandboxGroup): DeviceUpdateRun | undefined => ops.at(ROW(group))?.progress?.staged;
+    // The verdict was drawn inside the card, so it goes with it.
+    const dismissStaged = (group: DeviceSandboxGroup): void => ops.dismiss(ROW(group));
 
-    // Splits the row's own verb back out of the single-string `busy`, since only one op runs at a time.
-    const runningVerb = (group: DeviceSandboxGroup): SandboxVerb | undefined => {
-        const prefix = `${rowKey(group)}:`;
-        return busy.value?.startsWith(prefix) === true ? (busy.value.slice(prefix.length) as SandboxVerb) : undefined;
+    // A refusal the page decides before anything is sent: filed as the row's run, so it reads as one wherever it is read.
+    const refuse = (group: DeviceSandboxGroup, notice: NoticeModel): void => {
+        void ops.run(ROW(group), {
+            what: notice.title,
+            failed: () => ({ key: rowKey(group), notice }),
+            quiet: true,
+            task: () => Promise.reject(new Error(notice.title)),
+        });
     };
 
     const confirmingAct = ref<PendingAct | undefined>();
@@ -482,74 +513,71 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         try {
             flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, takesSet, runningShape(share), tooOld);
         } catch (error) {
-            failure.value = { key: rowKey(group), notice: noticeFrom(error, tooOld) };
+            refuse(group, noticeFrom(error, tooOld));
             return;
         }
         const key = rowKey(group);
-        busy.value = `${key}:${verb}`;
-        failure.value = undefined;
-        outcome.value = undefined;
-        runLines.value = { ...runLines.value, [key]: [] };
-        // Opened before lines arrive, so an empty pane reads as "reading" rather than an ignored click.
-        openLog.value = verb === `logs` ? key : undefined;
         // A reshape rides `update`'s op on some machines, but it is not one: only the two verbs themselves are staged.
-        const staged = intent === undefined && isStagedVerb(verb);
-        setStaged(key, staged ? startUpdateRun(verb, Date.now()) : undefined);
-        const endMark = markVerb(machine(), group, verb);
+        const staged = intent === undefined && isStagedVerb(verb) ? startUpdateRun(verb, Date.now()) : undefined;
         // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
         const severing = (intent === undefined || shapeSevers(intent)) && severs(group, verb);
-        const payload = actPayload(
-            flow,
-            to,
-            (line) => {
-                runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] };
-                const run = stagedRuns.value[key];
-                if (run !== undefined) {
-                    setStaged(key, foldUpdateLine(run, line, Date.now()));
+        const settle = (ok: boolean) => (previous: DeviceProgress | undefined): DeviceProgress =>
+            previous?.staged === undefined ? { ...previous } : { ...previous, staged: settleUpdateRun(previous.staged, ok, severing, Date.now()) };
+        const label = machine().label;
+        await ops.run(ROW(group), {
+            what: doingOn(verbWorking(verb, group.title) ?? VERB_LABEL[verb as Exclude<SandboxVerb, `logs`>] ?? verb, label),
+            tag: verb,
+            progress: staged === undefined ? {} : { staged },
+            // A log tail is a read: its end is the pane, and nobody wants a receipt for one.
+            quiet: verb === `logs`,
+            failed: (error) => ({
+                key,
+                notice: noticeFrom(error, t(`sandbox.deviceOps.didntWorkOnDevice`)),
+                command: sandboxFallback(verb, slug, intent, { takesSet, to }),
+            }),
+            done: (answer) => answer?.message,
+            task: async (report) => {
+                const endMark = markVerb(machine(), group, verb);
+                const payload = actPayload(
+                    flow,
+                    to,
+                    (line) => {
+                        report.line(line);
+                        report.progress((previous) =>
+                            previous?.staged === undefined ? { ...previous } : { ...previous, staged: foldUpdateLine(previous.staged, line, Date.now()) },
+                        );
+                    },
+                    severing,
+                );
+                try {
+                    const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], payload);
+                    report.progress(settle(true));
+                    // A log tail's result line would only restate the pane above it, so it's left to be the answer.
+                    return verb === `logs` ? undefined : { key, message };
+                } catch (error) {
+                    report.progress(settle(false));
+                    throw error;
+                } finally {
+                    endMark();
+                    // Always, including after failure: a flow that stopped halfway still changed the machine, so the
+                    // row must reflect what's there now.
+                    if (verb !== `logs`) {
+                        refetch();
+                    }
                 }
             },
-            severing,
-        );
-        const settle = (ok: boolean): void => {
-            const run = stagedRuns.value[key];
-            if (run !== undefined) {
-                setStaged(key, settleUpdateRun(run, ok, severing, Date.now()));
-            }
-        };
-        try {
-            const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], payload);
-            settle(true);
-            // A log tail's result line would only restate the pane above it, so it's left to be the answer.
-            outcome.value = verb === `logs` ? undefined : { key, message };
-        } catch (error) {
-            settle(false);
-            failure.value = { key, notice: noticeFrom(error, t(`sandbox.deviceOps.didntWorkOnDevice`)), command: sandboxFallback(verb, slug, intent, { takesSet, to }) };
-            if (verb === `logs`) {
-                openLog.value = undefined;
-            }
-        } finally {
-            busy.value = undefined;
-            endMark();
-            // Always, including after failure: a flow that stopped halfway still changed the machine, so the
-            // row must reflect what's there now.
-            if (verb !== `logs`) {
-                refetch();
-            }
-        }
+        });
     };
 
     // A row whose share wasn't reported has nothing to open the form on.
     const openResources = (group: DeviceSandboxGroup): void => {
         if (group.sandbox?.resources === undefined) {
-            failure.value = {
-                key: rowKey(group),
-                notice: {
-                    tone: `warning`,
-                    title: t(`sandbox.deviceOps.deviceDidntReportSandboxs`),
-                    // Names the button on this very page, not a command: the agent flow does the upgrade from here.
-                    detail: t(`sandbox.deviceOps.refreshTryAgainKeeps`),
-                },
-            };
+            refuse(group, {
+                tone: `warning`,
+                title: t(`sandbox.deviceOps.deviceDidntReportSandboxs`),
+                // Names the button on this very page, not a command: the agent flow does the upgrade from here.
+                detail: t(`sandbox.deviceOps.refreshTryAgainKeeps`),
+            });
             return;
         }
         reshaping.value = { group };
@@ -575,11 +603,10 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             openResources(group);
             return;
         }
-        // The log button toggles: reopening what you closed is the same click, not a second control.
-        if (verb === `logs` && openLog.value === rowKey(group)) {
-            openLog.value = undefined;
-            // Cleared with the pane it described, so no result line floats under a row with nothing near it.
-            outcome.value = undefined;
+        // The log button toggles: reopening what you closed is the same click, not a second control. The pane's run
+        // goes with it, so no result line floats under a row with nothing near it.
+        if (verb === `logs` && logShown(group)) {
+            ops.dismiss(ROW(group));
             return;
         }
         // A rollback always asks, and a chosen version is named in the question.
@@ -680,58 +707,61 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
 
     // The run's one answer, under the key the press came from. A refusal names the rows that stayed AND what did come
     // off, since a run that half worked is neither a success nor a failure and must not read as either.
-    const sayRemoval = (settled: readonly string[], refused: readonly string[]): void => {
+    const sayRemoval = (label: string, settled: readonly string[], refused: readonly string[]): { key: string; message: string } => {
         if (refused.length === 0) {
             // Nothing done is still something to say: a poll landing between the dialog and the press can leave a
             // row with neither half still on this machine.
             const said = settled.length === 0 ? t(`sandbox.deviceOps.heldNone`) : settled.join(`, `);
-            outcome.value = { key: listKey, message: `${machine().label}: ${said}.` };
-            return;
+            return { key: listKey, message: `${label}: ${said}.` };
         }
-        failure.value = {
+        throw new RunRefused({
             key: listKey,
             notice: {
                 tone: `warning`,
-                title: t(`sandbox.deviceOps.stayedOn`, { count: refused.length, machine: machine().label }, refused.length),
+                title: t(`sandbox.deviceOps.stayedOn`, { count: refused.length, machine: label }, refused.length),
                 detail: [...refused, ...(settled.length === 0 ? [] : [t(`sandbox.deviceOps.cameOff`, { list: settled.join(`, `) })])].join(` · `),
             },
-        };
+        });
     };
 
     const runRemoval = async (groups: readonly DeviceSandboxGroup[]): Promise<void> => {
         if (working.value || groups.length === 0) {
             return;
         }
-        removing.value = true;
-        failure.value = undefined;
-        outcome.value = undefined;
+        const label = machine().label;
         const removingWords = t(`sandbox.deviceOps.batchWorkingRemove`, { count: groups.length }, groups.length);
-        const endMark = markRun(machine(), groups, removingWords, t(`sandbox.deviceOps.doingFrom`, { doing: removingWords, machine: machine().label }));
-        let containers = 0;
-        let pairings = 0;
-        const refused: string[] = [];
-        batchProgress.value = { verb: `remove`, done: 0, total: groups.length };
-        try {
-            for (const [index, group] of groups.entries()) {
-                removingRow.value = group.sandboxId;
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
-                const done = await removeRow(group);
-                containers += done.container ? 1 : 0;
-                pairings += done.pairing ? 1 : 0;
-                if (done.refusal !== undefined) {
-                    refused.push(`${group.title}: ${done.refusal}`);
+        const what = t(`sandbox.deviceOps.doingFrom`, { doing: removingWords, machine: label });
+        await ops.run(LIST, {
+            what,
+            tag: `remove`,
+            progress: { batch: { verb: `remove`, done: 0, total: groups.length } },
+            failed: refusedAs(listKey, t(`sandbox.deviceOps.didntWorkOnDevice`)),
+            done: (answer) => answer?.message,
+            task: async (report) => {
+                const endMark = markRun(machine(), groups, removingWords, what);
+                let containers = 0;
+                let pairings = 0;
+                const refused: string[] = [];
+                try {
+                    for (const [index, group] of groups.entries()) {
+                        report.progress((previous) => ({ ...previous, row: group.sandboxId }));
+                        // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
+                        const done = await removeRow(group);
+                        containers += done.container ? 1 : 0;
+                        pairings += done.pairing ? 1 : 0;
+                        if (done.refusal !== undefined) {
+                            refused.push(`${group.title}: ${done.refusal}`);
+                        }
+                        report.progress((previous) => ({ ...previous, batch: { verb: `remove`, done: index + 1, total: groups.length } }));
+                    }
+                } finally {
+                    endMark();
+                    // Always, including after a refusal: a run that stopped halfway still changed the machine.
+                    refetch();
                 }
-                batchProgress.value = { verb: `remove`, done: index + 1, total: groups.length };
-            }
-        } finally {
-            removing.value = false;
-            removingRow.value = undefined;
-            batchProgress.value = undefined;
-            endMark();
-            // Always, including after a refusal: a run that stopped halfway still changed the machine.
-            refetch();
-        }
-        sayRemoval(removalSettled(containers, pairings), refused);
+                return sayRemoval(label, removalSettled(containers, pairings), refused);
+            },
+        });
     };
 
     const confirmRemoval = (): void => {
@@ -749,52 +779,57 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         if (hostId === undefined || working.value || groups.length === 0) {
             return;
         }
-        failure.value = undefined;
-        outcome.value = undefined;
+        const label = machine().label;
         const batchWords = batchWorking(verb, groups.length);
-        const endMark = markRun(machine(), groups, batchWords, doingOn(batchWords, machine().label));
-        let settled = 0;
-        const refused: string[] = [];
-        batchProgress.value = { verb, done: 0, total: groups.length };
-        try {
-            for (const [index, group] of groups.entries()) {
-                const slug = group.sandbox?.slug;
-                if (slug === undefined) {
-                    refused.push(`${group.title}: ${t(`sandbox.deviceOps.noContainerHere`)}`);
-                    continue;
+        const what = doingOn(batchWords, label);
+        await ops.run(LIST, {
+            what,
+            tag: verb,
+            progress: { batch: { verb, done: 0, total: groups.length } },
+            failed: refusedAs(listKey, t(`sandbox.deviceOps.didntWorkOnDevice`)),
+            done: (answer) => answer?.message,
+            task: async (report) => {
+                const endMark = markRun(machine(), groups, batchWords, what);
+                let settled = 0;
+                const refused: string[] = [];
+                try {
+                    for (const [index, group] of groups.entries()) {
+                        const slug = group.sandbox?.slug;
+                        if (slug === undefined) {
+                            refused.push(`${group.title}: ${t(`sandbox.deviceOps.noContainerHere`)}`);
+                            continue;
+                        }
+                        report.progress((previous) => ({ ...previous, row: group.sandboxId }));
+                        // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
+                        const refusal = await manageDeviceSandbox(hostId, slug, OP[verb]).then(
+                            () => undefined,
+                            (error: unknown) => refusalText(error),
+                        );
+                        if (refusal === undefined) {
+                            settled += 1;
+                        } else {
+                            refused.push(`${group.title}: ${refusal}`);
+                        }
+                        report.progress((previous) => ({ ...previous, row: undefined, batch: { verb, done: index + 1, total: groups.length } }));
+                    }
+                } finally {
+                    endMark();
+                    // Always, including after a refusal: a run that stopped halfway still changed the machine.
+                    refetch();
                 }
-                busy.value = `${rowKey(group)}:${verb}`;
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
-                const refusal = await manageDeviceSandbox(hostId, slug, OP[verb]).then(
-                    () => undefined,
-                    (error: unknown) => refusalText(error),
-                );
-                if (refusal === undefined) {
-                    settled += 1;
-                } else {
-                    refused.push(`${group.title}: ${refusal}`);
+                if (refused.length === 0) {
+                    return { key: listKey, message: `${label}: ${batchDone(verb, settled)}.` };
                 }
-                batchProgress.value = { verb, done: index + 1, total: groups.length };
-            }
-        } finally {
-            busy.value = undefined;
-            batchProgress.value = undefined;
-            endMark();
-            // Always, including after a refusal: a run that stopped halfway still changed the machine.
-            refetch();
-        }
-        if (refused.length === 0) {
-            outcome.value = { key: listKey, message: `${machine().label}: ${batchDone(verb, settled)}.` };
-            return;
-        }
-        failure.value = {
-            key: listKey,
-            notice: {
-                tone: `warning`,
-                title: batchRefused(verb, refused.length, machine().label),
-                detail: [...refused, ...(settled === 0 ? [] : [`${batchDone(verb, settled)}.`])].join(` · `),
+                throw new RunRefused({
+                    key: listKey,
+                    notice: {
+                        tone: `warning`,
+                        title: batchRefused(verb, refused.length, label),
+                        detail: [...refused, ...(settled === 0 ? [] : [`${batchDone(verb, settled)}.`])].join(` · `),
+                    },
+                });
             },
-        };
+        });
     };
 
     // Remove asks with its own dialog (both halves, named per effect), Update asks because each sandbox goes offline
@@ -835,18 +870,18 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    // The row a run is on right now: a container verb's row by its busy key, a removal's by the row it reached. With
-    // nothing running from this mount, the ledger's rows: a verb pressed before the page was last left is still out.
+    // The row a run is on right now: a container verb's own row, a batch's or a removal's by the row it reached. With
+    // nothing running here, the device-work ledger's rows: an agent press or a setup still out on the machine.
     const workingIds = computed<readonly string[]>(() => {
-        if (removingRow.value !== undefined) {
-            return [removingRow.value];
-        }
-        const held = busy.value;
-        if (held === undefined) {
+        const now = running.value;
+        if (now === undefined) {
             return sandboxesWorking(machine().key);
         }
-        const group = machine().groups.find((candidate) => held.startsWith(`${rowKey(candidate)}:`));
-        return group === undefined || runningVerb(group) === `logs` ? [] : [group.sandboxId];
+        if (subOf(now) === LIST) {
+            return now.progress?.row === undefined ? [] : [now.progress.row];
+        }
+        const group = machine().groups.find((candidate) => subOf(now) === ROW(candidate));
+        return group === undefined || now.tag === `logs` ? [] : [group.sandboxId];
     });
 
     // No confirmation for the reversible four; `sync-unpair` alone routes through the dialog. `sandboxId`
@@ -864,42 +899,43 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         if (hostId === undefined || working.value) {
             return;
         }
-        syncBusy.value = { key, command, port: about?.port };
-        failure.value = undefined;
-        outcome.value = undefined;
-        const endMark = beginDeviceWork({
-            machine: machine().key,
-            sandboxes: sandboxId === undefined ? [] : [sandboxId],
-            doing: syncWorking(command),
-            what: doingOn(syncWorking(command), environment.device.label),
+        const fallback = syncFallback(command, sandboxId, about?.port);
+        const what = doingOn(syncWorking(command), environment.device.label);
+        await ops.run(SYNC(key), {
+            what,
+            tag: command,
+            progress: { port: about?.port },
+            failed: refusedAs(key, commandUnreached(command), fallback),
+            done: (answer) => answer?.message,
+            task: async () => {
+                const endMark = beginDeviceWork({
+                    machine: machine().key,
+                    sandboxes: sandboxId === undefined ? [] : [sandboxId],
+                    doing: syncWorking(command),
+                    what,
+                });
+                try {
+                    const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
+                    // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
+                    // Setup answers with the CLI's whole narration; the row keeps only what a reader of it needs (syncSetup.ts).
+                    if (!result.ok) {
+                        throw new RunRefused({ key, notice: { tone: `warning`, title: commandRefusal(command), detail: result.message }, command: fallback });
+                    }
+                    return { key, message: command === `sync-install` ? setupSaid(result.message) : result.message };
+                } finally {
+                    endMark();
+                    // Blocks on a fresh read rather than serving the pre-click list, since the daemon dropped its
+                    // cached reading as the command ran.
+                    refetch();
+                }
+            },
         });
-        try {
-            const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
-            // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
-            // Setup answers with the CLI's whole narration; the row keeps only what a reader of it needs (syncSetup.ts).
-            outcome.value = result.ok ? { key, message: command === `sync-install` ? setupSaid(result.message) : result.message } : undefined;
-            failure.value = result.ok
-                ? undefined
-                : {
-                      key,
-                      notice: { tone: `warning`, title: commandRefusal(command), detail: result.message },
-                      command: syncFallback(command, sandboxId, about?.port),
-                  };
-        } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, commandUnreached(command)), command: syncFallback(command, sandboxId, about?.port) };
-        } finally {
-            syncBusy.value = undefined;
-            endMark();
-            // Blocks on a fresh read rather than serving the pre-click list, since the daemon dropped its
-            // cached reading as the command ran.
-            refetch();
-        }
     };
 
-    const syncRunning = (key: string, command: SyncCommand, port?: number): boolean =>
-        syncBusy.value?.key === key &&
-        syncBusy.value.port === port &&
-        (syncBusy.value.command === command || syncBusy.value.command === PAIRED_WITH[command]);
+    const syncRunning = (key: string, command: SyncCommand, port?: number): boolean => {
+        const run = runningAt(SYNC(key));
+        return run !== undefined && run.progress?.port === port && (run.tag === command || run.tag === PAIRED_WITH[command]);
+    };
 
     // Unpairing doesn't undo itself (a fresh one-liner re-enrolls), so it parks in the app's own dialog like
     // the container verbs.
@@ -970,21 +1006,22 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         const key = accessKey(environment);
         const label = environment.device.label;
-        revoking.value = true;
-        failure.value = undefined;
-        outcome.value = undefined;
-        try {
-            await revokeSyncDevice(enrollment.machine);
-            outcome.value = { key, message: t(`sandbox.deviceOps.noLongerAccessTo`, { label }) };
-        } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, t(`sandbox.deviceOps.couldntRevokeAccess`)) };
-        } finally {
-            confirmingRevoke.value = undefined;
-            revoking.value = false;
-            // The row is losing its enrollment either way, so refetch regardless of whether the call itself
-            // succeeded.
-            refetch();
-        }
+        await ops.run(ACCESS(key), {
+            what: t(`sandbox.deviceOps.workingRevoke`, { label }),
+            failed: refusedAs(key, t(`sandbox.deviceOps.couldntRevokeAccess`)),
+            done: (answer) => answer?.message,
+            task: async () => {
+                try {
+                    await revokeSyncDevice(enrollment.machine);
+                    return { key, message: t(`sandbox.deviceOps.noLongerAccessTo`, { label }) };
+                } finally {
+                    // The row is losing its enrollment either way, so refetch regardless of whether the call itself
+                    // succeeded.
+                    refetch();
+                }
+            },
+        });
+        confirmingRevoke.value = undefined;
     };
 
     return {

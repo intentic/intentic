@@ -75,7 +75,6 @@
     "_editor/web/src/client/session/passkeySignIn.ts": 2,
     "_editor/web/src/client/session/sandboxSession.ts": 6,
     "_editor/web/src/extension-host/apiImpl.ts": 1,
-    "_editor/web/src/features/agents/board/session/AgentSessionMenu.vue": 1,
     "_editor/web/src/features/agents/board/view/cardMenu.ts": 1,
     "_editor/web/src/features/agents/fleet/agentActions.ts": 1,
     "_editor/web/src/features/agents/fleet/synthesizeSessions.ts": 1,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { machinesOf } from "@intentic/sandbox-contract";
 import { Button, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watchEffect } from "vue";
 import {
     appBehind,
@@ -17,7 +18,9 @@ import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../
 import { useEnvironment } from "../../environment/useEnvironment";
 import RunCommand from "../../../../components/RunCommand.vue";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
-import { useHubWork } from "../../../../workbench/hub/hubWork";
+import { useOperation } from "../../../../workbench/operations/operations";
+import { activeSandboxId } from "../../../../lib/activeSandbox";
+import { expectRestart } from "../../live/sandboxRestart";
 import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -64,10 +67,12 @@ const unixDoors = computed(() => onlineDevices.value.filter((device) => device.p
 const hostId = computed(
     () => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? (unixDoors.value[0] ?? onlineDevices.value[0])?.hostId : undefined),
 );
-const hubWork = useHubWork();
-const restarting = ref(false);
-const restarted = ref(false);
-const failed = ref<string | undefined>(undefined);
+// The restart is this sandbox's, not this card's: kept in the operations ledger, so a reader who opens another section
+// while it runs comes back to it still running (and the button still held), then to how it ended.
+const restart = useOperation(`sandbox/dev-restart`);
+const restarting = restart.busy;
+const restarted = computed(() => restart.operation.value?.state === `done`);
+const failed = computed(() => restart.failure.value);
 // What the button does, on hover rather than as two lines under it. The note heads off the other button: the Update
 // card's "Rebuild from checkout" builds a whole new image and takes minutes, and this gap doesn't need it.
 const restartTip = computed<Tip | undefined>(() =>
@@ -89,23 +94,39 @@ const showCommand = computed(() => hostId.value === undefined || failed.value !=
 
 const restartOnDevice = async (): Promise<void> => {
     const id = hostId.value;
+    const sandbox = activeSandboxId.value;
     if (id === undefined || restarting.value) {
         return;
     }
-    restarting.value = true;
-    failed.value = undefined;
-    restarted.value = false;
-    const endMark = hubWork.begin(t(`sandbox.sandboxBehindCard.restartingTheSandbox`));
-    try {
-        // Undefined is the expected ending: the container being restarted is the one answering this request.
-        await runSeveringDeviceCommand(id, `dev-restart`);
-        restarted.value = true;
-    } catch (error) {
-        failed.value = error instanceof Error ? error.message : String(error);
-    } finally {
-        restarting.value = false;
-        endMark();
-    }
+    const what = t(`sandbox.sandboxBehindCard.restartingTheSandbox`);
+    await restart.run({
+        what,
+        failed: (error) => noticeFrom(error, t(`sandbox.sandboxBehindCard.couldntRestart`), { tone: `warning` }),
+        task: async () => {
+            // The silence this causes is the restart, said so by every surface rather than read as a fault. Armed for
+            // the whole run, since the machine can take the sandbox down before its answer arrives; once the ask went
+            // through, the sandbox answering again is what ends it.
+            const restartWork =
+                sandbox === undefined
+                    ? undefined
+                    : {
+                          sandbox,
+                          id: `dev-rebuild` as const,
+                          what,
+                          quiet: { title: what, detail: t(`sandbox.sandboxBehindCard.restartingOn`, { hostId: id }) },
+                      };
+            const settle = restartWork === undefined ? undefined : expectRestart(restartWork);
+            try {
+                // Undefined is the expected ending: the container being restarted is the one answering this request.
+                await runSeveringDeviceCommand(id, `dev-restart`);
+                if (restartWork !== undefined) {
+                    expectRestart({ ...restartWork, untilAnswered: true });
+                }
+            } finally {
+                settle?.();
+            }
+        },
+    });
 };
 
 // Asked only once something already disagrees: with the two sides level there is no cause to explain, and the answer
@@ -252,7 +273,7 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                             <template v-else>{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
                         </span>
                     </div>
-                    <Notice v-if="failed" tone="warning" class="text-2xs">{{ failed }}</Notice>
+                    <Notice v-if="failed" :of="failed" class="text-2xs" />
                     <RunCommand
                         v-if="showCommand"
                         :command="restartCommand"

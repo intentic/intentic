@@ -17,6 +17,7 @@ jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ ...realSandboxRpc, sandbox
 
 const { useCapabilityForm } = await import("./capabilityForm");
 const { useCapabilityProbe } = await import("./capabilityProbe");
+const { forgetOperations } = await import("../../workbench/operations/operations");
 
 const SSH = CAPABILITY_CATALOG.find((entry) => entry.id === `ssh`)!;
 
@@ -26,6 +27,7 @@ afterEach(() => {
         scope.stop();
     }
     probe.mockReset();
+    forgetOperations();
 });
 
 // The Test over a real form on the SSH tile, answered by `answer`.
@@ -45,7 +47,7 @@ const testOn = (entry: CapabilityCatalogEntry | undefined, answer: () => Promise
     scopes.push(scope);
     return scope.run(() => {
         const form = useCapabilityForm(state);
-        return { state, form, test: useCapabilityProbe({ selected: state.selected, form, error: state.error }) };
+        return { state, form, test: useCapabilityProbe({ selected: state.selected, form }), scope };
     })!;
 };
 
@@ -103,13 +105,33 @@ describe(`the Test`, () => {
     });
 
     it(`says it could not test when the daemon refuses, and is ready to try again`, async () => {
-        const { state, test } = testOn(SSH, async () => {
+        const { test } = testOn(SSH, async () => {
             throw new Error(`sandbox unreachable`);
         });
 
         await test.runProbe();
 
-        expect(state.error.value).toEqual({ tone: `danger`, title: `Could not test that connection.`, detail: `sandbox unreachable` });
+        expect(test.failure.value).toEqual({ tone: `danger`, title: `Could not test that connection.`, detail: `sandbox unreachable` });
         expect([test.probing.value, test.canProbe.value]).toEqual([false, true]);
+    });
+
+    // The dial is the tile's: a form opened again mid-test finds it still out, and cannot send a second one.
+    it(`is still testing on a form opened again while the first dial is out, and keeps how it ended`, async () => {
+        let refuse: (error: Error) => void = () => undefined;
+        const first = testOn(SSH, () => new Promise((_resolve, reject) => (refuse = reject)));
+        const pressed = first.test.runProbe();
+        first.scope.stop();
+
+        const again = testOn(SSH, async () => ({ checked: true, ok: true, message: `Connected.` }));
+        expect(again.test.probing.value).toBe(true);
+        await again.test.runProbe();
+        expect(probe).toHaveBeenCalledTimes(1);
+
+        refuse(new Error(`sandbox unreachable`));
+        await pressed;
+        expect(again.test.probing.value).toBe(false);
+        expect(again.test.failure.value?.detail).toBe(`sandbox unreachable`);
+        // What it said belongs to the form that asked, and that one is gone.
+        expect(again.form.probeResult.value).toBeUndefined();
     });
 });

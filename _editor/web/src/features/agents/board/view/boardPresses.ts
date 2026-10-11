@@ -1,11 +1,12 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { ref, type Ref, watch } from "vue";
+import { computed, type Ref, watch } from "vue";
 import type { Router } from "vue-router";
 import { runPress } from "../../../chat/run/chatRun";
 import type { Strip } from "../../../chat/tabs/tabFacts";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
+import { useOperations } from "../../../../workbench/operations/operations";
 
 // The board's presses that land on no agent card: a workflow run's row (a run is not an agent, see WorkflowRunCard), a
 // held wake's approve or reject, and the header's Synthesize.
@@ -43,27 +44,47 @@ export interface PressesHost {
 export const useBoardPresses = (host: PressesHost) => {
     const { workflows, agents } = host;
     // Runs asked to stop: the ledger confirms only once each step unwinds, on a poll, and unmarked a stop looks ignored.
-    const stoppingRuns = ref(new Set<string>());
-    const forgetStopping = (runId: string): void => {
-        const rest = new Set(stoppingRuns.value);
-        rest.delete(runId);
-        stoppingRuns.value = rest;
-    };
-    // The daemon answers a stop on an ended run as done, so a refusal means the run may still be spending.
+    // The daemon has no `stopping` of its own (a run reads `running` until it winds down), so the asks are kept in the
+    // operations ledger rather than this board: one that leaves and comes back finds the run still marked, where it used
+    // to offer Stop again. An ask that went is kept until the ledger says its run stopped, not until the request returns:
+    // steps keep finishing for minutes after.
+    const stops = useOperations(`workflows/stop`);
+    const stillRunning = (runId: string): boolean => workflows.runs.value.find((run) => run.runId === runId)?.state === `running`;
+    const stoppingRuns = computed(
+        () =>
+            new Set(
+                stops.all.value
+                    .filter((stop) => stop.tag !== undefined && (stop.state === `running` || (stop.state === `done` && stillRunning(stop.tag))))
+                    .map((stop) => stop.tag!),
+            ),
+    );
+    // The daemon answers a stop on an ended run as done, so a refusal means the run may still be spending. Its reason
+    // goes on the board's notice strip, which outlives the board, so it waits for a reader who left.
     const stopRun = async (run: WorkflowRun): Promise<void> => {
-        stoppingRuns.value = new Set([...stoppingRuns.value, run.runId]);
-        try {
-            await workflows.stop.mutateAsync(run.runId);
-        } catch (error) {
-            forgetStopping(run.runId);
-            agents.notice.value = messageOr(error, t(`agents.boardPresses.couldntStopRun`));
+        if (stoppingRuns.value.has(run.runId)) {
+            return;
+        }
+        const outcome = await stops.run(run.runId, {
+            what: t(`agents.boardPresses.stoppingRun`, { name: run.workflow.name }),
+            tag: run.runId,
+            failed: t(`agents.boardPresses.couldntStopRun`),
+            // The row says it, and keeps saying it until the run has wound down.
+            quiet: true,
+            keep: true,
+            task: async () => {
+                await workflows.stop.mutateAsync(run.runId);
+            },
+        });
+        if (outcome?.state === `failed`) {
+            stops.dismiss(run.runId);
+            agents.notice.value = outcome.failure?.detail ?? outcome.failure?.title;
         }
     };
-    // Held until the ledger says the run stopped, not until the request returns: steps keep finishing for minutes after.
-    watch(workflows.runs, (list) => {
-        for (const runId of stoppingRuns.value) {
-            if (list.find((run) => run.runId === runId)?.state !== `running`) {
-                forgetStopping(runId);
+    // Put away once the ledger says the run stopped.
+    watch(workflows.runs, () => {
+        for (const stop of stops.all.value) {
+            if (stop.tag !== undefined && stop.state === `done` && !stillRunning(stop.tag)) {
+                stops.dismiss(stop.tag);
             }
         }
     });

@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, Notice, StatusBadge, timeAgo, toneTint, ui, useAsyncAction } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
+import { Button, Notice, StatusBadge, timeAgo, toneTint, ui } from "@intentic/ui";
+import { computed, watch } from "vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { useHubWork } from "../../../workbench/hub/hubWork";
+import { useOperation } from "../../../workbench/operations/operations";
 import { router } from "../../../router";
 import { updateBrief } from "./extensionBrief";
+import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
 import { useT } from "@intentic/ui/i18n";
 
@@ -16,6 +17,10 @@ import { useT } from "@intentic/ui/i18n";
 // an update that came up wrong, then the update on offer. The offer is named for the row's `update` pill, so the pill
 // and the thing to press are one idea, and it is two clicks on purpose: Review stages the powers diff, then the confirm
 // is labelled by what that found. The standing policy lives in the drawer's Updates section, not here.
+//
+// Each step is kept in the operations ledger under the extension's id (extensionWork.ts), not in this component: it is
+// drawn inside the row's drawer, so collapsing the row unmounts it while the daemon fetches and builds the new code, and
+// reopening it has to show the apply still running, and then how it ended, rather than offer it again.
 
 const t = useT();
 
@@ -26,20 +31,30 @@ const { extension, anchor } = defineProps<{
 }>();
 
 const { previewUpdate, apply: applyUpdate, revert: revertUpdate } = useExtensionUpdates();
-const hubWork = useHubWork();
-const { busy, notice, run } = useAsyncAction();
+const at = (act: string): string => `${drawerScope(extension.id)}/update/${act}`;
+// The staged read behind the first click: what the confirm would approve.
+const staging = useOperation<Awaited<ReturnType<typeof previewUpdate>>>(() => at(`preview`));
+const applying = useOperation<Awaited<ReturnType<typeof applyUpdate>>>(() => at(`apply`));
+const reverting = useOperation(() => at(`revert`));
+// Anything under way on this extension, from this drawer, the row's own switch or Browse: one at a time.
+const busy = computed(() => extensionBusy(extension.id, extensionIdOf(extension.manifest)));
+const notice = computed(() => latestFailure([staging.operation.value, applying.operation.value, reverting.operation.value]));
 
 const offer = computed(() => extension.update);
 const unhealthy = computed(() => (extension.health?.state === `unhealthy` ? extension.health : undefined));
 const short = (ref_: string): string => ref_.slice(0, 7);
 
-// The staged read behind the first click; dropped whenever the offer it describes changes.
-const preview = ref<Awaited<ReturnType<typeof previewUpdate>>>();
+const preview = staging.value;
+// Dropped whenever the offer it describes changes, with any failure said about it. A finished apply stays: the offer
+// it took is gone by then, and what it reports (a rebuild still owed) outlives it.
 watch(
     () => offer.value?.ref,
     () => {
-        preview.value = undefined;
-        notice.value = undefined;
+        staging.dismiss();
+        if (applying.failure.value !== undefined) {
+            applying.dismiss();
+        }
+        reverting.dismiss();
     },
 );
 
@@ -72,27 +87,50 @@ const confirmLabel = computed(() => {
 
 const failed = (): string => t(`sandbox.extensionUpdateOffer.didntWork`);
 
-const stage = (): Promise<void> =>
-    run(async () => {
-        preview.value = await previewUpdate(extension.id);
-    }, failed());
+// A read of a staged clone; the drawer that asked is where its answer is drawn, so it raises no receipt of its own.
+const stage = async (): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await staging.run({
+        what: t(`sandbox.extensionUpdateOffer.reviewing`, { id: extension.id }),
+        quiet: true,
+        failed: failed(),
+        task: () => previewUpdate(extension.id),
+    });
+};
 
 // Applying reloads the host so this browser runs the new code (useExtensionUpdates). A pending image rebuild is
-// reported, not implied away.
-const rebuildNote = ref(false);
-const apply = (): Promise<void> =>
-    run(
-        () =>
-            // Fetching the new code and reconciling it takes longer than a click, so the Extensions row says so.
-            hubWork.track(t(`sandbox.extensionUpdateOffer.updating`, { id: extension.id }), async () => {
-                const applied = await applyUpdate(extension.id, preview.value?.ref);
-                rebuildNote.value = applied.rebuildNeeded === true;
-                preview.value = undefined;
-            }),
-        failed(),
-    );
+// reported, not implied away. The staged read is spent once the update lands, so it goes with the apply.
+const apply = async (): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    const target = preview.value?.ref;
+    await applying.run({
+        what: t(`sandbox.extensionUpdateOffer.updating`, { id: extension.id }),
+        done: () => t(`sandbox.extensionUpdateOffer.updated`, { id: extension.id }),
+        failed: failed(),
+        task: async () => {
+            const applied = await applyUpdate(extension.id, target);
+            staging.dismiss();
+            return applied;
+        },
+    });
+};
+const rebuildNote = computed(() => applying.value.value?.rebuildNeeded === true);
 
-const revert = (): Promise<void> => run(() => revertUpdate(extension.id), failed());
+const revert = async (): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await reverting.run({
+        what: t(`sandbox.extensionUpdateOffer.reverting`, { id: extension.id }),
+        done: () => t(`sandbox.extensionUpdateOffer.reverted`, { id: extension.id }),
+        failed: failed(),
+        task: () => revertUpdate(extension.id),
+    });
+};
 
 // Links a finished agent diff-read when the policy already ran one, offers to start one otherwise; an unregistered
 // conversation still resolves by id through the chat route.
@@ -229,7 +267,7 @@ const shown = computed(
                 <Button v-if="!preview" size="small" :loading="busy" :label="t(`sandbox.extensionUpdateOffer.reviewUpdate`)" @click="stage" />
                 <template v-else>
                     <Button size="small" :tone="added.length > 0 ? `warning` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
-                    <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" :disabled="busy" @click="preview = undefined" />
+                    <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" :disabled="busy" @click="staging.dismiss()" />
                 </template>
                 <ActionLink
                     v-if="offer.review"

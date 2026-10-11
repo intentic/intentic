@@ -11,7 +11,6 @@ import {
     providerSpec,
 } from "@intentic/sandbox-contract";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
-import { useAsyncAction } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -19,6 +18,7 @@ import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
+import { useOperation } from "../../../workbench/operations/operations";
 import { defaultModelFor, endpointProviders, trialStatus } from "../../chat/accounts/providerCatalog";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
@@ -356,12 +356,22 @@ const readKeys = async (): Promise<void> => {
     // allow(silent-catch): a list that could not be read offers nothing, which is what the section shows for none.
     keys.value = ProviderKeysSchema.parse(await sandboxJson(`/arrivals/keys`).catch(() => ({ keys: [] }))).keys;
 };
-const adding = ref<string | undefined>(undefined);
-const { notice: keyNotice, run: runAddKey } = useAsyncAction();
-const addKey = (key: ProviderKey): Promise<void> =>
-    runAddKey(async () => {
-        adding.value = key.id;
-        try {
+// Copying a key in is kept in the operations ledger rather than here: it writes the key and the endpoint and re-reads the
+// connections whether or not this page stays open, and coming back mid-copy has to show it under way, or why it failed.
+// One at a time, tagged with the key it copies; its value is the endpoint the key became.
+const keyCopy = useOperation<AgentProvider | undefined>(`models/keys/add`);
+const adding = computed(() => (keyCopy.busy.value ? keyCopy.operation.value?.tag : undefined));
+const keyNotice = keyCopy.failure;
+const addKey = async (key: ProviderKey): Promise<void> => {
+    if (adding.value !== undefined) {
+        return;
+    }
+    const ended = await keyCopy.run({
+        what: t(`connect.connect.foundKeyAdding`, { provider: key.label }),
+        tag: key.id,
+        quiet: true,
+        failed: t(`connect.connect.foundKeyFailed`),
+        task: async () => {
             const applied = ProviderKeysAppliedSchema.parse(
                 await sandboxJson(`/arrivals/keys/apply`, {
                     method: `POST`,
@@ -373,20 +383,25 @@ const addKey = (key: ProviderKey): Promise<void> =>
             if (failure !== undefined) {
                 throw new Error(failure.error);
             }
-            addedHere.value = new Set([...addedHere.value, key.id]);
-            keys.value = keys.value.map((entry) => (entry.id === key.id ? { ...entry, added: true } : entry));
             // The picker reads endpoints off the connection list, which has never heard of this one.
             await refreshConnections();
             const capability = applied.added[0]?.capability;
-            if (capability !== undefined) {
-                keyEndpointLabels.set(endpointProvider(capability), key.label);
-                landed.value = endpointProvider(capability);
-                selected.value = LOCAL_TILE;
-            }
-        } finally {
-            adding.value = undefined;
-        }
-    }, t(`connect.connect.foundKeyFailed`));
+            return capability === undefined ? undefined : endpointProvider(capability);
+        },
+    });
+    if (ended?.state !== `done`) {
+        return;
+    }
+    // The page's own answer to the copy: the row turns to Added, and the endpoint it became is opened and offered.
+    addedHere.value = new Set([...addedHere.value, key.id]);
+    keys.value = keys.value.map((entry) => (entry.id === key.id ? { ...entry, added: true } : entry));
+    keyCopy.dismiss();
+    if (ended.value !== undefined) {
+        keyEndpointLabels.set(ended.value, key.label);
+        landed.value = ended.value;
+        selected.value = LOCAL_TILE;
+    }
+};
 
 // The platform's free trial is not something to connect, so it has no tile; while it is on offer it is worth one line,
 // since it is what a chat runs on until something here is connected.

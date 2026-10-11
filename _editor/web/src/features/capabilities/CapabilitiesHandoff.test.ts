@@ -149,6 +149,8 @@ const mount = (): HTMLElement => {
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
     await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+    // The write runs in the operations ledger, which answers the page a few turns after the daemon does.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 };
 

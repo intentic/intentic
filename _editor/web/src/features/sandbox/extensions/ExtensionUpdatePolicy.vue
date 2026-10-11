@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
-import { Notice, SegmentedControl, ui, useAsyncAction } from "@intentic/ui";
+import { Notice, SegmentedControl, ui } from "@intentic/ui";
 import { computed } from "vue";
+import { useOperations } from "../../../workbench/operations/operations";
 import ExtensionSection from "./ExtensionSection.vue";
+import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
 import { useT } from "@intentic/ui/i18n";
 
@@ -15,7 +18,11 @@ const t = useT();
 const { extension } = defineProps<{ extension: ExtensionSummary }>();
 
 const { revert: revertUpdate, setUpdatePolicy } = useExtensionUpdates();
-const { busy, notice, run } = useAsyncAction();
+// Kept under the extension's id (extensionWork.ts), since this section sits in a drawer that collapsing the row unmounts.
+const work = useOperations(() => `${drawerScope(extension.id)}/policy`);
+// Anything under way on this extension, here, in the offer above, on the row or from Browse: one at a time.
+const busy = computed(() => extensionBusy(extension.id, extensionIdOf(extension.manifest)));
+const notice = computed(() => latestFailure(work.all.value));
 
 const failed = (): string => t(`sandbox.extensionUpdatePolicy.didntWork`);
 
@@ -35,14 +42,35 @@ const POLICY_OPTIONS = computed(() => [
     { label: t(`sandbox.extensionUpdatePolicy.agentPrepared`), value: `agent` },
     { label: t(`sandbox.extensionUpdatePolicy.auto`), value: `auto` },
 ]);
-const setPolicy = (updates: ExtensionUpdatePolicy["updates"]): Promise<void> => run(() => setUpdatePolicy(extension.id, { updates }), failed());
-const setAdvisories = (autoDisable: boolean): Promise<void> =>
-    run(() => setUpdatePolicy(extension.id, { advisories: autoDisable ? `auto-disable` : `notify` }), failed());
+// The answer shows itself on the controls, so a write raises no receipt of its own.
+const save = async (patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await work.run(`set`, {
+        what: t(`sandbox.extensionUpdatePolicy.saving`, { id: extension.id }),
+        quiet: true,
+        failed: failed(),
+        task: () => setUpdatePolicy(extension.id, patch),
+    });
+};
+const setPolicy = (updates: ExtensionUpdatePolicy["updates"]): Promise<void> => save({ updates });
+const setAdvisories = (autoDisable: boolean): Promise<void> => save({ advisories: autoDisable ? `auto-disable` : `notify` });
 
 // The way back, ordinary and visible: "the last update made it worse" needs no failing probe. An unhealthy update
 // offers the same revert from the drawer's lead, so it is not said twice.
 const previous = computed(() => (extension.health?.state === `unhealthy` ? undefined : extension.previous));
-const revert = (): Promise<void> => run(() => revertUpdate(extension.id), failed());
+const revert = async (): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    await work.run(`revert`, {
+        what: t(`sandbox.extensionUpdateOffer.reverting`, { id: extension.id }),
+        done: () => t(`sandbox.extensionUpdateOffer.reverted`, { id: extension.id }),
+        failed: failed(),
+        task: () => revertUpdate(extension.id),
+    });
+};
 </script>
 
 <template>

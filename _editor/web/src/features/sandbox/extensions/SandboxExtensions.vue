@@ -1,20 +1,19 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl, timeAgo, vAction } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { storedValue, storeValue } from "../../../lib/browserStorage";
-import { startAgent } from "../../agents/fleet/agentActions";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useExtensions } from "../../extensions/useExtensions";
 import { useRegistry } from "../../extensions/useRegistry";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
+import { dismissOperation, useOperations } from "../../../workbench/operations/operations";
 import { toListing, updateCount } from "./discoverListing";
-import { extensionBrief } from "./extensionBrief";
+import { endedNotice, ROWS, SECTION } from "./extensionWork";
 import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
-import { installsInFlight } from "./installsInFlight";
+import { INSTALLS, type InstallVerb, installNotice, installsInFlight, listingOf } from "./installsInFlight";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -63,7 +62,7 @@ const mode = ref<`all` | `on` | `off`>(`all`);
 const trust = ref<`all` | `verified`>(`all`);
 // How many rows the current view's filter left, drawn on the field that did the narrowing.
 const matched = ref(0);
-// Whichever view is mounted raises its failures here, keeping one notice region for the section.
+// Whichever view is mounted raises its read's failure here, keeping one notice region for the section.
 const viewNotice = ref<NoticeModel | undefined>(undefined);
 
 // How many published listings match the query, ignoring the trust pills; zero while the registry cache is cold.
@@ -102,18 +101,24 @@ const viewOptions = computed(() => [
     },
 ]);
 
-// Re-runs the extension host so a newly installed extension gets picked up, cheaper than a full page reload.
-const reloading = ref(false);
+// Work started from this section, kept in the operations ledger rather than here (extensionWork.ts): the section's own
+// verbs, the installed rows' and Browse's installs. Whatever ended is said in the notice region until put away, which
+// is also how an outcome that ended while the reader was elsewhere waits for them; an install whose dialog is open is
+// that dialog's to say.
+const section = useOperations<unknown>(SECTION);
+const rows = useOperations<NoticeModel | undefined>(ROWS);
+const installs = useOperations<InstallVerb>(INSTALLS);
+
+// Re-runs the extension host so a newly installed extension gets picked up, cheaper than a full page reload. Shows
+// itself on the button and in the list, so it raises no receipt.
+const reloading = computed(() => section.at(`reload`)?.state === `running`);
 const reload = async (): Promise<void> => {
-    reloading.value = true;
-    viewNotice.value = undefined;
-    try {
-        await reloadExtensions();
-    } catch (failure) {
-        viewNotice.value = noticeFrom(failure, t(`sandbox.sandboxExtensions.couldNotReload`));
-    } finally {
-        reloading.value = false;
-    }
+    await section.run(`reload`, {
+        what: t(`sandbox.sandboxExtensions.reloading`),
+        quiet: true,
+        failed: t(`sandbox.sandboxExtensions.couldNotReload`),
+        task: () => reloadExtensions(),
+    });
 };
 
 // An update landed elsewhere while this tab still runs the old bundle; the button here is the same host reload,
@@ -150,18 +155,16 @@ const newNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-// States when updates were last checked, re-rendered on every refetch so it stays as fresh as the check.
-const checking = ref(false);
+// States when updates were last checked, re-rendered on every refetch so it stays as fresh as the check: the registry
+// round for every installed extension, which the line's own time says once it lands.
+const checking = computed(() => section.at(`check`)?.state === `running`);
 const checkNow = async (): Promise<void> => {
-    checking.value = true;
-    viewNotice.value = undefined;
-    try {
-        await checkUpdates();
-    } catch (failure) {
-        viewNotice.value = noticeFrom(failure, t(`sandbox.sandboxExtensions.couldNotCheckUpdates`));
-    } finally {
-        checking.value = false;
-    }
+    await section.run(`check`, {
+        what: t(`sandbox.sandboxExtensions.checkingUpdates`),
+        quiet: true,
+        failed: t(`sandbox.sandboxExtensions.couldNotCheckUpdates`),
+        task: () => checkUpdates(),
+    });
 };
 
 const creating = ref(false);
@@ -172,24 +175,44 @@ const reveal = (id: string | undefined): void => {
     focused.value = id;
     show(`installed`);
 };
-// Reloads the extension host so the new extension actually runs, then opens on its row; a wish hands off to an
-// ordinary agent chat, not an isolated run, since a first draft benefits from the author's corrections.
-const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
+// Reloads the extension host so the new extension actually runs, then opens on its row. The wish was already handed to
+// an agent by the creation itself (NewExtensionDialog), which runs on whether or not this section is still open.
+const created = async (extension: { id: string }): Promise<void> => {
     // Switches to the installed view so the newly created row isn't hidden behind the other pill.
     if (view.value !== `installed`) {
         show(`installed`);
     }
     focused.value = extension.id;
     await reload();
-    if (extension.wish !== ``) {
-        startAgent(extensionBrief(extension));
+};
+
+const revealInstalled = (key: string, id: string | undefined): void => {
+    dismissOperation(key);
+    reveal(id);
+};
+// The open listing's install is said in its dialog, not here.
+const openListing = computed(() => (view.value === `browse` && typeof route.query[`ext`] === `string` ? route.query[`ext`] : undefined));
+const workNotices = computed<(NoticeModel | undefined)[]>(() => [
+    // The dialog says a creation's failure while it is open; closed over one, the section does.
+    ...section.all.value.filter((operation) => !(creating.value && operation.key === `${SECTION}/create`)).map((operation) => endedNotice(operation)),
+    ...rows.all.value.map((operation) => endedNotice(operation, operation.value)),
+    ...installs.all.value
+        .filter((operation) => listingOf(operation.key) !== openListing.value)
+        .map((operation) => installNotice(operation, extensions.value, (id) => revealInstalled(operation.key, id))),
+]);
+const dismissWork = (notice: NoticeModel): void => {
+    if (notice.key !== undefined) {
+        dismissOperation(notice.key);
     }
 };
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
-        <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
+        <div v-if="viewNotice || staleNotice || newNotice || workNotices.some(Boolean)" class="flex flex-col gap-2">
+            <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
+            <NoticeStack :of="workNotices" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissWork" />
+        </div>
 
         <!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
         <div class="flex flex-wrap items-center gap-2">
