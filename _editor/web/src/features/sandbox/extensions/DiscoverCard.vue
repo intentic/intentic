@@ -97,8 +97,8 @@ const unavailableTip = computed(() =>
             </span>
             <span v-if="listing.entry.version" class="shrink-0 text-2xs text-subtle">{{ listing.entry.version }}</span>
 
-            <!-- Right-aligned and always last: the one thing a reader scanning unfamiliar names is looking for. -->
-            <span class="ml-auto inline-flex shrink-0 items-center">
+            <!-- Keep the status slot text-height: a pill's padding must not shift the other glyphs onto fractional pixels. -->
+            <span class="ml-auto inline-flex h-4 shrink-0 items-center">
                 <span v-if="installing" class="inline-flex items-center gap-1 text-2xs font-medium text-muted" role="status">
                     <Icon name="spinner" spin />{{
                         listing.state.kind === `update` ? t(`sandbox.discoverCard.updating`) : t(`sandbox.discoverCard.installing`)
