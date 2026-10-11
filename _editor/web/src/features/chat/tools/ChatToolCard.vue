@@ -184,13 +184,14 @@ const openSubagent = (event: MouseEvent): void => {
 
 <template>
     <div class="flex flex-col gap-0.5">
-        <!-- Folded cards keep their target visible in muted text. -->
-        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
+        <!-- Folded cards keep their target visible in muted text. A phone's row is 32px rather than its 16px line, and its
+             presses fill it (ChatToolGroup's row says why). -->
+        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted max-md:min-h-8">
             <!-- Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an output-less call keeps a plain header. -->
             <button
                 v-if="hasContent"
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 whitespace-nowrap transition-colors hover:text-content"
+                class="flex shrink-0 items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
                 :aria-expanded="isOpen"
                 @click="toggleOpen"
             >
@@ -213,7 +214,7 @@ const openSubagent = (event: MouseEvent): void => {
             <button
                 v-else-if="location && openFile"
                 type="button"
-                class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
+                class="min-w-0 self-stretch truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="t(`chat.words.openFile`)"
                 @click="openFile(location.path, location.line)"
             >
@@ -237,12 +238,15 @@ const openSubagent = (event: MouseEvent): void => {
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
-            <!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet. -->
+            <!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet; faint under a thumb, which has no hover to find it with. -->
             <button
                 v-if="agentTerminal && surface.watchTerminal"
                 type="button"
-                class="shrink-0 transition hover:text-content"
-                :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
+                class="flex shrink-0 items-center self-stretch transition hover:text-content max-md:min-w-8 max-md:justify-center"
+                :class="[
+                    running && live ? '' : 'opacity-0 group-hover/tool:opacity-100 pointer-coarse:opacity-40',
+                    { 'ml-auto': !unfinished && !view.summary },
+                ]"
                 v-tooltip.top="t(`chat.words.watchTerminal`)"
                 :aria-label="t(`chat.words.watchTerminal`)"
                 @click="surface.watchTerminal(agentTerminal)"
@@ -253,8 +257,11 @@ const openSubagent = (event: MouseEvent): void => {
             <button
                 v-if="agentBrowser && surface.watchBrowser"
                 type="button"
-                class="shrink-0 transition hover:text-content"
-                :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
+                class="flex shrink-0 items-center self-stretch transition hover:text-content max-md:min-w-8 max-md:justify-center"
+                :class="[
+                    running && live ? '' : 'opacity-0 group-hover/tool:opacity-100 pointer-coarse:opacity-40',
+                    { 'ml-auto': !unfinished && !view.summary },
+                ]"
                 v-tooltip.top="t(`chat.chatToolCard.watchBrowser`)"
                 :aria-label="t(`chat.chatToolCard.watchBrowser`)"
                 @click="surface.watchBrowser(agentBrowser)"
@@ -267,7 +274,7 @@ const openSubagent = (event: MouseEvent): void => {
                 v-if="subagentDoor"
                 :href="subagentDoor.href"
                 :type="subagentDoor.href === undefined ? `button` : undefined"
-                class="shrink-0 transition-colors hover:text-content"
+                class="flex shrink-0 items-center self-stretch transition-colors hover:text-content max-md:min-w-8 max-md:justify-center"
                 v-tooltip.top="subagentDoor.label"
                 :aria-label="subagentDoor.label"
                 @click="openSubagent($event)"

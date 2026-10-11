@@ -57,6 +57,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             <Button
                 v-if="owner"
                 size="small"
+                thumb
                 tier="quiet"
                 :disabled="!reachable || isSaving || streaming"
                 v-tooltip.top="{
@@ -67,7 +68,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             >
                 {{ t(`chat.chatPaneNotices.privacyLetRead`, { provider: standing.label }) }}
             </Button>
-            <Button :as="RouterLink" :to="safety" size="small" tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
+            <Button :as="RouterLink" :to="safety" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
         </template>
     </Notice>
     <!-- Granted: said for as long as it holds, since this conversation's reads leave unmasked while it does. -->
@@ -80,6 +81,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
         <Button
             v-if="owner"
             size="small"
+            thumb
             tier="quiet"
             class="shrink-0"
             :disabled="!reachable || isSaving"

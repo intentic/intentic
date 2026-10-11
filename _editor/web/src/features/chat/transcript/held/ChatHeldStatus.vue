@@ -82,7 +82,11 @@ const why = computed(() => {
                 scope="global"
             >
                 <template #title
-                    ><button type="button" class="max-w-48 truncate align-bottom font-medium text-link hover:underline" @click="after.open()">
+                    ><button
+                        type="button"
+                        class="max-w-48 truncate align-bottom font-medium text-link hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
+                        @click="after.open()"
+                    >
                         {{ after.title }}
                     </button></template
                 >

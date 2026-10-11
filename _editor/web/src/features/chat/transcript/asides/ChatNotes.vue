@@ -61,7 +61,7 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                 <div v-for="note in notes" :key="note.title" class="flex flex-col">
                     <button
                         type="button"
-                        class="flex items-center gap-1.5 px-2.5 py-1 text-left transition-colors hover:text-content"
+                        class="flex items-center gap-1.5 px-2.5 py-1 text-left transition-colors hover:text-content max-md:py-2.5"
                         :class="opened === note.title ? `text-content` : `text-muted`"
                         :aria-expanded="opened === note.title"
                         @click="toggle(note.title)"

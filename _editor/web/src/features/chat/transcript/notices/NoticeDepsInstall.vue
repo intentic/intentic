@@ -15,7 +15,12 @@ const session = computed(() => rows.value.find((row) => row.session.endsWith(`--
 </script>
 
 <template>
-    <button v-if="session !== undefined" type="button" class="shrink-0 font-medium text-link hover:underline" @click="openWorkTerminal(session)">
+    <button
+        v-if="session !== undefined"
+        type="button"
+        class="touch-target shrink-0 font-medium text-link hover:underline"
+        @click="openWorkTerminal(session)"
+    >
         {{ t(`chat.chatMessageView.watchInstall`) }}
     </button>
 </template>

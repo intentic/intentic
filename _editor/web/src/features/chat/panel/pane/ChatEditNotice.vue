@@ -37,7 +37,9 @@ const keepBoth = (): void => {
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-card px-3 py-2 text-2xs text-muted shadow-sm"
     >
         <Icon name="pencil" class="shrink-0 text-link" />
-        <span class="min-w-0 flex-1">
+        <!-- A floor, not `min-w-0`: the presses beside it are a thumb's size on a phone, and squeezed between them the line
+             was a column of single words; past the floor they take a row of their own under it. -->
+        <span class="min-w-[12rem] flex-1">
             {{ t(`chat.chatPane.editingMessage`) }}
             <template v-if="dropped > 1">{{ t(`chat.chatPane.belowReplacedSend`, { editDropped: dropped - 1 }) }}</template>
             <template v-else>{{ t(`chat.chatPane.replacedSend`) }}</template>
@@ -45,6 +47,7 @@ const keepBoth = (): void => {
         <!-- The keep-answer action precedes Cancel so the answer is read first. -->
         <Button
             size="small"
+            thumb
             tier="quiet"
             class="shrink-0"
             v-tooltip.top="{ title: t(`chat.chatPane.forkWithDraft`), note: t(`chat.chatPane.thisChatUnchanged`) }"
@@ -54,6 +57,7 @@ const keepBoth = (): void => {
         </Button>
         <Button
             size="small"
+            thumb
             tier="quiet"
             tone="accent"
             class="shrink-0"

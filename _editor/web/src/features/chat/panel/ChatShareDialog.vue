@@ -77,7 +77,7 @@ const share = async (): Promise<void> => {
                     :href="result.url"
                     target="_blank"
                     rel="noopener"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
+                    class="touch-target flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
                     :aria-label="t(`chat.chatShareDialog.openSharedConversationIn`)"
                     v-tooltip.bottom="t(`ui.action.newTab`)"
                 >

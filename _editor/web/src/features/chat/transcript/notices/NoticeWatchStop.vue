@@ -29,7 +29,7 @@ const stop = async (): Promise<void> => {
 
 <template>
     <template v-if="armed">
-        <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stop">
+        <button type="button" class="touch-target shrink-0 font-medium text-link hover:underline" @click="stop">
             {{ t(`agents.words.stopWatching`) }}
         </button>
         <span v-if="refused !== undefined" role="alert" class="shrink-0 text-danger">{{ refused }}</span>

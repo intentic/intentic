@@ -48,7 +48,7 @@ const openSource = (): void => {
             <button
                 v-if="reachable"
                 type="button"
-                class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-content"
+                class="touch-target cursor-pointer underline decoration-dotted underline-offset-2 hover:text-content"
                 @click="openSource"
             >
                 {{ label }}

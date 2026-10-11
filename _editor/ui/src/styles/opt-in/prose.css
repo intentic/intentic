@@ -275,6 +275,13 @@
 .md-prose a.md-file-link:hover {
     text-decoration: underline solid var(--color-link);
 }
+/* A LINK IN A LINE OF TEXT IS AS TALL AS ITS TEXT, 14px under a thumb. Padding on an inline box moves nothing (the line
+   box ignores it) but is part of what a tap lands on, so a coarse pointer gets a target about as tall as the line itself. */
+@media (pointer: coarse) {
+    .md-prose a {
+        padding-block: 0.3125rem;
+    }
+}
 
 /* Tables. The failure to design against is a table WIDER THAN ITS COLUMN: the layout then collapses every column
    to its longest word and scrolls anyway, so the fit is bought in the cells — break opportunities (tables.ts) and a

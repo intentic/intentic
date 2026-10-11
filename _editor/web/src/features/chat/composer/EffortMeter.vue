@@ -59,7 +59,7 @@ const pick = (value: string): void => {
             <button
                 ref="trigger"
                 type="button"
-                class="flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-1 transition-colors active:bg-overlay"
+                class="flex min-h-11 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-md px-1 transition-colors active:bg-overlay"
                 :disabled="disabled"
                 :aria-label="t(`chat.effortMeter.reasoningEffort2`, { effortLabel })"
                 @click="sheetOpen = true"

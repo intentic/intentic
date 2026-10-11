@@ -501,7 +501,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <button
                         v-if="overflowing"
                         type="button"
-                        class="chat-prompt-toggle"
+                        class="chat-prompt-toggle touch-target"
                         :aria-expanded="expanded"
                         :aria-label="expanded ? t(`chat.chatMessageView.collapseMessage`) : t(`chat.chatMessageView.expandMessage`)"
                         @click="toggleExpanded"
@@ -517,11 +517,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
                 >{{ sentClock }}</span
             >
-            <!-- Edit pencil sits in the gutter's own column (the fork mark's lane), costing no width. -->
+            <!-- Edit pencil sits in the gutter's own column (the fork mark's lane), costing no width. Taller on a phone rather than a
+                 touch-target: an overlay would reach back over the bubble's own expand press. -->
             <button
                 v-if="editable"
                 type="button"
-                class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition hover:bg-overlay hover:text-content"
+                class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition hover:bg-overlay hover:text-content max-md:h-10"
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
                 v-tooltip.right="{ title: t(`chat.chatMessageView.editMessageShort`), note: t(`chat.chatMessageView.replacesWhatFollows`) }"
                 :aria-label="t(`chat.words.editMessage`)"
@@ -560,7 +561,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <button
                 v-if="unspokenSent !== undefined"
                 type="button"
-                class="shrink-0 font-medium text-link hover:underline"
+                class="touch-target shrink-0 font-medium text-link hover:underline"
                 :aria-expanded="watchEvidence"
                 @click="watchEvidence = !watchEvidence"
             >
@@ -573,7 +574,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <button
                 v-if="failure?.folded"
                 type="button"
-                class="shrink-0 font-medium text-link hover:underline"
+                class="touch-target shrink-0 font-medium text-link hover:underline"
                 :aria-expanded="failureOpen"
                 @click="failureOpen = !failureOpen"
             >

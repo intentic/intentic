@@ -46,10 +46,12 @@ const location = computed(() => {
 
 <template>
     <div class="flex flex-col gap-0.5">
-        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
+        <!-- A phone's row is 32px rather than its 16px line, and its two presses fill it: the fold and the file were each a
+             strip a thumb could not land on. -->
+        <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted max-md:min-h-8">
             <button
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 whitespace-nowrap transition-colors hover:text-content"
+                class="flex shrink-0 items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
                 :aria-expanded="expanded"
                 @click="toggle"
             >
@@ -61,7 +63,7 @@ const location = computed(() => {
             <button
                 v-if="location && openFile"
                 type="button"
-                class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
+                class="min-w-0 self-stretch truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="t(`chat.words.openFile`)"
                 @click="openFile(location.path, location.line)"
             >

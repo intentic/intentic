@@ -309,11 +309,12 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
             <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
             <!-- Status text has a minimum width beside shrinkable controls. -->
             <span class="min-w-[11rem] flex-1">{{ status }}</span>
-            <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
+            <div ref="waysAnchor" class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
                 <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
                 <Button
                     v-if="canReset"
                     size="small"
+                    thumb
                     tier="quiet"
                     :disabled="!reachable || resetting"
                     v-tooltip.top="resetTip"
@@ -338,17 +339,18 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                             {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
                         </Button>
                     </span>
-                    <Button size="small" :disabled="!reachable || !ready" v-tooltip.top="retryHint" @click="emit(`continue`)">
+                    <Button size="small" thumb :disabled="!reachable || !ready" v-tooltip.top="retryHint" @click="emit(`continue`)">
                         {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
                     </Button>
                 </template>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button v-else size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="pressContinue">
+                <Button v-else size="small" thumb :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`ui.action.continue`) }}
                 </Button>
                 <Button
                     v-if="hasMenu"
                     size="small"
+                    thumb
                     tier="quiet"
                     :disabled="!reachable"
                     :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"

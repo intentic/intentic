@@ -51,8 +51,10 @@ onBeforeUnmount(() => clearTimeout(saidTimer));
                 class="pointer-events-none absolute top-1/2 left-1/2 h-px w-[130%] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-current"
             />
         </button>
-        <!-- Drawn as a hover label is, where one stands, so it moves nothing in the row; the live region outlives the words in it. -->
-        <span role="status" class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap">
+        <!-- Drawn as a hover label is, where one stands, so it moves nothing in the row; the live region outlives the words in it.
+             Hung from the press's left edge rather than centred on it: the press opens the status strip, so a centred label lost
+             its first words off the screen's edge. -->
+        <span role="status" class="pointer-events-none absolute bottom-full left-0 z-10 mb-2 whitespace-nowrap">
             <span v-if="said !== undefined" class="ui-tooltip-body block">{{ said }}</span>
         </span>
     </span>

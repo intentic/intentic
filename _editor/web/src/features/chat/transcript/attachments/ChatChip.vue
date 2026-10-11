@@ -45,15 +45,16 @@ const iconColor = computed(() => explorerColorClass(`colorful`, name, `file`, fa
         :class="framed ? `overflow-hidden rounded-lg border bg-card ${error === undefined ? `border-line` : `border-danger`}` : ``"
     >
         <slot :openable="openable" :open="open" :icon-color="iconColor" />
-        <!-- `self-center`: a chip carrying a thumbnail or a waveform is taller than its caption. -->
+        <!-- `self-center`: a chip carrying a thumbnail or a waveform is taller than its caption. A phone's is 32px: the frame
+             clips, so a touch-target overlay would be cut to the 20px drawn. -->
         <button
             v-if="removable"
             type="button"
-            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-center"
+            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-center max-md:m-0.5 max-md:h-8 max-md:w-8"
             :aria-label="t(`chat.chatFileChip.removeAttachment`)"
             @click="emit(`remove`)"
         >
-            <Icon name="times" class="text-2xs" />
+            <Icon name="times" class="text-2xs max-md:text-xs" />
         </button>
         <!-- Upload progress: the one thing drawn here that is about the transfer rather than the file. -->
         <div

@@ -26,7 +26,7 @@ const hold = async (): Promise<void> => {
 
 <template>
     <template v-if="offered">
-        <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="hold">
+        <button type="button" class="touch-target shrink-0 font-medium text-link hover:underline" @click="hold">
             {{ t(`chat.chatMessageView.keepFutureWorkOn`) }}
         </button>
         <span class="shrink-0">{{ t(`chat.chatMessageView.waitsReadyToLand`) }}</span>

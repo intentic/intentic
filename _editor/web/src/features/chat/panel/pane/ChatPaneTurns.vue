@@ -120,7 +120,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
             <button
                 type="button"
-                class="cursor-pointer text-2xs text-subtle transition-colors hover:text-content disabled:cursor-default disabled:text-subtle"
+                class="touch-target cursor-pointer text-2xs text-subtle transition-colors hover:text-content disabled:cursor-default disabled:text-subtle"
                 :disabled="conversation.transcript.loadingOlder.value"
                 @click="conversation.transcript.loadOlder()"
             >
@@ -212,7 +212,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             class="flex-1 px-4"
         >
             <template #actions>
-                <Button size="small" tier="boring" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+                <Button size="small" thumb tier="boring" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
             </template>
         </EmptyState>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
@@ -234,7 +234,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                 <Icon name="exclamation-triangle" class="text-2xs text-warning" />
                 <span>{{ t(`chat.chatPaneTurns.couldntRefresh`) }}</span>
                 <span v-if="staleness.reason">{{ staleness.reason }}</span>
-                <Button size="small" tier="quiet" @click="retryHydrate(conversation)">{{ t(`ui.action.retry`) }}</Button>
+                <Button size="small" thumb tier="quiet" @click="retryHydrate(conversation)">{{ t(`ui.action.retry`) }}</Button>
             </template>
         </p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->

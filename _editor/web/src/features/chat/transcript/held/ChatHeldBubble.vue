@@ -99,8 +99,8 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                 @keydown.esc.prevent="rewording = undefined"
             />
             <div class="flex justify-end gap-1">
-                <Button size="small" tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
-                <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
+                <Button size="small" thumb tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
+                <Button size="small" thumb type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
             </div>
         </form>
         <template v-else>
@@ -130,7 +130,7 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
                     <button
                         v-if="overflowing && !compact"
                         type="button"
-                        class="chat-prompt-toggle"
+                        class="chat-prompt-toggle touch-target"
                         :aria-expanded="expanded"
                         :aria-label="expanded ? t(`chat.chatMessageView.collapseMessage`) : t(`chat.chatMessageView.expandMessage`)"
                         @click="expanded = !expanded"
@@ -163,8 +163,8 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
             <button
                 v-if="message.voice === `person`"
                 type="button"
-                class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
-                :class="compact ? `w-6` : `w-full`"
+                class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content max-md:h-9"
+                :class="compact ? `w-6 max-md:w-9` : `w-full`"
                 v-tooltip.right="t(`chat.chatQueue.reword`)"
                 :aria-label="t(`chat.chatQueue.rewordLabel`)"
                 @click="rewording = message.text"
@@ -173,8 +173,8 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
             </button>
             <button
                 type="button"
-                class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
-                :class="compact ? `w-6` : `w-full`"
+                class="flex h-6 cursor-pointer items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content max-md:h-9"
+                :class="compact ? `w-6 max-md:w-9` : `w-full`"
                 v-tooltip.right="t(`chat.chatQueue.takeBack`)"
                 :aria-label="t(`chat.chatQueue.removeLabel`)"
                 @click="unqueue(message)"

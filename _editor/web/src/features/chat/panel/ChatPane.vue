@@ -356,6 +356,12 @@ const scheduledWays = useScheduledWays({
 const wideActions = computed(
     () => (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) || inRow.value.persona || inRow.value.runThrough,
 );
+// A narrow composer gives the mic and Send one slot (`composer-yields` hides the other there): Send steps aside while there is
+// nothing to send and the mic is there to take it, since a greyed Send is the row's one press that does nothing.
+const micShares = computed(() => canDrive.value && !props.strip && !staged.value);
+// An empty box is as tall as its placeholder, and the placeholder changes under it (a plan waiting, a turn going live), so
+// it is measured again then: sized for the old one, a phone's two-line ask is cut off after its first line.
+watch(composerPlaceholder, () => grow(), { flush: `post` });
 const { open: waysOpen, ways: hasWays, fallbackName, canReset, resetting, note: waysNote, sendOnFallback, resetAndSend } = scheduledWays;
 const waysAnchor = ref<HTMLElement>();
 
@@ -436,7 +442,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <button
             v-if="closable"
             type="button"
-            class="absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
+            class="touch-target absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
             v-tooltip.bottom="closeHint"
             :aria-label="t(`chat.chatPane.closePane`)"
             @pointerdown.stop
@@ -564,21 +570,27 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 ></textarea>
 
                                 <!-- The control row keeps model controls and actions in separate groups. -->
-                                <!-- ONE LINE ON A PHONE: the icon presses there are 40px wide rather than 44 (their height keeps the 44, and the
-                                 row's gap keeps them a thumb apart), and a pill that has already dropped its name to its glyph drops its
-                                 chevron with it. Seven 44px presses and two chevrons were a 360px phone's whole row and more, so the row
-                                 broke in two under the text and moved every press it held. -->
-                                <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
+                                <!-- ONE LINE IN A NARROW COMPOSER, whatever is set: every chip there is its glyph alone, as square as the presses
+                                 beside it (the name is in its label and its sheet), the mic and Send share one slot, and the chips that still
+                                 do not fit scroll inside their own strip instead of breaking the row. A persona's name, a 5-rung meter and a
+                                 dead Send were a 375px phone's row and more, so it broke into three under the text and moved every press. -->
+                                <div
+                                    class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5 @max-md:flex-nowrap @max-md:gap-x-0.5 @max-md:px-2 @max-md:pb-2"
+                                >
                                     <!-- Workflow sends disable controls that do not affect the workflow step. -->
                                     <!-- `min-w-0` lets the model name truncate first, since it's the one shrinkable middle in the row. -->
-                                    <div class="flex min-w-0 items-center gap-1">
+                                    <div class="flex min-w-0 items-center gap-1 @max-md:shrink-0 @max-md:gap-0.5">
                                         <!-- With nothing that could run here there is no provider to announce: the name is the press itself, and it
                                              keeps its label at every width. A narrow composer drops a model's name to its logo and still reads;
                                              dropping "Choose a model" leaves a bare glyph with nothing saying to press it. -->
                                         <ComposerModelPill
                                             ref="modelPill"
                                             :conversation="conversation"
-                                            :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'model' }"
+                                            :class="{
+                                                'composer-steered': pickedWorkflow !== undefined,
+                                                'composer-flash': flashed === 'model',
+                                                'composer-glyph': !modelReading.unset,
+                                            }"
                                             :disabled="pickedWorkflow !== undefined"
                                             :expanded="modelOpen"
                                             :aria-label="
@@ -599,156 +611,167 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     </div>
 
                                     <!-- How the turn is shaped, and the press that sends it — the group holding the right edge. -->
-                                    <div class="ml-auto flex flex-wrap items-center justify-end gap-x-1 gap-y-1.5">
-                                        <!-- Mode follows the model and effort controls in the shaping group. -->
-                                        <button
-                                            v-if="inRow.mode"
-                                            ref="modePill"
-                                            type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                            :disabled="pickedWorkflow !== undefined"
-                                            @click="modeOpen = !modeOpen"
-                                            :aria-expanded="modeOpen"
-                                            :aria-label="t(`chat.words.agentMode`)"
+                                    <div
+                                        class="ml-auto flex flex-wrap items-center justify-end gap-x-1 gap-y-1.5 @max-md:min-w-0 @max-md:flex-nowrap @max-md:gap-x-0.5"
+                                    >
+                                        <!-- The chips that are set: no box of their own on a wide row, so they wrap with the presses beside them; a
+                                             strip that scrolls sideways in a narrow one, so a sixth chip costs a swipe rather than a second row. -->
+                                        <div
+                                            class="composer-chips scrollbar-none contents @max-md:flex @max-md:min-w-0 @max-md:items-center @max-md:gap-0.5 @max-md:overflow-x-auto"
                                         >
-                                            <Icon :name="modeIcon" class="text-2xs text-link" />
-                                            <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                            <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
-                                        </button>
+                                            <!-- Mode follows the model and effort controls in the shaping group. -->
+                                            <button
+                                                v-if="inRow.mode"
+                                                ref="modePill"
+                                                type="button"
+                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                                :disabled="pickedWorkflow !== undefined"
+                                                @click="modeOpen = !modeOpen"
+                                                :aria-expanded="modeOpen"
+                                                :aria-label="t(`chat.words.agentMode`)"
+                                            >
+                                                <Icon :name="modeIcon" class="text-2xs text-link" />
+                                                <span class="@max-md:hidden">{{ modeLabel }}</span>
+                                                <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
+                                            </button>
 
-                                        <!-- Placement controls the machine, not the message. -->
-                                        <button
-                                            v-if="placementShown && (!strip || placed)"
-                                            ref="placementPill"
-                                            type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{ 'composer-flash': flashed === 'placement' }"
-                                            @click="placementOpen = !placementOpen"
-                                            :aria-expanded="placementOpen"
-                                            :aria-label="t(`chat.words.whereRuns`)"
-                                        >
-                                            <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
-                                            <span class="@max-lg:hidden">{{ placementLabel }}</span>
-                                            <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
-                                        </button>
+                                            <!-- Placement controls the machine, not the message. -->
+                                            <button
+                                                v-if="placementShown && (!strip || placed)"
+                                                ref="placementPill"
+                                                type="button"
+                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{ 'composer-flash': flashed === 'placement' }"
+                                                @click="placementOpen = !placementOpen"
+                                                :aria-expanded="placementOpen"
+                                                :aria-label="t(`chat.words.whereRuns`)"
+                                            >
+                                                <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
+                                                <span class="@max-lg:hidden">{{ placementLabel }}</span>
+                                                <Icon name="chevron-down" class="text-2xs text-subtle @max-lg:hidden" />
+                                            </button>
 
-                                        <!-- Persona: who the chat is to the outside world. -->
-                                        <button
-                                            v-if="inRow.persona"
-                                            ref="personaPill"
-                                            type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{
-                                                'composer-active': pickedWorkflow === undefined,
-                                                'composer-steered': pickedWorkflow !== undefined,
-                                                'composer-flash': flashed === 'persona',
-                                            }"
-                                            :disabled="pickedWorkflow !== undefined"
-                                            @click="personaOpen = !personaOpen"
-                                            v-tooltip.top="{ title: t(`chat.chatPane.persona`), note: t(`chat.chatPane.itsAccountsOnly`) }"
-                                            :aria-expanded="personaOpen"
-                                            :aria-label="t(`chat.chatPane.acts`, { personaName })"
-                                        >
-                                            <!-- The persona control shows its face when a persona is selected, at the pill size: it clears the row's `h-8`. -->
-                                            <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="FACE_SIZES.pill" />
-                                            <Icon v-else name="users" class="text-2xs text-link" />
-                                            <span class="max-w-32 truncate">{{ personaName }}</span>
-                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                        </button>
+                                            <!-- Persona: who the chat is to the outside world. -->
+                                            <button
+                                                v-if="inRow.persona"
+                                                ref="personaPill"
+                                                type="button"
+                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{
+                                                    'composer-active': pickedWorkflow === undefined,
+                                                    'composer-steered': pickedWorkflow !== undefined,
+                                                    'composer-flash': flashed === 'persona',
+                                                }"
+                                                :disabled="pickedWorkflow !== undefined"
+                                                @click="personaOpen = !personaOpen"
+                                                v-tooltip.top="{ title: t(`chat.chatPane.persona`), note: t(`chat.chatPane.itsAccountsOnly`) }"
+                                                :aria-expanded="personaOpen"
+                                                :aria-label="t(`chat.chatPane.acts`, { personaName })"
+                                            >
+                                                <!-- The persona control shows its face when a persona is selected, at the pill size: it clears the row's `h-8`. -->
+                                                <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="FACE_SIZES.pill" />
+                                                <Icon v-else name="users" class="text-2xs text-link" />
+                                                <span class="max-w-32 truncate @max-md:hidden">{{ personaName }}</span>
+                                                <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
+                                            </button>
 
-                                        <!-- Run-through chooses one loop or workflow action. -->
-                                        <button
-                                            v-if="inRow.runThrough"
-                                            ref="runThroughPill"
-                                            type="button"
-                                            class="composer-active composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :disabled="runningLoop !== undefined && !reachable"
-                                            @click="runningLoop ? endLoop() : (runThroughOpen = !runThroughOpen)"
-                                            v-tooltip.top="runThroughHint"
-                                            :aria-pressed="runningLoop !== undefined"
-                                            :aria-expanded="runningLoop ? undefined : runThroughOpen"
-                                            :aria-label="runThroughLabel"
-                                        >
-                                            <Icon :name="runThroughIcon" class="text-2xs text-link" :spin="runningLoop !== undefined" />
-                                            <span v-if="runningLoop">{{ runningLoop.iteration }}/{{ runningLoop.maxIterations }}</span>
-                                            <template v-else-if="runThroughName !== undefined">
-                                                <span class="max-w-32 truncate">{{ runThroughName }}</span>
-                                                <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                            </template>
-                                        </button>
+                                            <!-- Run-through chooses one loop or workflow action. -->
+                                            <button
+                                                v-if="inRow.runThrough"
+                                                ref="runThroughPill"
+                                                type="button"
+                                                class="composer-active composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{ 'composer-glyph': runningLoop === undefined }"
+                                                :disabled="runningLoop !== undefined && !reachable"
+                                                @click="runningLoop ? endLoop() : (runThroughOpen = !runThroughOpen)"
+                                                v-tooltip.top="runThroughHint"
+                                                :aria-pressed="runningLoop !== undefined"
+                                                :aria-expanded="runningLoop ? undefined : runThroughOpen"
+                                                :aria-label="runThroughLabel"
+                                            >
+                                                <Icon :name="runThroughIcon" class="text-2xs text-link" :spin="runningLoop !== undefined" />
+                                                <span v-if="runningLoop">{{ runningLoop.iteration }}/{{ runningLoop.maxIterations }}</span>
+                                                <template v-else-if="runThroughName !== undefined">
+                                                    <span class="max-w-32 truncate @max-md:hidden">{{ runThroughName }}</span>
+                                                    <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
+                                                </template>
+                                            </button>
 
-                                        <!-- Voice makes the next send use the agent's voice. -->
-                                        <button
-                                            v-if="inRow.voice"
-                                            type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{
-                                                'composer-active': pickedWorkflow === undefined,
-                                                'composer-steered': pickedWorkflow !== undefined,
-                                            }"
-                                            :disabled="pickedWorkflow !== undefined || editing !== undefined"
-                                            @click="voiceAgent = false"
-                                            v-tooltip.top="
-                                                editing !== undefined
-                                                    ? { title: t(`chat.chatPane.editing`), note: t(`chat.chatPane.finishOrCancel`) }
-                                                    : { title: t(`chat.composerMore.writeAgent`), note: t(`chat.chatPane.noReplyPressExit`) }
-                                            "
-                                            :aria-pressed="true"
-                                            :aria-label="t(`chat.chatPane.writingAgent`)"
-                                        >
-                                            <Icon name="robot" class="text-2xs text-link" />
-                                            <span>{{ t(`chat.chatPane.agent`) }}</span>
-                                        </button>
+                                            <!-- Voice makes the next send use the agent's voice. -->
+                                            <button
+                                                v-if="inRow.voice"
+                                                type="button"
+                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{
+                                                    'composer-active': pickedWorkflow === undefined,
+                                                    'composer-steered': pickedWorkflow !== undefined,
+                                                }"
+                                                :disabled="pickedWorkflow !== undefined || editing !== undefined"
+                                                @click="voiceAgent = false"
+                                                v-tooltip.top="
+                                                    editing !== undefined
+                                                        ? { title: t(`chat.chatPane.editing`), note: t(`chat.chatPane.finishOrCancel`) }
+                                                        : { title: t(`chat.composerMore.writeAgent`), note: t(`chat.chatPane.noReplyPressExit`) }
+                                                "
+                                                :aria-pressed="true"
+                                                :aria-label="t(`chat.chatPane.writingAgent`)"
+                                            >
+                                                <Icon name="robot" class="text-2xs text-link" />
+                                                <span class="@max-md:hidden">{{ t(`chat.chatPane.agent`) }}</span>
+                                            </button>
 
-                                        <!-- This chat's own answer to whether its finished work lands by itself; the press turns it back to the sandbox's. -->
-                                        <button
-                                            v-if="inRow.land"
-                                            type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{
-                                                'composer-active': pickedWorkflow === undefined,
-                                                'composer-steered': pickedWorkflow !== undefined,
-                                                'composer-flash': flashed === 'land',
-                                            }"
-                                            :disabled="pickedWorkflow !== undefined"
-                                            @click="landing.toggle()"
-                                            v-tooltip.top="{
-                                                title: landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`),
-                                                note: landing.midTurn.value
-                                                    ? t(`chat.chatPane.appliesAfterTurn`)
-                                                    : landing.lands.value
-                                                      ? t(`chat.chatPane.landsWhenDoneNote`)
-                                                      : t(`chat.chatPane.holdsOnBranchNote`),
-                                            }"
-                                            :aria-pressed="landing.lands.value"
-                                            :aria-label="landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)"
-                                        >
-                                            <Icon :name="landing.lands.value ? `download` : `pause`" class="text-2xs text-link" />
-                                            <span class="@max-md:hidden">{{
-                                                landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
-                                            }}</span>
-                                        </button>
+                                            <!-- This chat's own answer to whether its finished work lands by itself; the press turns it back to the sandbox's. -->
+                                            <button
+                                                v-if="inRow.land"
+                                                type="button"
+                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{
+                                                    'composer-active': pickedWorkflow === undefined,
+                                                    'composer-steered': pickedWorkflow !== undefined,
+                                                    'composer-flash': flashed === 'land',
+                                                }"
+                                                :disabled="pickedWorkflow !== undefined"
+                                                @click="landing.toggle()"
+                                                v-tooltip.top="{
+                                                    title: landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`),
+                                                    note: landing.midTurn.value
+                                                        ? t(`chat.chatPane.appliesAfterTurn`)
+                                                        : landing.lands.value
+                                                          ? t(`chat.chatPane.landsWhenDoneNote`)
+                                                          : t(`chat.chatPane.holdsOnBranchNote`),
+                                                }"
+                                                :aria-pressed="landing.lands.value"
+                                                :aria-label="
+                                                    landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
+                                                "
+                                            >
+                                                <Icon :name="landing.lands.value ? `download` : `pause`" class="text-2xs text-link" />
+                                                <span class="@max-md:hidden">{{
+                                                    landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
+                                                }}</span>
+                                            </button>
 
-                                        <!-- When the next message goes, when not now: a time, or once another agent's work lands. The press opens its panel. -->
-                                        <button
-                                            v-if="inRow.later"
-                                            ref="laterPill"
-                                            type="button"
-                                            class="composer-ghost composer-active h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{ 'composer-flash': flashed === 'later' }"
-                                            @click="laterOpen = !laterOpen"
-                                            v-tooltip.top="{ title: t(`chat.sendLater.title`), note: laterText }"
-                                            :aria-expanded="laterOpen"
-                                            :aria-label="t(`chat.sendLater.scheduleAria`, { when: laterText ?? `` })"
-                                        >
-                                            <Icon
-                                                :name="conversation.sendLater.value?.kind === `after` ? `link` : `clock`"
-                                                class="text-2xs text-link"
-                                            />
-                                            <span class="max-w-40 truncate">{{ laterText }}</span>
-                                            <Icon name="chevron-down" class="text-2xs text-subtle max-md:hidden" />
-                                        </button>
+                                            <!-- When the next message goes, when not now: a time, or once another agent's work lands. The press opens its panel. -->
+                                            <button
+                                                v-if="inRow.later"
+                                                ref="laterPill"
+                                                type="button"
+                                                class="composer-ghost composer-active composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                                :class="{ 'composer-flash': flashed === 'later' }"
+                                                @click="laterOpen = !laterOpen"
+                                                v-tooltip.top="{ title: t(`chat.sendLater.title`), note: laterText }"
+                                                :aria-expanded="laterOpen"
+                                                :aria-label="t(`chat.sendLater.scheduleAria`, { when: laterText ?? `` })"
+                                            >
+                                                <Icon
+                                                    :name="conversation.sendLater.value?.kind === `after` ? `link` : `clock`"
+                                                    class="text-2xs text-link"
+                                                />
+                                                <span class="max-w-40 truncate @max-md:hidden">{{ laterText }}</span>
+                                                <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
+                                            </button>
+                                        </div>
 
                                         <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->
                                         <button
@@ -788,12 +811,14 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             <Icon name="sliders-h" class="text-xs max-md:text-base" />
                                         </button>
 
-                                        <!-- Hands-free voice: one tap arms it, and the pause is the send (useComposerVoice). -->
+                                        <!-- Hands-free voice: one tap arms it, and the pause is the send (useComposerVoice). A narrow composer gives it
+                                             and Send one slot between them, the way a phone's messengers do: the mic while there is nothing to send,
+                                             Send from the first keystroke, and the mic again for as long as it is listening. -->
                                         <button
                                             v-if="canDrive && !strip"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
-                                            :class="{ 'composer-active': voiceOn }"
+                                            :class="{ 'composer-active': voiceOn, 'composer-yields': staged && !voiceOn }"
                                             :disabled="voice.unsupported !== undefined || (!reachable && !voiceOn)"
                                             @click="toggleVoice"
                                             @pointerenter="voice.warm()"
@@ -861,6 +886,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             v-else-if="sendShown"
                                             type="submit"
                                             class="composer-send shrink-0 max-md:h-11 max-md:w-11"
+                                            :class="{ 'composer-yields': micShares }"
                                             :disabled="!canSend || !reachable"
                                             v-tooltip.top="sendHint"
                                             :aria-label="t(`ui.action.send`)"
@@ -886,10 +912,17 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             >
                                 {{ voiceFailure.message }}
                                 <template v-if="voiceFailure.action" #actions>
-                                    <Button v-if="voiceFailure.action.to" :as="RouterLink" :to="voiceFailure.action.to" size="small" tier="quiet">
+                                    <Button
+                                        v-if="voiceFailure.action.to"
+                                        :as="RouterLink"
+                                        :to="voiceFailure.action.to"
+                                        size="small"
+                                        thumb
+                                        tier="quiet"
+                                    >
                                         {{ voiceFailure.action.label }}
                                     </Button>
-                                    <Button v-else size="small" tier="quiet" @click="voiceFailure.action.run?.()">
+                                    <Button v-else size="small" thumb tier="quiet" @click="voiceFailure.action.run?.()">
                                         {{ voiceFailure.action.label }}
                                     </Button>
                                 </template>

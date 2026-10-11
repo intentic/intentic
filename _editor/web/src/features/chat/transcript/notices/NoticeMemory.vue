@@ -32,7 +32,7 @@ const figures = computed(() => memoryTip(memoryReading(props.message.text)));
     <!-- Under the kept message, the same line a queued one gets: it was not sent, why, the press, and what happens next. -->
     <div v-if="heldHere" class="flex flex-col items-end gap-1 self-end">
         <ChatHeldStatus reason="memory" :detail="memoryReading(message.text)">
-            <Button size="small" v-tooltip.top="sendAnywayTip()" @click="send">{{ t(`chat.chatHeld.sendAnyway`) }}</Button>
+            <Button size="small" thumb v-tooltip.top="sendAnywayTip()" @click="send">{{ t(`chat.chatHeld.sendAnyway`) }}</Button>
             <MemoryRaise v-if="message.noticeAction === `sandboxMemory`" />
         </ChatHeldStatus>
         <div class="flex flex-col items-end gap-1 text-2xs text-muted">

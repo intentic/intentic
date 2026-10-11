@@ -117,6 +117,7 @@ const activeAccountReauth = computed(() => {
         <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
         <Button
             size="small"
+            thumb
             tier="quiet" tone="accent"
             class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
@@ -132,7 +133,7 @@ const activeAccountReauth = computed(() => {
     <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
         {{ hoursNotice }}
         <template v-if="planOffered" #actions>
-            <Button :as="RouterLink" to="/settings/billing" size="small" tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
+            <Button :as="RouterLink" to="/settings/billing" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
         </template>
     </Notice>
     <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
@@ -144,10 +145,11 @@ const activeAccountReauth = computed(() => {
         <!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->
         <span class="min-w-[14rem] flex-1">{{ trialNotice }}</span>
         <!-- Notice actions share one button style and baseline. -->
-        <div class="flex shrink-0 items-center gap-1">
+        <div class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
             <Button
                 v-if="trialUnavailable"
                 size="small"
+                thumb
                 tier="quiet"
                 :disabled="!reachable || streaming"
                 v-tooltip.top="{ title: t(`chat.chatPaneNotices.retryTrial`), note: t(`chat.chatPaneNotices.resumesIfAnswers`) }"
@@ -163,6 +165,7 @@ const activeAccountReauth = computed(() => {
                 :as="RouterLink"
                 :to="MODELS_PATH"
                 size="small"
+                thumb
                 tier="quiet"
                 tone="accent"
                 v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }"

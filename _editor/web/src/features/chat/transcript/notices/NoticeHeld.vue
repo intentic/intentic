@@ -13,7 +13,7 @@ const { waiting, send } = useKeptTurn(() => props.message);
 </script>
 
 <template>
-    <button v-if="waiting" type="button" class="shrink-0 font-medium text-link hover:underline" @click="send">
+    <button v-if="waiting" type="button" class="touch-target shrink-0 font-medium text-link hover:underline" @click="send">
         {{ t(`agents.words.sendAgain`) }}
     </button>
 </template>

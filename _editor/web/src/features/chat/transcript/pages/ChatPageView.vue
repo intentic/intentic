@@ -45,7 +45,7 @@ const confirmPublish = async (): Promise<void> => {
         <div v-if="folded" class="flex min-w-0 items-center gap-1.5 px-3.5 text-2xs text-subtle">
             <Icon name="history" class="shrink-0 text-2xs" />
             <span class="min-w-0 truncate">{{ t(`chat.chatPages.superseded`, { title: page.title }) }}</span>
-            <button type="button" class="shrink-0 cursor-pointer font-medium text-link hover:underline" @click="earlierOpen = true">
+            <button type="button" class="touch-target shrink-0 cursor-pointer font-medium text-link hover:underline" @click="earlierOpen = true">
                 {{ t(`chat.chatPages.showEarlier`) }}
             </button>
         </div>
@@ -73,15 +73,25 @@ const confirmPublish = async (): Promise<void> => {
                     <span class="min-w-0 truncate">{{ t(`chat.chatPages.threw`, { count: errors.length }, errors.length) }}</span>
                 </span>
                 <span v-if="errors.length > 0 && told">{{ t(`chat.chatPages.agentTold`) }}</span>
-                <button v-else-if="errors.length > 0" type="button" class="cursor-pointer font-medium text-link hover:underline" @click="askFix">
+                <button
+                    v-else-if="errors.length > 0"
+                    type="button"
+                    class="touch-target cursor-pointer font-medium text-link hover:underline"
+                    @click="askFix"
+                >
                     {{ t(`chat.chatPages.askFix`) }}
                 </button>
-                <button v-if="actions.canExpand" type="button" class="cursor-pointer font-medium hover:text-content" @click="actions.expand">
+                <button
+                    v-if="actions.canExpand"
+                    type="button"
+                    class="touch-target cursor-pointer font-medium hover:text-content"
+                    @click="actions.expand"
+                >
                     {{ t(`chat.chatPages.expand`) }}
                 </button>
                 <button
                     type="button"
-                    class="cursor-pointer font-medium hover:text-content disabled:cursor-default"
+                    class="touch-target cursor-pointer font-medium hover:text-content disabled:cursor-default"
                     :disabled="actions.publishing.value"
                     @click="confirming = true"
                 >
@@ -90,7 +100,7 @@ const confirmPublish = async (): Promise<void> => {
                 <button
                     v-if="page.superseded && earlierOpen"
                     type="button"
-                    class="cursor-pointer font-medium hover:text-content"
+                    class="touch-target cursor-pointer font-medium hover:text-content"
                     @click="earlierOpen = false"
                 >
                     {{ t(`chat.chatPages.hideEarlier`) }}

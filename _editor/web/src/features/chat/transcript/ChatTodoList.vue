@@ -95,7 +95,7 @@ const hint = computed(() =>
         <button
             v-if="delta"
             type="button"
-            class="group/todo flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+            class="group/todo flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors hover:bg-overlay max-md:py-2.5"
             :aria-expanded="expanded"
             :aria-label="hint"
             @click="toggle"

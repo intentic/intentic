@@ -92,8 +92,8 @@ const save = async (message: QueuedMessage): Promise<void> => {
                         @keydown.esc.prevent="rewording = undefined"
                     />
                     <div class="flex justify-end gap-1">
-                        <Button size="small" tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
-                        <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
+                        <Button size="small" thumb tier="quiet" tone="accent" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
+                        <Button size="small" thumb type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
                     </div>
                 </form>
                 <div v-else class="flex min-w-0 flex-1 items-start gap-2">
@@ -139,7 +139,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
             <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. Not words a
                  spent allowance holds: the press would let nothing go, and the strip's Continue is the way to try sooner. -->
-            <Button v-if="!streaming && heldUntil === undefined" size="small" tier="quiet" tone="accent" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button v-if="!streaming && heldUntil === undefined" size="small" thumb tier="quiet" tone="accent" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </p>
     </div>
 </template>

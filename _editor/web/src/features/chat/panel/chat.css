@@ -841,6 +841,70 @@
     background: color-mix(in srgb, var(--color-content) 8%, transparent);
     color: var(--color-content);
 }
+/* A PILL DOWN TO ITS GLYPH IN A NARROW COMPOSER (ChatPane's control row, under the same 28rem the names hide at): as wide
+   as the icon presses beside it, and its glyph is theirs in size. With its padding kept a
+   bare glyph was a 31px sliver beside 40px presses, and its 11px glyph read as a different, lesser kind of control. */
+@container (width < 28rem) {
+    .composer-glyph {
+        flex-shrink: 0;
+        aspect-ratio: 1;
+        padding-inline: 0;
+    }
+    .composer-glyph > svg {
+        font-size: var(--text-xs);
+    }
+}
+/* On a phone, 40px wide like the paperclip and the mic (their height keeps the 44): eight presses in a 360px row. */
+@media (max-width: 767.98px) {
+    @container (width < 28rem) {
+        .composer-glyph {
+            aspect-ratio: auto;
+            width: 2.5rem;
+        }
+        .composer-glyph > svg {
+            font-size: var(--text-base);
+        }
+    }
+}
+/* THE SET CHIPS' STRIP IN A NARROW COMPOSER (ChatPane) scrolls sideways once they outnumber the row, and the edge a chip is
+   cut at fades, so the cut reads as "more this way" rather than as a broken pill. Driven by the strip's own scroll, so one
+   that fits (the usual one) has no fade at all; a browser without scroll timelines keeps the plain cut, never a fade
+   frozen at one end. */
+@property --composer-chips-fade-start {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@property --composer-chips-fade-end {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@keyframes composer-chips-fade {
+    from {
+        --composer-chips-fade-start: 0px;
+        --composer-chips-fade-end: 1rem;
+    }
+    to {
+        --composer-chips-fade-start: 1rem;
+        --composer-chips-fade-end: 0px;
+    }
+}
+@supports (animation-timeline: scroll()) {
+    @container (width < 28rem) {
+        .composer-chips {
+            mask-image: linear-gradient(
+                to right,
+                transparent,
+                #000 var(--composer-chips-fade-start),
+                #000 calc(100% - var(--composer-chips-fade-end)),
+                transparent
+            );
+            animation: composer-chips-fade linear both;
+            animation-timeline: scroll(self inline);
+        }
+    }
+}
 /* A composer control the picked workflow decides instead of this chat — see the footer row in ChatPane. */
 .composer-steered {
     opacity: 0.4;
@@ -931,6 +995,13 @@
     pointer-events: none;
     /* Nothing to press here: the sheet's rows are the target, so the drawn ladder keeps the rung's own height. */
     padding-block: 0;
+    padding-inline: 1px;
+}
+/* And nothing to aim at, so it is drawn as a glyph rather than at the size of the pointer's targets above: five rungs in
+   about 20px, where the touch-sized bars made a 5-level model's meter 72px, the widest press in a phone's composer row. */
+.composer-effort-seg-static::before {
+    height: 0.875rem;
+    width: 0.1875rem;
 }
 .composer-effort-seg-static:hover::before {
     background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 10%, transparent));
@@ -995,4 +1066,12 @@
 }
 .composer-stop:hover {
     background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
+}
+/* THE MIC AND SEND SHARE ONE SLOT IN A NARROW COMPOSER, and this is the one of the two that has stepped aside (ChatPane's
+   micShares). A rule rather than `@max-md:hidden`: the ghost and send classes set their own display unlayered, which beats
+   every utility. */
+@container (width < 28rem) {
+    .composer-yields {
+        display: none;
+    }
 }

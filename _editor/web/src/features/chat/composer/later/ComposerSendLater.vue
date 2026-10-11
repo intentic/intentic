@@ -157,7 +157,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                 <button
                     v-if="lands === `you` && canShip"
                     type="button"
-                    class="composer-ghost h-6 shrink-0 gap-1 self-center px-2 text-2xs font-medium"
+                    class="composer-ghost h-6 shrink-0 gap-1 self-center px-2 text-2xs font-medium max-md:h-9"
                     v-tooltip.top="{ title: t(`chat.sendLater.alsoLandIt`), note: t(`chat.sendLater.alsoLandItNote`) }"
                     :aria-label="t(`chat.sendLater.alsoLandIt`)"
                     @click.stop="setAutoLand(agent.id, sandboxLands ? null : true)"

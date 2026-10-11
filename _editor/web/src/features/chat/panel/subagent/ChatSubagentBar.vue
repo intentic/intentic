@@ -53,7 +53,7 @@ const clock = computed(() =>
             <!-- Whose it is, first and smallest: the breadcrumb a reader follows out of the subagent they stepped into. -->
             <button
                 type="button"
-                class="ui-row-select -ml-1.5 flex max-w-full min-w-0 items-center gap-1.5 self-start rounded-md px-1.5 py-0.5 text-2xs text-muted hover:text-content"
+                class="ui-row-select -ml-1.5 flex max-w-full min-w-0 items-center gap-1.5 self-start rounded-md px-1.5 py-0.5 text-2xs text-muted hover:text-content max-md:min-h-9"
                 :aria-label="t(`chat.chatSubagentBar.backTo`, { title: props.parentTitle })"
                 @click="emit(`back`)"
             >
@@ -89,13 +89,13 @@ const clock = computed(() =>
             <p class="min-w-0 flex-1 text-2xs text-subtle">
                 {{ spawned ? t(`chat.chatSubagentBar.spawnedNote`) : t(`chat.chatSubagentBar.inProcessNote`) }}
             </p>
-            <Button v-if="!spawned" size="small" tier="quiet" class="shrink-0" @click="emit(`back`)">
+            <Button v-if="!spawned" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`back`)">
                 <Icon name="arrow-left" class="text-2xs" />{{ t(`chat.chatSubagentBar.writeParent`) }}
             </Button>
-            <Button v-if="spawned" size="small" tier="quiet" class="shrink-0" @click="emit(`write`)">
+            <Button v-if="spawned" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`write`)">
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatSubagentBar.write`) }}
             </Button>
-            <Button v-if="stoppable" size="small" tier="boring" class="shrink-0" @click="emit(`stop`)">
+            <Button v-if="stoppable" size="small" thumb tier="boring" class="shrink-0" @click="emit(`stop`)">
                 <Icon name="stop" class="text-2xs" />{{ t(`ui.action.stop`) }}
             </Button>
         </div>

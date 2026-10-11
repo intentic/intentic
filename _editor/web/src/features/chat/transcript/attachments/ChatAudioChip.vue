@@ -220,7 +220,7 @@ watch(
             <div class="flex items-center gap-2" :class="framed ? `` : `rounded-md border border-line bg-canvas/40 px-2 py-1`">
                 <button
                     type="button"
-                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-fill text-2xs text-fill-content transition-[background-color,transform] hover:bg-primary-fill-hover active:scale-95 disabled:pointer-events-none disabled:bg-[var(--ui-button-off-fill)] disabled:text-[var(--ui-button-off-content)]"
+                    class="touch-target flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-fill text-2xs text-fill-content transition-[background-color,transform] hover:bg-primary-fill-hover active:scale-95 disabled:pointer-events-none disabled:bg-[var(--ui-button-off-fill)] disabled:text-[var(--ui-button-off-content)]"
                     :disabled="src === undefined || undecodable"
                     :aria-label="playing ? t(`chat.chatAudioChip.pause`, { name }) : t(`chat.chatAudioChip.play`, { name })"
                     @click="toggle"

@@ -75,14 +75,15 @@ defineExpose({ move, pickActive });
 
 <template>
     <ComposerPopover :icon="header.icon" :title="header.label" :busy="searching || pending">
-        <!-- Capped and scrolled so a drilled model list stays a sheet over the composer, not a wall. -->
+        <!-- Capped and scrolled so a drilled model list stays a sheet over the composer, not a wall. A phone's rows are a thumb's
+             44px rather than the pointer's 28, the height of the "+ more" sheet's rows beside it. -->
         <div class="max-h-80 overflow-y-auto">
             <button
                 v-for="(row, index) in rows"
                 :key="row.key"
                 :ref="(el) => setRowEl(row.key, el)"
                 type="button"
-                class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
                 :class="{ 'ui-row-select-on': index === activeIndex }"
                 @mousedown.prevent="emit('pick', row)"
             >

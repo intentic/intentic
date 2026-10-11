@@ -59,7 +59,7 @@ const press = computed((): HeldPress => {
             <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
                 <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-                    <Button size="small" v-tooltip.top="press.hint" @click="resumeQueue(heldIds)">{{ press.label }}</Button>
+                    <Button size="small" thumb v-tooltip.top="press.hint" @click="resumeQueue(heldIds)">{{ press.label }}</Button>
                     <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->
                     <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
                 </span>

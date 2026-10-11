@@ -160,7 +160,7 @@ const preview = (job: AgentJob): void => {
                 <button
                     v-if="row.job !== undefined && surface.watchTerminal !== undefined"
                     type="button"
-                    class="flex items-center rounded p-1 transition-colors hover:bg-overlay hover:text-content"
+                    class="touch-target flex items-center rounded p-1 transition-colors hover:bg-overlay hover:text-content"
                     v-tooltip.top="t(`chat.words.showTerminal`)"
                     :aria-label="t(`chat.words.watchInTerminal`)"
                     @click="surface.watchTerminal(row.job.session)"

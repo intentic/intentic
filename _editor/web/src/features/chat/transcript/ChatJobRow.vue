@@ -63,7 +63,10 @@ const status = computed(() => {
                 return t(`chat.chatJobRow.stopping`);
             }
             return current.handed === true
-                ? t(`chat.chatJobRow.leftForYou`, { ports: portsLine(current.ports ?? []), elapsed: formatElapsed((now.value - current.startedAt) / 1000) })
+                ? t(`chat.chatJobRow.leftForYou`, {
+                      ports: portsLine(current.ports ?? []),
+                      elapsed: formatElapsed((now.value - current.startedAt) / 1000),
+                  })
                 : t(`chat.chatJobRow.running`, { elapsed: formatElapsed((now.value - current.startedAt) / 1000) });
         case `stopped`:
             return stoppedLine(current.by, formatElapsed((current.took[1] - current.took[0]) / 1000));
@@ -86,11 +89,13 @@ const commandOpen = ref(false);
 
 <template>
     <div class="flex w-full min-w-0 flex-col gap-1">
-        <div class="flex max-w-full min-w-0 items-center gap-2 self-start rounded-lg border border-line px-2.5 py-1 text-2xs text-muted">
+        <div
+            class="flex max-w-full min-w-0 items-center gap-2 self-start rounded-lg border border-line px-2.5 py-1 text-2xs text-muted max-md:min-h-9 max-md:py-0"
+        >
             <!-- The label doubles as the command's fold, as a tool card's name does. -->
             <button
                 type="button"
-                class="flex min-w-0 items-center gap-1.5 transition-colors hover:text-content"
+                class="flex min-w-0 items-center gap-1.5 self-stretch transition-colors hover:text-content"
                 :aria-expanded="commandOpen"
                 v-tooltip.top="commandOpen ? t(`chat.chatJobRow.hideCommand`) : t(`chat.chatJobRow.showCommand`)"
                 @click="commandOpen = !commandOpen"
@@ -102,7 +107,7 @@ const commandOpen = ref(false);
             <button
                 v-if="terminal !== undefined"
                 type="button"
-                class="-mr-1 flex shrink-0 items-center rounded p-0.5 transition-colors hover:bg-overlay hover:text-content"
+                class="-mr-1 flex shrink-0 items-center rounded p-0.5 transition-colors hover:bg-overlay hover:text-content max-md:-mr-2.5 max-md:min-w-9 max-md:justify-center max-md:self-stretch"
                 v-tooltip.top="t(`chat.words.watchTerminal`)"
                 :aria-label="t(`chat.words.watchTerminal`)"
                 @click="surface.watchTerminal?.(terminal)"

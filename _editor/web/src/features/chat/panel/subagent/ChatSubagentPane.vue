@@ -169,7 +169,7 @@ const takeFocus = (): void => {
         <button
             v-if="closable"
             type="button"
-            class="absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
+            class="touch-target absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
             :aria-label="t(`chat.chatPane.closePane`)"
             @pointerdown.stop
             @focusin.stop

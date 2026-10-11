@@ -123,27 +123,29 @@ const memoryLine = computed(() => {
                     <span v-if="decision.title" class="text-muted"> · {{ decision.title }}</span>
                     <span v-else-if="decision.requestId === undefined" class="text-muted"> · {{ t(`chat.chatWaitingBar.fetching`) }}</span>
                 </span>
-                <span class="flex shrink-0 flex-wrap items-center gap-1">
+                <!-- A phone's presses fill the bar, each line of them edge to edge, rather than leaving a ragged gap after them. -->
+                <span class="flex max-w-full shrink-0 flex-wrap items-center gap-1 max-md:w-full max-md:[&>*]:flex-auto">
                     <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
                     <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
-                        <Button size="small" :disabled="!props.canDrive || replying" @click="emit(`approve`)">
+                        <Button size="small" thumb :disabled="!props.canDrive || replying" @click="emit(`approve`)">
                             {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
                         </Button>
-                        <Button size="small" tier="boring" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
+                        <Button size="small" thumb tier="boring" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
                             {{ t(`chat.chatWaitingBar.keepPlanning`) }}
                         </Button>
                     </template>
-                    <Button size="small" tier="quiet" @click="show">{{ showLabel }}</Button>
+                    <Button size="small" thumb tier="quiet" @click="show">{{ showLabel }}</Button>
                 </span>
             </div>
             <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
                 {{ memoryLine }}
                 <template #actions>
-                    <Button size="small" :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="sendHeld()">{{
+                    <Button size="small" thumb :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="sendHeld()">{{
                         t(`chat.chatHeld.sendAnyway`)
                     }}</Button>
                     <Button
                         size="small"
+                        thumb
                         tier="quiet"
                         v-tooltip.top="{ title: t(`chat.chatWaitingBar.wait`), note: sendsItself ? t(`chat.chatWaitingBar.waitHintRoom`) : t(`chat.chatWaitingBar.waitHint`) }"
                         @click="leftHeld = holdKey"

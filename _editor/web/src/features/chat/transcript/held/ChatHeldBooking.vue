@@ -44,7 +44,10 @@ const hint = computed((): Tip => {
     if (after.value !== undefined) {
         return { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowAfterNote`) };
     }
-    return { title: t(`chat.chatHeld.sendNowTitle`), note: spentReopensAt.value === undefined ? t(`chat.chatHeld.sendNowTimeNote`) : t(`chat.chatHeld.sendNowSpent`) };
+    return {
+        title: t(`chat.chatHeld.sendNowTitle`),
+        note: spentReopensAt.value === undefined ? t(`chat.chatHeld.sendNowTimeNote`) : t(`chat.chatHeld.sendNowSpent`),
+    };
 });
 
 // Re-timing these: the panel that booked them, opened over its own press. Offered by a sandbox that can re-time.
@@ -66,9 +69,11 @@ const sendNow = (): void => {
     <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact">
         <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
             <span v-if="retimable" ref="changeAnchor" class="inline-flex">
-                <Button size="small" tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{ t(`chat.chatHeld.change`) }}</Button>
+                <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
+                    t(`chat.chatHeld.change`)
+                }}</Button>
             </span>
-            <Button size="small" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button size="small" thumb v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>
     </ChatHeldStatus>
     <ResponsiveOverlay v-model="changing" :anchor="changeAnchor" cross="end" :header="t(`chat.sendLater.reschedule`)" panel-class="w-80 p-1">

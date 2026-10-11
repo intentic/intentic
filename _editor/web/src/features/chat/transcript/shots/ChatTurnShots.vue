@@ -151,7 +151,7 @@ const tiles = computed(() =>
             <span aria-hidden="true">·</span>
             <button
                 type="button"
-                class="cursor-pointer text-subtle underline-offset-2 transition-colors hover:text-content hover:underline"
+                class="touch-target cursor-pointer text-subtle underline-offset-2 transition-colors hover:text-content hover:underline"
                 :aria-pressed="revealed"
                 @click="emit(`reveal`, !revealed)"
             >

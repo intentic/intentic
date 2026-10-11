@@ -40,7 +40,7 @@ const apply = async (resources: ResourcesForm): Promise<void> => {
     <template v-if="offered">
         <button
             type="button"
-            class="shrink-0 font-medium text-link hover:underline disabled:cursor-default disabled:text-subtle disabled:hover:no-underline"
+            class="touch-target shrink-0 font-medium text-link hover:underline disabled:cursor-default disabled:text-subtle disabled:hover:no-underline"
             :disabled="selfResources.applying.value"
             v-tooltip.top="{ title: t(`chat.chatHeld.restartsSandbox`), note: t(`chat.chatHeld.messageWaits`) }"
             @click="resizing = true"

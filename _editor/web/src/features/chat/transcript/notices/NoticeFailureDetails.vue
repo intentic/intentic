@@ -25,7 +25,9 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
     <div class="chat-inset flex w-full flex-col gap-2 px-3 py-2 text-left text-2xs leading-relaxed" data-failure-details>
         <p v-if="details.prose.length > 0" class="break-words whitespace-pre-line select-text">
             <template v-for="(run, index) in details.prose" :key="index"
-                ><a v-if="`url` in run" :href="run.url" target="_blank" rel="noopener noreferrer" class="text-link hover:underline">{{ run.label }}</a
+                ><a v-if="`url` in run" :href="run.url" target="_blank" rel="noopener noreferrer" class="touch-target text-link hover:underline">{{
+                    run.label
+                }}</a
                 ><template v-else>{{ run.text }}</template></template
             >
         </p>
@@ -35,7 +37,11 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
                 <dt class="text-subtle">{{ fact.label }}</dt>
                 <dd class="flex min-h-6 min-w-0 items-center gap-1">
                     <span class="min-w-0 break-all text-content select-text" :class="{ 'font-mono': fact.key !== `category` }">{{ fact.value }}</span>
-                    <CopyButton v-if="fact.key !== `category`" :text="fact.value" :aria-label="t(`chat.providerFailure.copyValue`, { name: fact.label })" />
+                    <CopyButton
+                        v-if="fact.key !== `category`"
+                        :text="fact.value"
+                        :aria-label="t(`chat.providerFailure.copyValue`, { name: fact.label })"
+                    />
                 </dd>
             </template>
         </dl>
@@ -45,7 +51,7 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
                 :href="details.learnMore"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-link hover:underline"
+                class="touch-target inline-flex items-center gap-1 text-link hover:underline"
                 >{{ t(`chat.providerFailure.learnMore`) }}<Icon name="external-link" class="text-2xs"
             /></a>
             <!-- The message as the provider sent it, ids and links in place: what a bug report or a support ticket wants. -->

@@ -41,7 +41,9 @@ const offerUncapped = computed(
         </p>
         <p v-if="offerUncapped" class="max-w-[22rem] text-2xs leading-relaxed text-subtle">
             {{ t(`chat.chatPane.uncappedQuestion`) }}
-            <RouterLink :to="MODELS_PATH" class="whitespace-nowrap text-link hover:underline">{{ t(`chat.chatPane.uncappedLink`) }}</RouterLink>
+            <RouterLink :to="MODELS_PATH" class="touch-target whitespace-nowrap text-link hover:underline">{{
+                t(`chat.chatPane.uncappedLink`)
+            }}</RouterLink>
         </p>
     </div>
 </template>
