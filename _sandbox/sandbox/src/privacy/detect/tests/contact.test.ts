@@ -203,3 +203,27 @@ describe("spellings a detector used to miss", () => {
         expect(found("f(555) 123-4567", "phone")).toEqual([]);
     });
 });
+
+// Fixtures and documentation write a placeholder where a phone goes. Found once beside a "tel.", one went into the vault
+// and was matched from then on in every spelling, a shell loop counting to ten among them. Built from their digits, so
+// this file holds nothing a detector would mask.
+describe("placeholder numbers", () => {
+    const counting = Array.from({ length: 9 }, (_, index) => String(index + 1)).join("");
+    const grouped = (digits: string, separator = " "): string => [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)].join(separator);
+
+    test("one digit throughout, or each one up or down from the last, is no one's number", () => {
+        for (const digits of [counting, [...counting].reverse().join(""), "7".repeat(9), `${counting.slice(1)}0`]) {
+            expect(found(`tel. ${grouped(digits)}`, "phone"), digits).toEqual([]);
+            expect(found(`tel. ${grouped(digits, "-")}`, "phone"), digits).toEqual([]);
+            expect(found(`tel. +48 ${grouped(digits)}`, "phone"), digits).toEqual([]);
+            expect(found(`tel. +48${digits}`, "phone"), digits).toEqual([]);
+            expect(found(`tel. 0048${digits}`, "phone"), digits).toEqual([]);
+        }
+    });
+
+    test("a number with such a run in it is still somebody's", () => {
+        const number = `6${counting.slice(0, 8)}`;
+        expect(found(`tel. ${grouped(number)}`, "phone")).toEqual([grouped(number)]);
+        expect(found(`tel. +48 ${grouped(number)}`, "phone")).toEqual([`+48 ${grouped(number)}`]);
+    });
+});

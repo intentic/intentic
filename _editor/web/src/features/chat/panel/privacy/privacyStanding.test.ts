@@ -51,4 +51,22 @@ describe(`where a conversation stands with the privacy shield before the send`, 
         expect(privacyStanding(statusOf({ trusted: [`my-acp`] }), `my-acp`, ACP, `c-1`)).toBeUndefined();
         expect(privacyStanding(undefined, `my-acp`, ACP, `c-1`)).toBeUndefined();
     });
+
+    // The reported case (2026-10-11): a Cursor chat placed on a runner was turned away only after the send, and the
+    // refusal read as the shield having found something in the message.
+    test(`a conversation on a runner is said to be turned away before the send, whatever the runtime, until its provider is trusted`, () => {
+        expect(privacyStanding(statusOf({}), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toEqual({
+            kind: `refused`,
+            provider: `cursor`,
+            label: `Cursor`,
+            runner: `omen`,
+        });
+        expect(privacyStanding(statusOf({}), `claude`, CLAUDE_CODE, `c-1`, undefined, `omen`)?.kind).toBe(`refused`);
+        expect(privacyStanding(statusOf({}), `cursor`, CURSOR, `c-1`, { code: `privacy-unshielded`, text: `…` }, `omen`)?.kind).toBe(`refused`);
+        expect(privacyStanding(statusOf({ conversations: [{ conversationId: `c-1`, provider: `cursor` }] }), `cursor`, CURSOR, `c-1`, undefined, `omen`)?.kind).toBe(
+            `granted`,
+        );
+        expect(privacyStanding(statusOf({ trusted: [`cursor`] }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
+        expect(privacyStanding(statusOf({ mode: `watch` }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
+    });
 });

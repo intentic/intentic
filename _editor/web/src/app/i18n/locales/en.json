@@ -2720,6 +2720,7 @@
             "privacyLetReadTitle": "Unmasked, here only",
             "privacyOwnerOnly": "Only the sandbox's owner can let it through.",
             "privacyRefused": "The privacy shield won't send this to {provider}, and nothing you wrote is the reason: {provider}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read or mask.",
+            "privacyRefusedRunner": "The privacy shield won't run this on {runner}, and nothing you wrote is the reason: {runner} would call {provider} from its own machine, where the shield can't mask what it sends. Run it here instead, or let {provider} read this conversation.",
             "privacySafety": "Safety settings",
             "privacyTakeBack": "Take back",
             "privacyTakeBackTitle": "Shielded here again",

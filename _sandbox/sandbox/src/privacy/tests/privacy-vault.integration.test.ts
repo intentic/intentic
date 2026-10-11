@@ -147,6 +147,22 @@ describe("what a found value is matched as alone", () => {
         await vault.learn("crm", [{ value: "Grace", class: "person-name" }]);
         expect(hits(vault, "Grace period ends today")).toBe(1);
     });
+
+    // Found once beside a "tel.", a placeholder number was matched from then on in a shell loop's `for i in 1 2 3 …`.
+    test("a placeholder number is not matched alone, and no number is matched written a digit at a time", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        const counting = Array.from({ length: 9 }, (_, index) => String(index + 1));
+        const groups = (digits: readonly string[]): string => [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)].map((group) => group.join("")).join(" ");
+        const placeholder = vault.tokenFor(groups(counting), "phone");
+        expect(hits(vault, `call ${groups(counting)}`)).toBe(0);
+        expect(vault.resolve("PHONE", placeholder.replace(/\D/g, ""))).toBe(groups(counting));
+        const number = [...["601", "234", "567"].join("")];
+        vault.tokenFor(groups(number), "phone");
+        expect(hits(vault, `call ${number.join("")}`)).toBe(1);
+        expect(hits(vault, `call ${number[0]} ${number.slice(1).join("")}`)).toBe(1);
+        expect(hits(vault, `for i in ${number.join(" ")} 10; do`)).toBe(0);
+    });
 });
 
 describe("the exact matcher", () => {
@@ -166,6 +182,20 @@ describe("the exact matcher", () => {
         const [hit] = matcher.find("dzwoń: +48 600 100 200 wieczorem");
         expect(hit?.payload).toBe("phone");
         expect("dzwoń: +48 600 100 200 wieczorem".slice(hit?.start, hit?.end)).toBe("+48 600 100 200");
+    });
+
+    // An address's house and flat numbers stand alone as a matter of course; a number's digits never all do.
+    test("a folded spelling with lone digits is a number only when it holds nothing but digits", () => {
+        const number = ["601", "234", "567"];
+        const digits = [...number.join("")];
+        const known = createKnownMatcher([
+            { value: ["Długa", "5", "m", "3"].join(" "), payload: "address", spelling: "folded" },
+            { value: number.join(" "), payload: "phone", spelling: "folded" },
+        ]);
+        expect(known.find("mieszka Długa 5 m 3").map((hit) => hit.payload)).toEqual(["address"]);
+        expect(known.find(`for i in ${digits.join(" ")}`)).toEqual([]);
+        expect(known.find(`seq ${digits.join("-")}`)).toEqual([]);
+        expect(known.find(`call ${number.join("_")}`).map((hit) => hit.payload)).toEqual(["phone"]);
     });
 
     // Raw JSON text writes a line break as `\n`, a tab as `\t`: the letter belongs to the escape, so a known value right

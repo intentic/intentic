@@ -148,10 +148,34 @@ const notPhoneShaped = (run: string, separators: readonly string[]): boolean => 
 // exchange films and documentation use.
 const fictionalNanp = (national: string): boolean => /^[01]/u.test(national) || national.slice(3, 6) === "555";
 
+// The number after its country code: the first group after a "+" where the run is grouped, else a code whose length is
+// fixed, and after the "00" a Polish number dials instead of "+".
+const nationalPart = (run: string, digits: string): string => {
+    if (digits.startsWith("0048")) {
+        return digits.slice(4);
+    }
+    if (!run.startsWith("+") && !run.startsWith("(+")) {
+        return digits;
+    }
+    const code = /^\(?\+(\d{1,3})[ .()-]/u.exec(run)?.[1] ?? FIXED_LENGTH.find(([prefix]) => digits.startsWith(prefix))?.[0] ?? "";
+    return digits.slice(code.length);
+};
+
+// The numbers forms, fixtures and documentation write in place of somebody's: one digit throughout, or every digit one
+// up or one down from the last (9 to 0 and back a step too). Found once beside a "tel.", such a number went into the
+// vault and was matched from then on in every spelling, a shell loop's `1 2 3 … 9` among them.
+const placeholderNumber = (national: string): boolean => {
+    if (national.length < 7) {
+        return false;
+    }
+    const steps = new Set(Array.from(national.slice(1), (digit, index) => (Number(digit) - Number(national[index]) + 10) % 10));
+    return steps.size === 1 && (steps.has(0) || steps.has(1) || steps.has(9));
+};
+
 const isPhone = (text: string, run: string, start: number): boolean => {
     const digits = digitsOf(run);
     const separators = [...run.matchAll(/\d([ .()-]+)(?=\d)/g)].map((match) => match[1] ?? "");
-    if (notPhoneShaped(run, separators)) {
+    if (notPhoneShaped(run, separators) || placeholderNumber(nationalPart(run, digits))) {
         return false;
     }
     if (run.startsWith("+") || run.startsWith("(+")) {

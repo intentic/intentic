@@ -9,6 +9,8 @@ import { afterEscape } from "./detect/text.js";
 // `Mark` from `mark`). `case`: in any case (an e-mail address, whose dots and dashes are its own). `folded`: in any
 // case, with its spaces, line breaks, hyphens and underscores anywhere or nowhere (a full name, a document or account
 // number): `Jan Kowalski`, `JAN  KOWALSKI`, `jan_kowalski`, `JanKowalski`, `ACME-0042-XK`, `acme0042xk`.
+// Never with a separator between nearly every digit, though: a number written a digit at a time is a list of numbers
+// (a shell loop's `for i in 1 2 3 …`), not a phone or an account written out (`digitByDigit`).
 export type Spelling = "exact" | "case" | "folded";
 
 export interface KnownValue<C> {
@@ -95,6 +97,13 @@ const boundedAt = <C>(text: string, start: number, end: number, candidate: Candi
     return !before && !after;
 };
 
+// A number a folded spelling matched with two lone digits or more, each standing between separators: no number is
+// grouped like that, while one lone digit is a country code (`+1 …`) or a trunk zero (`0 22 …`). Numbers only: an
+// address's house and flat numbers stand alone as a matter of course (`Długa 5 m 3`).
+const NUMBER_SPELLED = /^[\p{N}\s_-]+$/u;
+const LONE_DIGITS = /(?:^|[\s_-])\p{N}(?=[\s_-]|$)/gu;
+const digitByDigit = (matched: string): boolean => NUMBER_SPELLED.test(matched) && (matched.match(LONE_DIGITS) ?? []).length >= 2;
+
 // The places a value can start in a text: each word's first character, and the character after an escape's letter.
 const wordStarts = (text: string): number[] =>
     [...text.matchAll(WORD)].flatMap((word) => (word[0].length > 1 && afterEscape(text, word.index + 1) ? [word.index, word.index + 1] : [word.index]));
@@ -148,7 +157,11 @@ export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMa
                         continue;
                     }
                     const end = endAt(text, at, candidate);
-                    if (end === undefined || !boundedAt(text, start, end, candidate)) {
+                    if (
+                        end === undefined ||
+                        !boundedAt(text, start, end, candidate) ||
+                        (candidate.spelling === "folded" && digitByDigit(text.slice(at, end)))
+                    ) {
                         continue;
                     }
                     found.push({ start, end, payload: candidate.payload });

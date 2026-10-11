@@ -2720,6 +2720,7 @@
             "privacyLetReadTitle": "Bez maskowania, tylko tutaj",
             "privacyOwnerOnly": "Przepuścić go może tylko właściciel sandboxa.",
             "privacyRefused": "Osłona prywatności nie wyśle tego do {provider}, i nie z powodu tego, co napisałeś: agent {provider} sam czyta pliki i wyniki poleceń i wysyła je swojemu dostawcy kanałem, którego osłona nie może odczytać ani zamaskować.",
+            "privacyRefusedRunner": "Osłona prywatności nie uruchomi tego na {runner}, i nie z powodu tego, co napisałeś: {runner} wywołałby {provider} z własnej maszyny, gdzie osłona nie może zamaskować tego, co wysyła. Uruchom to tutaj albo pozwól {provider} czytać tę rozmowę.",
             "privacySafety": "Ustawienia bezpieczeństwa",
             "privacyTakeBack": "Cofnij",
             "privacyTakeBackTitle": "Znów pod osłoną",

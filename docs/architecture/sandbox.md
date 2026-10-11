@@ -244,6 +244,15 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   reader (`privacyShield` `seal` and `forTurn`). The strip had warned before a word was written that Cursor would be
   turned away, which made the shield read as a gate on a provider rather than a guard on data; the reading the
   2026-10-02 note set aside became buildable once the hooks proved to cover reads, commands and edits.
+- (2026-10-11) A conversation placed on a runner is turned away by its placement alone, so the strip says so before the
+  send whatever the runtime ([`privacyStanding.ts`](../../_editor/web/src/features/chat/panel/privacy/privacyStanding.ts)).
+  Reported as a false alarm: a Cursor chat on a runner was refused after the send while the shield's log showed an
+  unrelated phone in another conversation. That phone was a false positive too. A placeholder number (one digit throughout, or
+  each digit one up or down from the last) found once beside a "tel." was matched from the vault in every folded
+  spelling, a shell loop's `for i in 1 2 3 …` among them. The detector now refuses placeholder numbers
+  ([`contact.ts`](../../_sandbox/sandbox/src/privacy/detect/contact.ts)), so the vault stops matching those it already
+  holds, and a folded match that writes a number a digit at a time is no match
+  ([`known-matcher.ts`](../../_sandbox/sandbox/src/privacy/known-matcher.ts)).
 - (2026-10-07) A helper job (a title, a commit subject, a verdict) is a sealed request: the turn's own arm and loop with
   `policy.sealed`, no tool, no session, nothing read past its prompt
   ([`sealed-request.ts`](../../_sandbox/sandbox/src/agent/run/sealed/sealed-request.ts)). The shield reads it whole

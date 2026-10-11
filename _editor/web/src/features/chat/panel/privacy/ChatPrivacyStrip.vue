@@ -10,7 +10,7 @@ import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "../useChat-view";
 
 // The privacy shield's word on this conversation, above the composer, only when a turn is known to be turned away: a
-// runtime it cannot read at all (said before the send rather than after it), or what it found when the last turn was
+// runtime it cannot read at all or a runner it cannot reach (said before the send rather than after it), or what it found when the last turn was
 // sent (privacyStanding.ts). With it the narrow way through (this conversation only), and once that is granted a quiet
 // line that it is, which takes it back. Granting is the owner's alone, as every change to the policy is.
 
@@ -19,7 +19,9 @@ const { conversation, provider, capabilities, queuePaused, lastFailure, resumeQu
 const { reachable, active } = useSandbox();
 const { status, updatePolicy, isSaving } = usePrivacyShield();
 
-const standing = computed(() => privacyStanding(status.value, provider.value, capabilities.value, conversation.value.conversationId, lastFailure.value));
+const standing = computed(() =>
+    privacyStanding(status.value, provider.value, capabilities.value, conversation.value.conversationId, lastFailure.value, conversation.value.runner.value),
+);
 const owner = computed(() => active.value?.role === `owner`);
 const failed = ref(false);
 // The refusals a grant answers: a runtime the shield cannot read, and what it found in one it can.
@@ -49,7 +51,10 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
 
 <template>
     <Notice v-if="standing?.kind === `refused` || standing?.kind === `found`" tone="warning" icon="shield" size="sm">
-        <template v-if="standing.kind === `refused`">{{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}</template>
+        <template v-if="standing.kind === `refused` && standing.runner !== undefined">{{
+            t(`chat.chatPaneNotices.privacyRefusedRunner`, { provider: standing.label, runner: standing.runner })
+        }}</template>
+        <template v-else-if="standing.kind === `refused`">{{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}</template>
         <template v-else>{{ standing.reason ?? t(`chat.chatPaneNotices.privacyFound`, { provider: standing.label }) }}</template>
         <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
         <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>

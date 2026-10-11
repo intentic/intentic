@@ -1373,6 +1373,7 @@
             "privacyLetReadTitle": "Sans masquage, ici seulement",
             "privacyOwnerOnly": "Seul le propriétaire du sandbox peut le laisser passer.",
             "privacyRefused": "Le bouclier de confidentialité n'enverra pas ceci à {provider}, et rien de ce que vous avez écrit n'en est la cause : l'agent de {provider} lit lui-même des fichiers et des sorties de commandes et les envoie à son fournisseur par un canal que le bouclier ne peut ni lire ni masquer.",
+            "privacyRefusedRunner": "Le bouclier de confidentialité n'exécutera pas ceci sur {runner}, et rien de ce que vous avez écrit n'en est la cause : {runner} appellerait {provider} depuis sa propre machine, où le bouclier ne peut pas masquer ce qui est envoyé. Exécutez-le ici, ou laissez {provider} lire cette conversation.",
             "privacySafety": "Réglages de sécurité",
             "privacyTakeBack": "Révoquer",
             "privacyTakeBackTitle": "De nouveau protégée",

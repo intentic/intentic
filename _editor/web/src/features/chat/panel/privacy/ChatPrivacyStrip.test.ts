@@ -25,9 +25,10 @@ const queuePaused = ref<string | undefined>(undefined);
 const lastFailure = ref<{ code: string; text?: string } | undefined>(undefined);
 const resumeQueue = jest.fn(async () => {});
 const streaming = ref(false);
+const runner = ref<string | undefined>(undefined);
 jest.mock(`../useChat-view`, () => ({
     usePaneView: () => ({
-        conversation: shallowRef({ conversationId: `vivid-rowan-moks` }),
+        conversation: shallowRef({ conversationId: `vivid-rowan-moks`, runner }),
         provider,
         capabilities,
         queuePaused,
@@ -98,6 +99,7 @@ beforeEach(() => {
     queuePaused.value = undefined;
     lastFailure.value = undefined;
     streaming.value = false;
+    runner.value = undefined;
     reachable.value = true;
     active.value = { role: `owner` };
     policy.value = { ...DEFAULT_PRIVACY_SHIELD, mode: `on` };
@@ -142,6 +144,17 @@ it(`says before the send that an agent the shield can't read would be turned awa
     expect(element.textContent).toContain(`won't send this to My agent, and nothing you wrote is the reason`);
     expect(named(element, `Let My agent read this conversation`)?.tagName).toBe(`BUTTON`);
     expect(named(element, `Safety settings`)?.tagName).toBe(`A`);
+});
+
+// Third (2026-10-11): a Cursor chat placed on a runner was turned away after the send, and the refusal read as the
+// shield having found something. A runner calls its provider from its own machine, so the placement alone decides it.
+it(`says before the send that a conversation on a runner would be turned away, whatever its runtime`, () => {
+    provider.value = `cursor`;
+    capabilities.value = CURSOR;
+    runner.value = `omen`;
+    const element = mount();
+    expect(element.textContent).toContain(`won't run this on omen, and nothing you wrote is the reason`);
+    expect(named(element, `Let Cursor read this conversation`)?.tagName).toBe(`BUTTON`);
 });
 
 it(`lets the agent read this conversation alone, and sends the message the refusal held`, async () => {
