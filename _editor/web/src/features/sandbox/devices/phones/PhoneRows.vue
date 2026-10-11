@@ -1,7 +1,7 @@
 <!-- The owner's phones on the Devices board: whether the agent can reach each now, and the way to its card. -->
 <script setup lang="ts">
 import type { PhoneSummary } from "@intentic/sandbox-contract";
-import { Icon, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { BrandMark, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import { capabilityRoute } from "../deviceLinks";
@@ -23,7 +23,15 @@ const rows = computed(() => peers.value.map(phoneRowOf));
         <Row v-for="row in rows" :key="row.id">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
-                    <Icon name="mobile" class="shrink-0 text-muted" aria-hidden="true" />
+                    <!-- The phone's own OS mark, as a machine's tile wears its own; a platform drawn by nobody keeps the handset. -->
+                    <BrandMark
+                        :size="16"
+                        :name="row.id"
+                        :icon="row.platform === `android` ? `android` : row.platform === `ios` ? `apple` : `mobile`"
+                        :tint="row.platform === `android` ? `#3DDC84` : row.platform === `ios` ? `#000000` : undefined"
+                        :plain="true"
+                        :idle="row.tone === `neutral`"
+                    />
                     <span class="truncate font-mono">{{ row.id }}</span>
                     <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="phoneStateWord(row.state)" />
                 </span>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { deviceEnvironment, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
 import {
+    BrandMark,
     Button,
     ConfirmDialog,
     DeviceAgentNotes,
@@ -40,9 +41,11 @@ import {
     clearable,
     fixable,
     folderOwner,
+    machineCapacity,
     machineHardware,
     type MachineRow,
     machineLists,
+    machineMark,
     machineState,
     manageable,
     managerOf,
@@ -59,7 +62,7 @@ import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
-import { type DeviceScopes, manageBlock } from "./deviceFacts";
+import { type DeviceScopes, distroMark, manageBlock, osMark } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -142,7 +145,9 @@ const updateMachine = (): void => {
 // One verdict for the whole PC, so the masthead of a many-sided machine carries a state instead of listing the
 // environment names that are the section directly beneath it.
 const state = computed(() => machineState(machine, readAt));
-const hardware = computed(() => machineHardware(machine));
+// What the machine is, as its tile on the board says it: the hardware, then the engine every sandbox here shares.
+const hardware = computed(() => [machineHardware(machine), machineCapacity(machine)].filter((part) => part !== undefined && part !== ``).join(` · `));
+const pcMark = computed(() => machineMark(machine));
 
 // The Windows side's distros this sandbox holds NO door into: the connected ones are rows of their own, and
 // listing them again was this page's third telling of its own environments.
@@ -235,13 +240,9 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
 
             <!-- A many-sided machine's masthead carries one verdict for the PC; its sides are the section below. -->
             <Row v-else :flush="true" :heading="2">
+                <!-- The PC wears the mark of the side that owns its screen, as its tile on the board does. -->
                 <template #lead="{ mark }">
-                    <span
-                        class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
-                        :style="{ width: `${mark}px`, height: `${mark}px` }"
-                    >
-                        <Icon name="desktop" class="text-sm" />
-                    </span>
+                    <BrandMark :size="mark" :name="machine.label" :icon="pcMark.icon" :tint="pcMark.tint" :idle="state.variant === `neutral`" />
                 </template>
                 <template #title>{{ machine.label }}</template>
                 <template v-if="hardware !== ``" #description>{{ hardware }}</template>
@@ -286,7 +287,10 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
 
             <!-- The rest of this PC, as rows in the same list: a distro that is here but holds no door yet. A
                  connected one is already a row above, and saying so twice is what made this a second list. -->
-            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`sandbox.words.notConnected`)">
+            <Row v-for="distro in distros" :key="distro.name" :description="t(`sandbox.words.notConnected`)">
+                <template #lead="{ mark }">
+                    <BrandMark :size="mark" :name="distro.name" :icon="distroMark(distro.name).icon" :plain="true" :idle="true" />
+                </template>
                 <template #title
                     ><span class="font-mono">{{ distro.name }}</span></template
                 >
@@ -438,7 +442,13 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                          its buttons: the path alone says it, but not in words. -->
                     <template #where="{ group }">
                         <span v-if="many && ownerOf(group)" class="inline-flex min-w-0 items-center gap-1 text-2xs text-subtle">
-                            <Icon name="desktop" class="shrink-0" aria-hidden="true" />{{ environmentTitle(ownerOf(group)!) }}
+                            <BrandMark
+                                :size="12"
+                                :name="environmentTitle(ownerOf(group)!)"
+                                :icon="osMark(ownerOf(group)!.device).icon"
+                                :tint="osMark(ownerOf(group)!.device).tint"
+                                :plain="true"
+                            />{{ environmentTitle(ownerOf(group)!) }}
                         </span>
                     </template>
                     <!-- What settles a conflict, at the foot of the block that explains it. -->

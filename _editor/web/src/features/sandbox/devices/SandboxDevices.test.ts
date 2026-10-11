@@ -950,8 +950,11 @@ it(`names every sandbox a machine holds, and what each one came to, without bein
     expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
     expect(text).toContain(`radarsu-local-0738cd6b5027`);
     expect(text).toContain(`2 ports`);
-    // The third is stopped on purpose, which is a state rather than an errand.
-    expect(text).toContain(`stopped`);
+    // The third is stopped on purpose, which is a state rather than an errand: a grey dot, named for a screen reader,
+    // and counted in the tile's running figure.
+    const board = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
+    expect(board.querySelector(`[role="img"][aria-label="stopped"]`)).not.toBeNull();
+    expect(text).toContain(`2/3`);
     expect(text).toContain(`1 port busy here`);
     // No disclosure button on a machine: a card is one link, so nothing on the board expands.
     expect(disclosures(mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]))).toEqual([]);
@@ -966,10 +969,8 @@ it(`gives every computer its own named card and keeps board controls outside the
         `other-pc`,
         `radarsu-rog`,
     ]);
-    // Each fills a surface of its own, rather than being rows of one shared panel.
-    const surfaces = cards.map((card) => card.parentElement);
-    expect(new Set(surfaces).size).toBe(2);
-    expect(surfaces.map((surface) => surface?.classList.contains(`bg-card`))).toEqual([true, true]);
+    // Each IS a surface of its own, a tile in the board's grid, rather than rows of one shared panel.
+    expect(cards.map((card) => card.classList.contains(`bg-card`))).toEqual([true, true]);
     // One target per card: search, pairing and any future toolbar controls must not become nested interactions.
     expect(cards.flatMap((card) => [...card.querySelectorAll(`a, button, input`)])).toEqual([]);
     expect(el.querySelector(`input`)?.closest(`a`)).toBeNull();
@@ -1411,10 +1412,10 @@ const mirrorOnly = (): Device => ({
 
 it(`says which half of desktop sync each device holds`, async () => {
     const el = mount([mirrored(`on`), mirrorOnly()]);
-    // On the board it is the door each machine is reached through, beside its name.
-    const board = el.textContent ?? ``;
-    expect(board).toContain(`desktop sync`);
-    expect(board).toContain(`ports only`);
+    // On the board it is the door each machine is reached through, on its name's hover: a fact nobody scans a fleet
+    // for, so not a line on every tile.
+    expect(hovers(el)).toContain(`desktop sync`);
+    expect(hovers(el)).toContain(`ports only`);
 
     // On the machine's own page a WORKING enrollment says nothing: the folder and the mirrored ports in its
     // Sandboxes section are the same fact in the machine's own numbers, and the sentence was printed regardless.
@@ -1938,18 +1939,16 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     expect(cards).toHaveLength(2);
     const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
     expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
-    // A lone machine is a single row, its one environment being the machine itself. The PC is its own row, then one
-    // row per side, then one block of what runs there.
+    // A lone machine's one environment is the machine itself: its OS rides the tile's own line, with no chip for a
+    // side. The PC carries one chip per side, each under its own OS's mark, and its sandboxes once below them.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
-    expect(lone?.children).toHaveLength(1);
     const sides = [`Microsoft Windows 11 Home`, `Arch Linux on WSL`];
-    expect([...pc!.children].map((child) => sides.find((side) => child.textContent?.includes(side)))).toEqual([
-        undefined,
-        `Microsoft Windows 11 Home`,
-        `Arch Linux on WSL`,
-        undefined,
-    ]);
-    expect(pc?.children[3]?.textContent).toContain(`work`);
+    const chips = (card: Element | undefined): string[] =>
+        [...(card?.querySelectorAll(`li`) ?? [])].flatMap((item) => sides.filter((side) => item.textContent?.trim() === side));
+    expect(chips(lone)).toEqual([]);
+    expect(lone?.textContent).toContain(`Microsoft Windows 11 Pro`);
+    expect(chips(pc)).toEqual(sides);
+    expect([...pc!.querySelectorAll(`li`)].some((item) => item.textContent?.includes(`work`))).toBe(true);
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {

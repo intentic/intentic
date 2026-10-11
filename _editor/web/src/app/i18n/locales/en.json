@@ -5571,7 +5571,13 @@
             "intenticIconInTray": ", from the Intentic icon in your tray.",
             "noDevicePairedSandbox": "No device is paired with this sandbox yet. Add one to work on it from your own editor, or connect a Linux/Windows PC or an Android phone from Capabilities to let the agent work there.",
             "noDeviceSandboxHere": "No device or sandbox here matches \"{query}\".",
-            "readingDevices": "Reading your devices…"
+            "readingDevices": "Reading your devices…",
+            "byState": "Show devices by state",
+            "all": "All",
+            "live": "Live",
+            "attention": "Needs attention",
+            "offline": "Offline",
+            "noneAtState": "No device is {state} right now."
         },
         "phoneRows": {
             "phones": "Phones",
@@ -5589,6 +5595,15 @@
         },
         "deviceBoardCard": {
             "more": "… and {more} more",
+            "synced": "synced",
+            "ports": "ports",
+            "runningTip": "{running} of {hosted} sandboxes on this computer are running",
+            "notListed": "This computer did not list its containers",
+            "syncedTip": "Sandboxes whose files sync to a folder on this computer",
+            "portsTip": "Sandbox ports answering on this computer's localhost",
+            "state": "State",
+            "reachedThrough": "Reached through",
+            "holdsNothing": "No sandbox runs or syncs here",
             "notRunningHere": "not running here",
             "running": "running",
             "stopped": "stopped"
@@ -5754,7 +5769,8 @@
             "stateAttention": "needs attention",
             "stateQuiet": "gone quiet",
             "stateReconnecting": "reconnecting",
-            "stateOffline": "offline"
+            "stateOffline": "offline",
+            "capacity": "{memory} · {cpus} core | {memory} · {cpus} cores"
         },
         "deviceRunners": {
             "addRunner": "Add runner",

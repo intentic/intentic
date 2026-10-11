@@ -13,12 +13,18 @@ import {
     deviceSwitches,
     deviceSyncingSandbox,
     deviceTone,
+    fleetCounts,
     folderOwner,
     isSelf,
+    machineCapacity,
+    machineFigures,
     machineHardware,
+    machineMark,
     machineRow,
     machineRows,
+    machineSpecs,
     machineState,
+    machineVerdict,
     managerOf,
     notOnAccount,
     removableHere,
@@ -302,6 +308,62 @@ test(`reads the machine's hardware once, from whichever side described itself`, 
     const named = machineRows([device({ key: `box`, label: `box`, facts: ARCH, report: report({ hostname: `rog` }) })], undefined, NOW);
     expect(machineHardware(named[0]!)).toBe(`x64 · rog`);
     expect(machineHardware(machineRow([], { key: `bare`, label: `bare` }))).toBe(``);
+});
+
+// The board's tile verdict, which is not the page's: a PC whose distro sleeps beside a live Windows is a PC you can use.
+test(`calls a PC live while any side answers, and offline only when none does`, () => {
+    const halfAsleep = machineRows(
+        [
+            device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }),
+            device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined }),
+        ],
+        undefined,
+        NOW,
+    )[0]!;
+    expect(machineVerdict(halfAsleep, NOW)).toEqual({ status: `live`, word: `live`, variant: `success` });
+    const asleep = card(deviceRow(device({ online: false, gap: `offline`, report: undefined }), undefined));
+    expect(machineVerdict(asleep, NOW)).toEqual({ status: `offline`, word: `offline`, variant: `neutral` });
+    // One side on its way back is the word worth reading on a machine nothing else on answers.
+    const returning = card(deviceRow(device({ online: false, gap: `offline`, lastSeen: NOW - 5_000, report: undefined }), undefined));
+    expect(machineVerdict(returning, NOW).word).toBe(`reconnecting`);
+});
+
+test(`asks for attention for the machine's own trouble and for any sandbox's`, () => {
+    expect(machineVerdict(card(row({}, { agent: { running: false } })), NOW).status).toBe(`attention`);
+    expect(machineVerdict(card(row({}, PAIRED)), NOW).status).toBe(`live`);
+    const conflicted = card(row({}, { ...PAIRED, pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/w`, mutagenStatus: `watching`, conflicts: 2 }] }));
+    expect(machineVerdict(conflicted, NOW).status).toBe(`attention`);
+    // A warning read before the machine slept is not a verdict on a machine nothing answers on.
+    const stale = card(row({ online: false, gap: `offline` }, { agent: { running: false } }));
+    expect(machineVerdict(stale, NOW).status).toBe(`offline`);
+});
+
+test(`counts the fleet by verdict, so the board is read before a tile is`, () => {
+    const live = card(row());
+    const asleep = card(deviceRow(device({ key: `b`, label: `b`, online: false, gap: `offline`, report: undefined }), undefined));
+    const stuck = card(row({ key: `c`, label: `c` }, { agent: { running: false } }));
+    expect(fleetCounts([live, asleep, stuck, live], NOW)).toEqual({ live: 2, attention: 1, offline: 1 });
+});
+
+test(`counts what a PC holds once, however many doors list it`, () => {
+    expect(machineFigures(pc()[0]!)).toEqual({ hosted: 1, running: 1, synced: 1, ports: 1 });
+    // A machine nobody could list holds an unknown number of containers, not none.
+    expect(machineFigures(card(row({}, folders(`a`, `b`))))).toEqual({ hosted: undefined, running: 0, synced: 2, ports: 0 });
+});
+
+test(`states the engine's size and the OS a lone machine runs, and leaves out what it never said`, () => {
+    const sized = card(row({ facts: { ...ARCH, wsl: undefined, engine: { memoryBytes: 16 * 1024 ** 3, cpus: 8 } } }));
+    expect(machineCapacity(sized)).toBe(`16 GiB · 8 cores`);
+    expect(machineSpecs(sized)).toEqual([`Arch Linux`, `x64`, `16 GiB · 8 cores`]);
+    // A many-sided PC names its sides in chips of their own, so its line is the hardware alone.
+    expect(machineSpecs(pc()[0]!)).toEqual([`x64`]);
+    expect(machineSpecs(card(row({ facts: undefined })))).toEqual([]);
+});
+
+test(`marks each side by the OS it runs, and the PC by the side that owns its screen`, () => {
+    const machine = pc()[0]!;
+    expect(machineMark(machine).icon).toBe(`windows`);
+    expect(boardBody(machine, ``, undefined, NOW).environments.map((environment) => environment.mark.icon)).toEqual([`windows`, `archlinux`]);
 });
 
 test(`finds a many-sided machine by either of its doors`, () => {

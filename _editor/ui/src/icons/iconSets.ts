@@ -5,12 +5,15 @@ import { STATUS_GLYPHS } from "./statusGlyphs.js";
 import { BRAND_GLYPHS } from "./brandGlyphs.js";
 import { CONTROL_GLYPHS } from "./controlGlyphs.js";
 import { EDITOR_GLYPHS } from "./editorGlyphs.js";
+import { OS_GLYPHS } from "./osGlyphs.js";
 import type { Glyph } from "./glyph.js";
 
 // Native SVG drawings for the editor, extensions and shared views.
 export const ICONS = {
     ...CONTROL_GLYPHS,
     ...EDITOR_GLYPHS,
+    // Operating systems by name (`windows`, `apple`, `linux`, `archlinux`, `ubuntu`, `debian`, `fedora`).
+    ...OS_GLYPHS,
     "align-left": ACTION_GLYPHS[`align-left`],
     "angle-right": ACTION_GLYPHS[`chevron-right`],
     approvals: NAVIGATION_GLYPHS[`approvals`],

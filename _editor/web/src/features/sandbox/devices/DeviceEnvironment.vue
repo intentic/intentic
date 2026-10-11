@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { agentLines, Button, DeviceAgentNotes, Icon, Row, StatusBadge } from "@intentic/ui";
+import { agentLines, BrandMark, Button, DeviceAgentNotes, Row, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import AgentRunStrip from "./health/AgentRunStrip.vue";
 import DeviceConcern from "./health/DeviceConcern.vue";
@@ -7,7 +7,7 @@ import { cardRoute } from "./deviceLinks";
 import type { DeviceAgentPanel } from "./deviceAgent";
 import type { DeviceConcern as Concern } from "./health/deviceAttention";
 import { type DeviceRow, deviceState, deviceTone } from "./deviceRows";
-import { lastSeenNote, syncNote, syncStopped } from "./deviceFacts";
+import { lastSeenNote, osMark, syncNote, syncStopped } from "./deviceFacts";
 import { environmentAddressed, environmentDetail, environmentIdentity, environmentTitle } from "./machineEnvironments";
 import type { DeviceOps } from "./runners/deviceOps";
 
@@ -40,6 +40,9 @@ const { environment, panel, concerns, readAt, ops, masthead, hardware } = define
 const emit = defineEmits<{ connect: [] }>();
 
 const device = computed(() => environment.device);
+// The OS this environment runs, as its own mark: a Windows side and an Arch side of one PC used to share a monitor.
+const os = computed(() => osMark(device.value));
+const asleep = computed(() => deviceTone(device.value, readAt) === `neutral`);
 
 // The door id, unless the masthead has already said it: a lone machine is usually addressed by its own name, and
 // printing `ada-air` under the title `ada-air` is the repetition this page was rebuilt to stop. A list row's title
@@ -69,21 +72,16 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
 
 <template>
     <Row
-        :icon="masthead ? undefined : `desktop`"
         :flush="masthead"
         :heading="masthead ? 2 : undefined"
         :density="masthead ? `comfortable` : undefined"
         :spine="!masthead"
         :title="masthead ? undefined : environmentTitle(environment)"
     >
-        <!-- The masthead's mark is a plaque rather than a bare glyph: it outranks every row under it. -->
-        <template v-if="masthead" #lead="{ mark }">
-            <span
-                class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
-                :style="{ width: `${mark}px`, height: `${mark}px` }"
-            >
-                <Icon name="desktop" class="text-sm" />
-            </span>
+        <!-- The masthead's mark is a plaque rather than a bare glyph: it outranks every row under it. A list row's is the
+             glyph alone, in the OS's own colour, so the sides of one PC are told apart before their names are read. -->
+        <template #lead="{ mark }">
+            <BrandMark :size="mark" :name="device.label" :icon="os.icon" :tint="os.tint" :plain="!masthead" :idle="asleep" />
         </template>
 
         <!-- The masthead names the MACHINE and carries its OS beside it; a list row is the environment itself. -->

@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { artSrc, type Brand, brandUrl, loadBrand } from "./brandMark.js";
+import { brandPalette } from "../../lib/brandColor.js";
 import { isIconName } from "../../icons/iconSets.js";
 import { initialsOf } from "../../lib/format.js";
 import Icon from "../primitives/Icon.vue";
@@ -12,6 +13,7 @@ const {
     art,
     logo,
     icon,
+    tint,
     idle = false,
     flush = false,
     plain = false,
@@ -26,6 +28,9 @@ const {
     logo?: string | undefined;
     /** A name from the app's icon set; an unknown one is expected and falls to the monogram, not a blank. */
     icon?: string | undefined;
+    /** The brand's official colour (`#rrggbb`) for a glyph drawn from the app's own set (an OS mark, say): painted on
+     *  the plate the fetched tier uses, in both schemes; under `plain`, the glyph alone wears it. A fetched brand wins. */
+    tint?: string | undefined;
     /** Installed but switched off, listed but disabled: present, and not currently doing anything. */
     idle?: boolean;
     /** A band filling one edge, not a badge on the container: no rounding, no border, stretched to fit. */
@@ -60,6 +65,11 @@ watch(
     },
     { immediate: true },
 );
+
+// A local glyph in its brand's colours: the same four-colour placement a fetched mark gets, with no fetch behind it.
+const tinted = computed(() => (glyph.value === undefined || tint === undefined ? undefined : brandPalette(tint)));
+// Whichever tier is painting decides the colours; a fetched brand outranks a tint.
+const palette = computed(() => brand.value?.palette ?? (drawing.value === undefined ? tinted.value : undefined));
 </script>
 
 <template>
@@ -70,22 +80,22 @@ watch(
             // Both belong to the badge shape only: a flush mark is inside a border that is already drawn.
             plain ? (drawing === undefined ? `` : size >= 28 ? `rounded-lg` : `rounded-md`) : flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
             /* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border and whose corners). */
-            drawing !== undefined ? `` : plain ? `text-muted` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
+            drawing !== undefined ? `` : plain ? (brand === undefined && tinted !== undefined ? `` : `text-muted`) : palette === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
             // Stretched to the container and held square, rather than sized here: the height belongs to
             // whatever sits beside it, and that is in rem, so a pixel written here would be right at one
             // browser font size and wrong at every other.
             ...(flush ? { width: `auto`, height: `auto`, aspectRatio: `1` } : { width: `${size}px`, height: `${size}px` }),
-            ...(brand === undefined
+            ...(palette === undefined
                 ? {}
                 : {
                       // Declared once here and inherited by the mark below. Both schemes, because which one is
                       // wanted is a fact about the page, not about the brand: the CSS at the foot picks.
-                      '--brand-plate-light': brand.palette.plateLight,
-                      '--brand-plate-dark': brand.palette.plateDark,
-                      '--brand-mark-light': brand.palette.markLight,
-                      '--brand-mark-dark': brand.palette.markDark,
+                      '--brand-plate-light': palette.plateLight,
+                      '--brand-plate-dark': palette.plateDark,
+                      '--brand-mark-light': palette.markLight,
+                      '--brand-mark-dark': palette.markDark,
                   }),
         }"
         aria-hidden="true"
@@ -93,7 +103,12 @@ watch(
         <!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
         <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
         <template v-else-if="brand === undefined">
-            <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * (plain ? 0.625 : 0.5)}px` }" />
+            <Icon
+                v-if="glyph !== undefined"
+                :name="glyph"
+                :class="tinted === undefined ? undefined : `brand-ink`"
+                :style="{ fontSize: `${size * (plain ? 0.625 : 0.5)}px` }"
+            />
             <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
                 {{ initials }}
             </span>
@@ -135,5 +150,11 @@ watch(
 }
 [data-mode="dark"] .brand-mark {
     background-color: var(--brand-mark-dark);
+}
+.brand-ink {
+    color: var(--brand-mark-light);
+}
+[data-mode="dark"] .brand-ink {
+    color: var(--brand-mark-dark);
 }
 </style>

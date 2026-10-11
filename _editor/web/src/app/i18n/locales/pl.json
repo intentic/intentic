@@ -5035,7 +5035,13 @@
             "intenticIconInTray": ", z ikony Intentic w zasobniku.",
             "noDevicePairedSandbox": "Z tym sandboxem nie jest jeszcze sparowane żadne urządzenie. Dodaj jedno, żeby pracować na nim z własnego edytora, albo podłącz komputer z Linuksem/Windowsem lub telefon z Androidem w Możliwościach, żeby agent mógł tam pracować.",
             "noDeviceSandboxHere": "Żadne urządzenie ani sandbox tutaj nie pasuje do „{query}”.",
-            "readingDevices": "Odczytywanie Twoich urządzeń…"
+            "readingDevices": "Odczytywanie Twoich urządzeń…",
+            "byState": "Pokaż urządzenia według stanu",
+            "all": "Wszystkie",
+            "live": "Aktywne",
+            "attention": "Wymagają uwagi",
+            "offline": "Offline",
+            "noneAtState": "Żadne urządzenie nie jest teraz w stanie „{state}”."
         },
         "phoneRows": {
             "phones": "Telefony",
@@ -5053,6 +5059,15 @@
         },
         "deviceBoardCard": {
             "more": "… i {more} więcej",
+            "synced": "synchr.",
+            "ports": "porty",
+            "runningTip": "Działa {running} z {hosted} sandboxów na tym komputerze",
+            "notListed": "Ten komputer nie podał listy swoich kontenerów",
+            "syncedTip": "Sandboxy, których pliki synchronizują się z folderem na tym komputerze",
+            "portsTip": "Porty sandboxów odpowiadające na localhost tego komputera",
+            "state": "Stan",
+            "reachedThrough": "Dostęp przez",
+            "holdsNothing": "Żaden sandbox tu nie działa ani się nie synchronizuje",
             "notRunningHere": "nie działa tutaj",
             "running": "działa",
             "stopped": "zatrzymany"
@@ -5218,7 +5233,8 @@
             "stateAttention": "wymaga uwagi",
             "stateQuiet": "ucichło",
             "stateReconnecting": "ponowne łączenie",
-            "stateOffline": "offline"
+            "stateOffline": "offline",
+            "capacity": "{memory} · {cpus} rdzeń | {memory} · {cpus} rdzenie | {memory} · {cpus} rdzeni"
         },
         "deviceRunners": {
             "addRunner": "Dodaj runnera",

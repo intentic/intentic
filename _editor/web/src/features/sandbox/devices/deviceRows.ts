@@ -29,8 +29,11 @@ import {
     deviceReconnecting,
     lastSeenNote,
     machineWarnings,
+    type OsMark,
     osLabel,
+    osMark,
 } from "./deviceFacts";
+import { formatBinaryBytes } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // One device as the board and the device page both read it: its state in one word and one colour, its
@@ -121,6 +124,91 @@ const machineRank = (machine: MachineRow, readAt: number): number =>
 
 export const sortMachines = (machines: readonly MachineRow[], readAt: number): MachineRow[] =>
     machines.toSorted((a, b) => machineRank(a, readAt) - machineRank(b, readAt) || a.label.localeCompare(b.label));
+
+// THE BOARD'S ONE WORD FOR A WHOLE COMPUTER, of three, for its tile's badge and the board's status pills. Not the
+// machine page's verdict (machineState, worst side first, under which each side has a row of its own): on a board of
+// tiles the question is "can I use it, and does it want me". A PC is live while any side answers, since a distro asleep
+// beside a live Windows is the normal case and its own chip says so; it needs attention when anything that answers asks
+// for a hand, its own sides or the sandboxes it holds; it is offline only when nothing on it answers, and then nothing
+// on it is a verdict, since a warning read before it went to sleep cannot be acted on.
+export type MachineStatus = `live` | `attention` | `offline`;
+
+export interface MachineVerdict {
+    readonly status: MachineStatus;
+    readonly word: string;
+    readonly variant: StatusVariant;
+}
+
+const answering = (code: DeviceStateCode): boolean => code !== `offline` && code !== `reconnecting`;
+
+export const machineVerdict = (machine: MachineRow, readAt: number): MachineVerdict => {
+    const sides = machine.environments.map((environment) => ({ device: environment.device, code: stateCode(environment.device, readAt) }));
+    const awake = sides.filter((side) => answering(side.code));
+    if (awake.length === 0) {
+        // Coming back outranks gone: one side reconnecting is the word worth reading.
+        return { status: `offline`, word: stateWord(sides.some((side) => side.code === `reconnecting`) ? `reconnecting` : `offline`), variant: `neutral` };
+    }
+    const asking =
+        awake.some((side) => side.code !== `live` || machineWarnings(side.device, readAt).length > 0) ||
+        machine.groups.some((group) => groupSummary(group).warnings.length > 0);
+    return asking
+        ? { status: `attention`, word: stateWord(`attention`), variant: `warning` }
+        : { status: `live`, word: stateWord(`live`), variant: `success` };
+};
+
+/** How many machines stand at each verdict: the board's pills, so a fleet is read before a tile is. */
+export const fleetCounts = (machines: readonly MachineRow[], readAt: number): Readonly<Record<MachineStatus, number>> => {
+    const counts: Record<MachineStatus, number> = { live: 0, attention: 0, offline: 0 };
+    for (const machine of machines) {
+        counts[machineVerdict(machine, readAt).status]++;
+    }
+    return counts;
+};
+
+// THE TILE'S FIGURES: what the machine is doing for this account, in numbers a glance can compare across a board. Each
+// counted once per PC, since its sides share one engine and its sandboxes are already folded (machineLists).
+export interface MachineFigures {
+    /** Containers on this computer; absent when no side of it could list them, which is not the same as none. */
+    readonly hosted: number | undefined;
+    readonly running: number;
+    /** Sandboxes whose files sync to a folder here, and are not paused. */
+    readonly synced: number;
+    /** Sandbox ports answering on this computer's localhost. */
+    readonly ports: number;
+}
+
+export const machineFigures = (machine: MachineRow): MachineFigures => {
+    const listed = machine.environments.some((environment) => environment.device.sandboxes !== undefined);
+    const hosted = machine.groups.filter((group) => group.sandbox !== undefined);
+    return {
+        hosted: listed ? hosted.length : undefined,
+        running: hosted.filter((group) => group.sandbox?.running === true).length,
+        synced: machine.groups.filter((group) => group.folder?.mode === `sync` && group.folder.paused !== true).length,
+        ports: machine.groups.reduce((total, group) => total + group.ports.filter((port) => port.state === `mirrored`).length, 0),
+    };
+};
+
+// The Docker engine's size: the ceiling every sandbox here shares, and the one hardware fact that decides whether
+// another fits. One engine per PC, so whichever side describes it speaks for the machine.
+export const machineCapacity = (machine: MachineRow): string | undefined => {
+    const engine = machine.environments.find((environment) => environment.device.facts?.engine !== undefined)?.device.facts?.engine;
+    return engine === undefined ? undefined : t(`sandbox.deviceRows.capacity`, { memory: formatBinaryBytes(engine.memoryBytes), cpus: engine.cpus }, engine.cpus);
+};
+
+// The tile's second line, what the machine IS: its OS where it is one environment (a many-sided PC names each of its
+// sides in a chip of its own), then the hardware, then the engine's size. Parts the machine never stated drop out.
+export const machineSpecs = (machine: MachineRow): string[] => {
+    const lone = manySided(machine) ? undefined : machine.environments[0]?.device;
+    return [lone === undefined ? undefined : osLabel(lone), machineHardware(machine), machineCapacity(machine)].filter(
+        (part): part is string => part !== undefined && part !== ``,
+    );
+};
+
+/** The PC's mark: the side that owns the screen, which `machinesOf` puts first. */
+export const machineMark = (machine: MachineRow): OsMark => {
+    const lead = machine.environments[0]?.device;
+    return lead === undefined ? { icon: `desktop` } : osMark(lead);
+};
 
 // The agent with this render's verdicts already attached; absent on a device that never reported.
 export type RowAgent = DeviceAgent & {
@@ -481,6 +569,7 @@ const BOARD_LINES_MAX = 3;
 export interface BoardEnvironment {
     readonly key: string;
     readonly label: string;
+    readonly mark: OsMark;
     readonly doors: readonly string[];
     readonly state: string;
     readonly tone: StatusVariant;
@@ -507,6 +596,7 @@ const doorsOf = (row: DeviceRow): string[] => [
 const boardEnvironment = (row: DeviceRow, readAt: number): BoardEnvironment => ({
     key: row.device.key,
     label: osLabel(row.device) ?? row.device.label,
+    mark: osMark(row.device),
     doors: doorsOf(row),
     state: deviceState(row.device, readAt),
     tone: deviceTone(row.device, readAt),

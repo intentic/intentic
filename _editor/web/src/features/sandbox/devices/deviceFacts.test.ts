@@ -11,7 +11,9 @@ import {
     lastSeenNote,
     machineWarnings,
     manageBlock,
+    distroMark,
     osLabel,
+    osMark,
     osTitle,
     syncNote,
     syncStopped,
@@ -360,4 +362,41 @@ test(`judges the agent's rounds on the machine's own clock`, () => {
 test(`says nothing about an old reading of a machine that was syncing and answering`, () => {
     const old = { capturedAt: NOW - 19 * 60_000, agent: { running: true, lastTickAt: NOW - 19 * 60_000 } };
     expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching(old) }), NOW)).toEqual([]);
+});
+
+// The mark a screen draws for an environment: the OS it runs, never a monitor that says the same of all of them.
+test(`marks an environment by the OS it says it runs, a distro by its own name before its platform's`, () => {
+    const facts = (os: string, distro?: string): Device[`facts`] => ({
+        os,
+        arch: `x64`,
+        shell: `sh`,
+        home: `/`,
+        roots: [],
+        ...(distro === undefined ? {} : { wsl: { distro } }),
+    });
+    expect(osMark(device({ facts: facts(`Windows 11 Pro (build 10.0.26100)`) })).icon).toBe(`windows`);
+    expect(osMark(device({ facts: facts(`macOS 15.1`) })).icon).toBe(`apple`);
+    expect(osMark(device({ facts: facts(`Darwin 24.1.0`) })).icon).toBe(`apple`);
+    expect(osMark(device({ facts: facts(`Ubuntu 24.04 LTS`) })).icon).toBe(`ubuntu`);
+    // WSL hands a distro its own OS string, but the distro's name is what tells two of them apart.
+    expect(osMark(device({ platform: `windows`, facts: facts(`Linux`, `archlinux`) })).icon).toBe(`archlinux`);
+    // A distro whose name is no Linux anyone draws is still a Linux, which its platform (the Windows side's) cannot say.
+    expect(osMark(device({ platform: `windows`, facts: facts(`Linux`, `my-box`) })).icon).toBe(`linux`);
+    // Undescribed: the card's platform, then the monitor.
+    expect(osMark(device({ platform: `macos` })).icon).toBe(`apple`);
+    expect(osMark(device())).toEqual({ icon: `desktop` });
+    // Each OS's own colour rides the mark, for the plate it is drawn on.
+    expect(osMark(device({ platform: `windows` })).tint).toBe(`#0078D4`);
+});
+
+test(`marks a distro that is only a name, before anything connected through it`, () => {
+    expect(distroMark(`Ubuntu-22.04`).icon).toBe(`ubuntu`);
+    expect(distroMark(`docker-desktop`).icon).toBe(`linux`);
+});
+
+// A Mac's agent names the kernel; the label names the OS, and the title keeps the agent's own words.
+test(`calls a Mac macOS, keeping what its agent said for the title`, () => {
+    const mac = device({ facts: { os: `Darwin 24.1.0`, arch: `arm64`, shell: `/bin/zsh`, home: `/Users/ada`, roots: [] } });
+    expect(osLabel(mac)).toBe(`macOS`);
+    expect(osTitle(mac)).toBe(`Darwin 24.1.0`);
 });
