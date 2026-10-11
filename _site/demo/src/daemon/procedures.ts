@@ -70,7 +70,7 @@ import { events } from "./events";
 import { demoAreas, demoPersonas, removeArea, saveArea, savePersona } from "./personas";
 import { queueDoors, sayOrBook } from "./queue";
 import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, patchAgent, roster, STARTED_AT } from "./roster";
-import { DEMO_REPO_CHECKS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
+import { DEMO_REPO_CHECKS, DEMO_RUN_TARGETS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
 import { attach, reply, stopTurn } from "./turns";
 
 // Every procedure the fixture serves, one answer per contract route; an empty-but-real area answers its contract's
@@ -393,6 +393,11 @@ export const procedures = {
             ],
         }),
         runs: () => ({ runs: [] }),
+    },
+    // A repository's "Run on <device>" dialog. Starting a run refuses: it builds here and starts a program on a real computer.
+    runs: {
+        targets: () => DEMO_RUN_TARGETS,
+        start: () => refuse(`This is the demo workspace: a run builds here and starts the program on your own computer. Connect one to a sandbox and this button runs it.`),
     },
     // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
     // refuse: a recording can't act on a real pipeline. Main is failing, with its fix agents, only in the whole recording,

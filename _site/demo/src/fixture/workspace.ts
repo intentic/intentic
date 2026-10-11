@@ -14,7 +14,7 @@ import type {
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { includeGlobs } from "@intentic/sandbox-contract";
+import { includeGlobs, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
@@ -512,6 +512,29 @@ const API_PACKAGE = `{
 }
 `;
 
+// What `web` says it can run on the owner's computers. The run dialog's fixture (daemon/settings.ts) parses this very
+// text, as the daemon parses the real file, so the dialog and its "Edit run.json" link show the same thing.
+export const WEB_RUN_JSON = `{
+    "targets": [
+        {
+            "name": "desktop",
+            "description": "The shop's desktop app for Windows, cross-built here and started on the computer.",
+            "device": "ada-pc",
+            "build": "pnpm --filter desktop build --target x86_64-pc-windows-msvc",
+            "artifact": "desktop/target/x86_64-pc-windows-msvc/release/shop.exe"
+        },
+        {
+            "name": "desktop-isolated",
+            "description": "The same build inside Windows Sandbox: a throwaway VM that sees the build and nothing else of the computer.",
+            "device": "ada-pc",
+            "build": "pnpm --filter desktop build --target x86_64-pc-windows-msvc",
+            "artifact": "desktop/target/x86_64-pc-windows-msvc/release/shop.exe",
+            "isolated": true
+        }
+    ]
+}
+`;
+
 // One flat, root-relative table backing the tree, every read, search and write, so a file only needs adding here once.
 // A string is the real body; a number is a size-only stand-in. A missing path answers 404. Mutable: writes here persist
 // until reload.
@@ -537,6 +560,7 @@ const SOURCES: [string, string | number][] = [
     [`web/package.json`, WEB_PACKAGE],
     [`web/pnpm-lock.yaml`, 184_600],
     [`web/vite.config.ts`, 512],
+    [`web/${RUN_TARGETS_FILE}`, WEB_RUN_JSON],
     // Ignored: tree lists it grayed, and expanding it is what /workspace/children answers.
     [`web/node_modules/react/package.json`, 3_120],
     [`web/node_modules/vite/package.json`, 4_040],

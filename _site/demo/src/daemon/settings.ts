@@ -2,10 +2,14 @@ import {
     type ConversationPrompt,
     REPO_CHECKS_FILE,
     type RepoChecksList,
+    RUN_TARGETS_FILE,
+    RunTargetsFileSchema,
+    type RunTargetsList,
     type SandboxHandlerOutput,
     type SavingsReport,
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { WEB_RUN_JSON } from "../fixture/workspace";
 import { STARTED_AT } from "./roster";
 
 // The Settings tab's records: the sandbox's settings, the system prompt a conversation opened with, the checks each
@@ -100,6 +104,18 @@ export const DEMO_REPO_CHECKS: RepoChecksList = {
             adopted: false,
             changed: true,
         },
+    ],
+};
+
+/* The run dialog's record: `web`'s own run.json, read the way the daemon reads it, and the three computers it could
+   run on, one per state the dialog draws: `ada-pc` ready, `ada-air` asleep, `build-box` with its "Run programs this
+   sandbox sends" switch off. */
+export const DEMO_RUN_TARGETS: RunTargetsList = {
+    repos: [{ repo: `web`, path: `web/${RUN_TARGETS_FILE}`, targets: RunTargetsFileSchema.parse(JSON.parse(WEB_RUN_JSON)).targets }],
+    devices: [
+        { id: `ada-pc`, online: true, programs: true, allowed: true },
+        { id: `ada-air`, online: false, programs: true, allowed: true },
+        { id: `build-box`, online: true, programs: true, allowed: false },
     ],
 };
 

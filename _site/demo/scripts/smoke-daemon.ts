@@ -310,6 +310,10 @@ const samplesOf = (
             kinds: undefined,
             runs: undefined,
         },
+        runs: {
+            targets: undefined,
+            start: { repo: `web`, target: `desktop`, device: `ada-pc` },
+        },
         ci: {
             runs: undefined,
             jobs: pipeline,

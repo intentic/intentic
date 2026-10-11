@@ -9572,16 +9572,20 @@
             "whenIsEditOrTurn": "{when} is {edit} or {turn}, and the command runs in this folder, so write it as you would in a terminal here."
         },
         "directoryRuns": {
-            "agentTooOld": "Its agent is too old to run programs: update it there",
-            "declaredIn": "Declared in {path}, so it travels with the repository.",
+            "agentTooOld": "The agent on {device} is too old to run programs. Update it there.",
+            "computer": "Computer",
+            "connectOne": "Connect one",
             "declaresNothing": "This repository declares nothing to run on your computers. Put a file at",
-            "howItRuns": "A run builds here, carries the build to the computer and starts it there, in a terminal you can watch. Agents run the same targets with devices run.",
-            "isolated": "in Windows Sandbox",
+            "editFile": "Edit {file}",
+            "isolated": "Windows Sandbox",
             "noComputers": "No computer is connected to this sandbox.",
-            "offline": "Not connected right now",
-            "runIn": "Run {dir} on your computers",
-            "runOn": "Run on {device}",
-            "switchOff": "\"Run programs this sandbox sends\" is off on its card",
+            "offline": "{device} isn't connected right now.",
+            "openCard": "Open its card",
+            "run": "Run",
+            "runIn": "Run {dir}",
+            "runOn": "Run {target} on {device}",
+            "runTip": "Builds here, then starts on {device} in a terminal you can watch",
+            "switchOff": "\"Run programs this sandbox sends\" is off for {device}.",
             "yourComputers": "Your computers"
         },
         "directoryPersonas": {

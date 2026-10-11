@@ -252,8 +252,6 @@ export const UNSERVED = {
     "workspace.packageModules": UNFILLED_VIEW,
     "workspace.resolve": UNFILLED_VIEW,
     "workspace.templates": UNFILLED_VIEW,
-    // A repository's "Run on <device>" dialog: no fixture repository declares a run target.
-    "runs.targets": UNFILLED_VIEW,
     "GET /workspace/media": UNFILLED_VIEW,
     "GET /workspace/download": UNSIMULATED_WRITE,
     "GET /webchat/{id}/installs": UNFILLED_VIEW,
@@ -341,7 +339,6 @@ export const UNSERVED = {
     "ports.unforward": UNSIMULATED_WRITE,
     "public.publish": UNSIMULATED_WRITE,
     "public.unpublish": UNSIMULATED_WRITE,
-    "runs.start": UNSIMULATED_WRITE,
     "safety.setPolicy": UNSIMULATED_WRITE,
     "secrets.generate": UNSIMULATED_WRITE,
     "secrets.remove": UNSIMULATED_WRITE,
