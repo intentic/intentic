@@ -1,4 +1,4 @@
-import { keyOf, signInUrlOf, statusFacts } from "./devin-login.js";
+import { keyOf, landingOf, signInUrlOf, statusFacts } from "./devin-login.js";
 
 /* What the daemon reads off Devin's CLI while it signs an account in: its page, the key it writes, who it says this is. */
 
@@ -32,4 +32,12 @@ test("who is signed in is read off the status, and a status that names nobody gi
     ].join("\n");
     expect(statusFacts(status)).toEqual({ email: "dev@example.com", plan: "Free" });
     expect(statusFacts("Logged in.\n")).toEqual({});
+});
+
+test("the browser page's landing is its loopback redirect and state; the manual page has none", () => {
+    const browser = "https://app.devin.ai/auth/cli/continue?redirect_uri=http%3A%2F%2F127.0.0.1%3A45267%2Fcallback&state=s1&code_challenge=c1";
+    expect(landingOf(browser)).toEqual({ host: "127.0.0.1", port: 45267, path: "/callback", state: "s1" });
+    expect(landingOf("https://app.devin.ai/auth/cli/continue?state=s1&code_challenge=c1")).toBeUndefined();
+    // A redirect off this machine is no landing the CLI could be listening for.
+    expect(landingOf("https://app.devin.ai/x?redirect_uri=https%3A%2F%2Fevil.example%2Fcallback&state=s1")).toBeUndefined();
 });
