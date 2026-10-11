@@ -109,6 +109,7 @@ jest.mock("../../chat/run/useChat", () => {
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
 jest.mock("../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    draftsInTransit: { value: [] },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));

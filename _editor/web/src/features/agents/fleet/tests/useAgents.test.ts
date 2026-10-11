@@ -947,6 +947,55 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
+    // The opposite trip, and the one a reader clicks: the press claims the words here at once, while the popped-out chat
+    // shows its tab back a round trip later. The card used to drop off the board for the frames between and come back,
+    // nameless until the words' own note landed.
+    it("holds a set-aside card in place while a click hands its words to the popped-out chat", async () => {
+        const { receiveChatNote } = await import("../../../chat/run/chatChannel");
+        const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
+        const { open } = await import("../useAgents-actions");
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
+        keepClosedDraft({
+            conversationId: `fresh`,
+            isolated: true,
+            registered: false,
+            provider: `claude`,
+            harness: `native`,
+            draft: `fix the login redirect`,
+            draftAt: 1_700,
+            attachments: [],
+        });
+        const card = (): { id: string; open: boolean; unsent: boolean; preview: string | undefined }[] =>
+            useAgents().lanes.value.active.map((entry) => ({ id: entry.id, open: entry.open, unsent: entry.unsent, preview: previewOf(entry.id) }));
+        const setAside = [{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect` }];
+        expect(card()).toEqual(setAside);
+
+        open(useAgents().lanes.value.active[0]!, `peek`);
+
+        // Claimed out of the set, not yet shown back: still the same card.
+        expect(card()).toEqual(setAside);
+
+        // The tab arrives before its words, which travel as a note of their own.
+        receiveChatNote({
+            sandbox: undefined,
+            note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
+        });
+        expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect` }]);
+
+        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
+        await nextTick();
+        expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect` }]);
+
+        // Arrived, so nothing stands in for it any more: the chat closing with an empty composer leaves no card behind.
+        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: {} } });
+        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
+        await nextTick();
+        expect(activeIds()).toEqual([]);
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
     // The words and `draftAt` are not confined to nameless cards: a titled agent's half-written follow-up needs the
     // same mark (UnsentMark), carrying which message and how old for screen readers.
     it("carries the message's words and its age on a card that has a title of its own", () => {

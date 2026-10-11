@@ -2,9 +2,10 @@ import { computed, type ComputedRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { drawsChat, elsewherePreviews, elsewhereStrip, publishPreviews, publishStrip } from "../run/chatEcho";
 import { chatRun } from "../run/chatRun";
-import { closedDrafts } from "../drafts/closedDrafts";
+import { closedDrafts, handedOff, settleHandoffs } from "../drafts/closedDrafts";
 import { type DraftPreviews, draftPreview } from "../drafts/draftPreview";
 import { type Strip, tabFacts } from "../tabs/tabFacts";
+import type { StoredTab } from "../tabs/tabSnapshot";
 import { activeId, conversations, panes, scopedSandboxId } from "../tabs/useChat-tabs";
 
 // Outside surfaces must read the owner's complete projection, never combine it with this window's shadow tabs.
@@ -41,15 +42,36 @@ const localPreviews = computed<DraftPreviews>(() =>
 
 export const chatStrip: ComputedRef<Strip> = computed(() => (drawsChat.value ? localStrip.value : elsewhereStrip.value));
 
+const livePreviews = computed<DraftPreviews>(() => (drawsChat.value ? localPreviews.value : elsewherePreviews.value));
+
+/**
+ * Closed-chat words this window claimed that the chat's own window has not yet shown back: no tab for them in the
+ * strip, or a tab saying it has words whose preview has not landed (the two travel as separate notes). The board
+ * draws these as it drew the closed draft, so a card does not drop out for the round trip to a popped-out chat.
+ */
+export const draftsInTransit: ComputedRef<readonly StoredTab[]> = computed(() => {
+    const tabs = new Map(chatStrip.value.tabs.map((tab) => [tab.id, tab] as const));
+    const live = livePreviews.value;
+    return handedOff.value.filter((entry) => {
+        const open = tabs.get(entry.conversationId);
+        return open === undefined || (open.unsent && live[entry.conversationId] === undefined);
+    });
+});
+
+// Arrived ones stop being stood in for at once: a stand-in outliving its arrival would put a closed card back on the
+// board the moment the chat closes again with nothing in it.
+watch(draftsInTransit, (pending) => settleHandoffs((entry) => !pending.includes(entry)));
+
 // Words set aside by a closed chat are already in every window (closedDrafts has its own note), so they need no
-// publishing — only merging, under the live composers, which win the id they share.
+// publishing — only merging, under the live composers, which win the id they share. Words in transit go under the set,
+// which holds the newer copy when a chat was closed again before its last trip came back.
 export const chatPreviews: ComputedRef<DraftPreviews> = computed(() => ({
     ...previewsOf(
-        closedDrafts.value,
+        [...draftsInTransit.value, ...closedDrafts.value],
         (tab) => tab.conversationId,
         (tab) => tab.draft,
     ),
-    ...(drawsChat.value ? localPreviews.value : elsewherePreviews.value),
+    ...livePreviews.value,
 }));
 
 /**

@@ -17,6 +17,7 @@ import { IconStub } from "@intentic/ui/testing";
 const UNSENT_WORDS = `rename the landing page hero`;
 jest.mock("../../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    draftsInTransit: { value: [] },
     chatPreviews: { value: { a4: `rename the landing page hero` } },
     previewOf: (id: string) => (id === `a4` ? `rename the landing page hero` : undefined),
 }));

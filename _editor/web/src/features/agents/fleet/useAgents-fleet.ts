@@ -19,7 +19,7 @@ import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
 import type { StoredTab } from "../../chat/tabs/tabSnapshot";
 import { rememberedProviderFor } from "../../chat/run/turnDefaults";
 import { useChat } from "../../chat/run/useChat";
-import { chatStrip } from "../../chat/panel/useChat-strip";
+import { chatStrip, draftsInTransit } from "../../chat/panel/useChat-strip";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { onScreen } from "../../../workbench/window/onScreen";
 import { asStarted, endedHere, overlaid, withdrawnHere } from "./useAgents-provisional";
@@ -190,11 +190,19 @@ export const forgetFleet = (): void => {
     stableFleet.value = [];
 };
 
+// Chats closed with the message still in them, plus those whose words a click here just handed to a composer the
+// chat's own window has not yet shown back (draftsInTransit): drawn as they were until it does, so the card the click
+// landed on stays put. One entry per conversation, the set's own first.
+const setAsideTabs = computed<readonly StoredTab[]>(() => {
+    const kept = new Set(closedDrafts.value.map((tab) => tab.conversationId));
+    return [...closedDrafts.value, ...draftsInTransit.value.filter((tab) => !kept.has(tab.conversationId))];
+});
+
 // Unsent words in this browser: open composers plus chats closed with the message still in them; composers win any race.
 const unsentTabs = computed<ReadonlyMap<string, UnsentTab>>(
     () =>
         new Map([
-            ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
+            ...setAsideTabs.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
             ...chatStrip.value.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
         ]),
 );
@@ -217,7 +225,7 @@ export const fleet = computed<FleetAgent[]>(() => {
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
     // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
     // otherwise. Stands as `draft` unless the closed chat had a session, in which case reopening resumes it.
-    const setAside = closedDrafts.value
+    const setAside = setAsideTabs.value
         .filter((tab) => !openIds.has(tab.conversationId) && !carded.has(tab.conversationId) && !archivedIds.has(tab.conversationId))
         .map((tab): FleetAgent => closedCard(tab));
     const built = [

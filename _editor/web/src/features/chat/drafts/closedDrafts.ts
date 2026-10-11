@@ -60,19 +60,43 @@ export const keepClosedDraft = (tab: StoredTab): void => {
     publish([tab, ...kept.value.filter((entry) => entry.conversationId !== tab.conversationId)].slice(0, KEEP));
 };
 
+// How long claimed words wait for the composer they went to before this window stops standing in for them (ms). The
+// answer is one BroadcastChannel round trip; this only bounds a chat window that shut before it could give one.
+const HANDOFF_MS = 5_000;
+
+// Claimed words on their way to a composer, until the window drawing the chat says it holds them. The claim is this
+// window's and immediate; the composer may be another window's (a popped-out chat), whose strip reaches here a
+// round trip later. Without this the board drew the card from neither for the frames between, and a click on a closed
+// draft's card took the card off the board and put it back (useChat-strip.draftsInTransit decides when they arrived).
+const inTransit = sandboxShallowRef<readonly StoredTab[]>(() => []);
+
+/** Words claimed out of the set and not yet confirmed in a composer, newest first. */
+export const handedOff: ComputedRef<readonly StoredTab[]> = computed(() => inTransit.value);
+
+/** Stops standing in for these: their composer holds them now, or they are gone for good. */
+export const settleHandoffs = (settled: (entry: StoredTab) => boolean): void => {
+    if (inTransit.value.some(settled)) {
+        inTransit.value = inTransit.value.filter((entry) => !settled(entry));
+    }
+};
+
 // Returns and drops the named entries: the words are about to live in a composer again, so no duplicate can
 // go stale. Claimed once per reveal, so a multi-tab reveal writes and broadcasts the remainder once.
 export const claimClosedDrafts = (conversationIds: readonly string[]): readonly StoredTab[] => {
     const wanted = new Set(conversationIds);
     const found = kept.value.filter((entry) => wanted.has(entry.conversationId));
     if (found.length > 0) {
+        inTransit.value = [...found, ...inTransit.value.filter((entry) => !wanted.has(entry.conversationId))];
         publish(kept.value.filter((entry) => !wanted.has(entry.conversationId)));
+        // By identity, so a later claim of the same chat keeps its own full wait.
+        setTimeout(() => settleHandoffs((entry) => found.includes(entry)), HANDOFF_MS);
     }
     return found;
 };
 
 /** Drops an entry without reopening it, for the board's × that closes the conversation for good. */
 export const forgetClosedDraft = (conversationId: string): void => {
+    settleHandoffs((entry) => entry.conversationId === conversationId);
     if (kept.value.some((entry) => entry.conversationId === conversationId)) {
         publish(kept.value.filter((entry) => entry.conversationId !== conversationId));
     }

@@ -79,6 +79,7 @@ jest.mock("../../../chat/run/useChat", () => ({
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
 jest.mock("../../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    draftsInTransit: { value: [] },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
