@@ -92,13 +92,13 @@ const unavailableTip = computed(() =>
             >
                 <Icon name="exclamation-triangle" />{{ t(`sandbox.discoverCard.wontLoad`) }}
             </span>
-            <span v-if="listing.entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
-                <Icon name="star" />{{ listing.entry.stars }}
+            <span v-if="listing.entry.stars !== undefined" class="shrink-0 text-2xs text-subtle">
+                <Icon name="star" class="mr-0.5" />{{ listing.entry.stars }}
             </span>
             <span v-if="listing.entry.version" class="shrink-0 text-2xs text-subtle">{{ listing.entry.version }}</span>
 
             <!-- Right-aligned and always last: the one thing a reader scanning unfamiliar names is looking for. -->
-            <span class="ml-auto shrink-0">
+            <span class="ml-auto inline-flex shrink-0 items-center">
                 <span v-if="installing" class="inline-flex items-center gap-1 text-2xs font-medium text-muted" role="status">
                     <Icon name="spinner" spin />{{
                         listing.state.kind === `update` ? t(`sandbox.discoverCard.updating`) : t(`sandbox.discoverCard.installing`)
