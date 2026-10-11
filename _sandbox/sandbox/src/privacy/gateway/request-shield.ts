@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract";
 import { type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
 import type { ClassCounts, Masker, Replacement } from "../masker.js";
+import type { PrivacyImageArchive } from "../privacy-images.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
 import type { RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js";
 
@@ -27,13 +28,14 @@ const addCounts = (into: Record<string, number>, counts: ClassCounts): void => {
 };
 
 // The first of each token, until the log's share is full: the same value found twice in one request says nothing new.
-const addFound = (tally: ShieldTally, found: readonly Replacement[], image = false): void => {
+// One found in an image is marked so, with the id its picture is kept under when it was (privacy-images.ts).
+const addFound = (tally: ShieldTally, found: readonly Replacement[], image?: { readonly id: string | undefined }): void => {
     for (const each of found) {
         if (tally.replacements.length >= PRIVACY_REPLACEMENTS_MAX) {
             return;
         }
         if (!tally.replacements.some((kept) => kept.token === each.token)) {
-            tally.replacements.push(image ? { ...each, image: true } : each);
+            tally.replacements.push(image === undefined ? each : { ...each, image: true, ...(image.id !== undefined ? { imageId: image.id } : {}) });
         }
     }
 };
@@ -109,13 +111,23 @@ export interface RequestShieldDeps {
     readonly readings: ReadingMemo;
     readonly images: PrivacyImages;
     readonly tally: ShieldTally;
+    // Where each painted image is kept beside the picture it was, for the owner to peek at; none keeps nothing.
+    readonly archive?: PrivacyImageArchive;
     // Where an image named by its address is fetched from; the network unless a test says otherwise.
     readonly fetchImage?: (url: string) => Promise<ShieldBinary | undefined>;
 }
 
 const keyOf = (binary: ShieldBinary): string => createHash("sha1").update(binary.mediaType).update("\0").update(binary.data).digest("base64url");
 
-export const maskingShield = ({ masker, readers, readings, images, tally, fetchImage = fetchRemoteImage }: RequestShieldDeps): RequestShield => {
+export const maskingShield = ({
+    masker,
+    readers,
+    readings,
+    images,
+    tally,
+    archive,
+    fetchImage = fetchRemoteImage,
+}: RequestShieldDeps): RequestShield => {
     const mask = async (text: string): Promise<string> => {
         const result = await masker.mask(text);
         addCounts(tally.counts, result.counts);
@@ -142,7 +154,6 @@ export const maskingShield = ({ masker, readers, readings, images, tally, fetchI
         }
         const found = await masker.find(readingText(reading.value.lines));
         addCounts(tally.counts, found.counts);
-        addFound(tally, found.found, true);
         // An animation goes as the one frame that was read, painted or not: the frames after it were never checked.
         if (found.spans.length === 0 && (reading.value.frames ?? 1) <= 1) {
             return "keep";
@@ -154,6 +165,14 @@ export const maskingShield = ({ masker, readers, readings, images, tally, fetchI
             painted = await paintRegions(Buffer.from(source.data, "base64"), regions);
             readings.painted.set(paintKey, painted);
         }
+        // Kept under the painting's own key: the same picture painted for another policy is another pair. Written on the
+        // side, since a picture the owner could not peek at later costs the request nothing.
+        const kept = painted !== undefined && archive !== undefined && found.spans.length > 0 ? paintKey : undefined;
+        if (kept !== undefined && painted !== undefined) {
+            // allow(silent-catch): the archive is the owner's peek, never a reason to hold the request back
+            void archive?.keep(kept, { mediaType: source.mediaType, data: source.data }, painted).catch(() => undefined);
+        }
+        addFound(tally, found.found, { id: kept });
         tally.images += reading.fresh ? 1 : 0;
         return painted === undefined ? { text: WITHHELD_IMAGE } : { image: painted };
     };

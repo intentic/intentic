@@ -80,7 +80,9 @@ const shieldValue = async (value: Json, shield: RequestShield, masking: boolean,
         }
         return "text" in verdict ? { type: "text", text: verdict.text } : { ...value, blob: verdict.image.data, mimeType: verdict.image.mediaType };
     }
-    const entries = await Promise.all(Object.entries(value).map(async ([field, item]) => [field, await shieldValue(item, shield, masking, field)] as const));
+    const entries = await Promise.all(
+        Object.entries(value).map(async ([field, item]) => [field, await shieldValue(item, shield, masking, field)] as const),
+    );
     return Object.fromEntries(entries);
 };
 
@@ -133,7 +135,10 @@ const restoreMessage = (message: Json, restore: RestoreText): Json => {
 
 // A JSON-RPC error the client shows for a request this proxy would not send or could not read the answer of.
 const rpcError = (status: number, message: string): Response =>
-    new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_000, message } }), { status, headers: { "content-type": "application/json" } });
+    new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32_000, message } }), {
+        status,
+        headers: { "content-type": "application/json" },
+    });
 
 export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDeps) => {
     const record = (session: { provider: string; conversationId?: string | undefined }, masking: boolean, tally: ShieldTally): void => {
@@ -214,19 +219,22 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
         }
         const tally = emptyTally();
         const walker = masking
-            ? maskingShield({ masker, readers: shield.readers, readings: shield.readings, images: policy.images, tally })
+            ? maskingShield({ masker, readers: shield.readers, readings: shield.readings, images: policy.images, tally, archive: shield.images })
             : watchingShield({ masker, tally, images: policy.images });
 
         if (isEventStream(type)) {
             const change = async (event: SseEvent): Promise<SseEvent> => {
-                const parsed = event.data === undefined ? undefined : (() => {
-                    try {
-                        return toJson(JSON.parse(event.data));
-                    } catch {
-                        // allow(silent-catch): an event whose data is not JSON is masked below as plain text.
-                        return undefined;
-                    }
-                })();
+                const parsed =
+                    event.data === undefined
+                        ? undefined
+                        : (() => {
+                              try {
+                                  return toJson(JSON.parse(event.data));
+                              } catch {
+                                  // allow(silent-catch): an event whose data is not JSON is masked below as plain text.
+                                  return undefined;
+                              }
+                          })();
                 const data =
                     parsed === undefined
                         ? await walker.mask(event.data ?? "")
@@ -255,7 +263,10 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
         } catch (error) {
             warn("privacy shield: an MCP answer could not be masked", error);
             if (masking) {
-                return rpcError(502, `The privacy shield could not mask this tool's answer, so it was withheld. ${error instanceof Error ? error.message : ""}`.trim());
+                return rpcError(
+                    502,
+                    `The privacy shield could not mask this tool's answer, so it was withheld. ${error instanceof Error ? error.message : ""}`.trim(),
+                );
             }
         }
         record(session, masking, tally);

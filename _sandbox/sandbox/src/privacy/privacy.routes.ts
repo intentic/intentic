@@ -39,6 +39,13 @@ export const createPrivacyRoutes = (services: Pick<Services, "privacyShield" | "
                 throw failing(error);
             }),
         ),
+        image: i.image.handler(async ({ input }) => {
+            const pair = await shield.images.read(input.id);
+            if (pair === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "That image is no longer kept: only the most recent ones are." });
+            }
+            return pair;
+        }),
         dictionary: i.dictionary.handler(({ input }) => nameDictionary(input.query)),
         sources: i.sources.handler(async () =>
             shield.sources().catch((error: unknown) => {

@@ -2,7 +2,9 @@ import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import {
     PRIVACY_KNOWN_BATCH_MAX,
+    PRIVACY_IMAGE_ID,
     PrivacyDictionarySchema,
+    PrivacyImagePairSchema,
     PrivacyKnownSourceSchema,
     PrivacyKnownValueSchema,
     PrivacyLedgerEntrySchema,
@@ -57,6 +59,17 @@ export const privacyContract = {
         .meta({ floor: "owner", control: "never", panel: false })
         .input(PrivacyRevealSchema)
         .output(z.record(z.string(), z.string())),
+    image: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/image",
+            summary: "An image before and after masking",
+            description:
+                "The picture as it was and as the shield painted it before it left, for a log entry's image replacement. The picture before holds the personal data, so only the owner may ask. Only the most recent images are kept; an older one answers not found.",
+        })
+        .meta({ floor: "owner", control: "never", panel: false })
+        .input(z.object({ id: z.string().regex(PRIVACY_IMAGE_ID) }))
+        .output(PrivacyImagePairSchema),
     dictionary: procedure
         .route({
             method: "GET",

@@ -1,4 +1,11 @@
-import type { PrivacyDictionary, PrivacyKnownSource, PrivacyLedgerEntry, PrivacyShieldPolicy, PrivacyShieldStatus } from "@intentic/sandbox-contract";
+import type {
+    PrivacyDictionary,
+    PrivacyImagePair,
+    PrivacyKnownSource,
+    PrivacyLedgerEntry,
+    PrivacyShieldPolicy,
+    PrivacyShieldStatus,
+} from "@intentic/sandbox-contract";
 import { keepPreviousData, useMutation } from "@tanstack/vue-query";
 import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
@@ -91,6 +98,23 @@ export function usePrivacyReveal(tokens: Ref<readonly string[]>) {
     return {
         values: computed<Readonly<Record<string, string>>>(() => query.data.value ?? {}),
         refused: computed<boolean>(() => query.error.value !== null),
+    };
+}
+
+// One image the shield painted over, as it was and as it left, for the owner peeking at a log row: asked for only once a
+// row is opened, since each answer is two whole pictures. Memory only and never retried, as the values are: the picture
+// before holds them, and a refusal (anybody but the owner) or an image no longer kept does not change by asking again.
+export function usePrivacyImage(id: Ref<string | undefined>) {
+    const { query } = useSandboxQuery({
+        ...rpcQuery(`privacy.image`, () => ({ id: id.value ?? `` }), { unpersisted: true }),
+        enabled: computed(() => id.value !== undefined),
+        retry: false,
+        staleTime: Infinity,
+    });
+    return {
+        pair: computed<PrivacyImagePair | undefined>(() => query.data.value),
+        isLoading: query.isLoading,
+        failed: computed<boolean>(() => query.error.value !== null),
     };
 }
 

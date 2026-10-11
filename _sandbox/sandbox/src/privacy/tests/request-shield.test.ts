@@ -2,6 +2,7 @@ import { PRIVACY_REPLACEMENTS_MAX } from "@intentic/sandbox-contract";
 import sharp from "sharp";
 import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker } from "../masker.js";
+import { memoryPrivacyImages } from "../privacy-images.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
@@ -24,7 +25,11 @@ const WIDTH = 200;
 const HEIGHT = 40;
 const GREY = 128;
 const page = async (): Promise<string> =>
-    (await sharp({ create: { width: WIDTH, height: HEIGHT, channels: 3, background: { r: GREY, g: GREY, b: GREY } } }).png().toBuffer()).toString("base64");
+    (
+        await sharp({ create: { width: WIDTH, height: HEIGHT, channels: 3, background: { r: GREY, g: GREY, b: GREY } } })
+            .png()
+            .toBuffer()
+    ).toString("base64");
 
 const lineOf = (text: string): OcrLine => {
     const chars = [...text];
@@ -68,7 +73,10 @@ const shieldWith = (images: "mask" | "allow", reader: LocalReaders, fetchImage?:
     });
     const tally = emptyTally();
     const readings = createReadingMemo();
-    return { tally, shield: maskingShield({ masker, readers: reader, readings, images, tally, ...(fetchImage === undefined ? {} : { fetchImage }) }) };
+    return {
+        tally,
+        shield: maskingShield({ masker, readers: reader, readings, images, tally, ...(fetchImage === undefined ? {} : { fetchImage }) }),
+    };
 };
 
 // The shade of the painted image at one point: what the reader's line held there is either still grey or covered.
@@ -100,6 +108,40 @@ test("the same image, re-sent, is read once and goes as the same bytes, counted 
     expect(second).toEqual(first);
     expect(reader.reads).toBe(1);
     expect(tally).toEqual({ counts: { "national-id": 1 }, images: 1, documents: 0, replacements: [IMAGE_REPLACEMENT] });
+});
+
+test("a painted image is kept beside the picture it was, and the log's replacement names it", async () => {
+    const { privacyShield } = privacySliceFake();
+    const masker = createMasker({
+        vault: privacyShield.vault,
+        policy: { classes: ["national-id"], allow: [], names: "dictionary" },
+        memo: createMaskMemo(),
+    });
+    const tally = emptyTally();
+    const archive = memoryPrivacyImages();
+    const shield = maskingShield({ masker, readers: readers(`PESEL ${PESEL}`), readings: createReadingMemo(), images: "mask", tally, archive });
+    const before = { mediaType: "image/png", data: await page() };
+    const out = await shield.image(before);
+    if (typeof out === "string" || !("image" in out)) {
+        throw new Error(`expected a painted image, got ${JSON.stringify(out)}`);
+    }
+    const imageId = tally.replacements[0]?.imageId;
+    expect(imageId).toMatch(/^[A-Za-z0-9_-]{16,64}$/u);
+    expect(tally.replacements).toEqual([{ ...IMAGE_REPLACEMENT, imageId }]);
+    expect(await archive.read(imageId ?? "")).toEqual({ at: expect.any(String), before, after: out.image });
+});
+
+test("an image with nothing personal on it is never kept", async () => {
+    const { privacyShield } = privacySliceFake();
+    const masker = createMasker({
+        vault: privacyShield.vault,
+        policy: { classes: ["national-id"], allow: [], names: "dictionary" },
+        memo: createMaskMemo(),
+    });
+    const archive = memoryPrivacyImages();
+    const shield = maskingShield({ masker, readers: readers("Hello"), readings: createReadingMemo(), images: "mask", tally: emptyTally(), archive });
+    expect(await shield.image({ mediaType: "image/png", data: await page() })).toBe("keep");
+    expect(archive.pairs.size).toBe(0);
 });
 
 test("an image with nothing personal on it goes as it is", async () => {

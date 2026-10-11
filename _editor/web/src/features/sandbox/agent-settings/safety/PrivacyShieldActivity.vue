@@ -18,6 +18,7 @@ import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { type ActivityFinding, activityFindings, activitySummary, allowKey, excerptParts, findingTokens } from "./privacyShield";
+import PrivacyImagePeek from "./PrivacyImagePeek.vue";
 import PrivacyProviderMark from "./PrivacyProviderMark.vue";
 import { usePrivacyReveal } from "./usePrivacyShield";
 
@@ -69,6 +70,17 @@ const hidden = computed(() => Math.min(findings.value.length, MANY) - shown.valu
 
 const { values, refused: revealRefused } = usePrivacyReveal(computed(() => findingTokens(shown.value)));
 
+// The rows whose picture is open, before and after masking. Offered to the owner alone: the picture before holds the
+// values, and the read that would show them is refused to anybody else, as the values are.
+const peeking = ref(new Set<string>());
+const togglePeek = (key: string): void => {
+    const next = new Set(peeking.value);
+    if (!next.delete(key)) {
+        next.add(key);
+    }
+    peeking.value = next;
+};
+
 const providerOf = (id: string): PrivacyProvider | undefined => providers.find((provider) => provider.id === id);
 const providerLabel = (id: string): string => providerOf(id)?.label ?? id;
 // The summary names every provider; a finding names its own only when the findings came from more than one.
@@ -96,6 +108,7 @@ const rows = computed(() =>
         lead: leadOf(finding),
         value: finding.kind === `value` ? values.value[finding.replacement.token] : undefined,
         parts: finding.kind === `value` ? excerptParts(finding.replacement.excerpt, finding.replacement.token) : [],
+        imageId: finding.kind === `value` && !revealRefused.value ? finding.replacement.imageId : undefined,
         local: providerOf(finding.provider)?.local ?? false,
     })),
 );
@@ -200,26 +213,50 @@ const leadOf = (finding: ActivityFinding): { icon: `eye-slash` | `eye` | `times`
                         <!-- The text as it left this machine (as it would have, while watching), set apart as a quote of what the
                              provider read: every token marked, this row's own the strongest. -->
                         <!-- `anywhere`, not `break-words`: a tool's JSON has no space to break at, and must still stay inside its box. -->
-                        <p
-                            class="rounded-md border border-line bg-content/5 px-2.5 py-1.5 font-mono text-2xs leading-relaxed text-muted [overflow-wrap:anywhere]"
-                        >
-                            <span v-if="row.finding.replacement.image === true" class="mr-1.5 inline-flex items-center gap-1 font-sans text-subtle">
-                                <Icon name="image" />{{ t(`sandbox.agentPrivacyShield.inImage`) }}
-                            </span>
-                            <template v-for="(part, index) in row.parts" :key="index">
+                        <div class="flex flex-col gap-1.5">
+                            <p
+                                class="rounded-md border border-line bg-content/5 px-2.5 py-1.5 font-mono text-2xs leading-relaxed text-muted [overflow-wrap:anywhere]"
+                            >
                                 <span
-                                    v-if="part.token"
-                                    class="rounded-sm px-0.5"
-                                    :class="part.own ? `bg-primary-500/15 text-primary-500` : `bg-content/10 text-content`"
-                                    >{{ part.text }}</span
+                                    v-if="row.finding.replacement.image === true"
+                                    class="mr-1.5 inline-flex items-center gap-1 font-sans text-subtle"
                                 >
-                                <template v-else>{{ part.text }}</template>
+                                    <Icon name="image" />{{ t(`sandbox.agentPrivacyShield.inImage`) }}
+                                </span>
+                                <template v-for="(part, index) in row.parts" :key="index">
+                                    <span
+                                        v-if="part.token"
+                                        class="rounded-sm px-0.5"
+                                        :class="part.own ? `bg-primary-500/15 text-primary-500` : `bg-content/10 text-content`"
+                                        >{{ part.text }}</span
+                                    >
+                                    <template v-else>{{ part.text }}</template>
+                                </template>
+                            </p>
+                            <!-- The picture itself, as it was and as it left, for a value read off one. -->
+                            <template v-if="row.imageId !== undefined">
+                                <Button
+                                    size="small"
+                                    tier="quiet"
+                                    class="self-start"
+                                    :aria-expanded="peeking.has(row.finding.key)"
+                                    @click="togglePeek(row.finding.key)"
+                                >
+                                    <Icon name="image" />{{
+                                        peeking.has(row.finding.key)
+                                            ? t(`sandbox.agentPrivacyShield.imageHide`)
+                                            : t(`sandbox.agentPrivacyShield.imagePeek`)
+                                    }}
+                                </Button>
+                                <PrivacyImagePeek v-if="peeking.has(row.finding.key)" :id="row.imageId" />
                             </template>
-                        </p>
+                        </div>
                     </template>
                     <template v-if="row.value !== undefined" #control>
                         <!-- A value the shield should have left alone goes on the never-masked list from where it was seen. -->
-                        <span v-if="allowed.has(allowKey(row.value))" class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.neverMaskedNow`) }}</span>
+                        <span v-if="allowed.has(allowKey(row.value))" class="text-2xs text-subtle">{{
+                            t(`sandbox.agentPrivacyShield.neverMaskedNow`)
+                        }}</span>
                         <Button v-else size="small" tier="quiet" :disabled="!ready" @click="emit(`neverMask`, row.value)">{{
                             t(`sandbox.agentPrivacyShield.neverMaskThis`)
                         }}</Button>

@@ -152,7 +152,14 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                     const parsed: unknown = JSON.parse(new TextDecoder().decode(raw));
                     const masker = await shield.masker(policy);
                     const walker = masking
-                        ? maskingShield({ masker, readers: shield.readers, readings: shield.readings, images: policy.images, tally })
+                        ? maskingShield({
+                              masker,
+                              readers: shield.readers,
+                              readings: shield.readings,
+                              images: policy.images,
+                              tally,
+                              archive: shield.images,
+                          })
                         : watchingShield({ masker, tally, images: policy.images });
                     const shielded = await shieldRequest(protocol, parsed, walker);
                     // The tokens the provider is about to read must be on disk before it reads them.

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { type Capability, DEFAULT_PRIVACY_SHIELD, type PrivacyLedgerEntry, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import type { JsonFile } from "../store/json-file.js";
+import { memoryPrivacyImages } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";
 import { createPrivacyShield } from "./privacy-shield.js";
 import type { PrivacySlice } from "./privacy-slice.js";
@@ -63,6 +64,7 @@ export const privacySliceFake = (
             },
             vault: createPrivacyVault(memoryVaultFile(), "memory"),
             ledger,
+            images: memoryPrivacyImages(),
             readers: options.readers ?? noReaders,
             tokens: sessionTokensFrom(async () => key),
             capabilities: options.capabilities ?? (async () => []),

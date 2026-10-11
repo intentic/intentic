@@ -374,6 +374,7 @@ export const procedures = {
         log: () => [],
         // Nothing is logged, so there is no token to read back.
         reveal: () => ({}),
+        image: () => refuse(`This is the demo workspace: its privacy shield has painted over no image.`),
         dictionary: ({ query }) => demoNameDictionary(query),
         sources: () => [],
         forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),

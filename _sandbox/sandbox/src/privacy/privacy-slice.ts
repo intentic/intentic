@@ -3,6 +3,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { loadTextReader, type TextReader } from "@intentic/ocr/paddle-ocr";
 import type { EntityRecognizer } from "./masker.js";
 import { loadRecognizer, nerInstalled } from "./ner.js";
+import { filePrivacyImages } from "./privacy-images.js";
 import { filePrivacyLedger, privacyLedgerDocument } from "./privacy-ledger.js";
 import { filePrivacyPolicy, privacyShieldDocument } from "./privacy-policy.js";
 import { createPrivacyShield, type PrivacyShield } from "./privacy-shield.js";
@@ -33,6 +34,8 @@ export const createPrivacySlice = ({ authRoot, workspaceRoot, capabilities, loop
             policyStore: filePrivacyPolicy(join(authRoot, privacyShieldDocument.path)),
             vault: filePrivacyVault(join(authRoot, privacyVaultDocument.path)),
             ledger: filePrivacyLedger(join(workspaceRoot, privacyLedgerDocument.path)),
+            // The pictures before masking hold what the vault holds, so they sit beside it rather than beside the log.
+            images: filePrivacyImages(join(authRoot, "privacy-images")),
             // The text reader loads on the first image it is asked to check, the name model on the first request for it.
             readers: createLocalReaders({ textReader: () => (textReader ??= loadTextReader(undefined, warn)) }),
             tokens: sessionTokens(join(authRoot, "privacy-gateway.key")),

@@ -87,7 +87,8 @@ export const trustedInConversation = (
     policy: Pick<PrivacyShieldPolicy, "conversations">,
     provider: string,
     conversationId: string | undefined,
-): boolean => conversationId !== undefined && policy.conversations.some((entry) => entry.conversationId === conversationId && entry.provider === provider);
+): boolean =>
+    conversationId !== undefined && policy.conversations.some((entry) => entry.conversationId === conversationId && entry.provider === provider);
 
 // The policy with that grant made or taken back. A full list drops its oldest grant to make room, since the newest is
 // the one somebody is waiting on.
@@ -104,7 +105,11 @@ export const DEFAULT_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySc
 export const PrivacyProviderSchema = z.object({
     id: z.string().describe("Provider id, as the trusted list names it."),
     label: z.string(),
-    shieldable: z.boolean().describe("The shield can read what its runtime sends by content (through the gateway or the runtime's hooks); one it cannot is refused while the shield is on, unless trusted."),
+    shieldable: z
+        .boolean()
+        .describe(
+            "The shield can read what its runtime sends by content (through the gateway or the runtime's hooks); one it cannot is refused while the shield is on, unless trusted.",
+        ),
     local: z.boolean().describe("It runs on this machine, so it is trusted whatever the list says."),
 });
 export type PrivacyProvider = z.infer<typeof PrivacyProviderSchema>;
@@ -140,6 +145,10 @@ export const PrivacyReplacementSchema = z.object({
         .string()
         .describe("The masked text around the token as it left this machine (watching: as it would have). Tokens only, never a value."),
     image: z.boolean().optional().describe("Found in an image's text, so the token was painted over the picture rather than written."),
+    imageId: z
+        .string()
+        .optional()
+        .describe("The image it was painted over, as privacy.image reads it back: the picture before and after masking, while it is still kept."),
 });
 export type PrivacyReplacement = z.infer<typeof PrivacyReplacementSchema>;
 
@@ -161,6 +170,17 @@ export const PrivacyLedgerEntrySchema = z.object({
         .describe("The first values replaced in what this request added, one per token. Absent on entries written before it was kept."),
 });
 export type PrivacyLedgerEntry = z.infer<typeof PrivacyLedgerEntrySchema>;
+
+// One image the shield painted over, as it was and as it left: the owner peeking at what the provider saw. The picture
+// before holds the personal data, so it is kept beside the vault, off the workspace, and only the owner may read it.
+export const PRIVACY_IMAGE_ID = /^[A-Za-z0-9_-]{16,64}$/u;
+export const PrivacyImageSchema = z.object({ mediaType: z.string(), data: z.string().describe("Base64.") });
+export const PrivacyImagePairSchema = z.object({
+    at: z.string().describe("When it was first painted, as an ISO timestamp."),
+    before: PrivacyImageSchema,
+    after: PrivacyImageSchema,
+});
+export type PrivacyImagePair = z.infer<typeof PrivacyImagePairSchema>;
 
 // Tokens read back to their values, for the owner checking what the shield masked; a token this vault never gave out is
 // left out of the answer.
@@ -205,7 +225,11 @@ export const PrivacyNameWordSchema = z.object({
     firstName: z.boolean().describe("A listed first name, in this form or as an inflection of one."),
     surname: z.boolean().describe("A listed surname, in this form or as an inflection of one."),
     surnameForm: z.boolean().describe("Shaped like a Polish surname (-ski, -cki, -wicz…), listed or not."),
-    ambiguous: z.boolean().describe("Also an ordinary word in some language, so found only beside other evidence (a title, a name field) and no surname to pair a first name with."),
+    ambiguous: z
+        .boolean()
+        .describe(
+            "Also an ordinary word in some language, so found only beside other evidence (a title, a name field) and no surname to pair a first name with.",
+        ),
     never: z.boolean().describe("Never taken as part of a name (a title, an institution, a function word)."),
 });
 export type PrivacyNameWord = z.infer<typeof PrivacyNameWordSchema>;

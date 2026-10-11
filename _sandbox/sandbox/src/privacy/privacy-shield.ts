@@ -11,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { detectPersonalData, normalizeAllowed } from "./detect/detect.js";
 import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker, type Replacement } from "./masker.js";
+import type { PrivacyImageArchive } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";
 import type { PrivacyPolicyStore } from "./privacy-policy.js";
 import { gatewayRuntime, isTrustedProvider, privacyProviders, shieldableRuntime } from "./privacy-trust.js";
@@ -114,6 +115,8 @@ export interface PrivacyShield {
     readonly reveal: (tokens: readonly string[]) => Promise<Record<string, string>>;
     readonly vault: PrivacyVault;
     readonly ledger: PrivacyLedger;
+    // The images it painted over, each beside the picture it was, for the owner's peek (privacy.image).
+    readonly images: PrivacyImageArchive;
     readonly readers: LocalReaders;
     readonly readings: ReadingMemo;
     readonly tokens: SessionTokens;
@@ -123,6 +126,7 @@ export interface PrivacyShieldDeps {
     readonly policyStore: PrivacyPolicyStore;
     readonly vault: PrivacyVault;
     readonly ledger: PrivacyLedger;
+    readonly images: PrivacyImageArchive;
     readonly readers: LocalReaders;
     readonly tokens: SessionTokens;
     readonly capabilities: () => Promise<readonly Capability[]>;
@@ -382,7 +386,8 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         mcpUrl: async (url) => `${deps.loopbackBase()}${MCP_PROXY_PATH}/${await deps.tokens.sign({ provider, upstream: url, conversationId })}`,
     });
     // Restoring needs no policy: a token is looked up in the vault, never trusted for what it says (tokens.ts).
-    const restoreWith = (text: string): string => createMasker({ vault: deps.vault, policy: RESTORE_POLICY, memo, recognizer: undefined }).restore(text);
+    const restoreWith = (text: string): string =>
+        createMasker({ vault: deps.vault, policy: RESTORE_POLICY, memo, recognizer: undefined }).restore(text);
     return {
         policy: deps.policyStore.get,
         setPolicy: deps.policyStore.set,
@@ -481,6 +486,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         },
         vault: deps.vault,
         ledger: deps.ledger,
+        images: deps.images,
         readers: deps.readers,
         readings,
         tokens: deps.tokens,
