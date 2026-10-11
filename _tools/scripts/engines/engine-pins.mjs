@@ -65,6 +65,14 @@ export const ENGINE_PINS = [
         sites: [site(WORKSPACE, /^ {2}"@cursor\/sdk": (\S+)$/gm, 1), site(pack("cursor"), /@cursor\/sdk@(\S+) /g, 1)],
     },
     {
+        id: "devin",
+        label: "Devin",
+        // Closed source like Cursor's SDK and never baked into a published image; its pack installs it on the owner's
+        // own machine once a Devin account is connected. The pack is the only pin: the daemon spawns it, never imports it.
+        upstream: { kind: "npm", package: "devin" },
+        sites: [site(pack("devin"), / devin@(\S+) /g, 1)],
+    },
+    {
         id: "opencode",
         label: "OpenCode",
         // OpenCode 2, blessed under a key of its own: released daemons drive OpenCode 1 and read `opencode`, so a 2.x

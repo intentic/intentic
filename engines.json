@@ -38,6 +38,10 @@
             "blessed": "1.0.37",
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
+        "devin": {
+            "blessed": "3000.11.3",
+            "notes": "npm devin, Cognition's Devin CLI, spawned as `devin acp` for Devin turns. Never baked into a published image: its licence grants no redistribution."
+        },
         "opencode": {
             "blessed": "1.18.35",
             "frozen": "Read only by daemons released before OpenCode 2, which drive OpenCode 1; their last 1.x. Newer daemons read opencode-v2.",

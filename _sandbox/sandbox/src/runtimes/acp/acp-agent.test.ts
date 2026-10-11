@@ -1,11 +1,12 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";
-import { createAcpAgent } from "./acp-agent.js";
+import { type AcpTurnOptions, createAcpAgent } from "./acp-agent.js";
 import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
+import type { AcpLaunch } from "./acp-spawn.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
@@ -18,7 +19,7 @@ const connectionsOf = (connection: AcpConnection): AcpConnections => ({
     drop: () => {},
 });
 
-const CONFIG: AcpAgentConfig = { command: "fake acp" };
+const LAUNCH: AcpLaunch = { argv: ["fake", "acp"], env: {} };
 const TIMEOUTS: TurnTimeouts = { inactivityMs: 60_000, maxTurnMs: 60_000 };
 
 const request = (
@@ -38,9 +39,10 @@ const collect = async (
     agent: ReturnType<typeof createAcpAgent>,
     turnRequest: AgentRequest<ContainerCredential>,
     onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
+    options?: AcpTurnOptions,
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    for await (const event of agent("fake", CONFIG, turnRequest)) {
+    for await (const event of agent("fake", LAUNCH, turnRequest, options)) {
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
@@ -49,6 +51,31 @@ const collect = async (
     }
     return events;
 };
+
+// A native provider on this runtime (Devin) names the model; the agent's own option is the only door to it.
+test("a named model switches the session before the prompt, and the turn announces it once", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["swe", "opus"] }))), TIMEOUTS);
+    const events = await collect(agent, request("hello"), undefined, { model: "opus" });
+    expect(events.filter((event) => event.kind === "init")).toEqual([{ kind: "init", model: "opus" }]);
+    expect(events).toContainEqual({ kind: "delta", text: "Hi there from opus" });
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
+test("a model the session's own list leaves out refuses the turn before anything is sent", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["swe", "opus"] }))), TIMEOUTS);
+    const events = await collect(agent, request("hello"), undefined, { model: "gpt" });
+    expect(events).toContainEqual(
+        expect.objectContaining({ kind: "error", code: "model-unavailable", message: expect.stringContaining("SWE, OPUS") }),
+    );
+    expect(events.some((event) => event.kind === "delta")).toBe(false);
+});
+
+test("a turn naming no model leaves the agent's own pick alone and announces nothing", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ models: ["swe", "opus"] }))), TIMEOUTS);
+    const events = await collect(agent, request("hello"));
+    expect(events.some((event) => event.kind === "init")).toBe(false);
+    expect(events).toContainEqual({ kind: "delta", text: "Hi there" });
+});
 
 test("a turn creates a session, streams deltas, and ends with done", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
@@ -174,7 +201,7 @@ test("an approval card holds the watchdog: the agent waits past the silence limi
     const connection = fakeAcpConnection(fakeAcpAgentApp());
     const agent = createAcpAgent(connectionsOf(connection), { inactivityMs: 100, maxTurnMs: 60_000 });
     const events: AgentEvent[] = [];
-    for await (const event of agent("fake", CONFIG, heldRequest("ask-to-force-push"))) {
+    for await (const event of agent("fake", LAUNCH, heldRequest("ask-to-force-push"))) {
         events.push(event);
         if (event.kind === "permission") {
             // Four silence windows on the card before anyone answers.

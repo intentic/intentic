@@ -5,6 +5,7 @@ import { ACP_ADAPTER, type AcpAdapterDeps } from "./acp/acp-adapter.js";
 import { claudeProvider, type ClaudeProviderDeps } from "./claude/claude-provider.js";
 import { codexProvider, type CodexProviderDeps } from "./codex/codex-provider.js";
 import { cursorProvider, type CursorProviderDeps } from "./cursor/cursor-provider.js";
+import { devinProvider, type DevinProviderDeps } from "./devin/devin-provider.js";
 import { type GeminiAdapterDeps, geminiProvider } from "./gemini/gemini-provider.js";
 import { grokProvider, type GrokProviderDeps } from "./grok/grok-provider.js";
 import { kimiProvider, type KimiProviderDeps } from "./kimi/kimi-provider.js";
@@ -19,6 +20,7 @@ import { PI_ADAPTER, type PiAdapterDeps } from "./pi/pi-adapter.js";
 export type ProviderDeps = ClaudeProviderDeps &
     CodexProviderDeps &
     CursorProviderDeps &
+    DevinProviderDeps &
     GrokProviderDeps &
     GeminiAdapterDeps &
     KimiProviderDeps &
@@ -29,6 +31,7 @@ export const PROVIDER_MODULES: readonly ProviderModule<ProviderDeps>[] = [
     claudeProvider,
     codexProvider,
     cursorProvider,
+    devinProvider,
     grokProvider,
     geminiProvider,
     kimiProvider,

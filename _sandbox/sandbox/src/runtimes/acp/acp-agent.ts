@@ -1,5 +1,5 @@
 import { type ContentBlock, type McpServer, methods, type PromptResponse, RequestError, type SessionNotification } from "@agentclientprotocol/sdk";
-import { ACP, type AcpAgentConfig, type AgentEvent } from "@intentic/sandbox-contract";
+import { ACP, type AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
@@ -20,13 +20,25 @@ import {
 import { withStderrTail } from "../decorators/vendor-errors.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
+import type { AcpLaunch } from "./acp-spawn.js";
 import { sessionUpdateEvent } from "./acp-events.js";
+import { recordModels } from "./acp-model.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
 // over any agent speaking the Agent Client Protocol. One warm connection per agent, one session per conversation. A
-// documented floor, not the native ceiling: the agent owns its model settings, MCP tools pass through only when
-// advertised.
+// documented floor, not the native ceiling: an installed agent owns its model settings, MCP tools pass through only when
+// advertised. A native provider on this runtime (Devin) names the model through AcpTurnOptions.
+
+// What a provider built on this runtime decides per turn beyond the request. An installed agent card decides none of it.
+export interface AcpTurnOptions {
+    // A value the session's model option offers (acp-model.ts): the session is switched to it before the prompt and the
+    // turn announces it. Absent, the agent keeps its own pick and nothing is announced.
+    readonly model?: string | undefined;
+}
+
+// A model the session's own option does not offer: the account's list moved since the catalog last read it.
+class ModelNotOffered extends Error {}
 
 // The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door, browsers included, and the
 // mcp-kind cards) passes through when the agent advertises http MCP support; in-process SDK servers have no ACP
@@ -81,7 +93,10 @@ async function* sessionFor(
                 mcpServers: mcpServersOf(request, connection),
             })
             .then(
-                () => false,
+                (loaded) => {
+                    recordModels(connection.models, sessionId, loaded.configOptions);
+                    return false;
+                },
                 (error: unknown) => {
                     if (error instanceof RequestError && error.code === RequestError.resourceNotFound().code) {
                         return true;
@@ -100,10 +115,29 @@ async function* sessionFor(
         cwd: request.spec.cwd,
         mcpServers: mcpServersOf(request, connection),
     });
+    recordModels(connection.models, created.sessionId, created.configOptions);
     connection.sessions.add(created.sessionId);
     yield { kind: "session", sessionId: created.sessionId };
     return created.sessionId;
 }
+
+// Puts the session on the model asked for and answers what it now runs on. Undefined when the agent offers no model
+// option for this session: it keeps its own, as an installed agent does. Asking for one it does not offer throws
+// ModelNotOffered rather than running the turn on a model nobody picked.
+const settleModel = async (connection: AcpConnection, sessionId: string, wanted: string): Promise<string | undefined> => {
+    const models = connection.models.get(sessionId);
+    if (models === undefined || models.current === wanted) {
+        return models?.current;
+    }
+    if (!models.choices.some((choice) => choice.value === wanted)) {
+        const offered = models.choices.map((choice) => choice.name).join(", ");
+        throw new ModelNotOffered(
+            `${wanted} is not one of the models this account offers${offered === "" ? "" : ` (${offered})`}. Pick another model.`,
+        );
+    }
+    const answer = await connection.agent.request(methods.agent.session.setConfigOption, { sessionId, configId: models.configId, value: wanted });
+    return recordModels(connection.models, sessionId, answer.configOptions)?.current ?? wanted;
+};
 
 // A phase's live half: what the agent sends lands in `queue` (or, while planning, in `text`), and every landing wakes
 // the loop. The gate's sink is repointed here, since the gate outlives a phase and the queue does not. `clock` is the
@@ -201,17 +235,29 @@ async function* runAcpTurn(
         // This turn's rulebook gate; one gate for the whole turn, its sink repointed per phase rather than rebuilt.
         readonly gate: CommandGuard;
         readonly sink: { push: (event: AgentEvent) => void };
+        // The turn's model, settled before every phase's prompt and announced once (`announced` outlives the phase).
+        readonly model: { readonly wanted: string | undefined; announced: boolean };
     },
 ): AsyncGenerator<AgentEvent, PlanPhaseResult> {
     let session: string | undefined;
+    let running: string | undefined;
     try {
         session = yield* sessionFor(connection, request, sessionId);
+        running = session !== undefined && turn.model.wanted !== undefined ? await settleModel(connection, session, turn.model.wanted) : undefined;
     } catch (error) {
+        if (error instanceof ModelNotOffered) {
+            yield { kind: "error", code: "model-unavailable", message: error.message };
+            return { sessionId: session, planText: "", errored: true };
+        }
         yield { kind: "error", message: withStderrTail(failureOf(error), connection.stderrTail()), ...authCodeOf(error instanceof RequestError ? error : undefined) };
-        return { sessionId, planText: "", errored: true };
+        return { sessionId: session ?? sessionId, planText: "", errored: true };
     }
     if (session === undefined) {
         return { sessionId: undefined, planText: "", errored: true };
+    }
+    if (running !== undefined && !turn.model.announced) {
+        turn.model.announced = true;
+        yield { kind: "init", model: running };
     }
     const wait = idleWait();
     // Started before the phase binds, since a permission the agent asks for holds it.
@@ -264,12 +310,18 @@ async function* runAcpTurn(
     }
 }
 
-// id/config come from the turn's resolved agent-kind capability (streamAgent's dispatch); a connection failure surfaces
-// as an error frame, then done.
+// One pooled process per id: an installed card's own id, or a native provider's per-account key, since the launch's
+// environment is the process's whole identity. A connection failure surfaces as an error frame, then done.
 export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS) =>
-    async function* runAcpAgent(id: string, config: AcpAgentConfig, request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
+    async function* runAcpAgent(
+        id: string,
+        launch: AcpLaunch,
+        request: AgentRequest<ContainerCredential>,
+        options: AcpTurnOptions = {},
+    ): AsyncGenerator<AgentEvent> {
+        const model = { wanted: options.model, announced: false };
         yield* vendorTurn(request, {
-            open: () => connections.acquire(id, config, request.spec.cwd),
+            open: () => connections.acquire(id, launch, request.spec.cwd),
             unopened: "ACP agent failed to start",
             // A session/new failure or a connection torn down mid-turn, with the agent's own stderr folded in.
             failure: (error, connection) => withStderrTail(failureOf(error), connection.stderrTail()),
@@ -284,6 +336,7 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeou
                         timeouts,
                         gate,
                         sink,
+                        model,
                     }),
                 );
             },

@@ -239,6 +239,29 @@ const cursorDescriptor: EngineDescriptor = {
     },
 };
 
+const DEVIN_PACKAGE = "devin";
+
+// The native binary inside a `devin` install. The package's own bin is a Node launcher that finds this file and runs it as
+// a child; spawning the binary itself saves a process per agent and lets a kill reach the program that holds the session.
+// npm installs only the platform package (`devin-linux-x64`, an alias of `devin@<version>-linux-x64`) this machine runs.
+export const devinBinaryUnder = (prefix: string): string => join(prefix, "node_modules", `devin-${platform()}-${arch()}`, "bin", "devin");
+
+const devinDescriptor: EngineDescriptor = {
+    id: "devin",
+    label: "Devin",
+    source: { kind: "npm", package: DEVIN_PACKAGE },
+    command: "devin",
+    paths: async (prefix) => ({ binPath: devinBinaryUnder(prefix) }),
+    // The pack's pin, which only an owner's own overlay bakes; never a published image (image-packs/devin.Dockerfile).
+    baked: () => packPin("devin", / devin@(\S+) /g),
+    verify: async (prefix) => {
+        const { binPath } = await devinDescriptor.paths(prefix);
+        return binPath === undefined || !(await pathExists(binPath))
+            ? "the downloaded package has no Devin binary for this machine"
+            : answersVersion(binPath);
+    },
+};
+
 const OPENCODE_PACKAGE = "@opencode/cli";
 // The OpenCode major the runtime in runtimes/opencode speaks. V2 changed the server API, its events, its config and its
 // credential store; a 1.x copy left on the volume by an older daemon is ignored rather than spawned under a V2 client.
@@ -302,6 +325,7 @@ export const ENGINE_DESCRIPTORS: readonly EngineDescriptor[] = [
     claudeDescriptor,
     codexDescriptor,
     cursorDescriptor,
+    devinDescriptor,
     opencodeDescriptor,
     translatorDescriptor,
 ];

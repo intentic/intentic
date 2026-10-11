@@ -4,7 +4,7 @@ import { z } from "zod";
 // An engine is the installed program a runtime (agent-catalog.ts) spawns or imports — the `claude` binary, `codex`
 // wrapper, `@cursor/sdk`, `opencode`, `cli-proxy-api` — not the loop itself; one engine can back several runtimes.
 
-export const ENGINE_IDS = ["claude", "codex", "cursor", "opencode", "translator"] as const;
+export const ENGINE_IDS = ["claude", "codex", "cursor", "devin", "opencode", "translator"] as const;
 export type EngineId = (typeof ENGINE_IDS)[number];
 export const EngineIdSchema = z.enum(ENGINE_IDS);
 

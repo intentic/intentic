@@ -8,7 +8,7 @@ export type ExecutionBackend = "shell" | "js";
 
 export interface AgentCapabilities {
     // Which loop serves the turn; `opencode-gemini` stays separate since adapter health keys off this field.
-    readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "pi" | "cursor";
+    readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "devin" | "pi" | "cursor";
     // Mid-turn injection (the SteeringQueue behind /agent/steer); needs the SDK's streaming-input mode.
     readonly steering: boolean;
     // How much of the permission-mode axis the runtime honours: every PermissionMode, or just propose-then-approve.
@@ -173,6 +173,14 @@ export const ACP: AgentCapabilities = {
     secrets: "none",
     // The agent picks its own provider and endpoint from its own login and environment.
     privacy: "none",
+};
+
+// Devin's own CLI (`devin acp`), the ACP floor with one seam an installed agent lacks: the daemon picks the model, from
+// the account's own list, through the session's model option. Its own runtime name, as OpenCode's Gemini twin has, since
+// adapter health keys off this field and Devin's readiness is an account and an engine, not an installed card.
+export const DEVIN: AgentCapabilities = {
+    ...ACP,
+    runtime: "devin",
 };
 
 // Pi driven over its RPC mode: above the ACP floor and below the Claude Code ceiling. Real mid-turn steering, an effort

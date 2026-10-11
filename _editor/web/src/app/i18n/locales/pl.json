@@ -3686,6 +3686,12 @@
                 "requirementNeeded": "subskrypcji Cursor Pro",
                 "requirementObject": "subskrypcję Cursor Pro"
             },
+            "devin": {
+                "requirement": "Konto Devin",
+                "requirementNeeded": "konta Devin",
+                "requirementObject": "konto Devin",
+                "runs": "Agent Devin na modelach z Twojego planu"
+            },
             "gemini": {
                 "requirement": "Logowanie przez Google",
                 "requirementNeeded": "logowania przez Google",

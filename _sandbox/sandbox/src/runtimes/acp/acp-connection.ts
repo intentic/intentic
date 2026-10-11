@@ -9,12 +9,12 @@ import {
     type SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { withTimeout } from "@intentic/base/async";
-import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { decidePermission } from "./acp-permissions.js";
+import { recordModels, type SessionModels } from "./acp-model.js";
 import { createAcpTerminals } from "./acp-terminal.js";
-import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
+import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
 
 // One warm subprocess per agent capability, kept across turns since ACP multiplexes sessions over one connection;
 // reaped when idle, respawned after an exit or config change. Turn-scoped hooks bind per session id, so concurrent
@@ -43,6 +43,9 @@ export interface AcpConnection {
     readonly stderrTail: () => string;
     // Session ids this process has served; one absent here needs session/load to resume.
     readonly sessions: Set<string>;
+    // Each session's model option as the agent last stated it (acp-model.ts): set from what session/new, session/load
+    // and session/set_config_option answer, and kept current by config_option_update. Absent: the agent offers none.
+    readonly models: Map<string, SessionModels>;
     // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;
     // Gives up on a session whose turn stopped answering, once that turn has cancelled and unbound it. The process is
@@ -54,7 +57,7 @@ export interface AcpConnection {
 }
 
 export interface AcpConnections {
-    readonly acquire: (id: string, config: AcpAgentConfig, cwd: string) => Promise<AcpConnection>;
+    readonly acquire: (id: string, launch: AcpLaunch, cwd: string) => Promise<AcpConnection>;
     // Kills and forgets the connection; a live turn on it then errors, acceptable for an explicit removal.
     readonly drop: (id: string) => void;
 }
@@ -64,13 +67,28 @@ interface Pooled {
     readonly connection: AcpConnection;
 }
 
+// The launch's sign-in, sent with the first method the agent advertises: the credential rides `_meta`, which is where an
+// agent that takes a key over the protocol (Devin's `api_key`) reads it. An agent advertising none cannot be signed in.
+const signIn = async (
+    agent: AcpConnection["agent"],
+    advertised: readonly { readonly id: string }[],
+    meta: Readonly<Record<string, unknown>>,
+): Promise<void> => {
+    const method = advertised[0];
+    if (method === undefined) {
+        throw new Error("The agent offers no way to sign in over the protocol.");
+    }
+    await withTimeout(agent.request(methods.agent.authenticate, { methodId: method.id, _meta: { ...meta } }), INIT_TIMEOUT_MS);
+};
+
 export const createAcpConnections = (logger: Services["logger"], terminalRun: TerminalRunner): AcpConnections => {
     const pool = new Map<string, Pooled>();
 
-    const connect = async (id: string, config: AcpAgentConfig, cwd: string): Promise<AcpConnection> => {
-        const proc = spawnAcpProcess(config.command, parseEnvBlock(config.env), cwd);
+    const connect = async (id: string, launch: AcpLaunch, cwd: string): Promise<AcpConnection> => {
+        const proc = spawnAcpProcess(launch, cwd);
         const turns = new Map<string, TurnHooks>();
         const sessions = new Set<string>();
+        const models = new Map<string, SessionModels>();
         const abandoned = new Set<string>();
         const terminals = createAcpTerminals(terminalRun);
         let dead = false;
@@ -121,6 +139,10 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
                 return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", abandoned.has(params.sessionId));
             })
             .onNotification(methods.client.session.update, ({ params }) => {
+                // Kept here rather than in a turn: an agent may restate its options between turns, with none bound.
+                if (params.update.sessionUpdate === "config_option_update") {
+                    recordModels(models, params.sessionId, params.update.configOptions);
+                }
                 turns.get(params.sessionId)?.onUpdate(params);
             })
             .onRequest(methods.client.terminal.create, ({ params }) => {
@@ -169,6 +191,12 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             const detail = proc.stderrTail().trim();
             throw new Error(detail === "" ? `ACP initialize failed: ${reason}` : `ACP initialize failed: ${reason}: ${detail}`);
         });
+        if (launch.authenticate !== undefined) {
+            await signIn(conn.agent, init.authMethods ?? [], launch.authenticate.meta).catch((error: unknown) => {
+                kill();
+                throw error;
+            });
+        }
 
         const connection: AcpConnection = {
             agent: conn.agent,
@@ -176,6 +204,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             alive: () => !dead,
             stderrTail: proc.stderrTail,
             sessions,
+            models,
             bindTurn: (sessionId, hooks) => {
                 abandoned.delete(sessionId);
                 turns.set(sessionId, hooks);
@@ -204,15 +233,15 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
     };
 
     return {
-        acquire: async (id, config, cwd) => {
-            // Command/env changes take effect on the next turn: a stale pooled process is killed and respawned.
-            const configKey = JSON.stringify([config.command, config.env ?? ""]);
+        acquire: async (id, launch, cwd) => {
+            // Command/env/credential changes take effect on the next turn: a stale pooled process is killed and respawned.
+            const configKey = JSON.stringify([launch.argv, launch.env, launch.authenticate ?? null]);
             const pooled = pool.get(id);
             if (pooled !== undefined && pooled.connection.alive() && pooled.configKey === configKey) {
                 return pooled.connection;
             }
             pooled?.connection.kill();
-            const connection = await connect(id, config, cwd);
+            const connection = await connect(id, launch, cwd);
             pool.set(id, { configKey, connection });
             return connection;
         },

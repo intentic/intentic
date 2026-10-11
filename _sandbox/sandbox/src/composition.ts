@@ -58,6 +58,7 @@ import { createOpenCodeAgent, createOpenCodeRunner } from "./runtimes/opencode/o
 import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
 import { type CodexSlice, createCodexSlice } from "./runtimes/codex/codex-provider.js";
 import { createCursorSlice, type CursorSlice } from "./runtimes/cursor/cursor-provider.js";
+import { createDevinSlice, type DevinSlice } from "./runtimes/devin/devin-provider.js";
 import { OPENCODE_GEMINI_PROVIDER } from "./runtimes/gemini/gemini-models.js";
 import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-provider.js";
 import type { GrokSlice } from "./runtimes/grok/grok-provider.js";
@@ -149,6 +150,7 @@ export interface Services
         ClaudeSlice,
         CodexSlice,
         CursorSlice,
+        DevinSlice,
         GrokSlice,
         GeminiSlice,
         KimiSlice,
@@ -349,6 +351,8 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
             ...claude,
             ...createCodexSlice({ config, authRoot, planModels: () => cliProxy.planModels("codex") }),
             ...cursor,
+            // The ACP pool serves Devin's turns and its model list; built after these slices, so read when first asked.
+            ...createDevinSlice({ authRoot, logger, acpConnections: () => whole().acpConnections }),
             ...grok,
             ...gemini,
             ...createKimiSlice(cliProxy),

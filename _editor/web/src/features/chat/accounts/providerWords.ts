@@ -61,6 +61,14 @@ const REQUIREMENTS: ReadonlyMap<string, Forms> = new Map<string, Forms>([
         },
     ],
     [
+        `Devin account`,
+        {
+            name: () => t(`chat.providerWords.devin.requirement`),
+            needed: () => t(`chat.providerWords.devin.requirementNeeded`),
+            object: () => t(`chat.providerWords.devin.requirementObject`),
+        },
+    ],
+    [
         `Muse Code subscription`,
         {
             name: () => t(`chat.providerWords.meta.requirement`),
@@ -72,6 +80,7 @@ const REQUIREMENTS: ReadonlyMap<string, Forms> = new Map<string, Forms>([
 
 const RUNS: ReadonlyMap<string, () => string> = new Map([
     [`Gemini, Claude and GPT-OSS under Claude Code`, () => t(`chat.providerWords.gemini.runs`)],
+    [`Devin's agent on the models your plan offers`, () => t(`chat.providerWords.devin.runs`)],
     [`Muse Spark under Claude Code`, () => t(`chat.providerWords.meta.runs`)],
     [`GLM under Claude Code`, () => t(`chat.providerWords.zai.runs`)],
 ]);

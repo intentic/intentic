@@ -16,13 +16,15 @@ test("profiles name real packs, and placement/overlayability inference matches e
     for (const name of profiles["standard"] ?? []) {
         expect(byName.has(name), `standard profile names unknown pack "${name}"`).toBe(true);
     }
-    for (const name of ["docker", "browser", "codex", "cursor", "opencode", "translator"]) {
+    for (const name of ["docker", "browser", "codex", "cursor", "devin", "opencode", "translator"]) {
         expect(byName.get(name)?.overlayable, `${name} must be overlay-installable`).toBe(true);
         expect(byName.get(name)?.postTrees, `${name} must splice above the tree COPYs`).toBe(false);
     }
-    // cursor's licence bars redistribution; only Connect installs it, not any profile (provider-packs.ts).
+    // cursor's and devin's licences bar redistribution; only Connect installs them, not any profile (provider-packs.ts).
     for (const profile of Object.values(profiles)) {
-        expect(profile, "no profile may bake the cursor pack: its licence grants no redistribution").not.toContain("cursor");
+        for (const closed of ["cursor", "devin"]) {
+            expect(profile, `no profile may bake the ${closed} pack: its licence grants no redistribution`).not.toContain(closed);
+        }
     }
     for (const name of ["semantic", "messaging", "speech"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);

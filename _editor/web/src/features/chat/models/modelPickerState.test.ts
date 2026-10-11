@@ -233,8 +233,8 @@ test("keeps the ACTIVE provider first even when it is the locked one", () => {
 test("leads the locked band with the provider that costs nothing while nothing is connected", () => {
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly());
 
-    // Active first, then free ahead of paid; ties keep PROVIDERS order.
-    expect(sections.map((section) => section.key)).toEqual([`codex`, `gemini`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+    // Active first, then the free ways in (Google, Devin) ahead of paid; ties keep PROVIDERS order.
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `gemini`, `devin`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
 });
 
 // The trial is the platform's allowance, not a model the reader connected: running on it alone is still the first-run
@@ -243,7 +243,7 @@ test("still leads with the free sign-in when only the free trial can run", () =>
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(TRIAL_PROVIDER));
 
-    expect(sections.map((section) => section.key)).toEqual([`codex`, TRIAL_PROVIDER, `gemini`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+    expect(sections.map((section) => section.key)).toEqual([`codex`, TRIAL_PROVIDER, `gemini`, `devin`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
 });
 
 // One connected model ends the promotion: the reader chose a way in, so the locked band falls back to PROVIDERS order
@@ -251,7 +251,7 @@ test("still leads with the free sign-in when only the free trial can run", () =>
 test("stops leading with the free sign-in once any model is connected", () => {
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(`claude`));
 
-    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `grok`, `kimi`, `gemini`, `cursor`, `meta`, `zai`]);
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `grok`, `kimi`, `gemini`, `cursor`, `devin`, `meta`, `zai`]);
     // A local model counts as much as an account does.
     endpointProviders.value = [{ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }];
     expect(pickerSections(MIXED, `codex`, undefined, readyOnly(`endpoint/ollama-a`)).map((section) => section.key)).toEqual([
@@ -262,6 +262,7 @@ test("stops leading with the free sign-in once any model is connected", () => {
         `kimi`,
         `gemini`,
         `cursor`,
+        `devin`,
         `meta`,
         `zai`,
     ]);

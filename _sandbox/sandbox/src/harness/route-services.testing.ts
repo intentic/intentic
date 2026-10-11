@@ -21,6 +21,7 @@ import { processesSliceFake } from "../processes/processes-slice.testing.js";
 import { type ClaudeFakeOverrides, claudeSliceFake } from "../runtimes/claude/claude-provider.testing.js";
 import { codexSliceFake } from "../runtimes/codex/codex-provider.testing.js";
 import { cursorSliceFake } from "../runtimes/cursor/cursor-provider.testing.js";
+import { devinSliceFake } from "../runtimes/devin/devin-provider.testing.js";
 import { geminiSliceFake } from "../runtimes/gemini/gemini-provider.testing.js";
 import { grokSliceFake } from "../runtimes/grok/grok-provider.testing.js";
 import { kimiSliceFake } from "../runtimes/kimi/kimi-provider.testing.js";
@@ -136,6 +137,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...claudeSliceFake({ claudeStore }),
         ...codexSliceFake(),
         ...cursorSliceFake(),
+        ...devinSliceFake(),
         ...geminiSliceFake(),
         ...grokSliceFake(),
         ...kimiSliceFake(),

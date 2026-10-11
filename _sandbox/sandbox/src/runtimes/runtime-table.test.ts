@@ -114,7 +114,9 @@ test("each runtime is asked about a resume by its own session store", async () =
         cursor: false,
         opencode: false,
         "opencode-gemini": false,
+        // ACP's store is the agent's own, asked at resume time by the warm process; Devin's CLI is an ACP agent.
         acp: true,
+        devin: true,
         pi: false,
     });
 });
@@ -154,7 +156,7 @@ test("unplaced session stores and process-capable probes stay closed to issued u
     const shared = unstubbed<RuntimeDeps>("services", { sessions: unstubbed<RuntimeDeps["sessions"]>("sessions", { exists }) });
     try {
         for (const adapter of ADAPTERS) {
-            if (adapter.runtime === "acp") {
+            if (adapter.runtime === "acp" || adapter.runtime === "devin") {
                 // A constant resume hint asks no daemon store/process; its later loop still owns resume placement.
                 await expect(adapter.holdsSession(unavailable, "s-1", execution.context)).resolves.toBe(true);
             } else if (adapter.runtime === "claude-code") {

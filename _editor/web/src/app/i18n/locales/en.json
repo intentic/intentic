@@ -3686,6 +3686,12 @@
                 "requirementNeeded": "Cursor Pro subscription",
                 "requirementObject": "Cursor Pro subscription"
             },
+            "devin": {
+                "requirement": "Devin account",
+                "requirementNeeded": "Devin account",
+                "requirementObject": "Devin account",
+                "runs": "Devin's agent on the models your plan offers"
+            },
             "gemini": {
                 "requirement": "Google sign-in",
                 "requirementNeeded": "Google sign-in",

@@ -3,6 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { createAcpConnections, type TurnHooks } from "./acp-connection.js";
+import { acpLaunchOf } from "./acp-spawn.js";
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
@@ -10,7 +11,7 @@ test("unbinding an older registration preserves the replacement turn's permissio
     const connections = createAcpConnections(logger, unstubbed<TerminalRunner>("terminal", { visible: false }));
     const connection = await connections.acquire(
         "fake",
-        { command: "node --import tsx src/runtimes/acp/__fixtures__/fake-acp-process.ts" },
+        acpLaunchOf({ command: "node --import tsx src/runtimes/acp/__fixtures__/fake-acp-process.ts" }),
         process.cwd(),
     );
     try {
@@ -49,7 +50,7 @@ test("a session given up on mid-turn is refused what it asks, and the process li
     const connections = createAcpConnections(logger, unstubbed<TerminalRunner>("terminal", { visible: false }));
     const connection = await connections.acquire(
         "fake",
-        { command: "node --import tsx src/runtimes/acp/__fixtures__/fake-acp-process.ts" },
+        acpLaunchOf({ command: "node --import tsx src/runtimes/acp/__fixtures__/fake-acp-process.ts" }),
         process.cwd(),
     );
     const prompt = (sessionId: string, text: string) =>

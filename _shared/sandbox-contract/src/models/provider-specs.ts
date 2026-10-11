@@ -1,5 +1,5 @@
 import type { ProviderBrand } from "@intentic/constants";
-import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, OPENCODE, OPENCODE_GEMINI } from "./agent-runtimes.js";
+import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, DEVIN, OPENCODE, OPENCODE_GEMINI } from "./agent-runtimes.js";
 
 // Every fact about a provider more than one surface needs, one row each, replacing lists that drifted out of sync.
 // `access` (cost) and `auth` (connection) stay separate: conflating them mis-describes Z.ai, a prepaid plan spent
@@ -150,6 +150,24 @@ export const PROVIDER_SPECS = [
         // Cursor ignores harness too: there is no route to it but its own SDK.
         runtimes: { native: CURSOR, claudeCode: CURSOR },
     },
+    {
+        // Cognition's Devin through its own CLI (`devin acp`); labelled for the account, since it vends many vendors'
+        // models (SWE, Claude, GPT, Gemini…) under one Devin plan.
+        id: "devin",
+        label: "Devin",
+        vendor: "Devin",
+        accountLabel: "Devin",
+        destination: "Devin",
+        brand: "devin",
+        // Free is a real tier here: a free Devin account runs turns, on the smaller list of models its plan offers.
+        access: { kind: "free", requirement: "Devin account", runs: "Devin's agent on the models your plan offers" },
+        // The daemon drives the CLI's own sign-in and holds the key it hands back, one per account.
+        auth: { kind: "oauth" },
+        // Devin publishes its quota only on its own pages and in its CLI's interactive view, nothing a key can read.
+        planLimits: false,
+        // The CLI is the only door, so harness is not a choice: both axes are Devin's own runtime.
+        runtimes: { native: DEVIN, claudeCode: DEVIN },
+    },
     // The two minted providers need no new runtime or translator hop: each has its own Anthropic Messages endpoint.
     {
         id: "meta",
@@ -223,7 +241,7 @@ export const PROVIDER_SPECS = [
 type Spec = (typeof PROVIDER_SPECS)[number];
 
 // The agent runtimes the daemon can serve; a native id is reserved, `endpoint/<id>` or any other value names an
-// installed capability instead. Derived from the table and a union of six names, so the wire vocabulary can't drift.
+// installed capability instead. Derived from the table and a union of its ids, so the wire vocabulary can't drift.
 export type NativeProvider = Spec["id"];
 export const NATIVE_PROVIDERS: readonly NativeProvider[] = PROVIDER_SPECS.map((spec) => spec.id);
 

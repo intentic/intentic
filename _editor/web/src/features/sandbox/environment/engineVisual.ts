@@ -12,6 +12,7 @@ const VISUALS: Record<EngineId, EngineVisual> = {
     claude: { logo: `claude`, icon: `sparkles` },
     codex: { icon: `terminal` },
     cursor: { logo: `cursor`, icon: `cpu` },
+    devin: { logo: `devin`, icon: `robot` },
     opencode: { icon: `code` },
     translator: { icon: `repeat` },
 };

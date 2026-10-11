@@ -1,6 +1,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "@intentic/base/web-stream";
@@ -35,8 +36,21 @@ export interface AcpProcess {
     readonly stderrTail: () => string;
 }
 
-export const spawnAcpProcess = (command: string, env: Record<string, string>, cwd: string): AcpProcess => {
-    const [bin, ...args] = splitCommand(command);
+// What starts one agent process: its argv, run with no shell, and the variables laid over the daemon's own environment.
+// An installed card's comes from its config (acpLaunchOf); a native provider on this runtime builds its own, so a
+// resolved binary path is never re-split and a credential never round-trips through an env block.
+export interface AcpLaunch {
+    readonly argv: readonly string[];
+    readonly env: Readonly<Record<string, string>>;
+    // Signs the process in over the protocol once it has answered initialize, so a credential reaches the agent without
+    // an env var every command it runs would inherit. Sent with the first method the agent advertises.
+    readonly authenticate?: { readonly meta: Readonly<Record<string, unknown>> };
+}
+
+export const acpLaunchOf = (config: AcpAgentConfig): AcpLaunch => ({ argv: splitCommand(config.command), env: parseEnvBlock(config.env) });
+
+export const spawnAcpProcess = (launch: AcpLaunch, cwd: string): AcpProcess => {
+    const [bin, ...args] = launch.argv;
     if (bin === undefined || bin === "") {
         throw new Error("ACP agent command is empty");
     }
@@ -48,7 +62,7 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
         // deliberately outlives the turn that warmed it (acp-connection.ts), so the in-life sweep must never
         // read one as abandoned. A pool process a previous daemon left is no sweep's either: it stays in that
         // daemon's process group, which intentic-netd ends once the daemon has crashed (supervise.rs).
-        env: { ...process.env, ...env, ...workloadStamp(DAEMON_OWNER) },
+        env: { ...process.env, ...launch.env, ...workloadStamp(DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
     });
     const stderr = outputTail(STDERR_TAIL);

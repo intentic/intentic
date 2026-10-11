@@ -1,7 +1,7 @@
 import { type AgentCapabilities, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { withTimeout } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
-import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
+import { acpLaunchOf, spawnAcpProcess } from "./acp-spawn.js";
 
 /* One-shot ACP probe for the `agent` capability handler: spawn the command, initialize, report what the agent advertises, kill. */
 
@@ -14,7 +14,7 @@ export interface AcpProbeResult {
 }
 
 export const probeAcpAgent = async (config: AcpAgentConfig, cwd: string): Promise<AcpProbeResult> => {
-    const proc = spawnAcpProcess(config.command, parseEnvBlock(config.env), cwd);
+    const proc = spawnAcpProcess(acpLaunchOf(config), cwd);
     try {
         const conn = client({ name: "intentic-probe" }).connect(proc.stream);
         // Hard timeout race. SDK request cancellation is cooperative, so a non-ACP binary would hang forever.

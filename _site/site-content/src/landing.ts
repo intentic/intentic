@@ -231,6 +231,7 @@ export const landingContent: LandingContent = {
             { name: "Google", logo: "gemini", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
             // Named for the plan, not the account: a free Cursor sign-in still cannot run a turn without the paid tier.
             { name: "Cursor", logo: "cursor", detail: "Composer and the frontier models, on your Cursor Pro plan" },
+            { name: "Devin", logo: "devin", detail: "SWE and the frontier models, on your Devin plan" },
             // These two rows connect by pasting a key, not signing in; the detail line says which, before clicking.
             { name: "Z.ai", logo: "zai", detail: "GLM, on your Coding Plan key" },
             { name: "Meta", logo: "meta", detail: "Muse Spark, on your Model API key" },

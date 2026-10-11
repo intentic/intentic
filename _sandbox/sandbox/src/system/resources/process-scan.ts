@@ -107,6 +107,7 @@ const PROGRAMS = [
     "opencode",
     "gemini",
     "kimi",
+    "devin",
     "chrome",
     "chromium",
     "firefox",
@@ -173,7 +174,7 @@ const SEARCH_ENGINE = /iq-engine|(^|[ /])iq([ /]|$)/u;
 const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
 const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
 const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
-const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi)([ /]|$)|agent-runtime/u;
+const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi|devin)([ /]|$)|agent-runtime/u;
 const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)/u;
 
 // Order matters: an engine before what it runs, a one-shot tsgo before the language server it can also be.

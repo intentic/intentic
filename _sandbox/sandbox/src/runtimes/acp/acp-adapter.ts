@@ -14,8 +14,9 @@ import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
+import { acpLaunchOf } from "./acp-spawn.js";
 
-// Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
+// Any provider id outside the native ones is an installed `agent`-kind capability served over the Agent Client Protocol.
 // Sited beside the runtime it serves, like the native providers, but a plain adapter, not a module: an ACP agent's
 // catalog, credentials and packs are the capability system's business.
 
@@ -35,7 +36,7 @@ export const planAcpTurn = async (
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
-    const acpConfig = capability.config;
+    const launch = acpLaunchOf(capability.config);
     // Resolved by planTurn; without one the turn is the open, attended default, which may drive the credential-free browser.
     // A warm session keeps the MCP config it was opened with, so its turns share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
@@ -49,7 +50,7 @@ export const planAcpTurn = async (
     return armPlan(
         // The agent's warm session keeps the conversation's bearer and each server's URL across turns; the release only
         // empties what the bearer reaches until the next turn leases it again.
-        releasingMounts((request) => services.acpAgent(provider, acpConfig, request), mounted),
+        releasingMounts((request) => services.acpAgent(provider, launch, request), mounted),
         withAttachments(
             {
                 ...context.base,

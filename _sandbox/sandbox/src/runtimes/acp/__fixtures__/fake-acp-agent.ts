@@ -7,10 +7,12 @@ import {
     methods,
     RequestError,
     type RequestPermissionRequest,
+    type SessionConfigOption,
     type SessionUpdate,
 } from "@agentclientprotocol/sdk";
 import { decidePermission } from "../acp-permissions.js";
 import type { AcpConnection, TurnHooks } from "../acp-connection.js";
+import { recordModels, type SessionModels } from "../acp-model.js";
 
 /* This fixture uses the ACP SDK in-process without transport. */
 
@@ -30,9 +32,34 @@ export const fakeAcpAgentApp = (
     options: {
         readonly answered?: (outcome: string) => void;
         readonly failure?: { readonly method: "load" | "new" | "prompt"; readonly code: number; readonly message: string };
+        // A model option on every session, as Devin's CLI offers one: these values, the first current. Absent: none.
+        readonly models?: readonly string[];
     } = {},
 ): AgentApp => {
     let nextSession = 0;
+    // Each session's current model, where `models` gives the sessions a model option.
+    const current = new Map<string, string>();
+    const configOptions = (sessionId: string): SessionConfigOption[] | undefined =>
+        options.models === undefined
+            ? undefined
+            : [
+                  {
+                      id: "mode",
+                      name: "Session Mode",
+                      category: "mode",
+                      type: "select",
+                      currentValue: "code",
+                      options: [{ value: "code", name: "Code" }],
+                  },
+                  {
+                      id: "model",
+                      name: "Model",
+                      category: "model",
+                      type: "select",
+                      currentValue: current.get(sessionId) ?? options.models[0] ?? "",
+                      options: options.models.map((value) => ({ value, name: value.toUpperCase() })),
+                  },
+              ];
     // Stalled prompts by session, each answered `cancelled` once its session is cancelled, as the protocol asks.
     const stalled = new Map<string, () => void>();
     const fail = (method: "load" | "new" | "prompt"): void => {
@@ -51,7 +78,21 @@ export const fakeAcpAgentApp = (
         })
         .onRequest(methods.agent.session.new, () => {
             fail("new");
-            return { sessionId: `fake-${(nextSession += 1)}` };
+            const sessionId = `fake-${(nextSession += 1)}`;
+            const offered = configOptions(sessionId);
+            return { sessionId, ...(offered !== undefined ? { configOptions: offered } : {}) };
+        })
+        .onRequest(methods.agent.session.setConfigOption, ({ params }) => {
+            if (
+                params.configId !== "model" ||
+                !("value" in params) ||
+                typeof params.value !== "string" ||
+                !(options.models ?? []).includes(params.value)
+            ) {
+                throw RequestError.invalidParams({ configId: params.configId });
+            }
+            current.set(params.sessionId, params.value);
+            return { configOptions: configOptions(params.sessionId) ?? [] };
         })
         .onNotification(methods.agent.session.cancel, ({ params }) => {
             stalled.get(params.sessionId)?.();
@@ -127,7 +168,11 @@ export const fakeAcpAgentApp = (
                 await push({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "executed" } });
                 return { stopReason: "end_turn" };
             }
-            await push({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Hi there" } });
+            const model = current.get(params.sessionId);
+            await push({
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: model === undefined ? "Hi there" : `Hi there from ${model}` },
+            });
             return { stopReason: "end_turn" };
         });
 };
@@ -137,6 +182,7 @@ export const fakeAcpAgentApp = (
 export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities = { loadSession: false }): AcpConnection => {
     const turns = new Map<string, TurnHooks>();
     const abandoned = new Set<string>();
+    const models = new Map<string, SessionModels>();
     let dead = false;
     const conn = client({ name: "fake-client" })
         .onRequest(methods.client.session.requestPermission, ({ params }) => {
@@ -144,6 +190,9 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
             return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", abandoned.has(params.sessionId));
         })
         .onNotification(methods.client.session.update, ({ params }) => {
+            if (params.update.sessionUpdate === "config_option_update") {
+                recordModels(models, params.sessionId, params.update.configOptions);
+            }
             turns.get(params.sessionId)?.onUpdate(params);
         })
         .connect(app);
@@ -153,6 +202,7 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
         alive: () => !dead,
         stderrTail: () => "",
         sessions: new Set<string>(),
+        models,
         bindTurn: (sessionId, hooks) => {
             abandoned.delete(sessionId);
             turns.set(sessionId, hooks);

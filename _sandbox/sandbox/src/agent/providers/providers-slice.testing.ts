@@ -13,6 +13,7 @@ export const testProviderCatalogs: ProvidersSlice["providerCatalogs"] = {
     claude: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
     codex: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }) },
     cursor: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }) },
+    devin: { models: async () => ({ models: [{ id: "swe-1-6", label: "SWE-1.6" }], default: "swe-1-6" }) },
     grok: { models: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }) },
     kimi: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
     gemini: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },

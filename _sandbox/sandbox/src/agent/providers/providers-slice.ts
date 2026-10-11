@@ -4,7 +4,9 @@ import type { Services } from "../../composition.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { createEndpointCatalog, type EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
 import { syncEndpointCompat } from "../../endpoints/endpoint-translator.js";
+import type { AcpTurnOptions } from "../../runtimes/acp/acp-agent.js";
 import type { AcpConnections } from "../../runtimes/acp/acp-connection.js";
+import type { AcpLaunch } from "../../runtimes/acp/acp-spawn.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
 import type { ProviderDeps, RuntimeAdapters } from "../../runtimes/runtime-table.js";
 import { localTolerantFetch } from "../../system/tls/local-tls.js";
@@ -56,8 +58,13 @@ export interface ProvidersSlice {
     readonly authRoot: string;
     // The Claude Code loop: serves native Claude, Kimi, every routed provider, every endpoint capability.
     readonly agent: (request: HarnessRequest) => AsyncGenerator<AgentEvent>;
-    // Generic ACP adapter for every agent-kind capability outside NATIVE_PROVIDERS; one warm subprocess per agent.
-    readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
+    // The ACP runtime: every agent-kind capability outside NATIVE_PROVIDERS, and Devin's CLI; one warm subprocess per id.
+    readonly acpAgent: (
+        id: string,
+        launch: AcpLaunch,
+        request: AgentRequest<ContainerCredential>,
+        options?: AcpTurnOptions,
+    ) => AsyncGenerator<AgentEvent>;
     readonly acpConnections: AcpConnections;
     // Pi adapter for the reserved pi agent-kind capability over Pi's RPC; one process per turn, sessions as files.
     readonly piAgent: (config: AcpAgentConfig, request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
